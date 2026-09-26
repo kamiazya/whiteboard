@@ -11,11 +11,13 @@ import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createCompleteSignInDeps } from '../security/complete-sign-in.js'
 import { createRelyingParty } from '../security/oidc-relying-party.js'
 import { createSignInAttemptStore } from '../security/sign-in-attempt-store.js'
 import { providerAuthenticator, signInConfigSchema } from '../security/sign-in-config.js'
 import { SESSION_COOKIE } from '../security/sign-in-session-store.js'
+import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createSignInRoutes, type SignInRouteProvider } from './sign-in.js'
 
@@ -56,6 +58,11 @@ function appFor(admission: object, trustedAddresses = [PROXY_ADDRESS], injectPee
       rp: createRelyingParty(),
       attempts: createSignInAttemptStore(handle.db),
       signIn,
+      administrators: createAdministratorCheck({
+        admins: createTenantAdministratorStore(handle.db),
+        members: signIn.members,
+        configured: [],
+      }),
       publicBaseUrl: BASE,
       ...(injectPeer ? { peerAddress: () => peer } : {}),
     }),

@@ -32,7 +32,12 @@ export const administratorResponseSchema = z
 /** Why an administrator's change was refused. A narrowing of `apiErrorBodySchema`. */
 export const tenantPeopleRefusalSchema = z
   .object({
-    error: z.enum(['not_an_administrator', 'unknown_user', 'cannot_deactivate_self']),
+    error: z.enum([
+      'not_an_administrator',
+      'unknown_user',
+      'cannot_deactivate_self',
+      'cannot_dismiss_self',
+    ]),
     message: z.string().min(1),
   })
   .strict()

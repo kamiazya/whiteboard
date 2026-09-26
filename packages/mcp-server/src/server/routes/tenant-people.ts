@@ -40,6 +40,8 @@ const REFUSALS = {
   not_an_administrator: [403, 'only an administrator of this server can do that'],
   unknown_user: [404, 'no user by that id here'],
   cannot_deactivate_self: [409, 'an administrator cannot deactivate themselves'],
+  // Dismissing oneself could leave nobody to manage people but the operator.
+  cannot_dismiss_self: [409, 'an administrator cannot dismiss themselves; another one can'],
 } as const satisfies Record<TenantPeopleRefusal['error'], readonly [number, string]>
 
 function refuse(c: Context, error: TenantPeopleRefusal['error']) {
@@ -100,6 +102,7 @@ function mountAppointments(app: Hono, options: TenantPeopleRouterOptions): void 
     if (acting === null) return refuse(c, 'not_an_administrator')
     const userId = c.req.param('userId')
     if (!(await isUser(members, userId))) return refuse(c, 'unknown_user')
+    if (userId === acting) return refuse(c, 'cannot_dismiss_self')
     await administration.appointments.dismiss(userId)
     log.notice({ userId, by: acting }, 'administrator dismissed')
     return c.json(administratorResponseSchema.parse({ userId, administrator: false }), 200)
@@ -116,7 +119,8 @@ export function createTenantPeopleRouter(options: TenantPeopleRouterOptions) {
       userId: user.id,
       displayName: user.displayName,
       deactivated: user.deactivated,
-      administrator: administrators.has(user.id),
+      // A deactivated administrator cannot act, so is not listed as one.
+      administrator: !user.deactivated && administrators.has(user.id),
     }))
     return c.json(tenantPeopleResponseSchema.parse({ people }), 200)
   })

@@ -21,7 +21,17 @@ export type SignInProvidersResponse = z.infer<typeof signInProvidersResponseSche
 
 export const signInSessionResponseSchema = z.discriminatedUnion('signedIn', [
   z.object({ signedIn: z.literal(false) }),
-  z.object({ signedIn: z.literal(true), user: z.object({ displayName: z.string() }) }),
+  z.object({
+    signedIn: z.literal(true),
+    // `userId` finds this person in a people list; `administrator` is
+    // whether they administer the server (ADR-0049), which is what the web
+    // app shows its people screen for.
+    user: z.object({
+      userId: z.string().min(1),
+      displayName: z.string(),
+      administrator: z.boolean(),
+    }),
+  }),
 ])
 
 export type SignInSessionResponse = z.infer<typeof signInSessionResponseSchema>

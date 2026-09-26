@@ -376,6 +376,7 @@ async function peopleOptions(
       ),
       db,
       deps,
+      people,
       publicBaseUrl,
     ),
   }
@@ -385,9 +386,20 @@ function signInRoutes(
   providers: readonly SignInRouteProvider[],
   db: TenantDatabase,
   signIn: CompleteSignInDeps,
+  people: ServerModePeople,
   publicBaseUrl: string,
 ): { signIn?: SignInRoutesDeps } {
   if (providers.length === 0) return {}
   const attempts = createSignInAttemptStore(db)
-  return { signIn: { providers, rp: createRelyingParty(), attempts, signIn, publicBaseUrl } }
+  const administrators = people.administration.check
+  return {
+    signIn: {
+      providers,
+      rp: createRelyingParty(),
+      attempts,
+      signIn,
+      administrators,
+      publicBaseUrl,
+    },
+  }
 }

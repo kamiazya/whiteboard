@@ -7,6 +7,7 @@
  * The provider is `fakeOidcProvider`, which signs and checks for real, so the
  * relying party's validation is exercised rather than stubbed.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,11 +17,13 @@ import {
   type FakeOidcProvider,
   fakeOidcProvider,
 } from '../../shared/test-utils/fake-oidc-provider.js'
+import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createCompleteSignInDeps } from '../security/complete-sign-in.js'
 import { createRelyingParty } from '../security/oidc-relying-party.js'
 import { createSignInAttemptStore } from '../security/sign-in-attempt-store.js'
 import { providerAuthenticator, signInConfigSchema } from '../security/sign-in-config.js'
 import { SESSION_COOKIE } from '../security/sign-in-session-store.js'
+import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createSignInRoutes } from './sign-in.js'
 
@@ -58,6 +61,11 @@ function appFor(admission: object, fetchFn: typeof fetch = idp.fetch) {
       rp: createRelyingParty({ fetch: fetchFn }),
       attempts: createSignInAttemptStore(db),
       signIn,
+      administrators: createAdministratorCheck({
+        admins: createTenantAdministratorStore(db),
+        members: signIn.members,
+        configured: [],
+      }),
       publicBaseUrl: BASE,
     }),
   )
@@ -171,14 +179,32 @@ describe('sign-in through an OIDC provider', () => {
   })
 
   it('answers the session this browser holds, and none without one', async () => {
-    const { app } = appFor({ createAccounts: true })
+    const { app, signIn } = appFor({ createAccounts: true })
     expect(await (await app.request(`${BASE}/auth/session`)).json()).toEqual({ signedIn: false })
     idp.next({ sub: 'ada-1', name: 'Ada' })
     const session = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
     const res = await app.request(`${BASE}/auth/session`, {
       headers: { cookie: `${SESSION_COOKIE}=${session}` },
     })
-    expect(await res.json()).toEqual({ signedIn: true, user: { displayName: 'Ada' } })
+    const [ada] = await signIn.members.listUsers()
+    expect(await res.json()).toEqual({
+      signedIn: true,
+      user: { userId: ada?.id, displayName: 'Ada', administrator: false },
+    })
+  })
+
+  // ADR-0049: the web app shows the people screen to an administrator only,
+  // so the session says whether this person is one.
+  it('says when the person signed in administers this server', async () => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1', name: 'Ada' })
+    const session = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    const ada = await signIn.members.listUsers()
+    await createTenantAdministratorStore(handle.db).appoint(ada[0]?.id as string, null)
+    const res = await app.request(`${BASE}/auth/session`, {
+      headers: { cookie: `${SESSION_COOKIE}=${session}` },
+    })
+    expect(await res.json()).toMatchObject({ user: { administrator: true } })
   })
 
   it('returns to the sign-in screen when the provider cannot be reached', async () => {

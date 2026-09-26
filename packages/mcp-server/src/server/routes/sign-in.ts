@@ -21,6 +21,7 @@ import type {
 import { type Context, Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { getLogger } from '../log.js'
+import type { AdministratorCheck } from '../security/administrator-check.js'
 import { type CompleteSignInDeps, completeSignIn } from '../security/complete-sign-in.js'
 import type { RelyingParty, ResolvedProvider } from '../security/oidc-relying-party.js'
 import type { VerifiedClaims } from '../security/sign-in-admission.js'
@@ -47,6 +48,8 @@ export interface SignInRoutesDeps {
   readonly rp: RelyingParty
   readonly attempts: SignInAttemptStore
   readonly signIn: CompleteSignInDeps
+  /** Whether the person signed in administers this tenant (ADR-0049). */
+  readonly administrators: AdministratorCheck
   /** The tenant's own origin, which the provider must redirect back to. */
   readonly publicBaseUrl: string
   readonly now?: () => number
@@ -184,9 +187,16 @@ async function session(c: Context, deps: SignInRoutesDeps, now: () => number) {
   const person = token === undefined ? null : await deps.signIn.sessions.resolve(token, now())
   const user = person === null ? null : await deps.signIn.members.profileForBinding(person)
   const body: SignInSessionResponse =
-    user === null
+    user === null || person === null
       ? { signedIn: false }
-      : { signedIn: true, user: { displayName: user.displayName } }
+      : {
+          signedIn: true,
+          user: {
+            userId: user.id,
+            displayName: user.displayName,
+            administrator: await deps.administrators.isAdministrator(person),
+          },
+        }
   return c.json(body)
 }
 

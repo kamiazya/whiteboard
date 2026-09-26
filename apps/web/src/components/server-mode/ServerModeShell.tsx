@@ -99,6 +99,20 @@ function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
   )
 }
 
+/** The open workspace's people: who is in it, and for an owner, who may be. */
+function WorkspacePeopleLink() {
+  const current = parseWorkspaceRoute(useLocation().pathname)?.workspace
+  if (current === undefined) return null
+  return (
+    <Link
+      to={`/people/w/${encodeURIComponent(current)}`}
+      className="text-muted-foreground hover:text-foreground"
+    >
+      People
+    </Link>
+  )
+}
+
 export function ServerModeShell({ displayName, fetchFn }: { displayName: string; fetchFn: Fetch }) {
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
@@ -109,6 +123,7 @@ export function ServerModeShell({ displayName, fetchFn }: { displayName: string;
         All workspaces
       </Link>
       <WorkspacePicker fetchFn={fetchFn} />
+      <WorkspacePeopleLink />
       <span className="text-muted-foreground">{label ?? ''}</span>
       {/* Mounted even when empty: a live region inserted with its text
           already in it is not announced. */}
