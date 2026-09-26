@@ -235,6 +235,17 @@ describe('dispatcher routing: whiteboard daemon stop', () => {
     )
   })
 
+  it('keeps a message that carries line breaks to that one line', async () => {
+    // The message names a path, and a path may hold a newline.
+    vi.mocked(daemonStopModule.runDaemonStop).mockRejectedValueOnce(
+      new Error('the daemon record /tmp/a\r\nb/daemon.json cannot be read'),
+    )
+    const { stderr } = await captureStdio(() => main(['daemon', 'stop', '--json']))
+    expect(stderr).toBe(
+      'whiteboard daemon stop: the daemon record /tmp/a b/daemon.json cannot be read\n',
+    )
+  })
+
   it('USAGE includes `whiteboard daemon stop`', () => {
     expect(USAGE).toMatch(/whiteboard daemon stop/)
   })
