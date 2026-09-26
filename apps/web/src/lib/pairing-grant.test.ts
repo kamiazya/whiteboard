@@ -519,6 +519,28 @@ describe('mutual authentication (identity pinning)', () => {
     expect(pins.map.get('whiteboard:daemon-identity-pins')).toContain(pinnedKey.publicKey)
   })
 
+  it.each([
+    [
+      'an entry this build cannot read',
+      JSON.stringify({
+        [DAEMON]: { alg: 'Ed25519', publicKey: 'K', pinnedAt: 'then', addedByANewerBuild: true },
+      }),
+    ],
+    ['a store that is not JSON', '{broken'],
+  ])('renewal fails CLOSED when the pin store holds %s', async (_, raw) => {
+    // An unreadable pin is not an absent one: read as "never pinned", renewal
+    // took the unverified path and accepted a token from whatever answered.
+    const squatter = await makeDaemonSigner()
+    const pins = makeStorage({ 'whiteboard:daemon-identity-pins': raw })
+    const result = await renewPairingToken({
+      daemonBaseUrl: DAEMON,
+      fetch: daemonFetch(squatter) as unknown as typeof globalThis.fetch,
+      hostedOrigin: HOSTED,
+      pinStorage: pins.storage,
+    })
+    expect(result).toEqual({ status: 'identity-mismatch', daemonBaseUrl: DAEMON })
+  })
+
   it('renewal against an UNPINNED daemon sends no nonce and stays on the legacy path', async () => {
     const signer = await makeDaemonSigner()
     const pins = makeStorage()

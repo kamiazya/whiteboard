@@ -4,8 +4,8 @@ import {
   challengeDaemonIdentity,
   createChallengeNonce,
   fingerprintPublicKey,
-  getPinnedIdentity,
   pinIdentity,
+  readPinnedIdentity,
   sha256Base64Url,
   verifyIdentitySignature,
 } from './daemon-identity-pin.js'
@@ -17,6 +17,11 @@ function fakeStorage() {
     setItem: (key: string, value: string) => void map.set(key, value),
     map,
   }
+}
+
+function pinnedKey(base: string, storage: ReturnType<typeof fakeStorage>) {
+  const pin = readPinnedIdentity(base, storage)
+  return pin.kind === 'pinned' ? pin.pin.publicKey : pin.kind
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -45,20 +50,22 @@ describe('daemon identity pin store', () => {
   it('round-trips a pin per daemon baseUrl (trailing slash normalized)', () => {
     const storage = fakeStorage()
     pinIdentity('http://127.0.0.1:3099/', { alg: 'Ed25519', publicKey: 'key-a' }, storage)
-    expect(getPinnedIdentity('http://127.0.0.1:3099', storage)).toMatchObject({
-      alg: 'Ed25519',
-      publicKey: 'key-a',
-    })
-    expect(getPinnedIdentity('http://127.0.0.1:3100', storage)).toBeNull()
+    expect(pinnedKey('http://127.0.0.1:3099', storage)).toBe('key-a')
+    expect(readPinnedIdentity('http://127.0.0.1:3100', storage)).toEqual({ kind: 'none' })
   })
 
-  it('a corrupt pin store degrades to no pins instead of throwing', () => {
+  it('a corrupt pin store reads as unreadable, not as no pins, and can be re-pinned', () => {
     const storage = fakeStorage()
     storage.setItem('whiteboard:daemon-identity-pins', '{broken')
-    expect(getPinnedIdentity('http://127.0.0.1:3099', storage)).toBeNull()
-    // And re-pinning over the corrupt store works.
+    expect(readPinnedIdentity('http://127.0.0.1:3099', storage)).toEqual({ kind: 'unreadable' })
+    // Re-pinning (the user's own consent on /pair) still works over it.
     pinIdentity('http://127.0.0.1:3099', { alg: 'Ed25519', publicKey: 'key-b' }, storage)
-    expect(getPinnedIdentity('http://127.0.0.1:3099', storage)?.publicKey).toBe('key-b')
+    expect(pinnedKey('http://127.0.0.1:3099', storage)).toBe('key-b')
+    // Which OTHER daemons the lost store pinned cannot be known, so they stay
+    // unreadable rather than turning into never-pinned ones renewed unverified.
+    expect(pinnedKey('http://127.0.0.1:3100', storage)).toBe('unreadable')
+    pinIdentity('http://127.0.0.1:3100', { alg: 'Ed25519', publicKey: 'key-c' }, storage)
+    expect(pinnedKey('http://127.0.0.1:3100', storage)).toBe('key-c')
   })
 })
 
@@ -256,6 +263,7 @@ describe('a pin store holding an entry this build cannot read', () => {
   // every daemon's pin — and pinning another daemon must not write the rest
   // away.
   const A = 'http://127.0.0.1:3099'
+  const B = 'http://127.0.0.1:4000'
   const C = 'http://127.0.0.1:5000'
   const good = { alg: 'Ed25519', publicKey: 'A-KEY', pinnedAt: '2026-09-01T00:00:00.000Z' }
   const seeded = () => {
@@ -264,20 +272,39 @@ describe('a pin store holding an entry this build cannot read', () => {
       'whiteboard:daemon-identity-pins',
       JSON.stringify({
         [A]: good,
-        'http://127.0.0.1:4000': { ...good, publicKey: 'B-KEY', addedByANewerBuild: true },
+        [B]: { ...good, publicKey: 'B-KEY', addedByANewerBuild: true },
       }),
     )
     return storage
   }
 
   it('still answers the entries it can read', () => {
-    expect(getPinnedIdentity(A, seeded())?.publicKey).toBe('A-KEY')
+    expect(pinnedKey(A, seeded())).toBe('A-KEY')
   })
 
-  it('keeps them when another daemon is pinned', () => {
+  it('answers unreadable for that entry, never "not pinned"', () => {
+    expect(pinnedKey(B, seeded())).toBe('unreadable')
+  })
+
+  it('keeps every entry, the unreadable one too, when another daemon is pinned', () => {
+    // Writing back only what parsed would turn B's pin into no pin at all —
+    // and an unpinned daemon is renewed without verification.
     const storage = seeded()
     pinIdentity(C, { alg: 'Ed25519', publicKey: 'C-KEY' }, storage)
-    expect(getPinnedIdentity(A, storage)?.publicKey).toBe('A-KEY')
-    expect(getPinnedIdentity(C, storage)?.publicKey).toBe('C-KEY')
+    expect(pinnedKey(A, storage)).toBe('A-KEY')
+    expect(pinnedKey(B, storage)).toBe('unreadable')
+    expect(pinnedKey(C, storage)).toBe('C-KEY')
+  })
+
+  it('challenges a daemon whose pin is unreadable as failed, without asking it', async () => {
+    const fetch = vi.fn()
+    const result = await challengeDaemonIdentity({
+      daemonBaseUrl: B,
+      fetch,
+      hostedOrigin: 'https://app.example',
+      storage: seeded(),
+    })
+    expect(result).toBe('failed')
+    expect(fetch).not.toHaveBeenCalled()
   })
 })

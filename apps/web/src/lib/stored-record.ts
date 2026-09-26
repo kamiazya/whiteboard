@@ -4,13 +4,17 @@ import type { z } from 'zod'
  * A keyed record read back from browser storage, ENTRY by entry: what parses
  * is kept, what does not is dropped on its own.
  *
- * The three stores this serves (daemon identity pins, registered passkeys,
- * wrapped replica keys) each read their whole record through one strict
- * schema, so a single entry it could not read made every entry read as
- * absent — and each then wrote back what it had just read, erasing the rest.
- * The likeliest such entry is not corruption but a NEWER build: it adds a
- * field, and an older tab still open reads that entry as unreadable under
- * `.strict()`. It should cost that entry, not every daemon's.
+ * The stores this serves (registered passkeys, wrapped replica keys) each
+ * read their whole record through one strict schema, so a single entry it
+ * could not read made every entry read as absent — and each then wrote back
+ * what it had just read, erasing the rest. The likeliest such entry is not
+ * corruption but a NEWER build: it adds a field, and an older tab still open
+ * reads that entry as unreadable under `.strict()`. It should cost that
+ * entry, not every daemon's.
+ *
+ * Only where a dropped entry reads as a safe absence. The daemon identity
+ * pins do not use it: there an absent pin means "renew unverified", so an
+ * unreadable one has to stay distinguishable (`daemon-identity-pin.ts`).
  *
  * Text that is not a JSON object has no entries to keep, so it reads as
  * empty, which is what each store already answered. Built with
