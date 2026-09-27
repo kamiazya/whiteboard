@@ -16,6 +16,7 @@
  */
 import { type LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { openMergeableMap } from './mergeable-containers.js'
+import { spliceText } from './minimal-change.js'
 
 /** Structural equality for the plain-JSON values the bridge stores in map entries. */
 function jsonEqual(a: unknown, b: unknown): boolean {
@@ -146,11 +147,11 @@ export function syncRootContainer(
   source: LoroDoc,
 ): boolean {
   if (typeof value === 'string') {
-    const text = roots.text(key)
-    if (text.toString() === value) return false
-    text.delete(0, text.length)
-    if (value.length > 0) text.insert(0, value)
-    return true
+    // Only the changed span. A rich-text mark belongs to the characters it
+    // covers — the annotation layer's passages on a markdown body — so
+    // deleting every character and re-inserting it took every mark down,
+    // for any write that changed anything anywhere.
+    return spliceText(roots.text(key), value)
   }
   if (Array.isArray(value)) {
     // A legacy List/MovableList root (old clients' `elements`). Carried as a

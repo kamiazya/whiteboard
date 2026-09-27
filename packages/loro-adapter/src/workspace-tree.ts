@@ -960,9 +960,10 @@ export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): Loro
  * silent no-op — measured against the real restore route); a diff of plain
  * values can, whatever lineage the past doc carries.
  *
- * Same diff rules as the tree write: maps sync per entry, text replaces on
- * inequality, list roots rewrite on inequality, an equal past commits no
- * ops, and a container the past doc does not have is cleared.
+ * Same diff rules as the tree write: maps sync per entry, text splices the
+ * changed span on inequality (so a mark on untouched text survives), list
+ * roots rewrite on inequality, an equal past commits no ops, and a container
+ * the past doc does not have is cleared.
  */
 export function reconcileDocContent(target: LoroDoc, past: LoroDoc): void {
   const wanted = past.toJSON() as Record<string, unknown>

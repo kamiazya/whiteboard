@@ -1,6 +1,7 @@
 // @vitest-environment node
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { minimalChange } from './minimal-change.js'
+import { minimalChange, spliceText } from './minimal-change.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 function apply(current: string, next: string): string {
@@ -58,4 +59,45 @@ describe('minimalChange', () => {
       expect(change.from).toBeLessThanOrEqual(change.to)
     },
   )
+})
+
+describe('spliceText', () => {
+  // Supplementary-character-dense on purpose: such a character is two
+  // UTF-16 units, and the trimmed span lands BETWEEN a pair's halves whenever
+  // two of them share one half — '😀'/'😁' share the leading \uD83D, and
+  // '😀' (U+1F600) / '𐘀' (U+10600) share the trailing \uDE00 — which Loro
+  // refuses outright ("Cannot insert or delete utf-16 in the middle of the
+  // codepoint"). Plain fc.string() pairs almost never produce either.
+  const text = fc
+    .array(fc.constantFrom('a', 'b', '😀', '😁', '\u{10600}', '👍🏽', '\n'), { maxLength: 12 })
+    .map((parts) => parts.join(''))
+
+  fcTest.prop([text, text, text, text], withDefaults())(
+    'writes the target into a live Loro text, whatever code points the edit touches',
+    (prefix, suffix, a, b) => {
+      const doc = new LoroDoc()
+      const body = doc.getText('body')
+      body.insert(0, prefix + a + suffix)
+      doc.commit()
+      spliceText(body, prefix + b + suffix)
+      doc.commit()
+      expect(body.toString()).toBe(prefix + b + suffix)
+    },
+  )
+
+  it('replaces a character with one that shares its trailing unit', () => {
+    const doc = new LoroDoc()
+    const body = doc.getText('body')
+    body.insert(0, 'x😀y')
+    expect(spliceText(body, 'x\u{10600}y')).toBe(true)
+    expect(body.toString()).toBe('x\u{10600}y')
+  })
+
+  it('replaces one emoji with another that shares its leading unit', () => {
+    const doc = new LoroDoc()
+    const body = doc.getText('body')
+    body.insert(0, 'x😀y')
+    expect(spliceText(body, 'x😁y')).toBe(true)
+    expect(body.toString()).toBe('x😁y')
+  })
 })
