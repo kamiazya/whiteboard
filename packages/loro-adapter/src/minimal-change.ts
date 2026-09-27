@@ -24,16 +24,20 @@ export interface MinimalChange {
  * passages would vanish on the next save.
  *
  * Offsets are UTF-16 code units, matching both Loro's text indices and
- * CodeMirror's positions. A boundary can therefore land between the halves
- * of a surrogate pair (two different emoji share a leading unit), which is
- * harmless: the range is replaced wholesale, so the result is `next` either
- * way — that is what this module's round-trip property pins.
+ * CodeMirror's positions. The span is widened to whole code points: two
+ * different emoji share a leading unit ('😀' and '😁' both start \uD83D), so
+ * the trimmed span would otherwise start between a surrogate pair's halves —
+ * and Loro refuses that outright ("Cannot insert or delete utf-16 in the
+ * middle of the codepoint"), failing the whole write.
  */
 export function minimalChange(current: string, next: string): MinimalChange {
   const shorter = Math.min(current.length, next.length)
 
   let from = 0
   while (from < shorter && current[from] === next[from]) from++
+  // The shared prefix is shared, so a leading half here precedes the
+  // trailing half in BOTH strings; step back over it.
+  if (from > 0 && isHighSurrogate(current.charCodeAt(from - 1))) from--
 
   let to = current.length
   let end = next.length
@@ -41,8 +45,22 @@ export function minimalChange(current: string, next: string): MinimalChange {
     to--
     end--
   }
+  // Likewise a trailing half at the start of the shared suffix belongs to
+  // the code point the span ends inside; take it into the span.
+  if (to < current.length && isLowSurrogate(current.charCodeAt(to))) {
+    to++
+    end++
+  }
 
   return { from, to, insert: next.slice(from, end) }
+}
+
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff
+}
+
+function isLowSurrogate(unit: number): boolean {
+  return unit >= 0xdc00 && unit <= 0xdfff
 }
 
 /**
