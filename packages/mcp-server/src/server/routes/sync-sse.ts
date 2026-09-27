@@ -115,6 +115,11 @@ const streams = new Map<string, SyncStream>()
  * The workspaces a stream here subscribed to at workspace granularity — the
  * record the workspace tail follows. A per-document key carries text only.
  */
+/** How many sync streams are held open right now — each one a page being served. */
+export function openSyncStreamCount(): number {
+  return streams.size
+}
+
 export function sseSubscribedWorkspaceIds(): string[] {
   const ids = new Set<string>()
   for (const stream of streams.values()) {

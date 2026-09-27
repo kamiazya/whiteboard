@@ -2,10 +2,17 @@ export class IdleTimer {
   private timer: ReturnType<typeof setTimeout> | null = null
   private lastActivityAt: number
 
+  /**
+   * @param busy Whether something is still being served without making
+   *   requests — a held stream, an open socket. Asked when the timeout
+   *   elapses: a busy daemon waits another timeout rather than stopping,
+   *   because "idle" means no client, not no request.
+   */
   constructor(
     private readonly timeoutMs: number,
     private readonly onIdle: () => void,
     private readonly now: () => number = () => Date.now(),
+    private readonly busy: () => boolean = () => false,
   ) {
     this.lastActivityAt = this.now()
   }
@@ -37,6 +44,10 @@ export class IdleTimer {
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) return
     this.timer = setTimeout(() => {
       this.timer = null
+      if (this.busy()) {
+        this.schedule()
+        return
+      }
       this.onIdle()
     }, this.timeoutMs)
   }
