@@ -144,7 +144,12 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
     }),
   )
   app.route('/', createMaintenanceRouter({ versionStore }))
-  app.route('/', createDocumentSvgExportRouter())
+  app.route(
+    '/',
+    createDocumentSvgExportRouter(
+      options.serverDeps === undefined ? {} : { liveDocuments: options.serverDeps.liveDocuments },
+    ),
+  )
   // Restore progress goes out over the WS surface; same dynamic import as
   // setAutoVersionTrigger above, for the same eval-order reason.
   const restoreProgress: RestoreProgress = async (event) => {

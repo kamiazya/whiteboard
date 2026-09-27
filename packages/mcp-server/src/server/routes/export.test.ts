@@ -55,15 +55,13 @@ vi.mock('../export/headless-export.js', () => ({
   exportCanvasHeadless: (args: MockHeadlessArgs) => mockExportCanvasHeadless(args),
 }))
 
-// Default documentExists to true so existing tests that already construct a
-// route + mock the headless renderer keep passing without each having to
-// stub the metadata-DB lookup. Missing-canvas tests opt out by overriding
-// the mock per-case.
+// Handed to the router as its LiveDocuments `exists`. Defaults to true so
+// cases that construct a route + mock the headless renderer need not stub
+// the lookup; missing-canvas cases override it per case.
 const mockDocumentExists = vi.fn<(workspaceId: string, path: string) => Promise<boolean>>(
   async () => true,
 )
 vi.mock('../store/document-store.js', () => ({
-  documentExists: (workspaceId: string, path: string) => mockDocumentExists(workspaceId, path),
   // The route family resolves an ADDRESS before it reaches the store
   // (ADR-0019), and that read goes through this same module — so a double
   // that omits it makes every export 500 on a TypeError rather than on
@@ -83,7 +81,7 @@ const { createExportRouter } = await import('./export.js')
 
 function makeApp() {
   const app = new Hono()
-  app.route('/', createExportRouter())
+  app.route('/', createExportRouter({ liveDocuments: { exists: mockDocumentExists } }))
   return app
 }
 

@@ -16,13 +16,12 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// The route now refuses a path that does not exist, so the metadata lookup is
-// stubbed true for every case; the not-found case overrides it.
+// The route refuses a path that does not exist; the router's LiveDocuments
+// `exists` is stubbed true for every case, and the not-found case overrides it.
 const mockDocumentExists = vi.fn<(workspaceId: string, path: string) => Promise<boolean>>(
   async () => true,
 )
 vi.mock('../../store/document-store.js', () => ({
-  documentExists: (workspaceId: string, path: string) => mockDocumentExists(workspaceId, path),
   // The route family resolves an ADDRESS before it reaches the store
   // (ADR-0019), and that read goes through this same module — so a double
   // that omits it makes every export 500 on a TypeError rather than on
@@ -55,7 +54,7 @@ const { createDocumentSvgExportRouter } = await import('./export-svg.js')
 
 function makeApp() {
   const app = new Hono()
-  app.route('/', createDocumentSvgExportRouter())
+  app.route('/', createDocumentSvgExportRouter({ liveDocuments: { exists: mockDocumentExists } }))
   return app
 }
 

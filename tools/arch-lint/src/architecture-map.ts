@@ -398,14 +398,12 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document.ts -> auto-compact',
   'routes/document.ts -> version-store',
   'routes/document/auto-version.ts -> version-store',
-  'routes/document/export-svg.ts -> document-store',
   'routes/document/maintenance.ts -> doc-cache',
   'routes/document/maintenance.ts -> document-store',
   'routes/document/maintenance.ts -> version-store',
   'routes/document/metadata.ts -> names-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
-  'routes/export.ts -> document-store',
   'routes/files.ts -> file-gc',
   'routes/files.ts -> version-store',
   'routes/files.ts -> workspace-lock',
@@ -438,7 +436,7 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * gone with the feature. Debt paid by deletion rather than by relocation,
  * which is the cheapest way this number ever comes down.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 18
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 16
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
