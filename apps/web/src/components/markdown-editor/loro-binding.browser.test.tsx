@@ -90,9 +90,9 @@ it('a remote edit merges into the editor and shifts the caret exactly', async ()
  * `CodeMirror plugin crashed` and DISABLES the plugin for good — the pane
  * keeps taking input and reaches nothing.
  *
- * `use-markdown-document`'s `bodyTextOf` is a live resolver of exactly this
- * shape: it reads `hostRef.current` on every call and answers with the
- * workspace tree-node container or the root one depending on what it finds.
+ * A live resolver has exactly this shape when it reads a mutable host on
+ * every call and answers with the workspace tree-node container or the root
+ * one depending on what it finds.
  * This pins the consequence rather than the trigger, and doubles as the
  * detector's own mutation check — a run that finds nothing here is looking at
  * a guard that stopped guarding.

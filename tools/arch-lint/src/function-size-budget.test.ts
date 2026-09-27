@@ -526,7 +526,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // daemon page was missing. Still JSX-shaped: the rows and the dialog are
   // most of its lines, and splitting them out would be a component per row.
   'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 80,
-  'apps/web/src/pages/use-markdown-document.ts#useMarkdownDocument': 378,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration.register': 58,

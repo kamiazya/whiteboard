@@ -1,7 +1,7 @@
 /**
  * The title a markdown body announces about itself, if it announces one.
  *
- * Used to NAME a document that nobody named — see `use-markdown-document`.
+ * Used to NAME a document that nobody named — see `seed-name-from-title`.
  * Deliberately line-anchored text matching rather than a markdown parse: a
  * level-1 ATX heading is only ever `#` + whitespace + text at the start of a
  * line, and a full parse buys nothing at that depth.

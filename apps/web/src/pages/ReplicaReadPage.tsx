@@ -136,9 +136,8 @@ function ReplicaActionPanel({
 /**
  * The replica's save queue: one trailing debounce and a sequential chain.
  *
- * ponytail: the full save-scheduler carries persistence-state reporting this
- * page does not show. Upgrade path: thread createSaveScheduler when a save
- * indicator arrives here.
+ * ponytail: no persistence-state reporting, since this page shows no save
+ * indicator. Report it from here when one arrives.
  *
  * The unmount FLUSHES rather than cancels — the daemon returning is exactly
  * what unmounts this page, and that moment must not eat the last debounce

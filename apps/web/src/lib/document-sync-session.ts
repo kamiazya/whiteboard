@@ -78,6 +78,9 @@ const log = getAppLogger('document-sync')
 // stuck commitChain cannot leave a disconnect() call pending forever.
 const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
 
+/** Edits within this window (ms) of each other coalesce into one commit. */
+export const COMMIT_DEBOUNCE_MS = 300
+
 /** Stable empty set so a lock read before the first snapshot is referentially stable. */
 const EMPTY_LOCKS: ReadonlySet<string> = new Set()
 
@@ -920,10 +923,6 @@ export function createDocumentSyncSession(
     notifyAnnotations(next)
   }
 
-  // Debounce window (ms): edits fired within this window of each other
-  // coalesce into a single commit firing.
-  const DEBOUNCE_MS = 300
-
   // Every DISTINCT target (see commandTargetKey) touched since the last
   // commit, keyed so a repeat edit to the SAME target within the window
   // overwrites its own entry (only the latest command per target survives),
@@ -995,7 +994,7 @@ export function createDocumentSyncSession(
     debounceTimer = setTimeout(() => {
       debounceTimer = null
       commitPendingTargets()
-    }, DEBOUNCE_MS)
+    }, COMMIT_DEBOUNCE_MS)
   }
 
   function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {

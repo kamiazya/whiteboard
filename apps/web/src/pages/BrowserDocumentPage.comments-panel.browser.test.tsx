@@ -37,15 +37,31 @@ vi.mock('../lib/browser-backend.js', async () => {
   const { FakeBrowserBackend, workspaceSnapshotFor } = await import(
     '../test-utils/fake-browser-backend.js'
   )
-  const { documentContainers: containersOf, writeCommentThread: writeThread } = await import(
-    '@kamiazya/whiteboard-loro-adapter'
-  )
+  const {
+    documentContainers: containersOf,
+    writeCommentThread: writeThread,
+    writeWorkspaceDocumentContent: writeContent,
+  } = await import('@kamiazya/whiteboard-loro-adapter')
   const { LoroDoc: Doc } = await import('loro-crdt')
   class ThreadSeedingBackend extends FakeBrowserBackend {
     // Named from the published contract rather than derived off the base
     // class: inside a `vi.mock` factory the base is a dynamic import, so a
     // `Parameters<…>` lookup over it resolves to `unknown`.
     connect(handlers: DocumentBackendHandlers): void {
+      // A note is served through its session like a board: its content —
+      // body, threads — goes on its node, as the real backend adopts it.
+      const note = seededNotes.get(this.target.documentId)
+      if (this.target.kind === 'markdown' && note !== undefined) {
+        const workspace = new Doc()
+        workspace.import(workspaceSnapshotFor(this.target))
+        const source = new Doc()
+        source.import(note)
+        writeContent(workspace, this.target.documentId, source)
+        workspace.commit()
+        handlers.onConnected()
+        handlers.onSnapshot(workspace.export({ mode: 'snapshot' }))
+        return
+      }
       // Rebuilt from the shared helper's snapshot so the workspace-document
       // shape stays the real one; only the threads plane is added on top.
       const doc = new Doc()
@@ -78,6 +94,9 @@ vi.mock('../lib/browser-backend.js', async () => {
   }
   return { BrowserBackend: ThreadSeedingBackend }
 })
+
+/** Each note case's content, keyed by document id, for the backend above. */
+const seededNotes = vi.hoisted(() => new Map<string, Uint8Array>())
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
@@ -211,7 +230,7 @@ it('lists a markdown document conversations, which no session is there to delive
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteHoldingOneThread())
+  seededNotes.set(note.documentId, noteHoldingOneThread())
 
   render(
     <BrowserDocumentPage
@@ -241,7 +260,7 @@ it('replies on a markdown document, where a reply has no session to travel throu
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteHoldingOneThread())
+  seededNotes.set(note.documentId, noteHoldingOneThread())
 
   render(
     <BrowserDocumentPage
@@ -278,7 +297,7 @@ it('opens a conversation from the markdown body, end to end', async () => {
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteHoldingABody())
+  seededNotes.set(note.documentId, noteHoldingABody())
 
   render(
     <BrowserDocumentPage
@@ -345,7 +364,7 @@ it('moves the reader into the conversation it opens, and Escape puts them back i
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteHoldingABody())
+  seededNotes.set(note.documentId, noteHoldingABody())
 
   render(
     <BrowserDocumentPage
@@ -407,7 +426,7 @@ it('keeps the body highlight through an edit inside its own passage', async () =
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteHoldingAMarkedPassage())
+  seededNotes.set(note.documentId, noteHoldingAMarkedPassage())
 
   render(
     <BrowserDocumentPage
@@ -559,7 +578,7 @@ it('reaches a note thread from the body: its gutter marker opens the rail on tha
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteHoldingAPlacedThread())
+  seededNotes.set(note.documentId, noteHoldingAPlacedThread())
 
   render(
     <BrowserDocumentPage
@@ -601,7 +620,7 @@ it('starts a conversation about the whole document from the rail, on a note', as
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteHoldingOneThread())
+  seededNotes.set(note.documentId, noteHoldingOneThread())
 
   render(
     <BrowserDocumentPage

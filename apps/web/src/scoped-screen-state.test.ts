@@ -52,7 +52,6 @@ const sources = import.meta.glob(
     './components/workspace-files/use-tags-in-use.ts',
     './pages/DaemonIndexPage.tsx',
     './components/VersionTimeline.tsx',
-    './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
     './pages/use-browser-route-sync.ts',
     './pages/use-auto-checkpoint.ts',
@@ -108,7 +107,6 @@ const PANEL_POINTERS_HOOK = './components/workspace-files/use-document-pointers.
 const PANEL_TAGS_HOOK = './components/workspace-files/use-tags-in-use.ts'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
-const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 // The address-bar half of that page, extracted so the page's own hook stays
 // under the complexity budget: `lastKnownCanvasIdRef` moved THERE, not away.
@@ -251,9 +249,8 @@ const EMPTY = '(null|undefined|\\[\\]|false|0|\'\'|""|[A-Z][A-Z0-9_]*)'
  * What a name is called and how a reset to it would read.
  *
  * The setter is taken from the DECLARATION rather than derived as
- * `set${Name}`, because that convention does not hold: `use-markdown-document`
- * declares `[body, setBodyState]` and `[coreFacets, setCoreMetaState]`, since
- * `setBody` is already the hook's public writer. A guard that assumed the
+ * `set${Name}`, because that convention does not hold: a hook whose public
+ * writer is `setBody` declares its state as `[body, setBodyState]`. A guard that assumed the
  * convention would have reported both as unbacked claims and sent the reader
  * looking for a bug in the fix.
  */
@@ -274,7 +271,7 @@ function stateNames(source: string): Slot[] {
  * Names every `const x = useRef` declares.
  *
  * It exists because a REF held the worst defect this ledger has covered:
- * `hostRef` in `use-markdown-document` kept the departed document's write
+ * `hostRef` in the (since deleted) markdown document hook kept the departed document's write
  * handle through the next one's load, so a keystroke under one document was
  * saved into another. Scanning only `useState` would never have asked about
  * it.
@@ -353,42 +350,6 @@ const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
     'no subject: a monotonic dispatch stamp; resetting it would revive the stale-response race it exists to close',
   prevRefreshSignalRef:
     'no subject: only decides whether a refetch is REDUNDANT — the switch already refetches through refresh’s identity',
-}
-
-// Scoped on the DOCUMENT, and the one case that scans REFS too — see
-// `refNames` for why.
-const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
-  doc: 'cleared on switch',
-  body: 'cleared on switch',
-  coreFacets: 'cleared on switch',
-  hostRef: 'cleared on switch',
-  // The same host `hostRef` holds, kept as STATE because `bodyTextResolver`
-  // has to capture it: a resolver handed to a mounted CRDT binding must not be
-  // able to change which container it answers, and a ref is cleared out from
-  // under one. Cleared on switch for the same reason every entry above is —
-  // it names the departed document's content.
-  contentHost: 'cleared on switch',
-
-  saveState: 'cleared on switch',
-  // The conversations on THIS document. Left standing across a switch it
-  // lists the departed document's threads beside the arrived one's body,
-  // over a reply box that writes by thread id — into whichever document
-  // actually holds it.
-  annotations: 'cleared on switch',
-  // And where their passages sit in THIS document's body. Offsets into a
-  // body that has left the screen, applied to the one that arrived, put
-  // every highlight somewhere the reader never marked.
-  threadMarks: 'cleared on switch',
-
-  loroRef: 'no subject: mirrors the `loro` prop, reassigned on every render',
-  scheduleSaveRef: 'no subject: mirrors the current `scheduleSave`, reassigned on every render',
-  setSaveStateRef: 'no subject: mirrors the state setter, reassigned on every render',
-  onLocalCommitRef:
-    'no subject: mirrors the page’s onLocalCommit, reassigned on every render — it is how the doc subscription reaches the CURRENT checkpoint signal without re-subscribing per render',
-  currentDocumentIdRef:
-    'no subject: mirrors the scope itself, reassigned on every render — it is what a scheduler outliving its document asks to find out whether its report still belongs on screen',
-  schedulerRef:
-    'no subject: keyed BY the document id — `schedulerFor` replaces it whenever the id differs, so it corrects itself rather than going stale',
 }
 
 // The page itself, not a panel inside it. It keeps its own document
@@ -480,8 +441,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   lastKnownCanvasIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
   shortcutHandledRef: 'no subject: a once-per-page-load flag for the ?new=canvas launcher param',
-  checkpointSignalRef:
-    'no subject: mirrors the current checkpoint pair’s signal, reassigned every render — the pair is memoised on the record source and the path, so a switch replaces it before the markdown hook can reach the departed document’s',
 }
 
 const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
@@ -539,12 +498,6 @@ const CASES = [
     files: [VERSION_TIMELINE],
     ledger: VERSION_TIMELINE_STATE,
     label: 'VersionTimeline',
-    scanRefs: true,
-  },
-  {
-    files: [MARKDOWN_DOCUMENT],
-    ledger: MARKDOWN_DOCUMENT_STATE,
-    label: 'useMarkdownDocument',
     scanRefs: true,
   },
   {
