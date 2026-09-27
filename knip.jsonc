@@ -88,6 +88,11 @@
       ],
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]
     },
+    "apps/extension": {
+      // The Firefox content script: a second, classic-script build that
+      // vite.config.ts starts from closeBundle, which knip cannot follow.
+      "entry": ["src/content.ts"]
+    },
     "apps/web": {
       "entry": [
         // Compile-time-only regression guard (tsc --noEmit fails/passes

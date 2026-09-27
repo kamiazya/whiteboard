@@ -37,6 +37,7 @@ describe('whiteboard native-host', () => {
   it('installs a launcher the browser can start from anywhere, relaying to the daemon', async () => {
     const dataDir = join(scratch, 'data')
     const manifestDir = join(scratch, 'NativeMessagingHosts')
+    const firefoxManifestDir = join(scratch, 'native-messaging-hosts')
     const installed = spawnSync(
       process.execPath,
       [
@@ -48,6 +49,7 @@ describe('whiteboard native-host', () => {
         '--json',
         `--data-dir=${dataDir}`,
         `--manifest-dir=${manifestDir}`,
+        `--firefox-manifest-dir=${firefoxManifestDir}`,
       ],
       { cwd: MCP_SERVER_DIR, encoding: 'utf8' },
     )
@@ -55,6 +57,13 @@ describe('whiteboard native-host', () => {
     const result = JSON.parse(installed.stdout)
     const manifest = JSON.parse(readFileSync(join(manifestDir, `${NATIVE_HOST_NAME}.json`), 'utf8'))
     expect(manifest.path).toBe(result.launcher)
+    const firefoxManifest = JSON.parse(
+      readFileSync(join(firefoxManifestDir, `${NATIVE_HOST_NAME}.json`), 'utf8'),
+    )
+    expect(firefoxManifest).toMatchObject({
+      path: result.launcher,
+      allowed_extensions: [expect.any(String)],
+    })
 
     const socketPath = join(scratch, 'd.sock')
     let authorization: string | undefined

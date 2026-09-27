@@ -11,6 +11,7 @@
  * `pageToHostSchema` and attaches the daemon's credentials itself.
  */
 import { z } from 'zod'
+import { WINDOW_BRIDGE_CHANNEL } from './extension-names.js'
 
 /**
  * Bytes of body one host message carries. Chromium refuses a message from
@@ -82,3 +83,29 @@ export const extensionHelloReplySchema = z.object({
   type: z.literal('hello'),
   version: z.string(),
 })
+
+/**
+ * Firefox lets no page message an extension, so the extension's content
+ * script relays between the page's window and the extension, for ports the
+ * page opens by a name of its own. This is what the content script posts;
+ * a relayed `message` is read by `extensionToPageSchema`, so it stays
+ * `unknown` here.
+ */
+const fromExtension = { channel: z.literal(WINDOW_BRIDGE_CHANNEL), from: z.literal('extension') }
+export const windowFromExtensionSchema = z.discriminatedUnion('kind', [
+  z.object({ ...fromExtension, kind: z.literal('hello'), version: z.string() }),
+  z.object({ ...fromExtension, kind: z.literal('connected'), port: idSchema }),
+  z.object({ ...fromExtension, kind: z.literal('message'), port: idSchema, message: z.unknown() }),
+  z.object({ ...fromExtension, kind: z.literal('disconnect'), port: idSchema }),
+])
+export type WindowFromExtension = z.infer<typeof windowFromExtensionSchema>
+
+/** What the page posts to the content script. */
+const fromPage = { channel: z.literal(WINDOW_BRIDGE_CHANNEL), from: z.literal('page') }
+const windowFromPageSchema = z.discriminatedUnion('kind', [
+  z.object({ ...fromPage, kind: z.literal('hello') }),
+  z.object({ ...fromPage, kind: z.literal('connect'), port: idSchema }),
+  z.object({ ...fromPage, kind: z.literal('message'), port: idSchema, message: pageToHostSchema }),
+  z.object({ ...fromPage, kind: z.literal('disconnect'), port: idSchema }),
+])
+export type WindowFromPage = z.infer<typeof windowFromPageSchema>

@@ -55,7 +55,7 @@ whiteboard server deactivate-user --json --user=<id|name> [--reactivate] [--data
 whiteboard server add-user       --json --provider=<id> --subject=<sub> [--name=<display name>] [--data-dir=<path>]
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
-whiteboard native-host install   --json [--data-dir=<path>] [--manifest-dir=<path>]
+whiteboard native-host install   --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]
 `
 
 function writeJsonObject(value: unknown): void {

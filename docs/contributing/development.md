@@ -141,10 +141,19 @@ loopback closes (ADR-0050 stage 4).
   (also `localhost` and `127.0.0.1`, for a dev server). Load either with
   **Load unpacked** on `chrome://extensions`; the manifest carries a key, so the
   id is always `ckgipndlpblkhiplhnbbdnpnibflplje`.
-- `whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>]`
-  registers the host with each Chromium browser this user has run (Chrome,
-  Chromium, Edge, Brave; Linux and macOS). It writes a launcher under the data
-  dir and a manifest that lets only the extension above start it. One host name
+- The build also writes `dist/firefox-production` and `dist/firefox-development`.
+  Firefox lets no page message an extension, so that build relays through a
+  content script on the admitted pages instead, and its id is
+  `whiteboard@kamiazya.github.io`. Load it with **Load Temporary Add-on** on
+  `about:debugging` (pick its `manifest.json`); it lasts until Firefox restarts.
+- `whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]`
+  registers the host with each browser this user has run (Chrome, Chromium,
+  Edge, Brave and Firefox, Ubuntu's snap Firefox included; Linux and macOS). It
+  writes a launcher under the data dir and, per browser, a manifest that lets
+  only the extension above start it — Chromium's naming the extension's origin,
+  Firefox's its id, since Firefox refuses a manifest that carries both. The snap
+  Firefox asks once, through a desktop dialog, before it first starts the host,
+  and remembers the answer — a refusal too. One host name
   means one data dir per browser: installing for `.dev-data` replaces the
   registration for `~/.whiteboard`.
 - The host relays only `/api/` requests, to the owner-only socket the daemon
@@ -161,8 +170,14 @@ loopback closes (ADR-0050 stage 4).
   extension, with no pairing grant to renew.
 - `pnpm --filter @kamiazya/whiteboard-extension smoke:bridge` proves the whole
   path in headless Chromium against a real daemon, including the built web app
-  connecting, reading an agent's note and writing back. Branded Chrome ignores
-  `--load-extension`, so it needs `pnpm exec playwright install chromium` once.
+  connecting, reading an agent's note, writing back, and seeing the agent's
+  next edit arrive live. Branded Chrome ignores `--load-extension`, so it needs
+  `pnpm exec playwright install chromium` once.
+- `smoke:bridge:firefox` proves the same in Firefox, over WebDriver: Playwright
+  cannot load an extension into Firefox. It needs geckodriver and a Firefox that
+  is not the snap (whose portal dialog wants a person), named by `GECKODRIVER`
+  and `FIREFOX_BIN` or found on `PATH`. Mozilla's own Linux tarball and a
+  geckodriver release both work unpacked anywhere.
 
 ## Cloudflare Pages header parity in local dev
 

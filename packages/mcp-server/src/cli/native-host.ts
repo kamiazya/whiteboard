@@ -11,14 +11,25 @@ import { homedir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
 import { loadDaemonRecord } from '../daemon/daemon-registry.js'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
-import { installNativeHost, nativeHostManifestDirs } from '../daemon/native-host/install.js'
+import {
+  installNativeHost,
+  type ManifestDir,
+  nativeHostManifestDirs,
+} from '../daemon/native-host/install.js'
 import { runNativeHost } from '../daemon/native-host/relay.js'
 import { type FlagTable, scanFlags } from './flag-table.js'
 
-const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir'> = {
+const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
   booleans: ['--json'],
-  values: { '--data-dir': 'dataDir', '--manifest-dir': 'manifestDir' },
+  values: {
+    '--data-dir': 'dataDir',
+    '--manifest-dir': 'manifestDir',
+    '--firefox-manifest-dir': 'firefoxManifestDir',
+  },
 }
+
+const INSTALL_USAGE =
+  'whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]'
 
 export async function dispatchNativeHost(
   subcommand: string | undefined,
@@ -26,9 +37,7 @@ export async function dispatchNativeHost(
 ): Promise<number> {
   if (subcommand === 'run') return await runHost()
   if (subcommand === 'install') return await install(rest)
-  process.stderr.write(
-    'Unknown native-host subcommand. Use: whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>]\n',
-  )
+  process.stderr.write(`Unknown native-host subcommand. Use: ${INSTALL_USAGE}\n`)
   return 64
 }
 
@@ -74,9 +83,17 @@ async function install(rest: readonly string[]): Promise<number> {
     return 64
   }
   const dataDir = resolve(scan.values.dataDir ?? resolveDefaultDataDir(process.env))
-  const manifestDirs = scan.values.manifestDir
-    ? [{ browser: 'explicit', dir: resolve(scan.values.manifestDir) }]
-    : nativeHostManifestDirs(homedir(), process.platform)
+  const { manifestDir, firefoxManifestDir } = scan.values
+  const explicit: ManifestDir[] = [
+    ...(manifestDir
+      ? [{ browser: 'explicit', engine: 'chromium', dir: resolve(manifestDir) } as const]
+      : []),
+    ...(firefoxManifestDir
+      ? [{ browser: 'explicit', engine: 'firefox', dir: resolve(firefoxManifestDir) } as const]
+      : []),
+  ]
+  const manifestDirs =
+    explicit.length > 0 ? explicit : nativeHostManifestDirs(homedir(), process.platform)
   const result = await installNativeHost({
     dataDir,
     manifestDirs,
@@ -87,7 +104,12 @@ async function install(rest: readonly string[]): Promise<number> {
     },
   })
   const ok = result.manifests.length > 0
-  const reason = ok ? {} : { reason: 'no Chromium browser was found; pass --manifest-dir=<path>' }
+  const reason = ok
+    ? {}
+    : {
+        reason:
+          'no Chromium browser or Firefox was found; pass --manifest-dir=<path> or --firefox-manifest-dir=<path>',
+      }
   process.stdout.write(`${JSON.stringify({ schemaVersion: 1, ok, ...reason, ...result })}\n`)
   return ok ? 0 : 1
 }

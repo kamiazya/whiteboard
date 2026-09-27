@@ -10,9 +10,10 @@ import { type ExtensionApi, installRelay, type Port } from './relay.js'
 class FakePort implements Port {
   readonly sent: unknown[] = []
   disconnected = false
+  error?: { message?: string }
   private readonly messageListeners: Array<(message: unknown) => void> = []
   private readonly disconnectListeners: Array<() => void> = []
-  constructor(readonly sender?: { origin?: string }) {}
+  constructor(readonly sender?: { origin?: string; url?: string }) {}
   readonly onMessage = {
     addListener: (l: (message: unknown) => void) => this.messageListeners.push(l),
   }
@@ -36,6 +37,7 @@ class FakePort implements Port {
 function fakeApi(lastError?: string) {
   const natives: Array<{ name: string; port: FakePort }> = []
   let onConnectExternal: ((port: Port) => void) | undefined
+  let onConnect: ((port: Port) => void) | undefined
   let onMessageExternal:
     | ((message: unknown, sender: { origin?: string }, reply: (r: unknown) => void) => void)
     | undefined
@@ -51,6 +53,7 @@ function fakeApi(lastError?: string) {
       },
       getManifest: () => ({ version: '9.9.9' }),
       onConnectExternal: { addListener: (l) => (onConnectExternal = l) },
+      onConnect: { addListener: (l) => (onConnect = l) },
       onMessageExternal: { addListener: (l) => (onMessageExternal = l) },
     },
   }
@@ -58,6 +61,7 @@ function fakeApi(lastError?: string) {
     api,
     natives,
     connect: (port: FakePort) => onConnectExternal?.(port),
+    connectFromContentScript: (port: FakePort) => onConnect?.(port),
     message: (message: unknown, origin: string) =>
       new Promise<unknown>((resolve) => onMessageExternal?.(message, { origin }, resolve)),
   }
@@ -114,5 +118,36 @@ describe('installRelay', () => {
     const fake = fakeApi()
     installRelay(fake.api, MATCHES)
     expect(await fake.message({ type: 'hello' }, APP)).toEqual({ type: 'hello', version: '9.9.9' })
+  })
+
+  // Firefox: the page reaches the relay through the content script, whose
+  // port names the page it runs in by URL.
+  it('relays a content script on an admitted page, and refuses one elsewhere', () => {
+    const fake = fakeApi()
+    installRelay(fake.api, MATCHES)
+    const admitted = new FakePort({ url: `${APP}/w/default` })
+    fake.connectFromContentScript(admitted)
+    const elsewhere = new FakePort({ url: 'https://evil.example/' })
+    fake.connectFromContentScript(elsewhere)
+
+    expect(fake.natives.map((n) => n.name)).toEqual([NATIVE_HOST_NAME])
+    admitted.receive({ type: 'request', id: 'a' })
+    expect(fake.natives[0]?.port.sent).toEqual([{ type: 'request', id: 'a' }])
+    expect(elsewhere.disconnected).toBe(true)
+  })
+
+  it('tells the page why its host went away where Firefox puts it, on the port', () => {
+    const fake = fakeApi()
+    installRelay(fake.api, MATCHES)
+    const page = new FakePort({ origin: APP })
+    fake.connect(page)
+    const native = fake.natives[0]?.port
+    if (native === undefined) throw new Error('no native host was started')
+    native.error = { message: 'No such native application io.github.kamiazya.whiteboard' }
+
+    native.drop()
+    expect(page.sent).toEqual([
+      { type: 'disconnected', message: 'No such native application io.github.kamiazya.whiteboard' },
+    ])
   })
 })

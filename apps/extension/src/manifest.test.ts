@@ -4,9 +4,12 @@
  * sides of that are written in the manifest.
  */
 import { createHash } from 'node:crypto'
-import { WHITEBOARD_EXTENSION_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  WHITEBOARD_EXTENSION_ID,
+  WHITEBOARD_GECKO_ID,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { describe, expect, it } from 'vitest'
-import { admitsOrigin, manifestFor } from './manifest.js'
+import { admitsOrigin, admittedMatches, firefoxManifestFor, manifestFor } from './manifest.js'
 
 /** Chromium's extension id: the first 32 hex digits of the key's SHA-256, spelled a-p. */
 function extensionIdOf(key: string): string {
@@ -40,6 +43,45 @@ describe('manifestFor', () => {
       'http://localhost/*',
       'http://127.0.0.1/*',
     ])
+  })
+})
+
+// Firefox lets no page message an extension, so its build reaches the page
+// through a content script instead — injected into the same pages Chromium
+// admits, and nowhere else.
+describe('firefoxManifestFor', () => {
+  it('carries the id the host manifest names', () => {
+    expect(firefoxManifestFor('production').browser_specific_settings.gecko.id).toBe(
+      WHITEBOARD_GECKO_ID,
+    )
+  })
+
+  it('relays through a content script on the pages the Chromium build admits', () => {
+    for (const mode of ['production', 'development'] as const) {
+      const manifest = firefoxManifestFor(mode)
+      expect(manifest.content_scripts).toEqual([
+        {
+          matches: manifestFor(mode).externally_connectable.matches,
+          js: ['content.js'],
+          run_at: 'document_start',
+        },
+      ])
+      expect(manifest.permissions).toEqual(['nativeMessaging'])
+      expect(manifest).not.toHaveProperty('externally_connectable')
+      expect(manifest).not.toHaveProperty('key')
+    }
+  })
+})
+
+describe('admittedMatches', () => {
+  it('reads the list the browser enforces, in either build', () => {
+    expect(admittedMatches(manifestFor('development'))).toEqual(
+      manifestFor('development').externally_connectable.matches,
+    )
+    expect(admittedMatches(firefoxManifestFor('development'))).toEqual(
+      manifestFor('development').externally_connectable.matches,
+    )
+    expect(admittedMatches({})).toEqual([])
   })
 })
 

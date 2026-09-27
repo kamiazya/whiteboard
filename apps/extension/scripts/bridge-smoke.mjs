@@ -15,53 +15,25 @@
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
 // Chromium: `pnpm exec playwright install chromium`.
-import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { createServer, request } from 'node:http'
-import { tmpdir } from 'node:os'
-import { dirname, extname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { mkdtempSync } from 'node:fs'
+import { join } from 'node:path'
 import { chromium } from 'playwright'
+import {
+  agentEdits,
+  buildAll,
+  createSmoke,
+  daemonNoteContains,
+  EXTENSION_DIR,
+  seedNote,
+  serve,
+  startDaemon,
+  stopDaemon,
+  whiteboard,
+} from './smoke-kit.mjs'
 
-const EXTENSION_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const MCP_SERVER_DIR = resolve(EXTENSION_DIR, '../../packages/mcp-server')
-const WEB_DIR = resolve(EXTENSION_DIR, '../web')
-const CLI = [process.execPath, '--import', 'tsx/esm', join(MCP_SERVER_DIR, 'src/cli/index.ts')]
 const EXTENSION_ID = 'ckgipndlpblkhiplhnbbdnpnibflplje'
-
-const scratch = mkdtempSync(join(tmpdir(), 'whiteboard-bridge-smoke-'))
-const dataDir = join(scratch, 'data')
-let failed = false
-const check = (ok, what, detail) => {
-  console[ok ? 'log' : 'error'](`  ${ok ? 'pass' : 'FAIL'}  ${what}${ok ? '' : ` — ${detail}`}`)
-  if (!ok) failed = true
-}
-
-function whiteboard(args) {
-  const run = spawnSync(CLI[0], [...CLI.slice(1), ...args], {
-    cwd: MCP_SERVER_DIR,
-    encoding: 'utf8',
-  })
-  if (run.status !== 0) throw new Error(`whiteboard ${args.join(' ')} failed: ${run.stderr}`)
-  return JSON.parse(run.stdout)
-}
-
-function startDaemon() {
-  const daemon = spawn(
-    CLI[0],
-    [...CLI.slice(1), 'daemon', 'run', '--json', `--data-dir=${dataDir}`, '--no-open'],
-    {
-      cwd: MCP_SERVER_DIR,
-      stdio: ['ignore', 'pipe', 'inherit'],
-    },
-  )
-  return new Promise((ready, fail) => {
-    daemon.stdout.once('data', () => ready(daemon))
-    daemon.once('exit', (code) =>
-      fail(new Error(`the daemon exited (${code}) before it was ready`)),
-    )
-  })
-}
+const smoke = createSmoke('bridge-smoke')
+const { check, dataDir, scratch } = smoke
 
 /** The page: asks for everything at once and reports what came back. */
 const PAGE = `<!doctype html><meta charset="utf-8"><script>
@@ -101,82 +73,9 @@ async function openPage(extensionDir, pageUrl) {
   return { context, page }
 }
 
-/** One MCP tool call to the daemon, over its socket, as an agent makes it. */
-function callTool(record, name, args) {
-  const body = JSON.stringify({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: { name, arguments: args },
-  })
-  return new Promise((done, fail) => {
-    const req = request(
-      {
-        socketPath: record.socketPath,
-        path: '/mcp',
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
-          authorization: `Bearer ${record.token}`,
-        },
-      },
-      (res) => {
-        let text = ''
-        res.on('data', (piece) => {
-          text += piece
-        })
-        res.on('end', () => done(JSON.parse(text).result?.structuredContent))
-      },
-    )
-    req.on('error', fail)
-    req.end(body)
-  })
-}
-
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.svg': 'image/svg+xml',
-  '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.png': 'image/png',
-  '.wasm': 'application/wasm',
-}
-
-/** The built web app, with the single-page fallback its hosting gives it. */
-function serveWebApp() {
-  const root = join(WEB_DIR, 'dist')
-  return createServer((req, res) => {
-    const path = join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname))
-    const file =
-      path.startsWith(root) && existsSync(path) && statSync(path).isFile()
-        ? path
-        : join(root, 'index.html')
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' })
-    res.end(readFileSync(file))
-  })
-}
-
 /** Connect from a browser-kept document, open an agent's note, and type into it. */
 async function webAppRoundTrip(record, appUrl) {
-  const seeded = await callTool(record, 'wb_workspace_edit', {
-    workspaceId: 'default',
-    createWorkspace: true,
-    ops: [
-      {
-        op: 'document.create',
-        path: 'bridge-note',
-        kind: 'markdown',
-        name: 'Bridge note',
-        markdown: '# Bridge note\n\nwritten by an agent',
-      },
-    ],
-  })
-  const documentId = seeded?.results?.[0]?.documentId
+  const documentId = await seedNote(record)
   const { context, page } = await openPage(join(EXTENSION_DIR, 'dist/development'), appUrl)
   // What the page said, so a failure here names its cause rather than a URL.
   const said = []
@@ -216,15 +115,7 @@ async function webAppRoundTrip(record, appUrl) {
     await page.locator('.cm-content').first().click()
     await page.keyboard.press('Control+End')
     await page.keyboard.type(' and typed in the browser')
-    let content = ''
-    for (let i = 0; i < 40 && !content.includes('typed in the browser'); i += 1) {
-      await page.waitForTimeout(250)
-      const got = await callTool(record, 'wb_document_get', {
-        workspaceId: 'default',
-        documentIds: [documentId],
-      })
-      content = got?.documents?.[0]?.content ?? ''
-    }
+    const content = await daemonNoteContains(record, documentId, 'typed in the browser')
     check(
       content.includes('typed in the browser'),
       'an edit in the web app lands on the daemon',
@@ -233,20 +124,7 @@ async function webAppRoundTrip(record, appUrl) {
     // The other direction, live: an agent's edit reaches the open page over
     // the bridge's SSE stream, which the page subscribed by the workspace's
     // segment (`default`) rather than its id.
-    await callTool(record, 'wb_body_edit', {
-      workspaceId: 'default',
-      documentId,
-      mode: 'apply',
-      ops: [
-        {
-          id: 'agent-edit',
-          op: 'body.replace',
-          anchor: { kind: 'text', start: 0, end: 13, quote: { exact: '# Bridge note' } },
-          assumed: '# Bridge note',
-          text: '# Edited by an agent',
-        },
-      ],
-    })
+    await agentEdits(record, documentId)
     const live = await page
       .getByText('Edited by an agent')
       .first()
@@ -262,25 +140,19 @@ async function webAppRoundTrip(record, appUrl) {
 }
 
 let daemon
-const pages = createServer((_req, res) =>
-  res.writeHead(200, { 'content-type': 'text/html' }).end(PAGE),
-)
-const webApp = serveWebApp()
+const pages = await serve(PAGE)
+const webApp = await serve()
 try {
-  const build = spawnSync('pnpm', ['build'], { cwd: EXTENSION_DIR, stdio: 'inherit' })
-  if (build.status !== 0) throw new Error('the extension did not build')
-  const webBuild = spawnSync('pnpm', ['exec', 'vite', 'build'], { cwd: WEB_DIR, stdio: 'inherit' })
-  if (webBuild.status !== 0) throw new Error('the web app did not build')
-  daemon = await startDaemon()
-  const record = JSON.parse(readFileSync(join(dataDir, 'daemon.json'), 'utf8'))
+  buildAll()
+  const started = await startDaemon(dataDir)
+  daemon = started.daemon
+  const { record } = started
   check(
     typeof record.socketPath === 'string',
     'the daemon records its socket',
     JSON.stringify(record),
   )
-
-  await new Promise((listening) => pages.listen(0, '127.0.0.1', listening))
-  const pageUrl = `http://127.0.0.1:${pages.address().port}/`
+  const pageUrl = pages.url
 
   const dev = await openPage(join(EXTENSION_DIR, 'dist/development'), pageUrl)
   await dev.page.waitForFunction(
@@ -330,8 +202,7 @@ try {
     JSON.stringify(mcp),
   )
 
-  await new Promise((listening) => webApp.listen(0, '127.0.0.1', listening))
-  await webAppRoundTrip(record, `http://127.0.0.1:${webApp.address().port}/`)
+  await webAppRoundTrip(record, webApp.url)
 
   const prod = await openPage(join(EXTENSION_DIR, 'dist/production'), pageUrl)
   const exposed = await prod.page.evaluate(() => typeof globalThis.chrome?.runtime?.connect)
@@ -342,15 +213,6 @@ try {
 } finally {
   pages.close()
   webApp.close()
-  daemon?.kill('SIGTERM')
-  await new Promise((exited) =>
-    daemon && daemon.exitCode === null ? daemon.once('exit', exited) : exited(),
-  )
-  rmSync(scratch, { recursive: true, force: true })
+  await stopDaemon(daemon)
+  smoke.finish()
 }
-
-if (failed) {
-  console.error('[bridge-smoke] FAIL')
-  process.exit(1)
-}
-console.log('[bridge-smoke] ok')

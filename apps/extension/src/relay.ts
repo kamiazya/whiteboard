@@ -6,11 +6,13 @@
  * https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging
  */
 import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
-import { admitsOrigin } from './manifest.js'
+import { type AdmittingManifest, admitsOrigin } from './manifest.js'
 
 /** The part of a `runtime.Port` the relay uses. */
 export interface Port {
-  readonly sender?: { origin?: string }
+  readonly sender?: { origin?: string; url?: string }
+  /** Why the port closed, where Firefox says so; Chromium sets `runtime.lastError`. */
+  readonly error?: { message?: string } | null
   readonly onMessage: { addListener(listener: (message: unknown) => void): void }
   readonly onDisconnect: { addListener(listener: () => void): void }
   postMessage(message: unknown): void
@@ -22,8 +24,10 @@ export interface ExtensionApi {
   runtime: {
     connectNative(application: string): Port
     readonly lastError?: { message?: string }
-    getManifest(): { version: string; externally_connectable?: { matches?: string[] } }
+    getManifest(): { version: string } & AdmittingManifest
     onConnectExternal: { addListener(listener: (port: Port) => void): void }
+    /** A connection from this extension's own content script (Firefox). */
+    onConnect: { addListener(listener: (port: Port) => void): void }
     onMessageExternal: {
       addListener(
         listener: (
@@ -36,9 +40,19 @@ export interface ExtensionApi {
   }
 }
 
+/** The page a port came from: a page names its origin, a content script its URL. */
+function originOf(sender: Port['sender']): string | undefined {
+  if (sender?.origin !== undefined) return sender.origin
+  try {
+    return sender?.url === undefined ? undefined : new URL(sender.url).origin
+  } catch {
+    return undefined
+  }
+}
+
 export function installRelay(api: ExtensionApi, matches: readonly string[]): void {
-  api.runtime.onConnectExternal.addListener((page) => {
-    if (!admitsOrigin(matches, page.sender?.origin)) {
+  const relay = (page: Port) => {
+    if (!admitsOrigin(matches, originOf(page.sender))) {
       page.disconnect()
       return
     }
@@ -46,12 +60,15 @@ export function installRelay(api: ExtensionApi, matches: readonly string[]): voi
     native.onMessage.addListener((message) => page.postMessage(message))
     page.onMessage.addListener((message) => native.postMessage(message))
     native.onDisconnect.addListener(() => {
-      const message = api.runtime.lastError?.message ?? 'the native host closed'
+      const message =
+        native.error?.message ?? api.runtime.lastError?.message ?? 'the native host closed'
       page.postMessage({ type: 'disconnected', message })
       page.disconnect()
     })
     page.onDisconnect.addListener(() => native.disconnect())
-  })
+  }
+  api.runtime.onConnectExternal.addListener(relay)
+  api.runtime.onConnect.addListener(relay)
 
   api.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
     if (!admitsOrigin(matches, sender.origin)) return
