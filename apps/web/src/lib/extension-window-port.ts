@@ -29,18 +29,26 @@ function listen(on: (message: WindowFromExtension) => void): () => void {
   return () => target.removeEventListener('message', listener)
 }
 
-/** Whether the extension's content script is on this page. */
-export function windowHello(timeoutMs: number): Promise<boolean> {
+/**
+ * Whether the extension's content script is on this page. A caller that stops
+ * caring aborts `signal`, which answers no and lets go of the window now
+ * rather than when the timer fires.
+ */
+export function windowHello(timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
   return new Promise((resolve) => {
     const finish = (present: boolean) => {
       clearTimeout(timer)
+      signal?.removeEventListener('abort', abandon)
       stop()
       resolve(present)
     }
+    const abandon = () => finish(false)
     const stop = listen((message) => {
       if (message.kind === 'hello') finish(true)
     })
     const timer = setTimeout(() => finish(false), timeoutMs)
+    if (signal?.aborted) return abandon()
+    signal?.addEventListener('abort', abandon, { once: true })
     post({ kind: 'hello' })
   })
 }

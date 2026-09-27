@@ -20,3 +20,14 @@ it('answers no after the window it listened on has gone', async () => {
   vi.advanceTimersByTime(50)
   await expect(answer).resolves.toBe(false)
 })
+
+it('an abandoned hello stops listening and answers no at once', async () => {
+  vi.useFakeTimers()
+  const removed = vi.spyOn(window, 'removeEventListener')
+  const asked = new AbortController()
+  const answer = windowHello(60_000, asked.signal)
+  asked.abort()
+  // No timer advance: the answer must not wait for the hello's timeout.
+  await expect(answer).resolves.toBe(false)
+  expect(removed).toHaveBeenCalledWith('message', expect.any(Function))
+})

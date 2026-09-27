@@ -45,9 +45,9 @@ function extensionRuntime(): ExtensionRuntime | null {
 }
 
 /** Whether the whiteboard extension is installed and admits this page. */
-export function extensionPresent(timeoutMs = 1_500): Promise<boolean> {
+export function extensionPresent(timeoutMs = 1_500, signal?: AbortSignal): Promise<boolean> {
   const runtime = extensionRuntime()
-  if (runtime === null) return windowHello(timeoutMs)
+  if (runtime === null) return windowHello(timeoutMs, signal)
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), timeoutMs)
     try {

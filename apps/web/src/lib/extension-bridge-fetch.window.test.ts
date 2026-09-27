@@ -34,7 +34,7 @@ afterEach(() => {
 describe('the bridge without chrome.runtime', () => {
   it('asks the content script whether the extension is there', async () => {
     expect(await extensionPresent(250)).toBe(true)
-    expect(windowHello).toHaveBeenCalledWith(250)
+    expect(windowHello).toHaveBeenCalledWith(250, undefined)
   })
 
   it('opens its port through the content script', async () => {
