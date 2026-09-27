@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const spawnMock = vi.fn()
@@ -64,6 +68,40 @@ describe('ensureDaemon', () => {
     })
     expect(spawnMock).not.toHaveBeenCalled()
     expect(deleteDaemonRecordMock).not.toHaveBeenCalled()
+  })
+
+  // ADR-0050 decision 2: a daemon that records a socket is asked there, so
+  // the check still answers once its loopback port is gone.
+  it('pings a daemon over the socket its record names', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'wb-ensure-socket-'))
+    const socketPath = join(dir, 'daemon.sock')
+    const daemon = createServer((req, res) => {
+      res.statusCode = req.url === '/api/runtime/ping' ? 200 : 404
+      res.end()
+    })
+    await new Promise<void>((resolve) => daemon.listen(socketPath, resolve))
+    try {
+      loadDaemonRecordMock.mockResolvedValue({
+        pid: 42,
+        port: 3099,
+        token: 'secret',
+        version: '0.1.0',
+        startedAt: '2026-04-23T00:00:00.000Z',
+        socketPath,
+      })
+      isPidAliveMock.mockReturnValue(true)
+      globalThis.fetch = vi.fn(async () => {
+        throw new TypeError('fetch failed')
+      }) as typeof globalThis.fetch
+
+      const result = await ensureDaemon({ dataDir: '/tmp/excalidraw-data' })
+
+      expect(result).toMatchObject({ pid: 42, socketPath })
+      expect(spawnMock).not.toHaveBeenCalled()
+    } finally {
+      await new Promise<void>((resolve) => daemon.close(() => resolve()))
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   it('spawns a new daemon when the registry is stale and returns the saved record', async () => {

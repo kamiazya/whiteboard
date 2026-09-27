@@ -14,6 +14,7 @@ import {
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
+import { daemonSocketPath } from '../daemon/daemon-socket.js'
 import { purgeLegacyWebOriginTrustFile } from '../daemon/purge-legacy-trust-file.js'
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
@@ -298,6 +299,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
       oauthClientRegistry: config.oauthClientRegistry,
       replicaTier: replicaEnv.tier,
       replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
+      socketPath: daemonSocketPath(dataDir),
     })
 
     const startedAt = new Date().toISOString()
@@ -309,6 +311,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
         token,
         version: PACKAGE_VERSION,
         startedAt,
+        socketPath: running.socketPath,
       },
       dataDir,
     )

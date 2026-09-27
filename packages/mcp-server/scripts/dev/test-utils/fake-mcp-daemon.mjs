@@ -16,10 +16,11 @@ const BIND_RETRY_INTERVAL_MS = 100
  * daemon's authenticated MCP endpoint, for exactly the fields
  * probeAuthenticatedMcpDaemon() inspects.
  *
- * @param {{ port: number, token: string, host?: string }} args
+ * @param {{ port?: number, token: string, host?: string, socketPath?: string }} args
  * @returns {Promise<{ server: import('node:http').Server, close: () => Promise<void> }>}
  */
-export function startFakeMcpResponder({ port, token, host = '127.0.0.1' }) {
+export function startFakeMcpResponder({ port, token, host = '127.0.0.1', socketPath }) {
+  const listenArgs = socketPath !== undefined ? [socketPath] : [port, host]
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       if (req.method !== 'POST' || req.url !== '/mcp') {
@@ -44,7 +45,7 @@ export function startFakeMcpResponder({ port, token, host = '127.0.0.1' }) {
     // max-listeners warning after ten retries.
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE' && Date.now() < deadline) {
-        setTimeout(() => server.listen(port, host), BIND_RETRY_INTERVAL_MS)
+        setTimeout(() => server.listen(...listenArgs), BIND_RETRY_INTERVAL_MS)
         return
       }
       reject(err)
@@ -55,6 +56,6 @@ export function startFakeMcpResponder({ port, token, host = '127.0.0.1' }) {
         close: () => new Promise((resolveClose) => server.close(() => resolveClose())),
       })
     })
-    server.listen(port, host)
+    server.listen(...listenArgs)
   })
 }
