@@ -13,6 +13,9 @@ export const daemonRecordBaseSchema = z.object({
   port: z.number().int().positive().max(MAX_TCP_PORT),
   version: z.string(),
   startedAt: z.string(),
+  // ADR-0050 decision 2: the owner-only socket the daemon also answers on.
+  // Absent where the platform has none, or from a daemon that predates it.
+  socketPath: z.string().min(1).optional(),
 })
 
 export const daemonRecordSchema = daemonRecordBaseSchema.extend({

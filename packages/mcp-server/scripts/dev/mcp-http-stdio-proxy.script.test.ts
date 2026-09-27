@@ -6,8 +6,10 @@
 // window. Each stdin JSON-RPC line becomes one authenticated POST /mcp;
 // connection failures retry within a budget instead of failing the client.
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
 
@@ -97,6 +99,26 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     const parsed = JSON.parse(line)
     expect(parsed.jsonrpc).toBe('2.0')
     expect(parsed).toHaveProperty('result')
+  })
+
+  // ADR-0050 decision 2: the daemon records the owner-only socket it answers
+  // on, and the proxy goes there — nothing listens on the port in this test.
+  it('forwards over the socket the daemon record names', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'wb-proxy-socket-'))
+    try {
+      const socketPath = join(dataDir, 'daemon.sock')
+      const responder = await startFakeMcpResponder({ token: TOKEN, socketPath })
+      closeResponder = responder.close
+      writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ socketPath }))
+      const proc = spawnProxy(await reserveFreePort(), { WHITEBOARD_DATA_DIR: dataDir })
+
+      proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/list' })}\n`)
+      expect(JSON.parse(await nextStdoutLine(proc))).toHaveProperty('result')
+    } finally {
+      await closeResponder?.()
+      closeResponder = null
+      rmSync(dataDir, { recursive: true, force: true })
+    }
   })
 
   it('holds a request across a backend that is not up yet (startup race / watch restart)', async () => {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
+import { daemonSocketPath } from '../daemon/daemon-socket.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { getDataDir } from './config.js'
@@ -290,6 +291,7 @@ export async function main() {
     oauthClientRegistry: oauthRegistry.registry,
     replicaTier: replicaEnv.tier,
     replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
+    socketPath: daemonMode ? daemonSocketPath(dataDir) : null,
     onClose: daemonMode
       ? async () => {
           await deleteDaemonRecord(dataDir)
@@ -310,6 +312,7 @@ export async function main() {
         token,
         version,
         startedAt: running.getRuntimeStatus().startedAt,
+        socketPath: running.socketPath,
       },
       dataDir,
     )

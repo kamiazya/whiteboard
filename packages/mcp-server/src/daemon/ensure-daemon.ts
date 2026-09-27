@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, openSync } from 'node:fs'
+import { request } from 'node:http'
 import { join } from 'node:path'
 import { nanoid } from 'nanoid'
 import { DATA_DIR, WHITEBOARD_ROOT } from '../shared/data-dir-secure.js'
@@ -133,6 +134,24 @@ async function pingDaemon(port: number, host: string): Promise<boolean> {
   }
 }
 
+function pingDaemonSocket(socketPath: string): Promise<boolean> {
+  return new Promise((resolvePing) => {
+    const req = request({ socketPath, path: '/api/runtime/ping' }, (res) => {
+      res.resume()
+      resolvePing(res.statusCode === 200)
+    })
+    req.on('error', () => resolvePing(false))
+    req.end()
+  })
+}
+
+/** ADR-0050 decision 2: a daemon that recorded a socket is asked there. */
+function pingRecordedDaemon(record: DaemonRecord, host: string): Promise<boolean> {
+  return record.socketPath !== undefined
+    ? pingDaemonSocket(record.socketPath)
+    : pingDaemon(record.port, host)
+}
+
 const DAEMON_STARTUP_TIMEOUT_ENV = 'WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS'
 
 // Packaged daemon cold-start (native modules, WASM, first-run migrations) can
@@ -186,7 +205,7 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
   }
   const existing = await loadDaemonRecord(dataDir)
 
-  if (existing && isPidAlive(existing.pid) && (await pingDaemon(existing.port, host))) {
+  if (existing && isPidAlive(existing.pid) && (await pingRecordedDaemon(existing, host))) {
     return {
       ...existing,
       baseUrl: `http://${host}:${existing.port}`,
@@ -197,7 +216,7 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
     dataDir,
     async () => {
       const fresh = await loadDaemonRecord(dataDir)
-      if (fresh && isPidAlive(fresh.pid) && (await pingDaemon(fresh.port, host))) {
+      if (fresh && isPidAlive(fresh.pid) && (await pingRecordedDaemon(fresh, host))) {
         return {
           ...fresh,
           baseUrl: `http://${host}:${fresh.port}`,

@@ -11,6 +11,7 @@ import { WHITEBOARD_WS_PROTOCOL } from '@kamiazya/whiteboard-daemon-client/ws-pr
 import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { WebSocketServer } from 'ws'
+import { listenOnSocket } from '../daemon/daemon-socket.js'
 import { IdleTimer } from '../daemon/idle-timer.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import { createSelfHostStoreLocalModule } from '../di/store-local.module.js'
@@ -142,6 +143,9 @@ export interface StartHttpServerOptions {
    *  below, so a test can observe the exit call instead of actually killing
    *  the test process. */
   exitProcess?: (code: number) => void
+  /** ADR-0050 decision 2: also serve the app on this owner-only socket.
+   *  Omitted (or null, on a platform without one) serves loopback alone. */
+  socketPath?: string | null
   /** The read plane's default tier (WHITEBOARD_REPLICA_TIER, replica-env.ts).
    *  Defaults to `offline` when omitted — see replica-env.ts's own default. */
   replicaTier?: ReplicaTier
@@ -155,6 +159,8 @@ export interface RunningServer {
   /** Unique per process-start id; used by CLI stop/status/doctor to verify
    *  they are talking to the daemon they recorded, not a PID-reuse impostor. */
   instanceId: string
+  /** The socket it also answers on, when one was asked for. */
+  socketPath?: string
   close: () => Promise<void>
   touch: () => void
   getRuntimeStatus: () => RuntimeStatus
@@ -227,6 +233,26 @@ async function refuseWsUpgradeUnlessMember(
   return true
 }
 
+/**
+ * Only the Hono app goes on the socket: its websocket surface is being retired
+ * for SSE (ADR-0050 decision 1), so no upgrade handler follows it. A socket
+ * that cannot be made safe stops the daemon rather than leaving it
+ * half-started on loopback alone.
+ */
+async function listenOnSocketOrClose(
+  fetch: Parameters<typeof listenOnSocket>[0],
+  socketPath: string | null | undefined,
+  close: () => Promise<void>,
+): Promise<Awaited<ReturnType<typeof listenOnSocket>> | undefined> {
+  if (!socketPath) return undefined
+  try {
+    return await listenOnSocket(fetch, socketPath)
+  } catch (err) {
+    await close()
+    throw err
+  }
+}
+
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
   const host = normalizeBindHost(options.host ?? '127.0.0.1')
   const instanceId = randomUUID()
@@ -235,6 +261,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   let server: ReturnType<typeof serve>
   let wss: WebSocketServer
   let closePromise: Promise<void> | null = null
+  let socketListener: Awaited<ReturnType<typeof listenOnSocket>> | undefined
   const sockets = new Set<Socket>()
 
   // Constructed once per daemon start, independent of the WS ticket store
@@ -328,6 +355,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const performClose = async (): Promise<void> => {
     await backgroundWork.stopAll()
     setRuntimeTouchFn(() => {})
+    await socketListener?.close()
 
     await new Promise<void>((resolve, reject) => {
       server.close((err) => {
@@ -633,9 +661,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     })
   })
 
+  socketListener = await listenOnSocketOrClose(app.fetch, options.socketPath, close)
+
   return {
     port: options.port,
     instanceId,
+    socketPath: socketListener?.path,
     close,
     touch,
     getRuntimeStatus,

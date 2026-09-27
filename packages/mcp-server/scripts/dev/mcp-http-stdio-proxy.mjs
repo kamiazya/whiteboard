@@ -22,17 +22,23 @@
 // listChanged) don't traverse this proxy — a dev-only tradeoff; reload the
 // client session to pick up a changed tool list.
 //
+// Where the daemon's record names a socket (ADR-0050 decision 2), requests go
+// there; the port is the fallback while no record says otherwise.
+//
 // Env:
+//   WHITEBOARD_DATA_DIR             where to read daemon.json (default: .dev-data)
 //   WHITEBOARD_DEV_PORT             override the derived port (tests)
 //   WHITEBOARD_TOKEN                bearer token (default: whiteboard-dev)
 //   WHITEBOARD_PROXY_SKIP_ENSURE=1  do not spawn the ensure hook (tests)
 //   WHITEBOARD_PROXY_RETRY_TIMEOUT_MS  per-request retry budget (default 30000)
 import { spawn } from 'node:child_process'
-import { dirname, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { request } from 'node:http'
+import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
-import { resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
+import { resolveDevDataDirEnv, resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
 
 const HOST = '127.0.0.1'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
@@ -43,6 +49,10 @@ const PORT = deriveDevPort({
   env: process.env,
 })
 const TOKEN = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
+const DAEMON_RECORD_PATH = join(
+  resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR,
+  'daemon.json',
+)
 const DEFAULT_RETRY_TIMEOUT_MS = 30_000
 
 // Only a finite, non-negative override is usable: NaN or Infinity would make
@@ -81,27 +91,75 @@ function ensureDaemon() {
 
 const ready = ensureDaemon()
 
-async function forwardOnce(line) {
+const MCP_HEADERS = {
+  'Content-Type': 'application/json',
+  Accept: 'application/json, text/event-stream',
+  Authorization: `Bearer ${TOKEN}`,
+}
+
+// Read per request, not once: a watch restart rewrites the record, and a
+// daemon that is down has none.
+function recordedSocketPath() {
+  try {
+    const { socketPath } = JSON.parse(readFileSync(DAEMON_RECORD_PATH, 'utf8'))
+    return typeof socketPath === 'string' && socketPath !== '' ? socketPath : null
+  } catch {
+    return null
+  }
+}
+
+function postOverSocket(socketPath, line) {
+  return new Promise((resolvePost, rejectPost) => {
+    const req = request(
+      { socketPath, path: '/mcp', method: 'POST', headers: MCP_HEADERS },
+      (res) => {
+        let text = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk) => {
+          text += chunk
+        })
+        res.on('end', () =>
+          resolvePost({
+            status: res.statusCode ?? 0,
+            contentType: res.headers['content-type'],
+            text,
+          }),
+        )
+        res.on('error', rejectPost)
+      },
+    )
+    req.on('error', rejectPost)
+    req.end(line)
+  })
+}
+
+async function post(line) {
+  const socketPath = recordedSocketPath()
+  if (socketPath !== null) return postOverSocket(socketPath, line)
   const res = await fetch(`http://${HOST}:${PORT}/mcp`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${TOKEN}`,
-    },
+    headers: MCP_HEADERS,
     body: line,
   })
-  const contentType = res.headers.get('content-type')?.toLowerCase() ?? ''
-  const text = await res.text()
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type'),
+    text: await res.text(),
+  }
+}
+
+async function forwardOnce(line) {
+  const { status, contentType: rawContentType, text } = await post(line)
+  const contentType = rawContentType?.toLowerCase() ?? ''
   // 202/empty: a notification was accepted — nothing to write back.
-  if (res.status === 202 || text.trim() === '') return null
-  if (!res.ok && !isJson(text)) {
+  if (status === 202 || text.trim() === '') return null
+  if ((status < 200 || status >= 300) && !isJson(text)) {
     // The daemon's own /mcp errors carry JSON-RPC bodies (a 401 does) and
     // are passed through below. A non-JSON error body is NOT a protocol
     // response — never write it to stdout. 5xx is treated as transient
     // (retried by the caller); anything else fails the request fast.
-    const error = new Error(`HTTP ${res.status} from the daemon endpoint`)
-    error.nonRetryable = res.status < 500
+    const error = new Error(`HTTP ${status} from the daemon endpoint`)
+    error.nonRetryable = status < 500
     throw error
   }
   if (contentType.includes('text/event-stream')) {
@@ -183,4 +241,7 @@ rl.on('close', () => {
   void Promise.allSettled([...inflight]).then(() => process.exit(0))
 })
 
-log(`proxying stdio <-> http://${HOST}:${PORT}/mcp`)
+const startupSocket = recordedSocketPath()
+log(
+  `proxying stdio <-> ${startupSocket === null ? `http://${HOST}:${PORT}/mcp` : `/mcp on socket ${startupSocket}`}`,
+)
