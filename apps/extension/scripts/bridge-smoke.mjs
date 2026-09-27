@@ -177,6 +177,15 @@ async function webAppRoundTrip(record, appUrl) {
   })
   const documentId = seeded?.results?.[0]?.documentId
   const { context, page } = await openPage(join(EXTENSION_DIR, 'dist/development'), appUrl)
+  // What the page said, so a failure here names its cause rather than a URL.
+  const said = []
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning')
+      said.push(`${m.type()}: ${m.text().slice(0, 200)}`)
+  })
+  page.on('framenavigated', (f) => {
+    if (f === page.mainFrame()) said.push(`navigated: ${new URL(f.url()).pathname}`)
+  })
   try {
     await page.getByText('Canvas', { exact: true }).click()
     await page
@@ -198,7 +207,11 @@ async function webAppRoundTrip(record, appUrl) {
         () => true,
         () => false,
       )
-    check(read, "the web app reads an agent's note through the extension", page.url())
+    check(
+      read,
+      "the web app reads an agent's note through the extension",
+      `${page.url()}\n    ${said.slice(-25).join('\n    ')}`,
+    )
     await page.locator('.cm-content').first().click()
     await page.keyboard.press('Control+End')
     await page.keyboard.type(' and typed in the browser')

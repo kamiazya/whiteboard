@@ -225,3 +225,24 @@ export function linkPairingPending({
   const open = grant === null || grant.status === 'none'
   return open ? linkBaseUrl : null
 }
+
+/**
+ * A remembered daemon's reconnection is in flight and has not answered, so
+ * which keeper holds this session is undecided — and the browser's own
+ * workspace must not be rendered meanwhile. The two keepers can share a
+ * workspace segment, so the address may name the daemon's document; a
+ * browser page opened on it leads somewhere else before the reconnection
+ * lands. Only while NOTHING has answered: an outcome that is not a
+ * connection (a changed identity) keeps its warning on the browser screen.
+ */
+export function renewalPending({
+  forcedBrowser,
+  awaitingDaemonRenewal,
+  grant,
+}: {
+  forcedBrowser: boolean
+  awaitingDaemonRenewal: boolean
+  grant: { status: string } | null
+}): boolean {
+  return !forcedBrowser && awaitingDaemonRenewal && grant === null
+}

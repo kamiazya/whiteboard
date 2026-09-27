@@ -128,6 +128,9 @@ describe('App route sync against an asynchronously-propagating router', () => {
     for (let i = 0; i < 10; i += 1) {
       await act(async () => {
         vi.runAllTimers()
+        // The link's pairing machinery is imported when a link is resolved,
+        // and a dynamic import is not a timer.
+        await vi.dynamicImportSettled()
       })
     }
     expect(screen.getByTestId('daemon-document-page')).toBeTruthy()

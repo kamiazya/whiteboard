@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
-import { connectThroughExtension } from './extension-connection.js'
+import { CONNECT_TIMEOUT_MS, connectThroughExtension } from './extension-connection.js'
 
 describe('connectThroughExtension', () => {
   it('pairs with the bridged daemon when it answers the ping, holding no token', async () => {
@@ -23,5 +23,25 @@ describe('connectThroughExtension', () => {
     ['the daemon answers badly', async () => new Response('', { status: 502 })],
   ])('connects nothing when %s', async (_why, answer) => {
     expect(await connectThroughExtension(vi.fn<typeof fetch>(answer))).toEqual({ status: 'none' })
+  })
+
+  // The app shows "Connecting…" until this answers, so a host that never
+  // answers must not hold it there.
+  it('gives up on a daemon that never answers', async () => {
+    vi.useFakeTimers()
+    try {
+      // Answers nothing, and ends only when aborted — as fetch does.
+      const silent = vi.fn<typeof fetch>(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+          }),
+      )
+      const pending = connectThroughExtension(silent)
+      await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS)
+      expect(await pending).toEqual({ status: 'none' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
