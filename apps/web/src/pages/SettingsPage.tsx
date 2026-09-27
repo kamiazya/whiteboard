@@ -24,6 +24,7 @@ import {
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { DaemonAddress } from '../components/connection/DaemonAddress.js'
+import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
 import { FontsCard } from '../components/FontsCard.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { PasskeysCard } from '../components/PasskeysCard.js'
@@ -271,6 +272,9 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
           <p className="mt-1 text-xs text-muted-foreground">
             A daemon on this machine holds durable storage and the AI agent connection for this app.
           </p>
+          <div className="mt-3">
+            <ExtensionConnectEntry settingsStore={settingsStore} />
+          </div>
         </section>
         {/* Discoverable while disabled: the move exists before its
             precondition is met, so its condition can be read here. */}

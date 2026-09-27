@@ -159,8 +159,10 @@ loopback closes (ADR-0050 stage 4).
 - The host relays only `/api/` requests, to the owner-only socket the daemon
   records in `daemon.json`, and attaches the daemon's token itself — the page
   never holds one.
-- In the web app, a browser-kept document's workspace popover offers
-  **Connect through the extension** once the extension answers. The daemon is
+- In the web app, **Connect through the extension** is offered wherever the
+  app says no daemon is connected, once the extension answers: Settings >
+  Connections, an empty browser workspace's first screen, and a browser-kept
+  document's workspace popover. The daemon is
   remembered under the reserved address `https://daemon.whiteboard.invalid`,
   which nothing on a network answers: `createDaemonFetch` sends every request
   to that address through the extension, whatever fetch a caller passes, the

@@ -1,4 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { ReactNode } from 'react'
 import WelcomeMark from '../../brand/welcome-mark.svg?react'
 
 /**
@@ -25,6 +26,7 @@ export function EmptyWorkspaceState({
   onCreate,
   disabled,
   subtitle,
+  footer,
 }: {
   onCreate: (kind: DocumentKind) => void
   disabled?: boolean
@@ -34,6 +36,8 @@ export function EmptyWorkspaceState({
    * local mode, and an onboarding line that lies is worse than none.
    */
   subtitle?: string
+  /** What else the page offers from here, under the two objects. */
+  footer?: ReactNode
 }) {
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -164,6 +168,7 @@ export function EmptyWorkspaceState({
           </span>
         </button>
       </div>
+      {footer}
     </div>
   )
 }

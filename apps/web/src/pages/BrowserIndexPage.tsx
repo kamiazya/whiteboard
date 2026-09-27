@@ -1,6 +1,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
@@ -374,6 +375,9 @@ function BrowserIndexBody(props: BrowserIndexBodyProps) {
         onCreate={(kind) => void props.onCreate(kind)}
         disabled={props.creating}
         subtitle="Everything stays in this browser — no account, no upload."
+        footer={
+          <ExtensionConnectEntry lead="Or keep your documents on the whiteboard daemon on this computer, where AI agents can reach them." />
+        }
       />
     )
   }

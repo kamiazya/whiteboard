@@ -23,8 +23,15 @@ export function ExtensionConnectOption({
   present = extensionPresent,
   connect = connectThroughExtension,
   reopen = () => window.location.assign('/'),
+  lead,
 }: {
   settingsStore: UserSettingsStore
+  /**
+   * A line saying what connecting is, for a page that does not already say
+   * so. It shows only with the button: without the extension there is
+   * nothing to lead into.
+   */
+  lead?: string
   present?: () => Promise<boolean>
   connect?: () => Promise<GrantConsumeResult>
   reopen?: () => void
@@ -48,8 +55,16 @@ export function ExtensionConnectOption({
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <Button size="sm" disabled={state === 'connecting'} onClick={() => void onConnect()}>
+    <div
+      className={lead === undefined ? 'flex flex-col gap-1' : 'flex flex-col items-center gap-1'}
+    >
+      {lead !== undefined && <p className="text-xs text-muted-foreground">{lead}</p>}
+      <Button
+        size="sm"
+        variant={lead === undefined ? 'default' : 'outline'}
+        disabled={state === 'connecting'}
+        onClick={() => void onConnect()}
+      >
         Connect through the extension
       </Button>
       {/* Mounted before it speaks, so the message is announced when it arrives. */}
