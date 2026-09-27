@@ -9,7 +9,7 @@
  * seconds, every time.
  */
 import { afterEach, describe, expect, it } from 'vitest'
-import { SAVE_DEBOUNCE_MS } from '../pages/use-markdown-document.js'
+import { COMMIT_DEBOUNCE_MS } from '../lib/document-sync-session.js'
 import { waitForMarkdownSaved } from './wait-for-saved.js'
 
 const PARTIAL_AT = '2026-08-30T01:00:00.000Z'
@@ -44,8 +44,8 @@ describe('waitForMarkdownSaved', () => {
     // but not yet run setBody, so nothing has re-armed the indicator.
     set(chip, 'saved', PARTIAL_AT)
 
-    setTimeout(() => set(chip, 'pending', PARTIAL_AT), SAVE_DEBOUNCE_MS / 2)
-    setTimeout(() => set(chip, 'saved', FULL_AT), SAVE_DEBOUNCE_MS)
+    setTimeout(() => set(chip, 'pending', PARTIAL_AT), COMMIT_DEBOUNCE_MS / 2)
+    setTimeout(() => set(chip, 'saved', FULL_AT), COMMIT_DEBOUNCE_MS)
 
     const settledOn = await waitForMarkdownSaved()
     expect(
@@ -63,7 +63,7 @@ describe('waitForMarkdownSaved', () => {
 
     // It costs one settle period and no more: the guard must not turn every
     // save wait into a multi-second stall.
-    expect(Date.now() - started).toBeLessThan(SAVE_DEBOUNCE_MS * 4)
+    expect(Date.now() - started).toBeLessThan(COMMIT_DEBOUNCE_MS * 4)
   })
 
   it('keeps waiting while the indicator never reports a write at all', async () => {
@@ -87,7 +87,7 @@ describe('waitForMarkdownSaved', () => {
 
     // Nothing re-arms for well over the old settle window — exactly what the
     // failing run observed.
-    setTimeout(() => set(chip, 'saved', FULL_AT), SAVE_DEBOUNCE_MS * 5)
+    setTimeout(() => set(chip, 'saved', FULL_AT), COMMIT_DEBOUNCE_MS * 5)
 
     await expect(waitForMarkdownSaved({ since: typedAt })).resolves.toBe(FULL_AT)
   })
@@ -100,6 +100,6 @@ describe('waitForMarkdownSaved', () => {
     await expect(waitForMarkdownSaved({ since: Date.parse(FULL_AT) - 1000 })).resolves.toBe(FULL_AT)
     // No settle sleep in anchored mode: the timestamp IS the proof, so the
     // wait must not spend a debounce period re-confirming it.
-    expect(Date.now() - started).toBeLessThan(SAVE_DEBOUNCE_MS)
+    expect(Date.now() - started).toBeLessThan(COMMIT_DEBOUNCE_MS)
   })
 })

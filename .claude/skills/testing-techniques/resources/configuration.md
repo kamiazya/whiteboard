@@ -394,7 +394,7 @@ indirect (CodeMirror's completion source, three lib modules). The remaining 145 
 - `sse-shared-stream-source.test.ts` installs its own `FakeSharedWorker` over
   `globalThis.SharedWorker`, so it reads as DOM-free and passes alone; its eviction path
   does not survive repetition without jsdom (`expected [] to have a length of 1`).
-- `save-scheduler.property.test.ts` timed out at 5000ms with a seed in its name — the
+- the save scheduler's property test (since deleted with its module) timed out at 5000ms with a seed in its name — the
   budget shape, not a counterexample (`async-and-timers.md`), and only under load.
 
 Both went back to jsdom; 141 remain. **Certify an environment swap under the stress shape,
