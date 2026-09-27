@@ -5,8 +5,8 @@ import {
   setWorkspaceDocumentName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { Loro } from 'loro-crdt'
-import { isGeneratedDocumentPath } from '../lib/new-document-path.js'
-import { titleFromMarkdownBody } from '../lib/title-from-body.js'
+import { isGeneratedDocumentPath } from './new-document-path.js'
+import { titleFromMarkdownBody } from './title-from-body.js'
 
 /**
  * Names a document after the title its body announces, while nobody has
@@ -31,7 +31,7 @@ import { titleFromMarkdownBody } from '../lib/title-from-body.js'
  * heading edit can never move a document out from under a link.
  *
  * Runs on every save, and KEEPS UP with a heading still being typed. Typing
- * outlasts the 500ms debounce on a loaded machine, so a save lands while the
+ * outlasts a save's debounce on a loaded machine, so a save lands while the
  * title is half written — and a first version of this stopped there, because
  * a name being present was what closed its gate. Measured in a real browser:
  * `# From` … ` the list` produced a document called "From", forever. A wrong

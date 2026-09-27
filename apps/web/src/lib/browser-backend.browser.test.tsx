@@ -23,6 +23,7 @@ import {
   projectWorkspaceDocument,
   readSpatialCanvas,
   resolveWorkspaceDocumentById,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -151,6 +152,29 @@ describe('BrowserBackend', () => {
     expect(canvas.nodes.map((n) => n.id)).toEqual(['n-edit'])
     // Deltas are merged into the snapshot on open — nothing replays.
     expect(h2.onRemoteUpdate).not.toHaveBeenCalled()
+    backend2.disconnect()
+  })
+
+  it('names an unnamed note after the heading its pushed body announces', async () => {
+    // The session path's half of seedNameFromTitle: a note written through
+    // this backend has to come out named the way the markdown hook names it.
+    const handlers = makeHandlers()
+    const backend = new BrowserBackend({ documentId: ID_A, path: 'untitled', kind: 'markdown' })
+    await connectAndWait(backend, handlers)
+
+    const doc = new LoroDoc()
+    doc.import(deliveredSnapshot(handlers))
+    const from = doc.version()
+    writeMarkdownBody(documentContainers(doc, ID_A), '# Weekly review\n\nNotes.')
+    await backend.pushLocalUpdate(doc.export({ mode: 'update', from }))
+    backend.disconnect()
+
+    const h2 = makeHandlers()
+    const backend2 = new BrowserBackend({ documentId: ID_A, path: 'untitled', kind: 'markdown' })
+    await connectAndWait(backend2, h2)
+    const reloaded = new LoroDoc()
+    reloaded.import(deliveredSnapshot(h2))
+    expect(resolveWorkspaceDocumentById(reloaded, ID_A)?.name).toBe('Weekly review')
     backend2.disconnect()
   })
 

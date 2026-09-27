@@ -57,9 +57,9 @@ import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-worksp
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
+import { seedNameFromTitle } from '../lib/seed-name-from-title.js'
 import { missingThreadMarks } from '../lib/text-anchor.js'
 import { createSaveScheduler, type SaveScheduler } from './save-scheduler.js'
-import { seedNameFromTitle } from './seed-name-from-title.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 const log = getAppLogger('markdown-document')
