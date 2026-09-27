@@ -93,10 +93,6 @@ function useDaemonDocument(
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
-  // This keeper's branches, over the same authorized fetch: the one supplier
-  // for the `?v=` preview below and for every consumer under the provider
-  // (chip, banner, dialog), so a hosted page paired to a loopback daemon
-  // cannot have half of them fall back to its own origin.
 
   // The WebSocket URL is derived from this locationHref (see
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
@@ -150,10 +146,6 @@ function useDaemonDocument(
   // `if (creating) return` reads the render closure, so it is stale in exactly
   // the same-tick double-press case it would have to catch.
   const [creating, setCreating] = useState(false)
-  // Bumped on an externally observed HEAD change (another client, an MCP
-  // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
-  // rename/delete actions already refetch internally and don't need this.
-  const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
   const { backend, contentDocumentId, authError, reportAuthError } = useDaemonDocumentBackend({
     daemonBaseUrl,
     token,
@@ -177,7 +169,6 @@ function useDaemonDocument(
   const sync = useDocumentSync(backend, {
     ...(contentDocumentId === undefined ? {} : { contentDocumentId }),
     onAuthError: reportAuthError,
-    onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     // Any version_created broadcast — this page's own save, MCP tool saves,
     // other peers — re-reads the page's history column.
     onVersionCreated: events.onVersionCreated,
@@ -498,7 +489,7 @@ function useDaemonDocument(
       log,
       onVersionCreated: events.onVersionCreated,
     }),
-    topBar: daemonTopBarSlot(canvas, branchRefreshSignal, setBranchRefreshSignal, onNavigateBack),
+    topBar: daemonTopBarSlot(canvas, onNavigateBack),
     spatial: {
       editorRef: spatialEditorRef,
       agentTouchedNodeIds: agentActivity.touchedNodeIds,

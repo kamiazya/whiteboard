@@ -420,20 +420,6 @@ function useBrowserDocument(
     readOutlineSource,
     persistence: syncPersistence,
   } = sync
-  // The record is not readable at mount — the backend delivers it a beat
-  // later — so anything that reads the branch plane on mount gets the resting
-  // state, HEAD `main`. `useBranches` refetches only when its keeper or
-  // document changes, neither of which happens when the record lands, so a
-  // document opened ON a variation kept saying `Main`: the chip named the
-  // wrong one and the combine banner, which needs a non-default HEAD, could
-  // never appear. This is the signal the daemon page has always had; the
-  // browser simply never supplied one.
-  const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
-  useEffect(() => {
-    if (!sync.loaded) return
-    setBranchRefreshSignal((n) => n + 1)
-  }, [sync.loaded])
-
   // The browser's version history for this document: rows in IndexedDB,
   // restores through whichever seam holds the live workspace record.
   //
@@ -457,12 +443,6 @@ function useBrowserDocument(
     [versionsRecord, versionStore, documentKind],
   )
 
-  // Built on the backend, because a branch is a frontier of the record the
-  // backend holds and a branch write goes through the same queue its edits
-  // do. Mounting it is also what stops a branch consumer on this page falling
-  // through to the context's daemon fallback and issuing a request to a
-  // daemon that is not there — which was this provider's whole job while the
-  // keeper had no branches, and remains true now that it has them.
   // A manual save announces itself on the window (dispatched after the
   // keeper confirmed the save), and the page's history column re-reads on
   // it. Scoped to THIS document's identity — an unchecked listener refreshed
@@ -680,8 +660,6 @@ function useBrowserDocument(
       workspaceId: 'local',
       path: loadedPath,
       dataMode: 'local',
-      branchRefreshSignal,
-      onBranchesChanged: () => setBranchRefreshSignal((n) => n + 1),
       // The way out of the editor. This page had none until now — the
       // app-shell brand mark was the only exit, and it says nothing about
       // where it goes.
