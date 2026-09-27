@@ -40,6 +40,7 @@ vi.mock('./pages/DaemonDocumentPage.js', () => ({
 const DAEMON_STATE: ProviderState = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' }
 const GONE_ID = '01M3H9HEHZJE9K5MA1K2BNG644'
 const LIVE_ID = '01M3HS5Q8P7XXVNNMYGMCPFA5B'
+const ALSO_GONE_ID = '01M3HS5Q8P7XXVNNMYGMCPFA5C'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -48,7 +49,10 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
-function installDaemon(listed: readonly string[]): { requests: string[] } {
+function installDaemon(
+  listed: readonly string[],
+  refused: readonly string[] = [GONE_ID],
+): { requests: string[] } {
   const requests: string[] = []
   vi.stubGlobal(
     'fetch',
@@ -61,12 +65,13 @@ function installDaemon(listed: readonly string[]): { requests: string[] } {
         )
       }
       if (url.endsWith('/api/fonts')) return Promise.resolve(json({ fonts: [] }))
-      if (url.includes(GONE_ID)) {
+      const refusedId = refused.find((id) => url.includes(id))
+      if (refusedId !== undefined) {
         return Promise.resolve(
           json(
             {
               error: 'workspace_not_found',
-              message: `Workspace not found: "${GONE_ID}". Pass createWorkspace: true on this wb_workspace_edit call.`,
+              message: `Workspace not found: "${refusedId}". Pass createWorkspace: true on this wb_workspace_edit call.`,
             },
             404,
           ),
@@ -153,4 +158,22 @@ it('choosing a refused workspace again asks the daemon again, once, rather than 
 
   await vi.waitFor(() => expect(asksFor(requests, GONE_ID), requests.join('\n')).toBe(2))
   await vi.waitFor(() => expect(router.state.location.pathname).toBe(`/w/${LIVE_ID}`))
+})
+
+it('two listed workspaces that both refuse settle on saying so, each asked once', async () => {
+  const { requests } = installDaemon([GONE_ID, ALSO_GONE_ID], [GONE_ID, ALSO_GONE_ID])
+  const router = createMemoryRouter(
+    [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+    {
+      initialEntries: ['/'],
+    },
+  )
+  mount(router)
+
+  await screen.findByRole('button', { name: 'Try again' })
+  expect(screen.getByRole('alert').textContent).toBe(
+    'This workspace is not on the daemon any more.',
+  )
+  expect(asksFor(requests, GONE_ID), requests.join('\n')).toBe(1)
+  expect(asksFor(requests, ALSO_GONE_ID), requests.join('\n')).toBe(1)
 })

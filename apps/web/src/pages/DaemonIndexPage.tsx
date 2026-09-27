@@ -288,12 +288,14 @@ export function DaemonIndexPage({
   const refusedRef = useRef(new Set<string>())
   // The address the effect below last saw. An address that MOVES to a refused
   // handle is a person choosing it — the switcher, a link — and is asked
-  // again; the same address seen again because the list was re-read is not.
+  // again; the same address seen again because the list was re-read is not,
+  // and neither is a move to the handle this page itself just reported.
   const lastAddressRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     if (workspace === undefined || !workspacesLoaded) return
-    const moved = lastAddressRef.current !== workspace
+    // A move this page caused by reporting its own selection is not a choice.
+    const moved = lastAddressRef.current !== workspace && workspace !== reportedWorkspaceRef.current
     lastAddressRef.current = workspace
     const { wanted, refused, usable } = resolveAddress(
       workspaces,
@@ -366,7 +368,11 @@ export function DaemonIndexPage({
         const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
         if (isStale()) return
         setWorkspaces(res.workspaces)
-        const next = res.workspaces.map(workspaceHandle).find((h) => h !== staleWorkspaceId)
+        // Every refused handle, not only this one: with two that 404, moving
+        // from one to the other and back is the same loop one level down.
+        const next = res.workspaces
+          .map(workspaceHandle)
+          .find((h) => h !== staleWorkspaceId && !refusedRef.current.has(h))
         if (next === undefined) {
           // Nothing to move to — this was the only workspace, or the list and
           // the documents disagree about it. Re-selecting the same one would
