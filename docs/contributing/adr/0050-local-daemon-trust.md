@@ -284,3 +284,44 @@ The stages, in order:
 
 Closing loopback is the stage that removes the audit's findings. Until it
 lands, the extension path runs beside today's connection.
+
+## Addendum (2026-09-28): closing loopback
+
+The owner took three more decisions before the closing-loopback stage began.
+
+8. **A cached replica stays encrypted with a passkey-held key.**
+   - Decision 3 retires the passkey as a way to sign in to the local
+     daemon. It does not retire ADR-0042's ciphertext at rest.
+   - The passkey's PRF output stays the key that opens a replica the
+     browser has cached, so it is used in the browser and never in a
+     request to the daemon.
+   - The reason is revocation, and it is an enterprise requirement for
+     later: a member who is removed must lose what their browser cached,
+     not only their access from now on.
+   - A local daemon has one person, so nobody is ever removed from it. The
+     cache is still shared with server mode, where members are removed.
+     Keeping one mechanism is what lets that requirement be met there.
+9. **Windows keeps its local daemon, over a named pipe.**
+   - The daemon's socket on Windows is a named pipe (`\\.\pipe\…`), which
+     Node listens on as it does a Unix socket.
+   - The native messaging host is registered in the registry, as Chromium
+     and Firefox read it there.
+   - Loopback closes only after Windows has this path. This machine cannot
+     run Windows, so it is verified on a Windows CI runner.
+10. **The web app in development reaches the daemon through the development
+    extension.**
+    - The development build of the extension already admits `localhost`.
+    - Developing the app then exercises the same path people use, and no
+      second transport is kept for development alone.
+
+The closing-loopback stage lands as a sequence, each part merged on its own:
+- the daemon counts a page by its SSE stream too, so nothing that asks
+  whether a browser has a document open depends on WebSocket;
+- the web app uses SSE alone for a local daemon, and WebSocket goes;
+- the web app reaches a local daemon only through the extension: the
+  loopback probe, pairing, the stored token, and the local passkey-session
+  and member screens go;
+- the daemon listens on a named pipe on Windows, and the host registers
+  there;
+- the daemon stops listening on loopback, and its browser-only routes go;
+- development tooling, smokes and documentation follow.
