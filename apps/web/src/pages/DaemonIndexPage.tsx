@@ -5,7 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
-import { createDaemonFetch, createDocument, listWorkspaces } from '../lib/daemon-api-client.js'
+import {
+  createDaemonFetch,
+  createDocument,
+  DaemonApiError,
+  listWorkspaces,
+} from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
@@ -81,6 +86,17 @@ import {
  * about deciding WHICH, not about drawing them.
  */
 import { DaemonIndexBody } from './daemon-index-body.js'
+
+const WORKSPACE_GONE = 'This workspace is not on the daemon any more.'
+
+// daemon-api-client errors are already sanitized (Problem Details title or a
+// generic status message), so one is safe to show — except a 404, which on a
+// create is the WORKSPACE, and whose reason is written for an MCP caller: it
+// names a tool parameter.
+function createFailureMessage(err: unknown, kind: DocumentKind): string {
+  if (err instanceof DaemonApiError && err.status === 404) return WORKSPACE_GONE
+  return err instanceof Error ? err.message : `Failed to create ${kindNoun(kind)}.`
+}
 
 export function DaemonIndexPage({
   daemonBaseUrl,
@@ -240,9 +256,22 @@ export function DaemonIndexPage({
   // causes that look identical from here, and only one of them is stale.
   const refetchedForRef = useRef<string | null>(null)
 
+  // Workspaces the LIST names but whose documents answered 404 — the list and
+  // the routes disagree about them. The address is not allowed to resolve to
+  // one: `reselectAfterStale` moves the page off it and stores a fresh list,
+  // which re-runs the effect below while the address still names it, and
+  // resolving it again selected it again — two workspaces alternating for as
+  // long as the tab stayed open. An explicit retry still selects one (the
+  // list load does not consult this), so a workspace that recovers is one
+  // press away.
+  const refusedRef = useRef(new Set<string>())
+
   useEffect(() => {
     if (workspace === undefined || !workspacesLoaded) return
-    const wanted = resolveWorkspaceHandle(workspaces, workspace)
+    const usable = workspaces.filter((w) => !refusedRef.current.has(workspaceHandle(w)))
+    const resolved = resolveWorkspaceHandle(workspaces, workspace)
+    const refused = resolved !== null && refusedRef.current.has(workspaceHandle(resolved))
+    const wanted = refused ? null : resolved
     // A handle this list does not hold is EITHER a stale bookmark or a
     // workspace the switcher created or renamed a moment ago. The switcher is
     // the SHELL's and writes through its own source, so this page's list is a
@@ -251,7 +280,7 @@ export function DaemonIndexPage({
     // address to name it. So a miss re-reads the list once per handle; a
     // handle still missing after that is genuinely stale and gets the
     // first-listed fallback below, unchanged.
-    if (wanted === null && refetchedForRef.current !== workspace) {
+    if (wanted === null && !refused && refetchedForRef.current !== workspace) {
       refetchedForRef.current = workspace
       // Unselected for the duration, and that is the load-bearing half. The
       // re-read can FAIL, and leaving the previous workspace selected under an
@@ -266,7 +295,7 @@ export function DaemonIndexPage({
       void loadWorkspaces()
       return
     }
-    const fallback = workspaces[0]
+    const fallback = usable[0]
     const target = wanted ?? fallback
     if (target === undefined) return
     const handle = workspaceHandle(target)
@@ -316,7 +345,10 @@ export function DaemonIndexPage({
           // loading state would spin without end. Say so instead: the request
           // that failed is the one the person is waiting on.
           setLoaded(true)
-          setLoadError('Failed to load documents for this workspace.')
+          setLoadError(WORKSPACE_GONE)
+          // Nothing selected, so the recovery offered is Try again rather than
+          // a create into a workspace the daemon does not have.
+          setSelectedWorkspace(null)
           return
         }
         // A real replacement re-enters the selection effect, which clears
@@ -371,6 +403,7 @@ export function DaemonIndexPage({
         // exists would silently make a DIFFERENT one (the route passes
         // `createWorkspace: true`).
         if (err instanceof WorkspaceMissingError) {
+          refusedRef.current.add(workspaceId)
           // Deliberately NOT `setLoaded(true)` here. The load is not over —
           // the page is still deciding what it is showing. Marking it
           // complete renders the onboarding empty state for the workspace
@@ -439,9 +472,7 @@ export function DaemonIndexPage({
         )
         onOpenDocument(workspaceAtStart, created.path)
       } catch (err) {
-        // daemon-api-client errors are already sanitized (Problem Details
-        // title or a generic status message) — safe to surface directly.
-        setCreateError(err instanceof Error ? err.message : `Failed to create ${kindNoun(kind)}.`)
+        setCreateError(createFailureMessage(err, kind))
         // The path is derived from `rows`, so a failure caused by a name this list has not seen
         // (another tab, a lost race) would otherwise re-derive the SAME path on every retry and
         // collide forever. Re-read the list so the next derive skips what is actually taken.
