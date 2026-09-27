@@ -112,6 +112,28 @@ function callTool(record, name, args) {
   })
 }
 
+/** How many browsers the daemon counts on a document, ready ones apart. */
+export function clientCount(record, path) {
+  return new Promise((done, fail) => {
+    const req = request(
+      {
+        socketPath: record.socketPath,
+        path: `/api/w/default/document/${encodeURIComponent(path)}/client-count`,
+        headers: { authorization: `Bearer ${record.token}` },
+      },
+      (res) => {
+        let text = ''
+        res.on('data', (piece) => {
+          text += piece
+        })
+        res.on('end', () => done(JSON.parse(text)))
+      },
+    )
+    req.on('error', fail)
+    req.end()
+  })
+}
+
 /** An agent's note on the daemon, for the web app to open; answers its id. */
 export async function seedNote(record) {
   const seeded = await callTool(record, 'wb_workspace_edit', {

@@ -43,7 +43,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
       return c.json(invalid, 400)
     }
 
-    // Fast-fail with 503 if no WS client is connected.
+    // Fast-fail with 503 if no browser has the document open, on either transport.
     if (getClientCount(workspaceId, path) === 0) {
       const noClient: ViewportErrorBody = {
         error: 'no_client',

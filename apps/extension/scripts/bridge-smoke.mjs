@@ -22,6 +22,7 @@ import { chromium } from 'playwright'
 import {
   agentEdits,
   buildAll,
+  clientCount,
   createSmoke,
   daemonNoteContains,
   EXTENSION_DIR,
@@ -142,6 +143,19 @@ async function webAppRoundTrip(record, appUrl, restartDaemon) {
       read,
       "the web app reads an agent's note through the extension",
       `${page.url()}\n    ${said.slice(-25).join('\n    ')}`,
+    )
+    // The page's only transport is its SSE stream, and the daemon has to see
+    // it there: an agent that asks whether anyone has the note open (the
+    // viewport tools do) was told nobody did while only sockets were counted.
+    let seen = { count: 0, readyCount: 0 }
+    for (let i = 0; i < 40 && seen.readyCount < 1; i += 1) {
+      seen = await clientCount(record, 'bridge-note')
+      if (seen.readyCount < 1) await new Promise((later) => setTimeout(later, 250))
+    }
+    check(
+      seen.readyCount >= 1,
+      'the daemon counts the page open on the note, through its SSE stream',
+      JSON.stringify(seen),
     )
     await page.locator('.cm-content').first().click()
     await page.keyboard.press('Control+End')
