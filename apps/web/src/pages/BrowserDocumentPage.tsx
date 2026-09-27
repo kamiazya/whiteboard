@@ -21,7 +21,7 @@ import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
-import { useDocumentSync } from '../hooks/useDocumentSync.js'
+import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
@@ -49,7 +49,6 @@ import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import {
   browserConnectionsSlot,
   browserTerminalAnswer,
-  browserVersionsSlot,
   conversationReads,
   documentLabels,
   documentPropertiesSlot,
@@ -76,6 +75,7 @@ import { useBrowserRouteSync } from './use-browser-route-sync.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
+import { versionsSlot } from './versions-slot.js'
 
 const log = getAppLogger('browser-document-page')
 
@@ -651,7 +651,18 @@ function useBrowserDocument(
       canvas: labels.commandCanvas,
       registryKey: documentId,
     },
-    versions: browserVersionsSlot({ backend: versionsBackend, workspaceId, path: loadedPath }),
+    versions: versionsSlot({
+      backend: versionsBackend,
+      workspaceId,
+      path: loadedPath,
+      // The top bar addresses this document as `local`/path (its
+      // `dataMode="local"` placeholder), so the dot listens under that id.
+      announceRefresh: () =>
+        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
+          workspaceId: 'local',
+          path: loadedPath,
+        }),
+    }),
     ...browserConnectionsSlot(connections, navigateToDocument, linkify),
     topBar: {
       // Local mode names documents through its own store, not through the

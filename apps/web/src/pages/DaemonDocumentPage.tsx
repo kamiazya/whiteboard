@@ -11,7 +11,6 @@ import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
-import { getAppLogger } from '../lib/app-logger.js'
 import { sessionHealthOf } from '../lib/connection-state.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
@@ -24,6 +23,7 @@ import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refr
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { createDaemonVersionsBackend } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
 import {
@@ -45,8 +45,6 @@ import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 import { useDocumentActions } from './use-document-actions.js'
-
-const log = getAppLogger('daemon-document-page')
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
@@ -93,6 +91,9 @@ function useDaemonDocument(
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+  // The History column's backend: relative routes, resolved against the
+  // daemon's base URL by `daemonFetch`.
+  const versionsBackend = useMemo(() => createDaemonVersionsBackend(daemonFetch), [daemonFetch])
 
   // The WebSocket URL is derived from this locationHref (see
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
@@ -484,9 +485,7 @@ function useDaemonDocument(
     versions: daemonVersionsSlot({
       canvas,
       labels,
-      daemonFetch,
-      daemonBaseUrl,
-      log,
+      backend: versionsBackend,
       onVersionCreated: events.onVersionCreated,
     }),
     topBar: daemonTopBarSlot(canvas, onNavigateBack),
