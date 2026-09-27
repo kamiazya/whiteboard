@@ -27,6 +27,7 @@ import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-ty
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
+import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
 import { themeFacesNamedBy } from '../lib/theme-fonts.js'
@@ -108,6 +109,13 @@ export interface UseDocumentSyncResult {
    */
   threadMarks: ReadonlyMap<string, PassageRange>
   markdownBody: string
+  /**
+   * What an editor binds the body through — the session's live doc, its
+   * body text and the session's debounced commit — or null before the first
+   * snapshot. A new object only when a snapshot replaces the doc, so an
+   * editor keyed on it remounts exactly then.
+   */
+  bodyBinding: BodyBinding | null
   /**
    * OKF core facets from the doc's `core` map — `undefined` for a spatial
    * document, which has none to hold. Republished on the same signal as
@@ -270,6 +278,7 @@ export function useDocumentSync(
   const [threadMarks, setThreadMarks] = useState<ReadonlyMap<string, PassageRange>>(EMPTY_MARKS)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
+  const [bodyBinding, setBodyBinding] = useState<BodyBinding | null>(null)
   const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
   const [facets, setFacetsState] = useState<ExtensionFacets>(EMPTY_FACETS)
   const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
@@ -382,6 +391,10 @@ export function useDocumentSync(
     // notification for the same reason locks do.
     const unsubscribeBody = session.subscribeMarkdownBody(() => {
       setMarkdownBodyState(session.getMarkdownBody())
+      // Stable per doc, so this re-sets the same object on every body change
+      // and React bails out; it changes only when a snapshot replaced the doc,
+      // which is also a body notification.
+      setBodyBinding(session.getBodyBinding())
       setCoreFacetsState(session.getCoreFacets())
       setFacetsState(session.getFacets())
     })
@@ -554,6 +567,7 @@ export function useDocumentSync(
     proposals,
     threadMarks,
     markdownBody,
+    bodyBinding,
     coreFacets,
     setCoreFacets,
     facets,

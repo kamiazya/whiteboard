@@ -19,6 +19,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
+import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
@@ -30,6 +31,7 @@ import {
   daemonConnectionsSlot,
   daemonDocumentLabels,
   daemonEmptyState,
+  daemonMarkdownSlot,
   daemonTerminalAnswer,
   daemonTopBarSlot,
   daemonVersionsSlot,
@@ -298,6 +300,13 @@ function useDaemonDocument(
     [onChange],
   )
   const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
+  // The editor writes the body at each change's own position, straight into
+  // the session's doc, and the session commits on its debounce. Handing it
+  // whole texts as `set-body` collapsed a burst to one span from the first
+  // edit to the last, re-inserting the text between — and the passage marks
+  // on it. `setMarkdownBody` stays for the surface's own contract; with a
+  // binding installed the editor does not call it.
+  const markdownBinding = useMemo(() => sessionBodyBinding(sync.bodyBinding), [sync.bodyBinding])
 
   // The rail's write door: both writes ride `onChange` like every other
   // edit here — one undo step, and they travel the annotation channel back.
@@ -437,12 +446,12 @@ function useDaemonDocument(
     documentKind,
     srTitle: 'Whiteboard (daemon)',
     sync,
-    markdown: {
+    markdown: daemonMarkdownSlot({
       body: markdownBody,
       setBody: setMarkdownBody,
+      binding: markdownBinding,
       meta: coreFacets ?? { type: documentKind },
-      hydrating: false,
-    },
+    }),
     // The NAME is the workspace's — the top bar hands it down from `/names`,
     // the same surface the canvas dropdown renames through.
     title: 'top-bar',

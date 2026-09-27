@@ -58,6 +58,7 @@ class LoroTextSync implements PluginValue {
     private readonly view: EditorView,
     private readonly doc: LoroDoc,
     private readonly readText: ReadBoundText,
+    private readonly commit: () => void,
   ) {
     this.unsubscribe = doc.subscribe(() => this.reconcile())
     // Deferred because a ViewPlugin is constructed DURING a state update, and
@@ -131,7 +132,7 @@ class LoroTextSync implements PluginValue {
       if (insert.length > 0) text.insert(fromA + adj, insert)
       adj += insert.length - (toA - fromA)
     })
-    this.doc.commit()
+    this.commit()
   }
 
   destroy(): void {
@@ -149,6 +150,37 @@ class LoroTextSync implements PluginValue {
  * Append it AFTER the built-in extensions: the binding has to observe the
  * document they produce, not the one before them.
  */
-export function loroTextSync(doc: LoroDoc, readText: ReadBoundText): Extension {
-  return ViewPlugin.define((view) => new LoroTextSync(view, doc, readText))
+export interface LoroTextSyncOptions {
+  /**
+   * What ends an edit's transaction. The default commits at once, which is
+   * right where the owner saves on its own schedule off the commit (the
+   * browser's markdown host). A sync session that pushes on every commit
+   * passes its own debounced commit instead, so a burst of keystrokes is one
+   * push, as it was when the editor handed the session whole texts — the
+   * ops are written at their positions straight away and read back as such
+   * before the commit lands.
+   */
+  readonly commit?: () => void
+}
+
+export function loroTextSync(
+  doc: LoroDoc,
+  readText: ReadBoundText,
+  options: LoroTextSyncOptions = {},
+): Extension {
+  const commit = options.commit ?? (() => doc.commit())
+  return ViewPlugin.define((view) => new LoroTextSync(view, doc, readText, commit))
+}
+
+/**
+ * The editor extensions for a sync session's body binding, or none before
+ * the session holds a doc. Memoise on the binding: the editor is keyed on
+ * the array's identity and remounts when it changes.
+ */
+export function sessionBodyBinding(
+  binding: { doc: LoroDoc; readText: ReadBoundText; commit: () => void } | null,
+): Extension[] | undefined {
+  return binding === null
+    ? undefined
+    : [loroTextSync(binding.doc, binding.readText, { commit: binding.commit })]
 }

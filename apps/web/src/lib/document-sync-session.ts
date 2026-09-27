@@ -6,6 +6,7 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   documentContainers,
+  MARKDOWN_BODY_KEY,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -67,6 +68,7 @@ import {
   type UseDocumentSyncOptions,
 } from './document-sync-types.js'
 import { PersistenceLedger } from './persistence-ledger.js'
+import { type BodyBinding, bodyBindingFor } from './session-body-binding.js'
 import type { EditorCommand, EditorLeafCommand } from './spatial/commands.js'
 import { missingThreadMarks } from './text-anchor.js'
 
@@ -281,6 +283,13 @@ export interface DocumentSyncSession {
   // its own notification. Empty string before the first snapshot.
   getMarkdownBody(): string
   subscribeMarkdownBody(listener: () => void): () => void
+  /**
+   * What a CodeMirror binding writes the body through: the live doc, the
+   * body text on it, and the session's debounced commit. Null before the
+   * first snapshot. One object per doc — a new one only when a snapshot
+   * replaces the doc — so an editor keyed on it remounts exactly then.
+   */
+  getBodyBinding(): BodyBinding | null
   /**
    * OKF core facets from the doc's `core` map. `undefined` until hydrated,
    * when none were ever written, and — by `readCoreFacets`' own rule — for
@@ -929,16 +938,24 @@ export function createDocumentSyncSession(
   const pendingTargets = new Map<string, EditorCommand>()
   let latestNext: SpatialCanvas | null = null
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  // Body text the editor binding wrote at its positions and has not
+  // committed: the ops are in the doc (a read sees them) and ride the same
+  // debounce as a canvas edit, so a burst of keystrokes is one commit and
+  // one push.
+  let bodyOpsPending = false
 
   function commitPendingTargets(): void {
-    if (!doc || pendingTargets.size === 0 || latestNext === null) {
+    const commitBody = bodyOpsPending
+    bodyOpsPending = false
+    const hasTargets = pendingTargets.size > 0 && latestNext !== null
+    if (!doc || (!hasTargets && !commitBody)) {
       pendingTargets.clear()
       latestNext = null
       return
     }
     const targetDoc = doc
     const next = latestNext
-    const commands = [...pendingTargets.values()]
+    const commands = next === null ? [] : [...pendingTargets.values()]
     pendingTargets.clear()
     latestNext = null
 
@@ -947,13 +964,14 @@ export function createDocumentSyncSession(
     // unguarded throw would reject the chain and silently skip every later
     // firing's commit for the rest of the session.
     const guardedCommit = (): void => {
+      if (commitBody) targetDoc.commit()
       for (const command of commands) {
         try {
           // contentOf resolves inside the try: a scoped node deleted between
           // scheduling and commit throws here, and must fail only this
           // target — guardedCommit's contract is that the chain never
           // rejects.
-          commitToDoc(targetDoc, contentOf(targetDoc), next, command)
+          if (next !== null) commitToDoc(targetDoc, contentOf(targetDoc), next, command)
         } catch (err) {
           log.error('scene commit failed; skipping this target', err)
         }
@@ -973,15 +991,38 @@ export function createDocumentSyncSession(
       })
   }
 
-  function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
-    persistence.edited()
-    pendingTargets.set(commandTargetKey(command), command)
-    latestNext = next
+  function armDebounce(): void {
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       debounceTimer = null
       commitPendingTargets()
     }, DEBOUNCE_MS)
+  }
+
+  function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
+    persistence.edited()
+    pendingTargets.set(commandTargetKey(command), command)
+    latestNext = next
+    armDebounce()
+  }
+
+  /**
+   * The binding wrote body ops into `bound`. A doc a snapshot has replaced is
+   * not ours to commit — the editor remounts on the new binding instead.
+   */
+  function bodyEdited(bound: LoroDoc): void {
+    if (bound !== doc) return
+    persistence.edited()
+    bodyOpsPending = true
+    armDebounce()
+  }
+
+  const bodyBindingOf = bodyBindingFor(
+    (target) => contentOf(target).getText(MARKDOWN_BODY_KEY),
+    bodyEdited,
+  )
+  function getBodyBinding(): BodyBinding | null {
+    return bodyBindingOf(doc)
   }
   onCanvasChange.flush = (): void => {
     if (debounceTimer) clearTimeout(debounceTimer)
@@ -1487,6 +1528,7 @@ export function createDocumentSyncSession(
     subscribeLocks,
     getMarkdownBody,
     subscribeMarkdownBody,
+    getBodyBinding,
     getCoreFacets,
     getFacets,
   }

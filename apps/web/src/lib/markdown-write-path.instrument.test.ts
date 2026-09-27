@@ -6,11 +6,12 @@
  * write paths "changes when a save lands, and that is judged by measurement").
  *
  * What it drives is a real CodeMirror view over the daemon's sync session,
- * wired the way the daemon page wires it today: every transaction hands the
- * WHOLE text to the session as `set-body`. What it records, per burst of
- * keystrokes:
+ * wired the way the daemon page wires it: bound to the session's own body
+ * text, commits left to the session's debounce. (It was a whole-text
+ * `set-body` per transaction until that lost passage marks; the two-place
+ * row records the before.) What it records, per burst of keystrokes:
  *
- * - pushes — how many updates reach the backend (one per debounce today);
+ * - pushes — how many updates reach the backend (one per debounce);
  * - bytes — what they weigh on the wire;
  * - whether a comment passage between the two edit sites keeps its mark.
  *
@@ -32,6 +33,7 @@ import {
   createGenerationCounters,
   type DocumentSyncSession,
 } from './document-sync-session.js'
+import { loroTextSync } from './loro-codemirror-sync.js'
 
 const HEAD = 'Alpha paragraph opens the note. '
 const PASSAGE = 'report on Friday'
@@ -112,18 +114,18 @@ async function openSession(): Promise<{
   return { session, backend }
 }
 
-/** The daemon editor today: each transaction's whole text becomes one `set-body`. */
+/**
+ * The daemon editor: CodeMirror bound to the session's own body text, each
+ * change written at its own position, the commit — and so the push — left
+ * to the session's debounce. The same wiring the daemon page installs.
+ */
 function daemonEditor(session: DocumentSyncSession): EditorView {
+  const binding = session.getBodyBinding()
+  if (binding === null) throw new Error('the session holds no document')
   return new EditorView({
     state: EditorState.create({
       doc: BODY,
-      extensions: EditorView.updateListener.of((update) => {
-        if (!update.docChanged) return
-        session.onChange(session.getCanvas(), {
-          kind: 'set-body',
-          text: update.state.doc.toString(),
-        })
-      }),
+      extensions: loroTextSync(binding.doc, binding.readText, { commit: binding.commit }),
     }),
     parent: document.body,
   })
@@ -156,7 +158,7 @@ async function measure(burst: (view: EditorView) => Promise<void>): Promise<Read
 const START = () => 0
 const END = (length: number) => length
 
-describe('markdown write path — the daemon editor today (set-body)', () => {
+describe('markdown write path — the daemon editor (bound to the session body)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -179,11 +181,11 @@ describe('markdown write path — the daemon editor today (set-body)', () => {
         await typeAt(view, i % 2 === 0 ? START : END, char)
       }
     })
-    // Still one push — the debounce collapses the burst to its last whole
-    // text — but that text differs from the stored one at BOTH ends, so the
-    // one span it becomes runs from the first edit to the last and re-inserts
-    // everything between, the passage included. The mark goes with it: the
-    // defect this instrument exists to watch leave.
-    expect(reading).toEqual({ pushes: 1, bytes: 241, markSurvived: false })
+    // Still one push: the ops are written at their positions as they are
+    // typed and committed together on the session's debounce. Each edit
+    // touches only its own place, so the passage between them keeps its
+    // mark. Before the binding this row read 1 push, 241 bytes, mark LOST —
+    // the whole text collapsed to one span re-inserting the passage.
+    expect(reading).toEqual({ pushes: 1, bytes: 121, markSurvived: true })
   })
 })

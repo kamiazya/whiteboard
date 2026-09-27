@@ -1,10 +1,12 @@
 /**
  * A body edit in daemon mode reaches the backend through the sync session's
- * own local-update forwarding — the ordinary `set-body` command path, not a
- * second write pipeline. The editor is a stub driving MarkdownEditor's
- * controlled `onChange`, because the subject here is the PAGE WIRING between
- * editor and session; CodeMirror's real input path is pinned independently
- * by loro-binding.browser.test.tsx.
+ * own local-update forwarding. The page installs a binding that writes each
+ * edit into the session's doc at its own position (no whole-text
+ * `set-body`), and the session's commit is what pushes. The editor is a
+ * stub that mounts a real CodeMirror view with the extensions the page
+ * hands it, because the subject here is the PAGE WIRING between editor and
+ * session; what a burst costs and whether a passage keeps its mark is
+ * `lib/markdown-write-path.instrument.test.ts`.
  */
 
 import type {
@@ -17,7 +19,7 @@ import {
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -40,15 +42,41 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
 
 // The stub keeps MarkdownEditor's controlled contract (`value`/`onChange`)
 // and nothing else — one textarea, no CodeMirror.
-vi.mock('../components/markdown-editor/MarkdownEditor.js', () => ({
-  MarkdownEditor: (props: { value: string; onChange: (next: string) => void }) => (
-    <textarea
-      aria-label="markdown source stub"
-      value={props.value}
-      onChange={(event) => props.onChange(event.target.value)}
-    />
-  ),
-}))
+const mounted = vi.hoisted(() => ({ views: [] as import('@codemirror/view').EditorView[] }))
+
+vi.mock('../components/markdown-editor/MarkdownEditor.js', async () => {
+  const { EditorState } = await import('@codemirror/state')
+  const { EditorView } = await import('@codemirror/view')
+  const { useEffect, useRef } = await import('react')
+  return {
+    MarkdownEditor: (props: {
+      value: string
+      sourceExtensions?: import('@codemirror/state').Extension
+    }) => {
+      const host = useRef<HTMLDivElement | null>(null)
+      // Mounted once per key, as the real editor is.
+      useEffect(() => {
+        if (host.current === null) return
+        const view = new EditorView({
+          state: EditorState.create({
+            doc: props.value,
+            extensions: props.sourceExtensions ?? [],
+          }),
+          parent: host.current,
+        })
+        mounted.views.push(view)
+        return () => view.destroy()
+      }, [])
+      return (
+        <div
+          data-testid="markdown-source-stub"
+          data-bound={props.sourceExtensions === undefined ? 'no' : 'yes'}
+          ref={host}
+        />
+      )
+    },
+  }
+})
 
 // This page schedules ADR-0023's replica pull and push in the background, on
 // an idle callback or a 1.5s timer. Nothing here is about replica caching, so
@@ -118,6 +146,7 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
   })
 
   it('a body edit pushes the update to the backend on the hydrated doc lineage', async () => {
+    mounted.views.length = 0
     const backend = new FakeBackend()
     render(
       <DaemonDocumentPage
@@ -128,17 +157,17 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
       />,
     )
 
-    // The stub mounts with the daemon-held body once the snapshot hydrates.
-    const editor = await screen.findByRole(
-      'textbox',
-      { name: 'markdown source stub' },
-      { timeout: 10_000 },
-    )
-    await waitFor(() => {
-      expect((editor as HTMLTextAreaElement).value).toBe(BODY)
+    // The editor mounts BOUND once the snapshot hydrates, on the daemon-held
+    // body: the binding is what writes, not the surface's `setBody`.
+    const editor = await screen.findByTestId('markdown-source-stub', undefined, {
+      timeout: 10_000,
     })
+    await waitFor(() => expect(editor.dataset.bound).toBe('yes'))
+    const view = mounted.views.at(-1)
+    if (view === undefined) throw new Error('no editor view mounted')
+    expect(view.state.doc.toString()).toBe(BODY)
 
-    fireEvent.change(editor, { target: { value: `${BODY} - edited here` } })
+    view.dispatch({ changes: { from: view.state.doc.length, insert: ' - edited here' } })
 
     // Replaying pushed updates over the original snapshot must yield the
     // edited body in the `body` text container. Asserted on the container
