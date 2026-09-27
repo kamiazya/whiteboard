@@ -393,11 +393,14 @@ export function useBrowserDocumentController(
       })
       removed = entry !== null // the pointer names nothing: silent no-op
       if (entry !== null) {
+        // Cleared BEFORE the row goes, as `startFresh` does: a load between
+        // the two would otherwise read a pointer naming nothing and say the
+        // data could not be read, where a missing pointer opens cleanly.
+        await pointerRef.current.clear()
         await indexRef.current.deleteDocument({
           workspaceId: getBrowserWorkspaceId(),
           path: entry.path,
         })
-        await pointerRef.current.clear()
       }
     } catch {
       // Generic safe copy — do not expose raw IDB error
