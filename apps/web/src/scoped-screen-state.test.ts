@@ -455,22 +455,24 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
-  // The one that bit: a bare boolean over `triggerCleanup()`, which acts on
-  // whatever document the controller currently holds. Confirmed after a
-  // switch, it deleted the document that had arrived.
+  // The one that bit: a bare boolean over the keeper's `deleteDocument()`,
+  // which acts on whatever document the controller currently holds.
+  // Confirmed after a switch, it deleted the document that had arrived.
   confirmDelete: 'cleared on switch',
+  deleteError: 'cleared on switch',
   duplicateError: 'cleared on switch',
   isDuplicating: 'cleared on switch',
 
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
-  canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
+  documentOpsButtonRef:
+    'no subject: the kebab this page hands close-focus back to, reassigned by React on every render — it names a BUTTON, not a document, and the button is the same one whichever document is open',
   // Renamed with the move into use-document-list-refresh.ts, where the file
   // supplies the "list" the old prefixes carried.
   generationRef:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
   currentDocumentIdRef:
-    'no subject: mirrors the scope itself, reassigned every render — it is what an async handler outliving its document asks to find out whether its report still belongs on screen',
+    'no subject: mirrors the document on screen, reassigned every render — it exists so a duplicate that started under one document can tell, after its awaits, whether it is still the one being looked at. Clearing it on a switch would remove the only thing that knows a switch happened',
   isFirstCanvasUrlSyncRef:
     'no subject: whether this MOUNT has synced the URL once, which picks replace over push — resetting it per document would make every switch a replace and flatten the history it exists to keep',
   enumeratedRef:
@@ -558,6 +560,11 @@ const CASES = [
       AUTO_CHECKPOINT_HOOK,
       DUPLICATE_DOCUMENT_HOOK,
       DOCUMENT_LIST_HOOK,
+      // The kebab's rows and Delete's confirmation are the bundle both
+      // keepers take now; the state moved THERE, so this ledger still
+      // accounts for it.
+      './pages/use-delete-document.ts',
+      './pages/use-document-actions.tsx',
     ],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
