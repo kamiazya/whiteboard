@@ -164,7 +164,7 @@ async function openPointedAt(
   const snap = await loadLocalDocument(stores.index, id, stores.clock)
   if (!alive()) return null
   if (snap !== null) return snap
-  const left = await openWhatIsLeft(stores)
+  const left = await openWhatIsLeft(stores, alive)
   return alive() ? left : null
 }
 
@@ -172,10 +172,24 @@ async function openPointedAt(
  * What a delete leaves open: the first document still listed, as the daemon
  * keeper does, or a fresh one when none is — this keeper's first-visit answer
  * to an empty workspace, where the daemon has an empty state instead.
+ *
+ * `alive` stops an OPEN that the page abandoned from seeding or repointing;
+ * a delete passes none, since its repoint must land whether or not the page
+ * is still there to show the result.
  */
-async function openWhatIsLeft(stores: OpeningStores): Promise<DocumentSnapshot> {
+function openWhatIsLeft(stores: OpeningStores): Promise<DocumentSnapshot>
+function openWhatIsLeft(
+  stores: OpeningStores,
+  alive: StillMounted,
+): Promise<DocumentSnapshot | null>
+async function openWhatIsLeft(
+  stores: OpeningStores,
+  alive: StillMounted = () => true,
+): Promise<DocumentSnapshot | null> {
   const [next] = await listLocalDocuments(stores.index, stores.clock)
+  if (!alive()) return null
   const opened = next ?? (await createSeededDocument(stores.index, stores.loro, stores.clock))
+  if (!alive()) return null
   await stores.pointer.set(opened.documentId)
   return opened
 }
