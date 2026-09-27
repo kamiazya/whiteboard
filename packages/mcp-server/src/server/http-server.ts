@@ -27,6 +27,7 @@ import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
+import { openSyncStreamCount } from './routes/sync-sse.js'
 import {
   getConnectionStats,
   handleWsUpgrade,
@@ -313,9 +314,16 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           intervalMs: workspaceTailIntervalMs,
         })
 
-  const idleTimer = new IdleTimer(options.idleTimeoutMs ?? 15 * 60_000, () => {
-    void close()
-  })
+  // A page holding a sync stream or a socket makes no request while nobody
+  // types, and must not have the daemon stop under it.
+  const idleTimer = new IdleTimer(
+    options.idleTimeoutMs ?? 15 * 60_000,
+    () => {
+      void close()
+    },
+    undefined,
+    () => getConnectionStats().connectedClients > 0 || openSyncStreamCount() > 0,
+  )
 
   const touch = () => idleTimer.touch()
   const getRuntimeStatus = (): RuntimeStatusResponse => {
@@ -535,7 +543,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     },
     {
       name: 'idle-shutdown',
-      trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms`,
+      trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms and no stream or socket open`,
       instances: {
         runs: 'every-instance',
         because: 'it is about THIS process being idle, which no other process can answer for it',

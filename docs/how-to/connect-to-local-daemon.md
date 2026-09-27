@@ -29,8 +29,9 @@ to disable this. See
 for the full list of conditions under which it is suppressed (CI, containers,
 non-interactive shells, non-loopback binds).
 
-A daemon that receives no request for 15 minutes stops on its own. `whiteboard
-daemon run` then prints `whiteboard daemon stopped: no request within its idle
+A daemon that receives no request for 15 minutes stops on its own, unless a
+page is still connected to it: an open tab keeps it running however long nobody
+types. `whiteboard daemon run` then prints `whiteboard daemon stopped: no request within its idle
 timeout.` to stderr and exits `0`; run it again to continue.
 
 Note the tradeoff this design accepts: with no network access and no
