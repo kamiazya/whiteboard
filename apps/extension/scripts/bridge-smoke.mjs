@@ -75,7 +75,7 @@ async function openPage(extensionDir, pageUrl) {
 }
 
 /** Connect from a browser-kept document, open an agent's note, and type into it. */
-async function webAppRoundTrip(record, appUrl) {
+async function webAppRoundTrip(record, appUrl, restartDaemon) {
   const { context, page } = await openPage(join(EXTENSION_DIR, 'dist/development'), appUrl)
   // What the page said, so a failure here names its cause rather than a URL.
   const said = []
@@ -149,6 +149,39 @@ async function webAppRoundTrip(record, appUrl) {
         () => false,
       )
     check(live, "an agent's edit reaches the open page live", page.url())
+    // A daemon that goes away and comes back: what was typed meanwhile
+    // reaches it on the reconnect, and the page stops saying it is unsaved.
+    const restarted = await restartDaemon(async () => {
+      await page.locator('.cm-content').first().click()
+      await page.keyboard.press('Control+End')
+      await page.keyboard.type(' typed while the daemon was down')
+      const unsaved = await page
+        .getByText('Changes not saved yet')
+        .waitFor({ timeout: 20_000 })
+        .then(
+          () => true,
+          () => false,
+        )
+      check(unsaved, 'the page says it is unsaved while the daemon is down', page.url())
+    })
+    const synced = await daemonNoteContains(
+      restarted,
+      documentId,
+      'typed while the daemon was down',
+    )
+    check(
+      synced.includes('typed while the daemon was down'),
+      'an edit made while the daemon was down reaches it after a restart',
+      synced,
+    )
+    const cleared = await page
+      .getByText('Changes not saved yet')
+      .waitFor({ state: 'hidden', timeout: 20_000 })
+      .then(
+        () => true,
+        () => false,
+      )
+    check(cleared, 'the page stops saying it is unsaved once the daemon has it', page.url())
   } finally {
     await context.close()
   }
@@ -217,7 +250,13 @@ try {
     JSON.stringify(mcp),
   )
 
-  await webAppRoundTrip(record, webApp.url)
+  await webAppRoundTrip(record, webApp.url, async (whileDown) => {
+    await stopDaemon(daemon)
+    await whileDown()
+    const again = await startDaemon(dataDir)
+    daemon = again.daemon
+    return again.record
+  })
 
   const prod = await openPage(join(EXTENSION_DIR, 'dist/production'), pageUrl)
   const exposed = await prod.page.evaluate(() => typeof globalThis.chrome?.runtime?.connect)

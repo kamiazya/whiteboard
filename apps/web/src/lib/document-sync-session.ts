@@ -725,6 +725,22 @@ export function createDocumentSyncSession(
   }
 
   /**
+   * One push the ledger counts: its landing settles, its refusal fails. The
+   * bytes are taken inside the chain, so a synchronous throw cannot escape
+   * into the backend's own handler.
+   */
+  function send(bytes: () => Uint8Array): void {
+    const push = persistence.pushStarted()
+    void Promise.resolve()
+      .then(() => backend.pushLocalUpdate(bytes()))
+      .then(push.resolved, () => {
+        if (isStale()) return push.dropped()
+        deps.onStatusChange('error')
+        push.rejected()
+      })
+  }
+
+  /**
    * Where this session's content containers live: the doc's roots, or — when
    * a content scope is set — the workspace tree node carrying
    * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
@@ -1082,21 +1098,10 @@ export function createDocumentSyncSession(
         // Full state rather than a delta since the last acknowledged version:
         // nothing acknowledges a push today, so there is no such version to
         // send from, and inventing one that is wrong would lose edits
-        // silently again.
+        // silently again. Counted like any push: its landing is when the
+        // writes lost during the outage land, so it settles their failure.
         const connectedDoc = doc
-        if (connectedDoc !== null) {
-          // Same handling as the local-update path: the export and the push
-          // both run inside the chain so a synchronous throw cannot escape
-          // into the backend's own connect handler, and a rejection is
-          // reported rather than left unhandled — this send IS the recovery,
-          // so its failure is exactly what the caller needs to hear about.
-          void Promise.resolve()
-            .then(() => backend.pushLocalUpdate(connectedDoc.export({ mode: 'update' })))
-            .catch(() => {
-              if (isStale()) return
-              deps.onStatusChange('error')
-            })
-        }
+        if (connectedDoc !== null) send(() => connectedDoc.export({ mode: 'update' }))
       },
 
       onWritesLanded() {
@@ -1165,12 +1170,7 @@ export function createDocumentSyncSession(
           // checkpoint that waited for durability would miss the edits a
           // failing store is exactly when you want bookmarked.
           deps.checkpoints?.signal()
-          const push = persistence.pushStarted()
-          void Promise.resolve(backend.pushLocalUpdate(update)).then(push.resolved, () => {
-            if (isStale()) return push.dropped()
-            deps.onStatusChange('error')
-            push.rejected()
-          })
+          send(() => update)
         })
 
         newDoc.subscribe((e) => {
