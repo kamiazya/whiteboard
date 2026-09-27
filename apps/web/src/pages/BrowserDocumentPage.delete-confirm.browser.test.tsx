@@ -34,6 +34,24 @@ function render(ui: ReactElement) {
   )
 }
 
+/**
+ * The deleted rows are gone and the page is on the one left in their place:
+ * with nothing else in the store, that is a fresh canvas.
+ */
+async function expectReplacedBy(store: IdbDocumentIndex, beforeIds: string[]): Promise<void> {
+  await waitFor(
+    async () => {
+      const afterIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+      for (const id of beforeIds) expect(afterIds).not.toContain(id)
+      expect(afterIds).toHaveLength(1)
+    },
+    { timeout: 5000 },
+  )
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
+    timeout: 5000,
+  })
+}
+
 async function renderLoaded(
   store: IdbDocumentIndex = new IdbDocumentIndex(),
 ): Promise<IdbDocumentIndex> {
@@ -90,16 +108,14 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
 
   it('opening the delete dialog does not delete the canvas yet', async () => {
     const store = await renderLoaded()
+    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
     await openDeleteDialog()
 
-    // Not yet deleted: the cleanup-completed screen has not been shown, and the
-    // canvas row is still present in the store.
-    expect(screen.queryByTestId('cleanup-completed')).toBeNull()
-    const list = await listLocalDocuments(store)
-    expect(list.length).toBeGreaterThan(0)
+    // Not yet deleted: the same rows, not a fresh one standing in for them.
+    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
   })
 
-  it('confirming deletion shows the cleanup-completed view and removes the canvas row', async () => {
+  it('confirming deletion removes the canvas row and opens a fresh canvas', async () => {
     const store = await renderLoaded()
     const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
     expect(beforeIds.length).toBeGreaterThan(0)
@@ -109,37 +125,33 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
       .getByRole('button', { name: /^delete$/i })
       .click()
 
-    await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
-    const afterIds = (await listLocalDocuments(store)).map((c) => c.documentId)
-    for (const id of beforeIds) {
-      expect(afterIds).not.toContain(id)
-    }
+    await expectReplacedBy(store, beforeIds)
   })
 
   it('cancelling via the Cancel button keeps the canvas intact', async () => {
-    await renderLoaded()
+    const store = await renderLoaded()
+    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
     const dialog = await openDeleteDialog()
     within(dialog)
       .getByRole('button', { name: /cancel/i })
       .click()
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
-    expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
+    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
     // No save state is drawn; the facts stay published, hidden, and untouched.
     expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
   })
 
   it('cancelling via Escape keeps the canvas intact', async () => {
-    await renderLoaded()
+    const store = await renderLoaded()
+    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
     const dialog = await openDeleteDialog()
     fireEvent.keyDown(dialog, { key: 'Escape' })
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
-    expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
+    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
   })
 
   it('dialog exposes an accessible name and description tied to the destructive action', async () => {
@@ -186,13 +198,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
       .getByRole('button', { name: /^delete$/i })
       .click()
 
-    await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
-    const afterIds = (await listLocalDocuments(store)).map((c) => c.documentId)
-    for (const id of beforeIds) {
-      expect(afterIds).not.toContain(id)
-    }
+    await expectReplacedBy(store, beforeIds)
   })
 
   it('a refused delete says so in the row and keeps the document open', async () => {
@@ -219,7 +225,6 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
     )
     expect(alert.closest('[role="alert"]')).not.toBeNull()
     expect(alert.textContent).not.toMatch(/simulated IndexedDB failure/)
-    expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
     expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
   })

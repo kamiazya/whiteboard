@@ -116,7 +116,6 @@ function useBrowserDocument(
     loro: resolvedLoro,
     snapshot,
     persistence,
-    cleanupCompleted,
     deleteDocument,
     startFresh,
     renameDocument,
@@ -132,7 +131,7 @@ function useBrowserDocument(
   // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
-  const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
+  const pageState = derivePageState({ snapshot, persistence })
 
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const loaded = loadedSnapshotOf(pageState)
@@ -476,7 +475,8 @@ function useBrowserDocument(
 
   // The kebab's Copy / Duplicate / Delete rows and Delete's confirmation,
   // drawn by the bundle both keepers share; this keeper supplies the verbs.
-  // Its delete RESOLVES into the cleanup-completed terminal and rejects with
+  // Its delete RESOLVES onto what is left (a fresh document when nothing is)
+  // and rejects with
   // the refusal to show, which is all the bundle reads. Called above the
   // terminal early-return below, like every hook here.
   const documentActions = useDocumentActions({

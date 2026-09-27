@@ -102,18 +102,6 @@ describe('useBrowserDocumentController', () => {
     expect(result.current.persistence.kind).toBe('saved')
   })
 
-  it('cleanupCompleted starts as false', () => {
-    const store = new LocalStoreDouble()
-    const { result } = renderHook(() =>
-      useBrowserDocumentController(store.index, {
-        loro: store.loro,
-        pointer: store.pointer,
-        clock: store.clock,
-      }),
-    )
-    expect(result.current.cleanupCompleted).toBe(false)
-  })
-
   it('creates and loads a new canvas when store is empty', async () => {
     const store = new LocalStoreDouble()
     const { result } = renderHook(() =>
@@ -198,7 +186,7 @@ describe('useBrowserDocumentController', () => {
     }
   })
 
-  it('deleteDocument flushes pending save then deletes canvas', async () => {
+  it('deleteDocument flushes pending save, deletes, and opens a fresh document when none is left', async () => {
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
@@ -216,10 +204,38 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {
       await result.current.deleteDocument()
     })
-    expect(result.current.cleanupCompleted).toBe(true)
-    expect(result.current.snapshot).toBeNull()
-    // Canvas removed from store
-    expect(await store.getDefaultDocumentId()).toBeNull()
+    // Nothing was left, so the page is on a fresh document — this keeper's
+    // first-visit answer — and the pointer names it rather than the deleted one.
+    const opened = result.current.snapshot
+    expect(opened).not.toBeNull()
+    expect(opened?.documentId).not.toBe(C1)
+    expect(await store.getDefaultDocumentId()).toBe(opened?.documentId)
+    expect(
+      await store.index.resolveDocumentById({
+        workspaceId: getBrowserWorkspaceId(),
+        documentId: C1,
+      }),
+    ).toBeNull()
+  })
+
+  it('deleteDocument opens the document that is left', async () => {
+    const store = new LocalStoreDouble()
+    await store.setDefaultDocumentId(C1)
+    await store.save(snap)
+    await store.save({ ...snap, documentId: C2, path: 'other', name: 'Other' })
+    const { result } = renderHook(() =>
+      useBrowserDocumentController(store.index, {
+        loro: store.loro,
+        pointer: store.pointer,
+        clock: store.clock,
+      }),
+    )
+    await act(async () => {})
+    await act(async () => {
+      await result.current.deleteDocument()
+    })
+    expect(result.current.snapshot?.documentId).toBe(C2)
+    expect(await store.getDefaultDocumentId()).toBe(C2)
   })
 
   it('a refused delete says why in a generic safe sentence — raw error not exposed', async () => {
@@ -366,7 +382,6 @@ describe('useBrowserDocumentController', () => {
     expect(result.current.persistence.kind).toBe('degraded')
     // Refused, and SAYS so: the rejection is the sentence the page shows.
     expect(await refusalOf(() => result.current.deleteDocument())).toMatch(/could not be safely/)
-    expect(result.current.cleanupCompleted).toBe(false)
     expect(result.current.snapshot).not.toBeNull()
     expect(await base.getDefaultDocumentId()).toBe(C1)
   })
@@ -392,7 +407,6 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {
       await result.current.deleteDocument()
     })
-    expect(result.current.cleanupCompleted).toBe(false)
     expect(result.current.snapshot).toEqual(snap)
   })
 
@@ -418,7 +432,7 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000)
     })
-    expect(await store.getDefaultDocumentId()).toBeNull()
+    expect(await store.getDefaultDocumentId()).not.toBe(C1)
     expect(await store.load(C1)).toBeNull()
   })
 
@@ -604,7 +618,7 @@ describe('useBrowserDocumentController', () => {
     expect(loaded?.name).toBe(snap.name)
   })
 
-  it('renameDocument after cleanup cleared the snapshot is a safe no-op', async () => {
+  it('renameDocument after a delete names the document now open, never the deleted one', async () => {
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
@@ -619,12 +633,13 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {
       await result.current.deleteDocument()
     })
-    expect(result.current.snapshot).toBeNull()
-    act(() => {
-      result.current.renameDocument('After cleanup')
+    const opened = result.current.snapshot?.documentId
+    await act(async () => {
+      await result.current.renameDocument('After delete')
     })
-    expect(result.current.snapshot).toBeNull()
-    expect(await store.getDefaultDocumentId()).toBeNull()
+    expect(result.current.snapshot?.documentId).toBe(opened)
+    expect(result.current.snapshot?.name).toBe('After delete')
+    expect(await store.load(C1)).toBeNull()
   })
 
   it('renameDocument refreshes updatedAt and transitions persistence to saved', async () => {

@@ -69,23 +69,6 @@ export function browserTerminalAnswer(
     }
   }
 
-  if (renderState.kind === 'cleanup-completed') {
-    return {
-      answer: {
-        kind: 'terminal',
-        node: (
-          <div
-            data-testid="cleanup-completed"
-            className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
-          >
-            <p className="text-sm text-muted-foreground">Canvas removed.</p>
-            <RecoveryButton label="Start fresh" onClick={() => void startFresh()} />
-          </div>
-        ),
-      },
-    }
-  }
-
   if (renderState.kind === 'loading') {
     return { answer: { kind: 'terminal', node: <DocumentPageSkeleton label="Loading canvas" /> } }
   }

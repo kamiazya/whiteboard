@@ -24,21 +24,20 @@ export type { LoroStoreLike }
 export interface BrowserDocumentController {
   /**
    * The resolved Loro store this controller persists through. Exposed so
-   * sibling consumers (the markdown-body hook) share the SAME instance —
-   * resolving the optional page prop's default twice would silently split
-   * spatial and markdown persistence across two stores.
+   * the page's other readers (the files source, its connections) share the SAME
+   * instance — resolving the optional page prop's default twice would
+   * silently split persistence across two stores.
    */
   loro: LoroStoreLike
   snapshot: DocumentSnapshot | null
   persistence: BrowserPersistenceState
-  cleanupCompleted: boolean
   // Resolves once the rename is flushed, rejects if the underlying save
   // failed — callers (e.g. WorkspaceTopBar) rely on the rejection to keep a
   // rename input open for retry instead of silently closing it.
   renameDocument(name: string): Promise<void>
   /**
-   * Resolves once the document is gone (the page then shows the
-   * cleanup-completed terminal) or when there is nothing to delete; REJECTS
+   * Resolves once the document is gone and what is left is open (a fresh
+   * document when nothing is), or when there is nothing to delete; REJECTS
    * with the sentence to show when it refused and kept the document — the
    * shape `use-document-actions.tsx` reads, the same as the daemon keeper's.
    */
@@ -166,6 +165,18 @@ async function openPointedAt(
   return snap ?? 'unreadable'
 }
 
+/**
+ * What a delete leaves open: the first document still listed, as the daemon
+ * keeper does, or a fresh one when none is — this keeper's first-visit answer
+ * to an empty workspace, where the daemon has an empty state instead.
+ */
+async function openWhatIsLeft(stores: OpeningStores): Promise<DocumentSnapshot> {
+  const [next] = await listLocalDocuments(stores.index, stores.clock)
+  const opened = next ?? (await createSeededDocument(stores.index, stores.loro, stores.clock))
+  await stores.pointer.set(opened.documentId)
+  return opened
+}
+
 export function useBrowserDocumentController(
   index: DocumentIndex,
   deps: BrowserControllerDeps = {},
@@ -181,7 +192,6 @@ export function useBrowserDocumentController(
     kind: 'saved',
     lastSavedAt: null,
   })
-  const [cleanupCompleted, setCleanupCompleted] = useState(false)
 
   // Stable refs so timer callbacks always see current state without re-creating
   const indexRef = useRef(index)
@@ -394,8 +404,29 @@ export function useBrowserDocumentController(
       throw new Error(`The ${noun} could not be removed. Your copy has been kept.`)
     }
     if (!removed) return
-    setSnapshot(null)
-    setCleanupCompleted(true)
+    // A switch in flight was aimed at a page that no longer holds this document.
+    switchGenerationRef.current++
+    try {
+      const opened = await openWhatIsLeft({
+        index: indexRef.current,
+        pointer: pointerRef.current,
+        clock: clockRef.current,
+        loro: loroRef.current,
+      })
+      snapshotRef.current = opened
+      setSnapshot(opened)
+    } catch {
+      // The delete stands; only the next open failed, so the page offers the
+      // load-failed recovery rather than claiming the delete was refused.
+      snapshotRef.current = null
+      setSnapshot(null)
+      setPersistenceRef.current({
+        kind: 'degraded',
+        reason: 'load-failed',
+        message: 'The next document could not be opened.',
+        lastSavedAt: null,
+      })
+    }
   }, [flushSave])
 
   const startFresh = useCallback(async () => {
@@ -453,7 +484,6 @@ export function useBrowserDocumentController(
     }
     setSnapshot(fresh)
     setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
-    setCleanupCompleted(false)
   }, [])
 
   const listDocuments = useCallback((): Promise<DocumentSnapshot[]> => {
@@ -546,7 +576,6 @@ export function useBrowserDocumentController(
     loro: loroRef.current,
     snapshot,
     persistence,
-    cleanupCompleted,
     renameDocument,
     deleteDocument,
     startFresh,
