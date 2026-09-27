@@ -16,7 +16,6 @@ import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from '../lib/bridge-address.js'
-import { DEV_TRANSPORT_OVERRIDE_KEY } from '../lib/dev-transport-override.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
@@ -109,18 +108,15 @@ describe('useDaemonDocumentBackend', () => {
   })
 })
 
-// ADR-0050 addendum decision 1: the bridge carries the SSE stream; a
-// WebSocket has no way through the extension, whatever a developer pinned.
-describe('useDaemonDocumentBackend through the extension', () => {
-  it('syncs over SSE even with WebSocket pinned for development', () => {
-    localStorage.setItem(DEV_TRANSPORT_OVERRIDE_KEY, 'websocket')
-    try {
-      const { result } = renderHook(() =>
-        useDaemonDocumentBackend(options({ daemonBaseUrl: BRIDGE_DAEMON_BASE_URL, token: '' })),
-      )
-      expect(result.current.backend).toBeInstanceOf(SseBackend)
-    } finally {
-      localStorage.removeItem(DEV_TRANSPORT_OVERRIDE_KEY)
-    }
+// ADR-0050: the local daemon's WebSocket goes, so every keeper syncs over
+// SSE — the bridge carries only the stream, and a plain-http page reaching a
+// plain-http daemon, which used to open a socket, uses it too.
+describe('useDaemonDocumentBackend transport', () => {
+  it.each([
+    ['a daemon reached through the extension', BRIDGE_DAEMON_BASE_URL],
+    ['a daemon on loopback, from a plain-http page', DAEMON_BASE_URL],
+  ])('syncs over SSE for %s', (_what, daemonBaseUrl) => {
+    const { result } = renderHook(() => useDaemonDocumentBackend(options({ daemonBaseUrl })))
+    expect(result.current.backend).toBeInstanceOf(SseBackend)
   })
 })

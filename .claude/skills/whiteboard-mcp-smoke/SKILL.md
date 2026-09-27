@@ -9,8 +9,8 @@ This repository splits verification targets into two categories.
 
 - **Server/daemon-side changes**
   Example: `src/server/**`, `src/daemon/**`, and the browser's sync client
-  `packages/daemon-client/src/daemon-backend.ts` (which is where the former
-  `useWhiteboardSync` hook ended up)
+  `packages/daemon-client/src/sse-backend.ts` (the only transport since the
+  WebSocket client went, ADR-0050)
 - **MCP schema/registration-side changes**
   Example: descriptions, schemas, or registration in `src/server/mcp/index.ts` and `src/server/mcp/tools/**`
 

@@ -71,8 +71,8 @@ function snapshotFor(path: string): Uint8Array {
 
 const constructed: { workspaceId: string; path: string }[] = []
 
-vi.mock('@kamiazya/whiteboard-daemon-client/daemon-backend', () => ({
-  DaemonBackend: class {
+vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', () => ({
+  SseBackend: class {
     readonly path: string
     constructor(workspaceId: string, path: string) {
       this.path = path

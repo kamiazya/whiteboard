@@ -595,7 +595,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable': 52,
   'packages/codec/src/spatial/projection.ts#liftNode': 55,
   'packages/codec/src/test-utils/fully-populated-canvas.ts#fullyPopulatedCanvas': 92,
-  'packages/daemon-client/src/daemon-backend.ts#openSocket': 142,
   'packages/daemon-client/src/replica-session-key.ts#sessionKey': 57,
   'packages/daemon-client/src/test-utils/document-backend-contract.ts#documentBackendContract': 102,
   'packages/daemon-client/src/test-utils/sse-stream-source-contract.ts#sseStreamSourceContract': 185,
