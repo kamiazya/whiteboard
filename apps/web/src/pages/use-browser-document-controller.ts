@@ -144,14 +144,15 @@ async function openDeepLink(
 /**
  * The document the pointer names, seeding a new one when it names nothing.
  *
- * `'unreadable'` is its own answer rather than null: a pointer naming a
- * document the index no longer has is a degraded read the caller reports,
- * where "nothing pointed at yet" is the ordinary first visit.
+ * A pointer naming a document the index no longer has opens what is left,
+ * as a delete does. It is not unreadable data — the pointer outlived its
+ * document (a delete whose repoint had not landed, another tab's delete) —
+ * and an error screen there is a dead end with nothing to recover.
  */
 async function openPointedAt(
   stores: OpeningStores,
   alive: StillMounted,
-): Promise<DocumentSnapshot | 'unreadable' | null> {
+): Promise<DocumentSnapshot | null> {
   const id = await stores.pointer.get()
   if (!alive()) return null
   if (id === null) {
@@ -162,17 +163,33 @@ async function openPointedAt(
   }
   const snap = await loadLocalDocument(stores.index, id, stores.clock)
   if (!alive()) return null
-  return snap ?? 'unreadable'
+  if (snap !== null) return snap
+  const left = await openWhatIsLeft(stores, alive)
+  return alive() ? left : null
 }
 
 /**
  * What a delete leaves open: the first document still listed, as the daemon
  * keeper does, or a fresh one when none is — this keeper's first-visit answer
  * to an empty workspace, where the daemon has an empty state instead.
+ *
+ * `alive` stops an OPEN that the page abandoned from seeding or repointing;
+ * a delete passes none, since its repoint must land whether or not the page
+ * is still there to show the result.
  */
-async function openWhatIsLeft(stores: OpeningStores): Promise<DocumentSnapshot> {
+function openWhatIsLeft(stores: OpeningStores): Promise<DocumentSnapshot>
+function openWhatIsLeft(
+  stores: OpeningStores,
+  alive: StillMounted,
+): Promise<DocumentSnapshot | null>
+async function openWhatIsLeft(
+  stores: OpeningStores,
+  alive: StillMounted = () => true,
+): Promise<DocumentSnapshot | null> {
   const [next] = await listLocalDocuments(stores.index, stores.clock)
+  if (!alive()) return null
   const opened = next ?? (await createSeededDocument(stores.index, stores.loro, stores.clock))
+  if (!alive()) return null
   await stores.pointer.set(opened.documentId)
   return opened
 }
@@ -304,17 +321,6 @@ export function useBrowserDocumentController(
       if (!alive()) return
       const opened = deepLinked ?? (await openPointedAt(stores, alive))
       if (!alive() || opened === null) return
-      if (opened === 'unreadable') {
-        // The pointer names a document the index no longer has. Generic safe
-        // copy, no raw error.
-        setPersistenceRef.current({
-          kind: 'degraded',
-          reason: 'load-failed',
-          message: 'The canvas data could not be read.',
-          lastSavedAt: null,
-        })
-        return
-      }
       setSnapshot(opened)
     }
 

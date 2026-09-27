@@ -10,7 +10,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { listLocalDocuments } from '../lib/local-document-summary.js'
+import { IdbDefaultDocumentPointer, listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
@@ -165,6 +165,30 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
         timeout: 5000,
       },
     )
+  })
+
+  // A pointer outliving its document — a delete whose repoint had not landed,
+  // another tab's delete — is not unreadable data; it names nothing. The page
+  // opens what is left, as a delete does, rather than an error screen whose
+  // only way out is "Start fresh".
+  it('open: a pointer naming a deleted document opens what is left', async () => {
+    const store = new IdbDocumentIndex()
+    render(<BrowserDocumentPage store={store} />)
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    const [kept] = await listLocalDocuments(store)
+    cleanup()
+    await new IdbDefaultDocumentPointer().set('01ZZZZZZZZZZZZZZZZZZZZZZZZ')
+
+    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(await new IdbDefaultDocumentPointer().get()).toBe(kept?.documentId)
   })
 
   it('network-negative: no fetch to /api/ or daemon endpoints during editing', async () => {

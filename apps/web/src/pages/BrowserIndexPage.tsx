@@ -86,10 +86,9 @@ interface PendingDelete {
  * Sequential and failure-tolerant on purpose: one path that cannot be deleted
  * must not abandon the rest, and the person has to be told how many did not
  * go. The POINTER is resolved by the caller before any of this, because
- * afterwards there is nothing left to compare it against — and a pointer
- * still naming a deleted document does not degrade gracefully, it hands the
- * user 'The canvas data could not be read.' the next time they open the
- * editor.
+ * afterwards there is nothing left to compare it against, and a pointer
+ * still naming a deleted document is cleared rather than left for the
+ * editor's next open to fall past.
  */
 async function deleteEach(
   index: DocumentIndex,
@@ -471,11 +470,7 @@ export function BrowserIndexPage({
     setDeleteError(null)
     try {
       // Resolved BEFORE the delete, because afterwards there is nothing left
-      // to compare the pointer against. A pointer still naming the deleted
-      // document does not degrade gracefully: the editor's resume path
-      // reports 'The canvas data could not be read.', so an ordinary delete
-      // would hand the user an error screen the next time they open the
-      // editor.
+      // to compare the pointer against.
       const failed = await deleteEach(index, pointer, pendingDelete.paths, await pointer.get())
       setSnapshots(await listLocalDocuments(index, clock))
       // The delete just moved a document INTO the trash — re-count so the
