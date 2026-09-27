@@ -456,6 +456,8 @@ describe('DaemonDocumentPage versions', () => {
       await takeBookmark()
 
       await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
+      // The shared versions slot logs the refused save, for either keeper.
+      await expectLoggedFailure('save version from the History panel failed')
 
       vi.unstubAllGlobals()
     })

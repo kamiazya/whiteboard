@@ -14,13 +14,7 @@ import type { ConnectionsBacklink } from '../components/connections/ConnectionsP
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
-import { getAppLogger } from '../lib/app-logger.js'
 import type { DocumentReadFailure } from '../lib/document-read-failure.js'
-import {
-  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
-  dispatchIdentityEvent,
-} from '../lib/document-sync-types.js'
-import type { VersionsBackend } from '../lib/versions-backend.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import type { BrowserPageState } from './browser-page-state.js'
 import type { DocumentKeeperAnswer } from './document-keeper.js'
@@ -239,45 +233,6 @@ export function documentLabels(
     overlayTitle: documentName ?? 'Untitled',
     exportFilenameBase: documentName ?? 'canvas',
     commandCanvas: documentId === null ? null : { documentId, name: documentName ?? '' },
-  }
-}
-
-const log = getAppLogger('browser-document-page')
-
-/**
- * The History column's slot: saving a version through this keeper's backend,
- * and announcing it the way the top bar listens.
- *
- * Null backend means nothing is loaded; the column is hidden then, so `save`
- * is never reached through it — it throws rather than guess a store.
- */
-export function browserVersionsSlot({
-  backend,
-  workspaceId,
-  path,
-}: {
-  backend: VersionsBackend | null
-  workspaceId: string
-  path: string
-}): DocumentPageModel['versions'] {
-  return {
-    enabled: backend !== null,
-    workspaceId,
-    path,
-    save: async (label) => {
-      if (backend === null) throw new Error('saveVersionFromPanel: no versions backend')
-      try {
-        const saved = await backend.save(workspaceId, path, { label })
-        return { workspaceId, path, versionId: saved.id }
-      } catch (err) {
-        log.warn('save version from the History panel failed', err)
-        throw err
-      }
-    },
-    // The top bar addresses this document as `local`/path (its
-    // `dataMode="local"` placeholder), so the dot listens under that id.
-    announceRefresh: () =>
-      dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, { workspaceId: 'local', path }),
   }
 }
 
