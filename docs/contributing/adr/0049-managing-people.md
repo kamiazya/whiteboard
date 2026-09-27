@@ -145,6 +145,13 @@ Immich, Vaultwarden, Discourse, Plane.
    replica key (ADR-0042) stay as they are. On a local daemon, the person who
    owns the machine is its administrator and every workspace's owner.
 
+   *Superseded for the local daemon by
+   [ADR-0050](0050-local-daemon-trust.md)'s 2026-09-27 addendum.* The local
+   daemon has one person, the machine's owner. Its members screen and API,
+   adding a person with a pinned passkey, and passkey-bound sessions are
+   retired as that ADR is built. The shared people surface stays server
+   mode's.
+
 6. **No step-up re-authentication for administrative actions, for now.** An
    administrator's session is an ordinary session. This is recorded as a
    decision, not an omission. The trigger for revisiting it is an
