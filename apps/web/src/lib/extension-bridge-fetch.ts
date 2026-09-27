@@ -15,6 +15,7 @@ import {
 import { WHITEBOARD_EXTENSION_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { BRIDGE_ORIGIN } from './bridge-address.js'
+import { connectThroughWindow, windowHello } from './extension-window-port.js'
 
 /** The part of a `runtime.Port` the page uses. */
 export interface BridgePort {
@@ -32,7 +33,8 @@ interface ExtensionRuntime {
 
 /**
  * `chrome.runtime` as a page sees it — present only where the browser has an
- * extension that admits this origin.
+ * extension that admits this origin. Firefox never gives a page one; there
+ * the extension's content script relays over the window instead.
  */
 function extensionRuntime(): ExtensionRuntime | null {
   const runtime = (globalThis as { chrome?: { runtime?: Partial<ExtensionRuntime> } }).chrome
@@ -45,7 +47,7 @@ function extensionRuntime(): ExtensionRuntime | null {
 /** Whether the whiteboard extension is installed and admits this page. */
 export function extensionPresent(timeoutMs = 1_500): Promise<boolean> {
   const runtime = extensionRuntime()
-  if (runtime === null) return Promise.resolve(false)
+  if (runtime === null) return windowHello(timeoutMs)
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), timeoutMs)
     try {
@@ -147,6 +149,11 @@ function sendRequest(
       entry.body?.error(request.signal.reason)
     }
     request.signal.addEventListener('abort', abort, { once: true })
+    // An abort while the body was being read has already fired.
+    if (request.signal.aborted) {
+      abort()
+      return
+    }
     entry.cancel = () => {
       if (pending.delete(id)) bridge.postMessage({ type: 'abort', id })
     }
@@ -210,5 +217,5 @@ function settle(
  * `BRIDGE_DAEMON_BASE_URL` shares this port.
  */
 export const extensionBridgeFetch = createBridgeFetch(
-  () => extensionRuntime()?.connect(WHITEBOARD_EXTENSION_ID) ?? null,
+  () => extensionRuntime()?.connect(WHITEBOARD_EXTENSION_ID) ?? connectThroughWindow(),
 )

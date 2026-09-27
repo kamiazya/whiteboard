@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import {
   NATIVE_HOST_NAME,
   WHITEBOARD_EXTENSION_ID,
+  WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { installNativeHost, nativeHostManifestDirs } from './install.js'
@@ -27,8 +28,36 @@ describe('nativeHostManifestDirs', () => {
     mkdirSync(join(scratch, '.config', 'microsoft-edge'), { recursive: true })
 
     expect(nativeHostManifestDirs(scratch, 'linux')).toEqual([
-      { browser: 'chrome', dir: join(scratch, '.config/google-chrome/NativeMessagingHosts') },
-      { browser: 'edge', dir: join(scratch, '.config/microsoft-edge/NativeMessagingHosts') },
+      {
+        browser: 'chrome',
+        engine: 'chromium',
+        dir: join(scratch, '.config/google-chrome/NativeMessagingHosts'),
+      },
+      {
+        browser: 'edge',
+        engine: 'chromium',
+        dir: join(scratch, '.config/microsoft-edge/NativeMessagingHosts'),
+      },
+    ])
+  })
+
+  // Firefox reads user-level hosts from one directory per install, not per
+  // profile — and Ubuntu's snap keeps its own home under ~/snap.
+  it('names each installed Firefox on Linux, the snap one included', () => {
+    mkdirSync(join(scratch, '.mozilla'), { recursive: true })
+    mkdirSync(join(scratch, 'snap/firefox/common/.mozilla'), { recursive: true })
+
+    expect(nativeHostManifestDirs(scratch, 'linux')).toEqual([
+      {
+        browser: 'firefox',
+        engine: 'firefox',
+        dir: join(scratch, '.mozilla/native-messaging-hosts'),
+      },
+      {
+        browser: 'firefox-snap',
+        engine: 'firefox',
+        dir: join(scratch, 'snap/firefox/common/.mozilla/native-messaging-hosts'),
+      },
     ])
   })
 
@@ -37,6 +66,7 @@ describe('nativeHostManifestDirs', () => {
     expect(nativeHostManifestDirs(scratch, 'darwin')).toEqual([
       {
         browser: 'chrome',
+        engine: 'chromium',
         dir: join(scratch, 'Library/Application Support/Google/Chrome/NativeMessagingHosts'),
       },
     ])
@@ -44,22 +74,33 @@ describe('nativeHostManifestDirs', () => {
 })
 
 describe('installNativeHost', () => {
-  it('writes a manifest only the whiteboard extension may start', async () => {
-    const manifestDir = join(scratch, 'profile', 'NativeMessagingHosts')
+  it('writes a manifest only the whiteboard extension may start, in each engine', async () => {
+    const chromeDir = join(scratch, 'chrome', 'NativeMessagingHosts')
+    const firefoxDir = join(scratch, 'firefox', 'native-messaging-hosts')
     const result = await installNativeHost({
       dataDir: join(scratch, 'data'),
-      manifestDirs: [{ browser: 'chrome', dir: manifestDir }],
+      manifestDirs: [
+        { browser: 'chrome', engine: 'chromium', dir: chromeDir },
+        { browser: 'firefox', engine: 'firefox', dir: firefoxDir },
+      ],
       launcher: launcherFor('/opt/whiteboard/cli.js'),
     })
 
-    const manifest = JSON.parse(readFileSync(join(manifestDir, `${NATIVE_HOST_NAME}.json`), 'utf8'))
-    expect(manifest).toEqual({
+    const read = (dir: string) =>
+      JSON.parse(readFileSync(join(dir, `${NATIVE_HOST_NAME}.json`), 'utf8'))
+    const common = {
       name: NATIVE_HOST_NAME,
       description: expect.any(String),
       path: result.launcher,
       type: 'stdio',
+    }
+    expect(read(chromeDir)).toEqual({
+      ...common,
       allowed_origins: [`chrome-extension://${WHITEBOARD_EXTENSION_ID}/`],
     })
+    // Firefox refuses a manifest carrying Chromium's key as "No such native
+    // application", so each engine gets only its own.
+    expect(read(firefoxDir)).toEqual({ ...common, allowed_extensions: [WHITEBOARD_GECKO_ID] })
     expect(statSync(result.launcher).mode & 0o777).toBe(0o700)
   })
 
