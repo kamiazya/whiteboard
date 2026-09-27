@@ -9,6 +9,7 @@
  * sitting.
  */
 
+import type { Extension } from '@codemirror/state'
 import type { ReactNode } from 'react'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -232,6 +233,32 @@ export function daemonVersionsSlot({
     announceOnce: () =>
       dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, canvas ?? undefined),
   })
+}
+
+/**
+ * The markdown editor's daemon half: the body the session holds, and the
+ * binding that writes edits into the session's doc at their own positions.
+ * No binding yet (before the first snapshot) means no `sourceExtensions`,
+ * and the surface falls back to `setBody` until one arrives.
+ */
+export function daemonMarkdownSlot({
+  body,
+  setBody,
+  binding,
+  meta,
+}: {
+  body: DocumentPageModel['markdown']['body']
+  setBody: DocumentPageModel['markdown']['setBody']
+  binding: Extension[] | undefined
+  meta: DocumentPageModel['markdown']['meta']
+}): DocumentPageModel['markdown'] {
+  return {
+    body,
+    setBody,
+    ...(binding === undefined ? {} : { sourceExtensions: binding }),
+    meta,
+    hydrating: false,
+  }
 }
 
 /**
