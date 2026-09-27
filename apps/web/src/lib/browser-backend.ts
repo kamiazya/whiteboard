@@ -19,6 +19,7 @@ import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { seedNameFromTitle } from './seed-name-from-title.js'
 
 /**
  * The document a BrowserBackend serves. `path`/`kind`/`name` are what connect
@@ -283,6 +284,12 @@ export class BrowserBackend implements DocumentBackend {
     if (workspaceDoc === null || workspaceId === null) return
     try {
       workspaceDoc.import(bytes)
+      // A note is named after its body's heading while nobody has named it —
+      // before the save, so the name rides the same write. The session never
+      // reads names, so doing it on the store's copy of the record is enough.
+      // No kind check: a canvas has an empty body container, so it announces
+      // no title and the function leaves it alone.
+      seedNameFromTitle(workspaceDoc, this.target.documentId)
       await this.docs.save(workspaceId, workspaceDoc)
       // The listing's updatedAt: stamped per push, keyed by the document this
       // backend serves — the workspace document itself has no row to stamp.
