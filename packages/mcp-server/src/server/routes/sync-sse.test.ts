@@ -14,7 +14,13 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
 import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-sse.js'
-import { sendHeadChanged, sendViewportRequest, setResolveViewportFn } from './ws.js'
+import {
+  getClientCount,
+  getReadyClientCount,
+  sendHeadChanged,
+  sendViewportRequest,
+  setResolveViewportFn,
+} from './ws.js'
 
 // Its own data dir: opening a stream opens the store, and a store shared with
 // another file running in parallel waits on that file's lock until timeout.
@@ -397,5 +403,32 @@ describe('SSE sync transport', () => {
     })
 
     expect(res.status).toBe(404)
+  })
+})
+
+// A page reached through the extension has no WebSocket: SSE is its only
+// transport. A count that read the socket map alone reported every such page
+// as absent, so `wb_viewport_set` and the client-count poll said "open the
+// canvas in a browser" to a browser that had it open.
+describe('the client count sees a page on the SSE transport', () => {
+  it('counts a subscribed stream, and counts it ready once it says client_ready', async () => {
+    const app = createApp(createRuntimeOptions())
+    const { streamId } = await openStream(app)
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, subscribe: ['ws-1/counted'] }),
+    })
+    expect(getClientCount('ws-1', 'counted')).toBe(1)
+    expect(getReadyClientCount('ws-1', 'counted')).toBe(0)
+
+    await app.request('/api/sync/message', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, doc: 'ws-1/counted', message: { type: 'client_ready' } }),
+    })
+    expect(getReadyClientCount('ws-1', 'counted')).toBe(1)
+    // Another document on the same stream is not this one.
+    expect(getClientCount('ws-1', 'elsewhere')).toBe(0)
   })
 })

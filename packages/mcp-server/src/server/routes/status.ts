@@ -4,7 +4,7 @@ import { onDocumentAction } from './document/path-route.js'
 import { getClientCount, getReadyClientCount } from './ws.js'
 
 // Lightweight route for polling whether a browser has connected to a canvas.
-// It only reads the WS connection map through getClientCount, so it stays O(1).
+// It reads the browsers on the document over either transport (getClientCount).
 //
 // Usage:
 //   GET /api/w/:workspaceId/document/<path>/client-count → { count: number }

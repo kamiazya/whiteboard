@@ -21,6 +21,7 @@ import {
   setSyncSseHooks,
   sseBroadcastText,
   sseBroadcastTextToReady,
+  sseClientCount,
   sseSubscribedWorkspaceIds,
 } from './sync-sse.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
@@ -228,13 +229,20 @@ export function sendViewportRequest(
   sseBroadcastTextToReady(workspaceId, path, raw)
 }
 
-// Return the number of WS clients connected to a canvas. Used for export.ts preflight checks.
+// The browsers on a document, over either transport: a page reached through
+// the extension has only its SSE stream.
 export function getClientCount(workspaceId: string, path: string): number {
-  return connections.get(`${workspaceId}/${path}`)?.size ?? 0
+  return (
+    (connections.get(`${workspaceId}/${path}`)?.size ?? 0) +
+    sseClientCount(workspaceId, path, false)
+  )
 }
 
 export function getReadyClientCount(workspaceId: string, path: string): number {
-  return readyConnections.get(`${workspaceId}/${path}`)?.size ?? 0
+  return (
+    (readyConnections.get(`${workspaceId}/${path}`)?.size ?? 0) +
+    sseClientCount(workspaceId, path, true)
+  )
 }
 
 export function getConnectionStats(): { connectedClients: number; readyClients: number } {

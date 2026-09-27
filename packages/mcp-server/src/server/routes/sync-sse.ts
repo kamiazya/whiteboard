@@ -198,6 +198,22 @@ function sendText(key: string, raw: string, admits: (entry: SyncStreamDoc) => bo
   }
 }
 
+/**
+ * How many streams are subscribed to one document, or only those that have
+ * signalled `client_ready` for it. The page a stream serves has no socket, so
+ * a count of browsers on a document has to add these to the WebSocket's.
+ */
+export function sseClientCount(workspaceId: string, path: string, readyOnly: boolean): number {
+  const key = docKey(workspaceId, path)
+  let count = 0
+  for (const stream of streams.values()) {
+    for (const entry of stream.docs.values()) {
+      if (entry.key === key && (!readyOnly || entry.ready)) count++
+    }
+  }
+  return count
+}
+
 /** Like sseBroadcastText, but only to streams that have signalled client_ready. */
 export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: string): void {
   sendText(docKey(workspaceId, path), raw, (entry) => entry.ready)
