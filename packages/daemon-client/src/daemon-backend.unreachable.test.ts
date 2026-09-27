@@ -11,7 +11,9 @@ import { DaemonBackend } from './daemon-backend.js'
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 
 class FakeWebSocket {
+  static readonly OPEN = 1
   static instances: FakeWebSocket[] = []
+  readyState = FakeWebSocket.OPEN
   binaryType = 'blob'
   onopen: (() => void) | null = null
   onclose: ((event: { code: number }) => void) | null = null
@@ -92,5 +94,57 @@ it('still gives up when the daemon answers but the socket keeps being refused', 
   const opened = FakeWebSocket.instances.length
   await vi.advanceTimersByTimeAsync(60_000)
   expect(FakeWebSocket.instances.length).toBe(opened)
+  backend.disconnect()
+})
+
+// A push is the session's only evidence that an edit left the tab. One the
+// socket could not carry must say so: returning quietly read as "saved" for
+// an edit that exists nowhere but this tab, while the reconnect's full re-send
+// is what actually delivers it.
+it('refuses a push while its socket is not open, instead of dropping it quietly', async () => {
+  const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/', {
+    fetch: vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+  })
+  backend.connect(handlers(vi.fn()))
+  const socket = FakeWebSocket.instances[0] as FakeWebSocket & { readyState: number }
+
+  socket.readyState = 3 // CLOSED, before its close event has been dispatched
+  await expect(async () => backend.pushLocalUpdate(new Uint8Array([1]))).rejects.toThrow()
+  backend.disconnect()
+})
+
+it('keeps reconnecting when the daemon answers the probe with a server error', async () => {
+  const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 500 })))
+  const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/', { fetch })
+  const onAuthError = vi.fn()
+  backend.connect(handlers(onAuthError))
+
+  await refuseSockets(3)
+
+  expect(onAuthError).not.toHaveBeenCalled()
+  expect(FakeWebSocket.instances.length).toBeGreaterThan(3)
+  backend.disconnect()
+})
+
+it('keeps reconnecting when the probe never answers', async () => {
+  const fetch = vi.fn(
+    (_input: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('timeout', 'TimeoutError')),
+        )
+      }),
+  )
+  const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/', {
+    fetch: fetch as unknown as typeof globalThis.fetch,
+  })
+  const onAuthError = vi.fn()
+  backend.connect(handlers(onAuthError))
+
+  await refuseSockets(3)
+  await vi.advanceTimersByTimeAsync(30_000)
+
+  expect(onAuthError).not.toHaveBeenCalled()
+  expect(FakeWebSocket.instances.length).toBeGreaterThan(3)
   backend.disconnect()
 })

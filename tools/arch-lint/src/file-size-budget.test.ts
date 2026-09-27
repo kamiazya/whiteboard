@@ -381,11 +381,8 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // debounce window, and what costs the lines is the WHY — committing that
   // write after an undo wrote the pre-undo canvas back over a document the
   // screen had already left, publishing nothing and discarding the redo
-  // stack. Raised again, 1535 -> 1536, for the two statements that tell the
-  // persistence ledger when the transport goes up and down: a push that
-  // resolves while it is down has not landed (the WebSocket's returns having
-  // sent nothing), and the rule itself lives in the ledger, not here.
-  'apps/web/src/lib/document-sync-session.ts': 1536,
+  // stack.
+  'apps/web/src/lib/document-sync-session.ts': 1535,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the

@@ -30,22 +30,11 @@ export class PersistenceLedger {
   // "this push resolved" is not "this write landed". A push clears the
   // failure only when no report arrived between its start and its end.
   private failureEpoch = 0
-  // Whether the session's transport is up. A backend whose transport is down
-  // may return from a push without sending anything (the WebSocket's does), so
-  // a push that resolves while it is down has not landed: the edit stays
-  // unsaved until the full re-send on reconnect lands it. Only a backend with
-  // a transport ever reports it down.
-  private transportUp = true
 
   constructor(
     private readonly report: Report,
     private readonly busy: () => boolean,
   ) {}
-
-  /** The session's transport came up or went down. */
-  transport(up: boolean): void {
-    this.transportUp = up
-  }
 
   /** A local edit was published. */
   edited(): void {
@@ -59,14 +48,8 @@ export class PersistenceLedger {
     this.inFlightPushes++
     this.written = true
     const epochAtPush = this.failureEpoch
-    const sentWhileUp = this.transportUp
     return {
       resolved: () => {
-        if (!sentWhileUp) {
-          this.inFlightPushes--
-          this.failed()
-          return
-        }
         this.inFlightPushes--
         if (this.failureEpoch === epochAtPush) this.writeFailed = false
         this.settle()

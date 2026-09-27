@@ -70,6 +70,11 @@ export interface DaemonApiTransport {
 // would silently spam reconnects with no way for the user to recover.
 const MAX_CONSECUTIVE_IMMEDIATE_FAILURES = 3
 
+// How long the probe that tells a stopped daemon from a refused credential
+// may take. A request that never settles would otherwise leave no reconnect
+// armed at all; one that times out counts as a daemon not answering.
+const REFUSAL_PROBE_TIMEOUT_MS = 5_000
+
 /**
  * One server text message, dispatched by its `type`. A chain of early
  * returns rather than a table, because two arms do more than call a handler:
@@ -213,7 +218,11 @@ export class DaemonBackend implements DocumentBackend {
   }
 
   pushLocalUpdate(bytes: Uint8Array): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    // Refused rather than dropped: returning quietly reads as a push that
+    // left the tab. The reconnect's full re-send is what carries the edit.
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('The daemon socket is not open; the edit is sent on reconnect.')
+    }
     this.ws.send(bytes.slice())
   }
 
@@ -229,19 +238,24 @@ export class DaemonBackend implements DocumentBackend {
   /**
    * A run of sockets that never opened is a refused credential OR a daemon
    * that is not running — the socket cannot tell the two apart. An HTTP
-   * request can: a stopped daemon fails at the network. Only that case keeps
-   * reconnecting; a daemon that answers at all keeps the terminal verdict,
-   * since the socket's credential is not the request's and a WS-only refusal
-   * would otherwise retry forever.
+   * request can: a stopped daemon fails at the network or does not answer
+   * in time. That case, and a server error, keep reconnecting; any other
+   * answer keeps the terminal verdict, since the socket's credential is not
+   * the request's and a WS-only refusal would otherwise retry forever.
    */
   private async judgeRefusal(handlers: DocumentBackendHandlers): Promise<void> {
     const fetchFn = this.apiTransport?.fetch ?? apiFetch
-    const answered = await fetchFn('/api/workspaces').then(
-      () => true,
-      () => false,
+    const abort = new AbortController()
+    const timer = setTimeout(() => abort.abort(), REFUSAL_PROBE_TIMEOUT_MS)
+    const response = await fetchFn('/api/workspaces', { signal: abort.signal }).then(
+      (res) => res,
+      () => undefined,
     )
+    clearTimeout(timer)
     if (this.cancelled) return
-    if (answered) {
+    // A server error is a daemon that is up and failing, not one refusing
+    // the credential, so it is retried like a daemon that is not answering.
+    if (response !== undefined && response.status < 500) {
       handlers.onAuthError?.()
       return
     }
