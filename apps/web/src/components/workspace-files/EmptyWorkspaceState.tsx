@@ -76,99 +76,120 @@ export function EmptyWorkspaceState({
           phones, and seeing both objects in one glance is the chooser's
           whole point. The grid splits whatever width the page gives. */}
       <div className="mt-2 grid w-full max-w-lg grid-cols-2 gap-3 px-4 sm:gap-4">
-        <button
-          type="button"
-          aria-label="Create a canvas"
+        <KindCard
+          label="Create a canvas"
+          title="Canvas"
+          line="Place notes and connect them in space."
+          picture={CANVAS_PICTURE}
           disabled={disabled}
           onClick={() => onCreate('spatial')}
-          className="hover:border-primary w-full rounded-lg border text-left transition-colors disabled:opacity-50"
-        >
-          <span
-            aria-hidden="true"
-            className="bg-muted/40 block aspect-[224/96] w-full overflow-hidden rounded-t-lg"
-          >
-            {/* Two notes and the connection between them — the canvas in
-                one picture. */}
-            <svg aria-hidden="true" viewBox="0 0 224 96" className="size-full">
-              <rect
-                x="34"
-                y="20"
-                width="58"
-                height="26"
-                rx="4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="text-primary/70"
-              />
-              <rect
-                x="132"
-                y="52"
-                width="54"
-                height="24"
-                rx="4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="text-primary/70"
-              />
-              <path
-                d="M92 40 C 112 46, 118 52, 132 58"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="text-primary/40"
-              />
-            </svg>
-          </span>
-          <span className="block px-4 py-3">
-            <span className="block text-sm font-semibold">Canvas</span>
-            <span className="text-muted-foreground block text-xs leading-relaxed">
-              Place notes and connect them in space.
-            </span>
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-label="Create a markdown note"
+        />
+        <KindCard
+          label="Create a markdown note"
+          title="Markdown note"
+          line="Start writing. Put it on a canvas later."
+          picture={NOTE_PICTURE}
           disabled={disabled}
           onClick={() => onCreate('markdown')}
-          className="hover:border-primary w-full rounded-lg border text-left transition-colors disabled:opacity-50"
-        >
-          <span
-            aria-hidden="true"
-            className="bg-muted/40 block aspect-[224/96] w-full overflow-hidden rounded-t-lg"
-          >
-            {/* Lines of prose — the note in one picture. */}
-            <svg aria-hidden="true" viewBox="0 0 224 96" className="size-full">
-              {[
-                { y: 24, w: 96 },
-                { y: 40, w: 150 },
-                { y: 56, w: 132 },
-                { y: 72, w: 78 },
-              ].map(({ y, w }) => (
-                <rect
-                  key={y}
-                  x="36"
-                  y={y}
-                  width={w}
-                  height="5"
-                  rx="2.5"
-                  fill="currentColor"
-                  className="text-primary/50"
-                />
-              ))}
-            </svg>
-          </span>
-          <span className="block px-4 py-3">
-            <span className="block text-sm font-semibold">Markdown note</span>
-            <span className="text-muted-foreground block text-xs leading-relaxed">
-              Start writing. Put it on a canvas later.
-            </span>
-          </span>
-        </button>
+        />
       </div>
       {footer}
     </div>
   )
 }
+
+/** One of the two objects: a picture of it, its name, and one line on what it is for. */
+function KindCard({
+  label,
+  title,
+  line,
+  picture,
+  disabled,
+  onClick,
+}: {
+  label: string
+  title: string
+  line: string
+  picture: ReactNode
+  disabled: boolean | undefined
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="hover:border-primary w-full rounded-lg border text-left transition-colors disabled:opacity-50"
+    >
+      <span
+        aria-hidden="true"
+        className="bg-muted/40 block aspect-[224/96] w-full overflow-hidden rounded-t-lg"
+      >
+        {picture}
+      </span>
+      <span className="block px-4 py-3">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="text-muted-foreground block text-xs leading-relaxed">{line}</span>
+      </span>
+    </button>
+  )
+}
+
+/** Two notes and the connection between them — the canvas in one picture. */
+const CANVAS_PICTURE = (
+  <svg aria-hidden="true" viewBox="0 0 224 96" className="size-full">
+    <rect
+      x="34"
+      y="20"
+      width="58"
+      height="26"
+      rx="4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="text-primary/70"
+    />
+    <rect
+      x="132"
+      y="52"
+      width="54"
+      height="24"
+      rx="4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="text-primary/70"
+    />
+    <path
+      d="M92 40 C 112 46, 118 52, 132 58"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="text-primary/40"
+    />
+  </svg>
+)
+
+/** Lines of prose — the note in one picture. */
+const NOTE_PICTURE = (
+  <svg aria-hidden="true" viewBox="0 0 224 96" className="size-full">
+    {[
+      { y: 24, w: 96 },
+      { y: 40, w: 150 },
+      { y: 56, w: 132 },
+      { y: 72, w: 78 },
+    ].map(({ y, w }) => (
+      <rect
+        key={y}
+        x="36"
+        y={y}
+        width={w}
+        height="5"
+        rx="2.5"
+        fill="currentColor"
+        className="text-primary/50"
+      />
+    ))}
+  </svg>
+)

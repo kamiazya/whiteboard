@@ -55,6 +55,27 @@ export function ExtensionConnectOption({
   }
 
   return (
+    <ConnectButton
+      lead={lead}
+      connecting={state === 'connecting'}
+      noDaemon={state === 'no-daemon'}
+      onConnect={() => void onConnect()}
+    />
+  )
+}
+
+function ConnectButton({
+  lead,
+  connecting,
+  noDaemon,
+  onConnect,
+}: {
+  lead: string | undefined
+  connecting: boolean
+  noDaemon: boolean
+  onConnect: () => void
+}) {
+  return (
     <div
       className={lead === undefined ? 'flex flex-col gap-1' : 'flex flex-col items-center gap-1'}
     >
@@ -62,14 +83,14 @@ export function ExtensionConnectOption({
       <Button
         size="sm"
         variant={lead === undefined ? 'default' : 'outline'}
-        disabled={state === 'connecting'}
-        onClick={() => void onConnect()}
+        disabled={connecting}
+        onClick={onConnect}
       >
         Connect through the extension
       </Button>
       {/* Mounted before it speaks, so the message is announced when it arrives. */}
       <span role="status" className="text-xs text-muted-foreground">
-        {state === 'no-daemon' && (
+        {noDaemon && (
           <>
             The whiteboard extension is installed, but no daemon answered. Start one with{' '}
             <code>whiteboard daemon run</code>, then try again.
