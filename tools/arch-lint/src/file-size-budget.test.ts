@@ -718,7 +718,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // since the pull those flows drive is sealed.
   // Raised 1053 -> 1086: ADR-0039's 2026-09-22 addendum makes a registered
   // passkey the precondition for moving, so all twenty renders arrange one.
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1086,
+  // Raised 1086 -> 1089: app-logger reaches the console in browser tests now,
+  // so the deferred-demote case claims the warn it provokes (import + two lines).
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1089,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // Raised 2708 -> 2724, two lines for each of the eight ink entries the
   // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`

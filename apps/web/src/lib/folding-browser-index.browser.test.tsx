@@ -12,6 +12,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
@@ -78,6 +79,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
   })
 
   it('a fold-skipped unreadable record stays listed, resolvable and deletable', async () => {
+    const logged = expectLoggedFailures()
     // The fold leaves a record it cannot read where it is (fold-workspace.ts
     // says so in as many words: "still reported by the old path as
     // damaged-but-present"). This index IS the old path's successor, so the
@@ -123,9 +125,13 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     expect(
       (await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).map((row) => row.path),
     ).toEqual(['readable'])
+    expect(logged.join('\n')).toContain(
+      '[folding-browser-index] startup fold left documents behind',
+    )
   })
 
   it('a kindless legacy row stays invisible — our own pre-kind data defect', async () => {
+    const logged = expectLoggedFailures()
     const legacyIndex = new IdbDocumentIndex()
     await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     // createDocument requires a kind, so write the row the way the defect
@@ -145,6 +151,9 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
         documentId: entry.documentId,
       }),
     ).toBeNull()
+    expect(logged.join('\n')).toContain(
+      '[folding-browser-index] startup fold left documents behind',
+    )
   })
 
   it('delete evacuates into the trash; restore brings the document back under the same id', async () => {

@@ -7,6 +7,7 @@
  * of failure a mocked test cannot see.
  */
 import { describe, expect, it } from 'vitest'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { renderDiagramFragment } from './markdown-fragment-renderers.js'
 
 describe('renderDiagramFragment (real mermaid)', () => {
@@ -23,8 +24,10 @@ describe('renderDiagramFragment (real mermaid)', () => {
   })
 
   it('is total against diagram source the engine rejects', async () => {
+    const logged = expectLoggedFailures()
     await expect(
       renderDiagramFragment('mermaid', 'not a diagram at all %%%'),
     ).resolves.toBeUndefined()
+    expect(logged.join('\n')).toContain('[markdown-fragments] mermaid rendering failed')
   })
 })

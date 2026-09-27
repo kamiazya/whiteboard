@@ -15,6 +15,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserBackend, type BrowserBackendTarget } from './browser-backend.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -130,6 +131,7 @@ it("another tab's edit applies to a note the first tab named from its heading", 
 })
 
 it('bytes this record cannot import are skipped, and the tab keeps saving', async () => {
+  const logged = expectLoggedFailures()
   const a = await open(target(DOC, 'design'))
   opened.push(a.backend)
   const garbage = new Uint8Array([1, 2, 3, 4])
@@ -154,6 +156,7 @@ it('bytes this record cannot import are skipped, and the tab keeps saving', asyn
   await expect(a.backend.pushLocalUpdate(a.doc.export({ mode: 'update', from }))).resolves.toBe(
     undefined,
   )
+  expect(logged.join('\n')).toContain('[browser-backend] skipped an update from another tab')
 })
 
 it('a save landing between reading the record and listening still reaches the tab', async () => {

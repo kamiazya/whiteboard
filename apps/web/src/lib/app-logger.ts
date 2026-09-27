@@ -23,17 +23,15 @@ export function getAppLogger(name: string): AppLogger {
     context: unknown[],
   ): void {
     // Read DEV at call time (not module load time). vi.stubGlobal('import.meta', ...)
-    // stores the stub under the key 'import.meta' (literal dot) on globalThis, so we
-    // look that up first to let tests override it after the module is imported.
-    // When no stub is present (the real running app), this falls through to the
-    // genuine `import.meta` object that Vite injects at runtime — `import.meta.env.DEV`
-    // is a real, always-populated property there, not just a build-time literal
-    // substitution, so the fallback reflects the actual dev/prod build correctly.
+    // stores the stub under the key 'import.meta' (literal dot) on globalThis, so a
+    // test's stub is looked up first. Otherwise `import.meta.env` is read AS
+    // WRITTEN: Vite injects `env` only where the source spells that member
+    // expression. Off a bare `import.meta` held in a variable a browser build
+    // finds no `env`, and every record is dropped without a sign.
     const g = globalThis as Record<string, unknown>
-    const importMeta = (g['import.meta'] ?? import.meta) as
-      | { env?: Record<string, unknown> }
-      | undefined
-    const isDev = importMeta?.env?.DEV === true
+    const stubbed = g['import.meta'] as { env?: Record<string, unknown> } | undefined
+    const env = stubbed?.env ?? import.meta.env
+    const isDev = env?.DEV === true
     if (isDev) {
       // biome-ignore lint/suspicious/noConsole: this is the one intended sink apps/web routes diagnostics through
       console[level](`${tag} ${message}`, ...context)

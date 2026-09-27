@@ -34,6 +34,7 @@ import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
@@ -962,6 +963,7 @@ describe('PromoteWorkspaceSection', () => {
   })
 
   it('a successful move is reported ok even when the session key is withheld exactly at the demote read-back', async () => {
+    const logged = expectLoggedFailures()
     // The move and the demote-cache write both already landed by the time
     // `replicaCarriesAll`'s read-back runs. Simulating the session lapsing
     // in that exact gap (ADR-0042: "a membership revocation is felt at the
@@ -1021,6 +1023,7 @@ describe('PromoteWorkspaceSection', () => {
     // The source browser copy survives — the demote decision was deferred,
     // not silently taken as "carries nothing".
     expect(await new BrowserWorkspaceDocs().open(sourceId)).not.toBeNull()
+    expect(logged.join('\n')).toContain('[promote-workspace-section] demote after promote failed')
   })
 
   it('stays discoverable but disabled with no daemon connected', async () => {
