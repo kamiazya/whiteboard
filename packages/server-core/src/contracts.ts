@@ -29,10 +29,7 @@
  * either.
  */
 export { type BacklinksOutput, backlinksOutputSchema } from './tools/backlinks.schemas.js'
-export {
-  wbDocumentCreateOutputSchema,
-  wbDocumentListOutputSchema,
-} from './tools/document-crud.schemas.js'
+export { wbDocumentCreateOutputSchema } from './tools/document-crud.schemas.js'
 export {
   type DocumentSearchOutput,
   documentSearchOutputSchema,
