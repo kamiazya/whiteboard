@@ -5,7 +5,7 @@
  * moves to another workspace; the address must then settle on that one rather
  * than resolve back to the refused one.
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import { App } from './App.js'
@@ -135,4 +135,22 @@ it('the only workspace, refused, says so and offers a retry rather than tool adv
   )
   expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
   expect(document.body.textContent).not.toContain('wb_workspace_edit')
+})
+
+it('choosing a refused workspace again asks the daemon again, once, rather than never', async () => {
+  const { requests } = installDaemon([LIVE_ID, GONE_ID])
+  const router = createMemoryRouter(
+    [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+    {
+      initialEntries: [`/w/${GONE_ID}`],
+    },
+  )
+  mount(router)
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe(`/w/${LIVE_ID}`))
+
+  // What the switcher does: move the address to the workspace by name.
+  await act(() => router.navigate(`/w/${GONE_ID}`))
+
+  await vi.waitFor(() => expect(asksFor(requests, GONE_ID), requests.join('\n')).toBe(2))
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe(`/w/${LIVE_ID}`))
 })

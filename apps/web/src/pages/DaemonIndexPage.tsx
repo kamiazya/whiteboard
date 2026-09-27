@@ -98,6 +98,27 @@ function createFailureMessage(err: unknown, kind: DocumentKind): string {
   return err instanceof Error ? err.message : `Failed to create ${kindNoun(kind)}.`
 }
 
+/**
+ * What the address resolves to, given the handles whose documents answered
+ * 404. An address that MOVED to a refused handle is a person choosing it, so
+ * its refusal is lifted (mutating `refused`) and it resolves as usual.
+ */
+function resolveAddress(
+  workspaces: readonly WorkspaceSummary[],
+  address: string,
+  refused: Set<string>,
+  moved: boolean,
+): { wanted: WorkspaceSummary | null; refused: boolean; usable: WorkspaceSummary[] } {
+  const resolved = resolveWorkspaceHandle(workspaces, address)
+  if (moved && resolved !== null) refused.delete(workspaceHandle(resolved))
+  const isRefused = resolved !== null && refused.has(workspaceHandle(resolved))
+  return {
+    wanted: isRefused ? null : resolved,
+    refused: isRefused,
+    usable: workspaces.filter((w) => !refused.has(workspaceHandle(w))),
+  }
+}
+
 export function DaemonIndexPage({
   daemonBaseUrl,
   token,
@@ -261,17 +282,25 @@ export function DaemonIndexPage({
   // one: `reselectAfterStale` moves the page off it and stores a fresh list,
   // which re-runs the effect below while the address still names it, and
   // resolving it again selected it again — two workspaces alternating for as
-  // long as the tab stayed open. An explicit retry still selects one (the
-  // list load does not consult this), so a workspace that recovers is one
+  // long as the tab stayed open. An explicit retry, or choosing it again (see
+  // `lastAddressRef`), still selects one, so a workspace that recovers is one
   // press away.
   const refusedRef = useRef(new Set<string>())
+  // The address the effect below last saw. An address that MOVES to a refused
+  // handle is a person choosing it — the switcher, a link — and is asked
+  // again; the same address seen again because the list was re-read is not.
+  const lastAddressRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     if (workspace === undefined || !workspacesLoaded) return
-    const usable = workspaces.filter((w) => !refusedRef.current.has(workspaceHandle(w)))
-    const resolved = resolveWorkspaceHandle(workspaces, workspace)
-    const refused = resolved !== null && refusedRef.current.has(workspaceHandle(resolved))
-    const wanted = refused ? null : resolved
+    const moved = lastAddressRef.current !== workspace
+    lastAddressRef.current = workspace
+    const { wanted, refused, usable } = resolveAddress(
+      workspaces,
+      workspace,
+      refusedRef.current,
+      moved,
+    )
     // A handle this list does not hold is EITHER a stale bookmark or a
     // workspace the switcher created or renamed a moment ago. The switcher is
     // the SHELL's and writes through its own source, so this page's list is a
