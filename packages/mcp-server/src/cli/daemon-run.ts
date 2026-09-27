@@ -49,7 +49,7 @@ export type DaemonRunOutcome =
       stopped: Promise<DaemonStopReason>
     }
 
-export type DaemonStopReason = 'idle' | 'signal'
+type DaemonStopReason = 'idle' | 'signal'
 
 export interface DaemonRunOptions {
   host?: string
