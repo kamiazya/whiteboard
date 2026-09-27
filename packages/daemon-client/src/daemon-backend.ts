@@ -70,6 +70,11 @@ export interface DaemonApiTransport {
 // would silently spam reconnects with no way for the user to recover.
 const MAX_CONSECUTIVE_IMMEDIATE_FAILURES = 3
 
+// How long the probe that tells a stopped daemon from a refused credential
+// may take. A request that never settles would otherwise leave no reconnect
+// armed at all; one that times out counts as a daemon not answering.
+const REFUSAL_PROBE_TIMEOUT_MS = 5_000
+
 /**
  * One server text message, dispatched by its `type`. A chain of early
  * returns rather than a table, because two arms do more than call a handler:
@@ -213,8 +218,60 @@ export class DaemonBackend implements DocumentBackend {
   }
 
   pushLocalUpdate(bytes: Uint8Array): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    // Refused rather than dropped: returning quietly reads as a push that
+    // left the tab. The reconnect's full re-send is what carries the edit.
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error('The daemon socket is not open; the edit is sent on reconnect.')
+    }
     this.ws.send(bytes.slice())
+  }
+
+  private scheduleReconnect(handlers: DocumentBackendHandlers): void {
+    // 500ms, 1s, 2s, 4s, 8s, 8s, … capped at 8s.
+    const delay = Math.min(8000, 500 * 2 ** this.attempt)
+    this.attempt += 1
+    this.reconnectTimer = setTimeout(() => {
+      this.openSocket(handlers)
+    }, delay)
+  }
+
+  /**
+   * A run of sockets that never opened is a refused credential OR a daemon
+   * that is not running — the socket cannot tell the two apart. An HTTP
+   * request can: a stopped daemon fails at the network or does not answer
+   * in time. That case, and a server error, keep reconnecting; any other
+   * answer keeps the terminal verdict, since the socket's credential is not
+   * the request's and a WS-only refusal would otherwise retry forever.
+   */
+  private async judgeRefusal(handlers: DocumentBackendHandlers): Promise<void> {
+    const fetchFn = this.apiTransport?.fetch ?? apiFetch
+    // Bounded twice over: the signal ends a request the transport lets go of,
+    // and the race ends the wait for one that ignores it.
+    const abort = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => {
+        abort.abort()
+        resolve(undefined)
+      }, REFUSAL_PROBE_TIMEOUT_MS)
+    })
+    const response = await Promise.race([
+      fetchFn('/api/workspaces', { signal: abort.signal }).then(
+        (res) => res,
+        () => undefined,
+      ),
+      timedOut,
+    ])
+    clearTimeout(timer)
+    if (this.cancelled) return
+    // A server error is a daemon that is up and failing, not one refusing
+    // the credential, so it is retried like a daemon that is not answering.
+    if (response !== undefined && response.status < 500) {
+      handlers.onAuthError?.()
+      return
+    }
+    this.consecutiveImmediateFailures = 0
+    this.scheduleReconnect(handlers)
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
@@ -299,16 +356,11 @@ export class DaemonBackend implements DocumentBackend {
       if (!opened) {
         this.consecutiveImmediateFailures += 1
         if (this.consecutiveImmediateFailures >= MAX_CONSECUTIVE_IMMEDIATE_FAILURES) {
-          handlers.onAuthError?.()
+          void this.judgeRefusal(handlers)
           return
         }
       }
-      // 500ms, 1s, 2s, 4s, 8s, 8s, … capped at 8s.
-      const delay = Math.min(8000, 500 * 2 ** this.attempt)
-      this.attempt += 1
-      this.reconnectTimer = setTimeout(() => {
-        this.openSocket(handlers)
-      }, delay)
+      this.scheduleReconnect(handlers)
     }
 
     ws.onerror = () => {

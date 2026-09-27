@@ -33,6 +33,9 @@ import {
 } from './smoke-kit.mjs'
 
 const EXTENSION_ID = 'ckgipndlpblkhiplhnbbdnpnibflplje'
+// The notice a daemon-kept page shows while an edit has not reached the
+// daemon. Its own element, so this names exactly it and not the live region.
+const UNSAVED_NOTICE = /^Changes not saved yet\.$/
 const smoke = createSmoke('bridge-smoke')
 const { check, dataDir, scratch } = smoke
 
@@ -168,8 +171,10 @@ async function webAppRoundTrip(record, appUrl, restartDaemon) {
       await page.locator('.cm-content').first().click()
       await page.keyboard.press('Control+End')
       await page.keyboard.type(' typed while the daemon was down')
+      // The visible notice, not the screen-reader live region that says the
+      // same words: a person has to be able to SEE that the edit is held.
       const unsaved = await page
-        .getByText('Changes not saved yet')
+        .getByText(UNSAVED_NOTICE)
         .waitFor({ timeout: 20_000 })
         .then(
           () => true,
@@ -188,7 +193,7 @@ async function webAppRoundTrip(record, appUrl, restartDaemon) {
       synced,
     )
     const cleared = await page
-      .getByText('Changes not saved yet')
+      .getByText(UNSAVED_NOTICE)
       .waitFor({ state: 'hidden', timeout: 20_000 })
       .then(
         () => true,
