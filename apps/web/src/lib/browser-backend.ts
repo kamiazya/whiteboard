@@ -20,6 +20,11 @@ import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
 import { seedNameFromTitle } from './seed-name-from-title.js'
+import {
+  listenToWorkspace,
+  type WorkspaceBroadcast,
+  type WorkspaceBroadcastEnd,
+} from './workspace-broadcast.js'
 
 /**
  * The document a BrowserBackend serves. `path`/`kind`/`name` are what connect
@@ -110,6 +115,8 @@ export class BrowserBackend implements DocumentBackend {
   private workspaceDoc: LoroDoc | null = null
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
+  /** This connection's end of the record's channel to the other tabs. */
+  private broadcast: WorkspaceBroadcastEnd | null = null
 
   constructor(
     target: BrowserBackendTarget,
@@ -124,6 +131,7 @@ export class BrowserBackend implements DocumentBackend {
   }
 
   connect(handlers: DocumentBackendHandlers): void {
+    this.closeBroadcast()
     this.disconnected = false
     this.handlers = handlers
     this.workspaceDoc = null
@@ -139,6 +147,7 @@ export class BrowserBackend implements DocumentBackend {
     this.disconnected = true
     this.handlers = null
     this.workspaceDoc = null
+    this.closeBroadcast()
   }
 
   /**
@@ -199,7 +208,7 @@ export class BrowserBackend implements DocumentBackend {
         const before = workspaceDoc.version()
         writeWorkspaceDocumentContent(workspaceDoc, this.target.documentId, past)
         const update = workspaceDoc.export({ mode: 'update', from: before })
-        await this.docs.save(workspaceId, workspaceDoc)
+        this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
         await touchContentTimestamp(this.target.documentId)
         if (update.length > 0 && !this.isStale(handlers)) handlers.onRemoteUpdate(update)
       } finally {
@@ -246,7 +255,7 @@ export class BrowserBackend implements DocumentBackend {
       // read-modify-write and several of them legitimately no-op (setHead to
       // the current head, a tip that already matches).
       if (update.length > 0) {
-        await this.docs.save(workspaceId, workspaceDoc)
+        this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
         if (!this.isStale(handlers)) handlers.onRemoteUpdate(update)
       }
       return result
@@ -290,7 +299,7 @@ export class BrowserBackend implements DocumentBackend {
       // No kind check: a canvas has an empty body container, so it announces
       // no title and the function leaves it alone.
       seedNameFromTitle(workspaceDoc, this.target.documentId)
-      await this.docs.save(workspaceId, workspaceDoc)
+      this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
       // The listing's updatedAt: stamped per push, keyed by the document this
       // backend serves — the workspace document itself has no row to stamp.
       await touchContentTimestamp(this.target.documentId)
@@ -355,6 +364,48 @@ export class BrowserBackend implements DocumentBackend {
     return this.disconnected || this.handlers !== handlers
   }
 
+  /** What this tab persisted, for the other tabs holding the record. */
+  private tellOtherTabs(persisted: Uint8Array | null): void {
+    if (persisted !== null) this.broadcast?.post({ type: 'update', bytes: persisted })
+  }
+
+  /**
+   * Closed only once the writes already queued have run: a push made just
+   * before a switch is still saved after it, and the other tabs still need
+   * to hear about it.
+   */
+  private closeBroadcast(): void {
+    const end = this.broadcast
+    if (end === null) return
+    void this._writeQueue.then(() => {
+      end.close()
+      if (this.broadcast === end) this.broadcast = null
+    })
+  }
+
+  /**
+   * Another tab's saved update merges here the way a peer's does over the
+   * daemon's socket: into this backend's copy, then to the session as a
+   * remote update. Never saved again — the record already holds it. Queued
+   * so it lands between this tab's own writes, never inside a restore.
+   */
+  private receive(
+    message: WorkspaceBroadcast,
+    workspaceDoc: LoroDoc,
+    handlers: DocumentBackendHandlers,
+  ): void {
+    if (this.isStale(handlers)) return
+    if (message.type === 'version-created') {
+      if (message.documentId === this.target.documentId) handlers.onVersionCreated(message.version)
+      return
+    }
+    this._writeQueue = this._writeQueue.then(() => {
+      if (this.isStale(handlers)) return
+      workspaceDoc.import(message.bytes)
+      handlers.onRemoteUpdate(message.bytes)
+    })
+  }
+
   private async loadAndDeliver(handlers: DocumentBackendHandlers): Promise<void> {
     // Any per-document records first fold into the tree, so a document
     // created by an older build is served from the same place as everything
@@ -370,9 +421,10 @@ export class BrowserBackend implements DocumentBackend {
     }
     if (this.isStale(handlers)) return
 
+    const workspaceId = getBrowserWorkspaceId()
     let workspaceDoc: LoroDoc
     try {
-      workspaceDoc = await this.docs.create(getBrowserWorkspaceId())
+      workspaceDoc = await this.docs.create(workspaceId)
     } catch (err) {
       // WHICH failure this was decides what the reader is told, and the two
       // sentences are about different things.
@@ -409,7 +461,19 @@ export class BrowserBackend implements DocumentBackend {
     }
     if (this.isStale(handlers)) return
 
+    this.deliver(workspaceDoc, workspaceId, handlers)
+  }
+
+  /** Hands the record to the session, and starts hearing the other tabs on it. */
+  private deliver(
+    workspaceDoc: LoroDoc,
+    workspaceId: string,
+    handlers: DocumentBackendHandlers,
+  ): void {
     this.workspaceDoc = workspaceDoc
+    this.broadcast = listenToWorkspace(workspaceId, (message) =>
+      this.receive(message, workspaceDoc, handlers),
+    )
     handlers.onSnapshot(workspaceDoc.export({ mode: 'snapshot' }))
   }
 

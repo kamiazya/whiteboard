@@ -263,3 +263,23 @@ when nothing is left it creates a fresh one, which is what it already does on
 a first visit (it has no empty-workspace state, where the daemon does). The
 behaviour is pinned once for both keepers by the document-page contract's
 "a confirmed delete opens what is left".
+
+## Addendum (2026-09-27): the browser keeper tells its other tabs
+
+Every tab of the origin opens the same IndexedDB record and edits its own
+copy, so until now a tab saw another tab's edit only after a reload (the CRDT
+merged them then; nothing was lost, it was only invisible). The browser
+keeper now has the daemon's fan-out in miniature: `lib/workspace-broadcast.ts`
+opens one BroadcastChannel per record (database name plus workspace id), a
+`BrowserBackend` posts the bytes each save persisted, and every other tab's
+backend merges them and hands them to its session as a remote update. A saved
+version is announced the same way and reaches the session's
+`onVersionCreated`, which closes the one difference the 2026-09-05
+re-inventory kept as deliberate (#8): the browser page used to refresh its
+history column from a window event only its own tab dispatched. Both keepers
+now learn of a version from their keeper, whoever saved it.
+
+A SharedWorker, which the Loro store's comment names as the eventual answer,
+would also serialise the writes; that is not what was missing. Concurrent
+writes from two tabs are already fenced (ADR-0020), and what a tab lacked was
+hearing about them.

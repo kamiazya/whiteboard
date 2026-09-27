@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
-import { useIdentityEvent } from '../hooks/use-identity-event.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
@@ -316,6 +315,10 @@ function useBrowserDocument(
     // reads and writes to the tree node carrying this document's content.
     ...(documentId === null ? {} : { contentDocumentId: documentId }),
     checkpoints: checkpointPair,
+    // A version saved in any tab on this document — this one's own save, a
+    // checkpoint, another tab's — re-reads the history column, the way the
+    // daemon's broadcast does on its page.
+    onVersionCreated: events.onVersionCreated,
   })
   const {
     canvas,
@@ -350,18 +353,6 @@ function useBrowserDocument(
             kind: documentKind,
           }),
     [versionsRecord, versionStore, documentKind],
-  )
-
-  // A manual save announces itself on the window (dispatched after the
-  // keeper confirmed the save), and the page's history column re-reads on
-  // it. Scoped to THIS document's identity — an unchecked listener refreshed
-  // on any document's announcement, where the daemon keeper has always
-  // routed the same signal through identity-checked dispatch.
-  useIdentityEvent(
-    DOCUMENT_SYNC_VERSION_SAVED_EVENT,
-    'local',
-    documentPath,
-    events.onVersionCreated,
   )
 
   // The second phase of the page state. `pageState` above is derived from what
