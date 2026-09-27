@@ -9,6 +9,6 @@ export const bridgeFetch: typeof globalThis.fetch = async (input, init) =>
   (await loadBridge()).extensionBridgeFetch(input, init)
 
 /** Whether the whiteboard extension is installed and admits this page. */
-export async function extensionPresent(): Promise<boolean> {
-  return (await loadBridge()).extensionPresent()
+export async function extensionPresent(signal?: AbortSignal): Promise<boolean> {
+  return (await loadBridge()).extensionPresent(undefined, signal)
 }

@@ -23,6 +23,23 @@ describe('ExtensionConnectOption', () => {
     expect(container.innerHTML).toBe('')
   })
 
+  // A probe outliving its page holds a listener and a timer on a window that
+  // may already be gone; unmounting has to call it off.
+  it('calls off the presence probe when it unmounts', async () => {
+    let asked: AbortSignal | undefined
+    const present = vi.fn((signal: AbortSignal) => {
+      asked = signal
+      return new Promise<boolean>(() => {})
+    })
+    const { unmount } = render(
+      <ExtensionConnectOption settingsStore={createUserSettingsStore()} present={present} />,
+    )
+    await vi.waitFor(() => expect(present).toHaveBeenCalled())
+    expect(asked?.aborted).toBe(false)
+    unmount()
+    expect(asked?.aborted).toBe(true)
+  })
+
   // Remembered, then reopened: the cold load reconnects through the same
   // path every later visit takes, and switching keeper is a reopen the
   // person asked for rather than a swap under them.

@@ -32,7 +32,7 @@ export function ExtensionConnectOption({
    * nothing to lead into.
    */
   lead?: string
-  present?: () => Promise<boolean>
+  present?: (signal: AbortSignal) => Promise<boolean>
   connect?: () => Promise<GrantConsumeResult>
   reopen?: () => void
 }) {
@@ -102,16 +102,16 @@ function ConnectButton({
 }
 
 /** Starts at 'checking', then answers whether the extension is there. */
-function useExtensionPresence(present: () => Promise<boolean>) {
+function useExtensionPresence(present: (signal: AbortSignal) => Promise<boolean>) {
   const [state, setState] = useState<OptionState>('checking')
   useEffect(() => {
-    let current = true
-    void present().then((installed) => {
-      if (current) setState(installed ? 'ready' : 'absent')
+    // Aborted on unmount, so the probe lets go of the window's listener and
+    // its timer now rather than outliving the page that asked.
+    const asked = new AbortController()
+    void present(asked.signal).then((installed) => {
+      if (!asked.signal.aborted) setState(installed ? 'ready' : 'absent')
     })
-    return () => {
-      current = false
-    }
+    return () => asked.abort()
   }, [present])
   return [state, setState] as const
 }
