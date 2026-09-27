@@ -83,5 +83,10 @@
     "name": "ci-gate",
     "status": "completed",
     "conclusion": "success"
+  },
+  {
+    "name": "native-host-windows",
+    "status": "completed",
+    "conclusion": "success"
   }
 ]

@@ -128,7 +128,7 @@ describe('the gate judges the run, and refuses everything but success', () => {
   it('fails a real red run of this workflow', () => {
     // Captured from the run whose dry-run-docker job really failed. A job
     // added to the workflow after that capture is appended to it as a plain
-    // success row (today: `test-shared`), since `needs` is read live and a
+    // success row (today: `test-shared`, `native-host-windows`), since `needs` is read live and a
     // needed job absent from the run is one of the failures this gate
     // reports — and a red run is not something to re-capture on demand.
     // This is what settles the question the `needs` form could not: the gate

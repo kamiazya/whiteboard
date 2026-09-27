@@ -61,6 +61,14 @@ addendum decision 5), and a store signs what it publishes.
   seeing the agent's next edit arrive live over SSE. Branded Chrome ignores
   `--load-extension`, so it needs Playwright's own Chromium
   (`pnpm exec playwright install chromium`).
+- `smoke:native-host` is the host with no browser in front of it: a real
+  daemon, the host `native-host install` writes, started as a browser starts
+  it, and one request in the native messaging framing. It is what CI runs on
+  `windows-latest` (the `native-host-windows` job), because nothing else here
+  runs on Windows. There the daemon's socket is a named pipe whose name is
+  random and read from `daemon.json` (a predictable one could be created
+  first by another user), the launcher is a `.cmd`, and each browser finds the
+  manifest through its `HKCU\…\NativeMessagingHosts` key (ADR-0050 decision 9).
 - `smoke:bridge:firefox` is the same proof in Firefox, driven over WebDriver
   because Playwright cannot load an extension there. Not the snap Firefox:
   its native messaging asks a person through a desktop portal first. Both

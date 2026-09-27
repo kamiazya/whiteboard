@@ -9,7 +9,8 @@
     "build": "vite build && vite build --mode development && vite build --mode firefox-production && vite build --mode firefox-development",
     "typecheck": "tsc --noEmit",
     "smoke:bridge": "node scripts/bridge-smoke.mjs",
-    "smoke:bridge:firefox": "node scripts/firefox-bridge-smoke.mjs"
+    "smoke:bridge:firefox": "node scripts/firefox-bridge-smoke.mjs",
+    "smoke:native-host": "node scripts/native-host-smoke.mjs"
   },
   "dependencies": {
     "@kamiazya/whiteboard-daemon-client": "workspace:*"
