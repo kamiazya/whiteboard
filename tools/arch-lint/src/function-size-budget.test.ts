@@ -684,7 +684,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 116,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 146,
   // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
-  'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 115,
   'packages/mcp-server/src/server/routes/viewport.ts#createViewportRouter': 71,
   // 75 -> 76 (ADR-0041 S8 slice 2): every accepted decision carries the resolved grant for the upgrade's membership check.
   'packages/mcp-server/src/server/routes/ws-auth.ts#authorizeWsUpgrade': 76,

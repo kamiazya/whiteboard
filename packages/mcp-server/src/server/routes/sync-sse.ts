@@ -30,6 +30,7 @@ import { z } from 'zod'
 import { getLogger } from '../log.js'
 import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import { membershipRefusal } from '../security/workspace-access.js'
+import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
 
 const log = getLogger('sync-sse')
 
@@ -90,9 +91,17 @@ export function setSyncSseHooks(hooks: {
  */
 interface SyncStreamDoc {
   ready: boolean
+  /**
+   * The key canonicalised: registries and broadcasts name a workspace by id,
+   * while the map holding this entry is keyed as the client subscribed — by
+   * whatever handle its address carries (ADR-0019), which is also what it
+   * routes events by. Two spellings of one document are two subscriptions.
+   */
+  key: string
 }
 
 interface SyncStream {
+  /** Keyed by the doc key exactly as the client subscribed with it. */
   docs: Map<string, SyncStreamDoc>
   send: (event: string, data: string) => void
   /** The user who opened it, where the keeper knows people; null otherwise. */
@@ -109,7 +118,7 @@ const streams = new Map<string, SyncStream>()
 export function sseSubscribedWorkspaceIds(): string[] {
   const ids = new Set<string>()
   for (const stream of streams.values()) {
-    for (const key of stream.docs.keys()) {
+    for (const { key } of stream.docs.values()) {
       if (key.startsWith(WORKSPACE_DOC_KEY_PREFIX))
         ids.add(key.slice(WORKSPACE_DOC_KEY_PREFIX.length))
     }
@@ -151,11 +160,13 @@ function toBase64(bytes: Uint8Array): string {
  */
 export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
   const key = workspaceDocKey(workspaceId)
-  const payload: SyncUpdateEvent = { doc: key, update: toBase64(update) }
-  const frame = JSON.stringify(payload)
+  const encoded = toBase64(update)
   for (const stream of streams.values()) {
-    if (!stream.docs.has(key)) continue
-    stream.send('update', frame)
+    for (const [as, entry] of stream.docs) {
+      if (entry.key !== key) continue
+      const payload: SyncUpdateEvent = { doc: as, update: encoded }
+      stream.send('update', JSON.stringify(payload))
+    }
   }
 }
 
@@ -169,24 +180,58 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
  * landing on another.
  */
 export function sseBroadcastText(workspaceId: string, path: string, raw: string): void {
-  const key = docKey(workspaceId, path)
-  const payload: SyncMessageEvent = { doc: key, raw }
-  const frame = JSON.stringify(payload)
+  sendText(docKey(workspaceId, path), raw, () => true)
+}
+
+function sendText(key: string, raw: string, admits: (entry: SyncStreamDoc) => boolean): void {
   for (const stream of streams.values()) {
-    if (!stream.docs.has(key)) continue
-    stream.send('message', frame)
+    for (const [as, entry] of stream.docs) {
+      if (entry.key !== key || !admits(entry)) continue
+      const payload: SyncMessageEvent = { doc: as, raw }
+      stream.send('message', JSON.stringify(payload))
+    }
   }
 }
 
 /** Like sseBroadcastText, but only to streams that have signalled client_ready. */
 export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: string): void {
-  const key = docKey(workspaceId, path)
-  const payload: SyncMessageEvent = { doc: key, raw }
-  const frame = JSON.stringify(payload)
-  for (const stream of streams.values()) {
-    if (!stream.docs.get(key)?.ready) continue
-    stream.send('message', frame)
+  sendText(docKey(workspaceId, path), raw, (entry) => entry.ready)
+}
+
+/**
+ * A doc key with its workspace handle resolved to the id, which is what
+ * every registry and broadcast here is keyed by. Total, as the resolver is:
+ * a key naming no workspace comes back unchanged.
+ */
+async function canonicalDocKey(
+  key: string,
+  resolve: (handle: string) => Promise<string> = resolveWorkspaceHandleToId,
+): Promise<string> {
+  const handle = workspaceIdOfDocKey(key)
+  if (handle === null) return key
+  const workspaceId = await resolve(handle)
+  if (workspaceId === handle) return key
+  return key.startsWith(WORKSPACE_DOC_KEY_PREFIX)
+    ? workspaceDocKey(workspaceId)
+    : docKey(workspaceId, key.slice(handle.length + 1))
+}
+
+/**
+ * Each key as the client wrote it, beside its canonical form. A handle is
+ * resolved once however many keys name it, since each resolution reads the
+ * workspace registry.
+ */
+async function canonicalKeys(keys: readonly string[]): Promise<Array<{ key: string; as: string }>> {
+  const resolutions = new Map<string, Promise<string>>()
+  const resolve = (handle: string) => {
+    let resolution = resolutions.get(handle)
+    if (resolution === undefined) {
+      resolution = resolveWorkspaceHandleToId(handle)
+      resolutions.set(handle, resolution)
+    }
+    return resolution
   }
+  return Promise.all(keys.map(async (as) => ({ key: await canonicalDocKey(as, resolve), as })))
 }
 
 /**
@@ -287,23 +332,108 @@ function exceedsStreamCap(
  * one delete takes the readiness with it.
  */
 function applySubscriptions(
-  docs: Map<string, { ready: boolean }>,
-  subscribe: readonly string[],
+  docs: Map<string, SyncStreamDoc>,
+  subscribe: ReadonlyArray<{ key: string; as: string }>,
   unsubscribe: readonly string[],
 ): string[] {
-  for (const key of subscribe) if (!docs.has(key)) docs.set(key, { ready: false })
-  for (const key of unsubscribe) docs.delete(key)
+  for (const { key, as } of subscribe) if (!docs.has(as)) docs.set(as, { ready: false, key })
+  for (const as of unsubscribe) docs.delete(as)
   return [...docs.keys()].sort()
 }
 
-function markReady(stream: SyncStream, doc: string): void {
-  const entry = stream.docs.get(doc) ?? { ready: false }
+function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
+  const entry = stream.docs.get(doc.as) ?? { ready: false, key: doc.key }
   entry.ready = true
-  stream.docs.set(doc, entry)
+  stream.docs.set(doc.as, entry)
   // Replay the latest viewport request so a stream that connected after
   // the request was issued still inherits the same fit/scroll/zoom intent.
-  const cached = getCachedViewportRequest(doc)
-  if (cached !== undefined) stream.send('message', JSON.stringify({ doc, raw: cached }))
+  const cached = getCachedViewportRequest(doc.key)
+  if (cached !== undefined) stream.send('message', JSON.stringify({ doc: doc.as, raw: cached }))
+}
+
+async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
+  const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
+  if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+
+  // Resolved before the gate, so membership is decided for the workspace
+  // a key actually reaches, whichever handle named it.
+  const subscribe = await canonicalKeys(parsed.data.subscribe ?? [])
+  // Dropped by the spelling it was subscribed under, so no resolution.
+  const unsubscribe = parsed.data.unsubscribe ?? []
+
+  const refusal = await firstMembershipRefusal(
+    c,
+    admit,
+    subscribe.map(({ key }) => key),
+  )
+  if (refusal) return c.json(refusal, 403)
+
+  const stream = streams.get(parsed.data.streamId)
+  // A subscribe for a stream that is not open is a client bug (a race with
+  // reconnect, a stale streamId). Answering 200 would leave the caller
+  // believing it is subscribed and waiting forever for updates.
+  if (!stream) return unknownStream(c, parsed.data.streamId)
+
+  if (
+    exceedsStreamCap(
+      stream.docs,
+      subscribe.map(({ as }) => as),
+      unsubscribe,
+    )
+  ) {
+    return c.json({ error: 'too_many_subscriptions' }, 400)
+  }
+  const docs = applySubscriptions(stream.docs, subscribe, unsubscribe)
+  // A stream that reaches zero documents is the state worth seeing: the
+  // client stops reconnecting there, so a gap between "the last tab
+  // unsubscribed" and "a tab subscribed again" is a window with no stream
+  // at all. Without this the two are indistinguishable from the outside.
+  log.info(
+    {
+      streamId: parsed.data.streamId,
+      subscribed: subscribe.map(({ as }) => as),
+      unsubscribed: parsed.data.unsubscribe ?? [],
+      docCount: docs.length,
+    },
+    'sync subscriptions changed',
+  )
+  return c.json({ ok: true, docs })
+}
+
+// The client->server half of the sync protocol. A WebSocket carries these as
+// text frames; an SSE client has no upstream channel of its own, so they
+// arrive here instead. The payload reuses clientTextMessageSchema so both
+// transports validate against the same declaration rather than drifting.
+async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
+  const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
+  if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+
+  const doc = { key: await canonicalDocKey(parsed.data.doc), as: parsed.data.doc }
+  const refusal = await firstMembershipRefusal(c, admit, [doc.key])
+  if (refusal) return c.json(refusal, 403)
+
+  const stream = streams.get(parsed.data.streamId)
+  if (!stream) return unknownStream(c, parsed.data.streamId)
+
+  const { message } = parsed.data
+  if (message.type === 'client_ready') {
+    // Upsert rather than require an existing subscription: subscribe and
+    // client_ready are separate POSTs with no ordering guarantee between
+    // them, and dropping readiness that arrived first would withhold the
+    // viewport request for good. Declaring readiness is a statement of
+    // interest in the document either way.
+    markReady(stream, doc)
+    return c.json({ ok: true })
+  }
+  if (message.type === 'viewport_response') {
+    resolveViewportRequest(message.requestId)
+    return c.json({ ok: true })
+  }
+  // `export_response` is inert on the WebSocket path too — the daemon stopped
+  // sending export_request once export became headless — and `ws_trace`
+  // carries a trace context that only the WebSocket's binary-frame pairing
+  // can consume. Accepted and ignored, so a client need not special-case them.
+  return c.json({ ok: true })
 }
 
 export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
@@ -348,76 +478,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     })
   })
 
-  app.post('/api/sync/subscribe', async (c) => {
-    const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
-
-    const subscribe = parsed.data.subscribe ?? []
-    const unsubscribe = parsed.data.unsubscribe ?? []
-
-    const refusal = await firstMembershipRefusal(c, options.admit, subscribe)
-    if (refusal) return c.json(refusal, 403)
-
-    const stream = streams.get(parsed.data.streamId)
-    // A subscribe for a stream that is not open is a client bug (a race with
-    // reconnect, a stale streamId). Answering 200 would leave the caller
-    // believing it is subscribed and waiting forever for updates.
-    if (!stream) return unknownStream(c, parsed.data.streamId)
-
-    if (exceedsStreamCap(stream.docs, subscribe, unsubscribe)) {
-      return c.json({ error: 'too_many_subscriptions' }, 400)
-    }
-    const docs = applySubscriptions(stream.docs, subscribe, unsubscribe)
-    // A stream that reaches zero documents is the state worth seeing: the
-    // client stops reconnecting there, so a gap between "the last tab
-    // unsubscribed" and "a tab subscribed again" is a window with no stream
-    // at all. Without this the two are indistinguishable from the outside.
-    log.info(
-      {
-        streamId: parsed.data.streamId,
-        subscribed: subscribe,
-        unsubscribed: unsubscribe,
-        docCount: docs.length,
-      },
-      'sync subscriptions changed',
-    )
-    return c.json({ ok: true, docs })
-  })
-
-  // The client->server half of the sync protocol. A WebSocket carries these as
-  // text frames; an SSE client has no upstream channel of its own, so they
-  // arrive here instead. The payload reuses clientTextMessageSchema so both
-  // transports validate against the same declaration rather than drifting.
-  app.post('/api/sync/message', async (c) => {
-    const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
-
-    const refusal = await firstMembershipRefusal(c, options.admit, [parsed.data.doc])
-    if (refusal) return c.json(refusal, 403)
-
-    const stream = streams.get(parsed.data.streamId)
-    if (!stream) return unknownStream(c, parsed.data.streamId)
-
-    const { doc, message } = parsed.data
-    if (message.type === 'client_ready') {
-      // Upsert rather than require an existing subscription: subscribe and
-      // client_ready are separate POSTs with no ordering guarantee between
-      // them, and dropping readiness that arrived first would withhold the
-      // viewport request for good. Declaring readiness is a statement of
-      // interest in the document either way.
-      markReady(stream, doc)
-      return c.json({ ok: true })
-    }
-    if (message.type === 'viewport_response') {
-      resolveViewportRequest(message.requestId)
-      return c.json({ ok: true })
-    }
-    // `export_response` is inert on the WebSocket path too — the daemon stopped
-    // sending export_request once export became headless — and `ws_trace`
-    // carries a trace context that only the WebSocket's binary-frame pairing
-    // can consume. Accepted and ignored, so a client need not special-case them.
-    return c.json({ ok: true })
-  })
+  app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options.admit))
+  app.post('/api/sync/message', (c) => handleMessage(c, options.admit))
 
   return app
 }
