@@ -12,7 +12,6 @@ import type {
   DaemonConnectionTarget,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useEffect, useRef, useState } from 'react'
-import { resolveLinkPairing } from '../lib/link-pairing.js'
 import type { GrantConsumeResult } from '../lib/pairing-grant.js'
 
 export interface UseLinkPairingOptions {
@@ -41,18 +40,23 @@ export function useLinkPairing({
     if (attemptedRef.current) return
     attemptedRef.current = true
     if (!enabled || payload === undefined || grant !== null) return
-    void resolveLinkPairing({
-      payload,
-      fetch: globalThis.fetch.bind(globalThis),
-      hostedOrigin: window.location.origin,
-      sessionStorage: window.sessionStorage,
-      navigate: (url) => {
-        window.location.assign(url)
-      },
-    }).then((outcome) => {
-      if (outcome.kind === 'resolved') onResolved(outcome.grant)
-      else if (outcome.kind === 'failed') setFailed(true)
-    })
+    // Loaded only when a `#wb=` link is being resolved.
+    void import('../lib/link-pairing.js')
+      .then(({ resolveLinkPairing }) =>
+        resolveLinkPairing({
+          payload,
+          fetch: globalThis.fetch.bind(globalThis),
+          hostedOrigin: window.location.origin,
+          sessionStorage: window.sessionStorage,
+          navigate: (url) => {
+            window.location.assign(url)
+          },
+        }),
+      )
+      .then((outcome) => {
+        if (outcome.kind === 'resolved') onResolved(outcome.grant)
+        else if (outcome.kind === 'failed') setFailed(true)
+      })
     // Cold-load decision over mount-time facts; the ref guards StrictMode.
   }, [])
 

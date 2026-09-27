@@ -11,6 +11,7 @@ import type {
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { isBridgeDaemon } from './bridge-address.js'
 import { postWorkerRequest, sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
@@ -58,6 +59,9 @@ export function createSharedSseStreamSource(
   token: string | undefined,
 ): SseStreamSource | null {
   if (typeof SharedWorker === 'undefined') return null
+  // A worker has no `chrome.runtime`, so it cannot reach a daemon through the
+  // extension (ADR-0050); the page opens that stream itself.
+  if (isBridgeDaemon(baseUrl)) return null
 
   const cached = sources.get(baseUrl)
   if (cached) {

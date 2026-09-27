@@ -56,6 +56,7 @@ import {
   daemonKeepsSession,
   effectiveProviderState,
   linkPairingPending,
+  renewalPending,
   replicaRead,
   sessionBanner,
   settingsDaemon,
@@ -353,6 +354,16 @@ export function App({ providerState }: AppProps) {
         onDisconnected={() => setForcedBrowser(true)}
         daemonWorkspaces={daemonWorkspaces}
         browserWorkspaces={browserWorkspaces}
+      />
+    )
+  }
+
+  if (renewalPending({ forcedBrowser, awaitingDaemonRenewal, grant: grantConnection })) {
+    return (
+      <LinkPairingPending
+        daemonBaseUrl=""
+        failed={false}
+        onWorkInBrowser={() => setForcedBrowser(true)}
       />
     )
   }

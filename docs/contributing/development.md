@@ -132,8 +132,8 @@ This does not affect normal published usage through `npx -y @kamiazya/whiteboard
 ## The browser extension and its native host (ADR-0050)
 
 The hosted app is moving to reach the local daemon through a browser extension
-rather than a loopback port. The pieces exist and are proven end to end; the
-web app does not use them yet.
+rather than a loopback port. It runs beside the pairing connection until
+loopback closes (ADR-0050 stage 4).
 
 - `apps/extension` is a Manifest V3 extension that relays each page connection
   to one native messaging host process. `pnpm --filter @kamiazya/whiteboard-extension build`
@@ -150,8 +150,18 @@ web app does not use them yet.
 - The host relays only `/api/` requests, to the owner-only socket the daemon
   records in `daemon.json`, and attaches the daemon's token itself — the page
   never holds one.
+- In the web app, a browser-kept document's workspace popover offers
+  **Connect through the extension** once the extension answers. The daemon is
+  remembered under the reserved address `https://daemon.whiteboard.invalid`,
+  which nothing on a network answers: `createDaemonFetch` sends every request
+  to that address through the extension, whatever fetch a caller passes, the
+  session syncs over SSE (the bridge carries no WebSocket), and the SSE stream
+  is the page's own rather than the SharedWorker's, since a worker cannot reach
+  an extension. A later visit reconnects by pinging the daemon through the
+  extension, with no pairing grant to renew.
 - `pnpm --filter @kamiazya/whiteboard-extension smoke:bridge` proves the whole
-  path in headless Chromium against a real daemon. Branded Chrome ignores
+  path in headless Chromium against a real daemon, including the built web app
+  connecting, reading an agent's note and writing back. Branded Chrome ignores
   `--load-extension`, so it needs `pnpm exec playwright install chromium` once.
 
 ## Cloudflare Pages header parity in local dev

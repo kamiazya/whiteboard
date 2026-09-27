@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+import { parseGrantFragment } from './grant-fragment.js'
 import {
   beginPairingGrant,
   consumeGrantFragment,
   createPkcePair,
-  parseGrantFragment,
   renewPairingToken,
 } from './pairing-grant.js'
 

@@ -18,12 +18,12 @@ import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { settingsPath } from '../lib/app-routes.js'
 import { browserWorkspaceIdOrNull } from '../lib/browser-workspace-id.js'
 import { isSyncOff } from '../lib/connection-state.js'
-import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { getShellConnection, subscribeShellStatus } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
+import { DaemonAddress } from './connection/DaemonAddress.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
 import { formatRelative } from './workspace-files/format-relative.js'
 
@@ -33,6 +33,13 @@ import { formatRelative } from './workspace-files/format-relative.js'
 const DaemonDetectedBanner = lazy(() =>
   import('./migration/DaemonDetectedBanner.js').then((m) => ({
     default: m.DaemonDetectedBanner,
+  })),
+)
+// Lazy for the same reason: it is offered only in that popover, and only
+// where the extension answers.
+const ExtensionConnectOption = lazy(() =>
+  import('./connection/ExtensionConnectOption.js').then((m) => ({
+    default: m.ExtensionConnectOption,
   })),
 )
 
@@ -71,10 +78,31 @@ function PromotedElsewhereNotice({
   }
   return (
     <p data-testid="promoted-elsewhere-notice" className="text-muted-foreground">
-      This workspace has been moved to the daemon at{' '}
-      <span className="font-mono text-xs">{storedDaemon.replace(/^https?:\/\//, '')}</span>. Changes
-      made here stay in this browser until you move it again from Settings.
+      This workspace has been moved to the daemon via <DaemonAddress baseUrl={storedDaemon} />.
+      Changes made here stay in this browser until you move it again from Settings.
     </p>
+  )
+}
+
+/** What the popover offers while the browser keeps the workspace: the ways onto a daemon. */
+function BrowserKeeperConnect({
+  settingsStore,
+}: {
+  settingsStore: ReturnType<typeof createUserSettingsStore>
+}) {
+  return (
+    <>
+      <p className="text-muted-foreground">
+        Connect a daemon (MCP) for automatic checkpoints, variations and merging. Once connected,
+        you can move this workspace to it from Settings — documents, their history and images
+        together.
+      </p>
+      <PromotedElsewhereNotice settingsStore={settingsStore} />
+      <Suspense fallback={null}>
+        <ExtensionConnectOption settingsStore={settingsStore} />
+        <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
+      </Suspense>
+    </>
   )
 }
 
@@ -325,12 +353,14 @@ function ShellBar({
           daemonBaseUrl === undefined
             ? undefined
             : () => {
-                void beginPairingGrant({
-                  daemonBaseUrl,
-                  hostedOrigin: window.location.origin,
-                  sessionStorage: window.sessionStorage,
-                  navigate: (url) => window.location.assign(url),
-                })
+                void import('../lib/pairing-grant.js').then(({ beginPairingGrant }) =>
+                  beginPairingGrant({
+                    daemonBaseUrl,
+                    hostedOrigin: window.location.origin,
+                    sessionStorage: window.sessionStorage,
+                    navigate: (url) => window.location.assign(url),
+                  }),
+                )
               }
         }
         onWorkInBrowser={onWorkInBrowser}
@@ -342,20 +372,7 @@ function ShellBar({
           />
         )}
         {connection?.state.keeper === 'browser' && (
-          <>
-            <p className="text-muted-foreground">
-              Connect a daemon (MCP) for automatic checkpoints, variations and merging. Once
-              connected, you can move this workspace to it from Settings — documents, their history
-              and images together.
-            </p>
-            <PromotedElsewhereNotice settingsStore={settingsStore} />
-            <Suspense fallback={null}>
-              <DaemonDetectedBanner
-                settingsStore={settingsStore}
-                fetch={window.fetch.bind(window)}
-              />
-            </Suspense>
-          </>
+          <BrowserKeeperConnect settingsStore={settingsStore} />
         )}
       </ConnectionStatus>
       <AlphaBadge />

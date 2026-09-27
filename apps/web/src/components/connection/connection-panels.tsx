@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { settingsPath } from '../../lib/app-routes.js'
 import type { ConnectionState } from '../../lib/connection-state.js'
+import { DaemonAddress } from './DaemonAddress.js'
 
 /**
  * A wall-clock time for the popover: `10:32`, in the reader's locale.
@@ -49,8 +50,8 @@ export function DaemonSyncedPanel({
         Changes are saved to the daemon on this machine
         {daemonBaseUrl ? (
           <>
-            {' at '}
-            <span className="font-mono text-xs">{daemonBaseUrl.replace(/^https?:\/\//, '')}</span>
+            {' via '}
+            <DaemonAddress baseUrl={daemonBaseUrl} />
           </>
         ) : null}
         .

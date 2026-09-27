@@ -575,12 +575,12 @@ describe('silent renewal on a hosted origin', () => {
     )
     render(<RouterProvider router={router} />)
 
-    // Undecided, not foreign: the address must stay exactly where it was
-    // asked for while the renewal is still open — rewriting it to the
-    // browser's own index here would lose the link before the renewal ever
-    // got to prove it belongs to a paired daemon.
-    await screen.findByTestId('browser-index-page')
+    // Undecided, not foreign: the address stays exactly as asked while the
+    // renewal is open, and the browser's workspace is not rendered — the two
+    // keepers can share a segment, so its page could lead elsewhere first.
+    await screen.findByText('Connecting to the daemon…')
     expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
+    expect(screen.queryByTestId('browser-index-page')).toBeNull()
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
 
     await act(async () => {
@@ -626,7 +626,7 @@ describe('silent renewal on a hosted origin', () => {
     render(<RouterProvider router={router} />)
 
     // Still undecided: same pending assertion as the success case above.
-    await screen.findByTestId('browser-index-page')
+    await screen.findByText('Connecting to the daemon…')
     expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
 
     await act(async () => {
