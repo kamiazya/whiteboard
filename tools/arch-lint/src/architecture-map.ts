@@ -282,6 +282,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
     allowedThirdParty: [],
   },
+  // The browser extension (ADR-0050): a composition root for the extension
+  // runtime, relaying the hosted app to the native host. It reads only the
+  // names the browser checks from daemon-client, and is registered so a
+  // shared package that took a dependency on it would be flagged.
+  '@kamiazya/whiteboard-extension': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
+    allowedThirdParty: [],
+  },
   // The OTHER composition root (browser). Registered for the same reason
   // `@kamiazya/whiteboard-mcp` is — being in this table is what makes
   // direction-check.ts flag a shared package that takes a dependency on it —

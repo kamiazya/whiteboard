@@ -65,6 +65,7 @@ export default defineConfig({
       'packages/canvas-viewer/vitest.node.config.ts',
       'packages/canvas-viewer/vitest.jsdom.config.ts',
       'packages/canvas-viewer/vitest.browser.config.ts',
+      'apps/extension/vitest.node.config.ts',
       'apps/web/vitest.config.ts',
       'apps/web/vitest.node.config.ts',
       'apps/web/vitest.browser.config.ts',

@@ -55,6 +55,7 @@ whiteboard server deactivate-user --json --user=<id|name> [--reactivate] [--data
 whiteboard server add-user       --json --provider=<id> --subject=<sub> [--name=<display name>] [--data-dir=<path>]
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
+whiteboard native-host install   --json [--data-dir=<path>] [--manifest-dir=<path>]
 `
 
 function writeJsonObject(value: unknown): void {
@@ -114,6 +115,13 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   if (command === 'search') {
     return await dispatchSearch(subcommand, rest)
+  }
+
+  // Before anything that could print: `native-host run`'s stdout is the
+  // browser's protocol channel, as `mcp`'s is the client's.
+  if (command === 'native-host') {
+    const { dispatchNativeHost } = await import('./native-host.js')
+    return await dispatchNativeHost(subcommand, rest)
   }
 
   if (command === 'daemon' && isDaemonSubcommand(subcommand)) {

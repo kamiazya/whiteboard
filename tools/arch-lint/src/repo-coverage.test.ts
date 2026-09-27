@@ -47,7 +47,7 @@ const SHARED_LAYER_PACKAGES = [
  * nothing checked: `apps/web` was absent from the map entirely, so a shared
  * package taking a dependency on it would have passed.
  */
-const COMPOSITION_ROOTS = ['apps/web', 'packages/mcp-server']
+const COMPOSITION_ROOTS = ['apps/extension', 'apps/web', 'packages/mcp-server']
 
 // `extensions` defaults to `.ts` only, so the existing boundary/direction/
 // allowed-deps scans below keep collecting exactly what they always did; the
