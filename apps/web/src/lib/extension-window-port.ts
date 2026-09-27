@@ -22,8 +22,11 @@ function listen(on: (message: WindowFromExtension) => void): () => void {
     const parsed = windowFromExtensionSchema.safeParse(event.data)
     if (parsed.success) on(parsed.data)
   }
-  window.addEventListener('message', listener)
-  return () => window.removeEventListener('message', listener)
+  // The window it listens on, held: the stop may run from a timer after the
+  // global is gone (a page unloading, a test environment torn down).
+  const target = window
+  target.addEventListener('message', listener)
+  return () => target.removeEventListener('message', listener)
 }
 
 /** Whether the extension's content script is on this page. */
