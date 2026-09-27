@@ -15,8 +15,8 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { BRIDGE_DAEMON_BASE_URL } from '../lib/bridge-address.js'
 import { DEV_TRANSPORT_OVERRIDE_KEY } from '../lib/dev-transport-override.js'
-import { BRIDGE_DAEMON_BASE_URL } from '../lib/extension-bridge-fetch.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'

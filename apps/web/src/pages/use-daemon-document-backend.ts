@@ -17,8 +17,8 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isBridgeDaemon } from '../lib/bridge-address.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
-import { isBridgeDaemon } from '../lib/extension-bridge-fetch.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 
 /** What a parent may substitute for the connection this hook would build. */

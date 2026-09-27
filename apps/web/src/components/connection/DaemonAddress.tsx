@@ -1,4 +1,4 @@
-import { isBridgeDaemon } from '../../lib/extension-bridge-fetch.js'
+import { isBridgeDaemon } from '../../lib/bridge-address.js'
 
 /**
  * Where a daemon is reached, as a person reads it: its host, or — for a

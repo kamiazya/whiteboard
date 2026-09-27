@@ -1,6 +1,6 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BRIDGE_DAEMON_BASE_URL } from '../../lib/extension-bridge-fetch.js'
+import { BRIDGE_DAEMON_BASE_URL } from '../../lib/bridge-address.js'
 import { DaemonAddress } from './DaemonAddress.js'
 
 afterEach(cleanup)

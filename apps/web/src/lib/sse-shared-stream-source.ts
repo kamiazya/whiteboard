@@ -11,7 +11,7 @@ import type {
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
-import { isBridgeDaemon } from './extension-bridge-fetch.js'
+import { isBridgeDaemon } from './bridge-address.js'
 import { postWorkerRequest, sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()

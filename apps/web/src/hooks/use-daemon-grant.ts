@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { isBridgeDaemon } from '../lib/extension-bridge-fetch.js'
-import { connectThroughExtension } from '../lib/extension-connection.js'
-import {
-  consumeGrantFragment,
-  type GrantConsumeResult,
-  parseGrantFragment,
-  renewPairingToken,
-} from '../lib/pairing-grant.js'
+import { isBridgeDaemon } from '../lib/bridge-address.js'
+import { parseGrantFragment } from '../lib/grant-fragment.js'
+import type { GrantConsumeResult } from '../lib/pairing-grant.js'
 import type { ProviderState } from '../lib/provider.js'
 import type { UserSettingsStore } from '../lib/user-settings-store.js'
 
@@ -138,11 +133,15 @@ function useGrantFragment(onResolved: (result: GrantConsumeResult) => void): voi
       '',
       window.location.pathname + window.location.search,
     )
-    void consumeGrantFragment({
-      hash,
-      sessionStorage: window.sessionStorage,
-      fetch: globalThis.fetch.bind(globalThis),
-    }).then(onResolved)
+    void import('../lib/pairing-grant.js')
+      .then(({ consumeGrantFragment }) =>
+        consumeGrantFragment({
+          hash,
+          sessionStorage: window.sessionStorage,
+          fetch: globalThis.fetch.bind(globalThis),
+        }),
+      )
+      .then(onResolved)
   }, [])
 }
 
@@ -152,8 +151,14 @@ function useGrantFragment(onResolved: (result: GrantConsumeResult) => void): voi
  * it answers.
  */
 function renewConnection(daemonBaseUrl: string): Promise<GrantConsumeResult> {
-  if (isBridgeDaemon(daemonBaseUrl)) return connectThroughExtension()
-  return renewPairingToken({ daemonBaseUrl, fetch: globalThis.fetch.bind(globalThis) })
+  if (isBridgeDaemon(daemonBaseUrl)) {
+    return import('../lib/extension-connection.js').then((m) => m.connectThroughExtension())
+  }
+  // Loaded here rather than at the top: a cold load with nothing to renew
+  // should not pay for the pairing machinery.
+  return import('../lib/pairing-grant.js').then(({ renewPairingToken }) =>
+    renewPairingToken({ daemonBaseUrl, fetch: globalThis.fetch.bind(globalThis) }),
+  )
 }
 
 /**
@@ -197,7 +202,7 @@ function useRememberGrantDaemon(
  * refusal the replica read has to be able to tell apart.
  */
 function applyRenewal(
-  result: Awaited<ReturnType<typeof renewPairingToken>>,
+  result: GrantConsumeResult,
   land: {
     setGrantConnection: (result: GrantConsumeResult) => void
     setDaemonRenewal: (renewal: 'refused' | 'unreachable' | null) => void

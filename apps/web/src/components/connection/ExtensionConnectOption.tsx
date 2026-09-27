@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { extensionPresent } from '../../lib/extension-bridge-fetch.js'
+import { extensionPresent } from '../../lib/bridge-loader.js'
 import { connectThroughExtension } from '../../lib/extension-connection.js'
 import type { GrantConsumeResult } from '../../lib/pairing-grant.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'

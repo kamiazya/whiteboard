@@ -4,7 +4,7 @@
  * whole trust chain — so connecting is asking whether the daemon answers.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { BRIDGE_DAEMON_BASE_URL } from './extension-bridge-fetch.js'
+import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { connectThroughExtension } from './extension-connection.js'
 
 describe('connectThroughExtension', () => {

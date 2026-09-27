@@ -6,12 +6,8 @@
  */
 import { toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  BRIDGE_DAEMON_BASE_URL,
-  type BridgePort,
-  createBridgeFetch,
-  isBridgeDaemon,
-} from './extension-bridge-fetch.js'
+import { BRIDGE_DAEMON_BASE_URL, isBridgeDaemon } from './bridge-address.js'
+import { type BridgePort, createBridgeFetch } from './extension-bridge-fetch.js'
 
 /** The extension's end of the port, answering as the native host would. */
 class FakeExtension {

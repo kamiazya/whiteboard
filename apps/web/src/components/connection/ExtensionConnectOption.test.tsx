@@ -4,7 +4,7 @@
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BRIDGE_DAEMON_BASE_URL } from '../../lib/extension-bridge-fetch.js'
+import { BRIDGE_DAEMON_BASE_URL } from '../../lib/bridge-address.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { ExtensionConnectOption } from './ExtensionConnectOption.js'
 

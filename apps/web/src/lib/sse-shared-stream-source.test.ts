@@ -6,7 +6,7 @@
  * and the caller never learned it should have opened its own stream.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BRIDGE_DAEMON_BASE_URL } from './extension-bridge-fetch.js'
+import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { createSharedSseStreamSource } from './sse-shared-stream-source.js'
 
 type ErrorHandler = ((event: { message?: string }) => void) | null
