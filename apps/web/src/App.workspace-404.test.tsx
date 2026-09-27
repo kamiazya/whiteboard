@@ -5,7 +5,7 @@
  * moves to another workspace; the address must then settle on that one rather
  * than resolve back to the refused one.
  */
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import { App } from './App.js'
@@ -151,10 +151,12 @@ it('choosing a refused workspace again asks the daemon again, once, rather than 
     },
   )
   mount(router)
+  await screen.findByText('What will you make first?')
   await vi.waitFor(() => expect(router.state.location.pathname).toBe(`/w/${LIVE_ID}`))
 
-  // What the switcher does: move the address to the workspace by name.
-  await act(() => router.navigate(`/w/${GONE_ID}`))
+  // Choose it again from the workspace menu, the way a person would.
+  fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+  fireEvent.click(await screen.findByRole('menuitem', { name: new RegExp(GONE_ID) }))
 
   await vi.waitFor(() => expect(asksFor(requests, GONE_ID), requests.join('\n')).toBe(2))
   await vi.waitFor(() => expect(router.state.location.pathname).toBe(`/w/${LIVE_ID}`))
