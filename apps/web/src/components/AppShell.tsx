@@ -94,8 +94,12 @@ function BrowserKeeperConnect({
       </p>
       <PromotedElsewhereNotice settingsStore={settingsStore} />
       <Suspense fallback={null}>
-        <ExtensionConnectEntry settingsStore={settingsStore} />
-        <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
+        <ExtensionConnectEntry
+          settingsStore={settingsStore}
+          absent={
+            <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
+          }
+        />
       </Suspense>
     </>
   )
