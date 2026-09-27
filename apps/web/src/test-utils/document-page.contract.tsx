@@ -139,8 +139,14 @@ function describeDocumentMenu(fixture: DocumentPageFixture): void {
       })
       const alert = await screen.findByRole('alert')
       expect(alert.textContent?.trim()).not.toBe('')
+      // In the document's own row, beside the kebab it was asked from — not
+      // any alert anywhere on the page.
+      const kebab = screen.getByRole('button', { name: 'More actions' })
+      expect(alert.parentElement?.contains(kebab)).toBe(true)
       expect(screen.queryByRole('alertdialog')).toBeNull()
       expect(screen.getByTestId('stub-spatial-editor')).toBeTruthy()
+      // Refused means nothing moved: the page is still on the document it was.
+      await fixture.expectOpened(HERE.path)
     })
   })
 }
