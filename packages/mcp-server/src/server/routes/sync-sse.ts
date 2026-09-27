@@ -331,6 +331,90 @@ function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
   if (cached !== undefined) stream.send('message', JSON.stringify({ doc: entry.as, raw: cached }))
 }
 
+async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
+  const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
+  if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+
+  // Resolved before the gate, so membership is decided for the workspace
+  // a key actually reaches, whichever handle named it.
+  const subscribe = await canonicalKeys(parsed.data.subscribe ?? [])
+  const unsubscribe = (await canonicalKeys(parsed.data.unsubscribe ?? [])).map(({ key }) => key)
+
+  const refusal = await firstMembershipRefusal(
+    c,
+    admit,
+    subscribe.map(({ key }) => key),
+  )
+  if (refusal) return c.json(refusal, 403)
+
+  const stream = streams.get(parsed.data.streamId)
+  // A subscribe for a stream that is not open is a client bug (a race with
+  // reconnect, a stale streamId). Answering 200 would leave the caller
+  // believing it is subscribed and waiting forever for updates.
+  if (!stream) return unknownStream(c, parsed.data.streamId)
+
+  if (
+    exceedsStreamCap(
+      stream.docs,
+      subscribe.map(({ key }) => key),
+      unsubscribe,
+    )
+  ) {
+    return c.json({ error: 'too_many_subscriptions' }, 400)
+  }
+  const docs = applySubscriptions(stream.docs, subscribe, unsubscribe)
+  // A stream that reaches zero documents is the state worth seeing: the
+  // client stops reconnecting there, so a gap between "the last tab
+  // unsubscribed" and "a tab subscribed again" is a window with no stream
+  // at all. Without this the two are indistinguishable from the outside.
+  log.info(
+    {
+      streamId: parsed.data.streamId,
+      subscribed: subscribe.map(({ as }) => as),
+      unsubscribed: parsed.data.unsubscribe ?? [],
+      docCount: docs.length,
+    },
+    'sync subscriptions changed',
+  )
+  return c.json({ ok: true, docs })
+}
+
+// The client->server half of the sync protocol. A WebSocket carries these as
+// text frames; an SSE client has no upstream channel of its own, so they
+// arrive here instead. The payload reuses clientTextMessageSchema so both
+// transports validate against the same declaration rather than drifting.
+async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
+  const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
+  if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+
+  const doc = { key: await canonicalDocKey(parsed.data.doc), as: parsed.data.doc }
+  const refusal = await firstMembershipRefusal(c, admit, [doc.key])
+  if (refusal) return c.json(refusal, 403)
+
+  const stream = streams.get(parsed.data.streamId)
+  if (!stream) return unknownStream(c, parsed.data.streamId)
+
+  const { message } = parsed.data
+  if (message.type === 'client_ready') {
+    // Upsert rather than require an existing subscription: subscribe and
+    // client_ready are separate POSTs with no ordering guarantee between
+    // them, and dropping readiness that arrived first would withhold the
+    // viewport request for good. Declaring readiness is a statement of
+    // interest in the document either way.
+    markReady(stream, doc)
+    return c.json({ ok: true })
+  }
+  if (message.type === 'viewport_response') {
+    resolveViewportRequest(message.requestId)
+    return c.json({ ok: true })
+  }
+  // `export_response` is inert on the WebSocket path too — the daemon stopped
+  // sending export_request once export became headless — and `ws_trace`
+  // carries a trace context that only the WebSocket's binary-frame pairing
+  // can consume. Accepted and ignored, so a client need not special-case them.
+  return c.json({ ok: true })
+}
+
 export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
   const app = new Hono()
 
@@ -373,89 +457,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     })
   })
 
-  app.post('/api/sync/subscribe', async (c) => {
-    const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
-
-    // Resolved before the gate, so membership is decided for the workspace
-    // a key actually reaches, whichever handle named it.
-    const subscribe = await canonicalKeys(parsed.data.subscribe ?? [])
-    const unsubscribe = (await canonicalKeys(parsed.data.unsubscribe ?? [])).map(({ key }) => key)
-
-    const refusal = await firstMembershipRefusal(
-      c,
-      options.admit,
-      subscribe.map(({ key }) => key),
-    )
-    if (refusal) return c.json(refusal, 403)
-
-    const stream = streams.get(parsed.data.streamId)
-    // A subscribe for a stream that is not open is a client bug (a race with
-    // reconnect, a stale streamId). Answering 200 would leave the caller
-    // believing it is subscribed and waiting forever for updates.
-    if (!stream) return unknownStream(c, parsed.data.streamId)
-
-    if (
-      exceedsStreamCap(
-        stream.docs,
-        subscribe.map(({ key }) => key),
-        unsubscribe,
-      )
-    ) {
-      return c.json({ error: 'too_many_subscriptions' }, 400)
-    }
-    const docs = applySubscriptions(stream.docs, subscribe, unsubscribe)
-    // A stream that reaches zero documents is the state worth seeing: the
-    // client stops reconnecting there, so a gap between "the last tab
-    // unsubscribed" and "a tab subscribed again" is a window with no stream
-    // at all. Without this the two are indistinguishable from the outside.
-    log.info(
-      {
-        streamId: parsed.data.streamId,
-        subscribed: subscribe.map(({ as }) => as),
-        unsubscribed: parsed.data.unsubscribe ?? [],
-        docCount: docs.length,
-      },
-      'sync subscriptions changed',
-    )
-    return c.json({ ok: true, docs })
-  })
-
-  // The client->server half of the sync protocol. A WebSocket carries these as
-  // text frames; an SSE client has no upstream channel of its own, so they
-  // arrive here instead. The payload reuses clientTextMessageSchema so both
-  // transports validate against the same declaration rather than drifting.
-  app.post('/api/sync/message', async (c) => {
-    const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
-
-    const doc = { key: await canonicalDocKey(parsed.data.doc), as: parsed.data.doc }
-    const refusal = await firstMembershipRefusal(c, options.admit, [doc.key])
-    if (refusal) return c.json(refusal, 403)
-
-    const stream = streams.get(parsed.data.streamId)
-    if (!stream) return unknownStream(c, parsed.data.streamId)
-
-    const { message } = parsed.data
-    if (message.type === 'client_ready') {
-      // Upsert rather than require an existing subscription: subscribe and
-      // client_ready are separate POSTs with no ordering guarantee between
-      // them, and dropping readiness that arrived first would withhold the
-      // viewport request for good. Declaring readiness is a statement of
-      // interest in the document either way.
-      markReady(stream, doc)
-      return c.json({ ok: true })
-    }
-    if (message.type === 'viewport_response') {
-      resolveViewportRequest(message.requestId)
-      return c.json({ ok: true })
-    }
-    // `export_response` is inert on the WebSocket path too — the daemon stopped
-    // sending export_request once export became headless — and `ws_trace`
-    // carries a trace context that only the WebSocket's binary-frame pairing
-    // can consume. Accepted and ignored, so a client need not special-case them.
-    return c.json({ ok: true })
-  })
+  app.post('/api/sync/subscribe', (c) => handleSubscribe(c, options.admit))
+  app.post('/api/sync/message', (c) => handleMessage(c, options.admit))
 
   return app
 }
