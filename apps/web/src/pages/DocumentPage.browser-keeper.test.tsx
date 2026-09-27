@@ -28,16 +28,18 @@ vi.mock('../lib/browser-backend.js', async () => {
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 let router: ReturnType<typeof createMemoryRouter> | null = null
+let store: LocalStoreDouble | null = null
 
 const browserFixture: DocumentPageFixture = {
   keeper: 'browser',
   async mount(documents: readonly ContractDocument[]) {
     const [open] = documents
     if (open === undefined) throw new Error('mount needs at least one document')
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId(open.id)
+    const seeded = new LocalStoreDouble()
+    store = seeded
+    await seeded.setDefaultDocumentId(open.id)
     for (const doc of documents) {
-      await store.save({
+      await seeded.save({
         documentId: doc.id,
         workspaceId: getBrowserWorkspaceId(),
         path: doc.path,
@@ -52,9 +54,9 @@ const browserFixture: DocumentPageFixture = {
           path: '/w/:workspace/d/*',
           element: (
             <BrowserDocumentPage
-              store={store.index}
-              pointer={store.pointer}
-              clock={store.clock}
+              store={seeded.index}
+              pointer={seeded.pointer}
+              clock={seeded.clock}
               loro={new InMemoryLoroStore()}
               initialPath={open.path}
             />
@@ -75,6 +77,15 @@ const browserFixture: DocumentPageFixture = {
     await waitFor(() => {
       expect(router?.state.location.pathname).toBe(`/w/default/d/${path}`)
     })
+  },
+  failNextDelete() {
+    const index = store?.index
+    if (index === undefined) throw new Error('failNextDelete before mount')
+    const real = index.deleteDocument.bind(index)
+    index.deleteDocument = async () => {
+      index.deleteDocument = real
+      throw new Error('simulated IndexedDB refusal')
+    }
   },
 }
 
