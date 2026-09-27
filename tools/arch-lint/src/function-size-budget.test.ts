@@ -195,7 +195,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // component in the app, and the next cut is a further layer rather than
   // another slot (measured: lifting a slot moves the complexity by about
   // one, because the condition that decides whether to render it stays).
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 700,
+  // Lowered 700 -> 616 when the pane scroll sync left for
+  // `use-pane-scroll-sync.ts` and its geometry for `preview-geometry.ts`.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 616,
   // Both are the editor's own JSX, one level out: a column is a frame plus
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.

@@ -115,24 +115,31 @@ it('stands each marker beside the block its conversation quotes, measured agains
  * `?raw`, never `node:fs`: apps/web is browser-only and
  * `web-app-boundary.test.ts` enforces it.
  */
-const editorSource =
-  (
-    import.meta.glob('./MarkdownEditor.tsx', {
-      query: '?raw',
-      eager: true,
-      import: 'default',
-    }) as Record<string, string>
-  )['./MarkdownEditor.tsx'] ?? ''
+// Every module in this directory, not the editor alone: the preview's
+// geometry has already moved out of it once, and a bare query in the module
+// it moved to would otherwise pass.
+const directorySources = Object.entries(
+  import.meta.glob(['./*.ts', './*.tsx', '!./*.test.ts', '!./*.test.tsx'], {
+    query: '?raw',
+    eager: true,
+    import: 'default',
+  }) as Record<string, string>,
+)
 
 it('asks for the preview document SVG through one definition, never a bare query', () => {
-  // The count proves the scan is reading the file it names, so an empty
+  // The count proves the scan is reading the directory it names, so an empty
   // result cannot be an empty read.
-  expect(editorSource.length).toBeGreaterThan(10_000)
-  expect(editorSource).toContain('function previewDocumentSvg')
+  expect(directorySources.length).toBeGreaterThan(20)
+  const defining = directorySources
+    .filter(([, source]) => source.includes('function previewDocumentSvg'))
+    .map(([path]) => path)
+  expect(defining).toEqual(['./preview-geometry.ts'])
 
-  const bare = editorSource
-    .split('\n')
-    .map((line, index) => ({ line: line.trim(), at: index + 1 }))
-    .filter(({ line }) => /querySelector\((['"`])svg\1\)/.test(line) && !line.startsWith('*'))
+  const bare = directorySources.flatMap(([path, source]) =>
+    source
+      .split('\n')
+      .map((line, index) => ({ path, line: line.trim(), at: index + 1 }))
+      .filter(({ line }) => /querySelector\((['"`])svg\1\)/.test(line) && !line.startsWith('*')),
+  )
   expect(bare).toEqual([])
 })
