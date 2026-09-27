@@ -321,6 +321,40 @@ describe('SSE sync transport', () => {
     expect(JSON.parse(data.raw).head).toBe('head-xyz')
   })
 
+  // ADR-0019: an address carries a HANDLE — a segment or the id — and the
+  // web app subscribes with the one in its address. Every broadcast names the
+  // workspace by id, so a segment subscription has to be resolved, and each
+  // event still has to come back under the key the client subscribed with,
+  // because that is what the client routes on.
+  it('delivers to a stream that subscribed by the workspace segment, under its own key', async () => {
+    const app = createApp(createRuntimeOptions())
+    const created = await app.request('/api/workspaces', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Segment Subscribe' }),
+    })
+    const { workspaceId, segment } = (await created.json()) as {
+      workspaceId: string
+      segment: string
+    }
+    expect(segment).not.toBe(workspaceId)
+    const { res, streamId } = await openStream(app)
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, subscribe: [`workspace:${segment}`, `${segment}/a`] }),
+    })
+
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([7]))
+    sendHeadChanged(workspaceId, 'a', 'head-seg')
+
+    const frames = await readEvents(res, 2)
+    expect(frames.find((f) => f.includes('event: update'))).toContain(
+      `"doc":"workspace:${segment}"`,
+    )
+    expect(frames.find((f) => f.includes('head_changed'))).toContain(`"doc":"${segment}/a"`)
+  })
+
   it('rejects a subscribe for an unknown stream instead of silently succeeding', async () => {
     const app = createApp(createRuntimeOptions())
 

@@ -30,6 +30,7 @@ import { z } from 'zod'
 import { getLogger } from '../log.js'
 import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import { membershipRefusal } from '../security/workspace-access.js'
+import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
 
 const log = getLogger('sync-sse')
 
@@ -90,6 +91,12 @@ export function setSyncSseHooks(hooks: {
  */
 interface SyncStreamDoc {
   ready: boolean
+  /**
+   * The key as the client subscribed with it. Registries and broadcasts name
+   * a workspace by id; a client addresses it by whatever handle its address
+   * carries (ADR-0019), and routes events by that same string.
+   */
+  as: string
 }
 
 interface SyncStream {
@@ -151,11 +158,12 @@ function toBase64(bytes: Uint8Array): string {
  */
 export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
   const key = workspaceDocKey(workspaceId)
-  const payload: SyncUpdateEvent = { doc: key, update: toBase64(update) }
-  const frame = JSON.stringify(payload)
+  const encoded = toBase64(update)
   for (const stream of streams.values()) {
-    if (!stream.docs.has(key)) continue
-    stream.send('update', frame)
+    const entry = stream.docs.get(key)
+    if (entry === undefined) continue
+    const payload: SyncUpdateEvent = { doc: entry.as, update: encoded }
+    stream.send('update', JSON.stringify(payload))
   }
 }
 
@@ -169,24 +177,41 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
  * landing on another.
  */
 export function sseBroadcastText(workspaceId: string, path: string, raw: string): void {
-  const key = docKey(workspaceId, path)
-  const payload: SyncMessageEvent = { doc: key, raw }
-  const frame = JSON.stringify(payload)
+  sendText(docKey(workspaceId, path), raw, () => true)
+}
+
+function sendText(key: string, raw: string, admits: (entry: SyncStreamDoc) => boolean): void {
   for (const stream of streams.values()) {
-    if (!stream.docs.has(key)) continue
-    stream.send('message', frame)
+    const entry = stream.docs.get(key)
+    if (entry === undefined || !admits(entry)) continue
+    const payload: SyncMessageEvent = { doc: entry.as, raw }
+    stream.send('message', JSON.stringify(payload))
   }
 }
 
 /** Like sseBroadcastText, but only to streams that have signalled client_ready. */
 export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: string): void {
-  const key = docKey(workspaceId, path)
-  const payload: SyncMessageEvent = { doc: key, raw }
-  const frame = JSON.stringify(payload)
-  for (const stream of streams.values()) {
-    if (!stream.docs.get(key)?.ready) continue
-    stream.send('message', frame)
-  }
+  sendText(docKey(workspaceId, path), raw, (entry) => entry.ready)
+}
+
+/**
+ * A doc key with its workspace handle resolved to the id, which is what
+ * every registry and broadcast here is keyed by. Total, as the resolver is:
+ * a key naming no workspace comes back unchanged.
+ */
+async function canonicalDocKey(key: string): Promise<string> {
+  const handle = workspaceIdOfDocKey(key)
+  if (handle === null) return key
+  const workspaceId = await resolveWorkspaceHandleToId(handle)
+  if (workspaceId === handle) return key
+  return key.startsWith(WORKSPACE_DOC_KEY_PREFIX)
+    ? workspaceDocKey(workspaceId)
+    : docKey(workspaceId, key.slice(handle.length + 1))
+}
+
+/** Each key as the client wrote it, beside its canonical form. */
+async function canonicalKeys(keys: readonly string[]): Promise<Array<{ key: string; as: string }>> {
+  return Promise.all(keys.map(async (as) => ({ key: await canonicalDocKey(as), as })))
 }
 
 /**
@@ -287,23 +312,23 @@ function exceedsStreamCap(
  * one delete takes the readiness with it.
  */
 function applySubscriptions(
-  docs: Map<string, { ready: boolean }>,
-  subscribe: readonly string[],
+  docs: Map<string, SyncStreamDoc>,
+  subscribe: ReadonlyArray<{ key: string; as: string }>,
   unsubscribe: readonly string[],
 ): string[] {
-  for (const key of subscribe) if (!docs.has(key)) docs.set(key, { ready: false })
+  for (const { key, as } of subscribe) if (!docs.has(key)) docs.set(key, { ready: false, as })
   for (const key of unsubscribe) docs.delete(key)
-  return [...docs.keys()].sort()
+  return [...docs.values()].map((entry) => entry.as).sort()
 }
 
-function markReady(stream: SyncStream, doc: string): void {
-  const entry = stream.docs.get(doc) ?? { ready: false }
+function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
+  const entry = stream.docs.get(doc.key) ?? { ready: false, as: doc.as }
   entry.ready = true
-  stream.docs.set(doc, entry)
+  stream.docs.set(doc.key, entry)
   // Replay the latest viewport request so a stream that connected after
   // the request was issued still inherits the same fit/scroll/zoom intent.
-  const cached = getCachedViewportRequest(doc)
-  if (cached !== undefined) stream.send('message', JSON.stringify({ doc, raw: cached }))
+  const cached = getCachedViewportRequest(doc.key)
+  if (cached !== undefined) stream.send('message', JSON.stringify({ doc: entry.as, raw: cached }))
 }
 
 export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
@@ -352,10 +377,16 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
 
-    const subscribe = parsed.data.subscribe ?? []
-    const unsubscribe = parsed.data.unsubscribe ?? []
+    // Resolved before the gate, so membership is decided for the workspace
+    // a key actually reaches, whichever handle named it.
+    const subscribe = await canonicalKeys(parsed.data.subscribe ?? [])
+    const unsubscribe = (await canonicalKeys(parsed.data.unsubscribe ?? [])).map(({ key }) => key)
 
-    const refusal = await firstMembershipRefusal(c, options.admit, subscribe)
+    const refusal = await firstMembershipRefusal(
+      c,
+      options.admit,
+      subscribe.map(({ key }) => key),
+    )
     if (refusal) return c.json(refusal, 403)
 
     const stream = streams.get(parsed.data.streamId)
@@ -364,7 +395,13 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     // believing it is subscribed and waiting forever for updates.
     if (!stream) return unknownStream(c, parsed.data.streamId)
 
-    if (exceedsStreamCap(stream.docs, subscribe, unsubscribe)) {
+    if (
+      exceedsStreamCap(
+        stream.docs,
+        subscribe.map(({ key }) => key),
+        unsubscribe,
+      )
+    ) {
       return c.json({ error: 'too_many_subscriptions' }, 400)
     }
     const docs = applySubscriptions(stream.docs, subscribe, unsubscribe)
@@ -375,8 +412,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     log.info(
       {
         streamId: parsed.data.streamId,
-        subscribed: subscribe,
-        unsubscribed: unsubscribe,
+        subscribed: subscribe.map(({ as }) => as),
+        unsubscribed: parsed.data.unsubscribe ?? [],
         docCount: docs.length,
       },
       'sync subscriptions changed',
@@ -392,13 +429,14 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
 
-    const refusal = await firstMembershipRefusal(c, options.admit, [parsed.data.doc])
+    const doc = { key: await canonicalDocKey(parsed.data.doc), as: parsed.data.doc }
+    const refusal = await firstMembershipRefusal(c, options.admit, [doc.key])
     if (refusal) return c.json(refusal, 403)
 
     const stream = streams.get(parsed.data.streamId)
     if (!stream) return unknownStream(c, parsed.data.streamId)
 
-    const { doc, message } = parsed.data
+    const { message } = parsed.data
     if (message.type === 'client_ready') {
       // Upsert rather than require an existing subscription: subscribe and
       // client_ready are separate POSTs with no ordering guarantee between
