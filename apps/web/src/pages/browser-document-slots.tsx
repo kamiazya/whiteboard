@@ -14,7 +14,9 @@ import type { ConnectionsBacklink } from '../components/connections/ConnectionsP
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
+import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { loadBrowserReference } from '../lib/document-embed-content.js'
 import type { DocumentReadFailure } from '../lib/document-read-failure.js'
 import {
   DOCUMENT_SYNC_VERSION_SAVED_EVENT,
@@ -280,6 +282,15 @@ export function browserVersionsSlot({
       dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, { workspaceId: 'local', path }),
   }
 }
+
+/**
+ * How this keeper loads a document a body points at: from the browser's own
+ * Loro store, by the id the page's alias table resolved. A target the table
+ * could not resolve has nothing to load here — the browser keeps no legacy
+ * path references the daemon still answers for.
+ */
+export const browserReferenceLoader: ReferenceLoader = (_target, documentId) =>
+  documentId === null ? Promise.resolve(undefined) : loadBrowserReference(documentId)
 
 /**
  * The Connections chip's slot. `backlinks: null` while the first answer is
