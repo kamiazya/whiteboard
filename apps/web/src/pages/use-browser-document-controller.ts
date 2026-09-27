@@ -144,14 +144,15 @@ async function openDeepLink(
 /**
  * The document the pointer names, seeding a new one when it names nothing.
  *
- * `'unreadable'` is its own answer rather than null: a pointer naming a
- * document the index no longer has is a degraded read the caller reports,
- * where "nothing pointed at yet" is the ordinary first visit.
+ * A pointer naming a document the index no longer has opens what is left,
+ * as a delete does. It is not unreadable data — the pointer outlived its
+ * document (a delete whose repoint had not landed, another tab's delete) —
+ * and an error screen there is a dead end with nothing to recover.
  */
 async function openPointedAt(
   stores: OpeningStores,
   alive: StillMounted,
-): Promise<DocumentSnapshot | 'unreadable' | null> {
+): Promise<DocumentSnapshot | null> {
   const id = await stores.pointer.get()
   if (!alive()) return null
   if (id === null) {
@@ -162,7 +163,9 @@ async function openPointedAt(
   }
   const snap = await loadLocalDocument(stores.index, id, stores.clock)
   if (!alive()) return null
-  return snap ?? 'unreadable'
+  if (snap !== null) return snap
+  const left = await openWhatIsLeft(stores)
+  return alive() ? left : null
 }
 
 /**
@@ -304,17 +307,6 @@ export function useBrowserDocumentController(
       if (!alive()) return
       const opened = deepLinked ?? (await openPointedAt(stores, alive))
       if (!alive() || opened === null) return
-      if (opened === 'unreadable') {
-        // The pointer names a document the index no longer has. Generic safe
-        // copy, no raw error.
-        setPersistenceRef.current({
-          kind: 'degraded',
-          reason: 'load-failed',
-          message: 'The canvas data could not be read.',
-          lastSavedAt: null,
-        })
-        return
-      }
       setSnapshot(opened)
     }
 

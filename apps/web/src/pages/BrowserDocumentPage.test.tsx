@@ -136,12 +136,14 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('renders load-degraded banner when store load fails', async () => {
-    // The pointer names a document the index does not have. That is what a
-    // corrupted metadata row degrades to now: the bespoke store answered a
-    // third 'corrupted' outcome from its own parse, and the index has no such
-    // answer to give — it either holds the document or it does not.
+    // The store's read itself fails. A pointer naming a document the index
+    // does not have is NOT this case: it opens what is left instead
+    // (BrowserDocumentPage.browser.test.tsx pins that).
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
+    vi.spyOn(store.index, 'resolveDocumentById').mockRejectedValueOnce(
+      new Error('store read failed'),
+    )
     await act(async () => {
       render(
         <BrowserDocumentPage
@@ -160,12 +162,14 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('offers a Start fresh recovery action in the load-degraded banner', async () => {
-    // The pointer names a document the index does not have. That is what a
-    // corrupted metadata row degrades to now: the bespoke store answered a
-    // third 'corrupted' outcome from its own parse, and the index has no such
-    // answer to give — it either holds the document or it does not.
+    // The store's read itself fails. A pointer naming a document the index
+    // does not have is NOT this case: it opens what is left instead
+    // (BrowserDocumentPage.browser.test.tsx pins that).
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
+    vi.spyOn(store.index, 'resolveDocumentById').mockRejectedValueOnce(
+      new Error('store read failed'),
+    )
     await act(async () => {
       render(
         <BrowserDocumentPage
@@ -186,12 +190,14 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('shows a recovery-failed message when Start fresh cannot save', async () => {
-    // The pointer names a document the index does not have. That is what a
-    // corrupted metadata row degrades to now: the bespoke store answered a
-    // third 'corrupted' outcome from its own parse, and the index has no such
-    // answer to give — it either holds the document or it does not.
+    // The store's read itself fails. A pointer naming a document the index
+    // does not have is NOT this case: it opens what is left instead
+    // (BrowserDocumentPage.browser.test.tsx pins that).
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
+    vi.spyOn(store.index, 'resolveDocumentById').mockRejectedValueOnce(
+      new Error('store read failed'),
+    )
     // ...and minting the replacement fails too, so the recovery action has to
     // say so rather than leaving the banner looking actionable.
     store.index.createDocument = async () => {

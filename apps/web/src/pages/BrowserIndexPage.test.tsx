@@ -440,9 +440,9 @@ describe('BrowserIndexPage', () => {
   })
 
   it('clears the default pointer when the deleted canvas was the one it named', async () => {
-    // A pointer left naming a deleted document does NOT degrade gracefully:
-    // the editor's resume path reports 'The canvas data could not be read.'
-    // and the user meets an error screen after an ordinary delete.
+    // A pointer left naming a deleted document would send the editor's next
+    // plain open somewhere the person did not choose (whatever is left),
+    // rather than to the fresh start a cleared pointer gives.
     const store = await seededStore([
       {
         documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
