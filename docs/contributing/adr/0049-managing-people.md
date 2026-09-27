@@ -18,7 +18,8 @@ manage people.
   scope) manages every workspace there, so no workspace there has a last
   owner to keep. Adding a person there is still choosing a pinned passkey.
   How the local daemon identifies a person is
-  [ADR-0050](0050-local-daemon-trust.md)'s to change.
+  [ADR-0050](0050-local-daemon-trust.md)'s to change. *(Settled by ADR-0050's 2026-09-27
+  addendum: the local daemon has one person, the machine's owner.)*
 - Decision 6 builds nothing.
 
 ## Context
@@ -143,6 +144,13 @@ Immich, Vaultwarden, Discourse, Plane.
    authenticator binding on server mode. The passkey check and the withheld
    replica key (ADR-0042) stay as they are. On a local daemon, the person who
    owns the machine is its administrator and every workspace's owner.
+
+   *Superseded for the local daemon by
+   [ADR-0050](0050-local-daemon-trust.md)'s 2026-09-27 addendum.* The local
+   daemon has one person, the machine's owner. Its members screen and API,
+   adding a person with a pinned passkey, and passkey-bound sessions are
+   retired as that ADR is built. The shared people surface stays server
+   mode's.
 
 6. **No step-up re-authentication for administrative actions, for now.** An
    administrator's session is an ordinary session. This is recorded as a
