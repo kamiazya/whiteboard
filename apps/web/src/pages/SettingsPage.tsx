@@ -23,6 +23,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { DaemonAddress } from '../components/connection/DaemonAddress.js'
 import { FontsCard } from '../components/FontsCard.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { PasskeysCard } from '../components/PasskeysCard.js'
@@ -314,7 +315,7 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
             workspace, and changing that is an intent you arrive here with. */}
         <section aria-label="This daemon" className="flex flex-col gap-1.5">
           <p className="text-sm">
-            Connected to <span className="font-mono text-xs">{stripScheme(daemon.baseUrl)}</span>
+            Connected via <DaemonAddress baseUrl={daemon.baseUrl} />
           </p>
           <button
             type="button"
@@ -335,10 +336,6 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
       </div>
     </DaemonApiContext.Provider>
   )
-}
-
-function stripScheme(baseUrl: string): string {
-  return baseUrl.replace(/^https?:\/\//, '')
 }
 
 /**

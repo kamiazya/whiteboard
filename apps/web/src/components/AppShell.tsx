@@ -24,6 +24,8 @@ import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
+import { DaemonAddress } from './connection/DaemonAddress.js'
+import { ExtensionConnectOption } from './connection/ExtensionConnectOption.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
 import { formatRelative } from './workspace-files/format-relative.js'
 
@@ -71,10 +73,31 @@ function PromotedElsewhereNotice({
   }
   return (
     <p data-testid="promoted-elsewhere-notice" className="text-muted-foreground">
-      This workspace has been moved to the daemon at{' '}
-      <span className="font-mono text-xs">{storedDaemon.replace(/^https?:\/\//, '')}</span>. Changes
-      made here stay in this browser until you move it again from Settings.
+      This workspace has been moved to the daemon via <DaemonAddress baseUrl={storedDaemon} />.
+      Changes made here stay in this browser until you move it again from Settings.
     </p>
+  )
+}
+
+/** What the popover offers while the browser keeps the workspace: the ways onto a daemon. */
+function BrowserKeeperConnect({
+  settingsStore,
+}: {
+  settingsStore: ReturnType<typeof createUserSettingsStore>
+}) {
+  return (
+    <>
+      <p className="text-muted-foreground">
+        Connect a daemon (MCP) for automatic checkpoints, variations and merging. Once connected,
+        you can move this workspace to it from Settings — documents, their history and images
+        together.
+      </p>
+      <PromotedElsewhereNotice settingsStore={settingsStore} />
+      <ExtensionConnectOption settingsStore={settingsStore} />
+      <Suspense fallback={null}>
+        <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
+      </Suspense>
+    </>
   )
 }
 
@@ -342,20 +365,7 @@ function ShellBar({
           />
         )}
         {connection?.state.keeper === 'browser' && (
-          <>
-            <p className="text-muted-foreground">
-              Connect a daemon (MCP) for automatic checkpoints, variations and merging. Once
-              connected, you can move this workspace to it from Settings — documents, their history
-              and images together.
-            </p>
-            <PromotedElsewhereNotice settingsStore={settingsStore} />
-            <Suspense fallback={null}>
-              <DaemonDetectedBanner
-                settingsStore={settingsStore}
-                fetch={window.fetch.bind(window)}
-              />
-            </Suspense>
-          </>
+          <BrowserKeeperConnect settingsStore={settingsStore} />
         )}
       </ConnectionStatus>
       <AlphaBadge />

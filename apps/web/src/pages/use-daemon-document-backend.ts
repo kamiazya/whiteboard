@@ -18,6 +18,7 @@ import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/sele
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
+import { isBridgeDaemon } from '../lib/extension-bridge-fetch.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 
 /** What a parent may substitute for the connection this hook would build. */
@@ -60,6 +61,24 @@ interface DaemonConnection {
   readonly contentDocumentId: string
 }
 
+/**
+ * A keeper with no WebSocket cannot honour a pinned 'websocket', so the
+ * development pin is for a paired daemon only — and a daemon reached through
+ * the extension (ADR-0050) serves none either: the bridge carries the SSE
+ * stream and nothing else.
+ */
+function documentTransport(daemonBaseUrl: string, serverMode: boolean) {
+  const servesWebSocket = !serverMode && !isBridgeDaemon(daemonBaseUrl)
+  return (
+    (servesWebSocket ? devTransportOverride() : null) ??
+    selectDocumentTransport({
+      pageOrigin: window.location.origin,
+      daemonBaseUrl,
+      keeperServesWebSocket: servesWebSocket,
+    })
+  )
+}
+
 function connectDaemonDocument({
   workspaceId,
   path,
@@ -76,15 +95,7 @@ function connectDaemonDocument({
   // in a production build. It exists because the rule below is correct AND
   // makes the SSE path — and the SharedWorker behind it — unreachable from
   // `pnpm dev`, which serves plain http.
-  // A keeper with no WebSocket cannot honour a pinned 'websocket', so the pin
-  // is for a paired daemon only.
-  const transport =
-    (serverMode ? null : devTransportOverride()) ??
-    selectDocumentTransport({
-      pageOrigin: window.location.origin,
-      daemonBaseUrl,
-      keeperServesWebSocket: !serverMode,
-    })
+  const transport = documentTransport(daemonBaseUrl, serverMode)
   if (transport !== 'sse') {
     // wsToken carries the pairing session token into the WS upgrade —
     // without it a pairing-grant session authenticates HTTP but opens

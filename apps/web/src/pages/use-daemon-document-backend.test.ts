@@ -12,8 +12,11 @@
  */
 import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { DEV_TRANSPORT_OVERRIDE_KEY } from '../lib/dev-transport-override.js'
+import { BRIDGE_DAEMON_BASE_URL } from '../lib/extension-bridge-fetch.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
@@ -103,5 +106,21 @@ describe('useDaemonDocumentBackend', () => {
     // A refusal belongs to one connection; the next one has not been refused.
     rerender(options({ path: 'second', documents: [summary('second', 'doc-2')] }))
     expect(result.current.authError).toBe(false)
+  })
+})
+
+// ADR-0050 addendum decision 1: the bridge carries the SSE stream; a
+// WebSocket has no way through the extension, whatever a developer pinned.
+describe('useDaemonDocumentBackend through the extension', () => {
+  it('syncs over SSE even with WebSocket pinned for development', () => {
+    localStorage.setItem(DEV_TRANSPORT_OVERRIDE_KEY, 'websocket')
+    try {
+      const { result } = renderHook(() =>
+        useDaemonDocumentBackend(options({ daemonBaseUrl: BRIDGE_DAEMON_BASE_URL, token: '' })),
+      )
+      expect(result.current.backend).toBeInstanceOf(SseBackend)
+    } finally {
+      localStorage.removeItem(DEV_TRANSPORT_OVERRIDE_KEY)
+    }
   })
 })

@@ -8,6 +8,8 @@
  * exactly what daemon-auth-seam.test.ts forbids. Keeping it small lets every
  * context share the one implementation.
  */
+import { extensionBridgeFetch, isBridgeDaemon } from './extension-bridge-fetch.js'
+
 /**
  * The daemon a session is connected to, as the pair every authorized call
  * needs — exactly what `createDaemonFetch` consumes. One declaration rather
@@ -96,6 +98,10 @@ export function createDaemonFetch(
   baseFetch: typeof globalThis.fetch = fetch,
 ): typeof globalThis.fetch {
   const daemonOrigin = new URL(daemonBaseUrl).origin
+  // A daemon reached through the extension (ADR-0050) has an address nothing
+  // on a network answers, so the bridge is its transport whatever fetch a
+  // caller handed in — several pass their own network one explicitly.
+  const transport = isBridgeDaemon(daemonBaseUrl) ? extensionBridgeFetch : baseFetch
 
   return async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
     const resolvedUrl = resolveRequestUrl(input, daemonBaseUrl)
@@ -110,9 +116,9 @@ export function createDaemonFetch(
     }
 
     if (input instanceof Request) {
-      return baseFetch(resolvedUrl, rebuiltRequestInit(input, init, headers))
+      return transport(resolvedUrl, rebuiltRequestInit(input, init, headers))
     }
 
-    return baseFetch(resolvedUrl, { ...init, headers })
+    return transport(resolvedUrl, { ...init, headers })
   }
 }

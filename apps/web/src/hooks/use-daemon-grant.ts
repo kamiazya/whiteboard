@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isBridgeDaemon } from '../lib/extension-bridge-fetch.js'
+import { connectThroughExtension } from '../lib/extension-connection.js'
 import {
   consumeGrantFragment,
   type GrantConsumeResult,
@@ -98,10 +100,7 @@ export function useDaemonGrant(input: {
 
   const attemptRenewal = useCallback(async () => {
     if (renewalTarget === null) return
-    const result = await renewPairingToken({
-      daemonBaseUrl: renewalTarget,
-      fetch: globalThis.fetch.bind(globalThis),
-    })
+    const result = await renewConnection(renewalTarget)
     applyRenewal(result, { setGrantConnection, setDaemonRenewal })
   }, [renewalTarget])
 
@@ -145,6 +144,16 @@ function useGrantFragment(onResolved: (result: GrantConsumeResult) => void): voi
       fetch: globalThis.fetch.bind(globalThis),
     }).then(onResolved)
   }, [])
+}
+
+/**
+ * Reconnects to a remembered daemon. One reached through the extension
+ * (ADR-0050) holds no pairing grant to renew: reconnecting is asking whether
+ * it answers.
+ */
+function renewConnection(daemonBaseUrl: string): Promise<GrantConsumeResult> {
+  if (isBridgeDaemon(daemonBaseUrl)) return connectThroughExtension()
+  return renewPairingToken({ daemonBaseUrl, fetch: globalThis.fetch.bind(globalThis) })
 }
 
 /**

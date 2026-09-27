@@ -44,7 +44,8 @@ addendum decision 5), and a store signs what it publishes.
   installed Chromium browser (a launcher under the data dir, a manifest per
   browser).
 - `smoke:bridge` is the real-browser proof: a real daemon, the real host, the
-  built extension and headless Chromium. Branded Chrome ignores
+  built extension and headless Chromium — and the built web app connecting
+  from a browser-kept document, reading an agent's note and writing back. Branded Chrome ignores
   `--load-extension`, so it needs Playwright's own Chromium
   (`pnpm exec playwright install chromium`).
 

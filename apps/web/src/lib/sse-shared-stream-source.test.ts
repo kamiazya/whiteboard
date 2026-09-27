@@ -6,6 +6,7 @@
  * and the caller never learned it should have opened its own stream.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BRIDGE_DAEMON_BASE_URL } from './extension-bridge-fetch.js'
 import { createSharedSseStreamSource } from './sse-shared-stream-source.js'
 
 type ErrorHandler = ((event: { message?: string }) => void) | null
@@ -83,5 +84,14 @@ describe("the worker's word on a document's writes", () => {
 
     expect(mine.mock.calls).toEqual([[false], [true]])
     expect(other).not.toHaveBeenCalled()
+  })
+})
+
+// ADR-0050: a SharedWorker has no `chrome.runtime`, so it cannot reach a
+// daemon through the extension — the page holds that stream itself.
+describe('a daemon reached through the extension', () => {
+  it('gets no shared worker, so the page opens its own stream', () => {
+    expect(createSharedSseStreamSource(BRIDGE_DAEMON_BASE_URL, undefined)).toBeNull()
+    expect(FakeSharedWorker.instances).toHaveLength(0)
   })
 })

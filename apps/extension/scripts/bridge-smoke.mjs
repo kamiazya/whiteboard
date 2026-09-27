@@ -8,20 +8,23 @@
 //    the daemon with the daemon's credential — not one the page supplied.
 // 2. An SSE stream arrives as it is written.
 // 3. A request outside /api/ is refused before it reaches the daemon.
-// 4. The production build admits no loopback page at all.
+// 4. The built web app connects through the extension from a browser-kept
+//    document, reads what an agent wrote on the daemon, and writes back.
+// 5. The production build admits no loopback page at all.
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
 // Chromium: `pnpm exec playwright install chromium`.
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { createServer } from 'node:http'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { createServer, request } from 'node:http'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 
 const EXTENSION_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MCP_SERVER_DIR = resolve(EXTENSION_DIR, '../../packages/mcp-server')
+const WEB_DIR = resolve(EXTENSION_DIR, '../web')
 const CLI = [process.execPath, '--import', 'tsx/esm', join(MCP_SERVER_DIR, 'src/cli/index.ts')]
 const EXTENSION_ID = 'ckgipndlpblkhiplhnbbdnpnibflplje'
 
@@ -97,13 +100,137 @@ async function openPage(extensionDir, pageUrl) {
   return { context, page }
 }
 
+/** One MCP tool call to the daemon, over its socket, as an agent makes it. */
+function callTool(record, name, args) {
+  const body = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: { name, arguments: args },
+  })
+  return new Promise((done, fail) => {
+    const req = request(
+      {
+        socketPath: record.socketPath,
+        path: '/mcp',
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${record.token}`,
+        },
+      },
+      (res) => {
+        let text = ''
+        res.on('data', (piece) => {
+          text += piece
+        })
+        res.on('end', () => done(JSON.parse(text).result?.structuredContent))
+      },
+    )
+    req.on('error', fail)
+    req.end(body)
+  })
+}
+
+const MIME = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.png': 'image/png',
+  '.wasm': 'application/wasm',
+}
+
+/** The built web app, with the single-page fallback its hosting gives it. */
+function serveWebApp() {
+  const root = join(WEB_DIR, 'dist')
+  return createServer((req, res) => {
+    const path = join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname))
+    const file =
+      path.startsWith(root) && existsSync(path) && statSync(path).isFile()
+        ? path
+        : join(root, 'index.html')
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' })
+    res.end(readFileSync(file))
+  })
+}
+
+/** Connect from a browser-kept document, open an agent's note, and type into it. */
+async function webAppRoundTrip(record, appUrl) {
+  const seeded = await callTool(record, 'wb_workspace_edit', {
+    workspaceId: 'default',
+    createWorkspace: true,
+    ops: [
+      {
+        op: 'document.create',
+        path: 'bridge-note',
+        kind: 'markdown',
+        name: 'Bridge note',
+        markdown: '# Bridge note\n\nwritten by an agent',
+      },
+    ],
+  })
+  const documentId = seeded?.results?.[0]?.documentId
+  const { context, page } = await openPage(join(EXTENSION_DIR, 'dist/development'), appUrl)
+  try {
+    await page.getByText('Canvas', { exact: true }).click()
+    await page
+      .getByRole('button', { name: /^Workspace/ })
+      .first()
+      .click()
+    await Promise.all([
+      page.waitForEvent('load', { timeout: 20_000 }),
+      page
+        .getByRole('button', { name: /connect through the extension/i })
+        .click({ timeout: 20_000 }),
+    ])
+    await page.goto(`${appUrl}w/default/d/bridge-note`)
+    const read = await page
+      .getByText('written by an agent')
+      .first()
+      .waitFor({ timeout: 20_000 })
+      .then(
+        () => true,
+        () => false,
+      )
+    check(read, "the web app reads an agent's note through the extension", page.url())
+    await page.locator('.cm-content').first().click()
+    await page.keyboard.press('Control+End')
+    await page.keyboard.type(' and typed in the browser')
+    let content = ''
+    for (let i = 0; i < 40 && !content.includes('typed in the browser'); i += 1) {
+      await page.waitForTimeout(250)
+      const got = await callTool(record, 'wb_document_get', {
+        workspaceId: 'default',
+        documentIds: [documentId],
+      })
+      content = got?.documents?.[0]?.content ?? ''
+    }
+    check(
+      content.includes('typed in the browser'),
+      'an edit in the web app lands on the daemon',
+      content,
+    )
+  } finally {
+    await context.close()
+  }
+}
+
 let daemon
 const pages = createServer((_req, res) =>
   res.writeHead(200, { 'content-type': 'text/html' }).end(PAGE),
 )
+const webApp = serveWebApp()
 try {
   const build = spawnSync('pnpm', ['build'], { cwd: EXTENSION_DIR, stdio: 'inherit' })
   if (build.status !== 0) throw new Error('the extension did not build')
+  const webBuild = spawnSync('pnpm', ['exec', 'vite', 'build'], { cwd: WEB_DIR, stdio: 'inherit' })
+  if (webBuild.status !== 0) throw new Error('the web app did not build')
   daemon = await startDaemon()
   const record = JSON.parse(readFileSync(join(dataDir, 'daemon.json'), 'utf8'))
   check(
@@ -163,6 +290,9 @@ try {
     JSON.stringify(mcp),
   )
 
+  await new Promise((listening) => webApp.listen(0, '127.0.0.1', listening))
+  await webAppRoundTrip(record, `http://127.0.0.1:${webApp.address().port}/`)
+
   const prod = await openPage(join(EXTENSION_DIR, 'dist/production'), pageUrl)
   const exposed = await prod.page.evaluate(() => typeof globalThis.chrome?.runtime?.connect)
   await prod.context.close()
@@ -171,6 +301,7 @@ try {
   check(false, 'the smoke ran to the end', err instanceof Error ? err.message : String(err))
 } finally {
   pages.close()
+  webApp.close()
   daemon?.kill('SIGTERM')
   await new Promise((exited) =>
     daemon && daemon.exitCode === null ? daemon.once('exit', exited) : exited(),
