@@ -397,7 +397,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 199,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 365,
-  'apps/web/src/lib/browser-backend.ts#loadAndDeliver': 57,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 103,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,

@@ -10,6 +10,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
@@ -130,13 +131,15 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
   })
 
   it('delete: the last canvas gives way to a fresh one, which survives a remount', async () => {
-    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    const store = new IdbDocumentIndex()
+    render(<BrowserDocumentPage store={store} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
         timeout: 5000,
       },
     )
+    const deletedIds = (await listLocalDocuments(store)).map((doc) => doc.documentId)
     fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0 })
     fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^delete$/i }))
     const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
@@ -144,11 +147,15 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
       .getByRole('button', { name: /^delete$/i })
       .click()
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
+    // The editor stays on screen through the switch, so it proves nothing; the
+    // store holding only a fresh row is what says the delete has finished.
     await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      {
-        timeout: 5000,
+      async () => {
+        const ids = (await listLocalDocuments(store)).map((doc) => doc.documentId)
+        expect(ids).toHaveLength(1)
+        expect(deletedIds).not.toContain(ids[0])
       },
+      { timeout: 5000 },
     )
     cleanup()
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)

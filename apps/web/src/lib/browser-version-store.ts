@@ -16,6 +16,7 @@ import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { VERSIONS_BY_DOCUMENT_INDEX, VERSIONS_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
+import { announceVersion } from './workspace-broadcast.js'
 
 /**
  * One saved version, as the `versions` store holds it. The frontier is the
@@ -148,7 +149,16 @@ export class BrowserVersionStore {
     // Only a checkpoint can push the document over the cap, so only a
     // checkpoint pays for the sweep — a manual save reads no rows at all.
     if (input.auto === true) await this.pruneAutoOverCap(workspaceId, placement.documentId)
-    return toEntry(row, path)
+    return this.announced(workspaceId, placement.documentId, toEntry(row, path))
+  }
+
+  /**
+   * Every tab on the document re-reads its history, this one included — the
+   * daemon's version_created broadcast, for the browser keeper.
+   */
+  private announced(workspaceId: string, documentId: string, entry: VersionEntry): VersionEntry {
+    announceVersion(workspaceId, documentId, entry)
+    return entry
   }
 
   /**
