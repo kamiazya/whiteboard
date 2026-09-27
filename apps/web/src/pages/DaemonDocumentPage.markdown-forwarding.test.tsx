@@ -15,10 +15,13 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   MARKDOWN_BODY_KEY,
+  MARKDOWN_BODY_NODE_ID,
   writeCoreFacets,
   writeDocumentKind,
   writeMarkdownBody,
+  writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -106,15 +109,34 @@ function markdownSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
+/**
+ * The shape before the writers were unified: the body stored as the
+ * `okf-body` TEXT NODE of a canvas, the `body` container empty. Still on
+ * disk wherever an older `wb_document_set` wrote a note.
+ */
+function preUnificationSnapshot(): Uint8Array {
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, {
+    nodes: [
+      textNode({ id: MARKDOWN_BODY_NODE_ID, x: 0, y: 0, width: 400, height: 200, text: BODY }),
+    ],
+    edges: [],
+  })
+  writeCoreFacets(doc, { type: 'markdown' })
+  writeDocumentKind(doc, 'markdown')
+  return doc.export({ mode: 'snapshot' })
+}
+
 class FakeBackend implements DocumentBackend {
   readonly pushed: Uint8Array[] = []
   // The exact bytes the page hydrated from: the replay assertion must
   // import updates into the SAME doc lineage, not a structurally-equal
   // rebuild with different Loro op ids.
   snapshot: Uint8Array = new Uint8Array()
+  constructor(private readonly seed: () => Uint8Array = markdownSnapshot) {}
   connect(handlers: DocumentBackendHandlers): void {
     handlers.onConnected()
-    this.snapshot = markdownSnapshot()
+    this.snapshot = this.seed()
     handlers.onSnapshot(this.snapshot)
   }
   disconnect(): void {}
@@ -176,6 +198,44 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
     await waitFor(
       () => {
         expect(backend.pushed.length).toBeGreaterThan(0)
+        const replay = new LoroDoc()
+        replay.import(backend.snapshot)
+        for (const update of backend.pushed) replay.import(update)
+        expect(replay.getText(MARKDOWN_BODY_KEY).toString()).toBe(`${BODY} - edited here`)
+      },
+      { timeout: 10_000 },
+    )
+  })
+
+  it('opens a pre-unification note on its prose, and an edit keeps it', async () => {
+    // The body lives in a canvas text node and the `body` container is empty.
+    // A binding reconciles the editor FROM the container on mount, so without
+    // a conversion the prose left the editor and the first keystroke wrote a
+    // one-character container that hid it (the container wins on read).
+    mounted.views.length = 0
+    const backend = new FakeBackend(preUnificationSnapshot)
+    render(
+      <DaemonDocumentPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspaceId="w1"
+        path="agent-note"
+        createBackend={() => backend}
+      />,
+    )
+    const editor = await screen.findByTestId('markdown-source-stub', undefined, {
+      timeout: 10_000,
+    })
+    await waitFor(() => expect(editor.dataset.bound).toBe('yes'))
+    const view = mounted.views.at(-1)
+    if (view === undefined) throw new Error('no editor view mounted')
+    // After the binding's first reconcile, not just at construction.
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    expect(view.state.doc.toString()).toBe(BODY)
+
+    view.dispatch({ changes: { from: view.state.doc.length, insert: ' - edited here' } })
+
+    await waitFor(
+      () => {
         const replay = new LoroDoc()
         replay.import(backend.snapshot)
         for (const update of backend.pushed) replay.import(update)

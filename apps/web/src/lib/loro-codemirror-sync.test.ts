@@ -371,3 +371,59 @@ describe('a view torn down before the deferred seeding runs', () => {
     expect(documentGone).toBe(true)
   })
 })
+
+describe('a view opened on text while the container is empty', () => {
+  function bindAdopting(doc: LoroDoc, initial: string, adopted: string[]): EditorView {
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: initial,
+        extensions: [
+          loroTextSync(doc, (d) => d.getText('body'), {
+            adoptInitial: (text) => {
+              adopted.push(text)
+              doc.getText('body').insert(0, text)
+              doc.commit()
+            },
+          }),
+        ],
+      }),
+      parent: document.body,
+    })
+    views.push(view)
+    return view
+  }
+
+  it('hands the text to the owner instead of emptying the view', async () => {
+    // The view opened on a pre-unification body read from a canvas node;
+    // reconciling to the empty container would have cleared it.
+    const doc = new LoroDoc()
+    const adopted: string[] = []
+    const view = bindAdopting(doc, '# Old prose', adopted)
+    await settleInit()
+
+    expect(adopted).toEqual(['# Old prose'])
+    expect(view.state.doc.toString()).toBe('# Old prose')
+    expect(doc.getText('body').toString()).toBe('# Old prose')
+  })
+
+  it('reconciles as usual once the container holds a body', async () => {
+    const doc = new LoroDoc()
+    doc.getText('body').insert(0, 'current')
+    doc.commit()
+    const adopted: string[] = []
+    const view = bindAdopting(doc, 'stale', adopted)
+    await settleInit()
+
+    expect(adopted).toEqual([])
+    expect(view.state.doc.toString()).toBe('current')
+  })
+
+  it('adopts nothing for an empty note', async () => {
+    const doc = new LoroDoc()
+    const adopted: string[] = []
+    bindAdopting(doc, '', adopted)
+    await settleInit()
+
+    expect(adopted).toEqual([])
+  })
+})
