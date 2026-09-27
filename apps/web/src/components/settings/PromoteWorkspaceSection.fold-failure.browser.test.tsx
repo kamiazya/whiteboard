@@ -23,6 +23,7 @@ import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
@@ -50,6 +51,7 @@ afterEach(cleanup)
 
 describe('PromoteWorkspaceSection under a failing fold', () => {
   it('attempts the fold, degrades to the tree-held count, never claims a daemon failure', async () => {
+    const logged = expectLoggedFailures()
     // One document each side of the fold: tree-held (survives a failed fold)
     // and a pre-fold legacy record (only a successful fold would carry it).
     const tree = new FoldingBrowserIndex()
@@ -102,5 +104,6 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
     // ...and nothing blames the daemon for a storage-side failure.
     expect(screen.queryByTestId('promote-unavailable')).toBeNull()
     expect(document.body.textContent).not.toMatch(/could not reach the daemon/i)
+    expect(logged.join('\n')).toContain('[promote-workspace-section] startup fold failed')
   })
 })

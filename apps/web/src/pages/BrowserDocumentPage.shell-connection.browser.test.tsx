@@ -8,6 +8,7 @@ import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so the chip is laid out the way it ships.
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -82,6 +83,7 @@ describe('shell mark over a real document kept in this browser', () => {
   // is also the only place the failure reaches a person: the row itself
   // draws no save state.
   it('a refused write breaks the shell mark, with the word in its name', async () => {
+    const logged = expectLoggedFailures()
     renderApp()
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
@@ -118,6 +120,10 @@ describe('shell mark over a real document kept in this browser', () => {
     } finally {
       IDBDatabase.prototype.transaction = transaction
     }
+    // WHICH reader logs the refusal first depends on timing; what must hold
+    // is that every record is the refusal this test induced, and nothing else.
+    expect(logged.length).toBeGreaterThan(0)
+    for (const line of logged) expect(line).toContain('storage refused the write (induced)')
   })
 
   it('leaving the document takes the claim with it', async () => {

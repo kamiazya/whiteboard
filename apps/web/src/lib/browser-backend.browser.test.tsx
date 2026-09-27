@@ -39,6 +39,7 @@ import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb } from './browser-idb.js'
 const ELSEWHERE_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
 
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
 
@@ -201,6 +202,7 @@ describe('BrowserBackend', () => {
   })
 
   it('refuses to deliver when another document already owns the target path, without calling it corruption', async () => {
+    const logged = expectLoggedFailures()
     // The tree already has a DIFFERENT document standing where this one
     // wants to be placed. `createWorkspaceDocumentAtPath` answers null for
     // that, and the backend used to ignore the answer: it saved and delivered
@@ -232,6 +234,7 @@ describe('BrowserBackend', () => {
     // the next save shadows the one at that path.
     expect(handlers.onSnapshot).not.toHaveBeenCalled()
     backend.disconnect()
+    expect(logged.join('\n')).toContain('[browser-backend] another document owns the target path')
   })
 
   it('disconnect() is idempotent — second call does not throw', () => {
