@@ -2413,6 +2413,15 @@ const allCommands = [
       fc.option(pointArb, { nil: null }),
     )
     .map(([i, mode, at]) => new ClipboardFlow(i, mode, at)),
+  // `cutDelete` again, as an arm of its own. It is the ONLY mode that
+  // reconnects anything (`cutTouch` leaves the boundary on the canvas by
+  // design, so it serves the reconnect-once guard, not this count), and the
+  // arm above is one of ~40 drawn uniformly — measured, ~20 `cutDelete`
+  // attempts per 500 runs, a third of them on a canvas with no edge yet.
+  // That is what put `reconnections` at a mean near 10 against a floor of 1.
+  fc
+    .tuple(indexArb, fc.option(pointArb, { nil: null }))
+    .map(([i, at]) => new ClipboardFlow(i, 'cutDelete', at)),
   // Weighted back toward `select`: hand mode makes every pointer command
   // inert by design, so an even draw would spend a third of the sequence
   // asserting that nothing happens.

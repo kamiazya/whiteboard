@@ -736,7 +736,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2730 -> 2743: the census prints on a green run now, and the lines
   // are the reason — a floor is a claim about a distribution, and a number
   // printed only on failure is one draw from its left tail.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2806,
+  // Raised 2806 -> 2815: a `cutDelete` arm of its own, the one mode that
+  // reconnects anything — `reconnections` went min 4 -> 28 over 30 runs each.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2815,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // Raised 1666 -> 1863 for the v19 -> v20 upgrade block (S4b's plaintext
   // replica discard): the seed fixture, the chunk-range no-op case, and the
