@@ -47,8 +47,7 @@
           "path": "server.json",
           "jsonpath": "$.packages[0].version"
         }
-      ],
-      "release-as": "0.0.20"
+      ]
     },
     "packages/mcp-server": {
       "release-type": "node",
@@ -61,8 +60,7 @@
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "draft": false,
-      "prerelease": false,
-      "release-as": "0.0.20"
+      "prerelease": false
     }
   },
   "plugins": [
