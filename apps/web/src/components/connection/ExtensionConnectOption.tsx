@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { extensionPresent } from '../../lib/bridge-loader.js'
 import { connectThroughExtension } from '../../lib/extension-connection.js'
 import type { GrantConsumeResult } from '../../lib/pairing-grant.js'
@@ -6,6 +6,26 @@ import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { Button } from '../ui/button.js'
 
 type OptionState = 'checking' | 'absent' | 'ready' | 'connecting' | 'no-daemon'
+
+interface ExtensionConnectOptionProps {
+  settingsStore: UserSettingsStore
+  /**
+   * A line saying what connecting is, for a page that does not already say
+   * so. It shows only with the button: without the extension there is
+   * nothing to lead into.
+   */
+  lead?: string
+  /**
+   * What to offer where the extension does not answer — the loopback probe,
+   * which ADR-0050 keeps beside the extension only until loopback closes.
+   * Shown where the extension is present too, a person would face two
+   * buttons with nothing saying which daemon each one reaches.
+   */
+  absent?: ReactNode
+  present?: (signal: AbortSignal) => Promise<boolean>
+  connect?: () => Promise<GrantConsumeResult>
+  reopen?: () => void
+}
 
 /**
  * ADR-0050: with the whiteboard extension installed, the local daemon is one
@@ -24,21 +44,14 @@ export function ExtensionConnectOption({
   connect = connectThroughExtension,
   reopen = () => window.location.assign('/'),
   lead,
-}: {
-  settingsStore: UserSettingsStore
-  /**
-   * A line saying what connecting is, for a page that does not already say
-   * so. It shows only with the button: without the extension there is
-   * nothing to lead into.
-   */
-  lead?: string
-  present?: (signal: AbortSignal) => Promise<boolean>
-  connect?: () => Promise<GrantConsumeResult>
-  reopen?: () => void
-}) {
+  absent = null,
+}: ExtensionConnectOptionProps) {
   const [state, setState] = useExtensionPresence(present)
 
-  if (state === 'checking' || state === 'absent') return null
+  // Shown while asking too: an absent extension answers only by timing out,
+  // and holding the loopback path back that long would slow down every
+  // browser without the extension, while a present one answers at once.
+  if (state === 'checking' || state === 'absent') return absent
 
   const onConnect = async () => {
     setState('connecting')

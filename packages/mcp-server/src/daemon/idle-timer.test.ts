@@ -71,4 +71,19 @@ describe('IdleTimer', () => {
     expect(timer.getIdleForMs()).toBe(125)
     vi.useRealTimers()
   })
+  it('waits another timeout while busy, and fires once it is not', () => {
+    vi.useFakeTimers()
+    const onIdle = vi.fn()
+    let busy = true
+    const timer = new IdleTimer(1_000, onIdle, undefined, () => busy)
+
+    timer.start()
+    vi.advanceTimersByTime(3_000)
+    expect(onIdle).not.toHaveBeenCalled()
+
+    busy = false
+    vi.advanceTimersByTime(1_000)
+    expect(onIdle).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
 })
