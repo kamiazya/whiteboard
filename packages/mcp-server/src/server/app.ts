@@ -684,7 +684,12 @@ export function createApp(options: AppOptions) {
   // instantiate their own otherwise.
   const sharedVersionStore = new FileVersionStore()
   app.route('/', createFilesRouter({ versionStore: sharedVersionStore }))
-  app.route('/', createExportRouter())
+  app.route(
+    '/',
+    createExportRouter(
+      options.serverDeps === undefined ? {} : { liveDocuments: options.serverDeps.liveDocuments },
+    ),
+  )
   app.route('/', createFontsRouter())
   app.route('/', createViewportRouter())
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))

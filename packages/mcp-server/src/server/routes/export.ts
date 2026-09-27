@@ -1,10 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import type { LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
+import { getDefaultServerDeps } from '../../di/default-server-deps.js'
 import {
   type ExportErrorBody,
   type ExportResponse,
@@ -13,7 +15,6 @@ import {
 import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
-import { documentExists } from '../store/document-store.js'
 import { onDocumentAction } from './document/path-route.js'
 import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
 
@@ -104,8 +105,23 @@ async function renderedExport(
   }
 }
 
-export function createExportRouter() {
+/**
+ * `exists` is asked of the LiveDocuments seam rather than the store
+ * (ADR-0018: an adapter translates, it does not reach a mechanic). The
+ * daemon passes its own; a router built without one — a route test, an
+ * ad-hoc caller — falls back to the same production wiring.
+ */
+export interface ExportRouterOptions {
+  liveDocuments?: Pick<LiveDocuments, 'exists'>
+}
+
+export function createExportRouter(options: ExportRouterOptions = {}) {
   const app = new Hono()
+  const documentExists = async (workspaceId: string, path: string) =>
+    (options.liveDocuments ?? (await getDefaultServerDeps()).liveDocuments).exists(
+      workspaceId,
+      path,
+    )
 
   // POST /api/w/:workspaceId/document/<path>/export
   onDocumentAction(

@@ -1,9 +1,11 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import type { LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
+import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import type { ExportErrorBody, ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
@@ -12,7 +14,6 @@ import {
 import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
-import { documentExists } from '../../store/document-store.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
 
@@ -81,8 +82,23 @@ async function resolveSvgOutputPath(
 // requests are typically automation / doc-generation use cases, not "match
 // what's on the connected browser's screen right now", so there is no WS
 // round-trip and no browser-connection requirement to plumb through.
-export function createDocumentSvgExportRouter() {
+/**
+ * The SVG route's `exists`, like the PNG route's in `routes/export.ts`, is asked of the LiveDocuments seam rather than the store
+ * (ADR-0018: an adapter translates, it does not reach a mechanic). The
+ * daemon passes its own; a router built without one — a route test, an
+ * ad-hoc caller — falls back to the same production wiring.
+ */
+export interface DocumentSvgExportRouterOptions {
+  liveDocuments?: Pick<LiveDocuments, 'exists'>
+}
+
+export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions = {}) {
   const app = new Hono()
+  const documentExists = async (workspaceId: string, path: string) =>
+    (options.liveDocuments ?? (await getDefaultServerDeps()).liveDocuments).exists(
+      workspaceId,
+      path,
+    )
 
   onDocumentAction(
     app,
