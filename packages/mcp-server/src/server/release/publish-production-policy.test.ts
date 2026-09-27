@@ -258,6 +258,33 @@ describe('release.yml publish-mcp job runs the publish-gate runner exactly once,
 
 // ── release.yml docker-publish-sign job ──────────────────────────────────────
 
+// The image's gate is scoped like the npm one: publishability plus what only a
+// container can show. The full `pnpm test` matrix already ran on this SHA in
+// verify CI, and re-running it on one runner at the tag turned every
+// load-dependent test into a way to block the image — the 0.0.20 image failed
+// three attempts that way, on three different tests, with npm already out.
+describe('release.yml docker-publish-sign gates on publishability, not the full test matrix', () => {
+  const dockerSection = () => jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
+
+  it('does not call check:release-candidate (which internally chains `pnpm test`)', () => {
+    expect(dockerSection()).not.toContain('check:release-candidate')
+  })
+
+  it('invokes `pnpm publish-gate` exactly once', () => {
+    expect(dockerSection().match(/run:\s*pnpm publish-gate\s*$/gm) ?? []).toHaveLength(1)
+  })
+
+  it.each([
+    'pnpm smoke:docker',
+    'pnpm smoke:docker-backup-restore',
+  ])('runs "%s", which only a container can answer', (command) => {
+    const lines = dockerSection()
+      .split('\n')
+      .map((l) => l.trim())
+    expect(lines).toContain(`run: ${command}`)
+  })
+})
+
 describe('release.yml docker-publish-sign job policy', () => {
   const dockerSection = () => jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
 

@@ -228,11 +228,19 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
 
-      - name: Release candidate gate (docker)
-        # No WHITEBOARD_DEV here either: check:release-candidate:docker runs
-        # `build` before any smoke (typecheck && build && ... && test:e2e:distribution),
-        # so dist/ always exists by the time a daemon spawn would need it.
-        run: pnpm check:release-candidate:docker
+      # Publishability only, like publish-mcp: the full `pnpm test` matrix ran
+      # on this SHA in verify CI, and re-running it here on one runner made
+      # every load-dependent test a way to block the image. No WHITEBOARD_DEV:
+      # publish-gate runs `build` before any smoke, so dist/ exists by the
+      # time a daemon spawn would need it.
+      - name: Publish gate (docker)
+        run: pnpm publish-gate
+
+      - name: Docker smoke (auth, graceful stop, volume remount, log redaction)
+        run: pnpm smoke:docker
+
+      - name: Docker backup and restore smoke
+        run: pnpm smoke:docker-backup-restore
 
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
