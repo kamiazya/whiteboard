@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useState } from 'react'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 
 const ExtensionConnectOption = lazy(() =>
@@ -15,8 +15,11 @@ const ExtensionConnectOption = lazy(() =>
 export function ExtensionConnectEntry({
   settingsStore,
   lead,
+  absent,
 }: {
   lead?: string
+  /** Offered instead where the extension does not answer. */
+  absent?: ReactNode
   /** The page's own store where it has one; the settings are one record either way. */
   settingsStore?: ReturnType<typeof createUserSettingsStore>
 }) {
@@ -26,6 +29,7 @@ export function ExtensionConnectEntry({
       <ExtensionConnectOption
         settingsStore={settingsStore ?? ownStore}
         {...(lead === undefined ? {} : { lead })}
+        {...(absent === undefined ? {} : { absent })}
       />
     </Suspense>
   )

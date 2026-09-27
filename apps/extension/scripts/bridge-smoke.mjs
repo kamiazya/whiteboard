@@ -87,17 +87,30 @@ async function webAppRoundTrip(record, appUrl, restartDaemon) {
     if (f === page.mainFrame()) said.push(`navigated: ${new URL(f.url()).pathname}`)
   })
   try {
+    // From inside a browser document: its connection popover is where the
+    // loopback probe lives, so that is where the two paths could meet.
     await page.getByText('Canvas', { exact: true }).click()
+    await page.waitForURL(/\/d\//, { timeout: 20_000 })
     await page
-      .getByRole('button', { name: /^Workspace/ })
+      .getByRole('button', { name: /^Workspace.* — / })
       .first()
       .click()
-    await Promise.all([
-      page.waitForEvent('load', { timeout: 20_000 }),
-      page
-        .getByRole('button', { name: /connect through the extension/i })
-        .click({ timeout: 20_000 }),
-    ])
+    const popover = page.getByRole('dialog')
+    const viaExtension = popover.getByRole('button', { name: /connect through the extension/i })
+    await viaExtension.waitFor({ timeout: 20_000 })
+    // ADR-0050 keeps the loopback probe beside the extension only where the
+    // extension does not answer; offered both, nothing says which daemon
+    // each button reaches. The probe always shows its port field, or the
+    // unsupported-browser notice in its place.
+    const loopbackOffered =
+      (await popover.getByTestId('daemon-port-input').count()) +
+      (await popover.getByRole('link', { name: 'How to connect a daemon' }).count())
+    check(
+      loopbackOffered === 0,
+      'the popover offers the extension instead of the loopback probe once the extension answers',
+      `${loopbackOffered} loopback element(s) beside the extension's button: ${(await popover.innerText()).slice(0, 300)}`,
+    )
+    await Promise.all([page.waitForEvent('load', { timeout: 20_000 }), viaExtension.click()])
     // Nothing is seeded yet, so this is a fresh daemon's own workspace: the
     // first screen a person meets after connecting.
     const ready = await page

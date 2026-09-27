@@ -25,6 +25,45 @@ describe('ExtensionConnectOption', () => {
 
   // A probe outliving its page holds a listener and a timer on a window that
   // may already be gone; unmounting has to call it off.
+  // ADR-0050: until loopback closes, the loopback probe runs beside the
+  // extension — but only where the extension does not answer. Offered both,
+  // a person cannot tell which daemon each button reaches.
+  it('shows what it is handed for a browser without the extension, and only there', async () => {
+    const absent = <p>loopback probe</p>
+    const { unmount } = render(
+      <ExtensionConnectOption
+        settingsStore={createUserSettingsStore()}
+        present={async () => false}
+        absent={absent}
+      />,
+    )
+    expect(await screen.findByText('loopback probe')).toBeTruthy()
+    unmount()
+
+    // Not held back while the extension is still being asked.
+    const asking = render(
+      <ExtensionConnectOption
+        settingsStore={createUserSettingsStore()}
+        present={() => new Promise<boolean>(() => {})}
+        absent={absent}
+      />,
+    )
+    expect(screen.getByText('loopback probe')).toBeTruthy()
+    asking.unmount()
+
+    render(
+      <ExtensionConnectOption
+        settingsStore={createUserSettingsStore()}
+        present={async () => true}
+        absent={absent}
+      />,
+    )
+    expect(
+      await screen.findByRole('button', { name: /connect through the extension/i }),
+    ).toBeTruthy()
+    expect(screen.queryByText('loopback probe')).toBeNull()
+  })
+
   it('calls off the presence probe when it unmounts', async () => {
     let asked: AbortSignal | undefined
     const present = vi.fn((signal: AbortSignal) => {
