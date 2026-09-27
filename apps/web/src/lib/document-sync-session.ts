@@ -1087,6 +1087,7 @@ export function createDocumentSyncSession(
     backend.connect({
       onConnected() {
         if (isStale()) return
+        persistence.transport(true)
         deps.onStatusChange('connected')
         backend.sendClientReady()
         // Re-send everything this document holds. A backend whose transport
@@ -1112,6 +1113,7 @@ export function createDocumentSyncSession(
 
       onDisconnected() {
         if (isStale()) return
+        persistence.transport(false)
         deps.onStatusChange('reconnecting')
       },
 

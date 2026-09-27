@@ -83,3 +83,54 @@ it('a failed write is settled by the full re-send a reconnect makes', async () =
   expect(persistence).toEqual(['pending', 'degraded', 'saved'])
   session.dispose()
 })
+
+// The WebSocket backend's push does not reject while its socket is closed —
+// it returns, having sent nothing. Resolving is not landing, so an edit made
+// while the transport is down is not saved until the reconnect re-send lands.
+it('an edit made while the transport is down is not saved by a push that sent nothing', async () => {
+  vi.useFakeTimers()
+  let handlers: DocumentBackendHandlers | null = null
+  const sent: Uint8Array[] = []
+  let socketOpen = true
+  const backend = {
+    connect(h: DocumentBackendHandlers) {
+      handlers = h
+      h.onConnected()
+    },
+    disconnect() {},
+    pushLocalUpdate: (bytes: Uint8Array) => {
+      if (socketOpen) sent.push(bytes)
+    },
+    getFile: async () => null,
+    putFile: async () => {},
+    sendClientReady() {},
+    sendExportResponse() {},
+  } as unknown as DocumentBackend
+  const persistence: BrowserPersistenceState['kind'][] = []
+  const session = createDocumentSyncSession(backend, {
+    getOptions: () => ({}),
+    onStatusChange: () => {},
+    onBackendError: () => {},
+    onRestoreChange: () => {},
+    dispatchIdentityEvent: () => {},
+    generations: createGenerationCounters(),
+    onPersistenceChange: (state) => persistence.push(state.kind),
+  })
+  session.connect()
+  handlers!.onSnapshot(snapshotOf(canvas))
+
+  socketOpen = false
+  handlers!.onDisconnected?.()
+  const edit: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+  session.onChange(applyCommand(canvas, edit), edit)
+  await vi.advanceTimersByTimeAsync(300)
+  await flushMicrotasks()
+  expect(persistence).toEqual(['pending', 'degraded'])
+
+  socketOpen = true
+  handlers!.onConnected()
+  await flushMicrotasks()
+  expect(persistence).toEqual(['pending', 'degraded', 'saved'])
+  expect(sent.length).toBeGreaterThan(0)
+  session.dispose()
+})

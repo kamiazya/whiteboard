@@ -217,6 +217,38 @@ export class DaemonBackend implements DocumentBackend {
     this.ws.send(bytes.slice())
   }
 
+  private scheduleReconnect(handlers: DocumentBackendHandlers): void {
+    // 500ms, 1s, 2s, 4s, 8s, 8s, … capped at 8s.
+    const delay = Math.min(8000, 500 * 2 ** this.attempt)
+    this.attempt += 1
+    this.reconnectTimer = setTimeout(() => {
+      this.openSocket(handlers)
+    }, delay)
+  }
+
+  /**
+   * A run of sockets that never opened is a refused credential OR a daemon
+   * that is not running — the socket cannot tell the two apart. An HTTP
+   * request can: a stopped daemon fails at the network. Only that case keeps
+   * reconnecting; a daemon that answers at all keeps the terminal verdict,
+   * since the socket's credential is not the request's and a WS-only refusal
+   * would otherwise retry forever.
+   */
+  private async judgeRefusal(handlers: DocumentBackendHandlers): Promise<void> {
+    const fetchFn = this.apiTransport?.fetch ?? apiFetch
+    const answered = await fetchFn('/api/workspaces').then(
+      () => true,
+      () => false,
+    )
+    if (this.cancelled) return
+    if (answered) {
+      handlers.onAuthError?.()
+      return
+    }
+    this.consecutiveImmediateFailures = 0
+    this.scheduleReconnect(handlers)
+  }
+
   async getFile(fileId: string): Promise<Blob | null> {
     const fetchFn = this.apiTransport?.fetch ?? apiFetch
     const res = await fetchFn(documentFileApiUrl(this.workspaceId, this.path, fileId))
@@ -299,16 +331,11 @@ export class DaemonBackend implements DocumentBackend {
       if (!opened) {
         this.consecutiveImmediateFailures += 1
         if (this.consecutiveImmediateFailures >= MAX_CONSECUTIVE_IMMEDIATE_FAILURES) {
-          handlers.onAuthError?.()
+          void this.judgeRefusal(handlers)
           return
         }
       }
-      // 500ms, 1s, 2s, 4s, 8s, 8s, … capped at 8s.
-      const delay = Math.min(8000, 500 * 2 ** this.attempt)
-      this.attempt += 1
-      this.reconnectTimer = setTimeout(() => {
-        this.openSocket(handlers)
-      }, delay)
+      this.scheduleReconnect(handlers)
     }
 
     ws.onerror = () => {
