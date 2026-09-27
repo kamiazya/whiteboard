@@ -2,7 +2,7 @@
  * A destructive dialog this page holds open must not outlive the document it
  * was opened about.
  *
- * `confirmDelete` is a bare boolean, and `triggerCleanup()` acts on whatever
+ * `confirmDelete` is a bare boolean, and `deleteDocument()` acts on whatever
  * document the controller currently holds. Nothing binds the two together —
  * so a dialog opened on A and confirmed after a switch deletes B.
  *

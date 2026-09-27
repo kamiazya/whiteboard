@@ -1,20 +1,7 @@
-import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../components/ui/alert-dialog.js'
-import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
@@ -30,7 +17,6 @@ import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
@@ -38,7 +24,6 @@ import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { loroTextSync } from '../lib/loro-codemirror-sync.js'
@@ -72,8 +57,8 @@ import {
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
 import { useBrowserRouteSync } from './use-browser-route-sync.js'
+import { useDocumentActions } from './use-document-actions.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
-import { useDuplicateDocument } from './use-duplicate-document.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
 import { versionsSlot } from './versions-slot.js'
 
@@ -136,8 +121,7 @@ function useBrowserDocument(
     snapshot,
     persistence,
     cleanupCompleted,
-    cleanupError,
-    triggerCleanup,
+    deleteDocument,
     startFresh,
     renameDocument,
     listDocuments,
@@ -152,51 +136,17 @@ function useBrowserDocument(
   // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const canvasOpsButtonRef = useRef<HTMLButtonElement | null>(null)
-
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const loaded = loadedSnapshotOf(pageState)
   const documentId = loaded.documentId
 
-  // Mirrors the scope itself, rewritten every render: an async handler that
-  // started under one document has to ask who is on screen NOW, and its own
-  // closure can only answer with the render it was created in.
-  const currentDocumentIdRef = useRef(documentId)
-  currentDocumentIdRef.current = documentId
-
-  // State that NAMES A DOCUMENT may not outlive it: this page keeps its own
-  // document switching rather than remounting (App.tsx says so at the mount
-  // site). Duplicate's half of that rule moved into use-duplicate-document.ts
-  // with the state it clears; what is left here is the delete dialog.
-  //
-  // `confirmDelete` is the one that bites: it is a bare boolean, and
-  // `triggerCleanup()` acts on whatever document the controller currently
-  // holds. Nothing binds them, so a dialog opened on one document and
-  // confirmed after a switch deletes the OTHER — measured, the document that
-  // arrived while the dialog stood was the one that went to the Trash.
-  // SCOPE RESET — see scoped-screen-state.test.ts. The history column, the
-  // save outcome and the comments rail clear themselves inside DocumentPage,
-  // keyed on the same documentId this effect watches.
-  useEffect(() => {
-    setConfirmDelete(false)
-  }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
   // instant the id is, and so this effect does not re-fire every time the list
   // refreshes (which would overwrite a Back the user just performed).
   const { documentPath, documentName, documentKind } = loaded
-  // Called HERE rather than above with the rest of the state: its refusal is
-  // worded with `documentKind`, and the handler closed over three consts
-  // declared below it — legal only because the body runs later.
-  const { isDuplicating, duplicateError, handleDuplicate } = useDuplicateDocument({
-    documentId,
-    currentDocumentIdRef,
-    documentKind,
-    duplicateDocument,
-  })
   // Filled in below, once the checkpoint pair exists. A ref because the hook
   // runs before that point in this component and a callback identity is not
   // what the subscription should depend on — the same shape the hook uses for
@@ -588,6 +538,23 @@ function useBrowserDocument(
     />
   )
 
+  // The kebab's Copy / Duplicate / Delete rows and Delete's confirmation,
+  // drawn by the bundle both keepers share; this keeper supplies the verbs.
+  // Its delete RESOLVES into the cleanup-completed terminal and rejects with
+  // the refusal to show, which is all the bundle reads. Called above the
+  // terminal early-return below, like every hook here.
+  const documentActions = useDocumentActions({
+    documentId: documentId ?? undefined,
+    documentKind,
+    // Spatial only: `canvas` falls back to an empty document on a markdown
+    // note, so the row would hand back a well-formed file whose content is
+    // not the note's — under a verb saying it is.
+    canvas: documentKind === 'spatial' ? canvas : null,
+    duplicateDocument,
+    deleteDocument,
+    deleteCopyId: 'delete-document-browser',
+  })
+
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)
   const { connections, linkify } = useBrowserConnections({
     index: store,
@@ -681,84 +648,7 @@ function useBrowserDocument(
     },
     spatial: {},
     ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),
-    slots: {
-      rowAlerts: (
-        <>
-          {cleanupError && (
-            <div role="alert" aria-live="assertive" className="text-destructive text-xs">
-              {cleanupError}
-            </div>
-          )}
-          {duplicateError && (
-            <div role="alert" aria-live="assertive" className="text-destructive text-xs">
-              {duplicateError}
-            </div>
-          )}
-        </>
-      ),
-      menuTriggerRef: canvasOpsButtonRef,
-      menuItems: (
-        <>
-          {/* Spatial only: `canvas` falls back to an empty document on a
-              markdown note, so this row would hand back a well-formed file
-              whose content is not the note's — under a verb saying it is. */}
-          {documentKind === 'spatial' && (
-            <DropdownMenuItem
-              onSelect={() => {
-                // Text on the clipboard survives any chat/paste channel intact,
-                // which a binary download cannot — the phone-friendly way to
-                // hand the exact canvas (coordinates included) to a debugger.
-                void navigator.clipboard
-                  ?.writeText(serializeSpatial(canvas, 'extended'))
-                  .catch(() => {})
-              }}
-            >
-              <Braces aria-hidden="true" className="size-3.5" />
-              Copy as JSON Canvas
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
-            <Copy aria-hidden="true" className="size-3.5" />
-            Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-            onSelect={() => setConfirmDelete(true)}
-          >
-            <Trash2 aria-hidden="true" className="size-3.5" />
-            Delete
-          </DropdownMenuItem>
-        </>
-      ),
-      afterMenu: (
-        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-          <AlertDialogContent
-            // The menu item that opened this dialog unmounted with the menu;
-            // default close-focus would fall to <body>, so hand it to the kebab.
-            onCloseAutoFocus={(event) => {
-              event.preventDefault()
-              canvasOpsButtonRef.current?.focus()
-            }}
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                {DESTRUCTIVE_COPY['delete-document-browser'](kindNoun(documentKind))}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => void triggerCleanup()}
-                className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      ),
-    },
+    slots: documentActions,
   }
 
   return {

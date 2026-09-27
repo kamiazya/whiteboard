@@ -32,12 +32,17 @@ export interface BrowserDocumentController {
   snapshot: DocumentSnapshot | null
   persistence: BrowserPersistenceState
   cleanupCompleted: boolean
-  cleanupError: string | null
   // Resolves once the rename is flushed, rejects if the underlying save
   // failed — callers (e.g. WorkspaceTopBar) rely on the rejection to keep a
   // rename input open for retry instead of silently closing it.
   renameDocument(name: string): Promise<void>
-  triggerCleanup(): Promise<void>
+  /**
+   * Resolves once the document is gone (the page then shows the
+   * cleanup-completed terminal) or when there is nothing to delete; REJECTS
+   * with the sentence to show when it refused and kept the document — the
+   * shape `use-document-actions.tsx` reads, the same as the daemon keeper's.
+   */
+  deleteDocument(): Promise<void>
   startFresh(): Promise<void>
   listDocuments(): Promise<DocumentSnapshot[]>
   createDocument(name?: string, kind?: DocumentSnapshot['kind']): Promise<DocumentSnapshot>
@@ -177,7 +182,6 @@ export function useBrowserDocumentController(
     lastSavedAt: null,
   })
   const [cleanupCompleted, setCleanupCompleted] = useState(false)
-  const [cleanupError, setCleanupError] = useState<string | null>(null)
 
   // Stable refs so timer callbacks always see current state without re-creating
   const indexRef = useRef(index)
@@ -208,7 +212,7 @@ export function useBrowserDocumentController(
 
   // Returns true if there was nothing to flush or the flush succeeded.
   // Returns false if a pending save failed — callers that depend on data
-  // integrity (e.g. triggerCleanup, switchDocument) must abort when this returns false.
+  // integrity (e.g. deleteDocument, switchDocument) must abort when this returns false.
   //
   // Loops instead of awaiting the in-flight save once: two concurrent callers
   // both awaiting the same prior save wake up in the same microtask batch, and
@@ -356,45 +360,45 @@ export function useBrowserDocumentController(
     [flushSave],
   )
 
-  const triggerCleanup = useCallback(async () => {
-    setCleanupError(null)
+  const deleteDocument = useCallback(async () => {
     // Copy below names the document, and a note is not a canvas — kindNoun is
     // the single place that mapping lives (vocabulary.md).
     const noun = kindNoun(snapshotRef.current?.kind)
     // Abort if flush fails — unsaved edits must not be silently discarded.
     const flushed = await flushSave()
     if (!flushed) {
-      setCleanupError(`Your changes could not be saved. The ${noun} copy has been kept.`)
-      return
+      throw new Error(`Your changes could not be saved. The ${noun} copy has been kept.`)
     }
     // Abort if a previous save already failed; data integrity is uncertain.
     if (persistenceRef.current.kind === 'degraded') {
-      setCleanupError(`The ${noun} could not be safely removed. Your copy has been kept.`)
-      return
+      throw new Error(`The ${noun} could not be safely removed. Your copy has been kept.`)
     }
     const id = await pointerRef.current.get()
     if (id === null) return
+    let removed: boolean
     try {
       const entry = await indexRef.current.resolveDocumentById({
         workspaceId: getBrowserWorkspaceId(),
         documentId: id,
       })
-      if (entry === null) return // the pointer names nothing: silent no-op
-      await indexRef.current.deleteDocument({
-        workspaceId: getBrowserWorkspaceId(),
-        path: entry.path,
-      })
-      await pointerRef.current.clear()
-      setSnapshot(null)
-      setCleanupCompleted(true)
+      removed = entry !== null // the pointer names nothing: silent no-op
+      if (entry !== null) {
+        await indexRef.current.deleteDocument({
+          workspaceId: getBrowserWorkspaceId(),
+          path: entry.path,
+        })
+        await pointerRef.current.clear()
+      }
     } catch {
       // Generic safe copy — do not expose raw IDB error
-      setCleanupError('The canvas could not be removed. Your copy has been kept.')
+      throw new Error(`The ${noun} could not be removed. Your copy has been kept.`)
     }
+    if (!removed) return
+    setSnapshot(null)
+    setCleanupCompleted(true)
   }, [flushSave])
 
   const startFresh = useCallback(async () => {
-    setCleanupError(null)
     let fresh: DocumentSnapshot
     try {
       // Create BEFORE repointing, so a failed create never leaves the pointer
@@ -543,9 +547,8 @@ export function useBrowserDocumentController(
     snapshot,
     persistence,
     cleanupCompleted,
-    cleanupError,
     renameDocument,
-    triggerCleanup,
+    deleteDocument,
     startFresh,
     listDocuments,
     createDocument,

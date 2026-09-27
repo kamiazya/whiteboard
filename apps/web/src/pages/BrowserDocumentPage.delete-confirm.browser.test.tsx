@@ -194,4 +194,33 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
       expect(afterIds).not.toContain(id)
     }
   })
+
+  it('a refused delete says so in the row and keeps the document open', async () => {
+    // The refusal travels as the keeper's REJECTION into the shared delete
+    // bundle, which draws it — the same path the daemon keeper's takes.
+    const store = new IdbDocumentIndex()
+    store.deleteDocument = async () => {
+      throw new Error('simulated IndexedDB failure')
+    }
+    await renderLoaded(store)
+    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+
+    const dialog = await openDeleteDialog()
+    within(dialog)
+      .getByRole('button', { name: /^delete$/i })
+      .click()
+
+    const alert = await screen.findByText(
+      /could not be removed\. Your copy has been kept\./,
+      undefined,
+      {
+        timeout: 5000,
+      },
+    )
+    expect(alert.closest('[role="alert"]')).not.toBeNull()
+    expect(alert.textContent).not.toMatch(/simulated IndexedDB failure/)
+    expect(screen.queryByTestId('cleanup-completed')).toBeNull()
+    expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
+    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
+  })
 })

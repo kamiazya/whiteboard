@@ -78,12 +78,13 @@ const sources = import.meta.glob(
  * scan reading the page alone would report the extraction as the keeper
  * LOSING the verb.
  *
- * When both pages take the same bundle, both lists hold it and every row in
+ * Both pages take the same bundle now, so both lists hold it and every row in
  * it is `both` by construction. That is the intended end state rather than a
- * loophole: two keepers rendering one component cannot differ.
+ * loophole: two keepers rendering one component cannot differ, and
+ * `file-seam-conformance.test.ts` refuses a keeper drawing a row of its own.
  */
 const PAGES: Record<Keeper, readonly string[]> = {
-  browser: ['/src/pages/BrowserDocumentPage.tsx'],
+  browser: ['/src/pages/BrowserDocumentPage.tsx', '/src/pages/use-document-actions.tsx'],
   daemon: ['/src/pages/DaemonDocumentPage.tsx', '/src/pages/use-document-actions.tsx'],
 }
 

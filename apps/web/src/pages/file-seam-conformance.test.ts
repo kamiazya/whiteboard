@@ -42,6 +42,12 @@ const sources = import.meta.glob(
   },
 )
 
+/** What each keeper contributes besides its page: the slot builders. */
+const keeperSlotSources = import.meta.glob('./{browser,daemon}-document-slots.tsx', {
+  query: '?raw',
+  import: 'default',
+})
+
 const paneSource = import.meta.glob('../components/document-editor/SpatialEditorPane.tsx', {
   query: '?raw',
   import: 'default',
@@ -276,6 +282,41 @@ const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
  * header as its own band, and moved here when the inspector slot took it.
  */
 const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'InspectorSegment', 'ConnectionsPanel'] as const
+
+/**
+ * The document kebab's own rows and the confirmation Delete opens.
+ * `use-document-actions.tsx` is the one place they are drawn; a keeper hands
+ * it the VERBS (what deleting means is the keeper's business) and spreads
+ * the answer into its slots. A keeper drawing its own copy is how the two
+ * drifted before: the browser page carried an inline `AlertDialog` beside
+ * the shared `DeleteDocumentDialog`, and its refusal lived in a second error
+ * state the shared bundle never saw.
+ */
+const DOCUMENT_ACTION_CHROME = ['DropdownMenuItem', 'AlertDialog', 'DeleteDocumentDialog'] as const
+
+describe('document kebab rows', () => {
+  it('reads every keeper module it judges', () => {
+    expect(Object.keys(keeperSlotSources).sort()).toEqual([
+      './browser-document-slots.tsx',
+      './daemon-document-slots.tsx',
+    ])
+  })
+
+  it.each(DOCUMENT_ACTION_CHROME)('no keeper module renders %s of its own', async (chrome) => {
+    const renderedBy: string[] = []
+    for (const page of KEEPER_PAGES) {
+      if (renders(await read(page), chrome)) renderedBy.push(page)
+    }
+    for (const [module, load] of Object.entries(keeperSlotSources)) {
+      if (renders((await load()) as string, chrome)) renderedBy.push(module)
+    }
+    expect(
+      renderedBy,
+      `${chrome} belongs to use-document-actions.tsx; a keeper passes it the ` +
+        'verbs and spreads the slots it answers.',
+    ).toEqual([])
+  })
+})
 
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {
