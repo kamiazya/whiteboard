@@ -148,6 +148,20 @@ function describeDocumentMenu(fixture: DocumentPageFixture): void {
       // Refused means nothing moved: the page is still on the document it was.
       await fixture.expectOpened(HERE.path)
     })
+
+    it('a confirmed delete opens what is left', async () => {
+      await fixture.mount([HERE, TARGET])
+      const menu = await openDocumentMenu()
+      await act(async () => {
+        fireEvent.pointerUp(within(menu).getByRole('menuitem', { name: /^delete$/i }))
+      })
+      const dialog = await screen.findByRole('alertdialog')
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }))
+      })
+      await fixture.expectOpened(TARGET.path)
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+    })
   })
 }
 
