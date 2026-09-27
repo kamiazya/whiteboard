@@ -28,6 +28,7 @@ import { getAppLogger } from '../../lib/app-logger.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { forgetReplicaEntry, listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
+import { DaemonAddress } from '../connection/DaemonAddress.js'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -63,16 +64,6 @@ function replicaRow(entry: ReplicaMatch): CopyRow {
   }
 }
 
-/** The daemon's host, which is what a person recognises. A malformed URL is
- *  shown as it was stored rather than hidden: the entry is what it is. */
-function daemonLabel(baseUrl: string): string {
-  try {
-    return new URL(baseUrl).host
-  } catch {
-    return baseUrl
-  }
-}
-
 /** One row. `onDelete` is handed the button so the card can restore focus
  *  to it after the dialog closes — one dialog serves every row, so there is
  *  no `AlertDialogTrigger` to do that for us. */
@@ -93,11 +84,14 @@ function CopyRowItem({
       <div className="flex flex-col gap-0.5">
         <span className="text-sm">{row.label}</span>
         <span className="text-muted-foreground text-xs">
-          {row.keeper === 'browser'
-            ? 'Kept in this browser — the only copy of it anywhere, so it cannot be removed here.'
-            : `Cached from ${daemonLabel(row.daemonBaseUrl ?? '')}${
-                row.syncedAt === undefined ? '' : ` · synced ${formatRelative(row.syncedAt)}`
-              }`}
+          {row.keeper === 'browser' ? (
+            'Kept in this browser — the only copy of it anywhere, so it cannot be removed here.'
+          ) : (
+            <>
+              Cached from <DaemonAddress baseUrl={row.daemonBaseUrl ?? ''} />
+              {row.syncedAt === undefined ? '' : ` · synced ${formatRelative(row.syncedAt)}`}
+            </>
+          )}
         </span>
       </div>
       {row.keeper === 'daemon' &&

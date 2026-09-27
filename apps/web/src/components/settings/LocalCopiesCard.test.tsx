@@ -9,6 +9,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { BRIDGE_DAEMON_BASE_URL } from '../../lib/bridge-address.js'
 import { withReplicaEntry } from '../../lib/replicas.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { LocalCopiesCard } from './LocalCopiesCard.js'
@@ -143,4 +144,22 @@ it('still lists the cached copies when this browser will not open its own storag
   // And it says the half it could not read is missing rather than implying
   // this device keeps nothing of its own.
   expect(screen.queryByText('My own board')).toBeNull()
+})
+
+// The bridge's address is reserved precisely so nothing answers it; it names
+// no host a person could recognise, so a row must say what it came through.
+it('names a copy kept through the extension by the extension, never its reserved address', async () => {
+  const store = createUserSettingsStore()
+  store.update((current) =>
+    withReplicaEntry(current, 'ws-bridged', {
+      daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+      syncedAt: new Date().toISOString(),
+      displayName: 'Bridged board',
+    }),
+  )
+  render(<LocalCopiesCard settingsStore={store} />)
+
+  const row = await screen.findByTestId('local-copy-ws-bridged')
+  expect(row.textContent).toMatch(/Cached from the whiteboard extension/)
+  expect(row.textContent).not.toMatch(/invalid/)
 })
