@@ -283,3 +283,13 @@ A SharedWorker, which the Loro store's comment names as the eventual answer,
 would also serialise the writes; that is not what was missing. Concurrent
 writes from two tabs are already fenced (ADR-0020), and what a tab lacked was
 hearing about them.
+
+One defect surfaced only once the tabs could hear each other, and it was older
+than the channel. The backend names an unnamed note after its heading on its
+own copy of the record, and those ops never reached the session: the comment
+said the session never reads names, which is true and beside the point. Every
+later edit, in any tab, depends on them, so a session missing them held that
+edit PENDING — a note created from the list never showed the other tab's
+typing, while a note that already had a name did. The backend now hands its own
+ops to the session as a remote update, the way `mutateRecord` and
+`applyRestore` already did.

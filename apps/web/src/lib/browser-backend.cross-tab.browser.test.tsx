@@ -6,7 +6,9 @@
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   documentContainers,
+  readMarkdownBody,
   readSpatialCanvas,
+  writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -102,4 +104,26 @@ it('a version saved for a document reaches the tabs on it, and only those', asyn
 
   await vi.waitFor(() => expect(onDoc.h.onVersionCreated).toHaveBeenCalledWith(version), WAIT)
   expect(onOther.h.onVersionCreated).not.toHaveBeenCalled()
+})
+
+it("another tab's edit applies to a note the first tab named from its heading", async () => {
+  // Unnamed, so the first save names it after the heading — ops the backend
+  // makes on its own copy of the record, which the other tab's edit then
+  // builds on. A session that never received them holds that edit pending.
+  const a = await open({ documentId: DOC, path: 'untitled', kind: 'markdown' })
+  opened.push(a.backend)
+  const from = a.doc.version()
+  writeMarkdownBody(documentContainers(a.doc, DOC), '# Named from the heading\n')
+  await a.backend.pushLocalUpdate(a.doc.export({ mode: 'update', from }))
+
+  const b = await open({ documentId: DOC, path: 'untitled', kind: 'markdown' })
+  opened.push(b.backend)
+  const fromB = b.doc.version()
+  writeMarkdownBody(documentContainers(b.doc, DOC), '# Named from the heading\n\nfrom tab B\n')
+  await b.backend.pushLocalUpdate(b.doc.export({ mode: 'update', from: fromB }))
+
+  await vi.waitFor(() => {
+    for (const [bytes] of vi.mocked(a.h.onRemoteUpdate).mock.calls) a.doc.import(bytes)
+    expect(readMarkdownBody(documentContainers(a.doc, DOC))).toContain('from tab B')
+  }, WAIT)
 })

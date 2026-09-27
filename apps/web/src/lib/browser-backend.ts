@@ -173,7 +173,10 @@ export class BrowserBackend implements DocumentBackend {
     //   workspace is worse.
     const workspaceDoc = this.workspaceDoc
     const workspaceId = workspaceDoc === null ? null : getBrowserWorkspaceId()
-    this._writeQueue = this._writeQueue.then(() => this._doWrite(bytes, workspaceDoc, workspaceId))
+    const handlers = this.handlers
+    this._writeQueue = this._writeQueue.then(() =>
+      this._doWrite(bytes, workspaceDoc, workspaceId, handlers),
+    )
     return this._writeQueue
   }
 
@@ -287,6 +290,7 @@ export class BrowserBackend implements DocumentBackend {
     bytes: Uint8Array,
     workspaceDoc: LoroDoc | null,
     workspaceId: string | null,
+    handlers: DocumentBackendHandlers | null,
   ): Promise<void> {
     // A push before the snapshot was delivered has nothing to land on — the
     // session cannot produce one, since its doc exists only after onSnapshot.
@@ -294,12 +298,19 @@ export class BrowserBackend implements DocumentBackend {
     try {
       workspaceDoc.import(bytes)
       // A note is named after its body's heading while nobody has named it —
-      // before the save, so the name rides the same write. The session never
-      // reads names, so doing it on the store's copy of the record is enough.
-      // No kind check: a canvas has an empty body container, so it announces
-      // no title and the function leaves it alone.
+      // before the save, so the name rides the same write. No kind check: a
+      // canvas has an empty body container, so it announces no title and the
+      // function leaves it alone.
+      const before = workspaceDoc.oplogVersion()
       seedNameFromTitle(workspaceDoc, this.target.documentId)
+      const named = workspaceDoc.oplogVersion().compare(before) !== 0
       this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
+      // The session never READS the name, but it must HOLD those ops: every
+      // later edit anywhere depends on them, and a doc missing a dependency
+      // keeps that edit pending — another tab's typing never appeared here.
+      if (named && handlers !== null && !this.isStale(handlers)) {
+        handlers.onRemoteUpdate(workspaceDoc.export({ mode: 'update', from: before }))
+      }
       // The listing's updatedAt: stamped per push, keyed by the document this
       // backend serves — the workspace document itself has no row to stamp.
       await touchContentTimestamp(this.target.documentId)
