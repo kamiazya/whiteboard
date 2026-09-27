@@ -40,6 +40,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
     listDocuments: vi.fn(),
     createDocument: vi.fn(),
     getDocumentBacklinks: vi.fn(),
+    deleteDocument: vi.fn(),
   }
 })
 
@@ -48,6 +49,7 @@ const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 const mockGetDocumentBacklinks = vi.mocked(daemonApiClient.getDocumentBacklinks)
+const mockDeleteDocument = vi.mocked(daemonApiClient.deleteDocument)
 
 // Every fake backend built, in order: the page opens a document by building
 // a backend for its path, so the most recent one says what is open.
@@ -120,6 +122,9 @@ const daemonFixture: DocumentPageFixture = {
   labelOf: (doc) => doc.path,
   async expectOpened(path) {
     await waitFor(() => expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', path }))
+  },
+  failNextDelete() {
+    mockDeleteDocument.mockRejectedValueOnce(new Error('simulated daemon refusal'))
   },
 }
 

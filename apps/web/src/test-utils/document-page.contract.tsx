@@ -15,7 +15,7 @@
  * to observe that the page opened another document (a route on the browser,
  * a new backend on the daemon). The scenarios below never mention a keeper.
  */
-import { act, cleanup, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { THEME_STORAGE_KEY } from '../hooks/useThemeMode.js'
 import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
@@ -45,6 +45,8 @@ export interface DocumentPageFixture {
   labelOf(doc: ContractDocument): string
   /** Resolves once the page has opened the document at `path`, however this keeper does that. */
   expectOpened(path: string): Promise<void>
+  /** Makes this keeper's next delete REFUSE, however its store refuses one. */
+  failNextDelete(): void
 }
 
 /** Two documents, with a path, an id and a name that could never stand in for one another. */
@@ -74,11 +76,78 @@ function createFakeModelContext(): ModelContext & { liveNames(): string[] } {
   }
 }
 
+/** Opens the document's kebab; Radix opens its menu on pointer DOWN. */
+async function openDocumentMenu(): Promise<HTMLElement> {
+  const trigger = await screen.findByRole('button', { name: 'More actions' })
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+  return screen.findByRole('menu')
+}
+
 /** Two microtask turns: the registry's own `await` before it records a tool. */
 async function settleRegistrations(): Promise<void> {
   await act(async () => {
     await Promise.resolve()
     await Promise.resolve()
+  })
+}
+
+// The `theme` prop is optional, so a page that forgets to pass it still
+// compiles — silently reproducing the dark-mode-invisible-chrome bug this
+// wiring exists to fix.
+function describeTheme(fixture: DocumentPageFixture): void {
+  describe('theme', () => {
+    it('threads a stored dark preference into the spatial editor', async () => {
+      window.localStorage.setItem(THEME_STORAGE_KEY, 'dark')
+      await fixture.mount([HERE])
+      expect(capturedEditorProps.map((p) => p.theme)).toContain('dark')
+    })
+
+    it('threads a stored light preference, and never dark', async () => {
+      window.localStorage.setItem(THEME_STORAGE_KEY, 'light')
+      await fixture.mount([HERE])
+      const themes = capturedEditorProps.map((p) => p.theme)
+      expect(themes).toContain('light')
+      expect(themes).not.toContain('dark')
+    })
+  })
+}
+
+// The kebab's own rows and the confirmation Delete opens. One bundle draws
+// them for both keepers (use-document-actions.tsx); what each keeper
+// supplies is the VERBS, so the scenarios are about what the verbs do.
+function describeDocumentMenu(fixture: DocumentPageFixture): void {
+  describe('document menu', () => {
+    it('offers a canvas Copy as JSON Canvas, Duplicate and Delete', async () => {
+      await fixture.mount([HERE, TARGET])
+      const menu = await openDocumentMenu()
+      const rows = within(menu)
+        .getAllByRole('menuitem')
+        .map((row) => row.textContent?.trim())
+      expect(rows).toEqual(expect.arrayContaining(['Copy as JSON Canvas', 'Duplicate', 'Delete']))
+    })
+
+    it('a refused delete says so in the row and keeps the document open', async () => {
+      await fixture.mount([HERE, TARGET])
+      fixture.failNextDelete()
+      const menu = await openDocumentMenu()
+      await act(async () => {
+        fireEvent.pointerUp(within(menu).getByRole('menuitem', { name: /^delete$/i }))
+      })
+      const dialog = await screen.findByRole('alertdialog')
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }))
+      })
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent?.trim()).not.toBe('')
+      // In the document's own row, beside the kebab it was asked from — not
+      // any alert anywhere on the page.
+      const kebab = screen.getByRole('button', { name: 'More actions' })
+      expect(alert.parentElement?.contains(kebab)).toBe(true)
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+      expect(screen.getByTestId('stub-spatial-editor')).toBeTruthy()
+      // Refused means nothing moved: the page is still on the document it was.
+      await fixture.expectOpened(HERE.path)
+    })
   })
 }
 
@@ -94,24 +163,7 @@ export function describeDocumentPageContract(fixture: DocumentPageFixture): void
       delete (document as { modelContext?: unknown }).modelContext
     })
 
-    // The `theme` prop is optional, so a page that forgets to pass it still
-    // compiles — silently reproducing the dark-mode-invisible-chrome bug this
-    // wiring exists to fix.
-    describe('theme', () => {
-      it('threads a stored dark preference into the spatial editor', async () => {
-        window.localStorage.setItem(THEME_STORAGE_KEY, 'dark')
-        await fixture.mount([HERE])
-        expect(capturedEditorProps.map((p) => p.theme)).toContain('dark')
-      })
-
-      it('threads a stored light preference, and never dark', async () => {
-        window.localStorage.setItem(THEME_STORAGE_KEY, 'light')
-        await fixture.mount([HERE])
-        const themes = capturedEditorProps.map((p) => p.theme)
-        expect(themes).toContain('light')
-        expect(themes).not.toContain('dark')
-      })
-    })
+    describeTheme(fixture)
 
     describe('WebMCP', () => {
       it('registers every read-only tool once the document is on screen', async () => {
@@ -174,6 +226,8 @@ export function describeDocumentPageContract(fixture: DocumentPageFixture): void
         expect(missing?.('asset:0f5bffa1-9d0f-4d2f-a2c4-0f0d4a1a2b3c')).toBe(false)
       })
     })
+
+    describeDocumentMenu(fixture)
 
     // Not vacuous: the fixture's mount promise is what every scenario above
     // waits on, and a mount that resolved on nothing would pass them all.
