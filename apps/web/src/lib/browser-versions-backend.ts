@@ -9,17 +9,10 @@ import type { VersionsBackend } from './versions-backend.js'
  * The live workspace record, as much of it as versions need: read one thing
  * off it, and reconcile a past state onto it.
  *
- * A SEAM rather than `BrowserBackend` itself, because the two kinds of
- * document this keeper holds reach the record by different routes and only
- * one of them has a backend. A spatial canvas has `BrowserBackend`, which
- * satisfies this structurally; a markdown note deliberately has none — the
- * spatial sync layer would clobber the body `useMarkdownDocument` writes —
- * and that hook supplies its own (`MarkdownRecordSeam`).
- *
- * Naming the backend here is what made a note's history unreachable: the
- * rows were always there, keyed on the same record and written by the same
- * checkpoint scheduler, and the only thing missing was a way to read and
- * restore one.
+ * `BrowserBackend` satisfies this structurally for both kinds of document;
+ * naming the two methods rather than the class keeps this module free of
+ * the backend's connection machinery, and lets a test hand in a record
+ * without standing one up.
  */
 export interface VersionsRecordSeam {
   readonly readRecord: <T>(read: (doc: LoroDoc, documentId: string) => T) => T | null

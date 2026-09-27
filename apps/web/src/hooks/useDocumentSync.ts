@@ -471,6 +471,12 @@ export function useDocumentSync(
   const setCoreFacets = useCallback((facets: StoredCoreFacets) => {
     const session = sessionRef.current
     if (session === undefined || session === null) return
+    // Published at once, as `onChange` publishes a canvas: the write lands on
+    // the session's debounce, and a form editing one field at a time from
+    // `coreFacets` would otherwise build a second edit inside that window on
+    // the facets without the first — and replace them. The commit re-reads
+    // the doc through the body notification and publishes the same value.
+    setCoreFacetsState(facets)
     session.onChange(session.getCanvas(), { kind: 'set-facets', facets })
   }, [])
 

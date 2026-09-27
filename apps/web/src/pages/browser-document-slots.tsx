@@ -13,8 +13,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
+import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import { loadBrowserReference } from '../lib/document-embed-content.js'
 import type { DocumentReadFailure } from '../lib/document-read-failure.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -22,7 +22,6 @@ import type { BrowserPageState } from './browser-page-state.js'
 import type { DocumentKeeperAnswer } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import type { Connections } from './use-connections.js'
-import type { MarkdownDocumentState } from './use-markdown-document.js'
 
 /** The one control a terminal screen offers. */
 function RecoveryButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -129,24 +128,27 @@ export function loadedSnapshotOf(pageState: BrowserPageState): {
 }
 
 /**
- * The Properties panel's own two answers. `ready` is about the BODY having
- * arrived, not about the document existing: a board is ready the moment it
- * loads (it has no frontmatter to wait for), while a note is not ready until
- * both halves of its OKF document are in hand — showing the panel earlier
- * offers an empty form over a document whose facets are still loading.
+ * The Properties panel's own two answers. `ready` is about the document
+ * having arrived: a board is ready the moment it loads (it has no
+ * frontmatter to wait for), a note once its session holds the doc —
+ * showing the panel earlier offers an empty form over facets still loading.
+ * A note with no facets stored reads as `type: markdown`, what it is.
  *
- * The facets themselves are spread-or-nothing for the same reason a spatial
- * canvas has no facets at all: a facet is OKF frontmatter, and JSON Canvas
- * has nowhere to put one (ADR-0009 decision 3).
+ * The facets are spread-or-nothing for the same reason a spatial canvas has
+ * no facets at all: a facet is OKF frontmatter, and JSON Canvas has nowhere
+ * to put one (ADR-0009 decision 3).
  */
 export function documentPropertiesSlot(
   documentKind: DocumentSnapshot['kind'],
-  markdownDoc: Pick<MarkdownDocumentState, 'body' | 'coreFacets' | 'setCoreFacets'>,
+  sync: Pick<UseDocumentSyncResult, 'loaded' | 'coreFacets' | 'setCoreFacets'>,
 ): Pick<DocumentPageModel['properties'], 'ready' | 'facets' | 'onFacetsChange'> {
   if (documentKind !== 'markdown') return { ready: true }
-  const ready = markdownDoc.body !== null && markdownDoc.coreFacets !== null
-  if (markdownDoc.coreFacets === null) return { ready }
-  return { ready, facets: markdownDoc.coreFacets, onFacetsChange: markdownDoc.setCoreFacets }
+  if (!sync.loaded) return { ready: false }
+  return {
+    ready: true,
+    facets: sync.coreFacets ?? { type: 'markdown' },
+    onFacetsChange: sync.setCoreFacets,
+  }
 }
 
 /**
@@ -169,52 +171,22 @@ export function withLiveSnapshot(
 }
 
 /**
- * The rail's write door for a NOTE. A board's is `spatialThreadWrite`, and
- * the page picks between them ONCE by document kind rather than asking per
- * method — four copies of the same question was how a fifth method could be
- * added and answered for one kind only.
- *
- * `editMessage` drops its `opening` argument here deliberately: a note's
- * thread has no anchor to re-open onto.
- */
-export function markdownThreadWrite(markdownDoc: MarkdownDocumentState): CommentsRailWrite {
-  return {
-    createThread: (thread) => markdownDoc.createThread(thread),
-    replyToThread: (threadId, message) => markdownDoc.replyToThread(threadId, message),
-    setThreadStatus: (threadId, status) => markdownDoc.setThreadStatus(threadId, status),
-    editMessage: (threadId, message) => markdownDoc.editMessage(threadId, message),
-  }
-}
-
-/**
  * Everything the annotation layer READS, chosen once by document kind rather
- * than three times.
- *
- * A markdown document is given no `BrowserBackend` on purpose, so the sync
- * session it would speak through stays idle and its annotation channel
- * answers `[]` forever; the markdown hook reads the same document-level
- * `threads` plane off the host it already has, and from here down nothing
- * cares which of the two did the reading.
+ * than three times — all of it off the session, which holds either kind.
  *
  * `threadMarks` is where the CRDT still holds each passage — only a note has
- * a body for a mark to live in, so a board answers with nothing rather than
- * with the sync session's map, which is about a body it is not showing.
- * `railCanvas` is the opposite: only a board has one.
+ * a body for a mark to live in, so a board answers with nothing. `railCanvas`
+ * is the opposite: only a board has one.
  */
 export function conversationReads(
   documentKind: DocumentSnapshot['kind'],
-  markdownDoc: MarkdownDocumentState,
-  spatialAnnotations: DocumentPageModel['threads']['annotations'],
+  sync: Pick<UseDocumentSyncResult, 'annotations' | 'threadMarks'>,
   canvas: SpatialCanvas,
 ): Pick<DocumentPageModel['threads'], 'annotations' | 'threadMarks' | 'railCanvas'> {
   if (documentKind !== 'markdown') {
-    return { annotations: spatialAnnotations, threadMarks: undefined, railCanvas: canvas }
+    return { annotations: sync.annotations, threadMarks: undefined, railCanvas: canvas }
   }
-  return {
-    annotations: markdownDoc.annotations,
-    threadMarks: markdownDoc.threadMarks,
-    railCanvas: null,
-  }
+  return { annotations: sync.annotations, threadMarks: sync.threadMarks, railCanvas: null }
 }
 
 /**
