@@ -19,7 +19,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
 
 /** Chromium and Firefox read the same manifest, each with its own allow-list key. */
-export type BrowserEngine = 'chromium' | 'firefox'
+type BrowserEngine = 'chromium' | 'firefox'
 
 export interface ManifestDir {
   browser: string

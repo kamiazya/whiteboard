@@ -503,6 +503,16 @@ jobs:
       - name: Extension bridge smoke
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:bridge
 
+      # The same in Firefox, which lets no page message an extension: the
+      # page goes through the content script. The runner's Firefox is
+      # Mozilla's own build rather than the snap (whose native messaging asks
+      # a person through a desktop portal), and its geckodriver sits at
+      # $GECKOWEBDRIVER. The Chromium smoke above just built both artifacts.
+      - name: Extension bridge smoke (Firefox)
+        env:
+          BRIDGE_SMOKE_PREBUILT: '1'
+        run: GECKODRIVER="$GECKOWEBDRIVER/geckodriver" pnpm --filter @kamiazya/whiteboard-extension smoke:bridge:firefox
+
       - name: Build
         run: pnpm build
 

@@ -9,7 +9,7 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const EXTENSION_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-export const MCP_SERVER_DIR = resolve(EXTENSION_DIR, '../../packages/mcp-server')
+const MCP_SERVER_DIR = resolve(EXTENSION_DIR, '../../packages/mcp-server')
 const WEB_DIR = resolve(EXTENSION_DIR, '../web')
 const CLI = [process.execPath, '--import', 'tsx/esm', join(MCP_SERVER_DIR, 'src/cli/index.ts')]
 
@@ -44,8 +44,12 @@ export function whiteboard(args) {
   return JSON.parse(run.stdout)
 }
 
-/** Builds the extension and the web app, as each smoke loads them. */
+/**
+ * Builds the extension and the web app, as each smoke loads them — unless
+ * BRIDGE_SMOKE_PREBUILT says a smoke before this one in the same job just did.
+ */
 export function buildAll() {
+  if (process.env.BRIDGE_SMOKE_PREBUILT === '1') return
   const build = spawnSync('pnpm', ['build'], { cwd: EXTENSION_DIR, stdio: 'inherit' })
   if (build.status !== 0) throw new Error('the extension did not build')
   const webBuild = spawnSync('pnpm', ['exec', 'vite', 'build'], { cwd: WEB_DIR, stdio: 'inherit' })
@@ -76,7 +80,7 @@ export async function stopDaemon(daemon) {
 }
 
 /** One MCP tool call to the daemon, over its socket, as an agent makes it. */
-export function callTool(record, name, args) {
+function callTool(record, name, args) {
   const body = JSON.stringify({
     jsonrpc: '2.0',
     id: 1,

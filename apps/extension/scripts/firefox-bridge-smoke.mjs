@@ -113,7 +113,12 @@ async function openFirefox(extensionDir) {
       const found = await until(
         `return document.evaluate(${JSON.stringify(xpath)}, document, null, 9, null).singleNodeValue !== null`,
       )
-      if (!found) throw new Error(`nothing matched ${xpath}`)
+      if (!found) {
+        const page = await run(
+          `return location.pathname + ' | buttons: ' + [...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.innerText.trim()).join(' / ')`,
+        )
+        throw new Error(`nothing matched ${xpath} at ${page}`)
+      }
       const element = await webdriver('POST', at('/element'), { using: 'xpath', value: xpath })
       await webdriver('POST', at(`/element/${Object.values(element)[0]}/click`), {})
       return Object.values(element)[0]
@@ -132,12 +137,17 @@ async function webAppRoundTrip(record, appUrl) {
   try {
     await firefox.goto(appUrl)
     await firefox.click(`//*[normalize-space(text())='Canvas']`)
-    await firefox.click(`//button[starts-with(normalize-space(.), 'Workspace')]`)
-    await firefox.click(`//button[contains(., 'through the extension')]`)
-    // Connecting reloads the page into the daemon's workspace.
-    await firefox.until(
-      `return document.readyState === 'complete' && !document.body.innerText.includes('Connecting to the daemon')`,
+    await firefox.click(
+      `//button[starts-with(@aria-label, 'Workspace') or starts-with(normalize-space(.), 'Workspace')]`,
     )
+    await firefox.click(
+      `//button[contains(@aria-label, 'through the extension') or contains(., 'through the extension')]`,
+    )
+    // Connecting reopens the app at its start, now kept by the daemon.
+    const connected = await firefox.until(
+      `return document.body.innerText.includes('no daemon answered') ? 'no daemon answered' : location.pathname === '/' ? 'reopened' : null`,
+    )
+    check(connected === 'reopened', 'the web app connects through the extension', connected)
     await firefox.goto(`${appUrl}w/default/d/bridge-note`)
     check(
       Boolean(await firefox.until(hasText('written by an agent'))),
@@ -145,8 +155,10 @@ async function webAppRoundTrip(record, appUrl) {
       await firefox.run('return location.pathname + " " + document.body.innerText.slice(0, 300)'),
     )
     const editor = await firefox.click(`//*[contains(@class, 'cm-content')]`)
-    // Control+End, then the text: WebDriver's key codes.
-    await firefox.type(editor, ' and typed in the browser')
+    // Control+End, then the text, as two calls: a call releases its
+    // modifiers only when it ends, so Control would turn the text into shortcuts.
+    await firefox.type(editor, '\uE009\uE010')
+    await firefox.type(editor, ' and typed in the browser')
     const content = await daemonNoteContains(record, documentId, 'typed in the browser')
     check(
       content.includes('typed in the browser'),
