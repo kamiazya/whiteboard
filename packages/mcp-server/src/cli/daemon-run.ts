@@ -1,9 +1,9 @@
 // `whiteboard daemon run --json` business logic.
 //
 // Starts the HTTP server in-process, writes the daemon record, emits the ready
-// JSON, and installs SIGTERM/SIGINT handlers that close the server and remove
-// the record before exiting. The dispatcher keeps the process alive with its
-// own never-resolving promise after calling this function.
+// JSON, and installs SIGTERM/SIGINT handlers that close the server before
+// exiting. However the server closes — a signal or its own idle timer — the
+// record is removed and `stopped` settles; the dispatcher waits on it.
 
 import { createServer } from 'node:net'
 import { nanoid } from 'nanoid'
@@ -42,7 +42,14 @@ export type DaemonRunOutcome =
         | 'startup_env'
     }
   | { kind: 'refused'; message: string }
-  | { kind: 'running'; result: DaemonRunReadyResult }
+  | {
+      kind: 'running'
+      result: DaemonRunReadyResult
+      /** Settles once the server has closed, saying what closed it. */
+      stopped: Promise<DaemonStopReason>
+    }
+
+type DaemonStopReason = 'idle' | 'signal'
 
 export interface DaemonRunOptions {
   host?: string
@@ -91,9 +98,9 @@ async function readTokenFromStdin(): Promise<string> {
   })
 }
 
-function installDaemonSignalHandlers(cleanup: () => Promise<void>): void {
+function installDaemonSignalHandlers(close: () => Promise<void>): void {
   const handle = () => {
-    void cleanup().finally(() => process.exit(0))
+    void close().finally(() => process.exit(0))
   }
   process.once('SIGTERM', handle)
   process.once('SIGINT', handle)
@@ -291,6 +298,15 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     // it — never re-read process.env inside a route.
     const replicaEnv = resolveReplicaEnv(options.env ?? process.env)
 
+    // The server closes itself when no request arrives within its idle
+    // timeout, and nothing else would remove the record then or let the
+    // dispatcher's wait end — an unsettled wait on a drained loop is exit 13.
+    let signalled = false
+    let settle: (reason: DaemonStopReason) => void = () => {}
+    const stopped = new Promise<DaemonStopReason>((resolve) => {
+      settle = resolve
+    })
+
     const running = await startHttpServer({
       port,
       host,
@@ -300,6 +316,10 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
       replicaTier: replicaEnv.tier,
       replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
       socketPath: daemonSocketPath(dataDir),
+      onClose: async () => {
+        await deleteDaemonRecord(dataDir)
+        settle(signalled ? 'signal' : 'idle')
+      },
     })
 
     const startedAt = new Date().toISOString()
@@ -316,9 +336,9 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
       dataDir,
     )
 
-    installDaemonSignalHandlers(async () => {
-      await running.close()
-      await deleteDaemonRecord(dataDir)
+    installDaemonSignalHandlers(() => {
+      signalled = true
+      return running.close()
     })
 
     return {
@@ -332,6 +352,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
         version: PACKAGE_VERSION,
         startedAt,
       }),
+      stopped,
     }
   })
 }

@@ -582,9 +582,7 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
     process.stderr.write(`${outcome.message}\n`)
     return 1
   }
-  // Ready: emit the JSON ready line, then keep the process alive
-  // — installDaemonSignalHandlers (called from runDaemonRun) takes
-  // over the lifecycle from here.
+  // Ready: emit the JSON ready line, then stay up until the server closes.
   writeJsonObject(outcome.result)
   // Best-effort UX on top of an already-successful startup: a browser that
   // fails to open (no display, sandboxed environment, …) must never affect
@@ -597,8 +595,10 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
     noOpenFlag: parsed.noOpen,
     configOpenBrowser: configFileResult.openBrowser,
   })
-  // Returning a Promise that never resolves keeps the caller's
-  // top-level then-chain pinned, so process.exit isn't called
-  // until SIGTERM/SIGINT lands and the signal handler exits 0.
-  return await new Promise<never>(() => undefined)
+  // A signal's handler exits the process itself; only the server's own idle
+  // close comes back here, and it is a clean stop rather than a failure.
+  if ((await outcome.stopped) === 'idle') {
+    process.stderr.write('whiteboard daemon stopped: no request within its idle timeout.\n')
+  }
+  return 0
 }

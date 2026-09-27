@@ -441,3 +441,24 @@ describe('runDaemonRun WHITEBOARD_OAUTH_CLIENT_REGISTRY wiring', () => {
     )
   })
 })
+
+describe('runDaemonRun when the server closes itself', () => {
+  it('an idle close removes the daemon record and settles the run as idle', async () => {
+    const registry = await import('../daemon/daemon-registry.js')
+    vi.mocked(registry.deleteDaemonRecord).mockClear()
+    startHttpServerMock.mockClear()
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+    })
+    if (outcome.kind !== 'running') throw new Error(`expected running, got ${outcome.kind}`)
+    // The idle timer's close runs the server's onClose; nothing signalled.
+    const [options] = startHttpServerMock.mock.calls[0] as unknown as [
+      { onClose?: () => Promise<void> },
+    ]
+    await options.onClose?.()
+    await expect(outcome.stopped).resolves.toBe('idle')
+    expect(registry.deleteDaemonRecord).toHaveBeenCalledWith(getDataDir())
+  })
+})
