@@ -318,6 +318,51 @@ describe('wiki link completion (real browser)', () => {
     expect(value).not.toContain('\n')
   })
 
+  it('Enter right after the closing ]] writes a newline, not an accept of the stale list', async () => {
+    // The closing bracket takes the text out of the [[ grammar, so the
+    // source is re-asked and will answer nothing — but until that re-query
+    // runs the OLD list is still drawn, disabled. An Enter in that window
+    // used to take the drawn option, whose apply then refused (the brackets
+    // were closed), so the key vanished: `![[x]]` + Enter + Enter lost both
+    // newlines on a loaded CI runner.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    await userEvent.keyboard('see [[[[Ret')
+    await vi.waitFor(() => {
+      expect(currentCompletions(view.state).length).toBeGreaterThan(0)
+    })
+
+    // One synchronous transaction closes the brackets, so no timer runs
+    // between it and the Enter — the loaded runner's window, as a condition.
+    const head = view.state.doc.length
+    view.dispatch({
+      changes: { from: head, insert: ']]' },
+      selection: { anchor: head + 2 },
+      userEvent: 'input.type',
+    })
+    expect(optionLabelled('Retro notes')).toBeDefined()
+
+    pressEnter(view)
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[Ret]]\n')
+    })
+  })
+
   it('Enter still writes a newline, and still continues a list, when no option is drawn', async () => {
     // The other side of the same guard, and the reason it cannot simply be
     // widened to "not closed": for prose the sources are pending too, and

@@ -14,11 +14,13 @@
 
 import {
   acceptCompletion,
+  CompletionContext,
+  type CompletionSource,
   completionStatus,
   currentCompletions,
   setSelectedCompletion,
 } from '@codemirror/autocomplete'
-import { Prec } from '@codemirror/state'
+import { type EditorState, Prec } from '@codemirror/state'
 import type { Command } from '@codemirror/view'
 import { EditorView, keymap, ViewPlugin } from '@codemirror/view'
 
@@ -182,29 +184,52 @@ export const acceptRenderedCompletion: Command = (view) => {
 }
 
 /**
+ * Whether any source would still offer completions at the cursor, asked NOW.
+ *
+ * A drawn list outlives the text it was for: a keystroke that takes the
+ * text out of a source's grammar (the closing `]]`, a space after `:smile`)
+ * re-asks the source, and until that re-query runs the old list stays on
+ * screen, disabled. That list is stale, and only the sources can say so —
+ * each answers by its own trigger, synchronously `null` when the cursor is
+ * outside it. A source that answers asynchronously is taken as still asking.
+ */
+function sourcesStillAsk(state: EditorState, sources: readonly CompletionSource[]): boolean {
+  const context = new CompletionContext(state, state.selection.main.head, false)
+  return sources.some((source) => source(context) !== null)
+}
+
+/**
  * Enter, for a host whose other claim on the key is the markdown keymap.
  *
  * While the popup is OPEN ('active') Enter is accept-or-nothing — never a
  * newline under a visible option list. 'pending' must fall through, or
  * Enter after typing "- item" would eat the list continuation; but a list
- * that is DRAWN is pending too, and that one owns the key. Which of the
- * two a 'pending' is, only `acceptRenderedCompletion` can say.
+ * that is DRAWN is pending too, and that one owns the key — unless the text
+ * has left every source's trigger, when the drawn list is stale and the key
+ * is a newline again (`sourcesStillAsk`). `sources` are the ones the host
+ * gave `autocompletion()`, so the two cannot disagree about the grammar.
  *
  * `Prec.highest` because `autocompletion()` installs its own keymap there
  * as well, and within that precedence whichever is listed first wins.
  */
-export const completionEnterKeymap = Prec.highest(
-  keymap.of([
-    {
-      key: 'Enter',
-      run: (view) => {
-        const status = completionStatus(view.state)
-        if (status === 'active') return acceptCompletion(view) || true
-        return status !== null && acceptRenderedCompletion(view)
+export function completionEnterKeymap(sources: readonly CompletionSource[]) {
+  return Prec.highest(
+    keymap.of([
+      {
+        key: 'Enter',
+        run: (view) => {
+          const status = completionStatus(view.state)
+          if (status === 'active') return acceptCompletion(view) || true
+          return (
+            status !== null &&
+            sourcesStillAsk(view.state, sources) &&
+            acceptRenderedCompletion(view)
+          )
+        },
       },
-    },
-  ]),
-)
+    ]),
+  )
+}
 
 /**
  * The popup in the app's popover clothes. An EditorView.theme rather than

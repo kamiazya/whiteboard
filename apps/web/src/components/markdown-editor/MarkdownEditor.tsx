@@ -360,15 +360,17 @@ export function MarkdownEditor({
   // at view creation, while the document list keeps refreshing under it.
   const linkTargetsRef = useRef<readonly LinkTarget[]>(linkTargets ?? [])
   linkTargetsRef.current = linkTargets ?? []
-  const completionExtension = useMemo(
-    () => [
+  const completionExtension = useMemo(() => {
+    // Both sources in ONE `autocompletion()`: `override` replaces the whole
+    // list, so a second call beside this would kill the `[[` one. The Enter
+    // keymap asks the same pair whether a drawn list is still live.
+    const sources = [
+      wikiLinkCompletionSource(() => linkTargetsRef.current),
+      shortcodeCompletionSource,
+    ]
+    return [
       autocompletion({
-        // Both sources in ONE `autocompletion()`: `override` replaces the
-        // whole list, so a second call beside this would kill the `[[` one.
-        override: [
-          wikiLinkCompletionSource(() => linkTargetsRef.current),
-          shortcodeCompletionSource,
-        ],
+        override: sources,
         // An icon row draws its own glyph where an emoji row shows its
         // character; every other row renders as it always did.
         addToOptions: shortcodeOptionRenderers,
@@ -382,12 +384,11 @@ export function MarkdownEditor({
       }),
       // Deletion re-asks the sources; the plugin itself only activates on typing.
       completionOnDelete(),
-      completionEnterKeymap,
+      completionEnterKeymap(sources),
       completionPopupTheme,
       completionTouchAccept,
-    ],
-    [],
-  )
+    ]
+  }, [])
   // Read through a ref for the same reason the completion source is: the
   // extension is installed once at view creation, while the handler the host
   // passes is a fresh closure on every render.
