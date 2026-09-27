@@ -1,4 +1,3 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -18,7 +17,6 @@ import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
-import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
@@ -26,8 +24,7 @@ import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { createLocalFilesSource } from '../lib/local-files-source.js'
-import { loroTextSync } from '../lib/loro-codemirror-sync.js'
-import { composeOutlineSource } from '../lib/outline-source.js'
+import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -39,7 +36,6 @@ import {
   documentLabels,
   documentPropertiesSlot,
   loadedSnapshotOf,
-  markdownThreadWrite,
   withLiveSnapshot,
 } from './browser-document-slots.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
@@ -60,7 +56,6 @@ import {
 import { useBrowserRouteSync } from './use-browser-route-sync.js'
 import { useDocumentActions } from './use-document-actions.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
-import { useMarkdownDocument } from './use-markdown-document.js'
 import { versionsSlot } from './versions-slot.js'
 
 const log = getAppLogger('browser-document-page')
@@ -148,18 +143,6 @@ function useBrowserDocument(
   // instant the id is, and so this effect does not re-fire every time the list
   // refreshes (which would overwrite a Back the user just performed).
   const { documentPath, documentName, documentKind } = loaded
-  // Filled in below, once the checkpoint pair exists. A ref because the hook
-  // runs before that point in this component and a callback identity is not
-  // what the subscription should depend on — the same shape the hook uses for
-  // its own save scheduler.
-  const checkpointSignalRef = useRef<(() => void) | null>(null)
-  const signalCheckpoint = useCallback(() => checkpointSignalRef.current?.(), [])
-  const markdownDoc = useMarkdownDocument(
-    resolvedLoro,
-    documentId,
-    documentKind === 'markdown',
-    signalCheckpoint,
-  )
   // The workspace's tag vocabulary (ADR-0040 decision 5), read through the
   // same files source the document browser uses over the same stores, once
   // per page — the browser keeper answers it by opening every document.
@@ -168,24 +151,6 @@ function useBrowserDocument(
     [store, resolvedLoro],
   )
   const tagVocabulary = useTagVocabulary(tagsSource)
-  // Binds CodeMirror straight to the document's 'body' text container: each
-  // change is written at its OWN position, and an external change moves the
-  // local caret exactly. The hook's doc subscription keeps body state and the
-  // save schedule in step, so onChange has nothing left to do.
-  //
-  // NOT, as this said until it was measured, "unlike setBody's wholesale
-  // replace": `minimalChange` is minimal, and identical for one keystroke.
-  // They differ on a transaction editing two places at once, where one span
-  // covers both — the untouched middle re-inserted, its passage marks gone.
-  const markdownBinding = useMemo(
-    () =>
-      markdownDoc.doc === null
-        ? undefined
-        : // bodyTextOf, not a root getText: in workspace mode the doc is the
-          // WORKSPACE document and this document's body sits on its tree node.
-          [loroTextSync(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
-    [markdownDoc.doc, markdownDoc.bodyTextOf],
-  )
   const currentUpdatedAt = loaded.updatedAt
   // Called HERE rather than with the rest of the state above: it reads
   // `currentUpdatedAt`, and it OWNS the enumerated flag the URL -> document
@@ -306,15 +271,14 @@ function useBrowserDocument(
     documentsEnumeratedRef,
   })
 
-  // Stable backend instance keyed on the canvas id. useMemo avoids
-  // re-connecting on re-renders when id is unchanged. A markdown canvas
-  // gets NO backend: the spatial sync layer persists its own LoroDoc to
-  // the same store id, and two independent docs for one id are last-writer-
-  // wins — the sync layer's body-less doc would clobber the markdown body
-  // written by use-markdown-body.
+  // Stable backend instance keyed on the document id. useMemo avoids
+  // re-connecting on re-renders when id is unchanged. Both kinds get one: the
+  // backend persists the workspace record incrementally and the session
+  // writes only this document's tree node — body, facets and threads for a
+  // note — so the canvas and the note share one write path, the daemon's.
   const backend = useMemo(
     () => {
-      if (pageState.kind !== 'editing' || pageState.snapshot.kind === 'markdown') return null
+      if (pageState.kind !== 'editing') return null
       const snap = pageState.snapshot
       // path/kind/name ride along so connect() can place the document in the
       // workspace tree when it is not there yet — a fresh document, or a
@@ -339,19 +303,11 @@ function useBrowserDocument(
     [store],
   )
 
-  // Who holds the workspace record for THIS document. A markdown note gets no
-  // backend at all (see the `backend` memo above), so the hook that owns its
-  // doc supplies the seam instead. Named once because two consumers need it —
-  // the version controls below, and the automatic checkpoint here, which read
-  // `backend` alone until a markdown note turned out to arm no checkpoint ever.
-  const recordSource = backend ?? markdownDoc.records
+  // Who holds the workspace record for THIS document: its backend, for either
+  // kind. Read by the version controls below and the automatic checkpoint here.
+  const recordSource = backend
 
   const checkpointPair = useAutoCheckpoint(recordSource, versionStore, documentPath)
-
-  // Handed to the markdown hook, which has no sync session to ride: a spatial
-  // document arms this from `subscribeLocalUpdates`, and a markdown one from
-  // its own doc subscription through here.
-  checkpointSignalRef.current = checkpointPair.signal
 
   // useDocumentSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
@@ -364,23 +320,26 @@ function useBrowserDocument(
   })
   const {
     canvas,
-    annotations: spatialAnnotations,
     proposals,
     onChange,
     backendError,
     readOutlineSource,
     persistence: syncPersistence,
   } = sync
+  // A note's body, read and written through the same session as a board: the
+  // editor bound to the session's body text (each change at its own
+  // position, committed on the session's debounce), `setBody` the whole-text
+  // fallback until that binding exists. Null until the session has the doc.
+  const markdownBody = documentKind === 'markdown' && sync.loaded ? sync.markdownBody : null
+  const setMarkdownBody = useCallback(
+    (next: string) => onChange(canvas, { kind: 'set-body', text: next }),
+    [onChange, canvas],
+  )
+  const markdownBinding = useMemo(() => sessionBodyBinding(sync.bodyBinding), [sync.bodyBinding])
   // The browser's version history for this document: rows in IndexedDB,
-  // restores through whichever seam holds the live workspace record.
-  //
-  // Which seam that is follows the KIND, and this is the one line the
-  // parity turned on. A version is a frontier of the workspace record, and
-  // both kinds live in the same record — but this was built from `backend`
-  // alone, which a markdown note deliberately never has, so a note's rows
-  // were written by the checkpoint scheduler and reachable by nothing. Null
-  // only while nothing is loaded, and then the control is hidden rather
-  // than left to fall back onto the daemon's routes.
+  // restores through the backend that holds the live workspace record. Null
+  // only while nothing is loaded, and then the control is hidden rather than
+  // left to fall back onto the daemon's routes.
   const versionsRecord = recordSource
   const versionsBackend = useMemo(
     () =>
@@ -414,28 +373,12 @@ function useBrowserDocument(
     isDocumentReadFailure(backendError) ? backendError : null,
   )
 
-  /**
-   * This document's conversations, whichever half of the page holds them.
-   *
-   * A markdown document is given no BrowserBackend on purpose (see the
-   * `backend` memo), so the sync session it would speak through stays idle
-   * and its annotation channel answers `[]` forever. The markdown hook reads
-   * the same document-level `threads` plane off the host it already has, and
-   * from here down nothing cares which of the two did the reading.
-   */
-  const conversation = conversationReads(documentKind, markdownDoc, spatialAnnotations, canvas)
-
-  /**
-   * The rail's write door. A markdown document is given no BrowserBackend
-   * on purpose (see the `backend` memo), so there is no session for a
-   * command to travel through: its writes go to the host holding it. A
-   * spatial document's writes ride `onChange` like every other edit — one
-   * undo step, on the annotation channel. The two doors are not a
-   * duplicate: they lead to different documents, and the second exists
-   * precisely because the first is closed on a note.
-   */
-  const spatialWrite = spatialThreadWrite(() => canvas, onChange)
-  const threadWrite = documentKind === 'markdown' ? markdownThreadWrite(markdownDoc) : spatialWrite
+  // This document's conversations and the rail's write door, both through the
+  // session for either kind: a note's threads plane is a peer of its body on
+  // the same tree node, and its writes ride `onChange` like every other edit
+  // — one undo step, on the annotation channel.
+  const conversation = conversationReads(documentKind, sync, canvas)
+  const threadWrite = spatialThreadWrite(() => canvas, onChange)
 
   // Staleness stamps for the file seams: an edit made elsewhere shows up on
   // the next refresh because the referenced document's updatedAt moved.
@@ -473,16 +416,13 @@ function useBrowserDocument(
     })
   }, [createDocument])
 
-  // One account of the document's writes over its three writers — the
-  // controller (renames), the markdown body's own save, and the spatial sync
-  // session — worst first, because the writer that is behind is the one
-  // holding unsaved work. A FACT, not a display state: the page shows nothing
-  // for the ordinary unsaved few hundred milliseconds while someone types.
-  // What it shows is the judgement below, and only when there is one.
-  const writes = mergePersistence(
-    mergePersistence(persistence, markdownDoc.saveState),
-    syncPersistence,
-  )
+  // One account of the document's writes over its two writers — the
+  // controller (renames) and the sync session (content, either kind) — worst
+  // first, because the writer that is behind is the one holding unsaved
+  // work. A FACT, not a display state: the page shows nothing for the
+  // ordinary unsaved few hundred milliseconds while someone types. What it
+  // shows is the judgement below, and only when there is one.
+  const writes = mergePersistence(persistence, syncPersistence)
   const storageHealth = useStorageHealth(writes)
 
   // The connection is app-level, so the App-mounted shell draws it and this
@@ -498,14 +438,9 @@ function useBrowserDocument(
   }, [storageHealth, lastWrittenAt])
 
   // Tab favicon: the same judgement as the shell mark (quiet unless a write
-  // is stuck or refused), scene content as the minimap. Which owner holds
-  // THIS document — see `composeOutlineSource`, which is where the two of
-  // them and the reason are written down.
-  const readDocumentOutlineSource = useCallback(
-    (kind: DocumentKind): DocumentOutlineSource | null =>
-      composeOutlineSource(kind, readOutlineSource, markdownDoc),
-    [readOutlineSource, markdownDoc],
-  )
+  // is stuck or refused), scene content as the minimap — both kinds read off
+  // the session that holds the document.
+  const readDocumentOutlineSource = readOutlineSource
   // The tab's mark. A SPATIAL document keeps its symbol on the canvas
   // envelope, the same bucket the edge-style facet uses; a MARKDOWN one
   // keeps its own in the frontmatter facets, which are no canvas value and
@@ -521,7 +456,7 @@ function useBrowserDocument(
     settingsStore,
     documentId,
     kind: documentKind,
-    revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
+    revision: documentKind === 'markdown' ? markdownBody : canvas,
     readSource: readDocumentOutlineSource,
     status: browserFaviconStatus(storageHealth),
     symbol: documentSymbol,
@@ -588,19 +523,19 @@ function useBrowserDocument(
     srTitle: editing.snapshot.name,
     sync,
     markdown: {
-      body: markdownDoc.body,
-      setBody: markdownDoc.setBody,
+      body: markdownBody,
+      setBody: setMarkdownBody,
       sourceExtensions: markdownBinding,
       autoFocus: true,
       // No facets at all for a SPATIAL canvas: a facet is OKF frontmatter
       // that JSON Canvas has nowhere to put (ADR-0009 decision 3).
-      meta: markdownDoc.coreFacets ?? { type: documentKind },
+      meta: sync.coreFacets ?? { type: documentKind },
       title,
-      hydrating: markdownDoc.coreFacets === null,
+      hydrating: documentKind === 'markdown' && !sync.loaded,
     },
     title: { value: title, onChange: onTitleChange },
     properties: {
-      ...documentPropertiesSlot(documentKind, markdownDoc),
+      ...documentPropertiesSlot(documentKind, sync),
       status: persistenceFact,
     },
     threads: { ...conversation, proposals, write: threadWrite },

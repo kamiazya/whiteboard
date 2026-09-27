@@ -14,9 +14,13 @@
  * would be marked or neither would, and either way this file would pass on a
  * claim it had not made.
  */
-import { writeCommentThread, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import {
+  type DocumentContainers,
+  writeCommentThread,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -38,6 +42,30 @@ vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: () => <div data-testid="mock-spatial-editor" />,
 }))
 
+// A note is served by its BrowserBackend session like a board, and jsdom has
+// no IndexedDB for the real one: this double delivers the workspace shape the
+// real backend does, with the note's body and threads on its node.
+vi.mock('../lib/browser-backend.js', async () => {
+  const { FakeBrowserBackend, workspaceSnapshotFor } = await import(
+    '../test-utils/fake-browser-backend.js'
+  )
+  const { documentContainers: containersOf } = await import('@kamiazya/whiteboard-loro-adapter')
+  const { LoroDoc: Doc } = await import('loro-crdt')
+  class NoteSeedingBackend extends FakeBrowserBackend {
+    connect(handlers: DocumentBackendHandlers): void {
+      const doc = new Doc()
+      doc.import(workspaceSnapshotFor(this.target))
+      seed.note(containersOf(doc, this.target.documentId))
+      doc.commit()
+      handlers.onConnected()
+      handlers.onSnapshot(doc.export({ mode: 'snapshot' }))
+    }
+  }
+  return { BrowserBackend: NoteSeedingBackend }
+})
+
+const seed = vi.hoisted(() => ({ note: (_containers: DocumentContainers): void => {} }))
+
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 function render(ui: ReactElement) {
@@ -56,8 +84,7 @@ const note: DocumentSnapshot = {
 const BODY = 'Ship the annotation layer in three steps.'
 
 /** One thread whose quote is in the body, and one whose quote is not. */
-function noteWithBothKinds(): Uint8Array {
-  const doc = new LoroDoc()
+function noteWithBothKinds(doc: DocumentContainers): void {
   writeMarkdownBody(doc, BODY)
   const at = BODY.indexOf('three steps')
   writeCommentThread(doc, {
@@ -79,8 +106,8 @@ function noteWithBothKinds(): Uint8Array {
     status: 'open',
     messages: [{ id: 'm2', body: 'still by Friday?' }],
   })
-  return doc.export({ mode: 'snapshot' })
 }
+seed.note = noteWithBothKinds
 
 afterEach(cleanup)
 
@@ -88,7 +115,6 @@ it('marks the conversation whose passage is gone, and only that one', async () =
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
-  await store.loro.save(note.documentId, noteWithBothKinds())
 
   render(
     <BrowserDocumentPage

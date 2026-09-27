@@ -480,8 +480,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   lastKnownCanvasIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
   shortcutHandledRef: 'no subject: a once-per-page-load flag for the ?new=canvas launcher param',
-  checkpointSignalRef:
-    'no subject: mirrors the current checkpoint pair’s signal, reassigned every render — the pair is memoised on the record source and the path, so a switch replaces it before the markdown hook can reach the departed document’s',
 }
 
 const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
