@@ -465,8 +465,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
-  branchRefreshSignal:
-    'no subject: a monotonic tick, not a name — the chip and banner act only on a value that CHANGES after their own mount, so a leftover count is inert, and a switch re-bumps it anyway because `sync.loaded` goes false and back to true for the arriving document',
   // Renamed with the move into use-document-list-refresh.ts, where the file
   // supplies the "list" the old prefixes carried.
   generationRef:
@@ -493,8 +491,6 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   authError:
     'no subject: whether the DAEMON refused this pairing, which spans every document it serves — a switch does not re-authorise anything, and the session effect below reads it to say `sync-off`',
   creating: 'no subject: an in-flight flag for this screen’s own create submit',
-  branchRefreshSignal:
-    'no subject: a counter that nudges HeaderBranchChip to refetch on an externally observed HEAD change; the chip is keyed on the document itself and refetches on a switch without this',
   connectionsRefresh:
     'no subject: a counter that re-runs the backlinks fetch; that fetch is keyed on the document id and nulls the value first, so the counter decides WHEN to refetch, never WHAT is shown',
   pathScope:

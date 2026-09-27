@@ -269,16 +269,12 @@ export function daemonVersionsSlot({
  */
 export function daemonTopBarSlot(
   canvas: { workspaceId: string; path: string } | null,
-  branchRefreshSignal: number,
-  setBranchRefreshSignal: (next: (n: number) => number) => void,
   onNavigateBack: (() => void) | undefined,
 ): DocumentPageModel['topBar'] {
   if (canvas === null) return null
   return {
     workspaceId: canvas.workspaceId,
     path: canvas.path,
-    branchRefreshSignal,
-    onBranchesChanged: () => setBranchRefreshSignal((n) => n + 1),
     ...(onNavigateBack === undefined ? {} : { onNavigateBack }),
   }
 }

@@ -119,15 +119,6 @@ export interface DocumentPageModel {
     readonly path: string
     readonly dataMode?: 'daemon' | 'local'
     readonly onNavigateBack?: () => void
-    readonly branchRefreshSignal?: number
-    /**
-     * Something moved HEAD or the branch set from inside the page — the
-     * shared `?v=` banner's switch — and the keeper's own signal above has
-     * no way to learn it. The counterpart of `branchRefreshSignal`: that one
-     * reports a change the keeper OBSERVED, this one reports one the page
-     * MADE.
-     */
-    readonly onBranchesChanged?: () => void
   } | null
   readonly spatial: Pick<SpatialEditorPaneProps, 'editorRef' | 'agentTouchedNodeIds' | 'children'>
   /**
