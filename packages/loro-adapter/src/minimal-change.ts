@@ -1,3 +1,5 @@
+import type { LoroText } from 'loro-crdt'
+
 /** A single replaced range: `current.slice(0, from) + insert + current.slice(to)`. */
 export interface MinimalChange {
   readonly from: number
@@ -41,4 +43,18 @@ export function minimalChange(current: string, next: string): MinimalChange {
   }
 
   return { from, to, insert: next.slice(from, end) }
+}
+
+/**
+ * Writes `next` into `text` as the one span that differs, and says whether
+ * anything changed. Every writer that turns a plain string back into a live
+ * text goes through here, so none of them can fall back to a whole-text
+ * replace — which takes every mark on the text down with it.
+ */
+export function spliceText(text: LoroText, next: string): boolean {
+  const change = minimalChange(text.toString(), next)
+  if (change.to === change.from && change.insert.length === 0) return false
+  if (change.to > change.from) text.delete(change.from, change.to - change.from)
+  if (change.insert.length > 0) text.insert(change.from, change.insert)
+  return true
 }
