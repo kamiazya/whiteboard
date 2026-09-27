@@ -96,13 +96,18 @@ const daemonFixture: DocumentPageFixture = {
     const [open] = documents
     if (open === undefined) throw new Error('mount needs at least one document')
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListDocuments.mockResolvedValue({
-      documents: documents.map((doc) => ({
-        path: doc.path,
-        id: doc.id,
-        updatedAt: '2026-01-01',
-        kind: doc.kind,
-      })),
+    // A store, not a fixed answer: a delete removes its row, so the list the
+    // page refreshes afterwards says what the daemon would.
+    let listed = documents.map((doc) => ({
+      path: doc.path,
+      id: doc.id,
+      updatedAt: '2026-01-01',
+      kind: doc.kind,
+    }))
+    mockListDocuments.mockImplementation(async () => ({ documents: listed }))
+    mockDeleteDocument.mockImplementation(async (_fetch, _base, _workspaceId, path) => {
+      listed = listed.filter((doc) => doc.path !== path)
+      return { ok: true as const }
     })
     mockGetDocumentBacklinks.mockResolvedValue({ backlinks: [], unlinkedMentions: [] })
     await act(async () => {

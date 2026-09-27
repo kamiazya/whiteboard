@@ -218,7 +218,7 @@ describe('BrowserDocumentPage', () => {
     expect(screen.getByText('Could not start a new canvas. Please try again.')).toBeTruthy()
   })
 
-  it('renders cleanup-completed view after delete button click and confirm', async () => {
+  it('opens a fresh canvas once a confirmed delete leaves nothing', async () => {
     vi.useRealTimers()
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
@@ -242,7 +242,10 @@ describe('BrowserDocumentPage', () => {
     await act(async () => {
       confirmBtn.click()
     })
-    expect(await screen.findByTestId('cleanup-completed')).toBeTruthy()
+    await waitFor(async () =>
+      expect(await store.getDefaultDocumentId()).not.toBe('069CFJNRVY147ADGKPSWZ258BE'),
+    )
+    expect(await screen.findByRole('main')).toBeTruthy()
   })
 
   it('does not delete the canvas when the confirmation dialog is cancelled', async () => {
@@ -267,8 +270,8 @@ describe('BrowserDocumentPage', () => {
       cancelBtn.click()
     })
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.getByRole('main')).toBeTruthy()
+    expect(await store.getDefaultDocumentId()).toBe('069CFJNRVY147ADGKPSWZ258BE')
   })
 
   it('duplicates the canvas and switches to the copy when Duplicate is clicked', async () => {
@@ -540,34 +543,6 @@ describe('BrowserDocumentPage', () => {
     expect(getShellConnection()?.state).toEqual({ keeper: 'browser', storage: 'ok' })
   })
 
-  it('offers a Start fresh action in the cleanup-completed view', async () => {
-    vi.useRealTimers()
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
-    await act(async () => {
-      render(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
-      )
-    })
-    await openDeleteConfirm()
-    const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
-    await act(async () => {
-      confirmBtn.click()
-    })
-    // cleanup-completed must not be a dead end: Start fresh mints a new canvas.
-    const startFresh = await screen.findByRole('button', { name: /start fresh/i })
-    await act(async () => {
-      startFresh.click()
-    })
-    expect(await screen.findByRole('main')).toBeTruthy()
-  })
-
   it('makes no network requests during load or cleanup', async () => {
     vi.useRealTimers()
     const fetchSpy = vi
@@ -591,7 +566,9 @@ describe('BrowserDocumentPage', () => {
     await act(async () => {
       confirmBtn.click()
     })
-    await screen.findByTestId('cleanup-completed')
+    await waitFor(async () =>
+      expect(await store.getDefaultDocumentId()).not.toBe('069CFJNRVY147ADGKPSWZ258BE'),
+    )
     expect(fetchSpy).not.toHaveBeenCalled()
     fetchSpy.mockRestore()
   })

@@ -129,7 +129,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     )
   })
 
-  it('cleanup: delete canvas shows cleanup-completed', async () => {
+  it('delete: the last canvas gives way to a fresh one, which survives a remount', async () => {
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
@@ -143,28 +143,13 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     within(dialog)
       .getByRole('button', { name: /^delete$/i })
       .click()
-    await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
-  })
-
-  it('post-cleanup reload: remount after delete shows a fresh canvas', async () => {
-    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
         timeout: 5000,
       },
     )
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0 })
-    fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^delete$/i }))
-    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
-    within(dialog)
-      .getByRole('button', { name: /^delete$/i })
-      .click()
-    await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
     cleanup()
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(

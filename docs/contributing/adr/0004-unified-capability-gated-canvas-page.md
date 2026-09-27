@@ -252,3 +252,14 @@ after it: a note saves on the session's 300ms commit debounce instead of the
 hook's 500ms; preview, outline, favicon and comment marks follow each commit;
 browser notes gain proposals and the tab symbol; session undo records body
 edits.
+
+## Addendum (2026-09-27): a delete opens what is left, on both keepers
+
+Decision 3's `cleanup-completed` state is gone. The browser keeper used to
+answer a delete with a terminal "Canvas removed" screen and a Start fresh
+button, while the daemon keeper moved to the next document in the list. Both
+now move on: the browser keeper opens the first document still listed, and
+when nothing is left it creates a fresh one, which is what it already does on
+a first visit (it has no empty-workspace state, where the daemon does). The
+behaviour is pinned once for both keepers by the document-page contract's
+"a confirmed delete opens what is left".

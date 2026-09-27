@@ -1,21 +1,14 @@
 // Page-state derivation for `BrowserDocumentPage`.
 //
 // `useBrowserDocumentController` carries several flat fields that
-// the page used to chain into a 3-way `if` cascade (degraded-load /
-// cleanup-completed / loading / editing). The cascade order matters
-// — completion view must beat the load-time placeholder — and the
-// invariants between fields are not obvious from the JSX alone:
+// the page used to chain into an `if` cascade (degraded-load /
+// loading / editing). The invariant between fields is not obvious
+// from the JSX alone:
 //
 //   - load-degraded with a non-null snapshot still uses the editor
 //     (the editor handles `persistence: degraded` itself); the
 //     full-page degraded banner only fires when the load itself
 //     failed and the page therefore has no snapshot to render.
-//   - cleanup-completed wins over the loading placeholder because
-//     `setSnapshot(null)` after a successful delete deliberately
-//     drops the snapshot and the initial load effect won't re-run.
-//   - cleanup-completed is mutually exclusive with load-degraded:
-//     cleanup runs from the editor, so the load already succeeded
-//     by the time cleanup is reachable.
 //
 // Encoding the cascade once as a discriminated union keeps the
 // invariants grep-friendly and lets the helper be tested in isolation
@@ -27,16 +20,10 @@ import {
   documentReadFailureMessage,
 } from '../lib/document-read-failure.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import type {
-  CleanupCompletedState,
-  EditingState,
-  LoadDegradedState,
-  LoadingState,
-} from './document-page-state.js'
+import type { EditingState, LoadDegradedState, LoadingState } from './document-page-state.js'
 export interface BrowserPageStateInput {
   snapshot: DocumentSnapshot | null
   persistence: BrowserPersistenceState
-  cleanupCompleted: boolean
 }
 
 // The browser half of the shared machine in document-page-state.ts, composed
@@ -47,9 +34,6 @@ export interface BrowserPageStateInput {
 //   the persistence state so the page never has to re-narrow
 //   `persistence.kind === 'degraded'` to read it — the helper is the single
 //   render source of truth.
-// - cleanup-completed: the persisted canvas is gone and the load effect
-//   won't re-run; the page renders the completion view instead of falling
-//   through to the loading placeholder.
 // - loading: pre-load tick — snapshot has not arrived yet and no terminal
 //   state has fired.
 // - editing: steady state. `persistence` may be `saved`, `pending`,
@@ -57,7 +41,6 @@ export interface BrowserPageStateInput {
 //   surface, not a page-level branch.
 export type BrowserPageState =
   | LoadDegradedState
-  | CleanupCompletedState
   | LoadingState
   | (EditingState & { snapshot: DocumentSnapshot; persistence: BrowserPersistenceState })
 
@@ -67,9 +50,6 @@ export function derivePageState(input: BrowserPageStateInput): BrowserPageState 
   // on the negations of the clauses above it.
   if (input.snapshot === null && input.persistence.kind === 'degraded') {
     return { kind: 'load-degraded', message: input.persistence.message }
-  }
-  if (input.snapshot === null && input.cleanupCompleted) {
-    return { kind: 'cleanup-completed' }
   }
   if (input.snapshot === null) {
     return { kind: 'loading' }

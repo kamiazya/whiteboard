@@ -9,10 +9,6 @@
 // Which keeper produces which state, and why the other cannot:
 //
 // - `loading`, `load-degraded`, `editing`: both keepers.
-// - `cleanup-completed`: browser only. Deleting the retained browser copy
-//   leaves the page with nothing to load and no list to fall back to; the
-//   daemon page never faces this — its delete flows navigate back to an
-//   index that still exists on the daemon.
 // - `document-missing`, `workspace-empty`: daemon only. The browser
 //   controller resolves a default document on mount (and repairs a stale
 //   /local/ URL to the loaded document), so "nothing at this address" and
@@ -31,11 +27,6 @@ export interface LoadingState {
 export interface LoadDegradedState {
   kind: 'load-degraded'
   message: string
-}
-
-/** Browser only: the user just deleted the retained browser copy. */
-export interface CleanupCompletedState {
-  kind: 'cleanup-completed'
 }
 
 /**

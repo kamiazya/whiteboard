@@ -9,7 +9,8 @@
 // 2. An SSE stream arrives as it is written.
 // 3. A request outside /api/ is refused before it reaches the daemon.
 // 4. The built web app connects through the extension from a browser-kept
-//    document, reads what an agent wrote on the daemon, and writes back.
+//    document, reads what an agent wrote on the daemon, writes back, and
+//    sees the agent's next edit arrive live.
 // 5. The production build admits no loopback page at all.
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
@@ -229,6 +230,32 @@ async function webAppRoundTrip(record, appUrl) {
       'an edit in the web app lands on the daemon',
       content,
     )
+    // The other direction, live: an agent's edit reaches the open page over
+    // the bridge's SSE stream, which the page subscribed by the workspace's
+    // segment (`default`) rather than its id.
+    await callTool(record, 'wb_body_edit', {
+      workspaceId: 'default',
+      documentId,
+      mode: 'apply',
+      ops: [
+        {
+          id: 'agent-edit',
+          op: 'body.replace',
+          anchor: { kind: 'text', start: 0, end: 13, quote: { exact: '# Bridge note' } },
+          assumed: '# Bridge note',
+          text: '# Edited by an agent',
+        },
+      ],
+    })
+    const live = await page
+      .getByText('Edited by an agent')
+      .first()
+      .waitFor({ timeout: 20_000 })
+      .then(
+        () => true,
+        () => false,
+      )
+    check(live, "an agent's edit reaches the open page live", page.url())
   } finally {
     await context.close()
   }
