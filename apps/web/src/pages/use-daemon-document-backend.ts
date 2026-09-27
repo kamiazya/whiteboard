@@ -12,13 +12,9 @@
  */
 
 import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { isBridgeDaemon } from '../lib/bridge-address.js'
-import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 
 /** What a parent may substitute for the connection this hook would build. */
@@ -39,8 +35,6 @@ export interface DaemonDocumentBackendOptions {
   /** While the list is still loading, no backend — see the memo's own note. */
   readonly loading: boolean
   readonly documents: readonly DocumentSummary[]
-  /** Served by a server-mode keeper, which has no WebSocket (ADR-0047). */
-  readonly serverMode?: boolean
 }
 
 export interface DaemonDocumentBackendState {
@@ -57,26 +51,7 @@ interface DaemonConnection {
   readonly daemonBaseUrl: string
   readonly daemonFetch: typeof globalThis.fetch
   readonly token: string | undefined
-  readonly serverMode: boolean
   readonly contentDocumentId: string
-}
-
-/**
- * A keeper with no WebSocket cannot honour a pinned 'websocket', so the
- * development pin is for a paired daemon only — and a daemon reached through
- * the extension (ADR-0050) serves none either: the bridge carries the SSE
- * stream and nothing else.
- */
-function documentTransport(daemonBaseUrl: string, serverMode: boolean) {
-  const servesWebSocket = !serverMode && !isBridgeDaemon(daemonBaseUrl)
-  return (
-    (servesWebSocket ? devTransportOverride() : null) ??
-    selectDocumentTransport({
-      pageOrigin: window.location.origin,
-      daemonBaseUrl,
-      keeperServesWebSocket: servesWebSocket,
-    })
-  )
 }
 
 function connectDaemonDocument({
@@ -85,34 +60,13 @@ function connectDaemonDocument({
   daemonBaseUrl,
   daemonFetch,
   token,
-  serverMode,
   contentDocumentId,
 }: DaemonConnection): { backend: DocumentBackend; contentDocumentId: string } {
-  // A secure page cannot open a ws:// socket to an http daemon at all, so
-  // the transport is decided up front rather than attempted and retried.
-  //
-  // The override in front is development-only and compiles away entirely
-  // in a production build. It exists because the rule below is correct AND
-  // makes the SSE path — and the SharedWorker behind it — unreachable from
-  // `pnpm dev`, which serves plain http.
-  const transport = documentTransport(daemonBaseUrl, serverMode)
-  if (transport !== 'sse') {
-    // wsToken carries the pairing session token into the WS upgrade —
-    // without it a pairing-grant session authenticates HTTP but opens
-    // the socket credential-less and is rejected 401 (edits then stay
-    // browser-only while the page looks connected).
-    return {
-      backend: new DaemonBackend(workspaceId, path, daemonBaseUrl, {
-        fetch: daemonFetch,
-        wsToken: () => token,
-      }),
-      contentDocumentId: contentDocumentId,
-    }
-  }
-  // Null where SharedWorker is unavailable; SseBackend then opens its own
-  // stream, which is correct but not shared across tabs. Same granularity
-  // as the WebSocket branch: every document syncs at workspace-document
-  // granularity.
+  // Every keeper syncs over SSE (ADR-0050): a hosted page cannot open ws://
+  // to loopback, a daemon reached through the extension has only the stream
+  // the bridge carries, and server mode serves no socket. Null where
+  // SharedWorker is unavailable; SseBackend then opens its own stream, which
+  // is correct but not shared across tabs.
   const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
   return {
     backend: new SseBackend(workspaceId, path, daemonBaseUrl, { fetch: daemonFetch }, shared),
@@ -129,7 +83,6 @@ export function useDaemonDocumentBackend({
   path,
   loading,
   documents,
-  serverMode = false,
 }: DaemonDocumentBackendOptions): DaemonDocumentBackendState {
   const [authError, setAuthError] = useState(false)
 
@@ -186,19 +139,9 @@ export function useDaemonDocumentBackend({
       daemonBaseUrl,
       daemonFetch,
       token,
-      serverMode,
       contentDocumentId: workspaceSyncDocumentId,
     })
-  }, [
-    workspaceId,
-    path,
-    loading,
-    daemonFetch,
-    daemonBaseUrl,
-    token,
-    workspaceSyncDocumentId,
-    serverMode,
-  ])
+  }, [workspaceId, path, loading, daemonFetch, daemonBaseUrl, token, workspaceSyncDocumentId])
   const backend = backendState?.backend ?? null
 
   // A rejected session belongs to one backend identity — switching to a new

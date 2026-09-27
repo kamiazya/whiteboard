@@ -10,12 +10,8 @@
  * - DocumentBackend, DocumentBackendHandlers, and ws-message payload types
  *   resolve from @kamiazya/whiteboard-daemon-client/document-backend-contract and compile
  *   against the z.infer-derived payload types.
- * - DaemonBackend resolves from the ./daemon-backend subpath and its
- *   relocated source compiles under this DOM-enabled tsconfig too.
  */
 
-// ── daemon-backend from its own subpath ───────────────────────────────────────
-export type { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
 // ── browser-contract types from the package subpath ──────────────────────────
 // Re-exporting the types proves they resolve; the declared consumers below
 // force tsc to compile against the z.infer-derived payload shapes.

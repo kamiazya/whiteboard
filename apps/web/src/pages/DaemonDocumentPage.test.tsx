@@ -870,45 +870,28 @@ describe('DaemonDocumentPage', () => {
     })
   })
   describe('default backend wiring (no createBackend override)', () => {
-    class FakeWebSocket {
-      static instances: FakeWebSocket[] = []
-      binaryType = 'blob'
-      readyState = 0
-      onopen: (() => void) | null = null
-      onclose: ((event: { code: number }) => void) | null = null
-      onerror: (() => void) | null = null
-      onmessage: ((event: MessageEvent) => void) | null = null
-      send = vi.fn()
-      close = vi.fn()
-
-      constructor(
-        public url: string,
-        public protocols?: string | string[],
-      ) {
-        FakeWebSocket.instances.push(this)
-      }
-    }
-
-    let originalWebSocket: typeof globalThis.WebSocket
-
-    beforeEach(() => {
-      FakeWebSocket.instances = []
-      originalWebSocket = globalThis.WebSocket
-      globalThis.WebSocket = FakeWebSocket as unknown as typeof globalThis.WebSocket
-    })
-
     afterEach(() => {
-      globalThis.WebSocket = originalWebSocket
+      vi.unstubAllGlobals()
     })
 
-    it('opens the WebSocket against the daemon origin, not the page origin', async () => {
+    it('syncs against the daemon origin, not the page origin', async () => {
+      const requested: string[] = []
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          requested.push(typeof input === 'string' ? input : input.toString())
+          return new Response('{}', { status: 404 })
+        }),
+      )
       await act(async () => {
         render(<DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} />, { container: document.body })
       })
 
-      await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
-      const wsUrl = new URL(FakeWebSocket.instances[0]!.url)
-      expect(wsUrl.origin).toBe(new URL(DAEMON_BASE_URL).origin.replace('http:', 'ws:'))
+      // The sync stream is the default backend's own request; the page's
+      // origin serves no daemon API.
+      await waitFor(() => expect(requested.some((u) => u.includes('/api/sync/'))).toBe(true))
+      const sync = requested.filter((u) => u.includes('/api/sync/'))
+      for (const url of sync) expect(new URL(url).origin).toBe(new URL(DAEMON_BASE_URL).origin)
     })
   })
 })

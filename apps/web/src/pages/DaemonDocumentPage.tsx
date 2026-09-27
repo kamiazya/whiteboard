@@ -158,7 +158,6 @@ function useDaemonDocument(
     path: controller.path,
     loading: controller.loading,
     documents: controller.documents,
-    serverMode,
   })
 
   // Holds the mounted SpatialEditor's imperative handle so a daemon-driven

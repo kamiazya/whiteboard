@@ -55,35 +55,6 @@ function workspaceSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-const constructed: {
-  workspaceId: string
-  path: string
-}[] = []
-
-vi.mock('@kamiazya/whiteboard-daemon-client/daemon-backend', () => ({
-  DaemonBackend: class {
-    constructor(workspaceId: string, path: string, _locationHref: string, _apiTransport?: unknown) {
-      constructed.push({ workspaceId, path })
-    }
-    connect(handlers: DocumentBackendHandlers): void {
-      handlers.onConnected()
-      // Every socket serves the WORKSPACE document's snapshot — the only
-      // binary contract.
-      handlers.onSnapshot(workspaceSnapshot())
-    }
-    disconnect(): void {}
-    pushLocalUpdate(): void {}
-    getFile(): Promise<Blob | null> {
-      return Promise.resolve(null)
-    }
-    putFile(): Promise<void> {
-      return Promise.resolve()
-    }
-    sendClientReady(): void {}
-    sendExportResponse(): void {}
-  },
-}))
-
 const sseConstructed: {
   workspaceId: string
   path: string
@@ -130,7 +101,6 @@ vi.mock('../lib/replica-refresh.js', () => ({
 }))
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
-const { DEV_TRANSPORT_OVERRIDE_KEY } = await import('../lib/dev-transport-override.js')
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
@@ -139,7 +109,6 @@ const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
 describe('DaemonDocumentPage workspace-scope sync', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    constructed.length = 0
     sseConstructed.length = 0
     vi.stubGlobal(
       'fetch',
@@ -175,31 +144,13 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
       )
     })
 
-    await waitFor(() => expect(constructed.length).toBeGreaterThan(0))
+    await waitFor(() => expect(sseConstructed.length).toBeGreaterThan(0))
     // The body renders — the session found the document INSIDE the workspace
     // snapshot, which is the whole contentDocumentId wiring in one signal.
     await waitFor(() =>
       expect(document.body.textContent).toContain('Hello from the workspace document'),
     )
     expect(screen.getByTestId('markdown-source-wrap')).toBeTruthy()
-  })
-
-  it('opts the SSE transport into workspace scope too, and hydrates the scoped document', async () => {
-    window.localStorage.setItem(DEV_TRANSPORT_OVERRIDE_KEY, 'sse')
-    await act(async () => {
-      render(
-        <DaemonDocumentPage
-          daemonBaseUrl="http://127.0.0.1:3099"
-          workspaceId="w1"
-          path="agent-note"
-        />,
-      )
-    })
-
-    await waitFor(() => expect(sseConstructed.length).toBeGreaterThan(0))
-    await waitFor(() =>
-      expect(document.body.textContent).toContain('Hello from the workspace document'),
-    )
   })
 
   it('shows a not-found state for a URL path the list does not contain, instead of connecting', async () => {
@@ -218,7 +169,6 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
     })
 
     await waitFor(() => expect(document.body.textContent).toContain('deleted-note'))
-    expect(constructed).toHaveLength(0)
     expect(sseConstructed).toHaveLength(0)
 
     // The affordance creates THAT path, not a generic untitled one.
