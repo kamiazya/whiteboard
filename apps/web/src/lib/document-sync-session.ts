@@ -6,7 +6,6 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   documentContainers,
-  MARKDOWN_BODY_KEY,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -1017,10 +1016,11 @@ export function createDocumentSyncSession(
     armDebounce()
   }
 
-  const bodyBindingOf = bodyBindingFor(
-    (target) => contentOf(target).getText(MARKDOWN_BODY_KEY),
-    bodyEdited,
-  )
+  const bodyBindingOf = bodyBindingFor({
+    contentOf,
+    onEdited: bodyEdited,
+    isCurrent: (target) => target === doc,
+  })
   function getBodyBinding(): BodyBinding | null {
     return bodyBindingOf(doc)
   }
