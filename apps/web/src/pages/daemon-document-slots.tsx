@@ -9,21 +9,20 @@
  * sitting.
  */
 
-import {
-  documentsApiUrl,
-  saveVersionResponseSchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { ReactNode } from 'react'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
 import { dispatchIdentityEvent } from '../hooks/useDocumentSync.js'
 import { linkifyDocumentMentions } from '../lib/daemon-api-client.js'
+import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
+import type { VersionsBackend } from '../lib/versions-backend.js'
 import type { DaemonPageState } from './daemon-page-state.js'
 import { DaemonTerminalScreen, membershipRefusedScreen } from './daemon-terminal-screens.js'
 import type { DocumentKeeperAnswer } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import type { DaemonConnections } from './use-daemon-connections.js'
+import { versionsSlot } from './versions-slot.js'
 
 /**
  * The three states where the page answers with a SCREEN instead of a
@@ -206,61 +205,33 @@ export function daemonDocumentLabels(canvas: { workspaceId: string; path: string
 }
 
 /**
- * The History column's seam. A daemon save is one POST, and the two
- * announcements after it are not redundant: the server's manual
- * `POST /versions` route does NOT broadcast `version_created` over the
- * websocket — that only fires for auto-saves and other peers' saves — so
- * this save dispatches the same identity-scoped event `useDocumentSync`
- * fires on a broadcast, or nothing listening for the save (the version
- * list, the tab) learns it happened.
- *
- * `enabled: false` is what makes the `canvas === null` throw unreachable
- * rather than a case a caller can drive.
+ * The History column's daemon half: the daemon's `VersionsBackend`, hidden
+ * until there is a document, and the two announcements a save here needs.
+ * The server's manual `POST /versions` does NOT broadcast `version_created`
+ * over the websocket — that fires only for auto-saves and other peers' saves
+ * — so a save made here raises both: the page's own refresh, and the
+ * identity-scoped event `useDocumentSync` fires on a broadcast, or nothing
+ * listening (the version list, the tab) learns it happened.
  */
 export function daemonVersionsSlot({
   canvas,
   labels,
-  daemonFetch,
-  daemonBaseUrl,
-  log,
+  backend,
   onVersionCreated,
 }: {
   canvas: { workspaceId: string; path: string } | null
   labels: ReturnType<typeof daemonDocumentLabels>
-  daemonFetch: typeof globalThis.fetch
-  daemonBaseUrl: string
-  log: { error: (message: string, data?: unknown) => void }
+  backend: VersionsBackend
   onVersionCreated: () => void
 }): DocumentPageModel['versions'] {
-  return {
-    enabled: canvas !== null,
+  return versionsSlot({
+    backend: canvas === null ? null : backend,
     workspaceId: labels.workspaceId,
     path: labels.path,
-    save: async (label) => {
-      if (canvas === null) throw new Error('saveVersion: no canvas')
-      const res = await daemonFetch(
-        `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label }),
-        },
-      )
-      if (!res.ok) throw new Error(`save failed: ${res.status}`)
-      const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-      if (!parsed.success) {
-        log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
-        throw new Error('save response did not match schema')
-      }
-      return {
-        workspaceId: canvas.workspaceId,
-        path: canvas.path,
-        versionId: parsed.data.version.id,
-      }
-    },
     announceRefresh: onVersionCreated,
-    announceOnce: () => dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined),
-  }
+    announceOnce: () =>
+      dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, canvas ?? undefined),
+  })
 }
 
 /**

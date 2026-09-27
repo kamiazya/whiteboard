@@ -318,6 +318,27 @@ describe('document kebab rows', () => {
   })
 })
 
+/**
+ * The version history's wire. Both keepers hand the History column a
+ * `VersionsBackend` (`lib/versions-backend.ts` for the daemon, the IndexedDB
+ * one for the browser) and `versions-slot.ts` drives it. A keeper module
+ * parsing the save response itself is a second copy of that request — the
+ * daemon's slot carried one while the backend it already had made it
+ * redundant.
+ */
+describe('the versions wire', () => {
+  it('no keeper module speaks the versions routes itself', async () => {
+    const speaking: string[] = []
+    for (const page of KEEPER_PAGES) {
+      if ((await read(page)).includes('saveVersionResponseSchema')) speaking.push(page)
+    }
+    for (const [module, load] of Object.entries(keeperSlotSources)) {
+      if (((await load()) as string).includes('saveVersionResponseSchema')) speaking.push(module)
+    }
+    expect(speaking, 'save through the keeper’s VersionsBackend instead').toEqual([])
+  })
+})
+
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {
     expect(
