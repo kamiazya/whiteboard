@@ -9,8 +9,9 @@
 // 2. An SSE stream arrives as it is written.
 // 3. A request outside /api/ is refused before it reaches the daemon.
 // 4. The built web app connects through the extension from a browser-kept
-//    document, reads what an agent wrote on the daemon, writes back, and
-//    sees the agent's next edit arrive live.
+//    document and lands on the fresh daemon's own workspace, ready to use;
+//    then it reads what an agent wrote on the daemon, writes back, and sees
+//    the agent's next edit arrive live.
 // 5. The production build admits no loopback page at all.
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
@@ -75,7 +76,6 @@ async function openPage(extensionDir, pageUrl) {
 
 /** Connect from a browser-kept document, open an agent's note, and type into it. */
 async function webAppRoundTrip(record, appUrl) {
-  const documentId = await seedNote(record)
   const { context, page } = await openPage(join(EXTENSION_DIR, 'dist/development'), appUrl)
   // What the page said, so a failure here names its cause rather than a URL.
   const said = []
@@ -98,6 +98,21 @@ async function webAppRoundTrip(record, appUrl) {
         .getByRole('button', { name: /connect through the extension/i })
         .click({ timeout: 20_000 }),
     ])
+    // Nothing is seeded yet, so this is a fresh daemon's own workspace: the
+    // first screen a person meets after connecting.
+    const ready = await page
+      .getByText('What will you make first?')
+      .waitFor({ timeout: 20_000 })
+      .then(
+        () => true,
+        () => false,
+      )
+    check(
+      ready && (await page.getByText('Failed to load').count()) === 0,
+      "a fresh daemon's first screen after connecting is ready to use",
+      `${page.url()} ${(await page.locator('body').innerText()).slice(0, 200)}`,
+    )
+    const documentId = await seedNote(record)
     await page.goto(`${appUrl}w/default/d/bridge-note`)
     const read = await page
       .getByText('written by an agent')

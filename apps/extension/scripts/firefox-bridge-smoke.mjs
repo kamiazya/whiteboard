@@ -132,7 +132,6 @@ const hasText = (text) =>
   `return document.body?.innerText.includes(${JSON.stringify(text)}) ?? false`
 
 async function webAppRoundTrip(record, appUrl) {
-  const documentId = await seedNote(record)
   const firefox = await openFirefox(join(EXTENSION_DIR, 'dist/firefox-development'))
   try {
     await firefox.goto(appUrl)
@@ -148,6 +147,17 @@ async function webAppRoundTrip(record, appUrl) {
       `return document.body.innerText.includes('no daemon answered') ? 'no daemon answered' : location.pathname === '/' ? 'reopened' : null`,
     )
     check(connected === 'reopened', 'the web app connects through the extension', connected)
+    // Nothing is seeded yet, so this is a fresh daemon's own workspace: the
+    // first screen a person meets after connecting.
+    const firstScreen = await firefox.until(
+      `const t = document.body.innerText; return t.includes('Failed to load') ? 'failed: ' + t.slice(0, 200) : t.includes('What will you make first?') ? 'ready' : null`,
+    )
+    check(
+      firstScreen === 'ready',
+      "a fresh daemon's first screen after connecting is ready to use",
+      firstScreen,
+    )
+    const documentId = await seedNote(record)
     await firefox.goto(`${appUrl}w/default/d/bridge-note`)
     check(
       Boolean(await firefox.until(hasText('written by an agent'))),
