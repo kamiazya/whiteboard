@@ -33,6 +33,7 @@ import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import {
   browserConnectionsSlot,
+  browserReferenceLoader,
   browserTerminalAnswer,
   conversationReads,
   documentLabels,
@@ -610,6 +611,7 @@ function useBrowserDocument(
       resolveTitle,
       missingFileRef,
       pickerTargets,
+      loadReference: browserReferenceLoader,
     },
     openDocument: navigateToDocument,
     ...labels,
