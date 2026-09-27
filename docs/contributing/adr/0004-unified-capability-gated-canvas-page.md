@@ -231,3 +231,24 @@ absence there is no longer one of) and `provider.capability-reach.test.ts`
 judge, and an empty map kept "for later" is the one thing it could never have
 refused). `keeper-parity.test.ts` loses its `capability` answer for the same
 reason; a real declared difference would bring both back together.
+
+## Addendum (2026-09-27): one write path for a markdown body
+
+The follow-up named in the 2026-09-05 page-body addendum has landed. A
+browser-kept note used to get no sync backend: the browser page ran it
+through `useMarkdownDocument`, a hook with its own LoroDoc and its own save
+scheduler, because the spatial sync layer once persisted a body-less doc to
+the same id and the two would overwrite each other. Once `BrowserBackend`
+delivered the workspace record and the session wrote only its own document's
+tree node, that reason was gone. Both keepers now serve a note through the
+same `DocumentSyncSession`: the editor is bound to the session's body text
+(each change written at its own position, so comment passages keep their
+marks), and facets, threads, versions and proposals all come from the
+session. The hook, its scheduler and the browser-only outline fallback are
+deleted.
+
+What changed for a person, decided before the change rather than found
+after it: a note saves on the session's 300ms commit debounce instead of the
+hook's 500ms; preview, outline, favicon and comment marks follow each commit;
+browser notes gain proposals and the tab symbol; session undo records body
+edits.

@@ -11,9 +11,9 @@
  * The subtlety this helper exists for is one step past that. A settled
  * `saved` plus a present `data-last-saved-at` proves SOME write landed — not
  * that it covered what is currently on screen. Under load, typing outlasts
- * the 500ms debounce, so a partial body is written while the rest of the
+ * the session's commit debounce, so a partial body is written while the rest of the
  * keystrokes are still travelling
- * CodeMirror -> Loro commit -> doc subscription -> setBody -> `pending`.
+ * CodeMirror -> Loro body text -> session commit -> `pending`.
  * That chain is asynchronous, so the editor can already show the full text
  * — all a caller can cheaply check — while the indicator is still describing
  * the partial write. A wait that samples once there returns immediately, the
@@ -29,10 +29,10 @@
  */
 import { waitFor } from '@testing-library/react'
 import { expect } from 'vitest'
-import { SAVE_DEBOUNCE_MS } from '../pages/use-markdown-document.js'
+import { COMMIT_DEBOUNCE_MS } from '../lib/document-sync-session.js'
 
 /** How long to leave the indicator alone before believing it. */
-const SETTLE_MS = SAVE_DEBOUNCE_MS * 2
+const SETTLE_MS = COMMIT_DEBOUNCE_MS * 2
 
 function expectSettled(): string {
   const chip = document.querySelector('[data-testid="persistence-state"]')
