@@ -1,7 +1,9 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
 import { upsertWorkspaceRow } from './store/db/upsert-workspace.js'
+import { LibsqlDocumentStore } from './store/libsql/libsql-document-store.js'
 
 // The current workspace id is the live source of truth in the `runtime`
 // table. ensureWorkspaceId memoizes the lookup per dataDir; the first caller
@@ -60,13 +62,14 @@ export function ensureWorkspaceId(dataDir: string): Promise<string> {
     const db = await getDb(dataDir)
 
     const resolved = await resolveWorkspaceId(db)
-    // Materialize the workspace as a ROW, not only as the runtime marker. The
-    // daemon commits to having a current workspace the moment it answers with
-    // one, but the workspaces table used to learn of it as a side effect of
-    // the first document write — so a daemon nobody had written to yet held an
-    // id that `GET /api/workspaces` did not list, and a browser connecting to
-    // it had no workspace to select. Idempotent, and memoized with the rest of
-    // this resolve, so it costs one no-op insert per process per data dir.
+    // Materialize the workspace, not only its registry row: the list answers
+    // from the row, and every addressed route from the stored record, so a
+    // row alone is a workspace the list names and the document index refuses
+    // as not found — the first screen a browser meets on a fresh daemon.
+    // Both halves are idempotent, and the record check also repairs a daemon
+    // an earlier bootstrap left with the row and no record.
+    const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db))
+    if ((await docs.open(resolved)) === null) await docs.save(resolved, await docs.create(resolved))
     await upsertWorkspaceRow(db, resolved)
     return resolved
   })()
