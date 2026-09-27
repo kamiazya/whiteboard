@@ -60,6 +60,16 @@ const snap: DocumentSnapshot = {
   kind: 'spatial' as const,
 }
 
+/** The sentence a refused delete rejects with; fails the test if it resolved. */
+async function refusalOf(del: () => Promise<void>): Promise<string> {
+  let refusal: unknown
+  await act(async () => {
+    refusal = await del().catch((err: unknown) => err)
+  })
+  expect(refusal, 'the delete resolved, but it should have refused').toBeInstanceOf(Error)
+  return (refusal as Error).message
+}
+
 describe('useBrowserDocumentController', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -188,7 +198,7 @@ describe('useBrowserDocumentController', () => {
     }
   })
 
-  it('triggerCleanup flushes pending save then deletes canvas', async () => {
+  it('deleteDocument flushes pending save then deletes canvas', async () => {
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
@@ -204,7 +214,7 @@ describe('useBrowserDocumentController', () => {
       result.current.renameDocument('Renamed before cleanup')
     })
     await act(async () => {
-      await result.current.triggerCleanup()
+      await result.current.deleteDocument()
     })
     expect(result.current.cleanupCompleted).toBe(true)
     expect(result.current.snapshot).toBeNull()
@@ -212,7 +222,7 @@ describe('useBrowserDocumentController', () => {
     expect(await store.getDefaultDocumentId()).toBeNull()
   })
 
-  it('cleanupError is a generic safe copy when flush fails — raw error not exposed', async () => {
+  it('a refused delete says why in a generic safe sentence — raw error not exposed', async () => {
     const base = new LocalStoreDouble()
     await base.setDefaultDocumentId(C1)
     await base.save(snap)
@@ -235,7 +245,7 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {})
     shouldFailSave = true
     // renameDocument flushes immediately; let that failing save settle to 'degraded'
-    // before triggerCleanup runs, matching how a real prior save failure lingers.
+    // before deleteDocument runs, matching how a real prior save failure lingers.
     // Its returned promise rejects on this failed save (see the dedicated
     // rejection test below) — catch it here since this test only cares about
     // the resulting persistence/cleanup state, not the rejection itself.
@@ -245,15 +255,12 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
-    await act(async () => {
-      await result.current.triggerCleanup()
-    })
-    expect(result.current.cleanupError).not.toBeNull()
-    expect(result.current.cleanupError).not.toMatch(/secret-credential-xyz/i)
-    expect(result.current.cleanupError).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
+    const refusal = await refusalOf(() => result.current.deleteDocument())
+    expect(refusal).not.toMatch(/secret-credential-xyz/i)
+    expect(refusal).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
   })
 
-  it('cleanupError names the document by its own kind, not always "canvas"', async () => {
+  it('a refused delete names the document by its own kind, not always "canvas"', async () => {
     // `kindNoun` exists so user-visible copy never calls a note a canvas
     // (vocabulary.md retired the container sense of the word). These two
     // failure messages were written before it and bypassed it, so deleting a
@@ -282,11 +289,9 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
-    await act(async () => {
-      await result.current.triggerCleanup()
-    })
-    expect(result.current.cleanupError).toMatch(/\bnote\b/)
-    expect(result.current.cleanupError).not.toMatch(/\bcanvas\b/i)
+    const refusal = await refusalOf(() => result.current.deleteDocument())
+    expect(refusal).toMatch(/\bnote\b/)
+    expect(refusal).not.toMatch(/\bcanvas\b/i)
   })
 
   it('renameDocument returns a promise that rejects when the underlying save fails', async () => {
@@ -327,26 +332,7 @@ describe('useBrowserDocumentController', () => {
     expect(result.current.persistence.kind).toBe('degraded')
   })
 
-  it('cleanupError is null on successful cleanup', async () => {
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId(C1)
-    await store.save(snap)
-    const { result } = renderHook(() =>
-      useBrowserDocumentController(store.index, {
-        loro: store.loro,
-        pointer: store.pointer,
-        clock: store.clock,
-      }),
-    )
-    await act(async () => {})
-    await act(async () => {
-      await result.current.triggerCleanup()
-    })
-    expect(result.current.cleanupError).toBeNull()
-    expect(result.current.cleanupCompleted).toBe(true)
-  })
-
-  it('triggerCleanup aborts when flush fails — preserves data copy', async () => {
+  it('deleteDocument aborts when flush fails — preserves data copy', async () => {
     const base = new LocalStoreDouble()
     await base.setDefaultDocumentId(C1)
     await base.save(snap)
@@ -369,7 +355,7 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {})
     shouldFailSave = true
     // renameDocument flushes immediately and fails; let it settle to 'degraded'
-    // before triggerCleanup runs, so triggerCleanup's own degraded-guard aborts.
+    // before deleteDocument runs, so deleteDocument's own degraded-guard aborts.
     // The returned promise rejects on this failed save — caught here since
     // this test only cares about the resulting cleanup-abort state.
     await act(async () => {
@@ -378,15 +364,14 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
-    await act(async () => {
-      await result.current.triggerCleanup()
-    })
+    // Refused, and SAYS so: the rejection is the sentence the page shows.
+    expect(await refusalOf(() => result.current.deleteDocument())).toMatch(/could not be safely/)
     expect(result.current.cleanupCompleted).toBe(false)
     expect(result.current.snapshot).not.toBeNull()
     expect(await base.getDefaultDocumentId()).toBe(C1)
   })
 
-  it('triggerCleanup is a no-op when the pointer no longer names a document the index holds', async () => {
+  it('deleteDocument is a no-op when the pointer no longer names a document the index holds', async () => {
     // The bespoke store's `del` compared against the default pointer itself
     // and answered 'pointer-mismatch'; the port has no such coupling, so the
     // check moved into the controller and reads as a resolve that finds
@@ -405,13 +390,13 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {})
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await act(async () => {
-      await result.current.triggerCleanup()
+      await result.current.deleteDocument()
     })
     expect(result.current.cleanupCompleted).toBe(false)
     expect(result.current.snapshot).toEqual(snap)
   })
 
-  it('no phantom save re-populates store after triggerCleanup', async () => {
+  it('no phantom save re-populates store after deleteDocument', async () => {
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
@@ -427,7 +412,7 @@ describe('useBrowserDocumentController', () => {
       result.current.renameDocument('Renamed')
     })
     await act(async () => {
-      await result.current.triggerCleanup()
+      await result.current.deleteDocument()
     })
     // Advance past any timer window — no un-flushed timer should save phantom data.
     await act(async () => {
@@ -632,7 +617,7 @@ describe('useBrowserDocumentController', () => {
     )
     await act(async () => {})
     await act(async () => {
-      await result.current.triggerCleanup()
+      await result.current.deleteDocument()
     })
     expect(result.current.snapshot).toBeNull()
     act(() => {
