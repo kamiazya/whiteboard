@@ -24,6 +24,7 @@ import { cn } from '../lib/utils.js'
 import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
 import { DaemonAddress } from './connection/DaemonAddress.js'
+import { ExtensionConnectEntry } from './connection/ExtensionConnectEntry.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
 import { formatRelative } from './workspace-files/format-relative.js'
 
@@ -37,12 +38,6 @@ const DaemonDetectedBanner = lazy(() =>
 )
 // Lazy for the same reason: it is offered only in that popover, and only
 // where the extension answers.
-const ExtensionConnectOption = lazy(() =>
-  import('./connection/ExtensionConnectOption.js').then((m) => ({
-    default: m.ExtensionConnectOption,
-  })),
-)
-
 /**
  * The honest-detach floor for a moved workspace: a cold load whose silent
  * daemon renewal fails lands in the browser flow with the stored daemon
@@ -99,7 +94,7 @@ function BrowserKeeperConnect({
       </p>
       <PromotedElsewhereNotice settingsStore={settingsStore} />
       <Suspense fallback={null}>
-        <ExtensionConnectOption settingsStore={settingsStore} />
+        <ExtensionConnectEntry settingsStore={settingsStore} />
         <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
       </Suspense>
     </>
