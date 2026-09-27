@@ -1,0 +1,23 @@
+{
+  "name": "@kamiazya/whiteboard-extension",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "description": "The whiteboard browser extension: relays the hosted app to the local daemon through a native messaging host (ADR-0050). Loaded by hand while releases are 0.0.x.",
+  "type": "module",
+  "scripts": {
+    "build": "vite build && vite build --mode development",
+    "typecheck": "tsc --noEmit",
+    "smoke:bridge": "node scripts/bridge-smoke.mjs"
+  },
+  "dependencies": {
+    "@kamiazya/whiteboard-daemon-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "playwright": "1.63.0",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

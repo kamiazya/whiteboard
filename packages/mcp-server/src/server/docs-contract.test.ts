@@ -72,6 +72,7 @@ describe('docs/ contract', () => {
       'packages/scene': 'scene',
       'packages/canvas-viewer': 'canvas-viewer',
       'packages/daemon-client': 'daemon-client',
+      'apps/extension': 'extension node',
       'apps/web': 'web',
     }
     const docsDescribingFullTestSuite = [
@@ -292,6 +293,7 @@ describe('docs/ contract', () => {
       'twenty-five',
       'twenty-six',
       'twenty-seven',
+      'twenty-eight',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]

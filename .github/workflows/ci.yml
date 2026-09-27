@@ -493,6 +493,16 @@ jobs:
           WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
 
+      # ADR-0050's bridge in a real browser: a real daemon on its socket, the
+      # native host `whiteboard native-host` installs, the built extension,
+      # headless Chromium. Branded Chrome (WHITEBOARD_CHROME_PATH) ignores
+      # --load-extension, so this one runs on Playwright's own Chromium.
+      - name: Install Playwright Chromium (extension bridge smoke)
+        run: pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium
+
+      - name: Extension bridge smoke
+        run: pnpm --filter @kamiazya/whiteboard-extension smoke:bridge
+
       - name: Build
         run: pnpm build
 

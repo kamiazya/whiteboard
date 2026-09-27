@@ -129,6 +129,31 @@ If behavior diverges, fall back to renaming `.mcp.json` to `.mcp.json.published`
 
 This does not affect normal published usage through `npx -y @kamiazya/whiteboard-mcp@latest`, because each launch is a fresh spawn.
 
+## The browser extension and its native host (ADR-0050)
+
+The hosted app is moving to reach the local daemon through a browser extension
+rather than a loopback port. The pieces exist and are proven end to end; the
+web app does not use them yet.
+
+- `apps/extension` is a Manifest V3 extension that relays each page connection
+  to one native messaging host process. `pnpm --filter @kamiazya/whiteboard-extension build`
+  writes `dist/production` (admits the hosted app only) and `dist/development`
+  (also `localhost` and `127.0.0.1`, for a dev server). Load either with
+  **Load unpacked** on `chrome://extensions`; the manifest carries a key, so the
+  id is always `ckgipndlpblkhiplhnbbdnpnibflplje`.
+- `whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>]`
+  registers the host with each Chromium browser this user has run (Chrome,
+  Chromium, Edge, Brave; Linux and macOS). It writes a launcher under the data
+  dir and a manifest that lets only the extension above start it. One host name
+  means one data dir per browser: installing for `.dev-data` replaces the
+  registration for `~/.whiteboard`.
+- The host relays only `/api/` requests, to the owner-only socket the daemon
+  records in `daemon.json`, and attaches the daemon's token itself — the page
+  never holds one.
+- `pnpm --filter @kamiazya/whiteboard-extension smoke:bridge` proves the whole
+  path in headless Chromium against a real daemon. Branded Chrome ignores
+  `--load-extension`, so it needs `pnpm exec playwright install chromium` once.
+
 ## Cloudflare Pages header parity in local dev
 
 `apps/web/public/_headers` (security headers, CSP) is only served by
@@ -170,12 +195,12 @@ pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 Default regression triple after a change:
 
 ```bash
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
 pnpm typecheck   # tsc --noEmit (~21s across all 17 packages)
 pnpm smoke:e2e   # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
 ```
 
-For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-seven configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all four browser projects (canvas-render-browser, canvas-viewer-browser, web-browser, web-browser-window-state)):
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-eight configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, extension node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all four browser projects (canvas-render-browser, canvas-viewer-browser, web-browser, web-browser-window-state)):
 
 ```bash
 pnpm test --project mcp-node

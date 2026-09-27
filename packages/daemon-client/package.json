@@ -118,6 +118,14 @@
       "types": "./src/token-store.ts",
       "import": "./src/token-store.ts"
     },
+    "./extension-bridge": {
+      "types": "./src/extension-bridge.ts",
+      "import": "./src/extension-bridge.ts"
+    },
+    "./extension-names": {
+      "types": "./src/extension-names.ts",
+      "import": "./src/extension-names.ts"
+    },
     "./ws-messages": {
       "types": "./src/ws-messages.ts",
       "import": "./src/ws-messages.ts"
