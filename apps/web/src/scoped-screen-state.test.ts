@@ -234,6 +234,10 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
     'no subject: keyed BY the workspace it names; a switch changes the comparison, not the ref',
   refetchedForRef:
     'no subject: keyed BY the handle it names, the same shape as reportedWorkspaceRef',
+  lastAddressRef:
+    'no subject: the address itself, compared with the next one to tell a move from a re-run',
+  refusedRef:
+    'no subject: a set keyed BY the handles that answered 404, so a switch cannot leave one standing for the wrong workspace',
 }
 
 /** An empty value, in any of the shapes these screens reset to. */
