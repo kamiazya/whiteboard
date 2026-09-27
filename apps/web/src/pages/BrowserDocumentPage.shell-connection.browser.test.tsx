@@ -120,7 +120,10 @@ describe('shell mark over a real document kept in this browser', () => {
     } finally {
       IDBDatabase.prototype.transaction = transaction
     }
-    expect(logged.join('\n')).toContain('[browser-backend] opening the workspace record failed')
+    // WHICH reader logs the refusal first depends on timing; what must hold
+    // is that every record is the refusal this test induced, and nothing else.
+    expect(logged.length).toBeGreaterThan(0)
+    for (const line of logged) expect(line).toContain('storage refused the write (induced)')
   })
 
   it('leaving the document takes the claim with it', async () => {
