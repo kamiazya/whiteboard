@@ -442,7 +442,7 @@ function DocumentPageBody({
     body: markdownBody ?? '',
     resolveAlias: files.resolveAlias,
     resolveTitle: files.resolveTitle,
-    ...(files.loadReference === undefined ? {} : { load: files.loadReference }),
+    load: files.loadReference,
     // The same adapter the board resolves its pictures through, so a body's
     // inline attachment previews here instead of drawing the written path.
     loadImage: (ref) => files.adapter.loadImageUrl(ref),

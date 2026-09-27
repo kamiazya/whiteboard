@@ -87,7 +87,12 @@ export interface DocumentPageModel {
     readonly resolveTitle: NonNullable<UseDocumentFileSeamsOptions['resolveTitle']>
     readonly missingFileRef: SpatialEditorPaneProps['missingFileRef']
     readonly pickerTargets: ReturnType<typeof linkTargets>
-    readonly loadReference?: ReferenceLoader
+    /**
+     * How this keeper loads a document a body points at. Required: a default
+     * here was the BROWSER's loader, so a keeper that forgot to pass one
+     * silently read references from the wrong store.
+     */
+    readonly loadReference: ReferenceLoader
   }
   /** Following a reference: the id it names, the keeper's own way to get there. */
   readonly openDocument: (id: string) => void

@@ -22,7 +22,6 @@ import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { useCallback, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import { loadBrowserReference } from '../lib/document-embed-content.js'
 import { type LoadImageUrl, useImageUrls } from './use-image-urls.js'
 import {
   type PrefetchRequest,
@@ -43,9 +42,6 @@ export type ReferenceLoader = (
   documentId: string | null,
 ) => Promise<LoadedReference | undefined>
 
-const loadFromBrowser: ReferenceLoader = (_target, documentId) =>
-  documentId === null ? Promise.resolve(undefined) : loadBrowserReference(documentId)
-
 export interface UseReferenceSeamsOptions {
   /** The body whose references seed the graph. */
   readonly body: string
@@ -53,8 +49,8 @@ export interface UseReferenceSeamsOptions {
   readonly resolveAlias?: AliasResolver
   /** The page's list-based names, consulted before any load. */
   readonly resolveTitle?: (documentId: string) => string | undefined
-  /** Injection seam for tests and for the daemon page; defaults to the browser's Loro loader. */
-  readonly load?: ReferenceLoader
+  /** The keeper's loader. No default: which store a reference is read from is the keeper's answer. */
+  readonly load: ReferenceLoader
   /**
    * Where a stored picture is, for the body's inline `![](asset:…)`. Absent,
    * the layout keeps the written URL — which is right for an absolute one and
@@ -86,7 +82,7 @@ export function useReferenceSeams({
   body,
   resolveAlias,
   resolveTitle,
-  load = loadFromBrowser,
+  load,
   loadImage,
 }: UseReferenceSeamsOptions): ReferenceSeams {
   // A canonical id names itself, the way codec's reader treats it; anything
