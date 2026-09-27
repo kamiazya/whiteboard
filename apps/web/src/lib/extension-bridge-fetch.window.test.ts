@@ -8,17 +8,28 @@ import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { extensionBridgeFetch, extensionPresent } from './extension-bridge-fetch.js'
 import { connectThroughWindow, windowHello } from './extension-window-port.js'
 
+// The bridge is one port per page, held across calls; the port each test
+// opens is closed after it, so the next test (or repeat) opens its own.
+const dropPort = vi.hoisted(() => ({ current: () => {} }))
+
 vi.mock('./extension-window-port.js', () => ({
   windowHello: vi.fn(async () => true),
   connectThroughWindow: vi.fn(() => ({
     onMessage: { addListener: () => {} },
-    onDisconnect: { addListener: () => {} },
+    onDisconnect: {
+      addListener: (listener: () => void) => {
+        dropPort.current = listener
+      },
+    },
     postMessage: () => {},
     disconnect: () => {},
   })),
 }))
 
-afterEach(() => vi.clearAllMocks())
+afterEach(() => {
+  dropPort.current()
+  vi.clearAllMocks()
+})
 
 describe('the bridge without chrome.runtime', () => {
   it('asks the content script whether the extension is there', async () => {
