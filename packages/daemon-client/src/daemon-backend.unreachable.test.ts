@@ -148,3 +148,21 @@ it('keeps reconnecting when the probe never answers', async () => {
   expect(FakeWebSocket.instances.length).toBeGreaterThan(3)
   backend.disconnect()
 })
+
+// An injected transport may not honour the abort signal. The wait has to be
+// bounded on its own, or one such fetch leaves no reconnect armed.
+it('keeps reconnecting when the probe never settles and ignores its abort signal', async () => {
+  const fetch = vi.fn(() => new Promise<Response>(() => {}))
+  const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/', {
+    fetch: fetch as unknown as typeof globalThis.fetch,
+  })
+  const onAuthError = vi.fn()
+  backend.connect(handlers(onAuthError))
+
+  await refuseSockets(3)
+  await vi.advanceTimersByTimeAsync(30_000)
+
+  expect(onAuthError).not.toHaveBeenCalled()
+  expect(FakeWebSocket.instances.length).toBeGreaterThan(3)
+  backend.disconnect()
+})

@@ -245,12 +245,23 @@ export class DaemonBackend implements DocumentBackend {
    */
   private async judgeRefusal(handlers: DocumentBackendHandlers): Promise<void> {
     const fetchFn = this.apiTransport?.fetch ?? apiFetch
+    // Bounded twice over: the signal ends a request the transport lets go of,
+    // and the race ends the wait for one that ignores it.
     const abort = new AbortController()
-    const timer = setTimeout(() => abort.abort(), REFUSAL_PROBE_TIMEOUT_MS)
-    const response = await fetchFn('/api/workspaces', { signal: abort.signal }).then(
-      (res) => res,
-      () => undefined,
-    )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => {
+        abort.abort()
+        resolve(undefined)
+      }, REFUSAL_PROBE_TIMEOUT_MS)
+    })
+    const response = await Promise.race([
+      fetchFn('/api/workspaces', { signal: abort.signal }).then(
+        (res) => res,
+        () => undefined,
+      ),
+      timedOut,
+    ])
     clearTimeout(timer)
     if (this.cancelled) return
     // A server error is a daemon that is up and failing, not one refusing
