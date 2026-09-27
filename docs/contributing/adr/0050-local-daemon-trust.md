@@ -227,3 +227,60 @@ Unix socket, compared with today's loopback WebSocket.
   sent to every port on that host, so a squatter on another port receives
   it. A URL passes through the browser-opening command's arguments, which
   other users can read.
+
+## Addendum (2026-09-27): how it is built
+
+The owner took seven decisions on how to build this, before any of it is
+built.
+
+1. **The bridge carries the daemon's existing HTTP API.**
+   - Requests, responses and the SSE stream travel through the extension as
+     they are, rather than being redesigned as a new message protocol.
+   - The daemon keeps its routes and serves them on its socket.
+   - The web app keeps its calls and only changes the transport it hands
+     them to.
+   - WebSocket is retired in favour of the SSE stream the app already uses
+     on server mode.
+2. **Loopback HTTP closes to browsers once Chromium and Firefox both work.**
+   - The condition is everyday editing through the extension in both
+     engines.
+   - It does not wait for Safari, which today keeps its data in the browser
+     only.
+3. **The local daemon has one person: the machine's owner.**
+   - Only the owner can open the owner-only socket, so nothing is left for a
+     passkey to tell apart.
+   - Passkey-bound sessions and local member management are retired.
+   - A daemon shared by several people is what server mode is for.
+   - This settles the local half of ADR-0049 decision 5, which waited on
+     this ADR.
+4. **The loopback MCP listener goes too, once the development proxy reaches
+   the socket.** This replaces decision 3's allowance for an MCP-only
+   loopback listener.
+   - The development workflow uses HTTP only so that a client survives the
+     daemon restarting on every code change.
+   - The development stdio proxy already retries across those restarts.
+     Pointed at the socket, it gives the same property with no port.
+   - After that, the daemon listens on no loopback port at all.
+5. **While releases are 0.0.x, the extension is loaded by hand for
+   development.** Nothing is published to a store yet.
+6. **What the Consequences list as unmeasured is measured at the start of
+   the stage that needs it.** Two exceptions are measured first,
+   because they shape the bridge:
+   - an MV3 service worker suspended with a native port open;
+   - a real Loro snapshot.
+7. **Placement:**
+   - the extension is a new app in this repository;
+   - the native messaging host ships inside the published MCP package, so
+     one install gives the `whiteboard` command that writes the host's
+     manifest.
+
+The stages, in order:
+- the missing measurements;
+- the daemon on its socket;
+- the Chromium extension and host;
+- Firefox;
+- closing loopback;
+- Safari and distribution.
+
+Closing loopback is the stage that removes the audit's findings. Until it
+lands, the extension path runs beside today's connection.

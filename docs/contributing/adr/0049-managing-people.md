@@ -18,7 +18,8 @@ manage people.
   scope) manages every workspace there, so no workspace there has a last
   owner to keep. Adding a person there is still choosing a pinned passkey.
   How the local daemon identifies a person is
-  [ADR-0050](0050-local-daemon-trust.md)'s to change.
+  [ADR-0050](0050-local-daemon-trust.md)'s to change. *(Settled by ADR-0050's 2026-09-27
+  addendum: the local daemon has one person, the machine's owner.)*
 - Decision 6 builds nothing.
 
 ## Context
