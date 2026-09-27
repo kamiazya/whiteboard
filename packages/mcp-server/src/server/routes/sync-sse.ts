@@ -92,14 +92,16 @@ export function setSyncSseHooks(hooks: {
 interface SyncStreamDoc {
   ready: boolean
   /**
-   * The key as the client subscribed with it. Registries and broadcasts name
-   * a workspace by id; a client addresses it by whatever handle its address
-   * carries (ADR-0019), and routes events by that same string.
+   * The key canonicalised: registries and broadcasts name a workspace by id,
+   * while the map holding this entry is keyed as the client subscribed — by
+   * whatever handle its address carries (ADR-0019), which is also what it
+   * routes events by. Two spellings of one document are two subscriptions.
    */
-  as: string
+  key: string
 }
 
 interface SyncStream {
+  /** Keyed by the doc key exactly as the client subscribed with it. */
   docs: Map<string, SyncStreamDoc>
   send: (event: string, data: string) => void
   /** The user who opened it, where the keeper knows people; null otherwise. */
@@ -116,7 +118,7 @@ const streams = new Map<string, SyncStream>()
 export function sseSubscribedWorkspaceIds(): string[] {
   const ids = new Set<string>()
   for (const stream of streams.values()) {
-    for (const key of stream.docs.keys()) {
+    for (const { key } of stream.docs.values()) {
       if (key.startsWith(WORKSPACE_DOC_KEY_PREFIX))
         ids.add(key.slice(WORKSPACE_DOC_KEY_PREFIX.length))
     }
@@ -160,10 +162,11 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
   const key = workspaceDocKey(workspaceId)
   const encoded = toBase64(update)
   for (const stream of streams.values()) {
-    const entry = stream.docs.get(key)
-    if (entry === undefined) continue
-    const payload: SyncUpdateEvent = { doc: entry.as, update: encoded }
-    stream.send('update', JSON.stringify(payload))
+    for (const [as, entry] of stream.docs) {
+      if (entry.key !== key) continue
+      const payload: SyncUpdateEvent = { doc: as, update: encoded }
+      stream.send('update', JSON.stringify(payload))
+    }
   }
 }
 
@@ -182,10 +185,11 @@ export function sseBroadcastText(workspaceId: string, path: string, raw: string)
 
 function sendText(key: string, raw: string, admits: (entry: SyncStreamDoc) => boolean): void {
   for (const stream of streams.values()) {
-    const entry = stream.docs.get(key)
-    if (entry === undefined || !admits(entry)) continue
-    const payload: SyncMessageEvent = { doc: entry.as, raw }
-    stream.send('message', JSON.stringify(payload))
+    for (const [as, entry] of stream.docs) {
+      if (entry.key !== key || !admits(entry)) continue
+      const payload: SyncMessageEvent = { doc: as, raw }
+      stream.send('message', JSON.stringify(payload))
+    }
   }
 }
 
@@ -199,19 +203,35 @@ export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: 
  * every registry and broadcast here is keyed by. Total, as the resolver is:
  * a key naming no workspace comes back unchanged.
  */
-async function canonicalDocKey(key: string): Promise<string> {
+async function canonicalDocKey(
+  key: string,
+  resolve: (handle: string) => Promise<string> = resolveWorkspaceHandleToId,
+): Promise<string> {
   const handle = workspaceIdOfDocKey(key)
   if (handle === null) return key
-  const workspaceId = await resolveWorkspaceHandleToId(handle)
+  const workspaceId = await resolve(handle)
   if (workspaceId === handle) return key
   return key.startsWith(WORKSPACE_DOC_KEY_PREFIX)
     ? workspaceDocKey(workspaceId)
     : docKey(workspaceId, key.slice(handle.length + 1))
 }
 
-/** Each key as the client wrote it, beside its canonical form. */
+/**
+ * Each key as the client wrote it, beside its canonical form. A handle is
+ * resolved once however many keys name it, since each resolution reads the
+ * workspace registry.
+ */
 async function canonicalKeys(keys: readonly string[]): Promise<Array<{ key: string; as: string }>> {
-  return Promise.all(keys.map(async (as) => ({ key: await canonicalDocKey(as), as })))
+  const resolutions = new Map<string, Promise<string>>()
+  const resolve = (handle: string) => {
+    let resolution = resolutions.get(handle)
+    if (resolution === undefined) {
+      resolution = resolveWorkspaceHandleToId(handle)
+      resolutions.set(handle, resolution)
+    }
+    return resolution
+  }
+  return Promise.all(keys.map(async (as) => ({ key: await canonicalDocKey(as, resolve), as })))
 }
 
 /**
@@ -316,19 +336,19 @@ function applySubscriptions(
   subscribe: ReadonlyArray<{ key: string; as: string }>,
   unsubscribe: readonly string[],
 ): string[] {
-  for (const { key, as } of subscribe) if (!docs.has(key)) docs.set(key, { ready: false, as })
-  for (const key of unsubscribe) docs.delete(key)
-  return [...docs.values()].map((entry) => entry.as).sort()
+  for (const { key, as } of subscribe) if (!docs.has(as)) docs.set(as, { ready: false, key })
+  for (const as of unsubscribe) docs.delete(as)
+  return [...docs.keys()].sort()
 }
 
 function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
-  const entry = stream.docs.get(doc.key) ?? { ready: false, as: doc.as }
+  const entry = stream.docs.get(doc.as) ?? { ready: false, key: doc.key }
   entry.ready = true
-  stream.docs.set(doc.key, entry)
+  stream.docs.set(doc.as, entry)
   // Replay the latest viewport request so a stream that connected after
   // the request was issued still inherits the same fit/scroll/zoom intent.
   const cached = getCachedViewportRequest(doc.key)
-  if (cached !== undefined) stream.send('message', JSON.stringify({ doc: entry.as, raw: cached }))
+  if (cached !== undefined) stream.send('message', JSON.stringify({ doc: doc.as, raw: cached }))
 }
 
 async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
@@ -338,7 +358,8 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
   // Resolved before the gate, so membership is decided for the workspace
   // a key actually reaches, whichever handle named it.
   const subscribe = await canonicalKeys(parsed.data.subscribe ?? [])
-  const unsubscribe = (await canonicalKeys(parsed.data.unsubscribe ?? [])).map(({ key }) => key)
+  // Dropped by the spelling it was subscribed under, so no resolution.
+  const unsubscribe = parsed.data.unsubscribe ?? []
 
   const refusal = await firstMembershipRefusal(
     c,
@@ -356,7 +377,7 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
   if (
     exceedsStreamCap(
       stream.docs,
-      subscribe.map(({ key }) => key),
+      subscribe.map(({ as }) => as),
       unsubscribe,
     )
   ) {

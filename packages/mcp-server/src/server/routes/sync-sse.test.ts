@@ -355,6 +355,38 @@ describe('SSE sync transport', () => {
     expect(frames.find((f) => f.includes('head_changed'))).toContain(`"doc":"${segment}/a"`)
   })
 
+  // Two tabs on one stream may address one workspace by its segment and by
+  // its id; each spelling is its own subscription, answered and dropped alone.
+  it('keeps two spellings of one workspace as two subscriptions on a stream', async () => {
+    const app = createApp(createRuntimeOptions())
+    const created = await app.request('/api/workspaces', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Two Spellings' }),
+    })
+    const { workspaceId, segment } = (await created.json()) as {
+      workspaceId: string
+      segment: string
+    }
+    const { res, streamId } = await openStream(app)
+    const subscribe = (body: object) =>
+      app.request('/api/sync/subscribe', {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streamId, ...body }),
+      })
+    await subscribe({ subscribe: [`workspace:${segment}`, `workspace:${workspaceId}`] })
+
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1]))
+    const after = await subscribe({ unsubscribe: [`workspace:${segment}`] })
+    expect(((await after.json()) as { docs: string[] }).docs).toEqual([`workspace:${workspaceId}`])
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([2]))
+
+    const frames = (await readEvents(res, 3)).filter((f) => f.includes('event: update'))
+    expect(frames.filter((f) => f.includes(`"doc":"workspace:${segment}"`))).toHaveLength(1)
+    expect(frames.filter((f) => f.includes(`"doc":"workspace:${workspaceId}"`))).toHaveLength(2)
+  })
+
   it('rejects a subscribe for an unknown stream instead of silently succeeding', async () => {
     const app = createApp(createRuntimeOptions())
 
