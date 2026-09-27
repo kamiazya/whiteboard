@@ -27,7 +27,7 @@ import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
-import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
+import { documentYForLine } from './anchor-mapping.js'
 import {
   annotationDecorations,
   placeThreads,
@@ -46,11 +46,13 @@ import { editorLayout } from './editor-layout.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PassageProposalCard } from './PassageProposalCard.js'
+import { previewDocumentSvg, railContentHeight, totalSourceLines } from './preview-geometry.js'
 import { railScrollable } from './preview-width.js'
 import type { SourcePaneApi } from './SourcePane.js'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 import { SplitDivider, useSplitDrag } from './split-divider.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { usePaneScrollSync } from './use-pane-scroll-sync.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
 import { wikiLinkCompletionSource } from './wiki-link-completion.js'
@@ -257,77 +259,6 @@ function countWords(value: string): number {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 function isDocumentIdHref(href: string): boolean {
   return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
-}
-
-/** The laid-out document's height — the last block's bottom edge. */
-function railContentHeight(blocks: readonly RailBlock[]): number {
-  let bottom = 0
-  for (const block of blocks) bottom = Math.max(bottom, block.y + block.h)
-  return bottom
-}
-
-function totalSourceLines(value: string): number {
-  return value.split('\n').length
-}
-
-/**
- * The preview DOCUMENT's own SVG — the laid-out markdown — and not merely
- * the first SVG inside the preview column.
- *
- * Four places measure their origin from it, and a bare `querySelector('svg')`
- * answers all four wrongly the moment a document has a conversation on it:
- * the comment markers live in that same column, each carries an icon, and
- * they are rendered BEFORE the pane. Measured — the query returned a marker's
- * own `viewBox="0 0 24 24"` icon, so the marker placement was reading its own
- * previous output as its origin and computed a `svgTop` of 165 where the
- * document's is 32.
- *
- * Scoped by the pane's own class rather than by DOM order, so the next
- * element added to this column cannot bring it back.
- */
-function previewDocumentSvg(within: Element | null | undefined): SVGElement | null {
-  const found = within?.querySelector('.markdown-preview-pane svg') ?? null
-  return found instanceof SVGElement ? found : null
-}
-
-/**
- * Maps the top visible source line onto a preview scrollTop through the
- * per-block anchors, interpolating linearly inside the band between two
- * consecutive blocks (blank separator lines belong to the band above, so
- * scrolling through them eases toward the next block instead of jumping).
- * `undefined` means the anchored path cannot answer — no anchors yet, no
- * source API, no rendered SVG — and the caller keeps its proportional
- * fallback.
- */
-function anchoredPreviewTop(
-  anchors: readonly PreviewBlockAnchor[],
-  api: SourcePaneApi | null,
-  preview: HTMLElement,
-  totalLines: number,
-): number | undefined {
-  const first = anchors[0]
-  if (first === undefined || api === null || typeof api.topVisibleLine !== 'function') {
-    return undefined
-  }
-  const svg = previewDocumentSvg(preview)
-  if (svg === null) return undefined
-  const line = api.topVisibleLine()
-  // The SVG's own offset inside the scroll content (the document column
-  // wrapper adds padding above it), measured live so pane resizes and
-  // header changes never go stale.
-  const svgTop =
-    svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
-  if (line <= first.line) return svgTop + first.y * Math.max(0, line / first.line)
-  let index = anchors.length - 1
-  while (index > 0 && (anchors[index]?.line ?? Number.POSITIVE_INFINITY) > line) index--
-  const current = anchors[index]
-  if (current === undefined) return undefined
-  const next = anchors[index + 1]
-  const bandEndLine = next?.line ?? totalLines + 1
-  const bandEndY = next?.y ?? svg.getBoundingClientRect().height
-  const span = Math.max(1, bandEndLine - current.line)
-  const t = Math.min(1, Math.max(0, (line - current.line) / span))
-  return svgTop + current.y + t * (bandEndY - current.y)
 }
 
 export function MarkdownEditor({
@@ -564,67 +495,14 @@ export function MarkdownEditor({
 
   const divider = useSplitDrag(rootRef, setSplitRatio)
 
-  // Scroll sync, source -> preview. Line-accurate: the preview render
-  // reports each top-level block's source start line and laid-out Y (see
-  // render-preview.ts), so the top visible source line maps onto the
-  // block band it falls in, interpolated linearly inside the band. The
-  // proportional ratio map stays as the fallback for the moments anchors
-  // are unavailable (unparseable mid-edit body, first render) — it keeps
-  // the preview in the neighborhood, which is what split editors (VS
-  // Code's markdown preview default, HackMD) ship as their baseline.
-  useEffect(() => {
-    const scroller = sourceWrapRef.current?.querySelector('.cm-scroller')
-    if (!(scroller instanceof HTMLElement)) return
-    const onScroll = () => {
-      const preview = previewScrollRef.current
-      if (!preview) return
-      const anchored = anchoredPreviewTop(
-        anchorsRef.current,
-        sourceApiRef.current,
-        preview,
-        totalSourceLines(value),
-      )
-      if (anchored !== undefined) {
-        preview.scrollTop = anchored
-        return
-      }
-      const sourceRange = scroller.scrollHeight - scroller.clientHeight
-      const previewRange = preview.scrollHeight - preview.clientHeight
-      if (sourceRange <= 0 || previewRange <= 0) return
-      preview.scrollTop = (scroller.scrollTop / sourceRange) * previewRange
-    }
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    return () => scroller.removeEventListener('scroll', onScroll)
-  }, [value])
-
-  // Write mode has no preview on screen, so the rail drives the SOURCE:
-  // a press is a document position, and the anchors say which line that is.
-  const seekSource = useCallback(
-    (documentY: number) => {
-      const api = sourceApiRef.current
-      if (api === null) return
-      api.revealLine(
-        lineForDocumentY(anchorsRef.current, documentY, {
-          totalLines: totalSourceLines(value),
-          contentHeight: railContentHeight(blocksRef.current),
-        }),
-      )
-    },
-    [value],
-  )
-
-  const seekPreview = useCallback((documentY: number) => {
-    const preview = previewScrollRef.current
-    if (preview === null) return
-    const svg = previewDocumentSvg(preview)
-    const svgTop =
-      svg === null
-        ? 0
-        : svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
-    // Centre what was pointed at, the way a minimap press does — landing it
-    // at the very top would hide the context just above it.
-    preview.scrollTop = svgTop + documentY - preview.clientHeight / 2
-  }, [])
+  const { seekSource, seekPreview } = usePaneScrollSync({
+    value,
+    sourceWrapRef,
+    previewScrollRef,
+    sourceApiRef,
+    anchorsRef,
+    blocksRef,
+  })
 
   // Layout width the preview typesets at: what the pane can actually offer
   // (minus the document column's padding), clamped to a readable measure —
