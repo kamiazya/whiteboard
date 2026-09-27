@@ -113,7 +113,14 @@ Steps (in order):
 1. Validate `mcp-server-v<semver>` tag shape via `TAG` env var (same guard as npm job).
 2. Checkout the release tag.
 3. Install dependencies.
-4. `pnpm check:release-candidate:docker`: CI gates + Docker-specific gates.
+4. `pnpm publish-gate`, the same publishability tier the npm job runs (see "Publish gate
+   scope" above), then `pnpm smoke:docker` and `pnpm smoke:docker-backup-restore`, the
+   checks only a container can answer. It does **not** run `check:release-candidate:docker`:
+   that aggregate chains `pnpm test`, the full matrix verify CI already ran at this SHA.
+   Re-run on one runner at the tag, it failed the 0.0.20 image three times on three
+   different load-dependent tests, and a re-run checks out the same tag, so a flake there
+   blocks the image for that whole release. `check:release-candidate:docker` stays the
+   local, full pre-release pass.
 5. `docker/build-push-action` with `sbom: true` and `provenance: true` (OCI attestations).
 6. `cosign sign --yes` using `DIGEST` and `IMAGE_REPO` env vars (not inline shell
    expansion); keyless signing via Sigstore OIDC, no private key material.
