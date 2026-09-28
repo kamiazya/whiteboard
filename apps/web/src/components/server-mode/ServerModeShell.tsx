@@ -1,7 +1,7 @@
 /**
  * The chrome around a workspace in the web app a server-mode keeper serves
- * (ADR-0047). The daemon's own shell assumes a paired local daemon throughout
- * — re-pairing, "work in browser", a replica notice — none of which a
+ * (ADR-0047). The daemon's own shell assumes a local daemon throughout
+ * — "work in browser", a replica notice — none of which a
  * server keeper has, so this is its own and says only what applies: the way
  * back to the workspace list, the open document's sync state, and who is
  * signed in.

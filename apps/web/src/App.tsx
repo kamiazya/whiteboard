@@ -1,42 +1,25 @@
-import { readDaemonTokenOnce } from '@kamiazya/whiteboard-daemon-client/api-client'
-import type { DaemonConnectionTarget } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { lazy, Suspense, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   BrowserWorkspaceScreen,
+  ConnectingScreen,
   DaemonWorkspaceScreen,
   InvalidConfigScreen,
   NotFoundScreen,
-  PairingFailedScreen,
   SettingsScreen,
 } from './app-screens.js'
 import { LazyPageFallback } from './components/LazyPageFallback.js'
-import { LinkPairingPending } from './components/LinkPairingPending.js'
-import { useDaemonGrant } from './hooks/use-daemon-grant.js'
-import {
-  useDaemonShellTarget,
-  useRememberedDaemon,
-  useReplicaKeeper,
-} from './hooks/use-daemon-session.js'
-import { useDaemonConnection } from './hooks/useDaemonConnection.js'
+import { useDaemonReconnect } from './hooks/use-daemon-reconnect.js'
+import { useDaemonShellTarget, useReplicaKeeper } from './hooks/use-daemon-session.js'
 import { useDaemonThemeFonts } from './hooks/useDaemonThemeFonts.js'
-import { useLinkPairing } from './hooks/useLinkPairing.js'
 import {
   browserWorkspaceIdentitySnapshot,
   subscribeBrowserWorkspaceIdentity,
 } from './lib/browser-workspace-id.js'
 
-// Lazy: the /pair consent page transitively pulls daemon-api-client's zod
-// schema chain, which must stay off the entry chunk's critical path (see
-// apps/web/scripts/smoke-bundle-size.mjs). It renders on a rare, dedicated
-// top-level navigation, so the extra chunk fetch is invisible.
-const PairConsentPage = lazy(() =>
-  import('./pages/PairConsentPage.js').then((m) => ({ default: m.PairConsentPage })),
-)
-
-// Lazy for the same reason as /pair, and one more: this page decodes an
-// arriving workspace record, so it reaches loro — which must stay off the
-// entry chunk (entry-graph-loro-free.test.ts).
+// Lazy: this page decodes an arriving workspace record, so it reaches loro —
+// which must stay off the entry chunk (entry-graph-loro-free.test.ts) — and it
+// renders on a rare, dedicated top-level navigation.
 const ReceiveTransferPage = lazy(() =>
   import('./pages/ReceiveTransferPage.js').then((m) => ({ default: m.ReceiveTransferPage })),
 )
@@ -55,10 +38,8 @@ import {
   browserDocumentPath,
   daemonKeepsSession,
   effectiveProviderState,
-  linkPairingPending,
   renewalPending,
   replicaRead,
-  sessionBanner,
   settingsDaemon,
   shellDaemon,
 } from './lib/session-keeper.js'
@@ -66,44 +47,12 @@ import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { workspaceHandleOrNull } from './lib/workspace-handle.js'
 
 // Which daemon-mode view is showing: the canvas gallery, or a specific open
-// canvas. A #wb= fragment with a path skips straight to 'canvas'; a daemon
-// and path-less pairing start on 'index'. `key` on the DaemonDocumentPage mount
-// forces a clean remount (fresh controller/backend) on every index -> canvas
-// transition instead of reusing a previous canvas's identity. Reuses
-// DaemonRoute's shape (rather than a parallel type) since this state IS the
-// route — app-routes.ts's parse/build functions keep the two in sync.
+// document. `key` on the DaemonDocumentPage mount forces a clean remount
+// (fresh controller/backend) on every index -> document transition instead of
+// reusing a previous document's identity. It IS the route — app-routes.ts's
+// parse/build functions keep the two in sync — and a cold load's URL seeds it
+// (a bookmark, a shared link, or a reload).
 type DaemonView = WorkspaceRoute
-
-// A pairing link's target, as a view. One definition for both arrivals: the
-// `#wb=` payload read on this page load, and the target a consent round trip
-// carried back in the pairing transaction.
-function daemonViewForTarget(target: DaemonConnectionTarget): DaemonView {
-  if (target.workspaceId !== undefined && target.path !== undefined) {
-    return { kind: 'document', workspace: target.workspaceId, path: target.path }
-  }
-  return { kind: 'index', workspace: target.workspaceId }
-}
-
-/**
- * Where a daemon-kept session starts, from the facts that are fixed for the
- * life of the mount.
- *
- * A `#wb=` fragment carrying both workspaceId and path skips straight to the
- * document (the existing deep-link contract); a workspace-only fragment is
- * still a valid target (see daemon-connection-payload.ts's refine) and starts
- * on the gallery pre-scoped to that workspace rather than whichever workspace
- * the daemon happens to list first. Absent a fragment — the daemon's
- * runtime-config path, or a same-origin cold load of a `/w/:workspaceId/d/:path`
- * or `/w/:workspaceId` URL (a bookmark, a shared link, or R3's "Open the local
- * app" deep link) — the URL itself seeds the view.
- */
-function initialDaemonView(
-  linkTarget: DaemonConnectionTarget | undefined,
-  pathname: string,
-): DaemonView {
-  if (linkTarget !== undefined) return daemonViewForTarget(linkTarget)
-  return parseWorkspaceRoute(pathname) ?? { kind: 'index' }
-}
 
 interface AppProps {
   providerState?: ProviderState
@@ -122,78 +71,27 @@ export function App({ providerState }: AppProps) {
     ),
   )
 
-  // Routed BEFORE providerState resolution: a #wb= pairing fragment always
-  // wins over the runtime-config-driven provider state (which governs the
-  // separate same-origin daemon / browser split). 'none' (no
-  // fragment) falls through to that existing resolution unchanged.
-  const daemonConnection = useDaemonConnection()
-  // What the `#wb=` fragment on THIS page load named, or undefined: the
-  // daemon's address and what to open. Resolved once — four call sites below
-  // each narrowed the connection for themselves, and a reader had to check
-  // that they still agreed.
-  const linkPayload = daemonConnection.status === 'paired' ? daemonConnection.payload : undefined
   const [forcedBrowser, setForcedBrowser] = useState(false)
-  // Lazy initializer: readDaemonTokenOnce() consumes (deletes) the injected
-  // global, so it must run exactly once per mount — calling it in the render
-  // body would let StrictMode's double-render read-then-lose the token.
-  const [daemonToken] = useState(() => readDaemonTokenOnce() ?? undefined)
   const location = useLocation()
   const navigate = useNavigate()
 
-  // The daemon-served consent page is its OWN surface, not a daemon view:
-  // parseWorkspaceRoute('/pair') is null, so without this guard the
-  // daemonView -> URL sync effect below immediately navigated to '/',
-  // dropping the origin/challenge/state query and dumping the user on the
-  // gallery instead of the consent prompt.
-  const isPairRoute = location.pathname === '/pair'
-
-  // The keeper-served transfer receiver, for the same reason /pair needs a
-  // guard: `parseWorkspaceRoute('/receive-transfer')` is null, so without
-  // this the daemonView -> URL sync effect below navigates to '/' and drops
-  // the fragment the sender put there — which is the whole handshake.
+  // The keeper-served transfer receiver is its OWN surface, not a daemon view:
+  // `parseWorkspaceRoute('/receive-transfer')` is null, so without this guard
+  // the daemonView -> URL sync effect below navigates to '/' and drops the
+  // fragment the sender put there — which is the whole handshake.
   const isReceiveTransferRoute = location.pathname === '/receive-transfer'
 
-  const [grantErrorDismissed, setGrantErrorDismissed] = useState(false)
-
   const state = providerState ?? defaultProviderState
-  const {
-    grantConnection,
-    setGrantConnection,
-    grantPaired,
-    daemonRenewal,
-    attemptRenewal,
-    awaitingDaemonRenewal,
-  } = useDaemonGrant({
-    isPairRoute,
-    daemonConnected: daemonConnection.status !== 'none',
+  const { connection, renewal, attemptRenewal, awaitingDaemonRenewal } = useDaemonReconnect({
     providerKind: state.kind,
     userSettingsStore,
   })
 
-  // A #wb= fragment carrying both workspaceId+path skips straight to the
-  // canvas (the existing deep-link contract); a workspace-only fragment is
-  // still a valid target (see daemon-connection-payload.ts's refine) and
-  // starts on the gallery pre-scoped to that workspace rather than
-  // whichever workspace the daemon happens to list first. Absent a fragment
-  // (the daemon's runtime-config path, or a same-origin cold load of a
-  // `/w/:workspaceId/d/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
-  // a shared link, or R3's "Open the local app" deep link), the URL itself
-  // seeds the view. Lazy initializer: both the payload and the pathname at
-  // mount time are fixed for the life of the mount.
-  const [daemonView, setDaemonView] = useState<DaemonView>(() =>
-    initialDaemonView(linkPayload, location.pathname),
+  // Lazy initializer: the pathname at mount time is fixed for the life of the
+  // mount.
+  const [daemonView, setDaemonView] = useState<DaemonView>(
+    () => parseWorkspaceRoute(location.pathname) ?? { kind: 'index' },
   )
-
-  // A `#wb=` pairing link is an INTENT, not a connection: it carries no
-  // credential, so it is resolved through the pairing grant before anything
-  // can talk to the daemon (hooks/useLinkPairing.ts owns both halves).
-  const { failed: linkPairingFailed } = useLinkPairing({
-    payload: linkPayload,
-    enabled: !isPairRoute,
-    grant: grantConnection,
-    onResolved: setGrantConnection,
-    onTarget: (target) => setDaemonView(daemonViewForTarget(target)),
-  })
 
   // Derived per render, not read once at mount: an index route renders the
   // document list, a document route mounts the editor. Once mounted, the
@@ -222,27 +120,22 @@ export function App({ providerState }: AppProps) {
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
-  // State -> URL: fires whenever daemonView changes, whether from in-app
-  // navigation (onOpenDocument/onNavigateBack below) or from the #wb=
-  // consume-once fragment establishing the initial view above. The very
-  // first sync uses `replace` so the raw pairing URL never lingers as a
-  // separate history entry the user could "back" into (it's already been
-  // consumed and re-visiting it would silently do nothing); every
-  // subsequent sync pushes, so browser back/forward has real steps to walk.
+  // State -> URL: fires whenever daemonView changes from in-app navigation
+  // (onOpenDocument/onNavigateBack below). The very first sync uses `replace`;
+  // every subsequent sync pushes, so browser back/forward has real steps to
+  // walk.
   const effectiveState = effectiveProviderState(state, forcedBrowser)
   // Derived here rather than in the render tail because the URL-sync effect
   // below needs it: hooks cannot be conditional, so they run under BOTH
   // keepers and something has to tell them which one this is.
   const daemonKept = daemonKeepsSession({
     forcedBrowser,
-    linkPaired: linkPayload !== undefined,
-    grantPaired: grantPaired !== null,
+    connected: connection !== null,
     effectiveState,
   })
   useWorkspaceAddressSync({
     location,
     navigate,
-    isPairRoute,
     browserHandle,
     daemonKept,
     daemonView,
@@ -252,24 +145,15 @@ export function App({ providerState }: AppProps) {
   })
 
   const replica = replicaRead({
-    renewal: daemonRenewal,
+    renewal,
     daemonKept,
     route: browserRoute,
     settings: userSettingsStore.load(),
   })
 
   // Which daemon the SHELL is talking to. Hoisted above the render branches
-  // because a hook cannot live inside one, and the switcher has to work on
-  // the pairing-link path too — that branch renders the same index page, so
-  // leaving it out would have taken the deleted select away with nothing in
-  // its place.
-  const shell = shellDaemon({
-    forcedBrowser,
-    linkPayloadBaseUrl: linkPayload?.baseUrl,
-    grant: grantPaired,
-    effectiveState,
-    injectedToken: daemonToken,
-  })
+  // because a hook cannot live inside one.
+  const shell = shellDaemon({ forcedBrowser, connection, effectiveState })
   const daemonShellTarget = useDaemonShellTarget(shell)
 
   useDaemonThemeFonts(daemonShellTarget)
@@ -280,65 +164,22 @@ export function App({ providerState }: AppProps) {
     setDaemonRoute: setDaemonView,
   })
 
-  // Persists ONLY the reconnect target (baseUrl/workspaceId/path), never the
-  // bootstrapToken — the token stays in-memory via readDaemonTokenOnce's
-  // existing semantics. This lets a later hosted-app load (a fresh tab with
-  // no #wb= fragment) offer a one-click reconnect via DaemonDetectedBanner
-  // instead of silently landing on the browser with no path back.
-  useRememberedDaemon({
-    connected: linkPayload !== undefined,
-    target: linkPayload,
-    userSettingsStore,
-  })
-
   // /settings renders on its own route ahead of (and independent from) the
   // daemon/browser branch below, so its daemon connection is resolved here
   // rather than inside one of those branches' own scope. Off the RAW provider
   // state, not the effective one: the escape hatch is its own `forcedBrowser`
   // argument.
-  const settings = settingsDaemon({
-    forcedBrowser,
-    grant: grantPaired,
-    providerState: state,
-    injectedToken: daemonToken,
-  })
+  const settings = settingsDaemon({ forcedBrowser, connection, providerState: state })
 
   useReplicaKeeper(settings)
 
   // The keeper-served /receive-transfer surface — rendered in place of every
-  // other view, and before the pair branch for no reason other than reading
-  // order. Accepting needs the R3-injected token, same as /pair.
+  // other view.
   if (isReceiveTransferRoute) {
     return (
       <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
-        <ReceiveTransferPage daemonToken={daemonToken} />
+        <ReceiveTransferPage />
       </Suspense>
-    )
-  }
-
-  // The daemon-served /pair consent page (pairing-grant flow) — rendered
-  // in place of every other view; approving needs the R3-injected token.
-  if (isPairRoute) {
-    return (
-      <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
-        <PairConsentPage daemonToken={daemonToken} />
-      </Suspense>
-    )
-  }
-
-  const pendingPairingBaseUrl = linkPairingPending({
-    forcedBrowser,
-    linkBaseUrl: linkPayload?.baseUrl,
-    grantPaired: grantPaired !== null,
-    grant: grantConnection,
-  })
-  if (pendingPairingBaseUrl !== null) {
-    return (
-      <LinkPairingPending
-        daemonBaseUrl={pendingPairingBaseUrl}
-        failed={linkPairingFailed}
-        onWorkInBrowser={() => setForcedBrowser(true)}
-      />
     )
   }
 
@@ -358,37 +199,24 @@ export function App({ providerState }: AppProps) {
     )
   }
 
-  if (renewalPending({ forcedBrowser, awaitingDaemonRenewal, grant: grantConnection })) {
-    return (
-      <LinkPairingPending
-        daemonBaseUrl=""
-        failed={false}
-        onWorkInBrowser={() => setForcedBrowser(true)}
-      />
-    )
+  if (renewalPending({ forcedBrowser, awaitingDaemonRenewal, connected: connection !== null })) {
+    return <ConnectingScreen />
   }
 
-  // The 'Work in this browser instead' escape hatch opts out of the pairing
-  // fragment entirely, so once it's set both daemon branches are skipped.
-  // One pairing path now: every daemon connection a hosted page has is a
-  // grant. A `#wb=` fragment only decides WHICH daemon and what to open —
-  // the effect above turns it into the grant this branch reads, and
-  // `daemonView` carries what to open.
-  if (!forcedBrowser && grantPaired !== null) {
+  // The 'Work in this browser instead' escape hatch opts out of the daemon
+  // this page reconnected to, so once it's set both daemon branches are
+  // skipped.
+  if (!forcedBrowser && connection !== null) {
     return (
       <DaemonWorkspaceScreen
-        daemonBaseUrl={grantPaired.daemonBaseUrl}
-        token={grantPaired.token}
+        daemonBaseUrl={connection.daemonBaseUrl}
+        token={connection.token}
         view={daemonView}
         onView={setDaemonView}
         onWorkInBrowser={() => setForcedBrowser(true)}
         workspaces={daemonWorkspaces}
       />
     )
-  }
-
-  if (!forcedBrowser && daemonConnection.status === 'error') {
-    return <PairingFailedScreen onWorkInBrowser={() => setForcedBrowser(true)} />
   }
 
   if (effectiveState.kind === 'invalid-config') {
@@ -399,7 +227,6 @@ export function App({ providerState }: AppProps) {
     return (
       <DaemonWorkspaceScreen
         daemonBaseUrl={effectiveState.daemonBaseUrl}
-        token={daemonToken}
         view={daemonView}
         onView={setDaemonView}
         onWorkInBrowser={() => setForcedBrowser(true)}
@@ -411,8 +238,6 @@ export function App({ providerState }: AppProps) {
   return (
     <BrowserWorkspaceScreen
       workspaces={browserWorkspaces}
-      banner={sessionBanner(grantConnection, grantErrorDismissed)}
-      onDismissBanner={() => setGrantErrorDismissed(true)}
       replica={replica}
       onReconnect={attemptRenewal}
       path={browserPath}

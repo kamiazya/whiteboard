@@ -7,18 +7,15 @@ import { LazyPageFallback } from './components/LazyPageFallback.js'
 import type { WorkspaceRoute } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-auth-fetch.js'
 import type { ReplicaMatch } from './lib/replicas.js'
-import type { SessionBanner } from './lib/session-keeper.js'
 
 // Every page below is lazy for the reason its own comment gives, and they are
 // declared HERE rather than in App.tsx because this module is the one that
 // mounts them. `App.lazy-coverage.test.ts` reads both files, so a page moving
 // between them does not fall out of its coverage.
 
-// Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
-// of the entry chunk — sessions arriving via a #wb= pairing fragment AND
-// sessions with a runtime-config daemon provider state pay for it;
-// pure browser sessions never import it, keeping that entry under the
-// bundle-size budget.
+// Lazy so the daemon stack (DaemonBackend, api client) stays out of the entry
+// chunk — only a session with a daemon pays for it; pure browser sessions
+// never import it, keeping that entry under the bundle-size budget.
 const DaemonDocumentPage = lazy(() =>
   import('./pages/DaemonDocumentPage.js').then((m) => ({ default: m.DaemonDocumentPage })),
 )
@@ -31,7 +28,7 @@ const DaemonIndexPage = lazy(() =>
 
 // Lazy for the same reason: BrowserDocumentPage statically imports
 // useDocumentSync (which imports loro-crdt), and it is the default render
-// path (no daemon, no pairing fragment) — so it was the one making
+// path (no daemon) — so it was the one making
 // loro-crdt part of every session's initial paint even though
 // DaemonDocumentPage above was already lazy.
 const BrowserDocumentPage = lazy(() =>
@@ -104,12 +101,9 @@ function ShellFrame({
 /**
  * A daemon-kept workspace: its gallery, or one document open in the editor.
  *
- * ONE component for both arrivals — a `#wb=` pairing link resolved into a
- * grant, and a runtime-config daemon provider state. They differ in where the
- * address and the token come from and in nothing else, which is exactly why
- * the two copies had drifted: the pairing branch's container had lost the
- * `overflow-hidden` both shipped with, so a document that overflowed there
- * scrolled the shell instead of the pane.
+ * ONE component for both arrivals — a reconnection through the extension, and
+ * a runtime-config daemon provider state. They differ in where the address
+ * comes from and in nothing else.
  *
  * `key` on the document mount forces a clean remount (fresh
  * controller/backend) on every index -> document transition instead of
@@ -221,27 +215,16 @@ export function NotFoundScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-/** A `#wb=` pairing link that could not be turned into a connection. */
-export function PairingFailedScreen({ onWorkInBrowser }: { onWorkInBrowser: () => void }) {
+/**
+ * A remembered daemon is being reconnected through the extension. Rendering
+ * the browser's own workspaces meanwhile would flash the WRONG keeper's
+ * documents for as long as the native host takes to start.
+ */
+export function ConnectingScreen() {
   return (
-    <ErrorBoundary>
-      <div
-        role="alert"
-        aria-live="assertive"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
-      >
-        <p className="max-w-md text-sm text-destructive">
-          The daemon pairing link could not be used. You can continue without a daemon connection.
-        </p>
-        <button
-          type="button"
-          onClick={onWorkInBrowser}
-          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-        >
-          Work in this browser instead
-        </button>
-      </div>
-    </ErrorBoundary>
+    <div className="flex h-dvh items-center justify-center p-6">
+      <p className="text-sm text-muted-foreground">Connecting to the daemon…</p>
+    </div>
   )
 }
 
@@ -256,68 +239,9 @@ export function InvalidConfigScreen({ message }: { message: string }) {
   )
 }
 
-/** An in-flow banner the user can put away for the rest of the session. */
-function DismissibleAlert({
-  label,
-  onDismiss,
-  children,
-}: {
-  label: string
-  onDismiss: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      role="alert"
-      className="flex shrink-0 items-center justify-between gap-2 bg-destructive/10 px-chrome py-1.5 text-xs text-destructive"
-    >
-      <span>{children}</span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label={label}
-        className="shrink-0 rounded px-1.5 py-0.5 font-medium hover:bg-background/60"
-      >
-        Dismiss
-      </button>
-    </div>
-  )
-}
-
-/**
- * Fail-closed renewal refusal: a PINNED daemon answered with a wrong or
- * missing identity signature. Either the daemon rotated its key (delete +
- * regenerate) or something else is on its port — both need a fresh human
- * approval on the daemon's consent page.
- */
-function IdentityMismatchBanner({ onDismiss }: { onDismiss: () => void }) {
-  return (
-    <DismissibleAlert label="Dismiss identity warning" onDismiss={onDismiss}>
-      This daemon's identity changed — automatic reconnection was refused. If you rotated or
-      reinstalled the daemon, re-approve it from "Check for local daemon"; otherwise treat this as a
-      warning that something else may be answering on its port.
-    </DismissibleAlert>
-  )
-}
-
-/**
- * The user just clicked Approve on the daemon's consent page — landing back
- * here on the browser with no explanation was a silent dead end. The likeliest
- * cause on a hosted origin is the browser's local-network permission still
- * being closed.
- */
-function PairingErrorBanner({ detail, onDismiss }: { detail: string; onDismiss: () => void }) {
-  return (
-    <DismissibleAlert label="Dismiss pairing error" onDismiss={onDismiss}>
-      Pairing didn't complete: {detail}. If your browser asked for permission to reach local
-      devices, allow it and try again from "Check for local daemon".
-    </DismissibleAlert>
-  )
-}
-
 /**
  * ADR-0023's offline read: the addressed workspace is daemon-kept, the daemon
- * answered the renewal with nothing usable, and this browser holds a replica.
+ * did not answer the reconnection, and this browser holds a replica.
  */
 function ReplicaReadScreen({
   replica,
@@ -325,7 +249,7 @@ function ReplicaReadScreen({
   onReconnect,
 }: {
   replica: ReplicaMatch
-  renewal: 'refused' | 'unreachable'
+  renewal: 'unreachable'
   onReconnect: () => void | Promise<void>
 }) {
   return (
@@ -341,19 +265,11 @@ function ReplicaReadScreen({
 }
 
 /**
- * The browser's own workspace: its document list, or one document open —
- * plus the two session banners that only this keeper's shell shows.
- *
- * Owns the viewport as a flex column so an in-flow banner sits ABOVE the
- * canvas. Pages size to the height this shell allots them (h-full), so a
- * banner displaces the canvas instead of clipping its bottom edge — the tool
- * palette used to vanish behind the viewport on phones exactly because the
- * page claimed h-dvh underneath an in-flow banner.
+ * The browser's own workspace: its document list, or one document open, or
+ * the offline read of a daemon workspace this browser holds a replica of.
  */
 export function BrowserWorkspaceScreen({
   workspaces,
-  banner,
-  onDismissBanner,
   replica,
   onReconnect,
   path,
@@ -361,9 +277,7 @@ export function BrowserWorkspaceScreen({
   revision,
 }: {
   workspaces?: AppShellProps['workspaces']
-  banner: SessionBanner
-  onDismissBanner: () => void
-  replica: { match: ReplicaMatch; renewal: 'refused' | 'unreachable' } | null
+  replica: { match: ReplicaMatch; renewal: 'unreachable' } | null
   onReconnect: () => void | Promise<void>
   path?: string
   onOpenDocument: (path: string) => void
@@ -371,12 +285,6 @@ export function BrowserWorkspaceScreen({
 }) {
   return (
     <ShellFrame daemon={false} workspaces={workspaces}>
-      {banner.kind === 'identity-mismatch' && (
-        <IdentityMismatchBanner onDismiss={onDismissBanner} />
-      )}
-      {banner.kind === 'pairing-error' && (
-        <PairingErrorBanner detail={banner.detail} onDismiss={onDismissBanner} />
-      )}
       <div className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
           {replica !== null ? (

@@ -513,6 +513,17 @@ jobs:
           BRIDGE_SMOKE_PREBUILT: '1'
         run: GECKODRIVER="$GECKOWEBDRIVER/geckodriver" pnpm --filter @kamiazya/whiteboard-extension smoke:bridge:firefox
 
+      # The read plane (ADR-0042) crossed for real, through the extension: a
+      # sealed replica in real IndexedDB, the locked page a cold start with
+      # the daemon gone lands on, and the daemon page back on Reconnect. The
+      # browser-mode tests answer the daemon at `fetch`; this is where the
+      # built web app meets it. Here because it needs the extension build and
+      # Playwright's Chromium the bridge smokes above just made ready.
+      - name: Read-plane real-browser smoke (ADR-0042)
+        env:
+          BRIDGE_SMOKE_PREBUILT: '1'
+        run: pnpm --filter @kamiazya/whiteboard-extension smoke:read-plane
+
       - name: Build
         run: pnpm build
 
@@ -561,14 +572,6 @@ jobs:
       # is the one place each side meets what the other produces.
       - name: Passkey promote real-browser smoke (ADR-0039)
         run: pnpm --filter @kamiazya/whiteboard-mcp smoke:passkey-promote
-
-      # The read plane (ADR-0042/0043) crossed for real: a sealed replica in
-      # real IndexedDB, real 403s from the real membership store, and the
-      # locked / unpaired / removed page landings a cold start, a revoked
-      # grant and a removed member produce. The browser-mode tests answer the
-      # daemon at `fetch`; this is where the built web app meets the daemon.
-      - name: Read-plane real-browser smoke (ADR-0042/0043)
-        run: pnpm --filter @kamiazya/whiteboard-mcp smoke:read-plane
 
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged

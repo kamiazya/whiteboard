@@ -1,6 +1,5 @@
 import { context, propagation } from '@opentelemetry/api'
 import { z } from 'zod'
-import { readDaemonTokenOnce } from './token-store.js'
 
 /**
  * `@opentelemetry/api` is a tiny no-op surface: `propagation.inject` adds a
@@ -16,11 +15,6 @@ function injectTraceContextIntoHeaders(headers: Headers, ctx = context.active())
     },
   })
 }
-
-// Re-exported so daemon-pairing callers (apps/web's useDaemonConnection) can
-// verify the same module-singleton token store this file reads from,
-// without a separate package export just for pairing/test access.
-export { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
 
 // Validates that a URL string is a bare origin: scheme + host + optional port, no path/query/hash/credentials.
 // Downstream CORS, OAuth, and Cloudflare config all require a strict origin, not an arbitrary URL.
@@ -50,12 +44,11 @@ export const bareOriginSchema = z
 // than trusted as a cast — a malformed or tampered global falls back to the
 // unauthenticated default instead of propagating a bad value into apiFetch.
 //
-// Permanently token-free (ADR-0002 addendum): the daemon auth token travels
-// through its own global (see token-store.ts) so it never lands in a config
-// object that logging / error-reporting could serialize wholesale. `.strict()`
-// means a payload that still carries `daemonToken` fails validation rather
-// than silently dropping the extra key, so a stale server build cannot slip
-// a token back into this object undetected.
+// Permanently token-free (ADR-0002 addendum): a daemon credential never lands
+// in a config object that logging / error-reporting could serialize
+// wholesale. `.strict()` means a payload that still carries `daemonToken`
+// fails validation rather than silently dropping the extra key, so a stale
+// server build cannot slip a token back into this object undetected.
 export const runtimeConfigSchema = z
   .object({
     // Public origin of this deployed app (e.g., 'https://app.example.com').
@@ -127,10 +120,6 @@ export async function apiFetch(
   // stitch the inbound request span onto whatever client-side span (if
   // any) is active. No-op when browser tracing has not been enabled.
   injectTraceContextIntoHeaders(headers)
-  const daemonToken = readDaemonTokenOnce()
-  if (daemonToken) {
-    headers.set('Authorization', `Bearer ${daemonToken}`)
-  }
   return fetch(input, {
     ...init,
     headers,

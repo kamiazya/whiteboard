@@ -1,17 +1,13 @@
 // @vitest-environment node
 //
 // Regression guard: the daemon auth token must never surface in a log
-// record while flowing through TokenStore -> apiFetch -> SseBackend.
+// record while flowing through apiFetch -> SseBackend.
 // None of these modules call getLogger today, so this test is a tripwire —
 // it fails the moment a future log call captures the token value anywhere
 // in a record's message or structured fields.
 
 import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
-import {
-  readDaemonTokenOnce,
-  resetTokenStoreForTests,
-} from '@kamiazya/whiteboard-daemon-client/token-store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../server/log.js'
 
@@ -31,7 +27,6 @@ describe('token redaction: sentinel never reaches a log record', () => {
   let originalFetch: typeof fetch
 
   beforeEach(() => {
-    resetTokenStoreForTests()
     originalWindow = (globalThis as Record<string, unknown>).window
     originalFetch = globalThis.fetch
     ;(globalThis as Record<string, unknown>).window = {
@@ -44,17 +39,6 @@ describe('token redaction: sentinel never reaches a log record', () => {
   afterEach(() => {
     ;(globalThis as Record<string, unknown>).window = originalWindow
     globalThis.fetch = originalFetch
-    resetTokenStoreForTests()
-  })
-
-  it('token-store read does not log the sentinel', () => {
-    const capture = captureLogsForTests()
-    try {
-      readDaemonTokenOnce()
-      expect(recordsContainSentinel(capture.records)).toBe(false)
-    } finally {
-      capture.restore()
-    }
   })
 
   it('apiFetch auth-header attachment does not log the sentinel', async () => {

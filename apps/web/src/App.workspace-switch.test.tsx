@@ -25,9 +25,6 @@ vi.mock('./pages/BrowserIndexPage.js', () => ({
 vi.mock('./pages/BrowserDocumentPage.js', () => ({
   BrowserDocumentPage: () => <div data-testid="browser-document-page" />,
 }))
-vi.mock('./hooks/useDaemonConnection.js', () => ({
-  useDaemonConnection: () => ({ status: 'none' }),
-}))
 
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',

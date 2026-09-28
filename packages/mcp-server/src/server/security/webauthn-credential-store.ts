@@ -1,9 +1,8 @@
 /**
  * Persisted WebAuthn credential PINS: the public key of each passkey a paired
  * origin registered, so a later assertion is verified against the key the
- * daemon recorded and never against one the request brings (ADR-0039). The
- * daemon-side twin of the browser's `daemon-identity-pin.ts`, and kept the
- * way `pairing-grant-store.ts` keeps origin grants: a Zod-validated JSON file
+ * daemon recorded and never against one the request brings (ADR-0039). Kept
+ * the way `pairing-grant-store.ts` keeps origin grants: a Zod-validated JSON file
  * under the data dir, written owner-only through a rename, degrading to
  * empty when unreadable — losing pins means registering again, never a dead
  * daemon.

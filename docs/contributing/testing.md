@@ -262,24 +262,29 @@ Not included in `pnpm test`. Requires `dist/server/mcp/index.js` to exist. `test
 ### Real-browser smokes — opt-in, require `pnpm build` + Chromium
 
 Not included in `pnpm test` or `test:distribution`. Each launches a real
-Chromium (via Playwright) against a real daemon and the real built web app
-(`dist/web-app`), so `pnpm build` (from the repo root, so `apps/web`'s
-postbuild copy runs) must have already produced it. Run directly with
+Chromium (via Playwright) against a real daemon and the real built web app.
+`smoke:daemon-origin` and `smoke:passkey-promote` serve `dist/web-app`, so
+`pnpm build` (from the repo root, so `apps/web`'s postbuild copy runs) must
+have already produced it; run them directly with
 `node --import tsx/esm scripts/smoke/mcp-*.mjs` or through the `pnpm smoke:*`
-alias. All three run in CI's `verify` job. `smoke:read-plane` joined last: its
-check 1 (the replica pull) used to fail to fire in 2 of 6 local runs — a race
-between a daemon deep link's silent pairing renewal and the browser-keeper
-address rewrite, fixed by `awaitingDaemonRenewal` in
-`use-workspace-address-sync.ts` — and its check 4 (a removed member) only
-became assertable once the web app answered the daemon's `not_a_member`
-refusal with the removed page and a workspace that once had members stopped
-reopening to origin trust on its last removal.
+alias. `smoke:read-plane` reaches the daemon through the extension (ADR-0050),
+so it lives beside the bridge smokes in `apps/extension/scripts/`, builds the
+extension and the web app itself, and needs Playwright's own Chromium
+(`pnpm --filter @kamiazya/whiteboard-extension exec playwright install
+chromium`). All three run in CI's `verify` job.
+
+`smoke:read-plane` joined last: its replica pull used to fail to fire in 2 of 6
+local runs — a race between a daemon deep link's reconnection and the
+browser-keeper address rewrite, fixed by `awaitingDaemonRenewal` in
+`use-workspace-address-sync.ts`. It used to check a removed member and a
+revoked origin grant too; those were local member management and pairing,
+which ADR-0050 retired.
 
 | Script | What it crosses for real |
 |---|---|
-| `pnpm smoke:daemon-origin` | The daemon serves only `/pair` and 302s every other UI path — a real redirect, not a mocked route |
+| `pnpm smoke:daemon-origin` | The daemon serves only `/pair` and 302s every other UI path — a real redirect, not a mocked route — and the web app offers no consent at `/pair` |
 | `pnpm smoke:passkey-promote` | Chromium's virtual authenticator against the daemon's real WebAuthn verifier, through the pairing bearer under a browser-enforced Origin (ADR-0039) |
-| `pnpm smoke:read-plane` | A sealed replica in real IndexedDB, real 403s from the real membership store, and the real locked / unpaired / removed page landings a cold start, a revoked grant and a removed member produce (ADR-0042/0043) |
+| `pnpm smoke:read-plane` | Through the extension (ADR-0050): a sealed replica in real IndexedDB, the real locked page a cold start lands on with the daemon gone, and the daemon page back on Reconnect (ADR-0042). Lives in `apps/extension/scripts/` and needs the extension build |
 
 Every one of these fakes something in the Vitest browser-mode suites — the
 daemon at `fetch`, the browser's own routing, or the authenticator — so this

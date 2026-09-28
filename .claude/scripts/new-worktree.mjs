@@ -57,12 +57,13 @@ export function runWireStep({ scriptPath, wtPath, spawn = spawnSync, log = (msg)
  * substitute for building — anything editing mcp-server rebuilds anyway.
  *
  * `dist/web-app` is the ONE subtree that argument does not cover, so it is never seeded. It is not
- * tooling the worktree runs: it is the built web app that three browser smokes SERVE as the
- * subject under test (`mcp-read-plane`, `mcp-passkey-promote`, `mcp-daemon-origin`). Seeded, a
+ * tooling the worktree runs: it is the built web app that two browser smokes SERVE as the
+ * subject under test (`mcp-passkey-promote`, `mcp-daemon-origin`). Seeded, a
  * fresh worktree tests whatever bundle the main checkout last built — from another branch, any
  * number of days old — and says nothing about the tree it is in.
  *
- * Measured: a worktree at pristine `origin/main` failed `smoke:read-plane` 9 of 18 checks, and the
+ * Measured, when the read-plane smoke still served it: a worktree at pristine `origin/main` failed
+ * `smoke:read-plane` 9 of 18 checks, and the
  * same worktree at the same commit passed 37 of 37 after `pnpm --filter @kamiazya/whiteboard-web
  * build`, twice. That cost one investigation of the app (three refuted hypotheses about the
  * membership gate) before anybody suspected the bundle. Each of those smokes already stops with

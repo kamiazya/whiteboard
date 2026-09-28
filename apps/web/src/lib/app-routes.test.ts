@@ -187,7 +187,6 @@ describe('isKnownAppPath', () => {
       '/w/ws1',
       '/w/ws1/d/main',
       '/w/default/d/design/login',
-      '/pair',
       '/settings',
       '/settings/general',
       '/settings/data',
@@ -208,6 +207,9 @@ describe('isKnownAppPath', () => {
       // rather than fall through to a silently different view.
       '/local',
       '/local/c1',
+      // The daemon's consent page. A local daemon is reached through the
+      // extension (ADR-0050), so there is no pairing to consent to.
+      '/pair',
       '/w/default/d//b',
       '/w/',
       '/settings/nope',

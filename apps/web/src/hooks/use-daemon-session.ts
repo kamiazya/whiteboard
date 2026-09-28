@@ -1,58 +1,10 @@
 /**
- * What follows from the daemon a session resolved: what the settings store
- * remembers of it, what the replica keeper is told about it, and the stable
- * handle the shell chrome reads it through.
+ * What follows from the daemon a session resolved: what the replica keeper is
+ * told about it, and the stable handle the shell chrome reads it through.
  */
 import { useEffect, useMemo } from 'react'
 import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
 import { passkeySupported } from '../lib/passkey-attestation.js'
-import type { UserSettingsStore } from '../lib/user-settings-store.js'
-
-/**
- * Remembers where a `#wb=` pairing landed, so a later hosted-app load (a
- * fresh tab with no fragment) can offer a one-click reconnect through
- * DaemonDetectedBanner instead of silently landing on the browser with no
- * path back.
- *
- * ONLY the reconnect target (baseUrl/workspaceId/path) — never the
- * bootstrapToken, which stays in memory under `readDaemonTokenOnce`'s
- * existing semantics.
- */
-export function useRememberedDaemon({
-  connected,
-  target,
-  userSettingsStore,
-}: {
-  connected: boolean
-  target: { baseUrl: string; workspaceId?: string; path?: string } | undefined
-  userSettingsStore: UserSettingsStore
-}): void {
-  useEffect(() => {
-    if (!connected || target === undefined) return
-    // update() serializes and writes to localStorage synchronously; skip it
-    // when the stored target already matches what we would write.
-    const stored = userSettingsStore.load().storage
-    if (
-      stored.daemonBaseUrl === target.baseUrl &&
-      stored.lastConnectedWorkspaceId === target.workspaceId &&
-      stored.lastConnectedPath === target.path
-    ) {
-      return
-    }
-    userSettingsStore.update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        daemonBaseUrl: target.baseUrl,
-        lastConnectedWorkspaceId: target.workspaceId,
-        lastConnectedPath: target.path,
-      },
-    }))
-    // The connection is a stable module-scope singleton for the life of the
-    // tab (see useDaemonConnection.ts) — this runs once per successful
-    // pairing, not on every unrelated re-render.
-  }, [connected])
-}
 
 /**
  * Tells `openDocumentStore` (S4b) which daemon this tab is connected to, so a

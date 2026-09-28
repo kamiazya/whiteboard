@@ -22,8 +22,8 @@
  *                returns, which is what makes that claim true — a backend
  *                whose socket is closed drops the delta it was handed.
  * - `sync-off` — the session was rejected. The chip turns attention-colored
- *                and the popover carries the two ways forward (re-pair / work
- *                in the browser). A polite sr-only live region announces the
+ *                and the popover says so and offers the browser instead. A
+ *                polite sr-only live region announces the
  *                transition so dropping the old role="alert" banner loses no
  *                assistive-tech signal.
  */
@@ -54,8 +54,6 @@ export interface ConnectionStatusProps {
   readonly state: ConnectionState | null
   /** Shown in the synced popover so the user knows which daemon holds the data. */
   readonly daemonBaseUrl?: string
-  /** sync-off only: starts the pairing grant flow on the daemon's /pair page. */
-  readonly onRepair?: () => void
   /** sync-off only: switches to the documents kept in this browser. */
   readonly onWorkInBrowser?: () => void
   /** browser only: page-supplied popover extras (daemon detection, capability hint). */
@@ -146,7 +144,6 @@ function PopoverHead({
 export function ConnectionStatus({
   state,
   daemonBaseUrl,
-  onRepair,
   onWorkInBrowser,
   children,
   lastWrittenAt,
@@ -200,7 +197,7 @@ export function ConnectionStatus({
         <BrowserStoragePanel state={state} lastWrittenAt={lastWrittenAt ?? null}>
           {children}
         </BrowserStoragePanel>
-        <SyncOffPanel show={syncOff} onRepair={onRepair} onWorkInBrowser={onWorkInBrowser} />
+        <SyncOffPanel show={syncOff} onWorkInBrowser={onWorkInBrowser} />
       </PopoverContent>
     </Popover>
   )

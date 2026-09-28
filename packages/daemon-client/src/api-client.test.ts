@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { apiFetch, readRuntimeConfig, runtimeConfigSchema } from './api-client.js'
-import { resetTokenStoreForTests } from './token-store.js'
 
 describe('runtimeConfigSchema', () => {
   it('accepts a valid daemonBaseUrl', () => {
@@ -87,20 +86,19 @@ describe('readRuntimeConfig', () => {
   })
 })
 
-describe('apiFetch auth header (TokenStore-sourced)', () => {
+// ADR-0050: the page holds no daemon credential, so nothing it finds on the
+// window becomes one.
+describe('apiFetch auth header', () => {
   afterEach(() => {
-    resetTokenStoreForTests()
     delete (globalThis as { window?: unknown }).window
   })
 
-  it('attaches Authorization from the TokenStore token, ignoring any daemonToken on the runtime-config global', async () => {
+  it('attaches no Authorization, whatever the window carries', async () => {
     let capturedHeaders: Headers | undefined
-    const fakeWindow = {
+    ;(globalThis as { window?: unknown }).window = {
       location: { origin: 'http://localhost' },
-      __WHITEBOARD_RUNTIME_CONFIG__: { daemonToken: 'ignored-config-token' },
-      __WHITEBOARD_DAEMON_TOKEN__: 'store-token',
+      __WHITEBOARD_DAEMON_TOKEN__: 'injected-token',
     }
-    ;(globalThis as { window?: unknown }).window = fakeWindow
     const originalFetch = globalThis.fetch
     globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers)
@@ -108,7 +106,7 @@ describe('apiFetch auth header (TokenStore-sourced)', () => {
     }) as typeof fetch
     try {
       await apiFetch('http://localhost/api/workspaces')
-      expect(capturedHeaders?.get('Authorization')).toBe('Bearer store-token')
+      expect(capturedHeaders?.has('Authorization')).toBe(false)
     } finally {
       globalThis.fetch = originalFetch
     }

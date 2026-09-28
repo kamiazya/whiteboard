@@ -11,7 +11,7 @@ describe('connectThroughExtension', () => {
   it('pairs with the bridged daemon when it answers the ping, holding no token', async () => {
     const fetchFn = vi.fn<typeof fetch>(async () => new Response('{"ok":true}', { status: 200 }))
     expect(await connectThroughExtension(fetchFn)).toEqual({
-      status: 'paired',
+      status: 'connected',
       daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
       token: '',
     })

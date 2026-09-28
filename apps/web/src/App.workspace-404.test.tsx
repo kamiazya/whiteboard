@@ -12,14 +12,8 @@ import { App } from './App.js'
 import type { ProviderState } from './lib/provider.js'
 import './pages/DaemonIndexPage.js'
 
-vi.mock('./hooks/useDaemonConnection.js', () => ({
-  useDaemonConnection: () => ({ status: 'none' }),
-}))
 vi.mock('./components/status/NotFoundPage.js', () => ({
   NotFoundPage: () => <div data-testid="not-found-page" />,
-}))
-vi.mock('./pages/PairConsentPage.js', () => ({
-  PairConsentPage: () => <div data-testid="pair-consent-page" />,
 }))
 vi.mock('./pages/SettingsPage.js', () => ({
   SettingsPage: () => <div data-testid="settings-page" />,

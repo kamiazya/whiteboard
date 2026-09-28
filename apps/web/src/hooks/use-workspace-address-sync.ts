@@ -36,20 +36,18 @@ import type { createUserSettingsStore } from '../lib/user-settings-store.js'
 export interface WorkspaceAddressInputs {
   readonly location: ReturnType<typeof import('react-router-dom').useLocation>
   readonly navigate: ReturnType<typeof import('react-router-dom').useNavigate>
-  readonly isPairRoute: boolean
   readonly browserHandle: string | null
   readonly daemonKept: boolean
   readonly daemonView: WorkspaceRoute
   readonly setDaemonView: Dispatch<SetStateAction<WorkspaceRoute>>
   readonly userSettingsStore: ReturnType<typeof createUserSettingsStore>
   /**
-   * A stored daemon connection's silent renewal (App's `attemptRenewal`) is
-   * a real network round trip, and `daemonKept` can only turn true once it
-   * lands — so for as long as this is true, an address that does not (yet)
+   * A remembered daemon's reconnection (App's `attemptRenewal`) waits on the
+   * extension, and `daemonKept` can only turn true once it lands — so for as long as this is true, an address that does not (yet)
    * match the browser's OWN workspace is UNDECIDED, not foreign. Without
    * this, the browser-keeper rewrite below ran first, concluded a daemon
    * deep link belonged to nobody it knew, and rewrote it to the browser's
-   * index before the renewal ever got to prove otherwise — losing the
+   * index before the reconnection ever got to prove otherwise — losing the
    * link for good, since the URL -> state effect then read the rewritten
    * address back into `daemonView`.
    */
@@ -58,8 +56,8 @@ export interface WorkspaceAddressInputs {
 
 /**
  * Whether this keeper may rewrite the address, and the workspace the address
- * names when it may. `leave-alone` covers every reason not to touch it: a
- * pair route, an address the daemon keeps, one that is undecided rather than
+ * names when it may. `leave-alone` covers every reason not to touch it: an
+ * address the daemon keeps, one that is undecided rather than
  * foreign (see `awaitingDaemonRenewal`), no browser workspace to point at, a
  * settings route, a path this app does not own, an address already naming
  * this browser's workspace, and a REPLICA address — which is not this
@@ -67,14 +65,13 @@ export interface WorkspaceAddressInputs {
  * the replica page may be serving it.
  */
 function addressToRewrite(input: {
-  isPairRoute: boolean
   daemonKept: boolean
   awaitingDaemonRenewal: boolean
   pathname: string
   settings: ReturnType<ReturnType<typeof createUserSettingsStore>['load']>
 }): string | undefined | 'leave-alone' {
-  const { isPairRoute, daemonKept, awaitingDaemonRenewal, pathname } = input
-  if (isPairRoute || daemonKept || awaitingDaemonRenewal) return 'leave-alone'
+  const { daemonKept, awaitingDaemonRenewal, pathname } = input
+  if (daemonKept || awaitingDaemonRenewal) return 'leave-alone'
   if (parseSettingsRoute(pathname) !== null) return 'leave-alone'
   if (!isKnownAppPath(pathname)) return 'leave-alone'
   const route = parseWorkspaceRoute(pathname)
@@ -89,7 +86,6 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   const {
     location,
     navigate,
-    isPairRoute,
     browserHandle,
     daemonKept,
     daemonView,
@@ -136,7 +132,6 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   // /api/workspaces + document-tags with the daemon page never settling.
   const lastRouteSyncPathRef = useRef(location.pathname)
   useEffect(() => {
-    if (isPairRoute) return
     // A browser-kept session's address is not daemonView's to write —
     // rewriting it would yank an open browser-kept editor back to the list.
     if (!daemonKept) return
@@ -184,7 +179,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     // location.pathname is read, not depended on: including it would refire
     // this effect on every navigation (including the one it just performed),
     // which is harmless but noisy. daemonView is the actual trigger.
-  }, [daemonView, navigate, isPairRoute, daemonKept])
+  }, [daemonView, navigate, daemonKept])
 
   // The browser keeper's half of the same rule, and it exists for the same
   // reason the daemon's does: the address has to NAME the workspace on
@@ -211,7 +206,6 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     // would leave it unnarrowed.
     if (browserHandle === null) return
     const named = addressToRewrite({
-      isPairRoute,
       daemonKept,
       awaitingDaemonRenewal,
       pathname: location.pathname,
@@ -252,7 +246,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     return () => {
       cancelled = true
     }
-  }, [location.pathname, browserHandle, daemonKept, isPairRoute, navigate, awaitingDaemonRenewal])
+  }, [location.pathname, browserHandle, daemonKept, navigate, awaitingDaemonRenewal])
 
   // URL -> state: handles the browser back/forward buttons (and, in
   // principle, any other code path that changes the route without going
@@ -260,15 +254,14 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   // Guarded by pathname VALUE, not a first-run flag: StrictMode's effect
   // replay re-runs this effect with the pre-navigation pathname still in
   // its closure, and a run-count flag let that replay read the stale '/'
-  // as user intent — overwriting the #wb= payload-derived canvas view with
-  // the gallery and, in a live browser, seeding a perpetual navigation
+  // as user intent — overwriting the canvas view with the gallery and, in a
+  // live browser, seeding a perpetual navigation
   // ping-pong that remounted the canvas page (and its WebSocket) ~170
   // times a second. Only an actual pathname CHANGE is a URL-driven
   // navigation; the ref seeds from the mount pathname so the mount run and
   // any replay of it are no-ops. `lastRouteSyncPathRef` itself is declared
   // above, beside the state->URL effect — see its comment.
   useEffect(() => {
-    if (isPairRoute) return
     if (lastRouteSyncPathRef.current === location.pathname) return
     lastRouteSyncPathRef.current = location.pathname
     const parsed = parseWorkspaceRoute(location.pathname)
@@ -280,5 +273,5 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     setDaemonView((current: WorkspaceRoute) =>
       workspaceRoutePath(current) === workspaceRoutePath(parsed) ? current : parsed,
     )
-  }, [location.pathname, isPairRoute])
+  }, [location.pathname])
 }

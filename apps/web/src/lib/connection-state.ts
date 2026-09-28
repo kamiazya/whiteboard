@@ -11,7 +11,7 @@ export type SessionHealth = 'synced' | 'reconnecting' | 'sync-off' | 'write-fail
 
 /**
  * What a daemon-kept page reports from what its session knows. An auth
- * rejection outranks everything, because re-pairing is the only way out of
+ * rejection outranks everything, because reconnecting is the only way out of
  * it; then a write that did not land (the session's persistence account, not
  * its `error` status, which an unreadable document reports too); synced is
  * claimed only while the session is connected; everything else — `idle`,
@@ -48,7 +48,7 @@ export type ConnectionState =
   | { readonly keeper: 'daemon'; readonly session: SessionHealth }
 
 /**
- * The one state whose only exit is re-pairing — what the shell's attention
+ * The one state whose only exit is reconnecting — what the shell's attention
  * dot keys on. A transient reconnect is not it: that recovers on its own.
  */
 export function isSyncOff(state: ConnectionState): boolean {

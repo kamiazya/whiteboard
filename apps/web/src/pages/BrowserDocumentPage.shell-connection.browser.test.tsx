@@ -74,6 +74,15 @@ describe('shell mark over a real document kept in this browser', () => {
     expect(
       await screen.findByText(/Connect a daemon \(MCP\) for automatic checkpoints/i),
     ).toBeInTheDocument()
+    // ADR-0050: this browser has no whiteboard extension, and a local daemon
+    // is reached through it alone — so the way on is getting it, never a
+    // probe of loopback ports. The extension answers "absent" only by timing
+    // out, hence the wider wait.
+    expect(
+      await screen.findByRole('link', { name: 'How to connect a daemon' }, { timeout: 5000 }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/install the whiteboard extension/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('daemon-port-input')).toBeNull()
   })
 
   // The one condition a browser-kept document can raise on its own: the

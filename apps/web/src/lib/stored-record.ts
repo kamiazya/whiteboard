@@ -12,9 +12,8 @@ import type { z } from 'zod'
  * reads that entry as unreadable under `.strict()`. It should cost that
  * entry, not every daemon's.
  *
- * Only where a dropped entry reads as a safe absence. The daemon identity
- * pins do not use it: there an absent pin means "renew unverified", so an
- * unreadable one has to stay distinguishable (`daemon-identity-pin.ts`).
+ * Only where a dropped entry reads as a safe absence: a store where an
+ * unreadable entry must stay distinguishable from a missing one cannot use it.
  *
  * Text that is not a JSON object has no entries to keep, so it reads as
  * empty, which is what each store already answered. Built with

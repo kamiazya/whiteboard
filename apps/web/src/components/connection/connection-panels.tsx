@@ -149,14 +149,12 @@ export function BrowserStoragePanel({
   )
 }
 
-/** The daemon rejected the session: re-pairing is the only way back. */
+/** The daemon rejected the session: reconnecting is the only way back. */
 export function SyncOffPanel({
   show,
-  onRepair,
   onWorkInBrowser,
 }: {
   show: boolean
-  onRepair: (() => void) | undefined
   onWorkInBrowser: (() => void) | undefined
 }) {
   if (!show) return null
@@ -164,18 +162,10 @@ export function SyncOffPanel({
     <div className="flex flex-col gap-2 text-sm">
       <p className="font-medium">Live sync is off</p>
       <p className="text-muted-foreground">
-        The daemon rejected this session, so edits stay in this browser until you re-pair.
+        The daemon rejected this session, so edits stay in this browser. Reload the page to connect
+        again.
       </p>
       <div className="mt-1 flex flex-col gap-1.5">
-        {onRepair && (
-          <button
-            type="button"
-            onClick={onRepair}
-            className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-          >
-            Re-pair with the daemon
-          </button>
-        )}
         {onWorkInBrowser && (
           <button
             type="button"

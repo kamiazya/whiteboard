@@ -1,7 +1,9 @@
-import { type ReactNode, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { extensionPresent } from '../../lib/bridge-loader.js'
-import { connectThroughExtension } from '../../lib/extension-connection.js'
-import type { GrantConsumeResult } from '../../lib/pairing-grant.js'
+import {
+  connectThroughExtension,
+  type ExtensionConnection,
+} from '../../lib/extension-connection.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { Button } from '../ui/button.js'
 
@@ -15,22 +17,15 @@ interface ExtensionConnectOptionProps {
    * nothing to lead into.
    */
   lead?: string
-  /**
-   * What to offer where the extension does not answer — the loopback probe,
-   * which ADR-0050 keeps beside the extension only until loopback closes.
-   * Shown where the extension is present too, a person would face two
-   * buttons with nothing saying which daemon each one reaches.
-   */
-  absent?: ReactNode
   present?: (signal: AbortSignal) => Promise<boolean>
-  connect?: () => Promise<GrantConsumeResult>
+  connect?: () => Promise<ExtensionConnection>
   reopen?: () => void
 }
 
 /**
- * ADR-0050: with the whiteboard extension installed, the local daemon is one
- * action away — no pairing page and no port. Offered only where the extension
- * answers, so a browser without it sees the connection it always had.
+ * ADR-0050: the local daemon is reached through the whiteboard extension and
+ * nothing else — with it installed, one action away; without it, the page says
+ * how to get it.
  *
  * A connection is remembered and the app reopened: the cold load reconnects
  * the same way every later visit does, and changing who keeps the workspace
@@ -44,19 +39,18 @@ export function ExtensionConnectOption({
   connect = connectThroughExtension,
   reopen = () => window.location.assign('/'),
   lead,
-  absent = null,
 }: ExtensionConnectOptionProps) {
   const [state, setState] = useExtensionPresence(present)
 
-  // Shown while asking too: an absent extension answers only by timing out,
-  // and holding the loopback path back that long would slow down every
-  // browser without the extension, while a present one answers at once.
-  if (state === 'checking' || state === 'absent') return absent
+  // Silent while asking: a present extension answers at once, and saying
+  // "install it" first would flash at every person who has.
+  if (state === 'checking') return null
+  if (state === 'absent') return <GetTheExtension />
 
   const onConnect = async () => {
     setState('connecting')
     const result = await connect()
-    if (result.status !== 'paired') {
+    if (result.status !== 'connected') {
       setState('no-daemon')
       return
     }
@@ -74,6 +68,26 @@ export function ExtensionConnectOption({
       noDaemon={state === 'no-daemon'}
       onConnect={() => void onConnect()}
     />
+  )
+}
+
+// Docs are not served from apps/web, so this links to the source of truth.
+const HOW_TO_CONNECT_URL =
+  'https://github.com/kamiazya/whiteboard/blob/main/docs/how-to/connect-to-local-daemon.md'
+
+function GetTheExtension() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      To connect the daemon on this computer, install the whiteboard extension.{' '}
+      <a
+        href={HOW_TO_CONNECT_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2 hover:text-foreground"
+      >
+        How to connect a daemon
+      </a>
+    </p>
   )
 }
 

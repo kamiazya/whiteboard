@@ -219,7 +219,7 @@ describe('AppShell', () => {
       value: { persisted: () => Promise.resolve(true) },
       configurable: true,
     })
-    // Sync off IS the auth error: re-pairing is the only way out of it, so it
+    // Sync off IS the auth error: reconnecting is the only way out of it, so it
     // counts as disconnected for the attention dot. Transient reconnects do not.
     setShellConnection({
       state: { keeper: 'daemon', session: 'sync-off' },

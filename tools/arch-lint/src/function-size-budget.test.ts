@@ -158,7 +158,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
   'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
-  'apps/web/src/components/PairedOriginsCard.tsx#PairedOriginsCard': 141,
   'apps/web/src/components/PasskeysCard.tsx#PasskeysCard': 184,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 441,
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 332,
@@ -213,17 +212,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/editor-verbs.ts#wrapSelectionWith': 63,
   'apps/web/src/components/markdown-editor/proposal-decorations.ts#proposalDecorations': 71,
   'apps/web/src/components/markdown-editor/verb-catalog.tsx#verbCatalogItems': 64,
-  // 649 -> 434: every ROW moved to `daemon-detected-banner-rows.tsx` — what
-  // the Local Network Access permission needs said, why a check came back
-  // empty, the port field, and each shape the found daemons can take. The
-  // three entries there are the rows still over the line budget; each is a
-  // block of copy with its own reasoning, and all three are under the
-  // complexity threshold.
-  'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner': 434,
-  'apps/web/src/components/migration/daemon-detected-banner-rows.tsx#LocalNetworkGateNotice': 71,
-  'apps/web/src/components/migration/daemon-detected-banner-rows.tsx#ProbeFailureNotice': 66,
-  'apps/web/src/components/migration/daemon-detected-banner-rows.tsx#SingleDaemonBanner': 72,
-  'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner.runProbe': 92,
   // A Settings card of the same shape as its two neighbours below (334 and
   // 522): the rows, the shared confirm dialog and the two-step delete are
   // one screen's worth of state, and the row already IS extracted
@@ -421,7 +409,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
   'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 363,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
-  'apps/web/src/lib/pairing-grant.ts#consumeGrantFragment': 97,
   // 86 -> 87: the credential now negotiates the `prf` extension at CREATE
   // (ADR-0042 d6), which several authenticators decide there rather than at
   // assertion time. One property on the options object; its reasoning is a
@@ -469,7 +456,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The exhaustiveness is the point — a seventh kind used to compile and show
   // nothing — so the arms belong in one table, not in seven files.
   'apps/web/src/pages/document-page-inspector.tsx#inspectorPanelsFor': 146,
-  'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
   // 393 -> 416: ADR-0042 decision 6's sixth state — an unlock attempt, the
   // remembered-blob read, and one more render branch. Paid for first: the
   // three action states now share ONE `ReplicaActionPanel` instead of a

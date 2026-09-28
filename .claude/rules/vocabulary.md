@@ -165,7 +165,7 @@ a local daemon".
 
 `local` is therefore NOT retired, and cannot be. It still means "on this
 machine rather than remote", which is its correct sense in `localhost`, in
-`Local Network Access` (a W3C spec name), in `local-network-gate.ts`, and in
+`Local Network Access` (a W3C spec name), and in
 `packages/mcp-server`'s `authMode: 'local-daemon'` — whose opposite is
 `'server-mode'`, making it exactly the network sense. Only `local` used for
 WHERE A WORKSPACE IS KEPT is retired.
