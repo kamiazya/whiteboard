@@ -16,6 +16,14 @@ inputs:
     description: npm registry URL to configure (passed through to actions/setup-node).
     required: false
     default: ''
+  cache-store:
+    description: >-
+      Whether to cache the pnpm store. Off for Windows: pnpm's store keeps its
+      links as junctions, which the cache's tar does not restore, so a restored
+      store resolves nothing (lefthook's binary and esbuild's platform package
+      both went missing on the second windows-latest run).
+    required: false
+    default: 'true'
 
 runs:
   using: composite
@@ -63,6 +71,7 @@ runs:
       run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
     - name: Cache pnpm store
+      if: ${{ inputs.cache-store == 'true' }}
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm-store.outputs.path }}

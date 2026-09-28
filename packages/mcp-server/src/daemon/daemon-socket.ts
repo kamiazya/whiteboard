@@ -12,7 +12,7 @@
  * A Unix socket path is limited to 104 bytes on macOS and 108 on Linux, so
  * the file is named by a hash of the data dir rather than by the data dir.
  */
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { chmodSync, lstatSync, mkdirSync, rmSync } from 'node:fs'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -30,16 +30,29 @@ function defaultContext(): SocketPathContext {
   return { env: process.env, platform: process.platform, uid: process.getuid?.() ?? -1 }
 }
 
+const PIPE_PREFIX = '\\\\.\\pipe\\'
+
+/** Whether `path` names a Windows named pipe rather than a socket file. */
+function isNamedPipe(path: string): boolean {
+  return path.startsWith(PIPE_PREFIX)
+}
+
 /**
  * The socket for the daemon keeping `dataDir`, or null where the platform has
- * none yet. Windows takes a named pipe, which ADR-0050 measures before
- * building.
+ * none.
+ *
+ * Windows takes a named pipe (ADR-0050 decision 9). A pipe has no directory
+ * to close, so its name is random rather than derived: another user who could
+ * predict it could create the pipe first and receive the token the host
+ * sends. Only the owner's daemon record says it, which is where every client
+ * reads it from.
  */
 export function daemonSocketPath(
   dataDir: string,
   context: SocketPathContext = defaultContext(),
 ): string | null {
-  if (context.platform === 'win32') return null
+  if (context.platform === 'win32')
+    return `${PIPE_PREFIX}whiteboard-${randomBytes(16).toString('hex')}`
   const name = `${createHash('sha256').update(resolve(dataDir)).digest('hex').slice(0, 16)}.sock`
   const runtime = context.env.XDG_RUNTIME_DIR
   if (runtime !== undefined && runtime !== '') return join(runtime, 'whiteboard', name)
@@ -90,14 +103,19 @@ export async function listenOnSocket(
   fetch: (request: Request) => Response | Promise<Response>,
   path: string,
 ): Promise<{ path: string; close: () => Promise<void> }> {
-  prepareSocketDirectory(dirname(path))
-  await clearStaleSocket(path)
+  // A pipe is not a file: there is no directory to close and nothing left
+  // behind to clear, and its name is already one nobody else can know.
+  const pipe = isNamedPipe(path)
+  if (!pipe) {
+    prepareSocketDirectory(dirname(path))
+    await clearStaleSocket(path)
+  }
   const server = createAdaptorServer({ fetch })
   await new Promise<void>((resolveListen, reject) => {
     server.once('error', reject)
     server.listen(path, () => resolveListen())
   })
-  chmodSync(path, 0o600)
+  if (!pipe) chmodSync(path, 0o600)
   return {
     path,
     close: () =>
