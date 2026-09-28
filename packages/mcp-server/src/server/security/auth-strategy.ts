@@ -56,7 +56,7 @@ export const AUTH_SCOPES = [
 export type AuthScope = (typeof AUTH_SCOPES)[number]
 
 // What "this credential can do anything" means, in one place: the daemon
-// token, an open daemon, and (for now) a pairing token all resolve to it.
+// token and an open daemon resolve to it.
 // Derived directly from `AUTH_SCOPES` so adding a scope to the vocabulary can
 // never leave the full grant set silently under-provisioned.
 export const ALL_AUTH_SCOPES: readonly AuthScope[] = AUTH_SCOPES

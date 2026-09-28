@@ -3,8 +3,9 @@
 **Status:** Accepted — in effect since 2026-09-20, by increment rather than
 by a single gate. The **act plane** (decisions 4, 5 and 8) ships as
 enforcement only: `security/macaroon.ts` is the HMAC chain (#1647), a
-macaroon presented to `/api/*`, the websocket or `/mcp` is verified and its
-scopes enforced (#1647, #1651, #1653), and the root key is written owner-only
+macaroon presented to `/api/*` or `/mcp` is verified and its scopes enforced
+(#1647, #1651, #1653; the websocket it was also verified on is gone, see the
+2026-09-28 note below), and the root key is written owner-only
 and never copied into a backup (#1648, #1666). Nothing in production mints
 one — decision 9's first application was withdrawn in the 2026-09-20 addendum
 below, on the finding that no shipped agent path presents a credential. The
@@ -22,6 +23,37 @@ hosted origins to the local-daemon mode it deliberately left unscoped. Stands
 on [ADR-0035](0035-device-keys-and-keeper.md) decision 1 **and its 2026-09-16
 addendum** — the addendum decides the format survey in decision 7, and
 decision 1's own "a user-level key does a different job" is decision 2 here.
+
+**Note (2026-09-28): what [ADR-0050](0050-local-daemon-trust.md) retired.**
+The reasoning below is kept as it was decided. Three surfaces it describes as
+present no longer exist, deleted by ADR-0050's closing-loopback stage (#1983),
+under which the local daemon listens on its owner-only socket and no TCP port:
+
+- **The local daemon's WebSocket.** Pages reach it over SSE alone
+  (`routes/sync-audience.ts`); `ws-auth.ts`, its connection ticket and
+  `redeemed.scopes` are deleted, and nothing in `packages/mcp-server/src`
+  installs an upgrade handler. Every "websocket upgrade" row and sentence
+  below is history.
+- **The pairing token and the pairing origin.** `/pair`, `/api/pairing/*`
+  and `isAuthorizedPairingOrigin` are deleted, so "the daemon token and the
+  pairing token" is now the daemon token alone.
+- **The hosted-origin authorization server**, and with it the OAuth grant the
+  Context table calls "already attenuated end to end". Local-daemon mode has
+  no OAuth grant any more; "the browser/pairing surface" that this ADR's index entry
+  once called attenuated is gone rather than narrowed.
+
+What the code holds today: `security/credential-resolver.ts` resolves a bearer
+to `anonymous` (no daemon token configured) or `daemon-token`, both carrying
+`ALL_AUTH_SCOPES`, or to `macaroon`, carrying its own scopes; its
+`signed-in` and `external-bearer` kinds are server mode's (ADR-0046) and this
+resolver never produces them. `routes/auth.ts`'s
+`grantCoversRoute` lets the first two through without consulting the route
+registry and checks everything narrower against `route-scope-registry.ts`,
+`daemon-token-only` included. The macaroon root key is created by
+`http-server.ts` and verified by the resolver; `mintMacaroon` and
+`attenuateMacaroon` are still called only from tests. So the act plane's
+single narrow credential is one nothing in production issues, which is the
+2026-09-20 addendum's position unchanged.
 
 ## Context
 
@@ -47,6 +79,10 @@ The four invariants survive unchanged as decision 8. Everything else here is
 new.
 
 ### What the codebase already holds, read rather than recalled
+
+As read at the time of writing (2026-09-19). The websocket, pairing-token and
+OAuth-grant rows describe surfaces ADR-0050 deleted; see the 2026-09-28 note
+above for what exists now.
 
 | fact | where | consequence |
 |---|---|---|
@@ -351,7 +387,8 @@ route is judged against: **no route may be a path from a narrow credential to
 a wider one.** A route that hands out authority must require the authority it
 hands out.
 
-Today's unscoped daemon and pairing tokens do not violate it — nothing widens,
+Today's unscoped daemon and pairing tokens (the daemon token alone since
+ADR-0050 deleted pairing; see the 2026-09-28 note) do not violate it — nothing widens,
 because nothing was narrow to begin with. That is the weaker failure and the
 one decision 9 addresses: an invariant about not widening says nothing at all
 when every credential starts at the top.
@@ -468,7 +505,8 @@ Narrowing that is not worth a minting route on the production daemon (user
 decision, 2026-09-20), so **the act plane stops at enforcement**: a macaroon
 presented to `/api/*`, the websocket and (since
 [#1653](https://github.com/kamiazya/whiteboard/pull/1653)) `/mcp` is verified
-and its scopes enforced, and nothing in production issues one. `mintMacaroon`
+and its scopes enforced (the websocket went with ADR-0050; `/api/*` and `/mcp`
+remain), and nothing in production issues one. `mintMacaroon`
 and `attenuateMacaroon` stay as the tested core the moment a real holder
 exists.
 
