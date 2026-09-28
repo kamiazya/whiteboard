@@ -568,7 +568,8 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // comment, a node's body) became `in-place-editors.tsx`.
   // Lowered 2119 -> 2060: the dialogs that choose what a node points at
   // became `node-target-dialogs.tsx`.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2060,
+  // Lowered 2060 -> 2038: the image file input became `image-file-input.tsx`.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2038,
 }
 
 describe('the path form both ledgers are keyed with', () => {
