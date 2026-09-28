@@ -117,14 +117,22 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
 
 // The relying party's checks, with a failure turned into a refusal rather
 // than an exception: the provider's answer is untrusted input.
+//
+// The exchange sends the callback's own address as `redirect_uri`, which must
+// equal the authorization request's (RFC 6749 section 4.1.3). So the callback
+// is read at the public address the provider redirected to, never at the
+// request's: behind the TLS proxy server mode always has, that is plain http
+// on an internal host.
 async function verifiedClaims(
   c: Context,
-  rp: RelyingParty,
+  routing: Routing,
   provider: ResolvedProvider,
   checks: { nonce: string; codeVerifier: string },
 ): Promise<VerifiedClaims | null> {
+  const callback = new URL(routing.callbackUrl(provider.id))
+  callback.search = new URL(c.req.url).search
   try {
-    return await rp.exchange(provider, new URL(c.req.url), {
+    return await routing.deps.rp.exchange(provider, callback, {
       state: c.req.query('state') ?? '',
       ...checks,
     })
@@ -161,7 +169,7 @@ async function finish(c: Context, routing: Routing, provider: SignInRouteProvide
   const claims =
     provider.kind === 'trusted-header'
       ? await proxiedClaims(c, routing, provider)
-      : await verifiedClaims(c, deps.rp, provider, attempt)
+      : await verifiedClaims(c, routing, provider, attempt)
   if (claims === null) return refusedTo(c, 'provider_refused')
 
   const done = await completeSignIn(deps.signIn, {

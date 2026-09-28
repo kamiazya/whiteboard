@@ -102,6 +102,7 @@
     "smoke:packaged": "node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/stdio.js",
     "smoke:tarball": "node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs",
     "smoke:codex-config": "node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs",
+    "smoke:transfer": "node --import tsx/esm scripts/smoke/cross-origin-transfer-smoke.mjs",
     "smoke:claude": "node scripts/smoke/mcp-claude-cli-smoke.mjs",
     "eval:tool-surface": "node scripts/eval/mcp-tool-surface-eval.mjs",
     "smoke:codex": "node scripts/smoke/mcp-codex-cli-smoke.mjs",

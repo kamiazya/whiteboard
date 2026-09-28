@@ -562,6 +562,14 @@ jobs:
       - name: Web app preview-origin behavioral smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
 
+      # ADR-0044's cross-origin transfer crossed for real: the browser app at
+      # one origin sends its workspace to a server-mode keeper at another,
+      # built above, whose person signed in through an OIDC provider. The
+      # component tests stub the keeper; only this sees the keeper's own
+      # headers, where a COOP of same-origin would sever the popup's opener.
+      - name: Cross-origin transfer real-browser smoke (ADR-0044)
+        run: pnpm smoke:transfer
+
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
 

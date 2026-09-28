@@ -20,6 +20,7 @@ export interface FakeOidcProvider {
 interface Grant {
   readonly nonce: string
   readonly challenge: string
+  readonly redirectUri: string
   readonly claims: Record<string, unknown>
 }
 
@@ -42,11 +43,19 @@ function discoveryDocument(issuer: string) {
 
 async function tokenResponse(
   grant: Grant | undefined,
-  verifier: string,
+  body: URLSearchParams,
   sign: (grant: Grant) => Promise<string>,
 ): Promise<Response> {
-  const challenge = createHash('sha256').update(verifier).digest('base64url')
-  if (grant === undefined || challenge !== grant.challenge) {
+  const challenge = createHash('sha256')
+    .update(body.get('code_verifier') ?? '')
+    .digest('base64url')
+  // RFC 6749 section 4.1.3: the exchange names the redirect URI the
+  // authorization request named, identically, as every real provider checks.
+  if (
+    grant === undefined ||
+    challenge !== grant.challenge ||
+    body.get('redirect_uri') !== grant.redirectUri
+  ) {
     return json({ error: 'invalid_grant' }, 400)
   }
   return json({
@@ -96,6 +105,7 @@ export async function fakeOidcProvider(
       codes.set(code, {
         nonce,
         challenge: url.searchParams.get('code_challenge') as string,
+        redirectUri: url.searchParams.get('redirect_uri') as string,
         claims: pending.claims,
       })
       return callbackFor(url, code, issuer)
@@ -108,7 +118,7 @@ export async function fakeOidcProvider(
       const body = new URLSearchParams(String(init.body ?? ''))
       const grant = codes.get(body.get('code') ?? '')
       codes.delete(body.get('code') ?? '')
-      return tokenResponse(grant, body.get('code_verifier') ?? '', sign)
+      return tokenResponse(grant, body, sign)
     },
   }
 }
