@@ -22,6 +22,11 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  readDaemonRecord,
+  requestDaemon,
+} from '../../packages/mcp-server/scripts/dev/dev-daemon-socket-lib.mjs'
+import { resolveDevDataDirEnv } from '../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
+import {
   collectStaleIssues,
   formatFindings,
   issueDocumentsFrom,
@@ -56,7 +61,7 @@ function repoRoot() {
  * MCP registration is not something the CLI can express (`~/.claude.json`
  * holds one project key per repository). The ticket store is therefore always
  * the main checkout's, and asking this worktree's daemon asks a daemon nobody
- * files issues into. `WHITEBOARD_DEV_PORT` still overrides, for a session that
+ * files issues into. `WHITEBOARD_DATA_DIR` still overrides, for a session that
  * really does point its client elsewhere.
  */
 function mainCheckoutRoot(root) {
@@ -86,16 +91,8 @@ function inspectorFor(root) {
 }
 
 async function main() {
-  const { deriveDevPort, isMainCheckout } = await import(
-    '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
-  )
   const root = repoRoot()
-  const main = mainCheckoutRoot(root)
-  const port = deriveDevPort({
-    repoRoot: main,
-    isMainCheckout: isMainCheckout(main),
-    env: process.env,
-  })
+  const dataDir = resolveDevDataDirEnv(process.env, mainCheckoutRoot(root)).WHITEBOARD_DATA_DIR
   const token = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
 
   let nextId = 1
@@ -105,13 +102,15 @@ async function main() {
    * them, so a cold start can reach here while the daemon is still binding.
    * Without this the check would be silent on exactly the session that starts
    * the machine's day. Bounded hard: three attempts over a second, and only
-   * for a connection that was refused — a daemon that is genuinely absent must
-   * not tax every session start.
+   * for a daemon with no record yet or one that refused the connection — a
+   * daemon that is genuinely absent must not tax every session start.
    */
   async function post(body) {
     for (let attempt = 0; ; attempt++) {
       try {
-        return await fetch(`http://127.0.0.1:${port}/mcp`, body)
+        const record = readDaemonRecord(dataDir)
+        if (record === null) throw new Error('the dev daemon is not running (no daemon.json)')
+        return await requestDaemon(record, { method: 'POST', path: '/mcp', ...body })
       } catch (error) {
         if (attempt >= 2) throw error
         await new Promise((done) => setTimeout(done, 500))
@@ -120,8 +119,7 @@ async function main() {
   }
 
   async function call(name, args) {
-    const res = await post({
-      method: 'POST',
+    const { text } = await post({
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json, text/event-stream',
@@ -134,7 +132,6 @@ async function main() {
         params: { name, arguments: args },
       }),
     })
-    const text = await res.text()
     const payload = JSON.parse(text.startsWith('data:') ? text.slice(text.indexOf('{')) : text)
     return unwrapToolResult(name, payload)
   }

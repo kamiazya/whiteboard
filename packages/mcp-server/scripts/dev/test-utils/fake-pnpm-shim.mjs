@@ -26,9 +26,10 @@
 //   FAKE_PNPM_BIND_SENTINEL        - path written the moment the responder
 //     starts listening, carrying a boundAt timestamp the test compares
 //     against the hook's own exit time (happens-before assertion).
-//   FAKE_PNPM_MARKER_JSON          - when set, its value is written to the
-//     data dir's dev-daemon.json at bind time, letting a test drive the
-//     post-spawn identity-mismatch branch to a foreign verdict.
+//
+// Like the real daemon, it listens on a socket and then writes daemon.json
+// naming that socket into WHITEBOARD_DATA_DIR; the port it is handed is only
+// recorded, never bound.
 
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -41,6 +42,9 @@ const args = process.argv.slice(2)
 const port = Number(args.find((arg) => arg.startsWith(PORT_FLAG))?.slice(PORT_FLAG.length))
 const token =
   args.find((arg) => arg.startsWith(TOKEN_FLAG))?.slice(TOKEN_FLAG.length) ?? 'whiteboard-dev'
+
+const dataDir = process.env.WHITEBOARD_DATA_DIR
+const socketPath = join(dataDir, 'fake-daemon.sock')
 
 const invokedSentinel = process.env.FAKE_PNPM_INVOKED_SENTINEL
 if (invokedSentinel) {
@@ -74,27 +78,25 @@ try {
     // lost in the direction that looks like a product bug — the server
     // starts, the hook reports success, and the assertion complains that a
     // log path is missing.
-    throw Object.assign(new Error(`listen EADDRINUSE: address already in use ${port}`), {
+    throw Object.assign(new Error(`listen EADDRINUSE: address already in use ${socketPath}`), {
       code: 'EADDRINUSE',
     })
   }
-  await startFakeMcpResponder({ port, token })
+  await startFakeMcpResponder({ socketPath, token })
 } catch (err) {
   // Without this the rejection is unhandled: the process dies with exit 1
   // and NOTHING on stderr, so the hook can only report "spawned process
   // exited with code 1" and the log it points at is empty. Say why.
   process.stderr.write(
-    `[fake-pnpm-shim] failed to bind ${port}: ${err?.code ?? ''} ${err?.message ?? err}\n`,
+    `[fake-pnpm-shim] failed to listen: ${err?.code ?? ''} ${err?.message ?? err}\n`,
   )
   process.exit(1)
 }
 
-const markerJson = process.env.FAKE_PNPM_MARKER_JSON
-const dataDir = process.env.WHITEBOARD_DATA_DIR
-if (markerJson && dataDir) {
-  mkdirSync(dataDir, { recursive: true })
-  writeFileSync(join(dataDir, 'dev-daemon.json'), markerJson)
-}
+writeFileSync(
+  join(dataDir, 'daemon.json'),
+  JSON.stringify({ pid: process.pid, port, token, socketPath }),
+)
 
 const bindSentinel = process.env.FAKE_PNPM_BIND_SENTINEL
 if (bindSentinel) {

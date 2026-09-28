@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Auto-wires a git worktree's Claude Code session to its own per-worktree
-// dev daemon port (see packages/mcp-server/scripts/dev/dev-port-lib.mjs),
-// so opening a worktree in Claude Code never has to fall back to the
-// tracked .mcp.json's broken `npx @kamiazya/whiteboard-mcp@latest` stdio
-// entry or the main checkout's port-3099 URL.
+// Auto-wires a git worktree's Claude Code session to its own dev daemon,
+// through the worktree's own stdio proxy (mcp-http-stdio-proxy.mjs, which
+// reaches the daemon over the socket in the worktree's own data dir), so
+// opening a worktree in Claude Code never has to fall back to the tracked
+// .mcp.json's `npx @kamiazya/whiteboard-mcp@latest` stdio entry or the main
+// checkout's daemon.
 //
 // Mechanism: `claude mcp add --scope local` under the SAME name as the
 // tracked entry ("whiteboard") writes to ~/.claude.json, keyed by this
@@ -35,7 +36,6 @@ import {
   buildDesiredConfig,
   classifyExistingConfig,
   planStaleSweep,
-  redactBearerTokens,
   removeStaleEntriesFromConfig,
   resolveMainCheckoutRoot,
   resolvesToAnotherProjectEntry,
@@ -184,13 +184,13 @@ function mainCheckoutRoot(repoRoot) {
   }
 }
 
-function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckoutOverride, claudeCliAvailableOverride }) {
+function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOverride, claudeCliAvailableOverride }) {
   const repoRoot = resolve(worktreeRoot)
   const mainCheckout = isMainCheckoutOverride ?? isMainCheckout(repoRoot)
 
   if (mainCheckout) {
     log(
-      `[wire-worktree-mcp] ${repoRoot} is the main checkout — already wired via tracked .claude/settings.json (port 3099); nothing to do.`,
+      `[wire-worktree-mcp] ${repoRoot} is the main checkout — it is registered once by hand (see .claude/settings.json); nothing to do.`,
     )
     return
   }
@@ -204,21 +204,15 @@ function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckou
     return
   }
 
-  const desired = buildDesiredConfig({ repoRoot, env, isMainCheckout: false })
-  if (desired.overrideWarning) {
-    log(
-      `[wire-worktree-mcp] WHITEBOARD_DEV_PORT is set in this shell but is ignored for registration — ` +
-        `the override is session-scoped and would diverge from the port a fresh session's SessionStart ` +
-        `hook actually starts the daemon on. Registering the path-derived port ${desired.port} instead.`,
-    )
-  }
+  const desired = buildDesiredConfig({ repoRoot, isMainCheckout: false })
+  const target = [desired.command, ...desired.args].join(' ')
 
   const existingConfig = readConfig()
   const existing = readExistingEntry(existingConfig, repoRoot, desired.name)
   const classification = classifyExistingConfig(existing, desired)
 
   if (classification.outcome === 'identical') {
-    log(`[wire-worktree-mcp] "${desired.name}" already wired to ${desired.url} — nothing to do.`)
+    log(`[wire-worktree-mcp] "${desired.name}" already wired to \`${target}\` — nothing to do.`)
     return
   }
 
@@ -246,7 +240,7 @@ function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckou
       `[wire-worktree-mcp] skipping: \`claude mcp add --scope local\` resolves a linked worktree to the ` +
         `main checkout, which already registers "${desired.name}". ~/.claude.json holds one project key ` +
         `per repository, so a per-worktree registration is not something the CLI can express. This ` +
-        `worktree's daemon still binds ${desired.url} — point a client at it directly if you need it.`,
+        `worktree's daemon still runs on its own data dir — register \`${target}\` under another name if you need it.`,
     )
     return
   }
@@ -255,9 +249,9 @@ function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckou
   const addArgs = buildClaudeMcpAddArgs(desired)
   const result = spawn('claude', addArgs, { cwd: repoRoot })
   if (result.status !== 0) {
-    const redactedCommand = redactBearerTokens(`claude ${addArgs.join(' ')}`)
-    const redactedOutput = redactBearerTokens(String(result.stderr || result.stdout || ''))
-    log(`[wire-worktree-mcp] \`${redactedCommand}\` failed (exit ${result.status}): ${redactedOutput}`)
+    log(
+      `[wire-worktree-mcp] \`claude ${addArgs.join(' ')}\` failed (exit ${result.status}): ${String(result.stderr || result.stdout || '')}`,
+    )
     return
   }
 
@@ -265,7 +259,7 @@ function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckou
   const effective = readExistingEntry(effectiveConfig, repoRoot, desired.name)
   const verified = verifyPostWrite(effective, desired)
   if (verified.outcome === 'wired') {
-    log(`[wire-worktree-mcp] wired "${desired.name}" -> ${desired.url}`)
+    log(`[wire-worktree-mcp] wired "${desired.name}" -> \`${target}\``)
   } else {
     log(
       `[wire-worktree-mcp] wrote "${desired.name}" but the post-write state does not match what we ` +
@@ -312,7 +306,7 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
 
 /**
  * @param {{
- *   argv?: string[], env?: Record<string, string | undefined>,
+ *   argv?: string[],
  *   spawn?: typeof defaultSpawn, readConfig?: typeof defaultReadConfig, writeConfig?: typeof defaultWriteConfig,
  *   log?: (msg: string) => void, isMainCheckoutOverride?: boolean, claudeCliAvailableOverride?: boolean,
  *   mainCheckoutRootOverride?: string, liveWorktreePathsOverride?: string[],
@@ -320,7 +314,6 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
  */
 export async function main({
   argv = process.argv.slice(2),
-  env = process.env,
   spawn = defaultSpawn,
   readConfig = defaultReadConfig,
   writeConfig = defaultWriteConfig,
@@ -341,7 +334,6 @@ export async function main({
   const target = argv.find((a) => !a.startsWith('--')) ?? process.cwd()
   wireWorktree({
     worktreeRoot: target,
-    env,
     spawn,
     readConfig,
     log,
