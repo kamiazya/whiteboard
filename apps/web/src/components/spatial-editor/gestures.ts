@@ -33,7 +33,6 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { moveInkCommand } from '../../lib/spatial/commands.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
@@ -42,6 +41,7 @@ import {
   resizeBoxByDelta,
   scaleBoxWithin,
 } from '../../lib/spatial/geometry.js'
+import { moveInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import {
   type BendSnapshot,

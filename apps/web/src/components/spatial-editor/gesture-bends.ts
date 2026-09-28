@@ -12,7 +12,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { bendInkCommand } from '../../lib/spatial/commands.js'
+import { bendInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { routableElement } from './gesture-ends.js'
 

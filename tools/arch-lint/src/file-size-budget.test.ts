@@ -216,7 +216,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decision plus its helper, which is what took both under the complexity
   // threshold. The bodies did not grow; the signatures and their doc comments
   // are the added lines.
-  'apps/web/src/lib/spatial/commands.ts': 1626,
+  // Lowered 1626 -> 1516: the ink-id family (which collection an id is in,
+  // per verb) left for `ink-commands.ts`.
+  'apps/web/src/lib/spatial/commands.ts': 1516,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
