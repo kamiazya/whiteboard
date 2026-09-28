@@ -157,6 +157,9 @@
     "claude",
     "codex",
     "openssl",
+    // Windows' own registry tool: the native host registers itself with it
+    // (ADR-0050 decision 9), and the Windows smoke reads the key back.
+    "reg",
     // lefthook.yml invokes secretlint via its literal node_modules/.bin path
     // rather than a bare command name, which knip parses as the "binary".
     "node_modules/.bin/secretlint",

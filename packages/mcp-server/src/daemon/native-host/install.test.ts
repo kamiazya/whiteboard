@@ -126,3 +126,79 @@ describe('installNativeHost', () => {
     expect(out).toEqual({ argv: ['native-host', 'run', 'chrome-extension://abc/'], dataDir })
   })
 })
+
+// ADR-0050 decision 9. Windows reads a host's manifest path from the registry,
+// per browser, rather than from a directory the browser owns.
+// https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging#native-messaging-host-location
+// https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_manifests#windows
+describe('installNativeHost on Windows', () => {
+  it('names a registry key per browser, with the manifest kept under the data dir', () => {
+    const dataDir = join(scratch, 'data')
+    expect(nativeHostManifestDirs(scratch, 'win32', dataDir)).toEqual([
+      {
+        browser: 'chrome',
+        engine: 'chromium',
+        dir: join(dataDir, 'native-host', 'chrome'),
+        registryKey: 'HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts',
+      },
+      {
+        browser: 'chromium',
+        engine: 'chromium',
+        dir: join(dataDir, 'native-host', 'chromium'),
+        registryKey: 'HKCU\\Software\\Chromium\\NativeMessagingHosts',
+      },
+      {
+        browser: 'edge',
+        engine: 'chromium',
+        dir: join(dataDir, 'native-host', 'edge'),
+        registryKey: 'HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts',
+      },
+      {
+        browser: 'firefox',
+        engine: 'firefox',
+        dir: join(dataDir, 'native-host', 'firefox'),
+        registryKey: 'HKCU\\Software\\Mozilla\\NativeMessagingHosts',
+      },
+    ])
+  })
+
+  it('registers each manifest and starts the host through a cmd launcher', async () => {
+    const dataDir = join(scratch, 'data dir')
+    const registered: [string, string][] = []
+    const manifestDirs = nativeHostManifestDirs(scratch, 'win32', dataDir).slice(0, 1)
+    const { launcher, manifests } = await installNativeHost({
+      dataDir,
+      manifestDirs,
+      launcher: launcherFor('C:\\whiteboard\\cli.js'),
+      platform: 'win32',
+      register: async (key, value) => {
+        registered.push([key, value])
+      },
+    })
+
+    const manifestPath = join(manifestDirs[0]!.dir, `${NATIVE_HOST_NAME}.json`)
+    expect(registered).toEqual([
+      [`HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${NATIVE_HOST_NAME}`, manifestPath],
+    ])
+    expect(JSON.parse(readFileSync(manifestPath, 'utf8')).path).toBe(launcher)
+    expect(manifests).toHaveLength(1)
+    expect(launcher.endsWith('.cmd')).toBe(true)
+    const script = readFileSync(launcher, 'utf8')
+    expect(script).toContain(`set "WHITEBOARD_DATA_DIR=${dataDir}"`)
+    expect(script).toContain('"C:\\whiteboard\\cli.js" native-host run %*')
+  })
+
+  // cmd has no quoting a `"` can live inside, so such a path is refused rather
+  // than written into a launcher that would run something else.
+  it('refuses a path cmd cannot quote', async () => {
+    await expect(
+      installNativeHost({
+        dataDir: join(scratch, 'a"b'),
+        manifestDirs: [],
+        launcher: launcherFor('C:\\cli.js'),
+        platform: 'win32',
+        register: async () => {},
+      }),
+    ).rejects.toThrow(/cannot be quoted/)
+  })
+})

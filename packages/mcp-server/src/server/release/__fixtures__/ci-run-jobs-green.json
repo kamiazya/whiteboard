@@ -1,87 +1,28 @@
 [
+  { "conclusion": "success", "name": "check", "status": "completed" },
+  { "conclusion": "success", "name": "sbom-npm", "status": "completed" },
+  { "conclusion": "success", "name": "test-shared", "status": "completed" },
+  { "conclusion": "success", "name": "test-unit (2)", "status": "completed" },
+  { "conclusion": "success", "name": "test-browser (1)", "status": "completed" },
   {
-    "name": "test-browser (1)",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "sbom-npm",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "check",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "verify",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "test-unit (1)",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "packaged-smoke",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "test-browser (2)",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "test-unit (2)",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "test-jsdom (1)",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "test-shared",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "widget-smoke",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "test-jsdom (2)",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "dry-run-docker",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
+    "conclusion": "success",
     "name": "stress-changed-tests (browser, *-browser)",
-    "status": "completed",
-    "conclusion": "success"
+    "status": "completed"
   },
+  { "conclusion": "success", "name": "packaged-smoke", "status": "completed" },
+  { "conclusion": "success", "name": "test-jsdom (2)", "status": "completed" },
   {
+    "conclusion": "success",
     "name": "stress-changed-tests (node, !*-browser)",
-    "status": "completed",
-    "conclusion": "success"
+    "status": "completed"
   },
-  {
-    "name": "dry-run-npm",
-    "status": "completed",
-    "conclusion": "success"
-  },
-  {
-    "name": "ci-gate",
-    "status": "completed",
-    "conclusion": "success"
-  }
+  { "conclusion": "success", "name": "verify", "status": "completed" },
+  { "conclusion": "success", "name": "widget-smoke", "status": "completed" },
+  { "conclusion": "success", "name": "test-unit (1)", "status": "completed" },
+  { "conclusion": "success", "name": "native-host-windows", "status": "completed" },
+  { "conclusion": "success", "name": "test-jsdom (1)", "status": "completed" },
+  { "conclusion": "success", "name": "test-browser (2)", "status": "completed" },
+  { "conclusion": "success", "name": "dry-run-docker", "status": "completed" },
+  { "conclusion": "success", "name": "dry-run-npm", "status": "completed" },
+  { "conclusion": "success", "name": "ci-gate", "status": "completed" }
 ]
