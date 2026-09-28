@@ -572,7 +572,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 1240 -> 1075: the comment claimant became `pointer-comment-claim.ts`, its
   // press, pin drag, menu and release together — the first claimant module.
   // 1075 -> 1035: the proposal claimant became `pointer-proposal-claim.ts`.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1035,
+  // 1035 -> 925: the ink claimant — stroke, ink drag and their release —
+  // became `pointer-ink-claim.ts`.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 925,
 }
 
 describe('the path form both ledgers are keyed with', () => {

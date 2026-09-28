@@ -312,7 +312,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // down rather than a ceiling that keeps rising.
   // 1000 -> 824: the comment claimant left for `pointer-comment-claim.ts`.
   // 824 -> 784: the proposal claimant, for `pointer-proposal-claim.ts`.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 784,
+  // 784 -> 674: the ink claimant, for `pointer-ink-claim.ts`.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 674,
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 103,
