@@ -276,7 +276,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasSpaceLayers': 88,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 119,
+  // 119 -> 62: the document picker and the URL dialog became
+  // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#runNavigation': 55,
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 91,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
