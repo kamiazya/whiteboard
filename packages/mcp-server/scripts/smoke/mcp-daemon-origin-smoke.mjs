@@ -1,16 +1,21 @@
 // Real-browser proof of the daemon's hosted-first UI end state (ADR-0001
-// addendum): the daemon serves exactly ONE page — /pair, the pairing consent
-// trust anchor — and redirects every other UI path to the official hosted
-// app. Requires a real prior `pnpm build` so it exercises the actual built
-// dist/web-app, not a fixture.
+// addendum): the daemon serves exactly ONE path, /pair, and redirects every
+// other UI path to the official hosted app. Requires a real prior
+// `pnpm build` so it exercises the actual built dist/web-app, not a fixture.
 //
 // What this pins:
 // 1. The bare origin (and any other UI path) answers 302 to the official
 //    hosted app URL, and the redirect leaks no token.
-// 2. /pair renders the real consent page from the built bundle, with the
-//    daemon's identity fingerprint (proves the daemon-served page, its
-//    asset serving, AND the identity ping end-to-end in one shot).
+// 2. /pair still answers with the built bundle, and the web app there offers
+//    no consent: it reaches a local daemon only through the extension
+//    (ADR-0050), so it has no pairing to approve and renders its not-found
+//    page. The daemon still serving /pair at all is ADR-0050's
+//    closing-loopback stage's to remove, with its browser-only routes.
 // 3. Reserved paths keep their non-UI semantics (/token stays 404).
+//
+// It used to also prove /pair rendered the consent page with the daemon's
+// identity fingerprint. That page went with pairing, when the web app began
+// reaching a local daemon only through the extension.
 //
 // Direct invocation requires tsx:
 //   node --import tsx/esm scripts/smoke/mcp-daemon-origin-smoke.mjs
@@ -72,7 +77,15 @@ if (tokenRes.status === 404) {
   failed = true
 }
 
-// --- 2. /pair renders the real consent page in a real browser ---
+// --- 2. /pair serves the bundle, and the web app offers no consent there ---
+const pairRes = await fetch(`${daemonBaseUrl}/pair`, { redirect: 'manual' })
+if (pairRes.status === 200 && (pairRes.headers.get('content-type') ?? '').includes('text/html')) {
+  console.log('  pass  /pair answers with the built bundle')
+} else {
+  console.error(`  FAIL  /pair expected 200 text/html, got ${pairRes.status}`)
+  failed = true
+}
+
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.WHITEBOARD_CHROME_PATH && {
@@ -100,30 +113,20 @@ try {
 
   // waitFor, not isVisible: isVisible ignores its timeout and reports the
   // instantaneous state, which races the boot splash's deliberate hold
-  // (apps/web/src/boot-splash.ts) — the app renders ~1.7s after load.
-  const consentHeading = page.getByRole('heading', {
-    name: /allow this web app to use your local daemon/i,
-  })
-  const consentVisible = await consentHeading
+  // (apps/web/src/boot-splash.ts) — the app renders ~1.7s after load. The
+  // not-found page appearing is also what proves the bundle booted, so the
+  // consent heading's absence below is not a page that never rendered.
+  const notFound = await page
+    .getByRole('button', { name: 'Back to documents' })
     .waitFor({ state: 'visible', timeout: 10_000 })
     .then(() => true)
     .catch(() => false)
-  if (consentVisible) {
-    console.log('  pass  /pair renders the consent page from the built bundle')
+  const consentShown =
+    (await page.getByRole('heading', { name: /allow this web app/i }).count()) > 0
+  if (notFound && !consentShown) {
+    console.log('  pass  /pair renders the not-found page, with no consent to approve')
   } else {
-    console.error('  FAIL  /pair did not render the consent heading')
-    failed = true
-  }
-
-  // The fingerprint proves the identity ping worked end-to-end from the
-  // daemon-served page (daemon identity keypair -> ping -> WebCrypto
-  // fingerprint render).
-  const fingerprint = page.getByTestId('daemon-fingerprint')
-  const fingerprintText = await fingerprint.textContent({ timeout: 10_000 }).catch(() => null)
-  if (fingerprintText !== null && /^[A-Z2-7]{4}-[A-Z2-7]{4}$/.test(fingerprintText.trim())) {
-    console.log(`  pass  /pair shows the daemon identity fingerprint (${fingerprintText.trim()})`)
-  } else {
-    console.error(`  FAIL  no daemon identity fingerprint rendered (got: ${fingerprintText})`)
+    console.error(`  FAIL  /pair: not-found page ${notFound}, consent heading ${consentShown}`)
     failed = true
   }
 
@@ -145,9 +148,8 @@ try {
 }
 
 if (consoleErrors.length > 0) {
-  // Console errors on /pair are diagnostic only for the external-origin
-  // navigation (expected to fail to load in an offline CI sandbox) — but a
-  // consent-page error is a real failure signal worth surfacing.
+  // Console errors are diagnostic only for the external-origin navigation
+  // (expected to fail to load in an offline CI sandbox).
   console.log(`  note  browser console errors observed:\n    ${consoleErrors.join('\n    ')}`)
 }
 

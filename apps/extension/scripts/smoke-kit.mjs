@@ -79,24 +79,22 @@ export async function stopDaemon(daemon) {
   await new Promise((exited) => (daemon.exitCode === null ? daemon.once('exit', exited) : exited()))
 }
 
-/** One MCP tool call to the daemon, over its socket, as an agent makes it. */
-function callTool(record, name, args) {
-  const body = JSON.stringify({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: { name, arguments: args },
-  })
+/**
+ * One request to the daemon over its socket, with the daemon's own
+ * credential — as an agent or an operator makes it. Answers the status and
+ * the parsed JSON body.
+ */
+export function daemonApi(record, method, path, body, headers = {}) {
   return new Promise((done, fail) => {
     const req = request(
       {
         socketPath: record.socketPath,
-        path: '/mcp',
-        method: 'POST',
+        path,
+        method,
         headers: {
           'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
           authorization: `Bearer ${record.token}`,
+          ...headers,
         },
       },
       (res) => {
@@ -104,34 +102,36 @@ function callTool(record, name, args) {
         res.on('data', (piece) => {
           text += piece
         })
-        res.on('end', () => done(JSON.parse(text).result?.structuredContent))
+        res.on('end', () =>
+          done({ status: res.statusCode, json: text === '' ? null : JSON.parse(text) }),
+        )
       },
     )
     req.on('error', fail)
-    req.end(body)
+    req.end(body === undefined ? undefined : JSON.stringify(body))
   })
 }
 
+/** One MCP tool call to the daemon, over its socket, as an agent makes it. */
+export async function callTool(record, name, args) {
+  const { json } = await daemonApi(
+    record,
+    'POST',
+    '/mcp',
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
+    { accept: 'application/json, text/event-stream' },
+  )
+  return json.result?.structuredContent
+}
+
 /** How many browsers the daemon counts on a document, ready ones apart. */
-export function clientCount(record, path) {
-  return new Promise((done, fail) => {
-    const req = request(
-      {
-        socketPath: record.socketPath,
-        path: `/api/w/default/document/${encodeURIComponent(path)}/client-count`,
-        headers: { authorization: `Bearer ${record.token}` },
-      },
-      (res) => {
-        let text = ''
-        res.on('data', (piece) => {
-          text += piece
-        })
-        res.on('end', () => done(JSON.parse(text)))
-      },
-    )
-    req.on('error', fail)
-    req.end()
-  })
+export async function clientCount(record, path) {
+  const { json } = await daemonApi(
+    record,
+    'GET',
+    `/api/w/default/document/${encodeURIComponent(path)}/client-count`,
+  )
+  return json
 }
 
 /** An agent's note on the daemon, for the web app to open; answers its id. */

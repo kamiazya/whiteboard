@@ -14,9 +14,9 @@ The chain has seventeen steps after the initial build prerequisite:
 4. `pnpm smoke:codex-config` — validates the Codex plugin manifest and published MCP config
 5. `pnpm smoke:claude` — end-to-end Claude CLI integration smoke
 6. `pnpm smoke:codex` — end-to-end Codex CLI integration smoke
-7. `pnpm smoke:daemon-origin` — real-browser proof the daemon origin serves a connected apps/web app (seeded canvas, no pairing CTA, token-gated mutation)
+7. `pnpm smoke:daemon-origin` — real-browser proof the daemon origin 302s every UI path to the hosted app, and that the web app offers no consent on its remaining `/pair` path
 8. `pnpm smoke:passkey-promote` — real-browser proof of the passkey attestation seam (ADR-0039): a Chromium virtual authenticator on a paired origin registers, promotes with an assertion the daemon verifies, is refused on tamper/replay/wrong workspace, and the History row carries the evidence
-9. `pnpm smoke:read-plane` — real-browser proof of the read plane (ADR-0042/0043): a sealed replica in real IndexedDB, real 403s from the real membership store, and the locked / unpaired / removed page landings a cold start, a revoked grant and a removed member produce
+9. `pnpm smoke:read-plane` — real-browser proof of the read plane (ADR-0042) through the extension: a sealed replica in real IndexedDB, the locked page a cold start lands on with the daemon gone, and the daemon page back on Reconnect
 10. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
 11. packaged daemon backup/restore smoke
 12. packaged daemon logs smoke
