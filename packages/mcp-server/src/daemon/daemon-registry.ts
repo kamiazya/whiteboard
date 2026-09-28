@@ -1,7 +1,11 @@
-import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { platform } from 'node:os'
 import { join } from 'node:path'
-import { assertDataDirOwnedByUser, DATA_DIR } from '../shared/data-dir-secure.js'
+import {
+  assertDataDirOwnedByUser,
+  DATA_DIR,
+  readFileOwnedByUser,
+} from '../shared/data-dir-secure.js'
 import {
   type DaemonRecord,
   daemonRecordBaseSchema,
@@ -41,13 +45,15 @@ export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
 export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<DaemonRecord | null> {
   assertDataDirOwnedByUser(dataDir)
   const path = getDaemonRecordPath(dataDir)
-  let text: string
+  let read: Awaited<ReturnType<typeof readFileOwnedByUser>>
   try {
-    text = await readFile(path, 'utf-8')
+    read = await readFileOwnedByUser(path)
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw new Error(`the daemon record ${path} exists but cannot be read`, { cause: err })
   }
+  if (read.kind === 'missing') return null
+  if (read.kind === 'not-owned') throw new Error(read.message)
+  const text = read.text
   let raw: unknown
   try {
     raw = JSON.parse(text)

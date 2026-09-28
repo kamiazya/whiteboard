@@ -1,4 +1,5 @@
 import { accessSync, chmodSync, constants as fsConstants, mkdirSync, statSync } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { homedir, platform, tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { findPackageRoot } from './package-root.js'
@@ -66,18 +67,60 @@ export function resolveDataDir(
  */
 export function assertDataDirOwnedByUser(dir: string, uid = process.getuid?.()): void {
   if (uid === undefined) return
-  let owner: number
+  let stat: ReturnType<typeof statSync>
   try {
-    owner = statSync(dir).uid
+    stat = statSync(dir)
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
     throw err
   }
-  if (owner === uid) return
-  throw new Error(
-    `the data directory ${dir} is owned by uid ${owner}, not this user (uid ${uid}). ` +
-      'Another user may have created it; set WHITEBOARD_DATA_DIR to a directory you own.',
-  )
+  if (stat.uid !== uid) {
+    throw new Error(
+      `the data directory ${dir} is owned by uid ${stat.uid}, not this user (uid ${uid}). ` +
+        'Another user may have created it; set WHITEBOARD_DATA_DIR to a directory you own.',
+    )
+  }
+  // World-writable lets anyone replace daemon.json. Group-writable is left
+  // alone: under user-private groups (umask 002) that group is this user.
+  if ((Number(stat.mode) & 0o002) !== 0) {
+    throw new Error(
+      `the data directory ${dir} is writable by other users (mode ${(Number(stat.mode) & 0o777).toString(8)}). ` +
+        `Run \`chmod 700 ${dir}\`.`,
+    )
+  }
+}
+
+/**
+ * A file's text, judged on the OPENED handle: `not-owned` when another user
+ * owns it, `missing` when there is none. Checking the handle rather than the
+ * path first is what closes the window where a directory missing at
+ * `assertDataDirOwnedByUser` is created, record and all, before the read.
+ */
+export async function readFileOwnedByUser(
+  path: string,
+  uid = process.getuid?.(),
+): Promise<
+  { kind: 'text'; text: string } | { kind: 'missing' } | { kind: 'not-owned'; message: string }
+> {
+  let handle: Awaited<ReturnType<typeof open>>
+  try {
+    handle = await open(path, 'r')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' }
+    throw err
+  }
+  try {
+    const owner = (await handle.stat()).uid
+    if (uid !== undefined && owner !== uid) {
+      return {
+        kind: 'not-owned',
+        message: `${path} is owned by uid ${owner}, not this user (uid ${uid}).`,
+      }
+    }
+    return { kind: 'text', text: await handle.readFile('utf-8') }
+  } finally {
+    await handle.close()
+  }
 }
 
 export function parentIsWritable(path: string): boolean {

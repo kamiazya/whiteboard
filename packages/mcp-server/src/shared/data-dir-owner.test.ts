@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -54,5 +54,33 @@ describe.skipIf(!ROOT_IS_SOMEONE_ELSES)('a data dir another user owns', () => {
 
   it('is not used to start a daemon', async () => {
     await expect(withDaemonStartupLock('/', async () => 'started')).rejects.toThrow(/not this user/)
+  })
+})
+
+describe('the record file itself', () => {
+  let dir: string
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'wb-record-owner-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  // Checked on the OPENED file, so a record that appears after the directory
+  // check — in a directory that was missing then — is judged too.
+  it.skipIf(!ROOT_IS_SOMEONE_ELSES)('is refused when another user owns it', async () => {
+    await symlink('/etc/hostname', join(dir, 'daemon.json'))
+    await expect(loadDaemonRecord(dir)).rejects.toThrow(/not this user/)
+    expect(await parseDaemonRecord(dir)).toMatchObject({
+      kind: 'malformed',
+      message: expect.stringMatching(/not this user/),
+    })
+  })
+
+  it('refuses a data dir anyone can write into, even one this user owns', async () => {
+    await chmod(dir, 0o777)
+    expect(() => assertDataDirOwnedByUser(dir, statSync(dir).uid)).toThrow(
+      /writable by other users/,
+    )
   })
 })
