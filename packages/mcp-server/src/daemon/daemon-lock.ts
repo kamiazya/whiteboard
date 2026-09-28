@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { DATA_DIR } from '../shared/data-dir-secure.js'
+import { assertDataDirOwnedByUser, DATA_DIR } from '../shared/data-dir-secure.js'
 import { type MkdirLockOptions, withMkdirLock } from '../shared/mkdir-lock.js'
 
 const DAEMON_LOCK_DIRNAME = 'daemon.lock'
@@ -14,6 +14,7 @@ export async function withDaemonStartupLock<T>(
   fn: () => Promise<T>,
   options: MkdirLockOptions = {},
 ): Promise<T> {
-  await mkdir(dataDir, { recursive: true })
+  await mkdir(dataDir, { recursive: true, mode: 0o700 })
+  assertDataDirOwnedByUser(dataDir)
   return withMkdirLock(getDaemonLockPath(dataDir), fn, options)
 }

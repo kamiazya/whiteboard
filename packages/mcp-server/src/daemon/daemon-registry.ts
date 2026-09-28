@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { platform } from 'node:os'
 import { join } from 'node:path'
-import { DATA_DIR } from '../shared/data-dir-secure.js'
+import { assertDataDirOwnedByUser, DATA_DIR } from '../shared/data-dir-secure.js'
 import {
   type DaemonRecord,
   daemonRecordBaseSchema,
@@ -39,6 +39,7 @@ export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
  * says to remove the file then, since only a person can tell the two apart.
  */
 export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<DaemonRecord | null> {
+  assertDataDirOwnedByUser(dataDir)
   const path = getDaemonRecordPath(dataDir)
   let text: string
   try {

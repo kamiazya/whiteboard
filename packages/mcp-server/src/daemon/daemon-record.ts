@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { assertDataDirOwnedByUser } from '../shared/data-dir-secure.js'
 import {
   type DaemonRecord,
   type DaemonRecordBase,
@@ -16,6 +17,11 @@ export type DaemonRecordParseResult =
   | { kind: 'valid'; record: DaemonRecord }
 
 export async function parseDaemonRecord(dataDir: string): Promise<DaemonRecordParseResult> {
+  try {
+    assertDataDirOwnedByUser(dataDir)
+  } catch (err) {
+    return { kind: 'malformed', message: (err as Error).message }
+  }
   const recordPath = getDaemonRecordPath(dataDir)
   let raw: string
   try {

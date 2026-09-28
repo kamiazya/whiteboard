@@ -1,4 +1,4 @@
-import { accessSync, chmodSync, constants as fsConstants, mkdirSync } from 'node:fs'
+import { accessSync, chmodSync, constants as fsConstants, mkdirSync, statSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { findPackageRoot } from './package-root.js'
@@ -54,6 +54,30 @@ export function resolveDataDir(
   // In the Codex sandbox, the home directory may not be writable.
   // Fall back to tmp only when there is no explicit env override.
   return resolve(options.tmpDir ?? tmpdir(), '.whiteboard')
+}
+
+/**
+ * Refuses a data dir another user owns. Whoever owns it controls `daemon.json`
+ * and so the socket and token a client trusts — a real risk when the dir is
+ * `$TMPDIR/.whiteboard`, which any user can create first. Mode bits say
+ * nothing here: an owner-only dir is exactly what that user would make.
+ * A dir that does not exist yet is fine; where there is no uid (Windows)
+ * there is nothing to compare.
+ */
+export function assertDataDirOwnedByUser(dir: string, uid = process.getuid?.()): void {
+  if (uid === undefined) return
+  let owner: number
+  try {
+    owner = statSync(dir).uid
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw err
+  }
+  if (owner === uid) return
+  throw new Error(
+    `the data directory ${dir} is owned by uid ${owner}, not this user (uid ${uid}). ` +
+      'Another user may have created it; set WHITEBOARD_DATA_DIR to a directory you own.',
+  )
 }
 
 export function parentIsWritable(path: string): boolean {
