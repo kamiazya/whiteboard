@@ -563,18 +563,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `selection-handles.tsx` through the same bundle; the menu the ⋯ opens
   // stays the host's.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2222,
-  // The six pointer handlers, moved verbatim; over budget on arrival, and
-  // splitting `handlePointerUp` there is what shrinks it.
-  // 1052 -> 1240: the press and release paths became claimant chains and the
-  // reasons moved onto the claimants. A press-side module beside the
-  // `pointer-release.ts` that already exists is the named follow-up that
-  // brings this back down — moving mass is what a FILE budget asks for.
-  // 1240 -> 1075: the comment claimant became `pointer-comment-claim.ts`, its
-  // press, pin drag, menu and release together — the first claimant module.
-  // 1075 -> 1035: the proposal claimant became `pointer-proposal-claim.ts`.
-  // 1035 -> 925: the ink claimant — stroke, ink drag and their release —
-  // became `pointer-ink-claim.ts`.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 925,
 }
 
 describe('the path form both ledgers are keyed with', () => {
