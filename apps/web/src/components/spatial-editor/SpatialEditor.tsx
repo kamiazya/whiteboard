@@ -145,9 +145,9 @@ import {
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
 import { RoutableHandles } from './routable-handles.js'
-import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
+import { SelectionHandles } from './selection-handles.js'
 import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
@@ -1394,94 +1394,46 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       </>
     )
 
-    /**
-     * What is drawn AROUND the selection: its outline, its handles, and the
-     * verbs that act on it.
-     */
-    const selectionOverlay = () => (
-      <>
-        {selection !== undefined && selectionBox !== undefined && (
-          <SelectionOverlay
-            // Keyed by TARGET: a new selection remounts the overlay and
-            // replays the outline's draw-once; dragging or resizing the
-            // same node keeps the element and stays still.
-            key={selection.id}
-            box={selectionBox}
-            zoom={viewport.zoom}
-            onHandlePointerDown={(handle, _handleBox, e) => {
-              const root = beginOverlayGesture(e)
-              if (root === null) return
-              const point = screenToCanvas(clientPointToRootLocal(e, root), viewport)
-              applyResult(
-                reduceGesture(gestureState, canvas, {
-                  type: 'pointerdown-handle',
-                  nodeId: selection.id,
-                  handle,
-                  point,
-                  // The resize anchor is the box the HANDLES surround, not
-                  // the handle's own tiny hit-box `_handleBox` describes —
-                  // using the handle box here would seed
-                  // `reducePointerUpResizing`'s anchor-preserving math from
-                  // an 8px square instead, growing/shrinking from the wrong
-                  // origin.
-                  box: selectionBox,
-                  // Omitted for a lone node, which keeps the original
-                  // single-command path — including its collapse-to-zero
-                  // behavior, which group members deliberately do not share.
-                  ...(isMultiSelection ? { members: selectionMembers } : {}),
-                }),
-              )
-            }}
-            // Connecting and editing act on ONE node; from handles that
-            // surround a group they would claim to apply to all of them.
-            onConnectPointerDown={
-              isMultiSelection
-                ? undefined
-                : (e) => {
-                    if (beginOverlayGesture(e) === null) return
-                    applyResult(
-                      reduceGesture(gestureState, canvas, {
-                        type: 'pointerdown-connect',
-                        nodeId: selection.id,
-                      }),
-                    )
-                  }
-            }
-            onHandleKeyDown={handleResizeHandleKeyDown}
-            onConnectKeyDown={handleConnectKeyDown}
-            // The ⋯ opens the SAME menu right-click does, for the same
-            // target — one catalog, now with a visible doorway. Offered
-            // for every selection (multi included: align/distribute were
-            // the least discoverable actions of all).
-            // Only a single text node has a body to open, and only when the
-            // host has a surface to open it on.
-            onOpenInEditor={
-              onOpenInEditor !== undefined &&
-              !isMultiSelection &&
-              selectedNode !== undefined &&
-              nodeKind(selectedNode) === 'text'
-                ? () => onOpenInEditor(selectedNode.id, nodeText(selectedNode) ?? '')
-                : undefined
-            }
-            onMoreActions={(anchor) => {
-              const screen = canvasToScreen(anchor, viewport)
-              setContextMenu({
-                x: screen.x,
-                y: screen.y,
-                nodeId: selection.id,
-                edgeId: undefined,
-                point: anchor,
-                // The ⋯ vessel follows the editor's width, decided at open
-                // time (the menu is transient): below the minimap
-                // breakpoint the popover becomes a bottom sheet — keyed
-                // off the CONTAINER for the same reason the minimap is.
-                variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
-              })
-            }}
-          />
-        )}
-      </>
-    )
+    const selectionOverlay = () =>
+      selection !== undefined &&
+      selectionBox !== undefined && (
+        <SelectionHandles
+          gesture={gesture}
+          target={{ id: selection.id, box: selectionBox }}
+          members={isMultiSelection ? selectionMembers : undefined}
+          onHandleKeyDown={handleResizeHandleKeyDown}
+          onConnectKeyDown={handleConnectKeyDown}
+          // Only a single text node has a body to open, and only when the
+          // host has a surface to open it on.
+          onOpenInEditor={
+            onOpenInEditor !== undefined &&
+            !isMultiSelection &&
+            selectedNode !== undefined &&
+            nodeKind(selectedNode) === 'text'
+              ? () => onOpenInEditor(selectedNode.id, nodeText(selectedNode) ?? '')
+              : undefined
+          }
+          // The ⋯ opens the SAME menu right-click does, for the same target
+          // — one catalog, now with a visible doorway. Offered for every
+          // selection (multi included: align/distribute were the least
+          // discoverable actions of all).
+          onMoreActions={(anchor) => {
+            const screen = canvasToScreen(anchor, viewport)
+            setContextMenu({
+              x: screen.x,
+              y: screen.y,
+              nodeId: selection.id,
+              edgeId: undefined,
+              point: anchor,
+              // The ⋯ vessel follows the editor's width, decided at open
+              // time (the menu is transient): below the minimap breakpoint
+              // the popover becomes a bottom sheet — keyed off the
+              // CONTAINER for the same reason the minimap is.
+              variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
+            })
+          }}
+        />
+      )
 
     /**
      * What is drawn ABOUT the current selection and the edit in progress:
