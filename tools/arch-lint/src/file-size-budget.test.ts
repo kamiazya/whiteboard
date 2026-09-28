@@ -574,7 +574,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and nothing duplicated. The next real shrink moves a layer into a
   // sibling module, which needs its share of the editor's gesture state
   // named as a bundle first.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2437,
+  // Lowered 2437 -> 2325: the facet panel's layer became
+  // `selection-inspector.tsx`, the first layer to leave for a sibling
+  // module. It could, where the others cannot yet, because it reads nine of
+  // the editor's values rather than forty.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2325,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
   // 1052 -> 1240: the press and release paths became claimant chains and the
