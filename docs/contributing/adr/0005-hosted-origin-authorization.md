@@ -1,6 +1,8 @@
 # ADR-0005: Authorizing a hosted origin against the local daemon
 
-**Status:** Accepted — not yet implemented. Revised twice after adversarial review; the *Corrections* section records what the earlier drafts got wrong.
+**Status:** Superseded by [ADR-0050](0050-local-daemon-trust.md), in effect 2026-09-28. Revised twice after adversarial review; the *Corrections* section records what the earlier drafts got wrong.
+
+*Status note (2026-09-28):* ADR-0050 supersedes decisions 2 and 3 by name, and the hosted-origin authorization server and the pairing link (`wb_pairing_link_create`) are deleted. Decision 1 has no ground left either: the local daemon listens on its owner-only socket alone, serves no web origin, and `daemon run` opens the hosted app. What still stands is the premise — open the familiar hosted URL and keep the data on your own machine — which ADR-0050 carries through the extension.
 
 **Builds on ADR-0002 (browser-to-daemon transport), which already decided:**
 

@@ -16,6 +16,14 @@ into a CLAIM and its EVIDENCE — decisions 5, 8 and 9, and the second paragraph
 of decision 2, are that revision; the first draft's decision 5 is kept under
 *Revisions* because the correction is the point.
 
+*Status note (2026-09-28):* the promotion row of decision 4 is no longer
+shipped. [ADR-0050](0050-local-daemon-trust.md) decision 3 retired the local
+daemon's passkey pins and its WebAuthn routes (#1982, #1983), every promote
+route refuses a body carrying an attestation, and a transfer is confirmed by
+the destination keeper's signed-in session instead (#1985; see the
+2026-09-28 entry under *Revisions*). History still shows *human · verified*
+for a row recorded with an attestation.
+
 ## Context
 
 ADR-0035 deferred "a browser profile's own keypair" without a trigger. Three

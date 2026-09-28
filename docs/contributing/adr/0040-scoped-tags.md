@@ -6,7 +6,8 @@ without `tags`, and [ADR-0036](0036-semantic-axes.md) §6's `semantic.class/v0`,
 which retires unshipped. Extends [ADR-0013](0013-facet-system.md) (core
 frontmatter stays core; what widens is where it attaches) and gives
 [ADR-0033](0033-facet-vocabulary-axis.md) the principled reading of `tags` it
-named as an omission. Design of record; nothing implemented.
+named as an omission. Implemented: increments 1-4 (#1615-#1620) and the
+library, 5a-5c (#1623-#1625, #1628); see *Increments* below.
 
 ## Context
 

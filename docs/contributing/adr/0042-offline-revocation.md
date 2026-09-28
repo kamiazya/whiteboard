@@ -16,6 +16,12 @@ the revocation cryptographic rather than advisory. Decision 6,
 cold-start-offline, **shipped 2026-09-21** on the shared gesture it names —
 [ADR-0039](0039-passkey-attestation.md) decision 6's user-verification gate.
 
+*Status note (2026-09-28):* since [ADR-0050](0050-local-daemon-trust.md)
+retired the passkeys registered through the daemon, cold-start offline is
+opt-in per copy: Settings wraps the copy's key under the PRF output of a
+passkey created in this browser only, and nothing is registered with the
+daemon (ADR-0050 decision 11, #1981).
+
 ## Context
 
 ADR-0041 decision 3 gives a keeper L1 (access to a resource) and L2

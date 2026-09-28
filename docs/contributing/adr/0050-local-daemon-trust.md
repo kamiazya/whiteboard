@@ -1,9 +1,12 @@
 # ADR-0050: A hosted page reaches the local daemon through a browser extension, never over loopback HTTP
 
-**Status:** Proposed. The owner chose the extension route on 2026-09-26,
-after three steps: an audit, a survey of how comparable products are built,
-and a measured spike. Built through the closing-loopback stage
-(2026-09-28); Safari and distribution remain.
+**Status:** Accepted, in effect since 2026-09-28. The owner chose the
+extension route on 2026-09-26, after three steps: an audit, a survey of how
+comparable products are built, and a measured spike. Built through the
+closing-loopback stage (2026-09-28, #1983): the local daemon listens on its
+owner-only socket or named pipe alone. What remains is the last stage —
+Safari (a macOS app and its app extension relaying to the socket) and store
+distribution; while releases are 0.0.x the extension is loaded by hand.
 
 This ADR supersedes three earlier decisions:
 - [ADR-0002](0002-browser-to-daemon-transport.md)'s choice of loopback HTTP

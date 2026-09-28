@@ -1,6 +1,6 @@
 # ADR-0030: A render theme is a document's pen and paper — a canvas facet naming a registered asset
 
-**Status:** Accepted — design of record (human gate, 2026-09-09, after a four-round hearing). Nothing is implemented yet. Extends [ADR-0013](0013-facet-system.md) (names `visual.theme` and the `canvas-theme` slot) and binds canvas-render decision #10 (the render-style seam, `.claude/rules/package-canvas-render.md`).
+**Status:** Accepted — design of record (human gate, 2026-09-09, after a four-round hearing). Implemented the same day in one increment (#1502): `visual.theme/v0` naming the sketch and neon assets, per-canvas resolution in layout, the glow filter, the `style` argument on render and export, and the editor's theme. Extends [ADR-0013](0013-facet-system.md) (names `visual.theme` and the `canvas-theme` slot) and binds canvas-render decision #10 (the render-style seam, `.claude/rules/package-canvas-render.md`).
 
 ## Context
 
