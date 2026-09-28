@@ -90,7 +90,6 @@ import {
 } from './navigation.js'
 import {
   advanceCommentDrag,
-  COMMENT_PRESS_SLOP_PX,
   cancelCommentPress,
   commentHoldsPress,
   commitCommentDrag,
@@ -100,6 +99,12 @@ import {
   rememberCommentPress,
   startCommentPinDrag,
 } from './pointer-comment-claim.js'
+import {
+  cancelProposalPress,
+  claimProposalBubble,
+  dismissProposalCard,
+  releaseProposalPress,
+} from './pointer-proposal-claim.js'
 import { commitRelease, releaseDrawing, releaseMarquee } from './pointer-release.js'
 import type { SpatialEditorProps } from './SpatialEditor.js'
 import type { useCommentState } from './use-comment-state.js'
@@ -135,11 +140,6 @@ const LONG_PRESS_SLOP_PX = 10
  * than a tap. A finger's tap is never perfectly still, and below this the
  * release opens the card instead of moving the comment by nothing.
  */
-
-/** Screen distance between two points — how far a press travelled. */
-function travelled(from: Point, to: Point): number {
-  return Math.hypot(from.x - to.x, from.y - to.y)
-}
 
 export interface EditorPointerInputs {
   // `useCommentState`
@@ -292,17 +292,13 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     applyResult,
     capturePointer,
     extraIds,
-    hitTestProposal,
     isOverlayEvent,
     lastStrokeRef,
     menuPickInputs,
-    openProposalId,
     pickInputs,
-    pressedProposalRef,
     rootRef,
     runNavigation,
     selectedId,
-    setOpenProposalId,
     toggleSelectionMember,
   } = inputs
 
@@ -335,24 +331,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
    */
   const dismissOpenCards = (point: Point): void => {
     dismissCommentCard(inputs, point)
-    if (openProposalId !== null && hitTestProposal(point) !== openProposalId) {
-      setOpenProposalId(null)
-    }
-  }
-
-  /**
-   * A proposal's BUBBLE is chrome above the content, so a press on it opens
-   * the card at the release rather than selecting whatever is under it.
-   *
-   * Its change OUTLINES are deliberately not tested: they are drawn on the
-   * document at the place a change would land, and making them pressable
-   * would put a dead zone over the node they describe.
-   */
-  const claimProposalBubble = (point: Point, screenPoint: Point): boolean => {
-    const hitProposalId = hitTestProposal(point)
-    if (hitProposalId === undefined) return false
-    pressedProposalRef.current = { id: hitProposalId, startScreen: screenPoint }
-    return true
+    dismissProposalCard(inputs, point)
   }
 
   /**
@@ -573,7 +552,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // double-press-to-edit: a single press opens the card, whose own Edit is
     // the successor, and the second press of a pair would land on that card.
     if (commentHoldsPress(inputs)) return true
-    return claimProposalBubble(point, screenPoint)
+    return claimProposalBubble(inputs, point, screenPoint)
   }
 
   /**
@@ -898,25 +877,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   }
 
   /**
-   * A press on a proposal's bubble, answered at the release.
-   *
-   * Consumed here whatever happens next, like the comment press above. A
-   * press that travelled was a pan and opens nothing; one that stayed put
-   * toggles the card, so pressing the bubble again is how it shuts.
-   */
-  const releasePressedProposal = (e: React.PointerEvent<HTMLDivElement>, root: HTMLElement) => {
-    const pressedProposal = pressedProposalRef.current
-    pressedProposalRef.current = null
-    if (pressedProposal === null) return false
-    const stayed =
-      travelled(clientPointToRootLocal(e, root), pressedProposal.startScreen) <
-      COMMENT_PRESS_SLOP_PX
-    if (!stayed) return false
-    setOpenProposalId((current) => (current === pressedProposal.id ? null : pressedProposal.id))
-    return true
-  }
-
-  /**
    * The end of an ink drag.
    *
    * The ink drag replaced the marquee this press used to start, and two
@@ -964,7 +924,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     navigationFellThrough: boolean,
   ): boolean => {
     if (releaseCommentPress(inputs)) return true
-    if (releasePressedProposal(e, root)) return true
+    if (releaseProposalPress(inputs, e, root)) return true
     if (!navigationFellThrough) return true
     return commitCommentDrag(inputs, e, root)
   }
@@ -1025,7 +985,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // release would read the stale id and open that comment's card. The
     // same is true of a proposal's press.
     cancelCommentPress(inputs)
-    pressedProposalRef.current = null
+    cancelProposalPress(inputs)
   }
 
   /**
