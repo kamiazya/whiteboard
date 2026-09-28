@@ -11,7 +11,7 @@ import {
   isFrame,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { labelInkCommand } from '../../lib/spatial/commands.js'
+import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
 import { TextNodeEditor } from './TextNodeEditor.js'

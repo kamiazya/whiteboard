@@ -9,7 +9,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
-import { applyCommand, deleteInkCommand, moveInkCommand } from '../../lib/spatial/commands.js'
+import { applyCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
   type ResizeHandleKind,
@@ -17,6 +17,7 @@ import {
   scaleBoxWithin,
   unionBox,
 } from '../../lib/spatial/geometry.js'
+import { deleteInkCommand, moveInkCommand } from '../../lib/spatial/ink-commands.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
