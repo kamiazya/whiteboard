@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Regression coverage for wire-worktree-mcp-lib.mjs's pure planning logic:
-// URL/argv construction, existing-config classification, the settings.json
+// registration/argv construction, existing-config classification, the settings.json
 // write-guard, and the stale-registration sweep. No real ~/.claude.json or
 // `claude` CLI invocation happens here — that stays a manual verification
 // step (see docs/contributing/development.md) precisely because this repo's
@@ -14,7 +14,6 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  buildMcpUrl,
   buildDesiredConfig,
   buildClaudeMcpAddArgs,
   classifyExistingConfig,
@@ -23,133 +22,87 @@ import {
   assertNotTrackedSettingsPath,
   resolveMainCheckoutRoot,
   removeStaleEntriesFromConfig,
-  redactBearerTokens,
-  redactUrlCredentials,
 } from './wire-worktree-mcp-lib.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const SERVER_NAME = 'whiteboard-wt'
 
-test('buildMcpUrl formats a derived port as the /mcp endpoint URL', () => {
-  assert.equal(buildMcpUrl(3457), 'http://127.0.0.1:3457/mcp')
-})
+const PROXY = '/repo/wt-a/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs'
+const DESIRED = { name: SERVER_NAME, command: 'node', args: [PROXY] }
+const IDENTICAL = { type: 'stdio', command: 'node', args: [PROXY], env: {} }
 
-test('buildMcpUrl on the main-checkout port matches the canonical settings.json URL (drift guard)', () => {
-  assert.equal(buildMcpUrl(3099), 'http://127.0.0.1:3099/mcp')
-})
-
-test('buildDesiredConfig derives the port from repoRoot only, ignoring WHITEBOARD_DEV_PORT', () => {
-  const withoutOverride = buildDesiredConfig({ repoRoot: '/repo/wt-a', env: {} })
-  const withOverride = buildDesiredConfig({
-    repoRoot: '/repo/wt-a',
-    env: { WHITEBOARD_DEV_PORT: '5555' },
-  })
-
-  assert.equal(withOverride.port, withoutOverride.port, 'override must not change the registered port')
-  assert.equal(withOverride.overrideWarning, true, 'must flag that an active override was ignored')
-  assert.equal(withoutOverride.overrideWarning, false)
+test("buildDesiredConfig registers the worktree's own stdio proxy, naming no port and carrying no token", () => {
+  const desired = buildDesiredConfig({ repoRoot: '/repo/wt-a' })
+  assert.deepEqual(desired, { name: 'whiteboard', command: 'node', args: [PROXY] })
 })
 
 test('buildDesiredConfig defaults to the tracked entry\'s own name ("whiteboard"), not a distinct name — verified against the real CLI: a local-scope registration under the SAME name cleanly shadows the tracked project-scope .mcp.json entry, so an agent never has to choose between two visibly different whiteboard-ish MCP servers', () => {
-  const desired = buildDesiredConfig({ repoRoot: '/repo/wt-a', env: {} })
+  const desired = buildDesiredConfig({ repoRoot: '/repo/wt-a' })
   assert.equal(desired.name, 'whiteboard')
 })
 
 test('buildDesiredConfig refuses to build a config for the main checkout', () => {
-  assert.throws(() => buildDesiredConfig({ repoRoot: '/repo', env: {}, isMainCheckout: true }), /main checkout/i)
+  assert.throws(() => buildDesiredConfig({ repoRoot: '/repo', isMainCheckout: true }), /main checkout/i)
 })
 
-test('buildDesiredConfig authenticates with a custom WHITEBOARD_TOKEN when set', () => {
-  const withCustomToken = buildDesiredConfig({
-    repoRoot: '/repo/wt-a',
-    env: { WHITEBOARD_TOKEN: 'my-custom-token' },
-  })
-  assert.equal(withCustomToken.authHeader, 'Authorization: Bearer my-custom-token')
-})
-
-test('buildDesiredConfig falls back to the package-script default token when WHITEBOARD_TOKEN is unset', () => {
-  const withDefaultToken = buildDesiredConfig({ repoRoot: '/repo/wt-a', env: {} })
-  assert.equal(withDefaultToken.authHeader, 'Authorization: Bearer whiteboard-dev')
-})
-
-test('buildClaudeMcpAddArgs produces the exact argv for `claude mcp add` — <name> <url> must come right after --transport http, real-CLI-verified: putting them after --scope/--header makes commander report "missing required argument \'name\'"', () => {
-  const desired = { name: SERVER_NAME, url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
-  assert.deepEqual(buildClaudeMcpAddArgs(desired), [
+test('buildClaudeMcpAddArgs produces the argv for a stdio `claude mcp add`: the server command line follows `--`', () => {
+  assert.deepEqual(buildClaudeMcpAddArgs(DESIRED), [
     'mcp',
     'add',
-    '--transport',
-    'http',
-    SERVER_NAME,
-    'http://127.0.0.1:3457/mcp',
     '--scope',
     'local',
-    '--header',
-    'Authorization: Bearer whiteboard-dev',
+    '--transport',
+    'stdio',
+    SERVER_NAME,
+    '--',
+    'node',
+    PROXY,
   ])
 })
 
 test('classifyExistingConfig: absent entry', () => {
-  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
-  assert.equal(classifyExistingConfig(undefined, desired).outcome, 'absent')
+  assert.equal(classifyExistingConfig(undefined, DESIRED).outcome, 'absent')
 })
 
-test('classifyExistingConfig: identical entry is a no-op', () => {
-  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
-  const existing = { type: 'http', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev' } }
-  assert.equal(classifyExistingConfig(existing, desired).outcome, 'identical')
+test('classifyExistingConfig: identical entry is a no-op, with or without an empty env', () => {
+  assert.equal(classifyExistingConfig(IDENTICAL, DESIRED).outcome, 'identical')
+  const { env: _env, ...withoutEnv } = IDENTICAL
+  assert.equal(classifyExistingConfig(withoutEnv, DESIRED).outcome, 'identical')
 })
 
 test('classifyExistingConfig: never treats a differing entry as identical', () => {
-  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
   const cases = [
-    { type: 'http', url: desired.url, headers: {} }, // missing Authorization header
-    { type: 'http', url: desired.url, headers: { Authorization: 'Bearer other-token' } }, // different bearer token
-    { type: 'http', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev' }, extra: 'field' }, // extra unknown field
-    { type: 'sse', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev' } }, // different transport
-    { type: 'http', url: 'http://127.0.0.1:9999/mcp', headers: { Authorization: 'Bearer whiteboard-dev' } }, // different URL
-    { type: 'http', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev', someExtra: 'x' } }, // extra unexpected header
+    { type: 'http', url: 'http://127.0.0.1:3457/mcp', headers: {} }, // the old port-based registration
+    { ...IDENTICAL, command: 'npx' }, // different command
+    { ...IDENTICAL, args: ['/repo/main/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs'] }, // another checkout's proxy
+    { ...IDENTICAL, args: [PROXY, '--extra'] }, // extra argument
+    { ...IDENTICAL, args: 'not-an-array' },
+    { ...IDENTICAL, env: { WHITEBOARD_TOKEN: 'x' } }, // env set
+    { ...IDENTICAL, extra: 'field' }, // extra unknown field
   ]
   for (const existing of cases) {
-    const result = classifyExistingConfig(existing, desired)
+    const result = classifyExistingConfig(existing, DESIRED)
     assert.equal(result.outcome, 'conflict', `expected conflict for ${JSON.stringify(existing)}`)
     assert.ok(result.reason && result.reason.length > 0, 'conflict must carry an actionable reason')
   }
 })
 
-test('classifyExistingConfig: a conflicting existing URL is redacted (no userinfo/query) in the reported reason', () => {
-  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
-  const existing = {
-    type: 'http',
-    url: 'http://user:hunter2@127.0.0.1:9999/mcp?token=super-secret',
-    headers: { Authorization: 'Bearer whiteboard-dev' },
+test('classifyExistingConfig: a conflicting registration never echoes its URL, headers or env values', () => {
+  const secrets = [
+    { type: 'http', url: 'http://user:hunter2@127.0.0.1:9999/mcp?token=super-secret', headers: { Authorization: 'Bearer super-secret' } },
+    { ...IDENTICAL, env: { WHITEBOARD_TOKEN: 'super-secret' } },
+  ]
+  for (const existing of secrets) {
+    const { reason } = classifyExistingConfig(existing, DESIRED)
+    assert.ok(!reason.includes('hunter2') && !reason.includes('super-secret'), reason)
   }
-  const result = classifyExistingConfig(existing, desired)
-  assert.equal(result.outcome, 'conflict')
-  assert.ok(!result.reason.includes('hunter2'), 'must not leak URL userinfo')
-  assert.ok(!result.reason.includes('super-secret'), 'must not leak a URL query-string secret')
-})
-
-test('redactUrlCredentials: strips userinfo and query string, keeps origin and path', () => {
-  assert.equal(
-    redactUrlCredentials('http://user:hunter2@127.0.0.1:9999/mcp?token=super-secret'),
-    'http://127.0.0.1:9999/mcp',
-  )
-})
-
-test('redactUrlCredentials: leaves a credential-free URL unchanged', () => {
-  assert.equal(redactUrlCredentials('http://127.0.0.1:3457/mcp'), 'http://127.0.0.1:3457/mcp')
-})
-
-test('redactUrlCredentials: returns non-URL input as-is rather than throwing', () => {
-  assert.equal(redactUrlCredentials('not-a-url'), 'not-a-url')
 })
 
 test('classifyExistingConfig: defensive against malformed/unknown shapes, never throws', () => {
-  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
-  const malformed = [null, 'not-an-object', 42, {}, { url: 123 }, { type: 'http' }]
+  const malformed = [null, 'not-an-object', 42, {}, { command: 123 }, { type: 'stdio' }]
   for (const existing of malformed) {
-    const result = classifyExistingConfig(existing, desired)
+    const result = classifyExistingConfig(existing, DESIRED)
     assert.equal(result.outcome, 'conflict')
     assert.ok(result.reason)
   }
@@ -175,15 +128,11 @@ test('assertNotTrackedSettingsPath rejects Windows-style backslash paths', () =>
 })
 
 test('verifyPostWrite: matching post-state reports wired', () => {
-  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
-  const effective = { type: 'http', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev' } }
-  assert.equal(verifyPostWrite(effective, desired).outcome, 'wired')
+  assert.equal(verifyPostWrite(IDENTICAL, DESIRED).outcome, 'wired')
 })
 
 test('verifyPostWrite: divergent post-state (concurrent writer) reports post-write-mismatch, no overwrite', () => {
-  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
-  const effective = { type: 'http', url: 'http://127.0.0.1:9999/mcp', headers: { Authorization: 'Bearer whiteboard-dev' } }
-  const result = verifyPostWrite(effective, desired)
+  const result = verifyPostWrite({ ...IDENTICAL, args: ['/elsewhere.mjs'] }, DESIRED)
   assert.equal(result.outcome, 'post-write-mismatch')
   assert.ok(result.reason)
 })
@@ -277,39 +226,17 @@ test('removeStaleEntriesFromConfig: empty actions list returns an equivalent con
   assert.deepEqual(removeStaleEntriesFromConfig(config, []), config)
 })
 
-test('redactBearerTokens: scrubs a "Bearer <token>" header value out of a failed-command log line', () => {
-  const message = "`claude mcp add --transport http whiteboard http://127.0.0.1:3457/mcp --scope local --header 'Authorization: Bearer super-secret-token'` failed"
-  const redacted = redactBearerTokens(message)
-  assert.ok(!redacted.includes('super-secret-token'), 'the live token must not appear in the redacted text')
-  assert.ok(redacted.includes('Bearer [redacted]'))
-})
-
-test('redactBearerTokens: scrubs every occurrence, including one echoed back in CLI stderr output', () => {
-  const message = 'sent Authorization: Bearer abc123 but server replied with Authorization: Bearer abc123 (unauthorized)'
-  const redacted = redactBearerTokens(message)
-  assert.ok(!redacted.includes('abc123'))
-  assert.equal((redacted.match(/Bearer \[redacted\]/g) ?? []).length, 2)
-})
-
-test('redactBearerTokens: leaves text with no bearer token untouched', () => {
-  assert.equal(redactBearerTokens('no secrets here'), 'no secrets here')
-})
-
 test('docs-lock: the manual fallback `claude mcp add` command in development.md matches buildClaudeMcpAddArgs argv order', () => {
   const docsPath = resolve(__dirname, '../../docs/contributing/development.md')
   const docs = readFileSync(docsPath, 'utf8')
   const match = docs.match(/`claude mcp add ([^`]+)`/)
   assert.ok(match, 'expected a `claude mcp add ...` fallback command in development.md')
 
-  const desired = { name: 'whiteboard', url: 'http://127.0.0.1:3100/mcp', authHeader: "Authorization: Bearer whiteboard-dev" }
-  const expectedArgs = buildClaudeMcpAddArgs(desired).slice(2) // drop the leading "mcp add" the regex already anchors on
-  const expectedFragment = expectedArgs
-    .map((arg) => (arg.includes(' ') ? `'${arg}'` : arg))
+  const desired = buildDesiredConfig({ repoRoot: '<worktree>' })
+  const expectedFragment = buildClaudeMcpAddArgs(desired)
+    .slice(2) // drop the leading "mcp add" the regex already anchors on
     .join(' ')
-    .replace('http://127.0.0.1:3100/mcp', '<port-placeholder>')
-
   const docsFragment = match[1]
-    .replace(/http:\/\/127\.0\.0\.1:<port>\/mcp/, '<port-placeholder>')
 
   assert.equal(docsFragment, expectedFragment, 'docs fallback command argv order must match buildClaudeMcpAddArgs')
 })
@@ -322,7 +249,7 @@ import { resolvesToAnotherProjectEntry } from './wire-worktree-mcp-lib.mjs'
 // whiteboard already exists in local config". ~/.claude.json holds exactly one project key for
 // this repo (the main checkout), so the CLI resolves a linked worktree to the main project and
 // collides with the entry already there. The add can never succeed; attempting it just prints a
-// failed command (with a redacted bearer token) on every worktree creation.
+// failed command on every worktree creation.
 test('a linked worktree whose main checkout already holds the entry is reported, not retried', () => {
   const config = { projects: { '/repo': { mcpServers: { whiteboard: { type: 'http' } } } } }
   assert.equal(

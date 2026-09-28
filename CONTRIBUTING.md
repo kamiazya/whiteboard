@@ -136,7 +136,7 @@ This repo ships its local AI-orchestrated dev flow under `.claude/` (Claude Code
 ### First-clone setup
 
 1. `pnpm install` (required before anything else — the dev daemon and tests need the workspace installed).
-2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which probes this checkout's derived dev port (3099 on the main checkout) and, if nothing is listening, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to bind.
+2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which pings the daemon over the socket named in this checkout's daemon record (`.dev-data/daemon.json`) and, if nothing answers, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to answer.
 3. **Register the stdio proxy once per checkout** so Claude Code actually talks to that daemon instead of the published npm package. `.claude/settings.json` has no `mcpServers` field in its schema — a definition there is silently ignored — so this is a one-time `--scope local` CLI registration (machine-private `~/.claude.json`) per checkout:
 
    ```bash

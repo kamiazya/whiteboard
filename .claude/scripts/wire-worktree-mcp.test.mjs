@@ -64,7 +64,6 @@ test('main: missing `claude` CLI skips wiring without touching config', async ()
       writeCalls += 1
     },
     log: (msg) => logs.push(msg),
-    env: {},
   })
 
   assert.equal(writeCalls, 0)
@@ -75,8 +74,7 @@ test('main: absent registration + successful `claude mcp add` + matching post-wr
   const repoRoot = '/repo/.claude/worktrees/wt-a'
   let addSpawns = 0
   let readCalls = 0
-  let writtenUrl
-  let writtenAuthHeader
+  let writtenLine
   const logs = []
   await main({
     argv: [repoRoot],
@@ -86,12 +84,10 @@ test('main: absent registration + successful `claude mcp add` + matching post-wr
       if (args?.includes('add')) {
         addSpawns += 1
         // Real `claude mcp add` writes the entry into ~/.claude.json itself;
-        // capture the url/header argv passed here so the post-write
+        // capture the command line passed after `--` so the post-write
         // readConfig stub below can echo back a registration that matches
         // exactly what was requested.
-        writtenUrl = args[5]
-        const headerIndex = args.indexOf('--header')
-        writtenAuthHeader = args[headerIndex + 1]
+        writtenLine = args.slice(args.indexOf('--') + 1)
       }
       return fakeSpawnOk()
     },
@@ -101,11 +97,11 @@ test('main: absent registration + successful `claude mcp add` + matching post-wr
       // verify): `claude mcp add` succeeded and wrote exactly what was
       // requested.
       if (readCalls === 1) return { projects: {} }
-      const [headerName, headerValue] = writtenAuthHeader.split(': ')
+      const [command, ...args] = writtenLine
       return {
         projects: {
           [resolve(repoRoot)]: {
-            mcpServers: { whiteboard: { type: 'http', url: writtenUrl, headers: { [headerName]: headerValue } } },
+            mcpServers: { whiteboard: { type: 'stdio', command, args, env: {} } },
           },
         },
       }
@@ -114,32 +110,11 @@ test('main: absent registration + successful `claude mcp add` + matching post-wr
       throw new Error('writeConfig must not be called on the plain-wiring path — only `claude mcp add` writes')
     },
     log: (msg) => logs.push(msg),
-    env: {},
   })
 
   assert.equal(addSpawns, 1)
   assert.equal(readCalls, 2)
   assert.ok(logs.some((line) => /^\[wire-worktree-mcp\] wired "whiteboard" -> /.test(line)), `expected a "wired" success log, got: ${JSON.stringify(logs)}`)
-})
-
-test('main: WHITEBOARD_DEV_PORT set in the calling shell logs the override warning before wiring proceeds', async () => {
-  const repoRoot = '/repo/.claude/worktrees/wt-a'
-  const logs = []
-  await main({
-    argv: [repoRoot],
-    isMainCheckoutOverride: false,
-    claudeCliAvailableOverride: true,
-    spawn: () => fakeSpawnOk(),
-    readConfig: () => ({ projects: {} }),
-    writeConfig: () => {},
-    log: (msg) => logs.push(msg),
-    env: { WHITEBOARD_DEV_PORT: '9999' },
-  })
-
-  assert.ok(
-    logs.some((line) => /WHITEBOARD_DEV_PORT is set in this shell but is ignored for registration/.test(line)),
-    `expected the override warning to be logged, got: ${JSON.stringify(logs)}`,
-  )
 })
 
 test('main: a conflicting existing registration is left untouched — no `claude mcp add` spawn', async () => {
@@ -163,7 +138,6 @@ test('main: a conflicting existing registration is left untouched — no `claude
     }),
     writeConfig: () => {},
     log: (msg) => logs.push(msg),
-    env: {},
   })
 
   assert.equal(addSpawned, false)
@@ -198,7 +172,6 @@ test('main: a post-write mismatch is reported without retrying the write', async
     },
     writeConfig: () => {},
     log: (msg) => logs.push(msg),
-    env: {},
   })
 
   assert.equal(addSpawns, 1)
@@ -207,7 +180,6 @@ test('main: a post-write mismatch is reported without retrying the write', async
 
 test('main: an already-identical registration is a no-op — no `claude mcp add` spawn, no write', async () => {
   const repoRoot = '/repo/.claude/worktrees/wt-a'
-  const desiredUrl = 'http://127.0.0.1:3457/mcp'
   let addSpawned = false
   let writeCalls = 0
   const logs = []
@@ -224,9 +196,10 @@ test('main: an already-identical registration is a no-op — no `claude mcp add`
         [resolve(repoRoot)]: {
           mcpServers: {
             whiteboard: {
-              type: 'http',
-              url: desiredUrl,
-              headers: { Authorization: 'Bearer whiteboard-dev' },
+              type: 'stdio',
+              command: 'node',
+              args: [`${repoRoot}/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs`],
+              env: {},
             },
           },
         },
@@ -236,16 +209,14 @@ test('main: an already-identical registration is a no-op — no `claude mcp add`
       writeCalls += 1
     },
     log: (msg) => logs.push(msg),
-    env: {},
   })
 
-  // Only asserting the no-op behavior here, not the exact desired port —
-  // classifyExistingConfig itself is unit-tested for exact matching.
   assert.equal(addSpawned, false)
   assert.equal(writeCalls, 0)
+  assert.ok(logs.some((line) => /already wired/.test(line)), JSON.stringify(logs))
 })
 
-test('main: a non-zero-exit `claude mcp add` is logged (redacted) without a post-write verify read', async () => {
+test('main: a non-zero-exit `claude mcp add` is logged without a post-write verify read', async () => {
   const repoRoot = '/repo/.claude/worktrees/wt-a'
   let readCalls = 0
   const logs = []
@@ -267,7 +238,6 @@ test('main: a non-zero-exit `claude mcp add` is logged (redacted) without a post
       throw new Error('writeConfig must not be called on this path')
     },
     log: (msg) => logs.push(msg),
-    env: {},
   })
 
   assert.equal(readCalls, 1, 'must not re-read config for a post-write verify after a failed add')
@@ -288,7 +258,6 @@ test('main --sweep: no ~/.claude.json projects found is a no-op — no write', a
       writeCalls += 1
     },
     log: (msg) => logs.push(msg),
-    env: {},
   })
 
   assert.equal(writeCalls, 0)
@@ -315,7 +284,6 @@ test('main --sweep: removes stale entries via a config write, keeps live entries
       writtenConfig = config
     },
     log: () => {},
-    env: {},
   })
 
   assert.ok(writtenConfig, 'expected a config write for the sweep')

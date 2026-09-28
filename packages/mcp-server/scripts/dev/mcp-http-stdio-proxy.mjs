@@ -22,37 +22,28 @@
 // listChanged) don't traverse this proxy — a dev-only tradeoff; reload the
 // client session to pick up a changed tool list.
 //
-// Where the daemon's record names a socket (ADR-0050 decision 2), requests go
-// there; the port is the fallback while no record says otherwise.
+// Requests go to the socket the daemon's record names (ADR-0050 decision 2),
+// never to a port this derives: while there is no record — the daemon is
+// starting, or is between the two halves of a watch restart — a request
+// waits within its retry budget for one to appear. (Windows is the one
+// exception, until its daemon records a named pipe: dev-daemon-socket-lib.mjs.)
 //
 // Env:
 //   WHITEBOARD_DATA_DIR             where to read daemon.json (default: .dev-data)
-//   WHITEBOARD_DEV_PORT             override the derived port (tests)
 //   WHITEBOARD_TOKEN                bearer token (default: whiteboard-dev)
 //   WHITEBOARD_PROXY_SKIP_ENSURE=1  do not spawn the ensure hook (tests)
 //   WHITEBOARD_PROXY_RETRY_TIMEOUT_MS  per-request retry budget (default 30000)
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { request } from 'node:http'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
-import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
+import { readDaemonRecord, requestDaemon } from './dev-daemon-socket-lib.mjs'
 import { resolveDevDataDirEnv, resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
 
-const HOST = '127.0.0.1'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolveRepoRootFromGit(SCRIPT_DIR)
-const PORT = deriveDevPort({
-  repoRoot: REPO_ROOT,
-  isMainCheckout: isMainCheckout(REPO_ROOT),
-  env: process.env,
-})
 const TOKEN = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
-const DAEMON_RECORD_PATH = join(
-  resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR,
-  'daemon.json',
-)
+const DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
 const DEFAULT_RETRY_TIMEOUT_MS = 30_000
 
 // Only a finite, non-negative override is usable: NaN or Infinity would make
@@ -97,60 +88,16 @@ const MCP_HEADERS = {
   Authorization: `Bearer ${TOKEN}`,
 }
 
-// Read per request, not once: a watch restart rewrites the record, and a
-// daemon that is down has none.
-function recordedSocketPath() {
-  try {
-    const { socketPath } = JSON.parse(readFileSync(DAEMON_RECORD_PATH, 'utf8'))
-    return typeof socketPath === 'string' && socketPath !== '' ? socketPath : null
-  } catch {
-    return null
-  }
-}
-
-function postOverSocket(socketPath, line) {
-  return new Promise((resolvePost, rejectPost) => {
-    const req = request(
-      { socketPath, path: '/mcp', method: 'POST', headers: MCP_HEADERS },
-      (res) => {
-        let text = ''
-        res.setEncoding('utf8')
-        res.on('data', (chunk) => {
-          text += chunk
-        })
-        res.on('end', () =>
-          resolvePost({
-            status: res.statusCode ?? 0,
-            contentType: res.headers['content-type'],
-            text,
-          }),
-        )
-        res.on('error', rejectPost)
-      },
-    )
-    req.on('error', rejectPost)
-    req.end(line)
-  })
-}
-
-async function post(line) {
-  const socketPath = recordedSocketPath()
-  if (socketPath !== null) return postOverSocket(socketPath, line)
-  const res = await fetch(`http://${HOST}:${PORT}/mcp`, {
-    method: 'POST',
-    headers: MCP_HEADERS,
-    body: line,
-  })
-  return {
-    status: res.status,
-    contentType: res.headers.get('content-type'),
-    text: await res.text(),
-  }
+// The record is read per request, not once: a watch restart rewrites it, and
+// a daemon that is down has none.
+function post(line) {
+  const record = readDaemonRecord(DATA_DIR)
+  if (record === null) return Promise.reject(new Error('the dev daemon has no record yet'))
+  return requestDaemon(record, { method: 'POST', path: '/mcp', headers: MCP_HEADERS, body: line })
 }
 
 async function forwardOnce(line) {
-  const { status, contentType: rawContentType, text } = await post(line)
-  const contentType = rawContentType?.toLowerCase() ?? ''
+  const { status, contentType, text } = await post(line)
   // 202/empty: a notification was accepted — nothing to write back.
   if (status === 202 || text.trim() === '') return null
   if ((status < 200 || status >= 300) && !isJson(text)) {
@@ -241,7 +188,4 @@ rl.on('close', () => {
   void Promise.allSettled([...inflight]).then(() => process.exit(0))
 })
 
-const startupSocket = recordedSocketPath()
-log(
-  `proxying stdio <-> ${startupSocket === null ? `http://${HOST}:${PORT}/mcp` : `/mcp on socket ${startupSocket}`}`,
-)
+log(`proxying stdio <-> /mcp on the socket named in ${resolve(DATA_DIR, 'daemon.json')}`)

@@ -6,14 +6,11 @@ import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   ensureDevDataDirSecured,
   injectDerivedPortArg,
-  removeDevDaemonMarker,
   reraiseSignalOrExit,
   resolveDevAllowedWebOriginsEnv,
   resolveDevDataDirEnv,
-  resolveEffectivePort,
   resolveRepoRootFromGit,
   resolveTsxWatchSpawn,
-  writeDevDaemonMarker,
 } from './with-dev-data-dir-lib.mjs'
 
 // Keeps dev daemons started via `pnpm mcp:http:dev` (and anything that
@@ -50,20 +47,9 @@ const derivedPort = deriveDevPort({
   env: process.env,
 })
 const argvWithPort = injectDerivedPortArg(process.argv.slice(2), derivedPort)
-// A caller-provided `--port=value` (recognized by parseArg in
-// server/index.ts) always wins over derivedPort — record that same
-// effective value in the marker so it never disagrees with the port the
-// server actually binds to.
-const effectivePort = resolveEffectivePort(argvWithPort, derivedPort)
 
 const entryPath = resolve(packageRoot, 'src/server/daemon-entry.ts')
 const { command, args } = resolveTsxWatchSpawn(packageRoot, entryPath, argvWithPort)
-
-writeDevDaemonMarker(env.WHITEBOARD_DATA_DIR, {
-  port: effectivePort,
-  repoRoot,
-  pid: process.pid,
-})
 
 const child = spawn(command, args, {
   cwd: packageRoot,
@@ -77,7 +63,6 @@ child.on('error', (error) => {
 })
 
 child.on('exit', (code, signal) => {
-  removeDevDaemonMarker(env.WHITEBOARD_DATA_DIR)
   if (signal) {
     reraiseSignalOrExit(signal)
     return
