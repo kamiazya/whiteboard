@@ -33,9 +33,9 @@ catalog:
   # reached it. That pin is gone — mcp-server builds with tsdown, whose dts
   # plugin has a `tsgo` generator that reads TypeScript 7 directly.
   typescript: "^7.0.2"
-  vite: "^8.2.2"
-  vitest: "^5.0.0"
-  "@vitest/browser-playwright": "^5.0.0"
+  vite: "^8.3.0"
+  vitest: "^5.0.1"
+  "@vitest/browser-playwright": "^5.0.1"
   # codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
   unified: "^11.0.5"
   remark-parse: "^11.0.0"
@@ -47,10 +47,10 @@ catalog:
   # One version everywhere, because a break-opportunity difference between the
   # browser and Node would desync the byte-identical-SVG guarantee.
   css-line-break: "^2.1.0"
-  "@vitest/coverage-v8": "^5.0.0"
+  "@vitest/coverage-v8": "^5.0.1"
   # the html reporter and `vitest --ui`; the only surfaces that persist a
   # browser traceView replay (measured: the flag alone writes nothing).
-  "@vitest/ui": "^5.0.0"
+  "@vitest/ui": "^5.0.1"
   # mcp-server's first InversifyJS composition root (DI wiring only, no
   # decorators/reflect-metadata) — pinned old enough to clear minimumReleaseAge.
   inversify: "^8.2.3"
