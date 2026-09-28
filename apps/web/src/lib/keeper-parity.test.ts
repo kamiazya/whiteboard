@@ -82,6 +82,14 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: 'moves a browser-kept workspace INTO the daemon and shows what the daemon keeps of the workspace in view (its replica tier line) — both are about the daemon as the destination or the keeper, and a browser-kept workspace has no counterpart for either',
   },
+  'src/components/settings/LocalCopiesCard.tsx': {
+    reach: 'daemon-itself',
+    why: "hands the connected daemon's fetch to each of that daemon's cached copies, for the offline switch below — a browser-kept workspace is stored unsealed, so there is no key to lock and nothing to hand",
+  },
+  'src/components/settings/ReplicaOfflineControl.tsx': {
+    reach: 'daemon-itself',
+    why: "asks the daemon for a cached copy's key to lock it under a passkey held in this browser — only a daemon-kept copy is sealed, so a browser-kept one has no key to lock",
+  },
   'src/components/settings/MembersCard.tsx': {
     reach: 'daemon-itself',
     why: 'lists, adds and removes the people a daemon workspace admits — membership is a daemon-side record (member profiles over pinned passkeys) with no browser-keeper equivalent, since a browser workspace has exactly one person and no sessions to end',

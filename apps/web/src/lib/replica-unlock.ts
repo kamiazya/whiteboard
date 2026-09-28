@@ -24,7 +24,10 @@
  * a signature a caller could replay somewhere that DOES verify.
  */
 
-import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import {
+  type ReplicaTier,
+  replicaKeyResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import {
   deriveWrappingKey,
   unwrapWorkspaceKey,
@@ -41,6 +44,15 @@ import {
   type StorageLike,
 } from './passkey-attestation.js'
 import { prfInputForDaemon } from './passkey-prf.js'
+import {
+  assertOfflinePasskey,
+  browserCredentials,
+  createOfflinePasskey,
+  dropOfflinePasskey,
+  loadOfflinePasskey,
+  type OfflinePasskeyCredentials,
+  saveOfflinePasskey,
+} from './replica-offline-passkey.js'
 import { dropWrappedKey, loadWrappedKey, saveWrappedKey } from './replica-wrapped-key-store.js'
 
 /**
@@ -110,7 +122,7 @@ export async function unlockReplicaKey({
 }: {
   daemonBaseUrl: string
   workspaceId: string
-  credentials?: PasskeyCredentials
+  credentials?: PasskeyCredentials & OfflinePasskeyCredentials
   storage?: StorageLike
 }): Promise<UnlockOutcome> {
   const held = sessionKeyStatus(daemonBaseUrl, workspaceId)
@@ -118,6 +130,43 @@ export async function unlockReplicaKey({
 
   const blob = loadWrappedKey(daemonBaseUrl, workspaceId)
   if (blob === null) return { ok: false, reason: 'no-blob' }
+
+  const prf = await prfForUnlock({ daemonBaseUrl, workspaceId, credentials, storage })
+  if (!prf.ok) return prf
+
+  const wrappingKey = await deriveWrappingKey(prf.prfOutput)
+  const response = await unwrapWorkspaceKey(wrappingKey, blob, { daemonBaseUrl, workspaceId })
+  if (response === null) {
+    stopReplicaReadableOffline(daemonBaseUrl, workspaceId)
+    return { ok: false, reason: 'unopenable' }
+  }
+
+  if (!adoptSessionKey(daemonBaseUrl, workspaceId, response)) {
+    stopReplicaReadableOffline(daemonBaseUrl, workspaceId)
+    return { ok: false, reason: 'lapsed' }
+  }
+  return { ok: true, tier: response.tier }
+}
+
+/**
+ * The `prf` output an unlock opens with. A copy made readable offline from
+ * Settings names its own passkey, kept in this browser, and asks nothing of any
+ * daemon; any other copy was wrapped by a passkey a daemon's pairing
+ * registered.
+ */
+async function prfForUnlock({
+  daemonBaseUrl,
+  workspaceId,
+  credentials,
+  storage,
+}: {
+  daemonBaseUrl: string
+  workspaceId: string
+  credentials?: PasskeyCredentials & OfflinePasskeyCredentials
+  storage?: StorageLike
+}): Promise<{ ok: true; prfOutput: Uint8Array } | { ok: false; reason: UnlockFailure }> {
+  const local = loadOfflinePasskey(daemonBaseUrl, workspaceId)
+  if (local !== null) return assertOfflinePasskey(local, credentials ?? browserCredentials())
 
   const outcome = await assertWithRegisteredPasskey({
     daemonBaseUrl,
@@ -129,17 +178,83 @@ export async function unlockReplicaKey({
   if (outcome === null) return { ok: false, reason: 'no-passkey' }
   if (!outcome.ok) return { ok: false, reason: 'cancelled' }
   if (outcome.prfOutput === undefined) return { ok: false, reason: 'no-prf' }
+  return { ok: true, prfOutput: outcome.prfOutput }
+}
 
-  const wrappingKey = await deriveWrappingKey(outcome.prfOutput)
-  const response = await unwrapWorkspaceKey(wrappingKey, blob, { daemonBaseUrl, workspaceId })
-  if (response === null) {
-    dropWrappedKey(daemonBaseUrl, workspaceId)
-    return { ok: false, reason: 'unopenable' }
-  }
+/** True when this copy was made readable offline and can still be opened that way. */
+export function isReplicaReadableOffline(daemonBaseUrl: string, workspaceId: string): boolean {
+  return (
+    loadOfflinePasskey(daemonBaseUrl, workspaceId) !== null &&
+    loadWrappedKey(daemonBaseUrl, workspaceId) !== null
+  )
+}
 
-  if (!adoptSessionKey(daemonBaseUrl, workspaceId, response)) {
-    dropWrappedKey(daemonBaseUrl, workspaceId)
-    return { ok: false, reason: 'lapsed' }
+/**
+ * Why a copy could not be made readable offline. Each is its own sentence:
+ * `unsupported` is this browser, `unreachable` is the daemon, `cancelled` is
+ * the person, `no-offline` is the keeper's policy (ADR-0042 decision 5).
+ */
+export type OfflineOptInFailure = 'unsupported' | 'unreachable' | 'cancelled' | 'no-offline'
+
+/**
+ * Settings' "make readable offline" (ADR-0050 decision 11): creates a passkey
+ * in this browser only and wraps the copy's key under its `prf` output.
+ *
+ * The key is asked for FIRST, because it has to be held to be wrapped — and a
+ * passkey created before learning the daemon cannot hand it over would be one
+ * the person has to find and delete for nothing.
+ */
+export async function makeReplicaReadableOffline({
+  daemonBaseUrl,
+  workspaceId,
+  label,
+  fetch,
+  credentials = browserCredentials(),
+}: {
+  daemonBaseUrl: string
+  workspaceId: string
+  label: string
+  /** A fetch that reaches this copy's daemon. */
+  fetch: typeof globalThis.fetch
+  credentials?: OfflinePasskeyCredentials
+}): Promise<{ ok: true } | { ok: false; reason: OfflineOptInFailure }> {
+  if (credentials === undefined) return { ok: false, reason: 'unsupported' }
+  const response = await fetchReplicaKey(fetch, daemonBaseUrl, workspaceId)
+  if (response === null) return { ok: false, reason: 'unreachable' }
+  if (response.tier === 'no-offline') return { ok: false, reason: 'no-offline' }
+
+  const created = await createOfflinePasskey({ label, credentials })
+  if (!created.ok) return created
+  await rememberReplicaKey({ daemonBaseUrl, workspaceId, response, prfOutput: created.prfOutput })
+  saveOfflinePasskey(daemonBaseUrl, workspaceId, created.record)
+  return { ok: true }
+}
+
+/**
+ * Turning it off drops the wrapped key, which is what makes the copy
+ * unopenable offline, and the credential record with it. The passkey itself
+ * stays in the person's passkey manager: a page cannot delete one there.
+ */
+export function stopReplicaReadableOffline(daemonBaseUrl: string, workspaceId: string): void {
+  dropWrappedKey(daemonBaseUrl, workspaceId)
+  dropOfflinePasskey(daemonBaseUrl, workspaceId)
+}
+
+/** The request the session-key holder makes, answered as the parsed response or null. */
+async function fetchReplicaKey(
+  fetch: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+): Promise<ReplicaKeyResponse | null> {
+  try {
+    const res = await fetch(
+      `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/replica-key`,
+      { method: 'POST' },
+    )
+    if (!res.ok) return null
+    const parsed = replicaKeyResponseSchema.safeParse(await res.json())
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
   }
-  return { ok: true, tier: response.tier }
 }

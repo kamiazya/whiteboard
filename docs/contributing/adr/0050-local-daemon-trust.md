@@ -287,7 +287,8 @@ lands, the extension path runs beside today's connection.
 
 ## Addendum (2026-09-28): closing loopback
 
-The owner took three more decisions before the closing-loopback stage began.
+The owner took three more decisions before the closing-loopback stage began,
+and an eleventh during it.
 
 8. **A cached replica stays encrypted with a passkey-held key.**
    - Decision 3 retires the passkey as a way to sign in to the local
@@ -313,6 +314,20 @@ The owner took three more decisions before the closing-loopback stage began.
     - The development build of the extension already admits `localhost`.
     - Developing the app then exercises the same path people use, and no
       second transport is kept for development alone.
+
+11. **Offline reading on the extension path is opt-in from Settings**
+    (2026-09-28).
+    - Each daemon-kept copy under Settings > Connections > "Copies on this
+      device" offers **Make readable offline**.
+    - Pressing it creates a passkey in this browser only, with the PRF
+      extension, and wraps that copy's workspace key under the PRF output.
+      Nothing is registered with the daemon, and the app never asks for a
+      passkey on its own.
+    - It is offered only while the daemon is connected, because the key has
+      to be held to be wrapped.
+    - Once a copy is readable offline, the existing unlock opens it with one
+      passkey gesture. The row says so and offers **Turn off**, which drops
+      the wrapped key.
 
 The closing-loopback stage lands as a sequence, each part merged on its own:
 - the daemon counts a page by its SSE stream too, so nothing that asks

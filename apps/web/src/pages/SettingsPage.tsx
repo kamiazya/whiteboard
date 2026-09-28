@@ -299,7 +299,11 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
           settingsStore={settingsStore}
           workspaceId={workspaceId}
         />
-        <LocalCopiesCard settingsStore={settingsStore} workspaceId={workspaceId} />
+        <LocalCopiesCard
+          settingsStore={settingsStore}
+          workspaceId={workspaceId}
+          daemonBaseUrl={daemon.baseUrl}
+        />
         {/* Hidden without a known workspace id: a cold load with a daemon
             merely detected names none yet, and the card would have nothing
             to manage. */}

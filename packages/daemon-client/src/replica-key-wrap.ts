@@ -38,7 +38,7 @@ const DERIVED_KEY_BITS = 256
  * Base64url without padding, the encoding every other stored shape here uses
  * — the blob is JSON in a browser store, so the bytes have to be text.
  */
-const BASE64URL = /^[A-Za-z0-9_-]+$/
+export const BASE64URL = /^[A-Za-z0-9_-]+$/
 
 export const wrappedWorkspaceKeySchema = z
   .object({
@@ -56,13 +56,13 @@ export interface WrapBinding {
   workspaceId: string
 }
 
-function toBase64Url(bytes: Uint8Array): string {
+export function toBase64Url(bytes: Uint8Array): string {
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function fromBase64Url(text: string): Uint8Array<ArrayBuffer> {
+export function fromBase64Url(text: string): Uint8Array<ArrayBuffer> {
   const padded = text.replace(/-/g, '+').replace(/_/g, '/')
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
   const out = new Uint8Array(binary.length)

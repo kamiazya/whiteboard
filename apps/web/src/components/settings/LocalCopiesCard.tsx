@@ -23,9 +23,11 @@
  * still appears, because a list of "every copy" that silently omits half of
  * them is worse than no list.
  */
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
+import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
 import { getAppLogger } from '../../lib/app-logger.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
+import { stopReplicaReadableOffline } from '../../lib/replica-unlock.js'
 import { forgetReplicaEntry, listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { DaemonAddress } from '../connection/DaemonAddress.js'
@@ -40,6 +42,7 @@ import {
 } from '../ui/alert-dialog.js'
 import { Button } from '../ui/button.js'
 import { formatRelative } from '../workspace-files/format-relative.js'
+import { ReplicaOfflineControl } from './ReplicaOfflineControl.js'
 
 const log = getAppLogger('local-copies')
 
@@ -64,6 +67,24 @@ function replicaRow(entry: ReplicaMatch): CopyRow {
   }
 }
 
+function CopyRowDescription({ row }: { row: CopyRow }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-sm">{row.label}</span>
+      <span className="text-muted-foreground text-xs">
+        {row.keeper === 'browser' ? (
+          'Kept in this browser — the only copy of it anywhere, so it cannot be removed here.'
+        ) : (
+          <>
+            Cached from <DaemonAddress baseUrl={row.daemonBaseUrl ?? ''} />
+            {row.syncedAt === undefined ? '' : ` · synced ${formatRelative(row.syncedAt)}`}
+          </>
+        )}
+      </span>
+    </div>
+  )
+}
+
 /** One row. `onDelete` is handed the button so the card can restore focus
  *  to it after the dialog closes — one dialog serves every row, so there is
  *  no `AlertDialogTrigger` to do that for us. */
@@ -71,61 +92,48 @@ function CopyRowItem({
   row,
   openHere,
   onDelete,
+  daemonFetch,
 }: {
   row: CopyRow
   openHere: boolean
   onDelete: (trigger: HTMLButtonElement) => void
+  /** A fetch to this row's daemon while it is the connected one, else null. */
+  daemonFetch: typeof globalThis.fetch | null
 }) {
   return (
-    <li
-      data-testid={`local-copy-${row.workspaceId}`}
-      className="flex items-start justify-between gap-3"
-    >
-      <div className="flex flex-col gap-0.5">
-        <span className="text-sm">{row.label}</span>
-        <span className="text-muted-foreground text-xs">
-          {row.keeper === 'browser' ? (
-            'Kept in this browser — the only copy of it anywhere, so it cannot be removed here.'
+    <li data-testid={`local-copy-${row.workspaceId}`} className="flex flex-col gap-1.5">
+      <div className="flex items-start justify-between gap-3">
+        <CopyRowDescription row={row} />
+        {row.keeper === 'daemon' &&
+          (openHere ? (
+            <span className="text-muted-foreground text-xs">Open here</span>
           ) : (
-            <>
-              Cached from <DaemonAddress baseUrl={row.daemonBaseUrl ?? ''} />
-              {row.syncedAt === undefined ? '' : ` · synced ${formatRelative(row.syncedAt)}`}
-            </>
-          )}
-        </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(event) => onDelete(event.currentTarget)}
+            >
+              Delete copy
+            </Button>
+          ))}
       </div>
-      {row.keeper === 'daemon' &&
-        (openHere ? (
-          <span className="text-muted-foreground text-xs">Open here</span>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={(event) => onDelete(event.currentTarget)}
-          >
-            Delete copy
-          </Button>
-        ))}
+      {row.keeper === 'daemon' && row.daemonBaseUrl !== undefined && (
+        <ReplicaOfflineControl
+          daemonBaseUrl={row.daemonBaseUrl}
+          workspaceId={row.workspaceId}
+          label={row.label}
+          daemonFetch={daemonFetch}
+        />
+      )}
     </li>
   )
 }
 
-export function LocalCopiesCard({
-  settingsStore,
-  workspaceId,
-}: {
-  settingsStore: UserSettingsStore
-  /** The workspace this session is showing, if any — its copy cannot be
-   *  deleted from under the page that is reading it. */
-  workspaceId?: string
-}) {
-  const headingId = useId()
+/** Every copy this device keeps, read from the two sources that list them; `load` re-reads. */
+function useCopyRows(settingsStore: UserSettingsStore) {
   const [rows, setRows] = useState<CopyRow[] | null>(null)
   const [keptReadable, setKeptReadable] = useState(true)
-  const [pending, setPending] = useState<CopyRow | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
 
   const load = useCallback(async () => {
     // The claims come from the settings blob in localStorage and need no
@@ -161,6 +169,30 @@ export function LocalCopiesCard({
     void load()
   }, [load])
 
+  return { rows, keptReadable, load }
+}
+
+export function LocalCopiesCard({
+  settingsStore,
+  workspaceId,
+  daemonBaseUrl,
+}: {
+  settingsStore: UserSettingsStore
+  /** The workspace this session is showing, if any — its copy cannot be
+   *  deleted from under the page that is reading it. */
+  workspaceId?: string
+  /** The daemon this session is connected to, whose fetch the provider above
+   *  carries — what lets that daemon's copies be made readable offline. */
+  daemonBaseUrl?: string
+}) {
+  const headingId = useId()
+  const daemonApi = useContext(DaemonApiContext)
+  const [pending, setPending] = useState<CopyRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+
+  const { rows, keptReadable, load } = useCopyRows(settingsStore)
+
   const confirmDelete = useCallback(
     async (row: CopyRow) => {
       setDeleting(true)
@@ -171,6 +203,10 @@ export function LocalCopiesCard({
         // where the reverse leaves a claim pointing at a record that is gone
         // and every reader of it has to cope with the absence.
         settingsStore.update((current) => forgetReplicaEntry(current, row.workspaceId))
+        // A wrapped key for a copy that is gone is a key on disk for nothing.
+        if (row.daemonBaseUrl !== undefined) {
+          stopReplicaReadableOffline(row.daemonBaseUrl, row.workspaceId)
+        }
         const { openDocumentStore } = await import('../../lib/replica-store.js')
         await openDocumentStore().deleteDoc({
           docRef: { kind: 'workspace-tree', workspaceId: row.workspaceId },
@@ -206,6 +242,9 @@ export function LocalCopiesCard({
               key={`${row.keeper}:${row.workspaceId}`}
               row={row}
               openHere={row.workspaceId === workspaceId}
+              daemonFetch={
+                daemonApi !== null && row.daemonBaseUrl === daemonBaseUrl ? daemonApi : null
+              }
               onDelete={(trigger) => {
                 triggerRef.current = trigger
                 setPending(row)

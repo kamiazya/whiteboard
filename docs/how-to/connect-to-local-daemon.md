@@ -257,14 +257,10 @@ daemon and must be paired again, or — if you were removed from the
 workspace — a plain notice that you were removed and that nothing you
 changed since is sent anywhere.
 
-The passkey unlock is what lets a copy survive closing the tab. It is set up
-for you, on the same passkey prompt you already answer when a workspace
-opens: there is no second prompt and nothing to switch on. The trade is
-worth knowing before you rely on it — **if you lose that passkey, this
-device's copy cannot be read again.** The daemon still keeps the workspace,
-so a fresh copy can be pulled; anything this device had not yet sent is
-gone. Some browsers and security keys do not support it, in which case the
-copy behaves as before and stays readable only until the tab closes. If anything could
+The passkey unlock is what lets a copy survive closing the tab, and you
+switch it on per copy: see
+[Read a copy offline](#read-a-copy-offline) below. Until you do, a copy
+stays readable only until the tab closes. If anything could
 not be confirmed (for example an image upload failed), the browser copy is
 kept unchanged and the result says so; moving again later is safe and
 simply re-merges.
@@ -283,6 +279,31 @@ yet, so the confirmation says so before you commit to it. The copy the
 session is currently showing is not offered a delete, and neither is a
 workspace this browser keeps itself: that one is the only copy of its data
 anywhere, and the way to let go of it is to move it to a daemon first.
+
+## Read a copy offline
+
+A cached replica is encrypted on this device, and its key is held only while
+the tab is open. To open a copy after the tab has closed and the daemon is
+unreachable, use **Make readable offline** on its row in **Settings >
+Connections > Copies on this device**.
+
+The action creates a passkey in this browser only. It is not registered with
+the daemon, and the app never asks for one on its own. The copy's key is
+locked with that passkey, and the row then reads *Readable offline with your
+passkey.* The next time the daemon cannot be reached, the copy offers
+**Unlock with your passkey**: one gesture, no network.
+
+- The action works only while the daemon that keeps the workspace is
+  connected, because its key is needed to lock the copy. Otherwise the row
+  says so and the button is disabled.
+- **If you lose that passkey, this device's copy cannot be read again.** The
+  daemon still keeps the workspace, so a fresh copy can be pulled; anything
+  this device had not yet sent is gone.
+- A browser whose passkeys cannot do this says *This browser cannot make a
+  copy readable offline.* and nothing is changed.
+- **Turn off** on the row removes the locked key, so the copy is again
+  readable only while a tab holds it. The passkey stays in your passkey
+  manager; delete it there if you no longer want it.
 
 ## Manage who can use a workspace
 
