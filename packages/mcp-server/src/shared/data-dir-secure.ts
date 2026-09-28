@@ -1,6 +1,7 @@
-import { accessSync, chmodSync, constants as fsConstants, mkdirSync } from 'node:fs'
+import { accessSync, chmodSync, constants as fsConstants, mkdirSync, statSync } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { homedir, platform, tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { findPackageRoot } from './package-root.js'
 
 // The package root (holds package.json + dist/). Resolved by walking up to
@@ -54,6 +55,94 @@ export function resolveDataDir(
   // In the Codex sandbox, the home directory may not be writable.
   // Fall back to tmp only when there is no explicit env override.
   return resolve(options.tmpDir ?? tmpdir(), '.whiteboard')
+}
+
+/**
+ * Refuses a data dir another user owns. Whoever owns it controls `daemon.json`
+ * and so the socket and token a client trusts — a real risk when the dir is
+ * `$TMPDIR/.whiteboard`, which any user can create first. Mode bits say
+ * nothing here: an owner-only dir is exactly what that user would make.
+ * A dir that does not exist yet is fine; where there is no uid (Windows)
+ * there is nothing to compare.
+ */
+export function assertDataDirOwnedByUser(
+  dir: string,
+  uid = process.getuid?.(),
+  { mustExist = false }: { mustExist?: boolean } = {},
+): void {
+  if (uid === undefined) return
+  let stat: ReturnType<typeof statSync>
+  try {
+    stat = statSync(dir)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    if (!mustExist) return
+    throw new Error(`the data directory ${dir} no longer exists while a file in it is open.`)
+  }
+  if (stat.uid !== uid) {
+    throw new Error(
+      `the data directory ${dir} is owned by uid ${stat.uid}, not this user (uid ${uid}). ` +
+        'Another user may have created it; set WHITEBOARD_DATA_DIR to a directory you own.',
+    )
+  }
+  // World-writable lets anyone replace daemon.json. Group-writable is left
+  // alone: under user-private groups (umask 002) that group is this user.
+  if ((Number(stat.mode) & 0o002) !== 0) {
+    throw new Error(
+      `the data directory ${dir} is writable by other users (mode ${(Number(stat.mode) & 0o777).toString(8)}). ` +
+        `Run \`chmod 700 ${dir}\`.`,
+    )
+  }
+}
+
+/**
+ * A file's text, judged on the OPENED handle: `not-owned` when another user
+ * owns it, `missing` when there is none. Checking the handle rather than the
+ * path first is what closes the window where a directory missing at
+ * `assertDataDirOwnedByUser` is created, record and all, before the read.
+ * A symlink is never followed (a planted one could point at a file this user
+ * does own), and the directory is judged again once the file is open in it.
+ */
+export async function readFileOwnedByUser(
+  path: string,
+  uid = process.getuid?.(),
+): Promise<
+  { kind: 'text'; text: string } | { kind: 'missing' } | { kind: 'not-owned'; message: string }
+> {
+  let handle: Awaited<ReturnType<typeof open>>
+  try {
+    // O_NOFOLLOW is undefined on Windows, where the flag is simply absent.
+    handle = await open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return { kind: 'missing' }
+    if (code === 'ELOOP')
+      return { kind: 'not-owned', message: `${path} is a symlink; refusing to follow it.` }
+    throw err
+  }
+  try {
+    try {
+      assertDataDirOwnedByUser(dirname(path), uid, { mustExist: true })
+    } catch (err) {
+      return { kind: 'not-owned', message: (err as Error).message }
+    }
+    const stat = await handle.stat()
+    const owner = stat.uid
+    // The record is only ever written by rename, so a second name means a
+    // file of this user's was linked in from somewhere else.
+    if (uid !== undefined && stat.nlink > 1) {
+      return { kind: 'not-owned', message: `${path} has another hard link; refusing to read it.` }
+    }
+    if (uid !== undefined && owner !== uid) {
+      return {
+        kind: 'not-owned',
+        message: `${path} is owned by uid ${owner}, not this user (uid ${uid}).`,
+      }
+    }
+    return { kind: 'text', text: await handle.readFile('utf-8') }
+  } finally {
+    await handle.close()
+  }
 }
 
 export function parentIsWritable(path: string): boolean {

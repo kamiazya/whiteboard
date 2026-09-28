@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { assertDataDirOwnedByUser, readFileOwnedByUser } from '../shared/data-dir-secure.js'
 import {
   type DaemonRecord,
   type DaemonRecordBase,
@@ -16,16 +16,21 @@ export type DaemonRecordParseResult =
   | { kind: 'valid'; record: DaemonRecord }
 
 export async function parseDaemonRecord(dataDir: string): Promise<DaemonRecordParseResult> {
-  const recordPath = getDaemonRecordPath(dataDir)
-  let raw: string
   try {
-    raw = await readFile(recordPath, 'utf-8')
+    assertDataDirOwnedByUser(dataDir)
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { kind: 'missing' }
-    }
+    return { kind: 'malformed', message: (err as Error).message }
+  }
+  const recordPath = getDaemonRecordPath(dataDir)
+  let read: Awaited<ReturnType<typeof readFileOwnedByUser>>
+  try {
+    read = await readFileOwnedByUser(recordPath)
+  } catch {
     return { kind: 'malformed', message: 'Could not read daemon record file.' }
   }
+  if (read.kind === 'missing') return { kind: 'missing' }
+  if (read.kind === 'not-owned') return { kind: 'malformed', message: read.message }
+  const raw = read.text
 
   let parsed: unknown
   try {
