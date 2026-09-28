@@ -75,6 +75,14 @@ export function mountServerModeWebApp(app: Hono, webAppDir: string): void {
     const shell = await readFile(join(webAppDir, 'index.html'), 'utf-8').catch(() => null)
     if (shell === null) return c.html(SERVER_MODE_PLACEHOLDER_HTML)
     const { html, csp } = shellWithConfig(shell)
-    return c.html(html, 200, { 'Content-Security-Policy': csp })
+    return c.html(html, 200, {
+      'Content-Security-Policy': csp,
+      // The transfer receiver is a popup another origin opens, and its whole
+      // handshake is `window.opener.postMessage` — which `same-origin` severs.
+      // It checks every message's origin and nonce itself (receive-transfer.ts).
+      ...(c.req.path === '/receive-transfer'
+        ? { 'Cross-Origin-Opener-Policy': 'unsafe-none' }
+        : {}),
+    })
   })
 }

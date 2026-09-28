@@ -519,6 +519,19 @@ What it costs is stated rather than hidden: a browser that cannot hold a
 passkey cannot transfer a workspace, and the UI says so where the move
 used to be offered.
 
+**2026-09-28 — the transfer's confirmation is the destination's own
+session, not an assertion.** [ADR-0050](0050-local-daemon-trust.md) retired
+every keeper's passkey pin, and every promote route now refuses a body that
+carries an attestation, so the amendment above had become a receiver that
+could never accept. What it protected is kept: a keeper does not accept a
+crossing nobody confirmed. The confirmation is now the person SIGNED IN to
+that keeper, pressing Accept on the receiving page at its own origin — the
+keeper authorises the merge the way it authorises any other write of theirs,
+and whatever strength its sign-in has (a passkey at the identity provider
+included) is the strength of the confirmation. The receiving page lives only
+in the web app a server-mode keeper serves (ADR-0047); the local daemon
+serves no web origin to receive at.
+
 ## Sources
 
 - W3C WebAuthn Level 3, `BE`/`BS` flags in authenticator data.

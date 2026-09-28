@@ -275,3 +275,23 @@ describe('server mode inside a workspace', () => {
     expect(screen.getByRole('main').textContent).toContain('workspace index')
   })
 })
+
+describe('server mode transfer receiver', () => {
+  const returnTo = window.location.pathname + window.location.search
+  afterEach(() => history.replaceState(null, '', returnTo))
+
+  it('receives at this keeper, listing workspaces through its own session', async () => {
+    // The page reads the handshake from the real fragment, as the popup does.
+    history.replaceState(
+      null,
+      '',
+      `/receive-transfer#from=https%3A%2F%2Fapp.example&nonce=${'n'.repeat(32)}`,
+    )
+    const fetchFn = renderAt('/receive-transfer', {
+      signedIn: 'Ada',
+      workspaces: [{ workspaceId: 'ws-1' }],
+    })
+    expect((await screen.findByTestId('receive-transfer-status')).textContent).toMatch(/Waiting/)
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledWith('/api/workspaces', undefined))
+  })
+})

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   BrowserWorkspaceScreen,
@@ -8,24 +8,11 @@ import {
   NotFoundScreen,
   SettingsScreen,
 } from './app-screens.js'
-import { LazyPageFallback } from './components/LazyPageFallback.js'
 import { useDaemonReconnect } from './hooks/use-daemon-reconnect.js'
 import { useDaemonShellTarget, useReplicaKeeper } from './hooks/use-daemon-session.js'
-import { useDaemonThemeFonts } from './hooks/useDaemonThemeFonts.js'
-import {
-  browserWorkspaceIdentitySnapshot,
-  subscribeBrowserWorkspaceIdentity,
-} from './lib/browser-workspace-id.js'
-
-// Lazy: this page decodes an arriving workspace record, so it reaches loro —
-// which must stay off the entry chunk (entry-graph-loro-free.test.ts) — and it
-// renders on a rare, dedicated top-level navigation.
-const ReceiveTransferPage = lazy(() =>
-  import('./pages/ReceiveTransferPage.js').then((m) => ({ default: m.ReceiveTransferPage })),
-)
-
 import { useShellWorkspaces } from './hooks/use-shell-workspaces.js'
 import { useWorkspaceAddressSync } from './hooks/use-workspace-address-sync.js'
+import { useDaemonThemeFonts } from './hooks/useDaemonThemeFonts.js'
 import {
   documentPath,
   isKnownAppPath,
@@ -33,6 +20,10 @@ import {
   parseWorkspaceRoute,
   type WorkspaceRoute,
 } from './lib/app-routes.js'
+import {
+  browserWorkspaceIdentitySnapshot,
+  subscribeBrowserWorkspaceIdentity,
+} from './lib/browser-workspace-id.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import {
   browserDocumentPath,
@@ -74,12 +65,6 @@ export function App({ providerState }: AppProps) {
   const [forcedBrowser, setForcedBrowser] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-
-  // The keeper-served transfer receiver is its OWN surface, not a daemon view:
-  // `parseWorkspaceRoute('/receive-transfer')` is null, so without this guard
-  // the daemonView -> URL sync effect below navigates to '/' and drops the
-  // fragment the sender put there — which is the whole handshake.
-  const isReceiveTransferRoute = location.pathname === '/receive-transfer'
 
   const state = providerState ?? defaultProviderState
   const { connection, renewal, attemptRenewal, awaitingDaemonRenewal } = useDaemonReconnect({
@@ -172,16 +157,6 @@ export function App({ providerState }: AppProps) {
   const settings = settingsDaemon({ forcedBrowser, connection, providerState: state })
 
   useReplicaKeeper(settings)
-
-  // The keeper-served /receive-transfer surface — rendered in place of every
-  // other view.
-  if (isReceiveTransferRoute) {
-    return (
-      <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
-        <ReceiveTransferPage />
-      </Suspense>
-    )
-  }
 
   if (!isKnownAppPath(location.pathname)) {
     return <NotFoundScreen onBack={() => navigate('/')} />

@@ -8,12 +8,10 @@
  * rendering anything. The gate it defers to is `lib/receive-transfer.ts`,
  * where the order of the origin, shape and nonce checks is the design.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { acceptTransferredRecord } from '../lib/accept-transferred-record.js'
 import { CROSS_ORIGIN_TRANSFER_PROTOCOL } from '../lib/cross-origin-transfer-protocol.js'
 import { listWorkspaces } from '../lib/daemon-api-client.js'
-import { createDaemonFetch } from '../lib/daemon-auth-fetch.js'
-import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
 import {
   type OfferedTransfer,
   openTransferSession,
@@ -41,6 +39,9 @@ export interface TransferHandshake {
   session: TransferSession | null
   stage: TransferStage
   targets: { workspaceId: string; displayName?: string }[]
+  /** This keeper would not list its workspaces — for a server-mode keeper,
+   *  the person is not signed in here. */
+  targetsUnavailable: boolean
   targetId: string
   setTargetId: (id: string) => void
   accept: () => Promise<void>
@@ -48,26 +49,21 @@ export interface TransferHandshake {
 
 export function useTransferHandshake({
   hash,
-  daemonToken,
   fetchFn,
   opener,
-  credentials,
 }: {
   hash: string
-  daemonToken?: string
+  /** Same-origin, so the signed-in person's session cookie is the credential. */
   fetchFn: typeof globalThis.fetch
   opener: TransferOpener
-  /** Test seam; production asks this origin's real authenticator. */
-  credentials?: PasskeyCredentials
 }): TransferHandshake {
   const [session] = useState<TransferSession | null>(() => openTransferSession(hash))
   const [stage, setStage] = useState<TransferStage>(() =>
     openTransferSession(hash) === null ? { kind: 'not-a-transfer' } : { kind: 'waiting' },
   )
-  const keeperFetch = useKeeperFetch(daemonToken, fetchFn)
-  const { targets, targetId, setTargetId } = useKeeperWorkspaceTargets({
+  const { targets, targetsUnavailable, targetId, setTargetId } = useKeeperWorkspaceTargets({
     enabled: session !== null,
-    keeperFetch,
+    keeperFetch: fetchFn,
   })
   // Held in a ref as well as in state: the accept handler must act on the
   // bytes it was given, and a re-render between the offer and the press must
@@ -105,13 +101,12 @@ export function useTransferHandshake({
 
   const accept = useCallback(async () => {
     const offer = offered.current
-    if (offer === null || session === null || keeperFetch === null || targetId === '') return
+    if (offer === null || session === null || targetId === '') return
     setStage({ kind: 'accepting' })
     const outcome = await acceptTransferredRecord({
-      fetch: keeperFetch,
+      fetch: fetchFn,
       workspaceId: targetId,
       snapshot: offer.snapshot,
-      ...(credentials === undefined ? {} : { credentials }),
     })
     if (!outcome.ok) {
       setStage({ kind: 'refused', reason: outcome.reason })
@@ -134,9 +129,9 @@ export function useTransferHandshake({
         imagesMissing: outcome.imagesMissing,
       })
     }
-  }, [session, keeperFetch, targetId, opener, credentials])
+  }, [session, fetchFn, targetId, opener])
 
-  return { session, stage, targets, targetId, setTargetId, accept }
+  return { session, stage, targets, targetsUnavailable, targetId, setTargetId, accept }
 }
 
 /**
@@ -151,17 +146,18 @@ function useKeeperWorkspaceTargets({
   keeperFetch,
 }: {
   enabled: boolean
-  /** Null when this page is not served by a keeper: there is nothing to list. */
-  keeperFetch: typeof globalThis.fetch | null
+  keeperFetch: typeof globalThis.fetch
 }): {
   targets: { workspaceId: string; displayName?: string }[]
+  targetsUnavailable: boolean
   targetId: string
   setTargetId: (id: string) => void
 } {
   const [targets, setTargets] = useState<{ workspaceId: string; displayName?: string }[]>([])
+  const [targetsUnavailable, setTargetsUnavailable] = useState(false)
   const [targetId, setTargetId] = useState('')
   useEffect(() => {
-    if (!enabled || keeperFetch === null) return
+    if (!enabled) return
     void listWorkspaces(keeperFetch, '')
       .then((response) => {
         setTargets(response.workspaces)
@@ -169,26 +165,10 @@ function useKeeperWorkspaceTargets({
       })
       // A keeper that cannot list its own workspaces cannot accept into one;
       // the accept control stays disabled and the page says why.
-      .catch(() => setTargets([]))
+      .catch(() => {
+        setTargets([])
+        setTargetsUnavailable(true)
+      })
   }, [enabled, keeperFetch])
-  return { targets, targetId, setTargetId }
-}
-
-/**
- * Every request this page makes is to its OWN keeper, and the credential
- * reaches it through the one seam that attaches it (`createDaemonFetch`,
- * daemon-auth-seam.test.ts) — never a header set here. Null when the page is
- * not served by a keeper: there is then nothing it may ask.
- */
-function useKeeperFetch(
-  daemonToken: string | undefined,
-  fetchFn: typeof globalThis.fetch,
-): typeof globalThis.fetch | null {
-  return useMemo(
-    () =>
-      daemonToken === undefined
-        ? null
-        : createDaemonFetch(globalThis.location.origin, daemonToken, fetchFn),
-    [daemonToken, fetchFn],
-  )
+  return { targets, targetsUnavailable, targetId, setTargetId }
 }
