@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs'
-import { chmod, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, link, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -82,6 +82,22 @@ describe('the record file itself', () => {
     await symlink(elsewhere, join(dir, 'daemon.json'))
     await expect(loadDaemonRecord(dir)).rejects.toThrow(/symlink/)
     expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'malformed' })
+  })
+
+  // A hard link is how a file this user owns could sit in a directory
+  // someone else made; the record is only ever written by rename, so one
+  // with a second name is not ours to trust.
+  it('is refused when it has another hard link', async () => {
+    const elsewhere = join(dir, 'elsewhere.json')
+    await writeFile(elsewhere, '{}')
+    await link(elsewhere, join(dir, 'daemon.json'))
+    await expect(loadDaemonRecord(dir)).rejects.toThrow(/hard link/)
+  })
+
+  it('treats a directory gone once the file is open as refused, not absent', () => {
+    expect(() =>
+      assertDataDirOwnedByUser(join(dir, 'vanished'), statSync(dir).uid, { mustExist: true }),
+    ).toThrow(/no longer exists/)
   })
 
   it('refuses a data dir anyone can write into, even one this user owns', async () => {

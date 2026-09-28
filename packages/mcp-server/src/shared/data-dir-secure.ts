@@ -65,14 +65,19 @@ export function resolveDataDir(
  * A dir that does not exist yet is fine; where there is no uid (Windows)
  * there is nothing to compare.
  */
-export function assertDataDirOwnedByUser(dir: string, uid = process.getuid?.()): void {
+export function assertDataDirOwnedByUser(
+  dir: string,
+  uid = process.getuid?.(),
+  { mustExist = false }: { mustExist?: boolean } = {},
+): void {
   if (uid === undefined) return
   let stat: ReturnType<typeof statSync>
   try {
     stat = statSync(dir)
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
-    throw err
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    if (!mustExist) return
+    throw new Error(`the data directory ${dir} no longer exists while a file in it is open.`)
   }
   if (stat.uid !== uid) {
     throw new Error(
@@ -117,11 +122,17 @@ export async function readFileOwnedByUser(
   }
   try {
     try {
-      assertDataDirOwnedByUser(dirname(path), uid)
+      assertDataDirOwnedByUser(dirname(path), uid, { mustExist: true })
     } catch (err) {
       return { kind: 'not-owned', message: (err as Error).message }
     }
-    const owner = (await handle.stat()).uid
+    const stat = await handle.stat()
+    const owner = stat.uid
+    // The record is only ever written by rename, so a second name means a
+    // file of this user's was linked in from somewhere else.
+    if (uid !== undefined && stat.nlink > 1) {
+      return { kind: 'not-owned', message: `${path} has another hard link; refusing to read it.` }
+    }
     if (uid !== undefined && owner !== uid) {
       return {
         kind: 'not-owned',
