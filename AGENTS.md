@@ -97,11 +97,10 @@ pnpm run test:browser:trace  # same, plus a trace for EVERY test and its DOM sna
 ## MCP Development Mode
 
 Develop this repo's MCP server against the **dev daemon's `/mcp`**, not the packaged `stdio`
-entry: `pnpm mcp:http:dev` starts the local daemon in watch mode on its owner-only socket (it
-listens on no TCP port, ADR-0050), and clients reach it through the development stdio proxy, which
-retries across restarts — so a code change restarts the daemon rather than the whole client
-integration. The packaged `stdio` entry is reserved for distribution checks — validating
-`@kamiazya/whiteboard-mcp` as it ships. Debug in this order: MCP Inspector on the proxy
+entry: `pnpm mcp:http:dev` starts the daemon in watch mode on its owner-only socket (no TCP port,
+ADR-0050), reached through the dev stdio proxy, which retries across restarts — so a code change
+restarts the daemon, not the client integration. The packaged `stdio` entry is for distribution
+checks — validating `@kamiazya/whiteboard-mcp` as it ships. Debug in this order: MCP Inspector on the proxy
 (`pnpm mcp:inspect`), then `initialize` and `tools/list`, then `MCP_HTTP_DEBUG=1` if capability
 negotiation or request flow is unclear, and only then compare against a specific client.
 
