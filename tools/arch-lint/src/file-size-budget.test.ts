@@ -566,7 +566,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // progress and what it reached became `gesture-overlays.tsx`.
   // Lowered 2166 -> 2119: the in-place editors (edge and group labels, a new
   // comment, a node's body) became `in-place-editors.tsx`.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2119,
+  // Lowered 2119 -> 2060: the dialogs that choose what a node points at
+  // became `node-target-dialogs.tsx`.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2060,
 }
 
 describe('the path form both ledgers are keyed with', () => {

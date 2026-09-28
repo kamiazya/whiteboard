@@ -68,7 +68,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { nodeFile, nodeKind, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
+import { nodeKind, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -117,8 +117,6 @@ import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { commentComposeStyle } from './comment-compose-overlay.js'
-import { CREATION_LABELS } from './creation-labels.js'
-import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
 import type { EditorGesture } from './editor-gesture.js'
@@ -129,7 +127,6 @@ import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { InPlaceEditors } from './in-place-editors.js'
 import { LegendOverlay } from './LegendOverlay.js'
-import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
   createIdleNavigation,
@@ -137,6 +134,7 @@ import {
   type NavigationResult,
   reduceNavigation,
 } from './navigation.js'
+import { NodeTargetDialogs } from './node-target-dialogs.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
 import { RoutableHandles } from './routable-handles.js'
@@ -1494,73 +1492,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             missingFileRef={missingFileRef}
           />
         )}
-        {canvasPicker !== null &&
-          fileRefOptions !== undefined &&
-          // A retarget edits ONE node, so it may not outlive it: an undo,
-          // an import or a peer's delete can take the node while the
-          // dialog is open, and `set-node-file` for a node that is gone
-          // is a no-op the user cannot see. Resolved in the render like
-          // the two label editors below rather than cleared by an effect
-          // — a gate the dialog cannot render without passing is one no
-          // future canvas-changing path can forget.
-          (canvasPicker.mode === 'create' ||
-            canvas.nodes.some((node) => node.id === canvasPicker.nodeId)) && (
-            <DocumentPickerDialog
-              title={
-                canvasPicker.mode === 'create' ? `Add ${CREATION_LABELS.document}` : 'Change target'
-              }
-              options={fileRefOptions}
-              currentFile={
-                canvasPicker.mode === 'retarget'
-                  ? (() => {
-                      const target = canvas.nodes.find((n) => n.id === canvasPicker.nodeId)
-                      return target === undefined ? undefined : nodeFile(target)
-                    })()
-                  : undefined
-              }
-              onPick={(file) => {
-                if (canvasPicker.mode === 'create') {
-                  createFileRefAtViewportCenter(file, canvasPicker.point)
-                } else {
-                  applyResult({
-                    state: { kind: 'idle' },
-                    commands: [{ kind: 'set-node-file', id: canvasPicker.nodeId, file }],
-                  })
-                }
-                setDocumentPicker(null)
-              }}
-              onCancel={() => setDocumentPicker(null)}
-            />
-          )}
-        {linkDialog !== null &&
-          // Same rule as the picker above: an Edit URL that outlived its
-          // link shows an empty field and writes nothing on OK.
-          (linkDialog.mode === 'create' ||
-            canvas.nodes.some((node) => node.id === linkDialog.nodeId)) && (
-            <LinkUrlDialog
-              title={linkDialog.mode === 'create' ? `Add ${CREATION_LABELS.link}` : 'Edit URL'}
-              initialUrl={
-                linkDialog.mode === 'edit'
-                  ? (() => {
-                      const target = canvas.nodes.find((n) => n.id === linkDialog.nodeId)
-                      return target === undefined ? undefined : nodeUrl(target)
-                    })()
-                  : undefined
-              }
-              onSubmit={(url) => {
-                if (linkDialog.mode === 'create') {
-                  createLinkAtViewportCenter(url, linkDialog.point)
-                } else {
-                  applyResult({
-                    state: { kind: 'idle' },
-                    commands: [{ kind: 'set-node-url', id: linkDialog.nodeId, url }],
-                  })
-                }
-                setLinkDialog(null)
-              }}
-              onCancel={() => setLinkDialog(null)}
-            />
-          )}
+        <NodeTargetDialogs
+          gesture={gesture}
+          fileRefOptions={fileRefOptions}
+          picker={canvasPicker}
+          setPicker={setDocumentPicker}
+          linkDialog={linkDialog}
+          setLinkDialog={setLinkDialog}
+          createFileRefAt={createFileRefAtViewportCenter}
+          createLinkAt={createLinkAtViewportCenter}
+        />
       </>
     )
 
