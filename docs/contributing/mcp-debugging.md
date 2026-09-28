@@ -55,8 +55,8 @@ pnpm mcp:debug:http
 What each does:
 
 - `pnpm mcp:http:dev`: starts the local daemon in watch mode and exposes MCP at `http://127.0.0.1:3099/mcp`
-- Claude Code / Codex sessions reach that endpoint through the stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` (spawned per session; ensures the daemon, waits for readiness, retries per request across watch restarts). It forwards over the owner-only Unix socket the daemon names in `<dataDir>/daemon.json` (`socketPath`, ADR-0050 decision 2), and never over the port: while there is no record — the daemon is starting, or between the halves of a watch restart — a request waits within the retry budget for one to appear. A client on that socket still sends the bearer token and a loopback `Host` (`localhost`), since the socket serves the same app with the same checks — `curl --unix-socket <path> http://localhost/mcp …`. Claude Code reads the proxy from a LOCAL-scope registration (`claude mcp add --scope local … mcp-http-stdio-proxy.mjs`, once per checkout), which shadows `.mcp.json`'s published `npx` definition; `settings.json` has no `mcpServers` field, so never define servers there. Inspector and curl still hit the HTTP endpoint directly.
-- `pnpm mcp:inspect`: starts the official MCP Inspector UI
+- Claude Code / Codex sessions reach that endpoint through the stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` (spawned per session; ensures the daemon, waits for readiness, retries per request across watch restarts). It forwards over the owner-only Unix socket the daemon names in `<dataDir>/daemon.json` (`socketPath`, ADR-0050 decision 2), and never over the port: while there is no record — the daemon is starting, or between the halves of a watch restart — a request waits within the retry budget for one to appear. A client on that socket still sends the bearer token and a loopback `Host` (`localhost`), since the socket serves the same app with the same checks — `curl --unix-socket <path> http://localhost/mcp …`. Claude Code reads the proxy from a LOCAL-scope registration (`claude mcp add --scope local … mcp-http-stdio-proxy.mjs`, once per checkout), which shadows `.mcp.json`'s published `npx` definition; `settings.json` has no `mcpServers` field, so never define servers there. Inspector goes through the same proxy.
+- `pnpm mcp:inspect`: starts the official MCP Inspector UI on the same stdio proxy, so it reaches this checkout's dev daemon over its socket (starting one if none answers). Inspector has no Unix-socket transport of its own.
 - `pnpm mcp:inspect:stdio`: starts Inspector against the raw stdio MCP entrypoint
 - `pnpm mcp:debug:http`: runs `mcp:http:dev` and Inspector together for quick iteration
 
@@ -68,24 +68,18 @@ What each does:
 pnpm mcp:http:dev
 ```
 
-2. In another terminal, open Inspector:
+2. In another terminal, open Inspector. It launches the stdio proxy itself, so there is no URL to enter:
 
 ```bash
 pnpm mcp:inspect
 ```
 
-3. Point Inspector at:
-
-```text
-http://127.0.0.1:3099/mcp
-```
-
-4. Run these calls in order:
+3. Run these calls in order:
    - `initialize`
    - `tools/list`
    - the failing `tools/call`
 
-5. Only compare against Codex or Claude Code after Inspector reproduces or disproves the problem.
+4. Only compare against Codex or Claude Code after Inspector reproduces or disproves the problem.
 
 ## When To Use HTTP vs STDIO
 

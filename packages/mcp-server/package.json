@@ -79,7 +79,7 @@
     "mcp": "node --import tsx/esm src/server/mcp/stdio.ts",
     "mcp:http": "node scripts/dev/run-built-daemon.mjs",
     "mcp:http:dev": "node scripts/dev/with-dev-data-dir.mjs --daemon --token=whiteboard-dev --idle-timeout-ms=0",
-    "mcp:inspect": "npx @modelcontextprotocol/inspector",
+    "mcp:inspect": "npx @modelcontextprotocol/inspector node scripts/dev/mcp-http-stdio-proxy.mjs",
     "mcp:inspect:stdio": "npx @modelcontextprotocol/inspector node --import tsx/esm src/server/mcp/stdio.ts",
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
     "daemon": "node dist/server/daemon-entry.js --daemon",
