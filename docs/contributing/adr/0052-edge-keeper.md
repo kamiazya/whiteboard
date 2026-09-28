@@ -143,11 +143,22 @@ mode.
 
 The edge keeper is the backend ADR-0044 was written for. It declares its
 limit and promotion band the way the browser keeper does
-(`apps/web/src/lib/browser-keeper-capacity.ts`), against the 128 MB isolate
-and under the "one more full export still fits" criterion. The numbers are
-taken with Miniflare or workerd running the real record, not borrowed from
-Node or the browser. The curve transfers; the ceiling and the allocator do
-not.
+(`apps/web/src/lib/browser-keeper-capacity.ts`), under the "one more full
+export still fits" criterion. Two measurements feed the number, and neither
+one is enough by itself:
+
+- **The curve**, taken locally with Miniflare or workerd running the real
+  record: how peak memory grows with the document count.
+- **The ceiling**, calibrated on HOSTED Cloudflare. The 128 MB limit belongs
+  to the isolate, not to one object, and several Durable Objects can be
+  co-resident in one isolate and share it. Self-hosted workerd enforces no
+  limit at all. So a single workspace measured alone locally overstates what
+  one workspace may use. The declared limit has to leave headroom for
+  co-resident objects, and that headroom is measured on the hosted platform
+  with several objects loaded, not assumed.
+
+Until that calibration exists, a real allocation failure is the backstop.
+It must surface as a refused write with a reason, not as a dead isolate.
 
 ## Consequences
 
@@ -194,7 +205,8 @@ In dependency order. Each slice lands on its own with its verification.
 4. **The sign-in extraction** into a shared package. Server mode's suites
    stay unchanged.
 5. **Sign-in and the served web app** on the edge keeper.
-6. **Capacity** per decision 5: measure first, then declare.
+6. **Capacity** per decision 5. Measure the curve locally, calibrate the
+   ceiling on hosted Cloudflare with co-resident objects, then declare.
 7. **The way in.** A transfer from the browser keeper is received and
    merged, end to end. It extends `pnpm smoke:transfer`.
 8. **Deployment and docs.** `wrangler deploy` from CI to a staging object,
