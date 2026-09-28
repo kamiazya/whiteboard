@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "smoke:bridge": "node scripts/bridge-smoke.mjs",
     "smoke:bridge:firefox": "node scripts/firefox-bridge-smoke.mjs",
+    "smoke:native-host": "node scripts/native-host-smoke.mjs",
     "smoke:read-plane": "node scripts/read-plane-smoke.mjs"
   },
   "dependencies": {

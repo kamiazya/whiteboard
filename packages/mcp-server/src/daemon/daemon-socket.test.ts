@@ -56,8 +56,16 @@ describe('daemonSocketPath', () => {
     expect(path?.length).toBeLessThan(104)
   })
 
-  it('has none on Windows yet, where a named pipe is measured first', () => {
-    expect(daemonSocketPath('C:\\wb', { env: {}, platform: 'win32', uid: -1 })).toBeNull()
+  // ADR-0050 decision 9. A pipe has no directory to close, so another user
+  // could create one first under a name they can predict and receive the
+  // token the host sends. The name is random instead, and only the owner's
+  // daemon record says it.
+  it('is a named pipe on Windows, under a name nobody can predict', () => {
+    const context = { env: {}, platform: 'win32' as const, uid: -1 }
+    const first = daemonSocketPath('C:\\wb', context)
+    const second = daemonSocketPath('C:\\wb', context)
+    expect(first).toMatch(/^\\\\\.\\pipe\\whiteboard-[0-9a-f]{32}$/)
+    expect(second).not.toBe(first)
   })
 })
 

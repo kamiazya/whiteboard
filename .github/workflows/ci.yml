@@ -713,6 +713,27 @@ jobs:
   #
   # Every ci.yml job must appear in `needs` — for ordering, and as the list the
   # gate cross-checks the run against. ci-gate.test.ts fails on a missing one.
+  # ADR-0050 decision 9: on Windows the daemon listens on a named pipe and the
+  # native host is registered in the registry. Nothing else here runs on
+  # Windows, so without this job no part of that path would ever execute.
+  native-host-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          cache-store: 'false'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Native host smoke (named pipe + registry)
+        run: pnpm --filter @kamiazya/whiteboard-extension smoke:native-host
+
   ci-gate:
     if: always()
     needs:
@@ -725,6 +746,7 @@ jobs:
       - sbom-npm
       - packaged-smoke
       - widget-smoke
+      - native-host-windows
       - verify
       - dry-run-npm
       - dry-run-docker

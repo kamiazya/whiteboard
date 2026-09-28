@@ -1,6 +1,6 @@
 // Subprocess-level tests of the SessionStart hook entrypoint. Runs the real
 // ensure-http-dev-daemon.mjs as a child process against a PATH-shimmed
-// `pnpm` (never a real build) plus a fake authenticated MCP responder, so
+// `pnpm` (never a real build) plus a fake daemon on a socket, so
 // the wait-for-ready behavior is exercised the same way a client's session
 // start actually does: wait for the hook process to exit, not for a unit
 // under test to return a promise.
@@ -17,7 +17,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { createServer } from 'node:net'
+import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -27,28 +27,23 @@ import { resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
 const REPO_ROOT = resolveRepoRootFromGit(resolve(import.meta.dirname))
 const HOOK_SCRIPT_PATH = resolve(import.meta.dirname, 'ensure-http-dev-daemon.mjs')
 const SHIM_ENTRY_PATH = resolve(import.meta.dirname, 'test-utils/fake-pnpm-shim.mjs')
-const HOST = '127.0.0.1'
 const LOG_PATH_SUFFIX = 'tmp/logs/mcp-http-dev.log'
 
-/** Attempts allowed when another process wins the port before the hook probes it. */
-const PORT_CONFLICT_ATTEMPTS = 3
-
-async function reserveFreePort(): Promise<number> {
-  return new Promise((resolvePort, rejectPort) => {
-    const tester = createServer()
-    tester.once('error', rejectPort)
-    tester.listen(0, HOST, () => {
-      const address = tester.address()
-      const port = typeof address === 'object' && address ? address.port : undefined
-      tester.close(() => {
-        if (port === undefined) {
-          rejectPort(new Error('failed to reserve a free port'))
-          return
-        }
-        resolvePort(port)
-      })
-    })
+/** A TCP listener that only counts who connects to it. */
+async function countingTcpListener(): Promise<{
+  port: number
+  connections: () => number
+  server: Server
+}> {
+  let count = 0
+  const server = createServer((socket) => {
+    count += 1
+    socket.destroy()
   })
+  await new Promise<void>((listening) => server.listen(0, '127.0.0.1', () => listening()))
+  const address = server.address()
+  const port = typeof address === 'object' && address !== null ? address.port : 0
+  return { port, connections: () => count, server }
 }
 
 /**
@@ -115,6 +110,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   const cleanupPids: number[] = []
   const cleanupDirs: string[] = []
   let cleanupResponder: (() => Promise<void>) | undefined
+  let cleanupServer: Server | undefined
 
   afterEach(async () => {
     for (const pid of cleanupPids.splice(0)) killQuietly(pid)
@@ -122,21 +118,21 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       await cleanupResponder()
       cleanupResponder = undefined
     }
+    if (cleanupServer) {
+      const server = cleanupServer
+      cleanupServer = undefined
+      await new Promise<void>((closed) => server.close(() => closed()))
+    }
     for (const dir of cleanupDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
   })
 
   /**
-   * Reserves a free port, a temp data dir and a PATH shim dir (both
-   * registered for cleanup), and returns the env every hook run shares.
-   * Per-case behavior is layered on by spreading extra FAKE_PNPM_* /
-   * WHITEBOARD_DEV_READY_TIMEOUT_MS entries over `env`.
-   *
-   * The fake daemon never writes an identity marker (unlike the real one),
-   * so a fresh data dir also exercises the no-marker self-heal path
-   * (verifyDevDaemonIdentity -> 'no-marker' -> isSelfHealableIdentity).
+   * Makes a temp data dir and a PATH shim dir (both registered for cleanup),
+   * and returns the env every hook run shares. Per-case behavior is layered
+   * on by spreading extra FAKE_PNPM_* / WHITEBOARD_DEV_READY_TIMEOUT_MS
+   * entries over `env`.
    */
   async function prepareHookRun(): Promise<{
-    port: number
     token: string
     dataDir: string
     invokedSentinelPath: string
@@ -145,7 +141,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
     countSpawns: () => number
     env: NodeJS.ProcessEnv
   }> {
-    const port = await reserveFreePort()
     const token = randomUUID()
     const dataDir = mkdtempSync(join(tmpdir(), 'ensure-http-dev-daemon-data-'))
     const shimDir = writePnpmShimDir()
@@ -157,7 +152,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       existsSync(invokedSentinelDir) ? readdirSync(invokedSentinelDir).length : 0
 
     return {
-      port,
       token,
       dataDir,
       invokedSentinelPath,
@@ -167,7 +161,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       env: {
         ...process.env,
         PATH: `${shimDir}:${process.env.PATH ?? ''}`,
-        WHITEBOARD_DEV_PORT: String(port),
         WHITEBOARD_TOKEN: token,
         WHITEBOARD_DATA_DIR: dataDir,
         FAKE_PNPM_INVOKED_SENTINEL: invokedSentinelPath,
@@ -213,7 +206,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   itPosix(
     'terminates within the bound and fails loudly when the daemon never answers',
     async () => {
-      const { port, invokedSentinelPath, env } = await prepareHookRun()
+      const { invokedSentinelPath, env } = await prepareHookRun()
 
       const startedAt = Date.now()
       const { exitCode, stderr } = await runHook({
@@ -227,7 +220,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       // hook terminates on its own instead of hanging.
       expect(elapsedMs).toBeLessThan(6_000)
       expect(exitCode).not.toBe(0)
-      expect(stderr).toContain(String(port))
       expect(stderr).toContain(LOG_PATH_SUFFIX)
       expect(stderr).toContain('MCP tools will be unavailable')
 
@@ -236,25 +228,26 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   )
 
   itPosix(
-    'is a no-op when our authenticated daemon is already up with a matching identity marker (fast path preserved)',
+    'is a no-op when the daemon its record names answers on the socket, and never connects to the port',
     async () => {
-      const { port, token, dataDir, invokedSentinelPath, lockPath, env } = await prepareHookRun()
+      const { token, dataDir, invokedSentinelPath, lockPath, env } = await prepareHookRun()
 
-      const responder = await startFakeMcpResponder({ port, token, host: HOST })
+      const socketPath = join(dataDir, 'daemon.sock')
+      const responder = await startFakeMcpResponder({ socketPath, token })
       cleanupResponder = responder.close
       writeFileSync(
-        join(dataDir, 'dev-daemon.json'),
-        JSON.stringify({
-          port,
-          repoRoot: REPO_ROOT,
-          pid: process.pid,
-          startedAt: new Date().toISOString(),
-        }),
+        join(dataDir, 'daemon.json'),
+        JSON.stringify({ pid: process.pid, token, socketPath }),
       )
+      // Something on the port the daemon was spawned with: the hook must not
+      // go there to decide anything.
+      const tcp = await countingTcpListener()
+      cleanupServer = tcp.server
 
-      const { exitCode, stderr } = await runHook(env)
+      const { exitCode, stderr } = await runHook({ ...env, WHITEBOARD_DEV_PORT: String(tcp.port) })
 
       expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
+      expect(tcp.connections()).toBe(0)
       expect(() => readFileSync(invokedSentinelPath, 'utf8')).toThrow()
       // The fast path must never touch the lock: no spawn decision was made.
       expect(existsSync(lockPath)).toBe(false)
@@ -262,55 +255,77 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   )
 
   itPosix(
-    'THE RED TEST: two concurrent hooks against the same free port produce exactly one spawn, both exit 0',
+    'spawns a daemon when the record left behind names a socket nothing answers on',
     async () => {
-      // The hook only makes a spawn decision when it finds the port free, so
-      // the gap between picking a port number and probing it cannot be closed
-      // — and this suite runs beside other tests that bind ephemeral ports.
-      // When one of them is handed this port first, the hook correctly refuses
-      // the foreign listener. That is a precondition we failed to establish,
-      // not a result about the spawn lock, so it earns a fresh port rather
-      // than a red build. The retry is bounded: the last attempt asserts, so
-      // a persistent conflict still fails with the hook's own message.
-      for (let attempt = 1; ; attempt++) {
-        const { invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+      const { token, dataDir, invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+      writeFileSync(
+        join(dataDir, 'daemon.json'),
+        JSON.stringify({ pid: 999_999, token, socketPath: join(dataDir, 'gone.sock') }),
+      )
 
-        const runEnv = {
-          ...env,
-          WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
-          FAKE_PNPM_BIND_DELAY_MS: '500',
-        }
+      const { exitCode, stderr } = await runHook({
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
+      })
 
-        const [first, second] = await Promise.all([runHook(runEnv), runHook(runEnv)])
+      expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
+      expect(countSpawns()).toBe(1)
+      killAllSpawnedPids(invokedSentinelDir)
+    },
+  )
 
-        const portStolen = [first, second].some((result) => /is in use but /.test(result.stderr))
-        if (portStolen && attempt < PORT_CONFLICT_ATTEMPTS) {
-          killAllSpawnedPids(invokedSentinelDir)
-          continue
-        }
+  itPosix('refuses a running daemon that was started with a different token', async () => {
+    const { token, dataDir, countSpawns, env } = await prepareHookRun()
+    const socketPath = join(dataDir, 'daemon.sock')
+    const responder = await startFakeMcpResponder({ socketPath, token: 'another-token' })
+    cleanupResponder = responder.close
+    writeFileSync(
+      join(dataDir, 'daemon.json'),
+      JSON.stringify({ pid: process.pid, token: 'another-token', socketPath }),
+    )
 
-        expect(
-          first.exitCode,
-          `hook 1 stderr:\n${first.stderr}\nhook 1 stdout:\n${first.stdout}`,
-        ).toBe(0)
-        expect(
-          second.exitCode,
-          `hook 2 stderr:\n${second.stderr}\nhook 2 stdout:\n${second.stdout}`,
-        ).toBe(0)
-        // The discriminating assertion: exactly one process was ever spawned.
-        // On unpatched main, both hooks observe the port free and both spawn.
-        expect(countSpawns()).toBe(1)
+    const { exitCode, stderr } = await runHook(env)
 
-        killAllSpawnedPids(invokedSentinelDir)
-        return
+    expect(exitCode).not.toBe(0)
+    expect(stderr).toContain('different token')
+    expect(stderr).not.toContain('another-token')
+    expect(stderr).not.toContain(token)
+    expect(countSpawns()).toBe(0)
+  })
+
+  itPosix(
+    'two concurrent hooks with no daemon up produce exactly one spawn, both exit 0',
+    async () => {
+      const { invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+
+      const runEnv = {
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
+        FAKE_PNPM_BIND_DELAY_MS: '500',
       }
+
+      const [first, second] = await Promise.all([runHook(runEnv), runHook(runEnv)])
+
+      expect(
+        first.exitCode,
+        `hook 1 stderr:\n${first.stderr}\nhook 1 stdout:\n${first.stdout}`,
+      ).toBe(0)
+      expect(
+        second.exitCode,
+        `hook 2 stderr:\n${second.stderr}\nhook 2 stdout:\n${second.stdout}`,
+      ).toBe(0)
+      // The discriminating assertion: exactly one process was ever spawned.
+      // Without the lock, both hooks find no daemon and both spawn.
+      expect(countSpawns()).toBe(1)
+
+      killAllSpawnedPids(invokedSentinelDir)
     },
   )
 
   itPosix(
     'writes the reason to the daemon log when the spawned dev server cannot bind',
     async () => {
-      const { port, env } = await prepareHookRun()
+      const { env } = await prepareHookRun()
       const logPath = join(REPO_ROOT, LOG_PATH_SUFFIX)
 
       // The failure is INJECTED into the spawned process rather than
@@ -341,39 +356,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       expect(stderr).toContain(LOG_PATH_SUFFIX)
       const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : ''
       expect(log).toContain('EADDRINUSE')
-      expect(log).toContain(String(port))
-    },
-  )
-
-  itPosix(
-    'fails loudly when a colliding worktree answers the readiness probe right after our own spawn (post-spawn TOCTOU)',
-    async () => {
-      const { port, dataDir, invokedSentinelPath, env } = await prepareHookRun()
-
-      // Simulates the race this branch guards against: our spawn's readiness
-      // probe succeeds, but the identity marker written at bind time belongs
-      // to a different worktree (same derived port, different repoRoot) —
-      // i.e. a colliding worktree's daemon answered instead of ours.
-      const foreignMarker = JSON.stringify({
-        port,
-        repoRoot: '/some/other/worktree',
-        pid: process.pid,
-        startedAt: new Date().toISOString(),
-      })
-
-      const { exitCode, stderr } = await runHook({
-        ...env,
-        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
-        FAKE_PNPM_MARKER_JSON: foreignMarker,
-      })
-
-      expect(exitCode).not.toBe(0)
-      expect(stderr).toContain('startup race with another worktree')
-      expect(stderr).toContain(String(port))
-
-      // The fake daemon stays up despite the hook's failure — clean it up.
-      cleanupPids.push(readSentinel<{ pid: number }>(invokedSentinelPath).pid)
-      expect(existsSync(join(dataDir, 'dev-daemon.json'))).toBe(true)
     },
   )
 

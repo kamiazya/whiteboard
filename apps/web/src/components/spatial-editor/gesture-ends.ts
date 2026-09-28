@@ -21,8 +21,8 @@
 import type { CanvasEdge, CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
 import type { EditorCommand, EndTarget } from '../../lib/spatial/commands.js'
-import { endInkCommand } from '../../lib/spatial/commands.js'
 import { boxContains } from '../../lib/spatial/geometry.js'
+import { endInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 
 /**

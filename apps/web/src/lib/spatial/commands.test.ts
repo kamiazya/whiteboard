@@ -23,15 +23,12 @@ import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-vi
 import { describe, expect, it } from 'vitest'
 import {
   applyCommand,
-  bendInkCommand,
   buildFragmentInsertCommand,
   DUPLICATE_OFFSET_PX,
-  deleteInkCommand,
   type EditorCommand,
-  endInkCommand,
-  labelInkCommand,
 } from './commands.js'
 import commandsSource from './commands.ts?raw'
+import { bendInkCommand, deleteInkCommand, endInkCommand, labelInkCommand } from './ink-commands.js'
 
 function baseCanvas(): SpatialCanvas {
   return {

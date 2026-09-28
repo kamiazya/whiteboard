@@ -216,7 +216,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decision plus its helper, which is what took both under the complexity
   // threshold. The bodies did not grow; the signatures and their doc comments
   // are the added lines.
-  'apps/web/src/lib/spatial/commands.ts': 1626,
+  // Lowered 1626 -> 1516: the ink-id family (which collection an id is in,
+  // per verb) left for `ink-commands.ts`.
+  'apps/web/src/lib/spatial/commands.ts': 1516,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -550,7 +552,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and nothing duplicated. The next real shrink moves a layer into a
   // sibling module, which needs its share of the editor's gesture state
   // named as a bundle first.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2437,
+  // Lowered 2437 -> 2325: the facet panel's layer became
+  // `selection-inspector.tsx`, the first layer to leave for a sibling
+  // module. It could, where the others cannot yet, because it reads nine of
+  // the editor's values rather than forty.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2325,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
   // 1052 -> 1240: the press and release paths became claimant chains and the

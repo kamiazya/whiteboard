@@ -281,7 +281,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 119,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#facetPanelSlot': 99,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#runNavigation': 55,
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 91,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,

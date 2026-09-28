@@ -11,7 +11,7 @@ import type {
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
-import { deleteInkCommand } from '../../lib/spatial/commands.js'
+import { deleteInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import type { ActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'

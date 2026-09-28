@@ -69,7 +69,7 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { nodeFile, nodeKind, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
   type ReactNode,
@@ -99,7 +99,6 @@ import { findFreeSpot, hitTest, indexNodeBoxes } from '../../lib/spatial/geometr
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
-import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import {
   canvasToScreen,
   clientPointToRootLocal,
@@ -127,8 +126,6 @@ import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeEndHandles } from './EdgeEndHandles.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
-import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
-import { collectFieldSuggestions } from './facet-widgets/field-suggestions.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
 import { otherEndNodeOf } from './gesture-ends.js'
@@ -154,6 +151,7 @@ import { ProposalCard } from './ProposalCard.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
+import { SelectionInspector } from './selection-inspector.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { useCanvasReferences } from './use-canvas-references.js'
@@ -417,23 +415,6 @@ function growToFitText(
     width: node.width,
     height: required,
   } as const
-}
-
-/**
- * Which nodes a panel write reaches.
- *
- * A write to a MEMBER of the selection applies to the whole set — reshaping
- * five selected nodes must not become five visits to the panel — while a
- * write to a node outside it reaches that node alone.
- */
-function writeReachesIds(
-  target: { id: string } | undefined,
-  selectedId: string | null,
-  extraIds: ReadonlySet<string>,
-): string[] {
-  if (target === undefined) return []
-  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
-  return members.has(target.id) ? [...members] : [target.id]
 }
 
 export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>(
@@ -1615,111 +1596,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
 
     /**
-     * The facet panel, which is ABOUT whatever is selected. An edge
-     * selection wins over a node one because selecting an edge clears the
-     * node selection, so the two are never both live.
-     */
-    const facetPanelSlot = () => {
-      const edgeTarget =
-        selectedEdgeId === null
-          ? undefined
-          : canvas.edges.find((entry) => entry.id === selectedEdgeId)
-      const target = canvas.nodes.find((entry) => entry.id === selectedId)
-      // Nothing selected: there is nothing for the inspector to be
-      // about. It closes rather than standing there saying so — the
-      // same thing a press on blank canvas does to the context menu,
-      // which is the semantic this matches. The flag is cleared during
-      // render just above, so re-opening it later is an ordinary open
-      // rather than a stuck true.
-      if (edgeTarget === undefined && target === undefined) return null
-      return (
-        <FacetFormPanel
-          subject={
-            edgeTarget !== undefined
-              ? { kind: 'edge', edge: edgeTarget }
-              : { kind: 'node', node: target as SpatialNode }
-          }
-          registry={bundledFacetRegistry}
-          // What the board already wrote into free-entry fields, so a
-          // second classification is a pick. Recomputed per render
-          // while the panel is open: one pass over the nodes' facets.
-          suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
-          tagSuggestions={[...collectCanvasTags(canvas), ...(tagSuggestions ?? [])]}
-          {...(tagLibrary === undefined ? {} : { tagLibrary })}
-          variant={inspectorIsSheet ? 'sheet' : 'dock'}
-          onTagsChange={(after) => {
-            // Every write is the CHANGE the row showed being made,
-            // applied to the object's tags as the eager chain holds
-            // them (`canvasRef.current`), never the shown list copied
-            // over: under a slow parent the row still shows the list
-            // before the previous commit landed, and on a selection
-            // of five the four other boxes carry tags of their own.
-            if (edgeTarget !== undefined) {
-              const current = canvasRef.current.edges.find((e) => e.id === edgeTarget.id)
-              applyResult({
-                state: { kind: 'idle' },
-                commands: [
-                  {
-                    kind: 'set-edge-tags' as const,
-                    id: edgeTarget.id,
-                    tags: retag(current?.tags, edgeTarget.tags ?? [], after),
-                  },
-                ],
-              })
-              return
-            }
-            const before = target?.tags ?? []
-            applyResult({
-              state: { kind: 'idle' },
-              commands: writeReachesIds(target, selectedId, extraIds).flatMap((id) => {
-                const node = canvasRef.current.nodes.find((entry) => entry.id === id)
-                return node === undefined
-                  ? []
-                  : [
-                      {
-                        kind: 'set-node-tags' as const,
-                        id,
-                        tags: retag(node.tags, before, after),
-                      },
-                    ]
-              }),
-            })
-          }}
-          onWrite={(key, payload) => {
-            if (edgeTarget !== undefined) {
-              // One edge, because an edge selection is one edge —
-              // there is no multi-edge selection to fan out over.
-              applyResult({
-                state: { kind: 'idle' },
-                commands: [{ kind: 'set-edge-facet' as const, id: edgeTarget.id, key, payload }],
-              })
-              return
-            }
-            // Applies to the whole selection, the semantics the menu
-            // bands had: reshaping five selected nodes must not become
-            // five visits to this panel.
-            const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
-            const ids =
-              target !== undefined && members.has(target.id)
-                ? [...members]
-                : target === undefined
-                  ? []
-                  : [target.id]
-            applyResult({
-              state: { kind: 'idle' },
-              commands: ids.map((id) => ({
-                kind: 'set-node-facet' as const,
-                id,
-                key,
-                payload,
-              })),
-            })
-          }}
-        />
-      )
-    }
-
-    /**
      * What the chrome OPENS: the context menu, the canvas picker and the
      * link dialog. Each is modal over the surface rather than part of it.
      */
@@ -2430,7 +2306,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           {screenSpaceOverlays()}
           {canvasSpaceLayers()}
         </div>
-        {facetPanelOpen && facetPanelSlot()}
+        {facetPanelOpen && (
+          <SelectionInspector
+            canvas={canvas}
+            currentCanvas={() => canvasRef.current}
+            selectedId={selectedId}
+            selectedEdgeId={selectedEdgeId}
+            extraIds={extraIds}
+            tagSuggestions={tagSuggestions}
+            tagLibrary={tagLibrary}
+            variant={inspectorIsSheet ? 'sheet' : 'dock'}
+            onCommands={(commands) => applyResult({ state: { kind: 'idle' }, commands })}
+          />
+        )}
       </div>
     )
   },

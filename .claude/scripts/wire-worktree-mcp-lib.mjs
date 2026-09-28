@@ -1,27 +1,16 @@
 #!/usr/bin/env node
 // Pure planning logic for auto-wiring a worktree's Claude Code session to
-// its per-worktree dev daemon port (see dev-port-lib.mjs). Kept free of any
+// its own dev daemon, through that worktree's stdio proxy. Kept free of any
 // `claude` CLI invocation or filesystem/network I/O so the classify/plan
 // decisions are unit-testable without ever touching the real, developer-
 // global ~/.claude.json.
-import { dirname, resolve } from 'node:path'
-import { deriveDevPort } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
-import { resolveDevBearerToken } from '../../packages/mcp-server/scripts/dev/ensure-http-dev-daemon-lib.mjs'
-
-/** @param {number} port */
-export function buildMcpUrl(port) {
-  return `http://127.0.0.1:${port}/mcp`
-}
+import { dirname, join, resolve } from 'node:path'
 
 /**
- * Derives the desired registration for a worktree. The port always comes
- * from the worktree's path (via deriveDevPort with env stripped of
- * WHITEBOARD_DEV_PORT) — never from an active override — because a
- * baked-in overridden URL would diverge from whatever port a fresh
- * session's SessionStart hook (which sees no persistent override) actually
- * starts the daemon on. `overrideWarning` signals that divergence risk to
- * the caller so it can surface a warning instead of silently registering
- * a possibly-stale port.
+ * Derives the desired registration for a worktree: that worktree's own
+ * stdio proxy, which reaches the daemon over the socket named in the
+ * worktree's own data dir and sends the bearer token itself — so nothing in
+ * the registration names a port or carries a secret.
  *
  * Registers under the tracked entry's own name ("whiteboard") by default,
  * not a distinct one: a `--scope local` registration cleanly shadows the
@@ -30,82 +19,31 @@ export function buildMcpUrl(port) {
  * "whiteboard" server, not a working one plus a permanently-broken decoy
  * under a different name.
  *
- * @param {{ repoRoot: string, env?: Record<string, string | undefined>, isMainCheckout?: boolean, name?: string }} args
+ * @param {{ repoRoot: string, isMainCheckout?: boolean, name?: string }} args
  */
-export function buildDesiredConfig({ repoRoot, env = {}, isMainCheckout = false, name = 'whiteboard' }) {
+export function buildDesiredConfig({ repoRoot, isMainCheckout = false, name = 'whiteboard' }) {
   if (isMainCheckout) {
-    throw new Error('refusing to build a wiring config for the main checkout — it is wired via tracked settings.json to port 3099')
+    throw new Error('refusing to build a wiring config for the main checkout — it is registered once by hand (see .claude/settings.json)')
   }
-  const envWithoutOverride = { ...env }
-  delete envWithoutOverride.WHITEBOARD_DEV_PORT
-  const port = deriveDevPort({ repoRoot, isMainCheckout: false, env: envWithoutOverride })
-  const token = resolveDevBearerToken(env)
   return {
     name,
-    port,
-    url: buildMcpUrl(port),
-    authHeader: `Authorization: Bearer ${token}`,
-    overrideWarning: env.WHITEBOARD_DEV_PORT !== undefined,
+    command: 'node',
+    args: [join(repoRoot, 'packages', 'mcp-server', 'scripts', 'dev', 'mcp-http-stdio-proxy.mjs')],
   }
 }
 
 /**
- * Builds the argv for `claude mcp add`. `<name>` and `<url>` must come
- * right after `--transport http` — commander (the CLI's arg parser) reports
- * "missing required argument 'name'" if they're placed after `--scope`/
- * `--header` instead, confirmed against the real CLI.
+ * Builds the argv for `claude mcp add`: everything after `--` is the stdio
+ * server's own command line.
  *
- * @param {{ name: string, url: string, authHeader: string }} desired
+ * @param {{ name: string, command: string, args: string[] }} desired
  */
 export function buildClaudeMcpAddArgs(desired) {
-  return ['mcp', 'add', '--transport', 'http', desired.name, desired.url, '--scope', 'local', '--header', desired.authHeader]
-}
-
-// Matches the literal "Bearer <token>" text produced by buildDesiredConfig's
-// authHeader (and echoed back verbatim by a failing `claude mcp add`'s own
-// argv/stderr/stdout) so it can be scrubbed before anything reaches a log
-// sink — a failed CLI invocation is exactly the kind of unexpected path that
-// otherwise prints the live WHITEBOARD_TOKEN in the clear.
-const BEARER_TOKEN_PATTERN = /Bearer\s+\S+/g
-
-/**
- * Redacts any "Bearer <token>" occurrence in free-form text (CLI argv joined
- * for a log line, or a spawned process's stdout/stderr) before it is logged.
- *
- * @param {string} text
- */
-export function redactBearerTokens(text) {
-  if (typeof text !== 'string') return text
-  return text.replace(BEARER_TOKEN_PATTERN, 'Bearer [redacted]')
+  return ['mcp', 'add', '--scope', 'local', '--transport', 'stdio', desired.name, '--', desired.command, ...desired.args]
 }
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
- * Strips userinfo (user:pass@) and any query string out of a URL before it
- * is embedded in a human-readable conflict reason. A pre-existing local
- * registration a developer wired by hand can legitimately carry a
- * credential in either position (e.g. a token query parameter), and
- * classifyExistingConfig's conflict reason is logged verbatim by
- * wire-worktree-mcp.mjs — this keeps that path from echoing a live secret
- * into a terminal or log sink.
- *
- * @param {string} url
- */
-export function redactUrlCredentials(url) {
-  try {
-    const parsed = new URL(url)
-    parsed.username = ''
-    parsed.password = ''
-    parsed.search = ''
-    return parsed.toString()
-  } catch {
-    // Not a parseable absolute URL — return as-is rather than guessing at a
-    // redaction that might mangle a value that was never a URL.
-    return url
-  }
 }
 
 /**
@@ -116,7 +54,7 @@ export function redactUrlCredentials(url) {
  * unknown/partial/malformed input is never assumed identical.
  *
  * @param {unknown} existing
- * @param {{ url: string, authHeader: string }} desired
+ * @param {{ command: string, args: string[] }} desired
  */
 export function classifyExistingConfig(existing, desired) {
   if (existing === undefined) {
@@ -125,28 +63,25 @@ export function classifyExistingConfig(existing, desired) {
   if (!isPlainObject(existing)) {
     return { outcome: 'conflict', reason: `existing registration has an unrecognized shape: ${JSON.stringify(existing)}` }
   }
-  if (existing.type !== 'http') {
-    return { outcome: 'conflict', reason: `existing registration uses transport ${JSON.stringify(existing.type)}, expected 'http'` }
+  if (existing.type !== 'stdio') {
+    return { outcome: 'conflict', reason: `existing registration uses transport ${JSON.stringify(existing.type)}, expected 'stdio'` }
   }
-  if (typeof existing.url !== 'string' || existing.url !== desired.url) {
-    const existingUrlForDisplay = typeof existing.url === 'string' ? redactUrlCredentials(existing.url) : existing.url
+  const desiredLine = [desired.command, ...desired.args]
+  const existingLine = Array.isArray(existing.args) ? [existing.command, ...existing.args] : null
+  if (existingLine === null || JSON.stringify(existingLine) !== JSON.stringify(desiredLine)) {
     return {
       outcome: 'conflict',
-      reason: `existing registration URL ${JSON.stringify(existingUrlForDisplay)} does not match desired ${JSON.stringify(desired.url)}`,
+      reason: `existing registration runs ${JSON.stringify(existingLine ?? existing.command)}, expected ${JSON.stringify(desiredLine)}`,
     }
   }
-  const [headerName, headerValue] = desired.authHeader.split(': ')
-  const existingHeaderValue = isPlainObject(existing.headers) ? existing.headers[headerName] : undefined
-  if (existingHeaderValue !== headerValue) {
-    return { outcome: 'conflict', reason: `existing registration is missing or has a different ${headerName} header` }
+  // An `env` block could carry anything, including a secret, so none of it
+  // is reported.
+  if (existing.env !== undefined && (!isPlainObject(existing.env) || Object.keys(existing.env).length > 0)) {
+    return { outcome: 'conflict', reason: 'existing registration sets environment variables' }
   }
-  const extraKeys = Object.keys(existing).filter((key) => !['type', 'url', 'headers'].includes(key))
+  const extraKeys = Object.keys(existing).filter((key) => !['type', 'command', 'args', 'env'].includes(key))
   if (extraKeys.length > 0) {
     return { outcome: 'conflict', reason: `existing registration has unexpected extra fields: ${extraKeys.join(', ')}` }
-  }
-  const extraHeaderKeys = Object.keys(existing.headers ?? {}).filter((key) => key !== headerName)
-  if (extraHeaderKeys.length > 0) {
-    return { outcome: 'conflict', reason: `existing registration has unexpected extra headers: ${extraHeaderKeys.join(', ')}` }
   }
   return { outcome: 'identical' }
 }
@@ -158,7 +93,7 @@ export function classifyExistingConfig(existing, desired) {
  * to retry-overwrite.
  *
  * @param {unknown} effective
- * @param {{ url: string, authHeader: string }} desired
+ * @param {{ command: string, args: string[] }} desired
  */
 export function verifyPostWrite(effective, desired) {
   const classification = classifyExistingConfig(effective, desired)

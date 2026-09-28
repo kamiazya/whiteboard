@@ -93,7 +93,7 @@ async function install(rest: readonly string[]): Promise<number> {
       : []),
   ]
   const manifestDirs =
-    explicit.length > 0 ? explicit : nativeHostManifestDirs(homedir(), process.platform)
+    explicit.length > 0 ? explicit : nativeHostManifestDirs(homedir(), process.platform, dataDir)
   const result = await installNativeHost({
     dataDir,
     manifestDirs,
