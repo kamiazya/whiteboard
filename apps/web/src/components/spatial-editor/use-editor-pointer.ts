@@ -71,8 +71,7 @@
 
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { continuesStroke, type PreviousStroke } from '../../lib/spatial/stroke-group.js'
+import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
 import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import type { PickInputs } from './element-pick.js'
@@ -99,6 +98,7 @@ import {
   rememberCommentPress,
   startCommentPinDrag,
 } from './pointer-comment-claim.js'
+import { advanceDrawing, armInkDrag, beginDrawStroke, releaseInkDrag } from './pointer-ink-claim.js'
 import {
   cancelProposalPress,
   claimProposalBubble,
@@ -335,42 +335,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   }
 
   /**
-   * The draw tool makes the board a sheet of paper: a press starts a stroke,
-   * with no hit-test at all.
-   *
-   * It sits after the annotation layer's own chrome, which floats above the
-   * document and keeps its press. Capture is taken HERE rather than on the
-   * first move (the rule `captureOnFirstMove` states), or a stroke that
-   * leaves the root stops at its edge and the release is never seen.
-   */
-  const beginDrawStroke = (
-    e: React.PointerEvent<HTMLDivElement>,
-    root: HTMLElement,
-    point: Point,
-  ): boolean => {
-    if (tool !== 'draw') return false
-    capturePointer(root, e.pointerId)
-    // Which MARK this stroke belongs to, decided here because this is where
-    // the clock is: a stroke that goes down soon after the last one came up,
-    // near where it was drawn, is the next stroke of the same character
-    // rather than a new one (`stroke-group.ts`). The reducer's own default
-    // mints the id, so a test injecting `createId` gets deterministic groups.
-    const previous = lastStrokeRef.current ?? undefined
-    const group = continuesStroke(previous, e.timeStamp, point, viewport.zoom)
-      ? previous?.group
-      : (createId ?? defaultCreateId)()
-    applyResult(
-      reduceGesture(gestureState, canvas, {
-        type: 'pointerdown-draw',
-        point,
-        zoom: viewport.zoom,
-        ...(group === undefined ? {} : { group }),
-      }),
-    )
-    return true
-  }
-
-  /**
    * Shift-click builds a multi-selection instead of starting a gesture.
    *
    * What it MEANS per kind is `element-pick.ts`'s: the two arms used to be
@@ -414,16 +378,9 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   }
 
   /**
-   * A press that landed on no node: the marquee starts, and a stroke under
-   * the pointer is armed to travel with it.
-   *
-   * A press on a MEMBER keeps the whole set; anything else replaces it with
-   * the pressed stroke's MARK — a handwritten character is several strokes
-   * and a person pressing one means it. Same rule the node branch and the
-   * context menu follow. `pointerdown-ink` drops every id that is not a
-   * stroke, so a press on a RELATION arms nothing and falls through to the
-   * band: an edge's path is routed from the boxes it joins and has no
-   * geometry of its own to drag.
+   * A press that landed on no node: the marquee starts, unless a stroke
+   * under the pointer is armed to travel instead (`armInkDrag`). A press on
+   * a relation arms nothing and falls through to the band.
    */
   const pressOnEmptyBoard = (point: Point, hitPathId: string | undefined): void => {
     setMarquee({ start: point, current: point })
@@ -433,18 +390,8 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
       return
     }
-    const travelling = selectedInkIds.includes(hitPathId)
-      ? selectedInkIds
-      : withGroupMates([hitPathId], canvas.lines)
-    setSelectedInkIds(travelling)
-    const armed = reduceGesture(gestureState, canvas, {
-      type: 'pointerdown-ink',
-      ids: travelling,
-      point,
-    })
-    if (armed.state.kind === 'moving-ink') {
+    if (armInkDrag(inputs, point, hitPathId)) {
       setMarquee(null)
-      applyResult(armed)
       return
     }
     applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
@@ -579,7 +526,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     const { hitId, hitPathId, pressKey } = describePress(pick)
 
     if (chromeClaimsPress(e, root, point, screenPoint, hitId)) return
-    if (beginDrawStroke(e, root, point)) return
+    if (beginDrawStroke(inputs, e, root, point)) return
     // Deliberately NO pointer capture below. Capturing on the press retargets
     // the subsequent clicks to the capturing root, so a control the press
     // bubbled from never receives its click. Capture is taken on the first
@@ -774,30 +721,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     return true
   }
 
-  /**
-   * Unsnapped: snapping lines an object up with its neighbours, and a
-   * hand-drawn stroke has no such intent — a guide would redraw it.
-   *
-   * Reduced from the PREVIOUS state through a functional update rather
-   * than through `applyResult`, and that is the difference between a
-   * stroke and a straight line: `pointermove` is a continuous event, so
-   * the browser delivers several before React re-renders, and a handler
-   * reducing from its own render's `gestureState` has each move overwrite
-   * the last. Measured on a 61-sample wave drawn in one turn: ONE bend
-   * survived. No other gesture needs this — they all recompute from their
-   * start snapshot and the current point, and accumulate nothing.
-   */
-  const advanceDrawing = (screenPoint: Point): boolean => {
-    if (gestureStateRef.current.kind !== 'drawing') return false
-    applyResult(
-      reduceGesture(gestureStateRef.current, canvasRef.current, {
-        type: 'pointermove',
-        point: screenToCanvas(screenPoint, viewport),
-      }),
-    )
-    return true
-  }
-
   /** Every other gesture: snap the point, show the guides, reduce. */
   const advanceSnappedGesture = (
     e: React.PointerEvent<HTMLDivElement>,
@@ -841,7 +764,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     if (advanceCommentDrag(inputs, screenPoint)) return
     if (advanceMarquee(screenPoint)) return
     if (gestureState.kind === 'idle' && gestureStateRef.current.kind !== 'drawing') return
-    if (advanceDrawing(screenPoint)) return
+    if (advanceDrawing(inputs, screenPoint)) return
     advanceSnappedGesture(e, screenPoint)
   }
 
@@ -874,39 +797,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     setMarquee,
     setSelectedInkIds,
     viewport,
-  }
-
-  /**
-   * The end of an ink drag.
-   *
-   * The ink drag replaced the marquee this press used to start, and two
-   * things the marquee branch did for a press ON ink had to come with it.
-   * Both were found by the full browser run rather than by reading: each is
-   * about what happens AFTER a release that wrote nothing, so the drag's own
-   * tests passed over them.
-   *
-   * Unsnapped, for the reason the stroke's own release is: ink is sub-pixel
-   * by nature, and a snapped release would quantise a whole scribble to a box
-   * grid it was never drawn on. Focus is taken at the RELEASE because ink has
-   * no focusable element of its own — a drawn path carries no tabIndex — so
-   * without it Delete and Escape land on `<body>`, and the browser's own
-   * mousedown focus handling would undo one taken at the press.
-   */
-  const releaseInkDrag = (
-    e: React.PointerEvent<HTMLDivElement>,
-    root: HTMLElement,
-    armed: { key: string; point: Point } | null,
-  ): boolean => {
-    if (gestureState.kind !== 'moving-ink') return false
-    const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
-    applyResult(reduceGesture(gestureState, canvas, { type: 'pointerup', point: released }))
-    // A double press on a stroke edits its label, exactly as on a relation —
-    // the press key is `edge:<id>` for both.
-    if (armed?.key.startsWith('edge:')) {
-      setEdgeLabelEditId(armed.key.slice('edge:'.length))
-    }
-    root.focus()
-    return true
   }
 
   /**
@@ -950,7 +840,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
 
     const armed = doublePressRef.current
     doublePressRef.current = null
-    if (releaseInkDrag(e, root, armed)) return
+    if (releaseInkDrag(inputs, e, root, armed)) return
     if (marquee !== null) {
       releaseMarquee(e, root, armed, marquee, releaseContext)
       return

@@ -15,6 +15,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -140,4 +141,21 @@ it('a press that never travels still just selects', async () => {
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
   )
+})
+
+it('a dragged stroke takes the keyboard, so Delete removes it', async () => {
+  // A drawn path has no focusable element of its own, so the release focuses
+  // the editor — without it Delete lands on <body> and nothing happens.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  ;(document.activeElement as HTMLElement | null)?.blur()
+
+  await dragFrom(root, { x: 350, y: 300 }, { x: 390, y: 260 })
+  await vi.waitFor(() =>
+    expect(latest.canvas.lines?.[0]?.from).toEqual({ kind: 'point', point: { x: 240, y: 260 } }),
+  )
+
+  await userEvent.keyboard('{Delete}')
+  await vi.waitFor(() => expect(latest.canvas.lines ?? []).toEqual([]))
 })
