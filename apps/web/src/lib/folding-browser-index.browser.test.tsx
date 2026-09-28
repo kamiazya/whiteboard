@@ -248,4 +248,22 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
       index.createDocument({ workspaceId, path: 'c', kind: 'markdown' }),
     ).resolves.toMatchObject({ path: 'c' })
   })
+
+  it('refuses to restore from the trash into a full workspace', async () => {
+    const index = new FoldingBrowserIndex(undefined, { capacity: { bandStartsAt: 1, limit: 2 } })
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const trashed = await index.createDocument({ workspaceId, path: 'a', kind: 'markdown' })
+    await index.createDocument({ workspaceId, path: 'b', kind: 'markdown' })
+    await index.deleteDocument({ workspaceId, path: 'a' })
+    await index.createDocument({ workspaceId, path: 'c', kind: 'markdown' })
+
+    await expect(
+      index.restoreDocument({ workspaceId, documentId: trashed.documentId }),
+    ).rejects.toBeInstanceOf(WorkspaceCapacityReachedError)
+    // Still in the trash, not lost: it can come back once there is room.
+    expect((await index.listTrash({ workspaceId })).map((row) => row.documentId)).toEqual([
+      trashed.documentId,
+    ])
+  })
 })

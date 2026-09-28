@@ -169,11 +169,23 @@ export class FoldingBrowserIndex implements DocumentIndex {
    */
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
     await this.ensureFolded()
-    const held = await this.listDocuments({ workspaceId: input.workspaceId })
+    await this.admitOneMore(input.workspaceId)
+    return this.inner.createDocument(input)
+  }
+
+  /**
+   * ponytail: check-then-write, not atomic. Creates racing in this tab or
+   * others can each pass and overshoot by how many raced; the count comes
+   * from each tab's own replica of the record, so even a cross-tab lock
+   * would not make it exact. The limit sits well under where a tab fails,
+   * so a few over is harmless. Serialise through the workspace record's
+   * write queue if it ever needs to be exact.
+   */
+  private async admitOneMore(workspaceId: string): Promise<void> {
+    const held = await this.listDocuments({ workspaceId })
     if (held.length >= this.capacity.limit) {
       throw new WorkspaceCapacityReachedError(this.capacity.limit)
     }
-    return this.inner.createDocument(input)
   }
 
   async resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null> {
@@ -223,6 +235,8 @@ export class FoldingBrowserIndex implements DocumentIndex {
     input: Parameters<LoroWorkspaceDocumentIndex['restoreDocument']>[0],
   ): ReturnType<LoroWorkspaceDocumentIndex['restoreDocument']> {
     await this.ensureFolded()
+    // A restore adds a document back just as a create does.
+    await this.admitOneMore(input.workspaceId)
     return this.inner.restoreDocument(input)
   }
 
