@@ -722,6 +722,8 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
+        with:
+          cache-store: 'false'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
