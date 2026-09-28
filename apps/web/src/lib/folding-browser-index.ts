@@ -34,6 +34,11 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { getAppLogger } from './app-logger.js'
+import {
+  browserKeeperCapacity,
+  type KeeperCapacity,
+  WorkspaceCapacityReachedError,
+} from './browser-keeper-capacity.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -45,8 +50,13 @@ export class FoldingBrowserIndex implements DocumentIndex {
   private readonly inner: LoroWorkspaceDocumentIndex
   private readonly legacy: IdbDocumentIndex
   private folded: Promise<void> | null = null
+  private readonly capacity: KeeperCapacity
 
-  constructor(private readonly dbName?: string) {
+  constructor(
+    private readonly dbName?: string,
+    options: { capacity?: KeeperCapacity } = {},
+  ) {
+    this.capacity = options.capacity ?? browserKeeperCapacity()
     this.legacy = new IdbDocumentIndex(dbName)
     this.inner = new LoroWorkspaceDocumentIndex(
       new BrowserWorkspaceDocs(dbName),
@@ -151,9 +161,31 @@ export class FoldingBrowserIndex implements DocumentIndex {
     return this.inner.createWorkspace(input)
   }
 
+  /**
+   * Every way a browser-kept workspace gains a document ends here, so this is
+   * where its capacity is held (ADR-0044 decision 2). Only GROWTH is refused:
+   * the cost follows the document count, so editing what is already there
+   * stays open, and nothing already kept becomes unreadable.
+   */
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
     await this.ensureFolded()
+    await this.admitOneMore(input.workspaceId)
     return this.inner.createDocument(input)
+  }
+
+  /**
+   * ponytail: check-then-write, not atomic. Creates racing in this tab or
+   * others can each pass and overshoot by how many raced; the count comes
+   * from each tab's own replica of the record, so even a cross-tab lock
+   * would not make it exact. The limit sits well under where a tab fails,
+   * so a few over is harmless. Serialise through the workspace record's
+   * write queue if it ever needs to be exact.
+   */
+  private async admitOneMore(workspaceId: string): Promise<void> {
+    const held = await this.listDocuments({ workspaceId })
+    if (held.length >= this.capacity.limit) {
+      throw new WorkspaceCapacityReachedError(this.capacity.limit)
+    }
   }
 
   async resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null> {
@@ -203,6 +235,8 @@ export class FoldingBrowserIndex implements DocumentIndex {
     input: Parameters<LoroWorkspaceDocumentIndex['restoreDocument']>[0],
   ): ReturnType<LoroWorkspaceDocumentIndex['restoreDocument']> {
     await this.ensureFolded()
+    // A restore adds a document back just as a create does.
+    await this.admitOneMore(input.workspaceId)
     return this.inner.restoreDocument(input)
   }
 

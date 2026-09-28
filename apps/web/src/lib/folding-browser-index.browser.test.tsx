@@ -16,6 +16,7 @@ import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
+import { WorkspaceCapacityReachedError } from './browser-keeper-capacity.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -227,5 +228,42 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     expect(await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toEqual([])
     // Deleted from the tree means unreadable through the content path too.
     expect(await loadDocumentContent(entry.documentId)).toBeNull()
+  })
+
+  it('refuses a document past the declared capacity, and takes one again once there is room', async () => {
+    const index = new FoldingBrowserIndex(undefined, { capacity: { bandStartsAt: 1, limit: 2 } })
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    await index.createDocument({ workspaceId, path: 'a', kind: 'markdown' })
+    await index.createDocument({ workspaceId, path: 'b', kind: 'markdown' })
+
+    await expect(
+      index.createDocument({ workspaceId, path: 'c', kind: 'markdown' }),
+    ).rejects.toBeInstanceOf(WorkspaceCapacityReachedError)
+    // Refusing adds nothing, and leaves what is there readable.
+    expect((await index.listDocuments({ workspaceId })).map((e) => e.path)).toEqual(['a', 'b'])
+
+    await index.deleteDocument({ workspaceId, path: 'a' })
+    await expect(
+      index.createDocument({ workspaceId, path: 'c', kind: 'markdown' }),
+    ).resolves.toMatchObject({ path: 'c' })
+  })
+
+  it('refuses to restore from the trash into a full workspace', async () => {
+    const index = new FoldingBrowserIndex(undefined, { capacity: { bandStartsAt: 1, limit: 2 } })
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const trashed = await index.createDocument({ workspaceId, path: 'a', kind: 'markdown' })
+    await index.createDocument({ workspaceId, path: 'b', kind: 'markdown' })
+    await index.deleteDocument({ workspaceId, path: 'a' })
+    await index.createDocument({ workspaceId, path: 'c', kind: 'markdown' })
+
+    await expect(
+      index.restoreDocument({ workspaceId, documentId: trashed.documentId }),
+    ).rejects.toBeInstanceOf(WorkspaceCapacityReachedError)
+    // Still in the trash, not lost: it can come back once there is room.
+    expect((await index.listTrash({ workspaceId })).map((row) => row.documentId)).toEqual([
+      trashed.documentId,
+    ])
   })
 })

@@ -7,6 +7,7 @@
  * list up. Collapsed by default for the same reason.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { WorkspaceCapacityReachedError } from '../../lib/browser-keeper-capacity.js'
 import type { TrashRow } from '../../lib/files-source.js'
 import { formatRelative } from './format-relative.js'
 
@@ -17,6 +18,14 @@ export interface TrashSectionProps {
   onRestored: () => void
   /** External writes (a delete just landed) — re-read the trash. */
   revision?: unknown
+}
+
+// A full workspace is the one refusal a person can act on, so it says how;
+// anything else stays the generic line.
+function restoreFailureMessage(err: unknown): string {
+  return err instanceof WorkspaceCapacityReachedError
+    ? err.message
+    : 'Could not restore this document.'
 }
 
 export function TrashSection({
@@ -57,8 +66,8 @@ export function TrashSection({
         await restoreFromTrash(documentId)
         reload()
         onRestored()
-      } catch {
-        setError('Could not restore this document.')
+      } catch (err) {
+        setError(restoreFailureMessage(err))
       } finally {
         setBusy(null)
       }

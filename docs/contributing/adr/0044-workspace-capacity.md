@@ -1,6 +1,10 @@
 # ADR-0044: A workspace's capacity is an infrastructure limit, refused at the edge and promoted before it
 
-**Status:** Proposed — the shape is decided and one number is deliberately
+**Status:** Accepted (2026-09-28), in effect for the BROWSER keeper, the
+first backend to declare a limit — see the 2026-09-28 addendum. The daemon
+declares none, and a Worker keeper does not exist yet.
+
+*Originally:* Proposed — the shape is decided and one number is deliberately
 not. Decisions 1, 2 and 4 are ready to build; decision 3's threshold is left
 as a measurement rather than a value, because a fraction chosen by feel
 becomes a constant nobody can move afterwards. Nothing here commits to a
@@ -257,3 +261,41 @@ and every query filters on it — and the enumeration and the enforcement seam
 are open. A `tenantId` column on the workspace table alone would scope
 nothing, because that table is not authoritative for every workspace id other
 tables can name.
+
+## Addendum 2026-09-28 — the browser keeper declares its limit
+
+The owner accepted this ADR and chose the BROWSER keeper as the first
+backend to declare a capacity: it holds a whole workspace record in one tab's
+WASM memory, and it already has migration targets (the move to a daemon, and
+the cross-origin transfer), so decision 4's precondition holds.
+
+**The curve belongs to Loro, and the ceiling belongs to the device.**
+`apps/web/scripts/measure-workspace-record-memory.mjs` measured the same
+record in Chromium and Firefox, and both matched the Node table above to
+within 1MB: 360 documents peak at 109MB, 720 at 300MB, 1440 at 957MB and
+2880 at 3.2GB. What differs is where a tab is stopped. On a desktop that is
+wasm32's 4GiB. On a phone the OS kills the tab after a few hundred MB, and no
+API reports where.
+
+The limit is therefore two fixed tiers, and the page picks one from what it
+can see. A coarse primary pointer, or `navigator.deviceMemory` ≤ 4, selects
+the mobile tier:
+
+| tier | band from | limit |
+|---|---|---|
+| desktop | 1400 | 2000 |
+| mobile | 300 | 500 |
+
+The band follows the addendum's criterion: one more full export still fits.
+The phone numbers are an estimate, because no phone was measured, and the
+real failure stays the backstop.
+
+**Only growth is refused.** Cost follows the document count, so at the limit
+creating a document is refused, with the reason and where to move the
+workspace. Editing what is there stays open, and nothing already kept stops
+being readable. That is decision 2 read for a limit measured in documents.
+
+Built in `apps/web`: `lib/browser-keeper-capacity.ts`, the refusal in
+`FoldingBrowserIndex.createDocument` (every browser path that adds a document
+ends there), and `BrowserCapacityNotice` on the document list.
+
