@@ -152,7 +152,7 @@ describe('SettingsPage — General', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 3,
+        version: 4,
         storage: {},
         migration: {},
         capabilities: {},
@@ -824,74 +824,16 @@ describe('SettingsPage — the active section is mounted once', () => {
   it('offers a daemon-backed action once, not once per layout chrome', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/api/pairing/credentials')) {
-          return jsonResponse({
-            credentials: [
-              {
-                credentialId: 'Y3JlZC1vbmU',
-                origin: 'https://example.test',
-                backupEligible: true,
-                createdAt: '2026-09-18T00:00:00.000Z',
-              },
-            ],
-          })
-        }
-        return jsonResponse({}, 404)
-      }),
+      vi.fn(async () => jsonResponse({}, 404)),
     )
     renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
 
     // findAll, not find: with two copies a single-element query throws on the
     // ambiguity, which reports as a broken query rather than as the duplicate
-    // the count assertions below are here to name.
-    await screen.findAllByText('https://example.test')
-    // One card, one row, one Remove button — a second of each is a second
-    // list that this one's revoke will not reach.
-    expect(screen.getAllByTestId('passkeys-card')).toHaveLength(1)
-    expect(screen.getAllByTestId('passkey-Y3JlZC1vbmU')).toHaveLength(1)
-    expect(
-      screen.getAllByRole('button', {
-        name: 'Remove the passkey registered from https://example.test',
-      }),
-    ).toHaveLength(1)
-  })
-
-  it('leaves no copy of a revoked passkey anywhere on the page', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/api/pairing/credentials')) {
-          if (init?.method === 'DELETE') return jsonResponse({ revoked: true })
-          return jsonResponse({
-            credentials: [
-              {
-                credentialId: 'Y3JlZC1vbmU',
-                origin: 'https://example.test',
-                backupEligible: true,
-                createdAt: '2026-09-18T00:00:00.000Z',
-              },
-            ],
-          })
-        }
-        return jsonResponse({}, 404)
-      }),
-    )
-    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
-
-    await screen.findAllByText('https://example.test')
-    // The first copy is the one a person on a narrow viewport is looking at.
-    const removeButtons = screen.getAllByRole('button', {
-      name: 'Remove the passkey registered from https://example.test',
-    })
-    fireEvent.click(removeButtons[0] as HTMLElement)
-
-    // queryAll, not query: the defect this guards is a SECOND row surviving,
-    // which a single-element query reports as "found it" rather than failing.
-    await waitFor(() => {
-      expect(screen.queryAllByTestId('passkey-Y3JlZC1vbmU')).toHaveLength(0)
-    })
+    // the count assertion below is here to name.
+    await screen.findAllByTestId('settings-disconnect')
+    // One Disconnect button — a second is a second card whose action this
+    // one's state will not reach.
+    expect(screen.getAllByTestId('settings-disconnect')).toHaveLength(1)
   })
 })

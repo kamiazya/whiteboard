@@ -4,16 +4,11 @@
  */
 import { useEffect, useMemo } from 'react'
 import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
-import { passkeySupported } from '../lib/passkey-attestation.js'
 
 /**
  * Tells `openDocumentStore` (S4b) which daemon this tab is connected to, so a
  * daemon-kept workspace's replica routes to a real session-key source instead
  * of the withheld answer an unconnected ref gets.
- *
- * `credentials` is read the same way PromoteWorkspaceSection reads it —
- * undefined where WebAuthn is unsupported, so `bindPasskeySession` answers
- * `no-passkey` rather than throwing on a missing API.
  *
  * The store is imported DYNAMICALLY, like every other lib this session only
  * needs once a daemon resolves: a static import pulled the session-key
@@ -23,14 +18,7 @@ import { passkeySupported } from '../lib/passkey-attestation.js'
  */
 export function useReplicaKeeper(daemon: ConnectedDaemon | undefined): void {
   useEffect(() => {
-    const connected =
-      daemon === undefined
-        ? null
-        : {
-            baseUrl: daemon.baseUrl,
-            token: daemon.token,
-            credentials: passkeySupported() ? globalThis.navigator.credentials : undefined,
-          }
+    const connected = daemon === undefined ? null : { baseUrl: daemon.baseUrl, token: daemon.token }
     let cancelled = false
     import('../lib/replica-store.js').then(({ connectReplicaKeeper }) => {
       if (!cancelled) connectReplicaKeeper(connected)

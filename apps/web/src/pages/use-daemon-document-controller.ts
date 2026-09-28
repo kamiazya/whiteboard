@@ -10,13 +10,7 @@ import {
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
 import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
-import {
-  type MembershipRefusalState,
-  membershipRefusal,
-  withOnePasskeyBind,
-} from '../lib/membership-refusal.js'
-import { passkeySupported } from '../lib/passkey-attestation.js'
-import { bindPasskeySession } from '../lib/passkey-session.js'
+import { type MembershipRefusalState, membershipRefusal } from '../lib/membership-refusal.js'
 
 export interface UseDaemonDocumentControllerOptions {
   daemonBaseUrl: string
@@ -33,10 +27,10 @@ export interface DaemonDocumentController {
   // workspace/canvas, so there is nothing on screen to fall back to. The page
   // renders this as a full-page error state.
   loadError: string | null
-  // Set only once listDocuments has SUCCEEDED — never while a bind/retry is
-  // in flight, and never for a refused workspace. That admission gate is
-  // what keeps the push/refresh effect (keyed on this field) from racing the
-  // resolve's own passkey bind with a second one of its own.
+  // Set only once listDocuments has SUCCEEDED — never while a retry is in
+  // flight, and never for a refused workspace. That admission gate is what
+  // keeps the push/refresh effect (keyed on this field) off a workspace that
+  // turns out to be refused.
   workspaceId: string | null
   path: string | null
   workspaces: WorkspaceSummary[]
@@ -67,8 +61,7 @@ export interface DaemonDocumentController {
    *  naming the workspace — known once listWorkspaces has resolved, even
    *  before `workspaceId` above is admitted. `null` once admitted. */
   refusal: MembershipRefusalState | null
-  /** Re-runs the resolve, resetting the once-only passkey-bind guard so it
-   *  may bind exactly one more time. */
+  /** Re-runs the resolve. */
   retry: () => void
 }
 
@@ -123,12 +116,7 @@ export function useDaemonDocumentController(
   // switcher; what remains is the mount path alone.
   const resolveSeqRef = useRef(0)
   const [attempt, setAttempt] = useState(0)
-  // One bind per (daemon, page) mount — reset by retry() so a refusal that
-  // survives a bind can be answered by exactly one more prompt, never a loop.
-  const bindGuardRef = useRef({ attempted: false })
-
   const retry = useCallback(() => {
-    bindGuardRef.current = { attempted: false }
     setRefusal(null)
     // Back to loading for the duration of the re-resolve — without this,
     // `loading` is already false from the failed attempt, and a caller
@@ -173,8 +161,7 @@ export function useDaemonDocumentController(
       if (!current()) return
       // Admitted only now, together — never before listDocuments succeeds.
       // Setting workspaceId earlier would arm the page's replica push/refresh
-      // effect (keyed on it) for a workspace that turns out to be refused,
-      // and would let that effect's own passkey bind race this one.
+      // effect (keyed on it) for a workspace that turns out to be refused.
       setWorkspaceId(wid)
       setDocuments(documents)
       setPath(options.path ?? documents[0]?.path ?? null)
@@ -182,16 +169,7 @@ export function useDaemonDocumentController(
 
     async function resolve(): Promise<void> {
       try {
-        await withOnePasskeyBind(
-          resolveOnce,
-          () =>
-            bindPasskeySession({
-              daemonBaseUrl,
-              fetch: daemonFetch,
-              credentials: passkeySupported() ? globalThis.navigator?.credentials : undefined,
-            }),
-          bindGuardRef.current,
-        )
+        await resolveOnce()
       } catch (err) {
         if (!current()) return
         reportResolveFailure(err, knownWid, setRefusal, setLoadError)

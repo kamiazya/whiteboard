@@ -103,7 +103,7 @@ function rememberDaemon(daemonBaseUrl: string, extra: Record<string, unknown> = 
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
-      version: 3,
+      version: 4,
       storage: { daemonBaseUrl, ...extra },
       migration: {},
       // The USER SETTINGS' capabilities (`webMcpEnabled`). Required by a
@@ -211,88 +211,29 @@ describe('reconnecting a remembered daemon through the extension', () => {
   it('reconnects to the stored daemon and renders daemon mode', async () => {
     rememberDaemon(BRIDGE_DAEMON_BASE_URL)
     mockConnectResult = CONNECTED
-    // jsdom has no `navigator.credentials` property at all by default, which
-    // would make "credentials is undefined" true whether or not App reads
-    // `passkeySupported()` first — a sentinel here is what makes the GATE
-    // itself, not merely jsdom's own absence, the thing under test.
-    // `PublicKeyCredential` stays absent (jsdom's default), so the gate
-    // must still answer false.
-    Object.defineProperty(globalThis.navigator, 'credentials', {
-      value: { get: async () => null },
-      configurable: true,
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
     })
-    try {
-      await act(async () => {
-        render(
-          <MemoryRouter initialEntries={['/']}>
-            <App providerState={BROWSER_STATE} />
-          </MemoryRouter>,
-        )
-      })
 
-      await screen.findByTestId('daemon-index-page')
-      expect(connectThroughExtensionMock).toHaveBeenCalledOnce()
-      // The page holds no daemon token: the host supplies the daemon's own.
-      expect(receivedDaemonIndexPageProps).toMatchObject({
-        daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+    await screen.findByTestId('daemon-index-page')
+    expect(connectThroughExtensionMock).toHaveBeenCalledOnce()
+    // The page holds no daemon token: the host supplies the daemon's own.
+    expect(receivedDaemonIndexPageProps).toMatchObject({
+      daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+      token: '',
+    })
+    // S4b: the resolved daemon reaches the replica-key holder too, not only
+    // the page.
+    await vi.waitFor(() => {
+      expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith({
+        baseUrl: BRIDGE_DAEMON_BASE_URL,
         token: '',
       })
-      // S4b: the resolved daemon reaches the replica-key holder too, not
-      // only the page — and gated on `passkeySupported()`, so an origin
-      // with a `navigator.credentials` but no `PublicKeyCredential` (this
-      // stub) is still answered `undefined`, the unsupported half of the
-      // credentials-gating pair below.
-      await vi.waitFor(() => {
-        expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ baseUrl: BRIDGE_DAEMON_BASE_URL, token: '' }),
-        )
-      })
-      expect(connectReplicaKeeperMock.mock.lastCall?.[0].credentials).toBeUndefined()
-    } finally {
-      // @ts-expect-error test-only stub removal
-      delete globalThis.navigator.credentials
-    }
-  })
-
-  it('passes navigator.credentials to the replica-key holder when the platform supports passkeys', async () => {
-    const originalPublicKeyCredential = (globalThis as { PublicKeyCredential?: unknown })
-      .PublicKeyCredential
-    ;(globalThis as { PublicKeyCredential?: unknown }).PublicKeyCredential = class {}
-    // jsdom's own `navigator.credentials` is undefined even with
-    // `PublicKeyCredential` stubbed, which would make `toBe(globalThis.
-    // navigator.credentials)` below pass vacuously (undefined === undefined)
-    // whether or not App actually forwards the value — a real sentinel is
-    // what makes this assert the VALUE flows through, not just that both
-    // sides happen to be absent.
-    Object.defineProperty(globalThis.navigator, 'credentials', {
-      value: { get: async () => null },
-      configurable: true,
     })
-    try {
-      rememberDaemon(BRIDGE_DAEMON_BASE_URL)
-      mockConnectResult = CONNECTED
-      await act(async () => {
-        render(
-          <MemoryRouter initialEntries={['/']}>
-            <App providerState={BROWSER_STATE} />
-          </MemoryRouter>,
-        )
-      })
-      await screen.findByTestId('daemon-index-page')
-      await vi.waitFor(() => {
-        expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ baseUrl: BRIDGE_DAEMON_BASE_URL }),
-        )
-      })
-      expect(connectReplicaKeeperMock.mock.lastCall?.[0].credentials).toBe(
-        globalThis.navigator.credentials,
-      )
-    } finally {
-      ;(globalThis as { PublicKeyCredential?: unknown }).PublicKeyCredential =
-        originalPublicKeyCredential
-      // @ts-expect-error test-only stub removal
-      delete globalThis.navigator.credentials
-    }
   })
 
   it('serves the replica read-only when the daemon is unreachable and a replica exists', async () => {
@@ -320,9 +261,6 @@ describe('reconnecting a remembered daemon through the extension', () => {
     })
     const page = await screen.findByTestId('replica-read-page-stub')
     expect(page.getAttribute('data-workspace-id')).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
-    // ADR-0042 S5: the page decides its own degradation state from what the
-    // renewal answered, so App must pass the REASON, not merely a boolean.
-    expect(receivedReplicaPageProps?.renewal).toBe('unreachable')
     expect(receivedReplicaPageProps?.daemonBaseUrl).toBe(BRIDGE_DAEMON_BASE_URL)
   })
 
@@ -362,7 +300,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     // replica-refresh.ts omits it when a daemon workspace has none). A
     // registry lookup keyed on `segment` alone, or a replica branch gated
     // to index routes, would both miss this and fall through to the
-    // browser flow instead of the locked/unpaired states ADR-0042 S5 ships.
+    // browser flow instead of the locked states ADR-0042 S5 ships.
     const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA1'
     rememberDaemon(BRIDGE_DAEMON_BASE_URL, {
       replicas: {
@@ -382,7 +320,6 @@ describe('reconnecting a remembered daemon through the extension', () => {
     })
     const page = await screen.findByTestId('replica-read-page-stub')
     expect(page.getAttribute('data-workspace-id')).toBe(workspaceId)
-    expect(receivedReplicaPageProps?.renewal).toBe('unreachable')
     expect(screen.queryByTestId('browser-document-page')).toBeNull()
     expect(screen.queryByTestId('browser-index-page')).toBeNull()
   })

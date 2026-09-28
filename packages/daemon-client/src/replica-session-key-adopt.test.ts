@@ -39,12 +39,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-function sourceWith(fetchImpl: typeof fetch, extra: Partial<ReplicaSource> = {}): ReplicaSource {
-  return {
-    fetch: fetchImpl,
-    bindSession: async () => ({ ok: false as const, reason: 'no-passkey' as const }),
-    ...extra,
-  }
+function sourceWith(fetchImpl: typeof fetch): ReplicaSource {
+  return { fetch: fetchImpl }
 }
 
 afterEach(() => {
@@ -96,35 +92,5 @@ describe('adoptSessionKey', () => {
       false,
     )
     expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({ kind: 'held', tier: 'offline' })
-  })
-})
-
-describe('ReplicaSource.onKeyResponse', () => {
-  it('hands the minted response to the caller that will wrap it', async () => {
-    const seen: unknown[] = []
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(RESPONSE))
-
-    await sessionKey(
-      DAEMON,
-      WORKSPACE,
-      sourceWith(fetchImpl, { onKeyResponse: (r) => seen.push(r) }),
-    )
-
-    // The PARSED response, so the wrapper seals exactly what a cold start
-    // will parse back — not a re-serialisation of the decoded bytes.
-    expect(seen).toEqual([RESPONSE])
-  })
-
-  it('says nothing when the daemon withholds the key', async () => {
-    const seen: unknown[] = []
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ error: 'not_a_member' }, 403))
-
-    await sessionKey(
-      DAEMON,
-      WORKSPACE,
-      sourceWith(fetchImpl, { onKeyResponse: (r) => seen.push(r) }),
-    )
-
-    expect(seen).toEqual([])
   })
 })

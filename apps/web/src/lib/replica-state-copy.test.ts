@@ -23,14 +23,8 @@ describe('REPLICA_STATE_COPY', () => {
     )
   })
 
-  it('removed and unpaired offer no action', () => {
+  it('removed offers no action', () => {
     expect(REPLICA_STATE_COPY.removed.action).toBeUndefined()
-    expect(REPLICA_STATE_COPY.unpaired.action).toBeUndefined()
-  })
-
-  it('unpaired says the device is unpaired and never claims the person was removed', () => {
-    expect(REPLICA_STATE_COPY.unpaired.body).toContain('no longer paired')
-    expect(REPLICA_STATE_COPY.unpaired.body).not.toMatch(/removed/i)
   })
 
   it('locked and needs-connection each name an action', () => {

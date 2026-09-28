@@ -27,6 +27,7 @@ import {
 } from '../components/spatial-editor/node-editor-test-utils.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { saveOfflinePasskey } from '../lib/replica-offline-passkey.js'
 import { REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
 import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
 import { REPLICA_TIER_COPY } from '../lib/replica-tier-copy.js'
@@ -131,12 +132,13 @@ async function seedReplica(): Promise<void> {
 
 const PRF = new Uint8Array(32).fill(11)
 const SEALED_KEYS = 'whiteboard:replica-sealed-keys'
-const PASSKEYS = 'whiteboard:daemon-passkeys'
+const OFFLINE_PASSKEYS = 'whiteboard:replica-offline-passkeys'
 const RAW_ID = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8])
 
 /**
  * Leaves this device in the state a cold start finds: a sealed replica in
- * IndexedDB, a wrapped key beside it, a registered passkey, and NOTHING
+ * IndexedDB, a wrapped key beside it, the passkey this browser keeps for it
+ * (Settings' "Make readable offline"), and NOTHING
  * held in memory — the holder forgotten and the daemon disconnected, which
  * is what closing the tab does.
  */
@@ -151,12 +153,7 @@ async function forgetEverythingButTheBlob(): Promise<void> {
     },
     prfOutput: PRF,
   })
-  localStorage.setItem(
-    PASSKEYS,
-    JSON.stringify({
-      [DAEMON]: { credentialId: b64u(RAW_ID), registeredAt: '2026-09-21T00:00:00.000Z' },
-    }),
-  )
+  saveOfflinePasskey(DAEMON, DAEMON_WS, { credentialId: b64u(RAW_ID), prfSalt: 'AAAA' })
   connectReplicaKeeper(null)
   forgetAll()
 }
@@ -166,7 +163,7 @@ afterEach(() => {
   connectReplicaKeeper(null)
   forgetAll()
   localStorage.removeItem(SEALED_KEYS)
-  localStorage.removeItem(PASSKEYS)
+  localStorage.removeItem(OFFLINE_PASSKEYS)
   cleanup()
 })
 
@@ -179,7 +176,6 @@ describe('ReplicaReadPage', () => {
         displayName="Design team"
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -202,7 +198,6 @@ describe('ReplicaReadPage', () => {
       <ReplicaReadPage
         workspaceId={DAEMON_WS}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -237,7 +232,6 @@ describe('ReplicaReadPage', () => {
           workspaceId={DAEMON_WS}
           syncedAt={SYNCED}
           daemonBaseUrl={DAEMON}
-          renewal="unreachable"
           onReconnect={noopReconnect}
         />
       </div>,
@@ -287,7 +281,6 @@ describe('ReplicaReadPage', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -307,7 +300,6 @@ describe('ReplicaReadPage', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -329,7 +321,6 @@ describe('ReplicaReadPage', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -349,7 +340,6 @@ describe('ReplicaReadPage', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -370,7 +360,6 @@ describe('ReplicaReadPage', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -408,7 +397,6 @@ describe('ReplicaReadPage states', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={onReconnect}
       />,
     )
@@ -468,7 +456,6 @@ describe('ReplicaReadPage states', () => {
           workspaceId={DAEMON_WS}
           syncedAt={SYNCED}
           daemonBaseUrl={DAEMON}
-          renewal="unreachable"
           onReconnect={noopReconnect}
         />,
       )
@@ -477,25 +464,6 @@ describe('ReplicaReadPage states', () => {
     } finally {
       vi.useRealTimers()
     }
-  })
-
-  it('unpaired (renewal refused): says the device is unpaired, never that the person was removed', async () => {
-    await seedReplica()
-    render(
-      <ReplicaReadPage
-        workspaceId={DAEMON_WS}
-        syncedAt={SYNCED}
-        daemonBaseUrl={DAEMON}
-        renewal="refused"
-        onReconnect={noopReconnect}
-      />,
-    )
-    const unpaired = await screen.findByTestId('replica-state-unpaired')
-    expect(unpaired.textContent).toContain('no longer paired')
-    expect(unpaired.textContent).not.toContain('removed')
-    expect(screen.queryByTestId('replica-state-removed')).toBeNull()
-    expect(screen.queryAllByRole('button')).toHaveLength(0)
-    expect(document.querySelector('[contenteditable]')).toBeNull()
   })
 
   it('removed (key refusal not_a_member): no tree, no editor, no button', async () => {
@@ -509,7 +477,6 @@ describe('ReplicaReadPage states', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -530,7 +497,6 @@ describe('ReplicaReadPage states', () => {
       <ReplicaReadPage
         workspaceId={DAEMON_WS}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         withheld="not_a_member"
         onReconnect={noopReconnect}
       />,
@@ -558,7 +524,6 @@ describe('ReplicaReadPage states', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -575,7 +540,6 @@ describe('ReplicaReadPage states', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={onReconnect}
       />,
     )
@@ -601,7 +565,6 @@ describe('ReplicaReadPage states', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={onReconnect}
       />,
     )
@@ -632,7 +595,6 @@ describe('ReplicaReadPage states', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -665,7 +627,6 @@ describe('ReplicaReadPage: the cold start (ADR-0042 d6)', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )
@@ -711,7 +672,6 @@ describe('ReplicaReadPage: the cold start (ADR-0042 d6)', () => {
         workspaceId={DAEMON_WS}
         syncedAt={SYNCED}
         daemonBaseUrl={DAEMON}
-        renewal="unreachable"
         onReconnect={noopReconnect}
       />,
     )

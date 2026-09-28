@@ -74,10 +74,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: 'merges a workspace record arriving from ANOTHER origin into a workspace this keeper holds — it runs on the page a keeper serves at its own address, and a browser keeper serves no address anyone could send a transfer to, so there is no receiving side to mirror',
   },
-  'src/components/PasskeysCard.tsx': {
-    reach: 'daemon-itself',
-    why: "lists, registers and removes the passkeys a daemon will accept a move from — the pins are the daemon's, and a browser keeper is what a move comes FROM, so it has none to hold",
-  },
   'src/components/settings/PromoteWorkspaceSection.tsx': {
     reach: 'daemon-itself',
     why: 'moves a browser-kept workspace INTO the daemon and shows what the daemon keeps of the workspace in view (its replica tier line) — both are about the daemon as the destination or the keeper, and a browser-kept workspace has no counterpart for either',
@@ -89,10 +85,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/components/settings/ReplicaOfflineControl.tsx': {
     reach: 'daemon-itself',
     why: "asks the daemon for a cached copy's key to lock it under a passkey held in this browser — only a daemon-kept copy is sealed, so a browser-kept one has no key to lock",
-  },
-  'src/components/settings/MembersCard.tsx': {
-    reach: 'daemon-itself',
-    why: 'lists, adds and removes the people a daemon workspace admits — membership is a daemon-side record (member profiles over pinned passkeys) with no browser-keeper equivalent, since a browser workspace has exactly one person and no sessions to end',
   },
   'src/components/storage-maintenance.ts': {
     reach: 'both-keepers',
@@ -185,10 +177,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'both-keepers',
     browser: 'src/lib/idb-document-store.ts',
     note: 'the one store factory: a daemon replica is sealed under the session key, a browser-kept workspace is the inner IdbDocumentStore unsealed',
-  },
-  'src/lib/passkey-session.ts': {
-    reach: 'daemon-itself',
-    why: "binds this pairing session to the person's passkey so the daemon will issue the replica key — the session is the daemon's; a browser keeper has no session and no key to withhold",
   },
 }
 

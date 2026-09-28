@@ -25,28 +25,10 @@ import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
-import type { AttestOutcome } from './passkey-attestation.js'
 import { countBrowserWorkspaceDocuments, promoteWorkspace } from './promote-workspace.js'
 import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('promote-workspace')
-
-/**
- * A passkey that signs whatever it is handed. Every test needs one because
- * `attest` is required (a move to another keeper is confirmed with a
- * passkey), so a case about images or a 404 says so in one line instead of
- * restating the assertion shape.
- */
-const stubSigner = async (): Promise<AttestOutcome> => ({
-  ok: true,
-  attestation: {
-    kind: 'webauthn',
-    credentialId: 'Y3JlZA',
-    authenticatorData: 'YXV0aA',
-    clientDataJSON: 'Y2xpZW50',
-    signature: 'c2ln',
-  },
-})
 
 const BASE = 'http://127.0.0.1:3099'
 const DAEMON_OWN_ID = '01DMNAAAAAAAAAAAAAAAAAAAA0'
@@ -180,7 +162,6 @@ describe('promoteWorkspace', () => {
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
-      attest: stubSigner,
       onProgress: (phase) => phases.push(phase),
     })
     // Real progress, not staged: the record phase precedes the blob phase.
@@ -208,7 +189,7 @@ describe('promoteWorkspace', () => {
     expect([...(putFiles[0]?.bytes ?? [])]).toEqual([...imageBytes])
   })
 
-  it('the passkey assertion travels beside the very bytes it signed, and the result says attested', async () => {
+  it('sends the very bytes the record holds, with no attestation beside them', async () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
     await index.createDocument({
@@ -217,81 +198,16 @@ describe('promoteWorkspace', () => {
       kind: 'markdown',
     })
     const promotes: Array<{ snapshot: string; attestation?: { credentialId: string } }> = []
-    const signed: Uint8Array[] = []
     const result = await promoteWorkspace({
       fetch: daemonStub(targetDaemonRecord(), [], promotes),
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
-      attest: async (snapshot) => {
-        signed.push(snapshot)
-        return {
-          ok: true,
-          attestation: {
-            kind: 'webauthn',
-            credentialId: 'Y3JlZA',
-            authenticatorData: 'YXV0aA',
-            clientDataJSON: 'Y2xpZW50',
-            signature: 'c2ln',
-          },
-        }
-      },
     })
     expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.attested).toBe(true)
     expect(promotes).toHaveLength(1)
-    expect(promotes[0]?.attestation?.credentialId).toBe('Y3JlZA')
-    // What was signed is what was sent: the same bytes, byte for byte.
-    expect(base64UrlToBytes(promotes[0]?.snapshot ?? '')).toEqual(signed[0])
-  })
-
-  it('a cancelled passkey prompt moves nothing', async () => {
-    const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
-    await index.createDocument({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'a',
-      kind: 'markdown',
-    })
-    const promotes: Array<{ snapshot: string }> = []
-    const result = await promoteWorkspace({
-      fetch: daemonStub(targetDaemonRecord(), [], promotes),
-      keeperBaseUrl: BASE,
-      workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
-      attest: async () => ({ ok: false, reason: 'cancelled' }),
-    })
-    expect(result).toEqual({
-      kind: 'failed',
-      reason: 'The passkey prompt was cancelled, so nothing was moved.',
-    })
-    expect(promotes).toEqual([])
-  })
-
-  it('with no passkey registered for the destination, nothing is moved and the reason says what to do', async () => {
-    const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
-    await index.createDocument({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'a',
-      kind: 'markdown',
-    })
-    const promotes: Array<{ snapshot: string }> = []
-    const result = await promoteWorkspace({
-      fetch: daemonStub(targetDaemonRecord(), [], promotes),
-      keeperBaseUrl: BASE,
-      workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
-      attest: async () => null,
-    })
-    expect(result).toEqual({
-      kind: 'failed',
-      reason:
-        'Register a passkey for the destination first: a move to another keeper is confirmed with one.',
-    })
-    // The refusal is BEFORE the POST, so the destination never saw the bytes.
-    expect(promotes).toEqual([])
+    expect(promotes[0]).not.toHaveProperty('attestation')
+    expect(base64UrlToBytes(promotes[0]?.snapshot ?? '').length).toBeGreaterThan(0)
   })
 
   it('a referenced image whose bytes are gone is reported missing, never a failed promotion', async () => {
@@ -321,7 +237,6 @@ describe('promoteWorkspace', () => {
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
-      attest: stubSigner,
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -347,7 +262,6 @@ describe('promoteWorkspace', () => {
       keeperBaseUrl: BASE,
       workspaceId: 'ws-gone',
       workspaceDocs: new BrowserWorkspaceDocs(),
-      attest: stubSigner,
     })
     expect(result.kind).toBe('failed')
     if (result.kind !== 'failed') return
@@ -371,7 +285,6 @@ describe('promoteWorkspace', () => {
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
-      attest: stubSigner,
     })
     expect(result.kind).toBe('failed')
   })

@@ -26,12 +26,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { DaemonAddress } from '../components/connection/DaemonAddress.js'
 import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
 import { FontsCard } from '../components/FontsCard.js'
-import { PasskeysCard } from '../components/PasskeysCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { AppVersionRow } from '../components/settings/AppVersionRow.js'
 import { GestureTraceRow } from '../components/settings/GestureTraceRow.js'
 import { LocalCopiesCard } from '../components/settings/LocalCopiesCard.js'
-import { MembersCard } from '../components/settings/MembersCard.js'
 import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspaceSection.js'
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
 import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
@@ -68,10 +66,9 @@ export interface SettingsPageProps {
    */
   onDisconnected?: () => void
   /**
-   * The workspace currently in view, so the Members card knows which
-   * workspace's membership to manage. Undefined on a cold load with a
-   * daemon merely detected (no workspace named yet) — the card is hidden
-   * rather than guessing.
+   * The workspace currently in view, so the move and the cached-copy cards
+   * can speak about it. Undefined on a cold load with a daemon merely
+   * detected (no workspace named yet).
    */
   workspaceId?: string
 }
@@ -288,9 +285,6 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
   return (
     <DaemonApiContext.Provider value={daemonFetch ?? null}>
       <div className="space-y-6">
-        <section aria-label="Passkeys">
-          <PasskeysCard daemonBaseUrl={daemon.baseUrl} />
-        </section>
         <section aria-label="Storage">
           <StorageReportCard />
         </section>
@@ -304,14 +298,6 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
           workspaceId={workspaceId}
           daemonBaseUrl={daemon.baseUrl}
         />
-        {/* Hidden without a known workspace id: a cold load with a daemon
-            merely detected names none yet, and the card would have nothing
-            to manage. */}
-        {workspaceId !== undefined && (
-          <section aria-label="Members">
-            <MembersCard workspaceId={workspaceId} />
-          </section>
-        )}
         {/* Management, not status: the chip reports which daemon keeps this
             workspace, and changing that is an intent you arrive here with. */}
         <section aria-label="This daemon" className="flex flex-col gap-1.5">

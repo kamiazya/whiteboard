@@ -53,10 +53,7 @@ describe('disconnectFromDaemon', () => {
     markReplica(workspaceId, A)
 
     const fetchImpl = vi.fn(async () => keyResponse())
-    const source = {
-      fetch: fetchImpl,
-      bindSession: async () => ({ ok: false as const, reason: 'no-passkey' as const }),
-    }
+    const source = { fetch: fetchImpl }
     const first = await sessionKey(A, workspaceId, source)
     expect(first.kind).toBe('key')
     expect(fetchImpl).toHaveBeenCalledTimes(1)

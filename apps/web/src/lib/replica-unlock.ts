@@ -2,9 +2,10 @@
  * Opening a remembered replica from disk (ADR-0042 decision 6).
  *
  * Between them, the two functions here are the whole cold start. The write
- * half runs on the session that MINTED a key, wrapping it under the material
- * the passkey gesture already produced; the read half runs on a later tab
- * with the daemon unreachable, and turns one gesture into a held key.
+ * half runs when Settings makes a copy readable offline, wrapping the key
+ * under the prf output of the passkey it just created in this browser; the
+ * read half runs on a later tab with the daemon unreachable, and turns one
+ * gesture of that passkey into a held key.
  *
  * What never happens here is a second prompt. `rememberReplicaKey` takes a
  * prf output the caller already has rather than asking for one, and
@@ -39,12 +40,6 @@ import {
   sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
-  assertWithRegisteredPasskey,
-  type PasskeyCredentials,
-  type StorageLike,
-} from './passkey-attestation.js'
-import { prfInputForDaemon } from './passkey-prf.js'
-import {
   assertOfflinePasskey,
   browserCredentials,
   createOfflinePasskey,
@@ -60,11 +55,12 @@ import { dropWrappedKey, loadWrappedKey, saveWrappedKey } from './replica-wrappe
  * person, which is the only reason they are distinguished:
  *
  * - `no-blob` — nothing was remembered for this replica. Connect once.
- * - `no-passkey` — this daemon has no registered passkey on this device.
+ * - `no-passkey` — this browser offers no WebAuthn to ask.
  * - `no-prf` — the authenticator verified the person and produced no key
  *   material. Another browser on this machine may still open it.
  * - `cancelled` — the person dismissed the prompt. Offer it again.
- * - `unopenable` — nothing on this device can read what was remembered.
+ * - `unopenable` — nothing on this device can read what was remembered,
+ *   including a copy no passkey in this browser was kept for.
  * - `lapsed` — the bounded lease it was remembered under has been spent.
  */
 export type UnlockFailure =
@@ -77,17 +73,12 @@ export type UnlockFailure =
 
 export type UnlockOutcome = { ok: true; tier: ReplicaTier } | { ok: false; reason: UnlockFailure }
 
-/** True when this replica has something an unlock could open — what decides whether the offer is shown at all. */
-export function hasRememberedReplicaKey(daemonBaseUrl: string, workspaceId: string): boolean {
-  return loadWrappedKey(daemonBaseUrl, workspaceId) !== null
-}
-
 /**
  * Wraps a freshly minted replica key and leaves it beside the replica.
  *
- * Takes the prf output rather than asking for one: the only caller is the
- * session that just performed the gesture, and asking again here would be
- * the second prompt this design exists to avoid.
+ * Takes the prf output rather than asking for one: the caller just performed
+ * the gesture, and asking again here would be the second prompt this design
+ * exists to avoid.
  */
 export async function rememberReplicaKey({
   daemonBaseUrl,
@@ -117,13 +108,11 @@ export async function rememberReplicaKey({
 export async function unlockReplicaKey({
   daemonBaseUrl,
   workspaceId,
-  credentials,
-  storage,
+  credentials = browserCredentials(),
 }: {
   daemonBaseUrl: string
   workspaceId: string
-  credentials?: PasskeyCredentials & OfflinePasskeyCredentials
-  storage?: StorageLike
+  credentials?: OfflinePasskeyCredentials
 }): Promise<UnlockOutcome> {
   const held = sessionKeyStatus(daemonBaseUrl, workspaceId)
   if (held?.kind === 'held') return { ok: true, tier: held.tier }
@@ -131,7 +120,12 @@ export async function unlockReplicaKey({
   const blob = loadWrappedKey(daemonBaseUrl, workspaceId)
   if (blob === null) return { ok: false, reason: 'no-blob' }
 
-  const prf = await prfForUnlock({ daemonBaseUrl, workspaceId, credentials, storage })
+  const local = loadOfflinePasskey(daemonBaseUrl, workspaceId)
+  if (local === null) {
+    stopReplicaReadableOffline(daemonBaseUrl, workspaceId)
+    return { ok: false, reason: 'unopenable' }
+  }
+  const prf = await assertOfflinePasskey(local, credentials)
   if (!prf.ok) return prf
 
   const wrappingKey = await deriveWrappingKey(prf.prfOutput)
@@ -146,39 +140,6 @@ export async function unlockReplicaKey({
     return { ok: false, reason: 'lapsed' }
   }
   return { ok: true, tier: response.tier }
-}
-
-/**
- * The `prf` output an unlock opens with. A copy made readable offline from
- * Settings names its own passkey, kept in this browser, and asks nothing of any
- * daemon; any other copy was wrapped by a passkey a daemon's pairing
- * registered.
- */
-async function prfForUnlock({
-  daemonBaseUrl,
-  workspaceId,
-  credentials,
-  storage,
-}: {
-  daemonBaseUrl: string
-  workspaceId: string
-  credentials?: PasskeyCredentials & OfflinePasskeyCredentials
-  storage?: StorageLike
-}): Promise<{ ok: true; prfOutput: Uint8Array } | { ok: false; reason: UnlockFailure }> {
-  const local = loadOfflinePasskey(daemonBaseUrl, workspaceId)
-  if (local !== null) return assertOfflinePasskey(local, credentials ?? browserCredentials())
-
-  const outcome = await assertWithRegisteredPasskey({
-    daemonBaseUrl,
-    challenge: crypto.getRandomValues(new Uint8Array(32)),
-    prfInput: await prfInputForDaemon(daemonBaseUrl),
-    ...(credentials === undefined ? {} : { credentials }),
-    ...(storage === undefined ? {} : { storage }),
-  })
-  if (outcome === null) return { ok: false, reason: 'no-passkey' }
-  if (!outcome.ok) return { ok: false, reason: 'cancelled' }
-  if (outcome.prfOutput === undefined) return { ok: false, reason: 'no-prf' }
-  return { ok: true, prfOutput: outcome.prfOutput }
 }
 
 /** True when this copy was made readable offline and can still be opened that way. */
