@@ -121,6 +121,23 @@ describe('sign-in through an OIDC provider', () => {
     })
   })
 
+  // Server mode serves plain http behind the TLS proxy its https external URL
+  // requires, so the callback arrives at an address the provider never saw.
+  // The exchange must still name the redirect URI the authorization did.
+  it('completes a sign-in whose callback arrives through a TLS-terminating proxy', async () => {
+    const { app } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1' })
+    const started = await app.request(`${BASE}/auth/sign-in/corp`)
+    const binding = cookieFrom(started, '__Host-wb_signin')
+    const callback = new URL(idp.authorize(started.headers.get('location') as string))
+    const behindProxy = `http://127.0.0.1:8080${callback.pathname}${callback.search}`
+    const res = await app.request(behindProxy, {
+      headers: { cookie: `__Host-wb_signin=${binding}` },
+    })
+    expect(res.headers.get('location')).toBe('/')
+    expect(cookieFrom(res, SESSION_COOKIE)).toBeTruthy()
+  })
+
   // ADR-0051 decision 5: administration asks for a recent sign-in at the
   // provider, so a signed-in person can be sent back to sign in again —
   // interactively, whatever session the provider still holds.
