@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs'
-import { chmod, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -70,11 +70,18 @@ describe('the record file itself', () => {
   // check — in a directory that was missing then — is judged too.
   it.skipIf(!ROOT_IS_SOMEONE_ELSES)('is refused when another user owns it', async () => {
     await symlink('/etc/hostname', join(dir, 'daemon.json'))
-    await expect(loadDaemonRecord(dir)).rejects.toThrow(/not this user/)
-    expect(await parseDaemonRecord(dir)).toMatchObject({
-      kind: 'malformed',
-      message: expect.stringMatching(/not this user/),
-    })
+    await expect(loadDaemonRecord(dir)).rejects.toThrow(/not this user|symlink/)
+    expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'malformed' })
+  })
+
+  // A planted symlink to a file this user DOES own would pass an owner
+  // check on the handle, so the record is never read through one.
+  it('is refused when it is a symlink, even to a file this user owns', async () => {
+    const elsewhere = join(dir, 'elsewhere.json')
+    await writeFile(elsewhere, '{}')
+    await symlink(elsewhere, join(dir, 'daemon.json'))
+    await expect(loadDaemonRecord(dir)).rejects.toThrow(/symlink/)
+    expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'malformed' })
   })
 
   it('refuses a data dir anyone can write into, even one this user owns', async () => {

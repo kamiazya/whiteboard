@@ -1,7 +1,7 @@
 import { accessSync, chmodSync, constants as fsConstants, mkdirSync, statSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { homedir, platform, tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { findPackageRoot } from './package-root.js'
 
 // The package root (holds package.json + dist/). Resolved by walking up to
@@ -95,6 +95,8 @@ export function assertDataDirOwnedByUser(dir: string, uid = process.getuid?.()):
  * owns it, `missing` when there is none. Checking the handle rather than the
  * path first is what closes the window where a directory missing at
  * `assertDataDirOwnedByUser` is created, record and all, before the read.
+ * A symlink is never followed (a planted one could point at a file this user
+ * does own), and the directory is judged again once the file is open in it.
  */
 export async function readFileOwnedByUser(
   path: string,
@@ -104,12 +106,21 @@ export async function readFileOwnedByUser(
 > {
   let handle: Awaited<ReturnType<typeof open>>
   try {
-    handle = await open(path, 'r')
+    // O_NOFOLLOW is undefined on Windows, where the flag is simply absent.
+    handle = await open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' }
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return { kind: 'missing' }
+    if (code === 'ELOOP')
+      return { kind: 'not-owned', message: `${path} is a symlink; refusing to follow it.` }
     throw err
   }
   try {
+    try {
+      assertDataDirOwnedByUser(dirname(path), uid)
+    } catch (err) {
+      return { kind: 'not-owned', message: (err as Error).message }
+    }
     const owner = (await handle.stat()).uid
     if (uid !== undefined && owner !== uid) {
       return {
