@@ -33,31 +33,12 @@ describe('disconnectFromDaemon', () => {
     expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBeUndefined()
   })
 
-  // Forgetting alone is not enough: the default port range is rescanned on
-  // every visit, so the same daemon would come straight back.
-  it('records the dismissal and drops it from the known list', () => {
-    const store = createUserSettingsStore()
-    store.update((c) => ({ ...c, storage: { ...c.storage, knownDaemonBaseUrls: [A, B] } }))
-    disconnectFromDaemon(store, A)
-    const storage = createUserSettingsStore().load().storage
-    expect(storage.dismissedDaemonBaseUrls).toContain(A)
-    expect(storage.knownDaemonBaseUrls).toEqual([B])
-  })
-
   // Another daemon's stored target is none of this call's business.
   it('leaves a different daemon connected', () => {
     const store = createUserSettingsStore()
     store.update((c) => ({ ...c, storage: { ...c.storage, daemonBaseUrl: B } }))
     disconnectFromDaemon(store, A)
     expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe(B)
-  })
-
-  it('is a skip-list, not an archive — bounded at five', () => {
-    const store = createUserSettingsStore()
-    for (const port of [3000, 3001, 3002, 3003, 3004, 3005]) {
-      disconnectFromDaemon(store, `http://127.0.0.1:${port}`)
-    }
-    expect(createUserSettingsStore().load().storage.dismissedDaemonBaseUrls).toHaveLength(5)
   })
 
   it('forgets a held replica key for this daemon: the next ask hits a fresh fetch instead of the cache', async () => {

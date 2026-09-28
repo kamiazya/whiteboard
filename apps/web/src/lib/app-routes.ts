@@ -1,10 +1,6 @@
 // Canonical URL shapes for apps/web. Kept as pure string-building/parsing
 // functions (no React Router import) so the shape is unit-testable without a
-// router context and has exactly one place that can drift from
-// DaemonDetectedBanner's deep link (which builds the same
-// `/w/:workspace/d/*` shape independently, since it runs on a
-// different origin — the daemon's — and cannot import a client-side route
-// table).
+// router context.
 //
 // ONE grammar, for both keepers. The browser kept a `/local/*` family of its
 // own until ADR-0019 gave a browser workspace a segment to be named by;
@@ -131,9 +127,5 @@ export function parseSettingsRoute(pathname: string): { section: SettingsSection
  * to the default view — a mistyped or stale link should say so.
  */
 export function isKnownAppPath(pathname: string): boolean {
-  return (
-    pathname === '/pair' ||
-    parseSettingsRoute(pathname) !== null ||
-    parseWorkspaceRoute(pathname) !== null
-  )
+  return parseSettingsRoute(pathname) !== null || parseWorkspaceRoute(pathname) !== null
 }

@@ -14,11 +14,9 @@
  * `malformed` rather than throwing — the same contract the codec parsers
  * keep, since what reaches this function came off the wire.
  *
- * The key is a JWK handed in by the caller, never read from the assertion.
- * That mirrors `daemon-identity-pin.ts` in the browser, which verifies the
- * daemon against the key it PINNED and never against one a responder
- * advertises; here the daemon pins the browser's credential at pairing and
- * verifies against that. An assertion cannot bring its own key.
+ * The key is a JWK handed in by the caller, never read from the assertion:
+ * the daemon pins the browser's credential at pairing and verifies against
+ * that. An assertion cannot bring its own key.
  */
 import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import type { Attestation } from '@kamiazya/whiteboard-server-core'

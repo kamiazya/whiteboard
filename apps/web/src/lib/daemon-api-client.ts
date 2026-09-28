@@ -1,7 +1,6 @@
 import {
   apiErrorReason,
   createDocumentV1ResponseSchema,
-  createGrantResponseSchema,
   type DeleteDocumentResponse,
   type DocumentBacklinksResponse,
   type DocumentOkfV1Response,
@@ -463,31 +462,4 @@ export async function fetchFontFile(
     throw new DaemonApiError(message, res.status, body)
   }
   return await res.arrayBuffer()
-}
-
-// ---- pairing-grant flow (daemon-origin consent page) ----
-
-export type CreatePairingGrantResponse = z.infer<typeof createGrantResponseSchema>
-
-/** Same-origin call from the daemon-served /pair page; the daemon token is
- *  the R3-injected one. The credential goes through createDaemonFetch rather
- *  than an inline header so the seam stays a single function, not a whole
- *  module — a SharedWorker can then reuse it without importing this file. */
-export async function createPairingGrant(
-  fetchFn: typeof globalThis.fetch,
-  daemonToken: string,
-  input: { origin: string; codeChallenge: string },
-): Promise<CreatePairingGrantResponse> {
-  // Same-origin by construction: this page is served by the daemon, so its own
-  // origin IS the daemon origin and createDaemonFetch's origin check passes.
-  const authed = createDaemonFetch(globalThis.location.origin, daemonToken, fetchFn)
-  const res = await authed('/api/pairing/grants', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  })
-  if (!res.ok) {
-    throw new Error(`grant request failed (${res.status})`)
-  }
-  return createGrantResponseSchema.parse(await res.json())
 }

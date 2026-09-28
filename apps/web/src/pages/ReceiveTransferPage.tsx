@@ -30,8 +30,8 @@ import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
  */
 
 export interface ReceiveTransferPageProps {
-  /** The R3-injected daemon token (read once by App). Absent means this page
-   *  is not being served by a keeper, so accepting is impossible. */
+  /** The keeper's daemon token. Absent means this page is not being served
+   *  by a keeper, so accepting is impossible. */
   daemonToken?: string
   fetchFn?: typeof globalThis.fetch
   opener?: TransferOpener

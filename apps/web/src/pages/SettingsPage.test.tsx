@@ -403,7 +403,6 @@ describe('SettingsPage — Connections', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/api/pairing/grants')) return jsonResponse({ grants: [] })
         if (url.includes('/api/runtime/storage')) {
           return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
         }
@@ -416,12 +415,11 @@ describe('SettingsPage — Connections', () => {
     expect(button.hasAttribute('disabled')).toBe(false)
   })
 
-  it('renders the paired-origins and storage cards when a daemon is provided', async () => {
+  it('renders the storage card when a daemon is provided', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/api/pairing/grants')) return jsonResponse({ grants: [] })
         if (url.includes('/api/runtime/storage')) {
           return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
         }
@@ -430,10 +428,12 @@ describe('SettingsPage — Connections', () => {
     )
     renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
     const section = screen.getByTestId('settings-section')
-    expect(await within(section).findByText('Paired web apps')).toBeTruthy()
     expect(
       await within(section).findByRole('button', { name: /refresh storage usage/i }),
     ).toBeTruthy()
+    // ADR-0050: a local daemon is reached through the extension, so there are
+    // no paired web apps to list.
+    expect(within(section).queryByText('Paired web apps')).toBeNull()
   })
 })
 
@@ -462,15 +462,12 @@ describe('SettingsPage — disconnecting from a daemon', () => {
     // destruction it implies.
     const section = button.closest('section')
     expect(section?.textContent).toMatch(/stays on the daemon|not deleted/i)
-    expect(section?.textContent).toMatch(/not.*(unpair|revoke)|pairing is not revoked/i)
   })
 
-  it('records the dismissal so discovery does not bring it straight back', async () => {
-    // The default port range is rescanned on every visit, so forgetting alone
-    // would return this daemon and make the action read as a no-op.
+  it('forgets the daemon so the next load does not reconnect to it', async () => {
     createUserSettingsStore().update((current) => ({
       ...current,
-      storage: { ...current.storage, daemonBaseUrl: DAEMON, knownDaemonBaseUrls: [DAEMON] },
+      storage: { ...current.storage, daemonBaseUrl: DAEMON },
     }))
     // Asserted rather than assumed: a seed that failed the store's own
     // validation would make every assertion below pass vacuously.
@@ -481,8 +478,6 @@ describe('SettingsPage — disconnecting from a daemon', () => {
     fireEvent.click(await within(section).findByTestId('settings-disconnect'))
 
     const storage = createUserSettingsStore().load().storage
-    expect(storage.dismissedDaemonBaseUrls).toContain(DAEMON)
-    expect(storage.knownDaemonBaseUrls ?? []).not.toContain(DAEMON)
     // App.tsx reads daemonBaseUrl to decide a load is daemon-backed, so
     // leaving it set reconnects on the next visit and "this browser stops
     // using it" becomes false the moment the user reloads.
@@ -623,8 +618,8 @@ describe('SettingsPage — storage evidence wiring', () => {
 // ConnectionsSection/FontsSection build their daemon-aware fetch inline on
 // every render (`createDaemonFetch(daemon.baseUrl, ...)`), so a re-render
 // with an unchanged daemon still hands DaemonApiContext a brand-new function
-// identity. Every consumer effect keyed on that identity (PairedOriginsCard's
-// load/fingerprint effects, FontsCard's refresh effect) then re-fires and
+// identity. Every consumer effect keyed on that identity (StorageReportCard's
+// fetch, FontsCard's refresh effect) then re-fires and
 // re-issues its daemon request — observable here as extra fetch calls with no
 // daemon change to justify them.
 describe('SettingsPage — daemon fetch identity is stable across unrelated re-renders', () => {
@@ -638,18 +633,15 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
     })
   }
 
-  function countingFetch(counts: { grants: number; fonts: number }) {
+  function countingFetch(counts: { storage: number; fonts: number }) {
     return vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/api/pairing/grants')) {
-        counts.grants += 1
-        return jsonResponse({ grants: [] })
-      }
       if (url.includes('/api/fonts')) {
         counts.fonts += 1
         return jsonResponse({ fonts: [] })
       }
       if (url.includes('/api/runtime/storage')) {
+        counts.storage += 1
         return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
       }
       return jsonResponse({}, 404)
@@ -657,7 +649,7 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
   }
 
   // Both mobile and desktop layouts mount the active section's content at
-  // once (see the module doc comment on SettingsPage), so PairedOriginsCard/
+  // once (see the module doc comment on SettingsPage), so StorageReportCard/
   // FontsCard legitimately mount TWICE and fetch twice on first paint —
   // and SettingsPage's own unrelated effects (queryPersistentStorage, etc.)
   // settle shortly after mount and cause one more organic re-render. A count
@@ -705,7 +697,7 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
   }
 
   it('does not re-issue Connections requests on a re-render with the same daemon values', async () => {
-    const counts = { grants: 0, fonts: 0 }
+    const counts = { storage: 0, fonts: 0 }
     vi.stubGlobal('fetch', countingFetch(counts))
 
     render(
@@ -718,17 +710,17 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
       />,
     )
     const section = screen.getByTestId('settings-section')
-    await within(section).findByText('Paired web apps')
-    const baseline = await waitForStableCount(() => counts.grants)
+    await within(section).findByRole('button', { name: /refresh storage usage/i })
+    const baseline = await waitForStableCount(() => counts.storage)
     expect(baseline).toBeGreaterThanOrEqual(1)
 
     fireEvent.click(screen.getByTestId('swap-daemon'))
-    const afterSwap = await waitForStableCount(() => counts.grants)
+    const afterSwap = await waitForStableCount(() => counts.storage)
     expect(afterSwap).toBe(baseline)
   })
 
   it('does not re-issue Fonts requests on a re-render with the same daemon values', async () => {
-    const counts = { grants: 0, fonts: 0 }
+    const counts = { storage: 0, fonts: 0 }
     vi.stubGlobal('fetch', countingFetch(counts))
 
     render(
@@ -747,21 +739,21 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
   })
 
   it('re-issues Connections requests when the daemon baseUrl actually changes', async () => {
-    const counts = { grants: 0, fonts: 0 }
+    const counts = { storage: 0, fonts: 0 }
     vi.stubGlobal('fetch', countingFetch(counts))
 
     render(<DaemonSwapHarness path="/settings/connections" initial={DAEMON_A} swapTo={DAEMON_B} />)
     const section = screen.getByTestId('settings-section')
-    await within(section).findByText('Paired web apps')
-    const baseline = await waitForStableCount(() => counts.grants)
+    await within(section).findByRole('button', { name: /refresh storage usage/i })
+    const baseline = await waitForStableCount(() => counts.storage)
 
     fireEvent.click(screen.getByTestId('swap-daemon'))
-    const afterSwap = await waitForStableCount(() => counts.grants)
+    const afterSwap = await waitForStableCount(() => counts.storage)
     expect(afterSwap).toBeGreaterThan(baseline)
   })
 
   it('re-issues Connections requests when the daemon token changes to undefined', async () => {
-    const counts = { grants: 0, fonts: 0 }
+    const counts = { storage: 0, fonts: 0 }
     vi.stubGlobal('fetch', countingFetch(counts))
 
     render(
@@ -772,11 +764,11 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
       />,
     )
     const section = screen.getByTestId('settings-section')
-    await within(section).findByText('Paired web apps')
-    const baseline = await waitForStableCount(() => counts.grants)
+    await within(section).findByRole('button', { name: /refresh storage usage/i })
+    const baseline = await waitForStableCount(() => counts.storage)
 
     fireEvent.click(screen.getByTestId('swap-daemon'))
-    const afterSwap = await waitForStableCount(() => counts.grants)
+    const afterSwap = await waitForStableCount(() => counts.storage)
     expect(afterSwap).toBeGreaterThan(baseline)
   })
 

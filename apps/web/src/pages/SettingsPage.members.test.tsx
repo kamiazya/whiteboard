@@ -39,7 +39,6 @@ describe('SettingsPage — Members card wiring', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/api/pairing/grants')) return jsonResponse({ grants: [] })
         if (url.includes('/api/runtime/storage')) {
           return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
         }
@@ -64,7 +63,6 @@ describe('SettingsPage — Members card wiring', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/api/pairing/grants')) return jsonResponse({ grants: [] })
         if (url.includes('/api/runtime/storage')) {
           return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
         }
@@ -74,7 +72,7 @@ describe('SettingsPage — Members card wiring', () => {
 
     renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' }, undefined)
     const section = screen.getByTestId('settings-section')
-    await within(section).findByText('Paired web apps')
+    await within(section).findByRole('button', { name: /refresh storage usage/i })
     expect(within(section).queryByLabelText('Members')).toBeNull()
   })
 
@@ -89,7 +87,6 @@ describe('SettingsPage — Members card wiring', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/api/pairing/grants')) return jsonResponse({ grants: [] })
         if (url.includes('/api/runtime/storage')) {
           return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
         }

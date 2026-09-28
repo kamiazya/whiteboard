@@ -298,30 +298,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
-  // Shrunk from 973: the effect that fetches a theme's family from the
-  // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
-  // daemon-keyed effect belongs — App composes, it does not fetch.
-  // Raised deliberately, +24, when the `#wb=` pairing link stopped carrying
-  // the daemon's bearer token: the link became an INTENT App has to resolve
-  // through the pairing grant, which is a responsibility the root did not
-  // have before. Three modules were extracted rather than inlined for it
-  // (lib/link-pairing.ts, hooks/useLinkPairing.ts,
-  // components/LinkPairingPending.tsx) and two dead locals deleted; what is
-  // left is the wiring itself, and shaving it further would be shuffling
-  // lines to satisfy a number.
-  // Raised 986 -> 988, +2, for the Settings /settings branch passing
-  // `workspaceId` (from `daemonView.workspace`) to SettingsPage so its
-  // Members card knows which workspace to manage (ADR-0041 S0-5).
-  // Raised 988 -> 1019 for S4b's replica-key-holder effect: the dynamic
-  // `import('./lib/replica-store.js')` (kept dynamic to stay under
-  // smoke:bundle-size's modulepreload budget) and its cancellation guard.
-  // Raised 1019 -> 1045 for S5's read-plane states (ADR-0042 decisions
-  // 3-5): the renewal effect became a re-runnable `attemptRenewal`
-  // callback (Reconnect re-runs it) and `ReplicaReadPage` gained
-  // `daemonBaseUrl`/`renewal`/`onReconnect` props.
-  // Raised 1045 -> 1090: the daemon-page address ping-pong fix marks the
-  // pathname it supersedes and re-checks daemonKept live in the rewrite's
-  // async callback.
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
@@ -714,7 +690,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/App.test.tsx': 1998,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
-  'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
   // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
   // `connectReplicaKeeper` wiring every existing move/demote test now needs,
   // since the pull those flows drive is sealed.

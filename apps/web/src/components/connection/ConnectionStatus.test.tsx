@@ -92,13 +92,11 @@ describe('ConnectionStatus chip', () => {
     expect(screen.getByRole('button', { name: 'Use here' })).toBeTruthy()
   })
 
-  it('sync-off state carries attention styling and BOTH recovery actions', async () => {
-    const onRepair = vi.fn()
+  it('sync-off state says where edits go and offers the browser instead', async () => {
     const onWorkInBrowser = vi.fn()
     render(
       <ConnectionStatus
         state={{ keeper: 'daemon', session: 'sync-off' }}
-        onRepair={onRepair}
         onWorkInBrowser={onWorkInBrowser}
       />,
     )
@@ -108,17 +106,14 @@ describe('ConnectionStatus chip', () => {
     expect(await screen.findByText(/rejected this session/i)).toBeTruthy()
     // The dead-end fix: the popover states where edits are going...
     expect(screen.getByText(/edits stay in this browser/i)).toBeTruthy()
-    // ...and offers both ways forward.
-    fireEvent.click(screen.getByRole('button', { name: /re-pair/i }))
-    expect(onRepair).toHaveBeenCalledTimes(1)
+    // ...and a way forward. There is no pairing to redo (ADR-0050).
+    expect(screen.queryByRole('button', { name: /re-pair/i })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /work in this browser instead/i }))
     expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
   })
 
   it('sync-off announces itself to assistive tech without a visual banner', () => {
-    render(
-      <ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} onRepair={vi.fn()} />,
-    )
+    render(<ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} />)
     // A polite live region replaces the old role="alert" banner.
     expect(screen.getByRole('status', { name: /live sync off/i })).toBeTruthy()
   })

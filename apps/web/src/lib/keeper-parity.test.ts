@@ -86,10 +86,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: 'lists, adds and removes the people a daemon workspace admits — membership is a daemon-side record (member profiles over pinned passkeys) with no browser-keeper equivalent, since a browser workspace has exactly one person and no sessions to end',
   },
-  'src/components/PairedOriginsCard.tsx': {
-    reach: 'daemon-itself',
-    why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",
-  },
   'src/components/storage-maintenance.ts': {
     reach: 'both-keepers',
     browser: 'src/lib/persistent-storage.ts',
@@ -159,13 +155,9 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: 'src/lib/duplicate-browser-document.ts',
     note: "the row actions each index page performs on the panel's behalf. The browser's delete helpers are inline in BrowserIndexPage; its duplicate is one definition for both browser surfaces, since the row has only a path while the open page also owes a flush and a switch",
   },
-  'src/pages/PairConsentPage.tsx': {
-    reach: 'daemon-itself',
-    why: 'the screen where a person grants a web origin access to their daemon — it exists only because there is a daemon to pair with',
-  },
   'src/pages/SettingsPage.tsx': {
     reach: 'daemon-itself',
-    why: 'the Connections screen is where a daemon is found, paired and promoted to — its subject is the connection, so a browser keeper has nothing to mirror',
+    why: 'the Connections screen is where a daemon is connected and promoted to — its subject is the connection, so a browser keeper has nothing to mirror',
   },
   'src/pages/use-daemon-connections.ts': {
     reach: 'both-keepers',

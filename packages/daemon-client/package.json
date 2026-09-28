@@ -106,10 +106,6 @@
       "types": "./src/test-utils/sse-stream-source-contract.ts",
       "import": "./src/test-utils/sse-stream-source-contract.ts"
     },
-    "./token-store": {
-      "types": "./src/token-store.ts",
-      "import": "./src/token-store.ts"
-    },
     "./extension-bridge": {
       "types": "./src/extension-bridge.ts",
       "import": "./src/extension-bridge.ts"

@@ -30,7 +30,6 @@ function baseProps(overrides: Partial<Parameters<typeof useWorkspaceAddressSync>
       typeof import('react-router-dom').useLocation
     >,
     navigate: vi.fn() as unknown as ReturnType<typeof import('react-router-dom').useNavigate>,
-    isPairRoute: false,
     browserHandle: 'default',
     daemonKept: false,
     daemonView: { kind: 'document', workspace: DAEMON_WORKSPACE, path: 'moved-note' } as const,

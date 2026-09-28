@@ -74,36 +74,23 @@ const storageSettingsSchema = z
     // it never named this axis: a daemon runs on this machine too, so the
     // word said nothing that distinguished it from the browser keeper.
     daemonBaseUrl: httpUrl.optional(),
-    // The (workspaceId, path) last reached via a #wb= pairing, alongside
-    // daemonBaseUrl above — together they let a later hosted-app load
-    // offer a one-click reconnect to the same daemon and canvas instead of
-    // just the daemon's root. path is meaningless without workspaceId, but
-    // this is UI-hint state (not an access boundary), so it is not enforced
-    // by a cross-field refine the way daemonConnectionPayloadSchema does.
+    // The next six fields were written by the pairing link and the loopback
+    // probe, which ADR-0050 retired: a local daemon is reached through the
+    // extension alone. Nothing reads or writes them. They stay declared because the
+    // schema is `.strict()` and the loader falls back to defaults on any
+    // parse failure, so dropping one here would discard a stored record
+    // whole — removing them is a migration, not an edit.
     lastConnectedWorkspaceId: z.string().optional(),
     lastConnectedPath: z.string().optional(),
-    // Every daemon baseUrl a probe has actually confirmed, most recent
-    // first (see daemon-discovery.ts's MRU helper).
-    knownDaemonBaseUrls: z
-      .array(httpUrl)
-      // The writer keeps this MRU-capped (daemon-discovery's helper), and
-      // every stored entry is re-probed on the next check — an oversized
-      // tampered array must not turn discovery into an unbounded fan-out.
-      .max(5, 'must contain at most 5 daemon URLs')
-      .optional(),
-    // Daemons the user explicitly disconnected from. Discovery skips these
-    // even inside its scanned port range, which is what makes a disconnect
-    // outlive the page — without it the default-port daemon reappears on the
-    // next load and the action reads as a no-op. Same cap as the known list,
-    // for the same reason.
+    knownDaemonBaseUrls: z.array(httpUrl).max(5, 'must contain at most 5 daemon URLs').optional(),
     dismissedDaemonBaseUrls: z
       .array(httpUrl)
       .max(5, 'must contain at most 5 daemon URLs')
       .optional(),
-    dismissedPersistenceWarningAt: z.string().optional(),
-    dismissedBetaBannerAt: z.string().optional(),
     dismissedDaemonCtaAt: z.string().optional(),
     dismissedDaemonCtaInstanceId: z.string().optional(),
+    dismissedPersistenceWarningAt: z.string().optional(),
+    dismissedBetaBannerAt: z.string().optional(),
     /**
      * Daemon workspaces this browser holds a replica of (ADR-0023), keyed by
      * the daemon workspace id the replica record is stored under. UI-hint

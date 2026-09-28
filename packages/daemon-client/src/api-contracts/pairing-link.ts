@@ -1,11 +1,10 @@
 import { z } from 'zod'
 
-// The daemon-pairing URL fragment contract (`#wb=<base64url-json>`), shared
-// between the MCP tool that mints the link (server/mcp/pairing-link.ts) and
-// the browser that parses it (apps/web/src/lib/daemon-connection-payload.ts)
-// so the wire shape cannot drift between two independently-written schemas —
-// the failure mode a mirrored copy had before this file existed. Deliberately
-// free of any node:* import: apps/web consumes this module directly.
+// The daemon-pairing URL fragment contract (`#wb=<base64url-json>`), minted by
+// the MCP tool (server/mcp/pairing-link.ts). The web app stopped reading it
+// when it began reaching a local daemon only through the extension
+// (ADR-0050). Deliberately free of any node:* import, so any runtime can
+// read the shape.
 
 // URL hash key carrying the daemon-pairing payload: `#wb=<base64url-json>`.
 export const DAEMON_CONNECTION_FRAGMENT_KEY = 'wb'
@@ -43,14 +42,8 @@ const bareHttpOriginSchema = z.string().url().refine(isBareHttpOrigin, {
 // is what the field set below removes. `.strict()` is what makes the removal
 // enforceable rather than advisory: a link minted by an older daemon still
 // carries those keys, so it is REFUSED here instead of being parsed and
-// silently used, and the browser strips such a fragment from history on the
-// invalid path exactly as it does for a valid one.
-//
-// Split in two so the BROWSER can stash what to open across the consent
-// round trip without a second hand-written copy of these three fields: the
-// link's target survives a top-level navigation to the daemon's /pair page
-// and back, and `pairing-grant.ts` validates the stash with this same
-// schema.
+// silently used.
+
 export const daemonConnectionTargetSchema = z.object({
   workspaceId: z.string().min(1).optional(),
   path: z.string().min(1).optional(),

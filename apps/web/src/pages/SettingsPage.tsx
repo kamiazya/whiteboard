@@ -26,7 +26,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { DaemonAddress } from '../components/connection/DaemonAddress.js'
 import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
 import { FontsCard } from '../components/FontsCard.js'
-import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { PasskeysCard } from '../components/PasskeysCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { AppVersionRow } from '../components/settings/AppVersionRow.js'
@@ -256,8 +255,8 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
   // Keyed on the primitive fields, not `daemon` itself, so a re-render that
   // rebuilds the same `daemon` object (a new reference, same values) does not
   // rebuild this function — which would hand DaemonApiContext a new identity
-  // and re-fire every consumer effect keyed on it (PairedOriginsCard's
-  // load/fingerprint effects, StorageReportCard's fetch). Above the early
+  // and re-fire every consumer effect keyed on it (StorageReportCard's
+  // fetch, among others). Above the early
   // return so hook order stays unconditional across the connected/
   // disconnected branches; null-safe inside since `daemon` may be absent.
   const daemonFetch = useMemo(
@@ -289,12 +288,6 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
   return (
     <DaemonApiContext.Provider value={daemonFetch ?? null}>
       <div className="space-y-6">
-        <section aria-label="Paired web apps">
-          <PairedOriginsCard />
-        </section>
-        {/* Beside the paired origins because it manages the same thing one
-            layer in: which origins may reach this daemon, and which passkeys
-            it will accept a move from. */}
         <section aria-label="Passkeys">
           <PasskeysCard daemonBaseUrl={daemon.baseUrl} />
         </section>
@@ -333,8 +326,7 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
             Disconnect from this daemon
           </button>
           <p className="text-xs text-muted-foreground">
-            This browser stops using it and stops looking for it. Your data stays on the daemon and
-            is not deleted; pairing is not revoked.
+            This browser stops using it. Your data stays on the daemon and is not deleted.
           </p>
         </section>
       </div>

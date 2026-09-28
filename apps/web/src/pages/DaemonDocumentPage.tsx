@@ -52,11 +52,9 @@ export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
   workspaceId?: string
   path?: string
-  // The daemon credential for this session: a bootstrap token (#wb= flow)
-  // or a pairing session token (pairing-grant flow). Feeds both the HTTP
-  // side (createDaemonFetch's Authorization header) and the WS upgrade
-  // (DaemonBackend's wsToken); when the #wb= flow also seeded
-  // window.__WHITEBOARD_DAEMON_TOKEN__, that global wins for the WS.
+  // The daemon credential for this session, fed to createDaemonFetch's
+  // Authorization header. Empty or absent for a daemon reached through the
+  // extension (ADR-0050): the native host supplies the daemon's own.
   token?: string
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.

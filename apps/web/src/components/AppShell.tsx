@@ -1,13 +1,5 @@
 import { Maximize2, Minimize2, Settings } from 'lucide-react'
-import {
-  lazy,
-  type RefObject,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react'
+import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover.js'
@@ -28,16 +20,6 @@ import { ExtensionConnectEntry } from './connection/ExtensionConnectEntry.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
 import { formatRelative } from './workspace-files/format-relative.js'
 
-// React.lazy for the same reason the browser page had it: the banner
-// pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
-// ever opens it.
-const DaemonDetectedBanner = lazy(() =>
-  import('./migration/DaemonDetectedBanner.js').then((m) => ({
-    default: m.DaemonDetectedBanner,
-  })),
-)
-// Lazy for the same reason: it is offered only in that popover, and only
-// where the extension answers.
 /**
  * The honest-detach floor for a moved workspace: a cold load whose silent
  * daemon renewal fails lands in the browser flow with the stored daemon
@@ -93,14 +75,7 @@ function BrowserKeeperConnect({
         together.
       </p>
       <PromotedElsewhereNotice settingsStore={settingsStore} />
-      <Suspense fallback={null}>
-        <ExtensionConnectEntry
-          settingsStore={settingsStore}
-          absent={
-            <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
-          }
-        />
-      </Suspense>
+      <ExtensionConnectEntry settingsStore={settingsStore} />
     </>
   )
 }
@@ -297,7 +272,7 @@ function ShellBar({
   // Published by whichever page holds a live document session; `null` on an
   // index or settings page, which has none to describe.
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
-  // Sync off means the daemon rejected the session and re-pairing is the only
+  // Sync off means the daemon rejected the session and reconnecting is the only
   // way out, so it counts as disconnected for the attention dot. A transient
   // reconnect does not — it recovers on its own.
   const nudge = useSettingsNudge(daemon && !(connection !== null && isSyncOff(connection.state)))
@@ -347,20 +322,6 @@ function ShellBar({
               onCounted={applyCounts}
             />
           ) : undefined
-        }
-        onRepair={
-          daemonBaseUrl === undefined
-            ? undefined
-            : () => {
-                void import('../lib/pairing-grant.js').then(({ beginPairingGrant }) =>
-                  beginPairingGrant({
-                    daemonBaseUrl,
-                    hostedOrigin: window.location.origin,
-                    sessionStorage: window.sessionStorage,
-                    navigate: (url) => window.location.assign(url),
-                  }),
-                )
-              }
         }
         onWorkInBrowser={onWorkInBrowser}
       >

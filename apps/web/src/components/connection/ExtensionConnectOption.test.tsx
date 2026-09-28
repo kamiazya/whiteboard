@@ -14,56 +14,49 @@ afterEach(() => {
 })
 
 describe('ExtensionConnectOption', () => {
-  it('offers nothing where the extension is not installed', async () => {
-    const present = vi.fn(async () => false)
-    const { container } = render(
-      <ExtensionConnectOption settingsStore={createUserSettingsStore()} present={present} />,
-    )
-    await vi.waitFor(() => expect(present).toHaveBeenCalled())
-    expect(container.innerHTML).toBe('')
-  })
-
-  // A probe outliving its page holds a listener and a timer on a window that
-  // may already be gone; unmounting has to call it off.
-  // ADR-0050: until loopback closes, the loopback probe runs beside the
-  // extension — but only where the extension does not answer. Offered both,
-  // a person cannot tell which daemon each button reaches.
-  it('shows what it is handed for a browser without the extension, and only there', async () => {
-    const absent = <p>loopback probe</p>
-    const { unmount } = render(
+  // ADR-0050: a local daemon is reached through the extension and nothing
+  // else, so a browser without it is told how to get it.
+  it('says how to get the extension where it is not installed', async () => {
+    render(
       <ExtensionConnectOption
         settingsStore={createUserSettingsStore()}
         present={async () => false}
-        absent={absent}
       />,
     )
-    expect(await screen.findByText('loopback probe')).toBeTruthy()
-    unmount()
+    const link = await screen.findByRole('link', { name: 'How to connect a daemon' })
+    expect(link.getAttribute('href')).toContain('docs/how-to/connect-to-local-daemon.md')
+    expect(screen.getByText(/install the whiteboard extension/i)).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
 
-    // Not held back while the extension is still being asked.
-    const asking = render(
+  // The answer to "is it there?" is either instant or a timeout, so nothing
+  // is said until it arrives: saying "install it" first would flash at every
+  // person who has.
+  it('says nothing while the extension is still being asked', () => {
+    const { container } = render(
       <ExtensionConnectOption
         settingsStore={createUserSettingsStore()}
         present={() => new Promise<boolean>(() => {})}
-        absent={absent}
       />,
     )
-    expect(screen.getByText('loopback probe')).toBeTruthy()
-    asking.unmount()
+    expect(container.innerHTML).toBe('')
+  })
 
+  it('offers only the connect button where the extension answers', async () => {
     render(
       <ExtensionConnectOption
         settingsStore={createUserSettingsStore()}
         present={async () => true}
-        absent={absent}
       />,
     )
     expect(
       await screen.findByRole('button', { name: /connect through the extension/i }),
     ).toBeTruthy()
-    expect(screen.queryByText('loopback probe')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'How to connect a daemon' })).toBeNull()
   })
 
+  // A probe outliving its page holds a listener and a timer on a window that
+  // may already be gone; unmounting has to call it off.
   it('calls off the presence probe when it unmounts', async () => {
     let asked: AbortSignal | undefined
     const present = vi.fn((signal: AbortSignal) => {
@@ -90,7 +83,7 @@ describe('ExtensionConnectOption', () => {
         settingsStore={settingsStore}
         present={async () => true}
         connect={async () => ({
-          status: 'paired',
+          status: 'connected',
           daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
           token: '',
         })}

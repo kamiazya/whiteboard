@@ -1,17 +1,16 @@
-import { resetTokenStoreForTests } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import { LazyPageFallback } from './components/LazyPageFallback.js'
-import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
+import { BRIDGE_DAEMON_BASE_URL } from './lib/bridge-address.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
 } from './lib/browser-workspace-id.js'
-
+import type { ExtensionConnection } from './lib/extension-connection.js'
 import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 // App reaches every page through React.lazy(), so a page renders only once its
 // dynamic import resolves — and under a full-suite run that resolution can
@@ -28,9 +27,8 @@ import { resetShellStatusForTests, setShellConnection } from './lib/shell-status
 // producing in CI and never in isolation. A count goes stale; the guard does
 // not.
 import './components/status/NotFoundPage.js'
-import './pages/PairConsentPage.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
-import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
+import { STORAGE_KEY } from './lib/user-settings-store.js'
 import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
 afterEach(() => {
@@ -85,22 +83,37 @@ vi.mock('./pages/BrowserIndexPage.js', () => ({
   },
 }))
 
-// useDaemonConnection is a module-level singleton (see its own test file for
-// why) — mocked here so App routing tests control its result directly
-// instead of round-tripping through window.location.hash.
-let mockDaemonConnectionResult: DaemonConnectionResult = { status: 'none' }
-vi.mock('./hooks/useDaemonConnection.js', () => ({
-  useDaemonConnection: () => mockDaemonConnectionResult,
+// The reconnection seam: a remembered daemon is asked through the extension
+// (ADR-0050), and jsdom has none, so the answer is the test's to give.
+let mockConnectResult: ExtensionConnection = { status: 'none' }
+const connectThroughExtensionMock = vi.fn(async () => mockConnectResult)
+vi.mock('./lib/extension-connection.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/extension-connection.js')>()),
+  connectThroughExtension: () => connectThroughExtensionMock(),
 }))
 
-// Silent-renewal seam: everything else in pairing-grant stays real (the
-// /pair tests exercise the true fragment/PKCE code paths).
-let mockRenewResult: import('./lib/pairing-grant.js').GrantConsumeResult = { status: 'none' }
-const renewPairingTokenMock = vi.fn(async () => mockRenewResult)
-vi.mock('./lib/pairing-grant.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./lib/pairing-grant.js')>()),
-  renewPairingToken: (...args: unknown[]) => renewPairingTokenMock(...(args as [])),
-}))
+const CONNECTED: ExtensionConnection = {
+  status: 'connected',
+  daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+  token: '',
+}
+
+/** A settings record that remembers `daemonBaseUrl`, as a later cold load finds it. */
+function rememberDaemon(daemonBaseUrl: string, extra: Record<string, unknown> = {}) {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      version: 3,
+      storage: { daemonBaseUrl, ...extra },
+      migration: {},
+      // The USER SETTINGS' capabilities (`webMcpEnabled`). Required by a
+      // `.strict()` schema whose loader falls back to defaults on any parse
+      // failure — so dropping it here does not fail loudly, it silently
+      // discards the stored daemon URL and every test renders browser mode.
+      capabilities: {},
+    }),
+  )
+}
 
 let receivedDaemonPageProps: Record<string, unknown> | undefined
 // Toggled by the error-boundary test: throwing from the lazily-resolved page
@@ -186,32 +199,18 @@ const INVALID_CONFIG_STATE: ProviderState = {
   message: 'Runtime configuration is invalid.',
 }
 
-describe('silent renewal on a hosted origin', () => {
+describe('reconnecting a remembered daemon through the extension', () => {
   beforeEach(() => {
     resetShellStatusForTests()
     localStorage.clear()
-    renewPairingTokenMock.mockClear()
+    connectThroughExtensionMock.mockClear()
     connectReplicaKeeperMock.mockClear()
-    mockRenewResult = { status: 'none' }
+    mockConnectResult = { status: 'none' }
   })
 
-  it('reconnects to the stored daemon without a redirect and renders daemon mode', async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: {},
-        // The USER SETTINGS' capabilities (`webMcpEnabled`), which have
-        // nothing to do with the retired per-keeper capability map. Required
-        // by a `.strict()` schema whose loader falls back to defaults on any
-        // parse failure — so dropping it here does not fail loudly, it
-        // silently discards the stored daemon URL and every test below
-        // renders browser mode instead.
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+  it('reconnects to the stored daemon and renders daemon mode', async () => {
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    mockConnectResult = CONNECTED
     // jsdom has no `navigator.credentials` property at all by default, which
     // would make "credentials is undefined" true whether or not App reads
     // `passkeySupported()` first — a sentinel here is what makes the GATE
@@ -232,12 +231,11 @@ describe('silent renewal on a hosted origin', () => {
       })
 
       await screen.findByTestId('daemon-index-page')
-      expect(renewPairingTokenMock).toHaveBeenCalledWith(
-        expect.objectContaining({ daemonBaseUrl: 'http://127.0.0.1:3099' }),
-      )
+      expect(connectThroughExtensionMock).toHaveBeenCalledOnce()
+      // The page holds no daemon token: the host supplies the daemon's own.
       expect(receivedDaemonIndexPageProps).toMatchObject({
-        daemonBaseUrl: 'http://127.0.0.1:3099',
-        token: 'tok-r',
+        daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+        token: '',
       })
       // S4b: the resolved daemon reaches the replica-key holder too, not
       // only the page — and gated on `passkeySupported()`, so an origin
@@ -246,7 +244,7 @@ describe('silent renewal on a hosted origin', () => {
       // credentials-gating pair below.
       await vi.waitFor(() => {
         expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ baseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }),
+          expect.objectContaining({ baseUrl: BRIDGE_DAEMON_BASE_URL, token: '' }),
         )
       })
       expect(connectReplicaKeeperMock.mock.lastCall?.[0].credentials).toBeUndefined()
@@ -271,16 +269,8 @@ describe('silent renewal on a hosted origin', () => {
       configurable: true,
     })
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          version: 3,
-          storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-          migration: {},
-          capabilities: {},
-        }),
-      )
-      mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+      rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+      mockConnectResult = CONNECTED
       await act(async () => {
         render(
           <MemoryRouter initialEntries={['/']}>
@@ -291,7 +281,7 @@ describe('silent renewal on a hosted origin', () => {
       await screen.findByTestId('daemon-index-page')
       await vi.waitFor(() => {
         expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ baseUrl: 'http://127.0.0.1:3099' }),
+          expect.objectContaining({ baseUrl: BRIDGE_DAEMON_BASE_URL }),
         )
       })
       expect(connectReplicaKeeperMock.mock.lastCall?.[0].credentials).toBe(
@@ -310,26 +300,17 @@ describe('silent renewal on a hosted origin', () => {
     // browser holds a replica of, the daemon cannot be reached, so the
     // replica page serves it — addressed by SEGMENT, resolved to the
     // canonical id the registry keys by.
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: {
-          daemonBaseUrl: 'http://127.0.0.1:3099',
-          replicas: {
-            '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
-              daemonBaseUrl: 'http://127.0.0.1:3099',
-              syncedAt: '2026-09-01T12:00:00.000Z',
-              segment: 'team',
-              displayName: 'Design team',
-            },
-          },
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL, {
+      replicas: {
+        '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
+          daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+          syncedAt: '2026-09-01T12:00:00.000Z',
+          segment: 'team',
+          displayName: 'Design team',
         },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'none' }
+      },
+    })
+    mockConnectResult = { status: 'none' }
     await act(async () => {
       render(
         <MemoryRouter initialEntries={['/w/team']}>
@@ -342,62 +323,21 @@ describe('silent renewal on a hosted origin', () => {
     // ADR-0042 S5: the page decides its own degradation state from what the
     // renewal answered, so App must pass the REASON, not merely a boolean.
     expect(receivedReplicaPageProps?.renewal).toBe('unreachable')
-    expect(receivedReplicaPageProps?.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-  })
-
-  it("passes renewal:'refused' when the daemon reached and revoked the grant (ADR-0042 decision 4)", async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: {
-          daemonBaseUrl: 'http://127.0.0.1:3099',
-          replicas: {
-            '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
-              daemonBaseUrl: 'http://127.0.0.1:3099',
-              syncedAt: '2026-09-01T12:00:00.000Z',
-              segment: 'team',
-              displayName: 'Design team',
-            },
-          },
-        },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'refused' }
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={['/w/team']}>
-          <App providerState={BROWSER_STATE} />
-        </MemoryRouter>,
-      )
-    })
-    await screen.findByTestId('replica-read-page-stub')
-    expect(receivedReplicaPageProps?.renewal).toBe('refused')
+    expect(receivedReplicaPageProps?.daemonBaseUrl).toBe(BRIDGE_DAEMON_BASE_URL)
   })
 
   it('Reconnect re-runs renewal, and a now-paired answer unmounts the replica page for the daemon page', async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: {
-          daemonBaseUrl: 'http://127.0.0.1:3099',
-          replicas: {
-            '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
-              daemonBaseUrl: 'http://127.0.0.1:3099',
-              syncedAt: '2026-09-01T12:00:00.000Z',
-              segment: 'team',
-              displayName: 'Design team',
-            },
-          },
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL, {
+      replicas: {
+        '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
+          daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+          syncedAt: '2026-09-01T12:00:00.000Z',
+          segment: 'team',
+          displayName: 'Design team',
         },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'none' }
+      },
+    })
+    mockConnectResult = { status: 'none' }
     await act(async () => {
       render(
         <MemoryRouter initialEntries={['/w/team']}>
@@ -406,12 +346,12 @@ describe('silent renewal on a hosted origin', () => {
       )
     })
     await screen.findByTestId('replica-read-page-stub')
-    renewPairingTokenMock.mockClear()
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+    connectThroughExtensionMock.mockClear()
+    mockConnectResult = CONNECTED
     await act(async () => {
       screen.getByRole('button', { name: 'Reconnect' }).click()
     })
-    expect(renewPairingTokenMock).toHaveBeenCalledTimes(1)
+    expect(connectThroughExtensionMock).toHaveBeenCalledTimes(1)
     await screen.findByTestId('daemon-index-page')
     expect(screen.queryByTestId('replica-read-page-stub')).toBeNull()
   })
@@ -424,24 +364,15 @@ describe('silent renewal on a hosted origin', () => {
     // to index routes, would both miss this and fall through to the
     // browser flow instead of the locked/unpaired states ADR-0042 S5 ships.
     const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA1'
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: {
-          daemonBaseUrl: 'http://127.0.0.1:3099',
-          replicas: {
-            [workspaceId]: {
-              daemonBaseUrl: 'http://127.0.0.1:3099',
-              syncedAt: '2026-09-01T12:00:00.000Z',
-            },
-          },
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL, {
+      replicas: {
+        [workspaceId]: {
+          daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
+          syncedAt: '2026-09-01T12:00:00.000Z',
         },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'none' }
+      },
+    })
+    mockConnectResult = { status: 'none' }
     await act(async () => {
       render(
         <MemoryRouter initialEntries={[`/w/${workspaceId}/d/moved-note`]}>
@@ -457,16 +388,8 @@ describe('silent renewal on a hosted origin', () => {
   })
 
   it('an address with no replica behind it still falls to the browser flow when unreachable', async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'none' }
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    mockConnectResult = { status: 'none' }
     await act(async () => {
       render(
         <MemoryRouter initialEntries={['/w/team']}>
@@ -479,16 +402,8 @@ describe('silent renewal on a hosted origin', () => {
   })
 
   it('falls back to the browser when renewal reports none (revoked / unreachable)', async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'none' }
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    mockConnectResult = { status: 'none' }
     await act(async () => {
       render(
         <MemoryRouter initialEntries={['/']}>
@@ -506,31 +421,6 @@ describe('silent renewal on a hosted origin', () => {
     })
   })
 
-  it('surfaces the identity-mismatch warning when renewal fails closed', async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'identity-mismatch', daemonBaseUrl: 'http://127.0.0.1:3099' }
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={['/']}>
-          <App providerState={BROWSER_STATE} />
-        </MemoryRouter>,
-      )
-    })
-
-    // Fail closed: stays on the browser AND tells the user why.
-    await screen.findByTestId('browser-index-page')
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toMatch(/identity changed/i)
-  })
-
   it('does not attempt renewal when no daemon was ever stored', async () => {
     await act(async () => {
       render(
@@ -541,31 +431,50 @@ describe('silent renewal on a hosted origin', () => {
     })
 
     await screen.findByTestId('browser-index-page')
-    expect(renewPairingTokenMock).not.toHaveBeenCalled()
+    expect(connectThroughExtensionMock).not.toHaveBeenCalled()
+  })
+
+  // ADR-0050: a loopback address the pairing flow once remembered is not a
+  // way to reach a daemon any more. The page treats it as nothing remembered,
+  // and the person reconnects through the extension.
+  it('does not reconnect to a remembered loopback address', async () => {
+    rememberDaemon('http://127.0.0.1:3099')
+    mockConnectResult = CONNECTED
+    const fetchSpy = vi.fn((_url: unknown) =>
+      Promise.reject(new TypeError('no network in this test')),
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={['/']}>
+            <App providerState={BROWSER_STATE} />
+          </MemoryRouter>,
+        )
+      })
+      await screen.findByTestId('browser-index-page')
+      expect(screen.queryByTestId('daemon-index-page')).toBeNull()
+      expect(connectThroughExtensionMock).not.toHaveBeenCalled()
+      expect(fetchSpy.mock.calls.map(([url]) => String(url))).not.toContainEqual(
+        expect.stringContaining('127.0.0.1'),
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('does not rewrite a daemon deep link to the browser index while the stored connection is still renewing', async () => {
-    // App.tsx's own `awaitingDaemonRenewal` — not the extracted hook, which
-    // is fed the value directly by its own test. `renewPairingToken` is held
+    // App.tsx's own `awaitingDaemonRenewal`. `connectThroughExtension` is held
     // open here (rather than resolved inside the same act flush, as every
     // other case in this suite does) so there is a real window where the
     // renewal is neither settled nor decided, which is exactly the window
     // that field exists to cover.
     const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA3'
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    let resolveRenewal: (result: import('./lib/pairing-grant.js').GrantConsumeResult) => void =
-      () => {}
-    renewPairingTokenMock.mockImplementationOnce(
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    let resolveRenewal: (result: ExtensionConnection) => void = () => {}
+    connectThroughExtensionMock.mockImplementationOnce(
       () =>
-        new Promise<import('./lib/pairing-grant.js').GrantConsumeResult>((resolve) => {
+        new Promise<ExtensionConnection>((resolve) => {
           resolveRenewal = resolve
         }),
     )
@@ -584,7 +493,7 @@ describe('silent renewal on a hosted origin', () => {
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
 
     await act(async () => {
-      resolveRenewal({ status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' })
+      resolveRenewal(CONNECTED)
     })
 
     await screen.findByTestId('daemon-document-page')
@@ -597,25 +506,16 @@ describe('silent renewal on a hosted origin', () => {
   it('releases the gate on a failed renewal too, and the deep link then falls through to the browser', async () => {
     // The symmetric case to the one above: `awaitingDaemonRenewal` must
     // release on the FAILURE resolution as well as the success one — the
-    // field turns false the moment `daemonRenewal` stops being null, which
-    // 'refused'/'unreachable' satisfy exactly as 'paired' does. Held open
+    // field turns false the moment `renewal` stops being null, which
+    // 'unreachable' satisfies. Held open
     // the same way, so there is a real pending window to assert the address
     // survives before proving it stops being undecided afterwards.
     const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA5'
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    let resolveRenewal: (result: import('./lib/pairing-grant.js').GrantConsumeResult) => void =
-      () => {}
-    renewPairingTokenMock.mockImplementationOnce(
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    let resolveRenewal: (result: ExtensionConnection) => void = () => {}
+    connectThroughExtensionMock.mockImplementationOnce(
       () =>
-        new Promise<import('./lib/pairing-grant.js').GrantConsumeResult>((resolve) => {
+        new Promise<ExtensionConnection>((resolve) => {
           resolveRenewal = resolve
         }),
     )
@@ -630,7 +530,7 @@ describe('silent renewal on a hosted origin', () => {
     expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
 
     await act(async () => {
-      resolveRenewal({ status: 'refused' })
+      resolveRenewal({ status: 'none' })
     })
 
     // Gate released, and this workspace is nobody's browser workspace — the
@@ -642,38 +542,9 @@ describe('silent renewal on a hosted origin', () => {
   })
 })
 
-describe('grant exchange failure surfacing', () => {
-  it('a failed #wb-grant exchange shows an alert instead of silently falling back', async () => {
-    // No pairing transaction in sessionStorage -> the real consumeGrantFragment
-    // deterministically resolves { status: 'error' }. The user just clicked
-    // Approve on the daemon's consent page; falling back to the browser with zero feedback
-    // is the dead end this notice exists to close.
-    sessionStorage.clear()
-    window.location.hash = '#wb-grant=abc&state=xyz'
-    try {
-      await act(async () => {
-        render(
-          <MemoryRouter initialEntries={['/']}>
-            <App providerState={BROWSER_STATE} />
-          </MemoryRouter>,
-        )
-      })
-
-      const alert = await screen.findByRole('alert')
-      expect(alert.textContent).toMatch(/pairing didn't complete/i)
-      // Dismissible: the notice must not permanently occupy the banner row.
-      fireEvent.click(screen.getByRole('button', { name: /dismiss pairing error/i }))
-      expect(screen.queryByRole('alert')).toBeNull()
-    } finally {
-      window.location.hash = ''
-    }
-  })
-})
-
 describe('/receive-transfer route', () => {
   it('renders the receiver and keeps the FRAGMENT, which carries the whole handshake', async () => {
-    // The same regression shape `/pair` carries below, and worse here: the
-    // sender puts its origin and the attempt's nonce in the FRAGMENT, so a
+    // The sender puts its origin and the attempt's nonce in the FRAGMENT, so a
     // sync effect navigating to '/' drops the two things the receiver needs
     // to attribute any message at all. `parseWorkspaceRoute` answers null
     // for this path, which is exactly what makes the guard necessary.
@@ -692,45 +563,23 @@ describe('/receive-transfer route', () => {
     expect(router.state.location.pathname).toBe('/receive-transfer')
     expect(router.state.location.hash).toContain('from=https%3A%2F%2Fapp.example')
     expect(screen.getByTestId('receive-transfer-page')).not.toBeNull()
-    // The keeper's own token reaches the page: without it the page can show
-    // an offer and cannot accept one, so passing it is the wiring.
+    // The page holds no daemon token (ADR-0050), so none is handed on.
     expect(receivedReceiveTransferProps).toBeDefined()
-    expect(Object.hasOwn(receivedReceiveTransferProps ?? {}, 'daemonToken')).toBe(true)
+    expect(Object.hasOwn(receivedReceiveTransferProps ?? {}, 'daemonToken')).toBe(false)
   })
 })
 
-describe('/pair consent route', () => {
-  it('renders the consent page and does NOT rewrite the URL away from /pair', async () => {
-    // Regression: the daemonView -> URL sync effect ran on mount, saw
-    // parseDaemonRoute('/pair') === null (so daemonView defaulted to the
-    // index), and navigated to '/' — dropping the origin/challenge/state
-    // query and dumping the user on the daemon gallery instead of the
-    // consent page. Observed live on the daemon origin, 2026-08-07.
-    const router = createMemoryRouter(
-      [
-        {
-          path: '*',
-          element: <App providerState={DAEMON_STATE} />,
-        },
-      ],
-      {
-        initialEntries: ['/pair?origin=https%3A%2F%2Fexample.com&challenge=chal&state=st'],
-      },
+describe('/pair', () => {
+  // ADR-0050: a local daemon is reached through the extension, so there is no
+  // pairing to consent to and the daemon's consent page is not a route here.
+  it('is not a route', async () => {
+    render(
+      <MemoryRouter initialEntries={['/pair?origin=https%3A%2F%2Fexample.com&challenge=c&state=s']}>
+        <App providerState={DAEMON_STATE} />
+      </MemoryRouter>,
     )
-    await act(async () => {
-      render(<RouterProvider router={router} />)
-    })
-
-    expect(router.state.location.pathname).toBe('/pair')
-    const search = new URLSearchParams(router.state.location.search)
-    expect(search.get('origin')).toBe('https://example.com')
-    expect(search.get('challenge')).toBe('chal')
-    expect(search.get('state')).toBe('st')
-    // Synchronous on purpose: the page module is preloaded at the top of this
-    // file, so nothing here waits on a chunk. If that preload is ever dropped
-    // this fails immediately instead of flaking under load.
-    screen.getByText(/allow this web app to use your local daemon/i)
-    expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
+    expect(await screen.findByRole('button', { name: /back to documents/i })).toBeTruthy()
+    expect(document.querySelector('[data-mark="not-found"]')).toBeTruthy()
   })
 })
 
@@ -777,25 +626,6 @@ describe('App backend configuration chip', () => {
     expect(screen.getByText(/custom domain/i)).toBeTruthy()
     expect(screen.queryByText(/custom\.example\.com/)).toBeNull()
     expect(document.body.textContent).not.toMatch(/https?:\/\//)
-  })
-
-  it('lets the escape to the browser override invalid-config after a failed pairing', async () => {
-    // A pairing error can coexist with an invalid runtime config; clicking
-    // "Work in this browser instead" must land on the browser page, not
-    // bounce the user onto the invalid-config error page.
-    mockDaemonConnectionResult = { status: 'error', detail: 'malformed fragment' }
-    try {
-      render(
-        <MemoryRouter initialEntries={['/']}>
-          <App providerState={INVALID_CONFIG_STATE} />
-        </MemoryRouter>,
-      )
-      fireEvent.click(screen.getByRole('button', { name: /work in this browser instead/i }))
-      expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
-      expect(screen.queryByText('Runtime configuration is invalid.')).toBeNull()
-    } finally {
-      mockDaemonConnectionResult = { status: 'none' }
-    }
   })
 })
 
@@ -851,136 +681,10 @@ describe('App keeper wiring', () => {
   })
 })
 
-describe('App daemon-pairing routing', () => {
-  beforeEach(() => {
-    mockDaemonConnectionResult = { status: 'none' }
-    receivedDaemonPageProps = undefined
-  })
-
-  it('renders DaemonDocumentPage from the payload when paired', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'w1',
-        path: 'main',
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    // DaemonDocumentPage is React.lazy — resolves after a microtask even with
-    // a mocked module, so the assertion must await past the Suspense fallback.
-    expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
-    expect(screen.queryByTestId('browser-document-page')).toBeNull()
-    expect(receivedDaemonPageProps?.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-    expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
-    expect(receivedDaemonPageProps?.path).toBe('main')
-    expect(receivedDaemonPageProps?.token).toBe('tok')
-  })
-
-  it('renders a role=alert error UI with a escape to the browser hatch on error', async () => {
-    mockDaemonConnectionResult = { status: 'error', detail: 'malformed fragment' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    expect(screen.getByRole('alert')).toBeTruthy()
-    const button = screen.getByRole('button', { name: /work in this browser instead/i })
-    expect(button).toBeTruthy()
-    fireEvent.click(button)
-    expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
-  })
-
-  it('falls through to existing provider-state resolution unchanged when there is no fragment', async () => {
-    mockDaemonConnectionResult = { status: 'none' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
-  })
-})
-
-describe('App reconnect-target persistence', () => {
-  beforeEach(() => {
-    localStorage.clear()
-    mockDaemonConnectionResult = { status: 'none' }
-  })
-  afterEach(() => {
-    mockDaemonConnectionResult = { status: 'none' }
-  })
-
-  it('persists baseUrl/workspaceId/path to user settings on a successful #wb= pairing', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'w1',
-        path: 'main',
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    await screen.findByTestId('daemon-document-page')
-
-    const saved = createUserSettingsStore().load()
-    expect(saved.storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
-    expect(saved.storage.lastConnectedWorkspaceId).toBe('w1')
-    expect(saved.storage.lastConnectedPath).toBe('main')
-  })
-
-  it('never persists the bootstrapToken alongside the connection target', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'w1',
-        path: 'main',
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    await screen.findByTestId('daemon-document-page')
-
-    expect(localStorage.getItem(STORAGE_KEY) ?? '').not.toContain('super-secret-token')
-  })
-
-  it('does not persist a target when there is no #wb= pairing (plain browser session)', () => {
-    mockDaemonConnectionResult = { status: 'none' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBeUndefined()
-  })
-})
-
 describe('App daemon provider state', () => {
   beforeEach(() => {
     receivedDaemonPageProps = undefined
     receivedDaemonIndexPageProps = undefined
-    resetTokenStoreForTests()
-    delete (window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__
-  })
-  afterEach(() => {
-    resetTokenStoreForTests()
-    delete (window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__
   })
 
   it('mounts DaemonIndexPage (the gallery) instead of auto-opening a canvas', async () => {
@@ -1021,18 +725,7 @@ describe('App daemon provider state', () => {
     expect(receivedDaemonPageProps?.onNavigateBack).toBeInstanceOf(Function)
   })
 
-  it('passes the daemon-injected token when present', async () => {
-    ;(window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__ = 'tok-x'
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={DAEMON_STATE} />
-      </MemoryRouter>,
-    )
-    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(receivedDaemonIndexPageProps?.token).toBe('tok-x')
-  })
-
-  it('mounts gracefully with token undefined when the daemon has not injected one', async () => {
+  it('hands the page no token: the browser holds none', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={DAEMON_STATE} />
@@ -1390,96 +1083,6 @@ describe('App daemon provider state', () => {
   })
 })
 
-describe('App daemon-pairing routing (index vs canvas)', () => {
-  beforeEach(() => {
-    receivedDaemonPageProps = undefined
-    receivedDaemonIndexPageProps = undefined
-    mockDaemonConnectionResult = { status: 'none' }
-  })
-  afterEach(() => {
-    mockDaemonConnectionResult = { status: 'none' }
-  })
-
-  it('lands on the index when the #wb= payload has no path', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: undefined,
-        path: undefined,
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
-  })
-
-  it('gives the pairing-link branch the same switcher, built from the payload daemon', async () => {
-    // Two daemon branches render the same index page, and deleting that
-    // page's own select took the switch away from BOTH. Only the
-    // provider-state branch is covered above; without this, removing the
-    // wiring from this one stays green — measured, before this test existed.
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'design',
-        path: undefined,
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              workspaces: [
-                { workspaceId: 'w1', segment: 'design' },
-                { workspaceId: 'w2', segment: 'sandbox' },
-              ],
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
-        ),
-      ),
-    )
-    render(
-      <MemoryRouter initialEntries={['/w/design']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    await screen.findByTestId('daemon-index-page')
-
-    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
-    expect(await screen.findByRole('menuitem', { name: /sandbox/i })).toBeTruthy()
-  })
-
-  it('forwards the payload workspaceId as the addressed workspace when the #wb= payload has a workspace but no path', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'workspace-b',
-        path: undefined,
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App providerState={BROWSER_STATE} />
-      </MemoryRouter>,
-    )
-    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(receivedDaemonIndexPageProps?.workspace).toBe('workspace-b')
-  })
-})
-
 // Exposes the current router location as text so tests can assert on the
 // address bar without reaching into react-router internals.
 function LocationProbe() {
@@ -1514,10 +1117,6 @@ describe('App URL routing', () => {
   beforeEach(() => {
     receivedDaemonPageProps = undefined
     receivedDaemonIndexPageProps = undefined
-    mockDaemonConnectionResult = { status: 'none' }
-  })
-  afterEach(() => {
-    mockDaemonConnectionResult = { status: 'none' }
   })
 
   it('cold-loads a /w/:workspaceId/d/:path deep link straight into DaemonDocumentPage', async () => {
@@ -1591,25 +1190,6 @@ describe('App URL routing', () => {
     expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
   })
 
-  it('replaces a consumed #wb= pairing with the canonical URL instead of leaving the raw fragment behind', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'w1',
-        path: 'main',
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    const router = renderAppWithRouter(BROWSER_STATE, '/')
-    await screen.findByTestId('daemon-document-page')
-    expect(router.state.location.pathname).toBe('/w/w1/d/main')
-    // The replace must not have added a new history entry: going back from
-    // here should leave the SPA (nothing left to land on inside this test's
-    // single-entry history), not bounce to a stale pre-pairing '/' entry.
-    expect(router.state.location.key).not.toBe('default')
-  })
-
   it('shows the not-found page for an unrecognized path (no blank page, no silent redirect)', async () => {
     renderAppWithRouter(DAEMON_STATE, '/something/unrelated/entirely')
     expect(await screen.findByRole('button', { name: /back to documents/i })).toBeTruthy()
@@ -1646,22 +1226,18 @@ describe('App shell (single instance above the routed pages)', () => {
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
   })
 
-  it('the paired-fragment branch renders the shell too — Settings/Home must survive every entry path', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'w1',
-        path: 'main',
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
+  it('the reconnected branch renders the shell too — Settings/Home must survive every entry path', async () => {
+    localStorage.clear()
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    mockConnectResult = CONNECTED
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/w/w1/d/main']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
     await screen.findByTestId('daemon-document-page')
+    mockConnectResult = { status: 'none' }
+    localStorage.clear()
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
     // The mark stopped being a destination and gained no replacement: a
     // cross-workspace "all documents" view is a state this product does not
@@ -1671,7 +1247,6 @@ describe('App shell (single instance above the routed pages)', () => {
   })
 
   it('daemon branch renders the shell and a reported auth error lights its attention dot', async () => {
-    mockDaemonConnectionResult = { status: 'none' }
     Object.defineProperty(navigator, 'storage', {
       value: { persisted: () => Promise.resolve(true) },
       configurable: true,
@@ -1709,10 +1284,6 @@ describe('App shell (single instance above the routed pages)', () => {
 describe('App /settings routing', () => {
   beforeEach(() => {
     receivedSettingsPageProps = undefined
-    mockDaemonConnectionResult = { status: 'none' }
-  })
-  afterEach(() => {
-    mockDaemonConnectionResult = { status: 'none' }
   })
 
   it('mounts SettingsPage for /settings and its sub-routes instead of the usual view', async () => {
@@ -1783,113 +1354,23 @@ describe('App /settings routing', () => {
     })
   })
 
-  it('passes the paired fragment daemon baseUrl/token over the provider state', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: undefined,
-        path: undefined,
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    renderAppWithRouter(BROWSER_STATE, '/settings')
+  // Disconnecting (forcedBrowser=true) must drop workspaceId along with the
+  // daemon prop — a mutation that instead kept passing the daemon's workspace
+  // regardless of forcedBrowser would query the wrong keeper.
+  it('drops the daemon once Settings disconnects from it', async () => {
+    renderAppWithRouter(DAEMON_STATE, '/settings')
     await screen.findByTestId('settings-page')
-    expect(receivedSettingsPageProps?.daemon).toEqual({
-      baseUrl: 'http://127.0.0.1:3099',
-      token: 'tok',
-    })
-  })
-
-  // The other half of the ternary at App.tsx's /settings branch: once
-  // settingsDaemon is defined, workspaceId must be the workspace the daemon
-  // connection actually names (daemonView.workspace) rather than always
-  // undefined — a regression that dropped this branch entirely would still
-  // pass every other test in this describe block.
-  it('passes the workspace a paired fragment names as workspaceId', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'ws-fragment',
-        path: undefined,
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
-    renderAppWithRouter(BROWSER_STATE, '/settings')
-    await screen.findByTestId('settings-page')
-    expect(receivedSettingsPageProps?.workspaceId).toBe('ws-fragment')
-
-    // Disconnecting (forcedBrowser=true) must drop workspaceId along with
-    // the daemon prop — a mutation that instead kept passing daemonView's
-    // workspace regardless of forcedBrowser would query the wrong keeper.
+    expect(receivedSettingsPageProps?.daemon).toBeDefined()
     const onDisconnected = receivedSettingsPageProps?.onDisconnected as () => void
     await act(async () => onDisconnected())
     expect(receivedSettingsPageProps?.daemon).toBeUndefined()
     expect(receivedSettingsPageProps?.workspaceId).toBeUndefined()
   })
 
-  // A `#wb=` fragment names a daemon and carries no credential, so the token
-  // /settings receives can only have come from the grant. Pinned here
-  // because the fragment used to supply one directly, and a regression that
-  // reinstated that path would otherwise look identical from this route.
-  it('takes the daemon token from the grant, never from the #wb= fragment', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: undefined,
-        path: undefined,
-      },
-    }
-    mockRenewResult = {
-      status: 'paired',
-      daemonBaseUrl: 'http://127.0.0.1:3099',
-      token: 'from-the-grant',
-    }
-    renderAppWithRouter(BROWSER_STATE, '/settings')
-    await screen.findByTestId('settings-page')
-    expect(receivedSettingsPageProps?.daemon).toEqual({
-      baseUrl: 'http://127.0.0.1:3099',
-      token: 'from-the-grant',
-    })
-  })
-
-  // The failure this ordering caused when it was written the other way: an
-  // identity-mismatch is a RESOLUTION, and gating the "Connecting…" view on
-  // `grantPaired === null` alone left the page stuck on it forever, hiding
-  // the one warning that says the daemon's key changed.
-  it('does not hide an identity-mismatch behind the connecting view', async () => {
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: undefined,
-        path: undefined,
-      },
-    }
-    mockRenewResult = { status: 'identity-mismatch', daemonBaseUrl: 'http://127.0.0.1:3099' }
-    renderAppWithRouter(BROWSER_STATE, '/settings')
-    await screen.findByTestId('settings-page')
-    expect(screen.queryByText(/Connecting to the daemon/i)).toBeNull()
-  })
-
-  it('passes the daemon from a session grant established via the silent-renewal seam', async () => {
-    // Same mechanism as the "silent renewal" suite above: a stored
-    // daemonBaseUrl plus a 'paired' renewPairingToken result lands in
-    // grantConnection, which /settings must resolve exactly like a #wb-grant
-    // fragment consumed directly on this route would.
+  it('passes the daemon this page reconnected to through the extension', async () => {
     localStorage.clear()
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 3,
-        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-        migration: {},
-        capabilities: {},
-      }),
-    )
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    mockConnectResult = CONNECTED
     await act(async () => {
       render(
         <MemoryRouter initialEntries={['/settings']}>
@@ -1899,11 +1380,11 @@ describe('App /settings routing', () => {
     })
     await screen.findByTestId('settings-page')
     expect(receivedSettingsPageProps?.daemon).toEqual({
-      baseUrl: 'http://127.0.0.1:3099',
-      token: 'tok-r',
+      baseUrl: BRIDGE_DAEMON_BASE_URL,
+      token: '',
     })
-    renewPairingTokenMock.mockClear()
-    mockRenewResult = { status: 'none' }
+    connectThroughExtensionMock.mockClear()
+    mockConnectResult = { status: 'none' }
     localStorage.clear()
   })
 })
@@ -1931,21 +1412,15 @@ describe('App error boundary', () => {
     await expectLoggedFailure('The above error occurred')
   })
 
-  it('catches an error surfacing through the paired branch lazy path (boundary sits outside Suspense)', async () => {
+  it('catches an error surfacing through the reconnected branch lazy path (boundary sits outside Suspense)', async () => {
     throwInDaemonDocumentPage = true
-    mockDaemonConnectionResult = {
-      status: 'paired',
-      payload: {
-        baseUrl: 'http://127.0.0.1:3099',
-        workspaceId: 'w1',
-        path: 'main',
-      },
-    }
-    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
+    localStorage.clear()
+    rememberDaemon(BRIDGE_DAEMON_BASE_URL)
+    mockConnectResult = CONNECTED
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     try {
       render(
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter initialEntries={['/w/w1/d/main']}>
           <App providerState={BROWSER_STATE} />
         </MemoryRouter>,
       )
@@ -1955,7 +1430,8 @@ describe('App error boundary', () => {
       expect(reportSpy).toHaveBeenCalled()
     } finally {
       throwInDaemonDocumentPage = false
-      mockDaemonConnectionResult = { status: 'none' }
+      mockConnectResult = { status: 'none' }
+      localStorage.clear()
       reportSpy.mockRestore()
     }
     await expectLoggedFailure('The above error occurred')

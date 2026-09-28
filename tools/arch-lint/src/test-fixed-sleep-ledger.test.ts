@@ -40,7 +40,6 @@ export function countFixedSleeps(source: string): number {
 
 /** Repo-relative file -> fixed sleeps it held when last pinned. */
 const LEDGER: Record<string, number> = {
-  'apps/web/src/components/PairedOriginsCard.test.tsx': 2,
   'apps/web/src/components/StorageReportCard.test.tsx': 1,
   'apps/web/src/components/document-editor/canvas-verb-bar.browser.test.tsx': 1,
   'apps/web/src/components/markdown-editor/touch-formatting-bar.browser.test.tsx': 1,
@@ -74,7 +73,6 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1,
   'apps/web/src/pages/BrowserIndexPage.defaults.browser.test.tsx': 1,
   'apps/web/src/pages/DaemonDocumentPage.surface-outlives-document.test.tsx': 1,
-  'apps/web/src/pages/PairConsentPage.test.tsx': 1,
   'apps/web/src/pages/ReplicaReadPage.browser.test.tsx': 1,
   'packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.script.test.ts': 1,
   'packages/mcp-server/src/cli/dispatcher-mcp.test.ts': 1,

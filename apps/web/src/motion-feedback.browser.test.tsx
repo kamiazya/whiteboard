@@ -103,9 +103,7 @@ describe('feedback micro-motion', () => {
   })
 
   it('sync-off shows a finite attention pulse on the mark', () => {
-    render(
-      <ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} onRepair={vi.fn()} />,
-    )
+    render(<ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} />)
     const echo = document.querySelector('[data-testid="shell-mark-pulse"]') as HTMLElement
     expect(echo).not.toBeNull()
     const cs = getComputedStyle(echo)
