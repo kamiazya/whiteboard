@@ -310,7 +310,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // module of its own — `pointer-release.ts` is the precedent, and a
   // press-side module beside it is the named follow-up that brings this back
   // down rather than a ceiling that keeps rising.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 1000,
+  // 1000 -> 824: the comment claimant left for `pointer-comment-claim.ts`.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 824,
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 103,

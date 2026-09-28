@@ -569,7 +569,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reasons moved onto the claimants. A press-side module beside the
   // `pointer-release.ts` that already exists is the named follow-up that
   // brings this back down — moving mass is what a FILE budget asks for.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1240,
+  // 1240 -> 1075: the comment claimant became `pointer-comment-claim.ts`, its
+  // press, pin drag, menu and release together — the first claimant module.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1075,
 }
 
 describe('the path form both ledgers are keyed with', () => {
