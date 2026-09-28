@@ -197,11 +197,12 @@ itself is never persisted in the clear: it lives in an in-memory holder for
 the tab's life.
 
 **A later tab can open the copy without the daemon, using the passkey.**
-When the session's own passkey assertion produces a WebAuthn `prf` output —
-the same gesture that proves who is asking, never a second prompt — the key
-is wrapped under a value derived from that output and the ciphertext is left
-beside the replica. A cold start then offers "Unlock with your passkey": one
-gesture, no network. What lands on disk is useless to whatever later owns the
+The key is wrapped under a value derived from a WebAuthn `prf` output and the
+ciphertext is left beside the replica. For a local daemon reached through the
+browser extension this is opt-in per copy: **Make readable offline** in
+Settings creates a passkey in this browser only — never registered with the
+daemon or sent to it — and wraps the key under its `prf` output. A cold start
+then offers "Unlock with your passkey": one gesture, no network. What lands on disk is useless to whatever later owns the
 origin, because the material that opens it exists only inside the
 authenticator.
 

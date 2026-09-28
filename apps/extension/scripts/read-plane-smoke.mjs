@@ -12,8 +12,9 @@
 // credential, which the replica-key route admits without a membership or a
 // passkey (workspace-access.ts), so the pull needs neither. ADR-0050's
 // 2026-09-28 addendum decision 8 keeps a passkey's PRF as what can wrap that
-// key for a later cold start; no passkey is registered here, so nothing is
-// wrapped and a cold start must find the replica locked.
+// key for a later cold start, and decision 11 makes that opt-in from
+// Settings: until a person asks, nothing is wrapped and a cold start must find
+// the replica locked.
 //
 // What this pins, in the order a person meets it:
 // 1. Opening a daemon workspace through the extension pulls a SEALED
@@ -24,6 +25,14 @@
 //    decision 2 — the key lived in memory only).
 // 3. The daemon restarted, Reconnect clicked: the reconnection lands and the
 //    replica page unmounts for the daemon page.
+// 4. Settings > Connections, "Make readable offline" on the copy's row: a
+//    passkey is created in this browser (Chromium's virtual authenticator,
+//    with PRF) and the key is wrapped under it — still no key bytes at rest.
+// 5. The daemon stopped again, a cold reload: the copy is now unlockable, one
+//    passkey gesture opens it, and the note reads with no daemon.
+//
+// WebAuthn refuses an IP address as a relying party, so the app is opened at
+// `localhost` rather than the `127.0.0.1` the server listens on.
 //
 // What it no longer pins, and why. It used to reach the daemon over loopback
 // with a pairing grant, and so also checked a member removed from the
@@ -182,6 +191,27 @@ async function replicaBlobs(workspaceId) {
   return { blobs: blobs.length, loroHeaded }
 }
 
+/**
+ * A platform-style authenticator with PRF and user verification, answering
+ * every prompt on its own — what a person's passkey provider does after they
+ * confirm. Scoped to this page's target, so it survives a reload of the page.
+ */
+async function addPrfAuthenticator(context, page) {
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('WebAuthn.enable')
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      hasPrf: true,
+      automaticPresenceSimulation: true,
+    },
+  })
+}
+
 /** Waits for a test id to reach `state`; answers whether it did. */
 const reached = (page, testId, state, timeout = 30_000) =>
   page
@@ -280,6 +310,7 @@ async function readPlane(record, appUrl, restartDaemon) {
   const context = await openBrowser()
   try {
     const page = await context.newPage()
+    await addPrfAuthenticator(context, page)
     const docUrl = `${appUrl}w/${workspaceId}/d/${DOCUMENT_PATH}`
 
     // --- 1. the pull, sealed at rest --------------------------------------
@@ -349,6 +380,65 @@ async function readPlane(record, appUrl, restartDaemon) {
       'the daemon page shows the note again after reconnecting',
       page.url(),
     )
+
+    // --- 4. Settings: make the copy readable offline ----------------------
+    await page.goto(`${appUrl}settings/connections`)
+    const offlineRow = page.getByTestId(`local-copy-offline-${workspaceId}`)
+    // Enabled, not merely present: the row renders disabled until the page
+    // has reconnected through the extension, which is the state being waited on.
+    const makeReadable = offlineRow.locator('button:enabled', {
+      hasText: 'Make readable offline',
+    })
+    const enabled = await makeReadable.waitFor({ state: 'visible', timeout: 30_000 }).then(
+      () => true,
+      () => false,
+    )
+    check(
+      enabled,
+      "the copy's row offers 'Make readable offline' while the daemon is connected",
+      (await offlineRow.innerText().catch(() => '')).slice(0, 300),
+    )
+    if (enabled) await makeReadable.click()
+    const optedIn = await offlineRow
+      .getByText('Readable offline with your passkey.')
+      .waitFor({ state: 'visible', timeout: 30_000 })
+      .then(
+        () => true,
+        () => false,
+      )
+    check(
+      optedIn,
+      'the row says the copy is readable offline',
+      (await offlineRow.innerText().catch(() => '')).slice(0, 300),
+    )
+    const afterOptIn = await page.evaluate(dumpPersistedValues, needles)
+    check(
+      afterOptIn.byteHits === 0 && afterOptIn.cryptoKeys === 0,
+      "after the opt-in, storage still holds no bytes of this run's workspace key",
+      `byteHits=${afterOptIn.byteHits} cryptoKeys=${afterOptIn.cryptoKeys}`,
+    )
+
+    // --- 5. daemon stopped, cold reload: one passkey gesture opens it -----
+    await restartDaemon(async () => {
+      await page.goto(docUrl)
+      check(
+        await reached(page, 'replica-state-unlockable', 'visible'),
+        'a cold reload with the daemon stopped offers the passkey unlock',
+        `${page.url()} ${(await page.locator('body').innerText()).slice(0, 200)}`,
+      )
+      await page.getByRole('button', { name: 'Unlock with your passkey' }).click()
+      check(
+        await reached(page, 'replica-state-readable', 'visible'),
+        'the unlock opens the copy with the daemon stopped',
+        `${page.url()} ${(await page.locator('body').innerText()).slice(0, 200)}`,
+      )
+      await page.getByText('Read-plane note').first().click()
+      check(
+        await markerShown(page),
+        'the copy opened offline shows the note',
+        (await page.locator('body').innerText()).slice(0, 300),
+      )
+    })
     return restarted
   } finally {
     await context.close()
@@ -361,7 +451,8 @@ try {
   buildAll()
   const started = await startDaemon(dataDir)
   daemon = started.daemon
-  await readPlane(started.record, webApp.url, async (whileDown) => {
+  const appUrl = webApp.url.replace('127.0.0.1', 'localhost')
+  await readPlane(started.record, appUrl, async (whileDown) => {
     await stopDaemon(daemon)
     daemon = undefined
     await whileDown()
