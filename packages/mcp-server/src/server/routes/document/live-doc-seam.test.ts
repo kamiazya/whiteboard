@@ -31,7 +31,7 @@ const { getDefaultServerDeps } = await import('../../../di/default-server-deps.j
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
 // workaround for document.ts's dynamic import.
-await import('../ws.js')
+await import('../sync-audience.js')
 
 function updateBytes(nodeIds: readonly string[]): Uint8Array {
   const doc = new LoroDoc()

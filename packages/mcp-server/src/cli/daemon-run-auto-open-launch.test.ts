@@ -40,7 +40,6 @@ import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { findAvailablePort } from './daemon-run.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // tsx resolves as a devDependency of the mcp-server package, not the repo
@@ -98,7 +97,6 @@ interface LaunchResult {
 /** Boots the real dispatcher CLI (via tsx) inside a real pty, and resolves
  * once the ready JSON line has been observed. */
 async function launchDaemonInPty(args: {
-  port: number
   dataDir: string
   extraArgs?: readonly string[]
   extraEnv?: Readonly<Record<string, string | undefined>>
@@ -112,8 +110,6 @@ async function launchDaemonInPty(args: {
     'daemon',
     'run',
     '--json',
-    '--host=127.0.0.1',
-    `--port=${args.port}`,
     `--data-dir=${args.dataDir}`,
     ...(args.extraArgs ?? []),
   ]
@@ -138,7 +134,7 @@ async function launchDaemonInPty(args: {
       if (readyLine === null && line.trim().startsWith('{')) {
         try {
           const parsed = JSON.parse(line) as Record<string, unknown>
-          if (parsed.ok === true && typeof parsed.port === 'number') {
+          if (parsed.ok === true && typeof parsed.socketPath === 'string') {
             readyLine = parsed
             readyResolve(parsed)
           }
@@ -232,12 +228,10 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
     it(
       'invokes the fake opener with the hosted app URL exactly once when every guard passes',
       async () => {
-        const port = await findAvailablePort(4310)
         const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
         const { binDir, recordFile } = makeFakeOpenBin()
 
         const { pid, closed } = await launchDaemonInPty({
-          port,
           dataDir,
           extraEnv: {
             PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
@@ -264,12 +258,10 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
     it(
       'never invokes the opener when CI=true, even with a real TTY',
       async () => {
-        const port = await findAvailablePort(4311)
         const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
         const { binDir, recordFile } = makeFakeOpenBin()
 
         const { pid, closed } = await launchDaemonInPty({
-          port,
           dataDir,
           extraEnv: {
             PATH: `${binDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`,
@@ -293,12 +285,10 @@ describe.skipIf(!hasWorkingPty && !process.env.CI)(
     it(
       'never invokes the opener when --no-open is passed, even with a real TTY',
       async () => {
-        const port = await findAvailablePort(4312)
         const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
         const { binDir, recordFile } = makeFakeOpenBin()
 
         const { pid, closed } = await launchDaemonInPty({
-          port,
           dataDir,
           extraArgs: ['--no-open'],
           extraEnv: {

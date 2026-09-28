@@ -38,10 +38,6 @@ const ENTITIES = [
   // document in it, so `document` would be the wrong noun rather than a
   // shorter one.
   'workspace',
-  // wb_pairing_link_create: an agent asking the DAEMON to mint its own
-  // pairing handoff — a daemon concern, not stored document content, so it
-  // belongs beside 'viewport' rather than the document-model nouns above.
-  'pairing',
   // Added by ADR-0026, and a document-model noun like the first group rather
   // than a daemon concern: the annotation layer is a plane the document
   // holds, peer to its nodes and its body, and `vocabulary.md` already makes

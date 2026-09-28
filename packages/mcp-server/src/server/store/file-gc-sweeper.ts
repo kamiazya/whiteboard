@@ -3,9 +3,8 @@
 // operator ever hitting the purge route by hand.
 //
 // Design: a completion-rescheduled ONE-SHOT setTimeout, unref'd — never
-// setInterval. Unlike ws-ticket-store.ts / oauth-authz-transactions.ts (which
-// piggyback their lazy prune on a high-frequency operation they already run —
-// minting a ticket/transaction), file-gc has no equivalent natural hook: a
+// setInterval. Unlike a store that piggybacks its lazy prune on a
+// high-frequency operation it already runs, file-gc has no natural hook: a
 // full pass (Loro fork+checkout per branch/version per canvas, across every
 // workspace) is too expensive to run inline on every mutation. A `setInterval`
 // would also keep the daemon's event loop alive for the process lifetime even

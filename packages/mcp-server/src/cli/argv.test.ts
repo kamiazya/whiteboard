@@ -115,8 +115,6 @@ describe('parseDaemonRunArgs', () => {
     expect(result).toEqual({
       kind: 'ok',
       json: true,
-      host: undefined,
-      port: undefined,
       dataDir: undefined,
       tokenStdin: false,
       noOpen: false,
@@ -126,8 +124,6 @@ describe('parseDaemonRunArgs', () => {
   it('accepts all known flags together', () => {
     const result = parseDaemonRunArgs([
       '--json',
-      '--host=127.0.0.1',
-      '--port=4000',
       '--data-dir=/tmp/data',
       '--token-stdin',
       '--no-open',
@@ -135,8 +131,6 @@ describe('parseDaemonRunArgs', () => {
     expect(result).toEqual({
       kind: 'ok',
       json: true,
-      host: '127.0.0.1',
-      port: 4000,
       dataDir: '/tmp/data',
       tokenStdin: true,
       noOpen: true,
@@ -177,62 +171,11 @@ describe('parseDaemonRunArgs', () => {
     expect(result).toMatchObject({ kind: 'usage-error' })
   })
 
-  it('returns usage-error when --host is given without = (space form)', () => {
-    const result = parseDaemonRunArgs(['--json', '--host'])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-    expect((result as { kind: string; message: string }).message).toContain('--host')
-  })
-
-  it('returns usage-error when --host= has an empty value', () => {
-    const result = parseDaemonRunArgs(['--json', '--host='])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-  })
-
-  it('returns usage-error when --host is duplicated', () => {
-    const result = parseDaemonRunArgs(['--json', '--host=a', '--host=b'])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-    expect((result as { kind: string; message: string }).message).toContain(
-      '--host specified more than once',
-    )
-  })
-
-  it('returns usage-error when --port is given without = (space form)', () => {
-    const result = parseDaemonRunArgs(['--json', '--port'])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-  })
-
-  it('returns usage-error when --port= has an empty value', () => {
-    const result = parseDaemonRunArgs(['--json', '--port='])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-  })
-
-  it('returns usage-error when --port is not an integer', () => {
-    const result = parseDaemonRunArgs(['--json', '--port=abc'])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-  })
-
-  it('returns usage-error when --port is 0', () => {
-    const result = parseDaemonRunArgs(['--json', '--port=0'])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-  })
-
-  it('returns usage-error when --port exceeds 65535', () => {
-    const result = parseDaemonRunArgs(['--json', '--port=65536'])
-    expect(result).toMatchObject({ kind: 'usage-error' })
-  })
-
-  it('accepts --port=65535 (boundary)', () => {
-    const result = parseDaemonRunArgs(['--json', '--port=65535'])
-    expect(result).toMatchObject({ kind: 'ok', port: 65535 })
-  })
-
-  it('accepts --port=1 (boundary)', () => {
-    const result = parseDaemonRunArgs(['--json', '--port=1'])
-    expect(result).toMatchObject({ kind: 'ok', port: 1 })
-  })
-
-  it('returns usage-error when --port is duplicated', () => {
-    const result = parseDaemonRunArgs(['--json', '--port=4000', '--port=5000'])
+  // ADR-0050: the local daemon listens on its socket and no TCP port, so there
+  // is no port or host to choose — and a script still passing one is told so
+  // rather than having it silently ignored.
+  it.each(['--port=4000', '--host=127.0.0.1'])('refuses %s as an unknown argument', (flag) => {
+    const result = parseDaemonRunArgs(['--json', flag])
     expect(result).toMatchObject({ kind: 'usage-error' })
   })
 

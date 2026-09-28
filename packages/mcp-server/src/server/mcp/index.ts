@@ -14,34 +14,13 @@ import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
 import {
-  type PairingLinkContext,
-  type PairingUnavailableReason,
-  registerPairingLinkTool,
-} from './pairing-link.js'
-import {
   buildDrawDiagramPrompt,
   WHITEBOARD_DRAW_PROMPT,
   WHITEBOARD_INSTRUCTIONS,
 } from './standalone-help.js'
 import { installStdioLifecycle } from './stdio-lifecycle.js'
 
-export interface CreateMcpServerOptions {
-  /** What wb_pairing_link_create embeds: this daemon's own origin, and the
-   *  web-origin allowlist it checks the target against. NO credential — the
-   *  link carries none, and access is approved by a person on the daemon's
-   *  /pair page. Absent on the stdio entrypoint, which has no HTTP listener
-   *  of its own to embed in a pairing link — the tool stays registered there
-   *  too (so tools/list is one authoritative list across transports) but
-   *  answers isError. */
-  pairing?: PairingLinkContext
-  /** Why `pairing` is absent, so the tool's refusal message names the real
-   *  cause instead of assuming stdio. Defaults to 'stdio' since that is this
-   *  module's own standalone entrypoint's reason — http-server.ts overrides
-   *  it per authMode when pairing is absent for an HTTP-connected caller. */
-  pairingUnavailableReason?: PairingUnavailableReason
-}
-
-export async function createMcpServer(options: CreateMcpServerOptions = {}) {
+export async function createMcpServer() {
   // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
   // HTTP /mcp handler does not race concurrent requests on the marker file.
   // Called for its prepareDataDir migration side effect ahead of the DB use
@@ -112,7 +91,6 @@ export async function createMcpServer(options: CreateMcpServerOptions = {}) {
   )
 
   registerMcpAppsExtension(server)
-  registerPairingLinkTool(server, options.pairing, options.pairingUnavailableReason)
 
   const dataDir = getDataDir()
   const db = await getDb(dataDir)

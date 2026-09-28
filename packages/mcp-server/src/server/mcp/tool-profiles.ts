@@ -67,14 +67,4 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   // plane on purpose: it is a UI contract with the host, not a tool a model
   // reads data through.
   canvas_view: { profile: READ_ONLY, title: 'Show a canvas inline in the chat' },
-  // Deliberately MUTATING rather than READ_ONLY despite touching no stored
-  // state. The link carries NO credential — that rationale died with the
-  // bootstrap token the payload used to embed — but minting one is still a
-  // step in granting access: opening it at an origin the user approved
-  // earlier admits that browser silently. An invitation to reach this daemon
-  // is not something an auto-run/read-only approval path should issue.
-  wb_pairing_link_create: {
-    profile: MUTATING,
-    title: 'Mint a daemon-pairing link for the whiteboard web app',
-  },
 }

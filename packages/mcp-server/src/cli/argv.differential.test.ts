@@ -70,8 +70,6 @@ function oldParseDaemonSubcommandArgs(args: readonly string[], commandName: stri
 
 function oldParseDaemonRunArgs(args: readonly string[]): Result {
   let json = false
-  let host: string | undefined
-  let port: number | undefined
   let dataDir: string | undefined
   let tokenStdin = false
   let noOpen = false
@@ -101,34 +99,6 @@ function oldParseDaemonRunArgs(args: readonly string[]): Result {
           '--token is not accepted. Use --token-stdin or the WHITEBOARD_DAEMON_TOKEN env variable.',
       }
     }
-    if (arg === '--host') {
-      return { kind: 'usage-error', message: '--host requires the inline form: --host=<value>' }
-    }
-    if (arg.startsWith('--host=')) {
-      const value = arg.slice('--host='.length)
-      if (!value)
-        return { kind: 'usage-error', message: '--host=<value> requires a non-empty value' }
-      if (host !== undefined)
-        return { kind: 'usage-error', message: '--host specified more than once' }
-      host = value
-      continue
-    }
-    if (arg === '--port') {
-      return { kind: 'usage-error', message: '--port requires the inline form: --port=<value>' }
-    }
-    if (arg.startsWith('--port=')) {
-      const value = arg.slice('--port='.length)
-      const num = Number(value)
-      if (!value || !Number.isInteger(num) || num <= 0 || num > 65535)
-        return {
-          kind: 'usage-error',
-          message: '--port=<value> requires a valid port number (1–65535)',
-        }
-      if (port !== undefined)
-        return { kind: 'usage-error', message: '--port specified more than once' }
-      port = num
-      continue
-    }
     if (arg === '--data-dir') {
       return {
         kind: 'usage-error',
@@ -153,7 +123,7 @@ function oldParseDaemonRunArgs(args: readonly string[]): Result {
       message: 'Only --json is supported. Re-run with: whiteboard daemon run --json',
     }
   }
-  return { kind: 'ok', json: true, host, port, dataDir, tokenStdin, noOpen }
+  return { kind: 'ok', json: true, dataDir, tokenStdin, noOpen }
 }
 
 function oldParseDaemonSupportBundleArgs(args: readonly string[]): Result {

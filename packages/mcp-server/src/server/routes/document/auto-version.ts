@@ -43,10 +43,10 @@ export type AutoVersionTrigger = CheckpointScheduler
  * The "this document changed" signal, held where BOTH halves can import it
  * statically.
  *
- * `document.ts` registers it and `ws.ts` calls it, and those two cannot import
+ * `document.ts` registers it and `sync-audience.ts` calls it, and those two cannot import
  * each other — the di wiring's chain closes a value cycle back through
  * canvas-client-notifier. document.ts bridged that with
- * `void import('./ws.js').then(...)`, a promise nobody awaited: measured, TWO
+ * `void import('./sync-audience.js').then(...)`, a promise nobody awaited: measured, TWO
  * were still in flight when a router-building test file's last test ended, so
  * whether that module graph finished before vitest tore the environment down
  * was a coin flip. Losing it read as

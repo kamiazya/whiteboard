@@ -4,33 +4,10 @@ import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ensureDevDataDirSecured,
-  injectDerivedPortArg,
   reraiseSignalOrExit,
-  resolveDevAllowedWebOriginsEnv,
   resolveDevDataDirEnv,
   resolveTsxWatchSpawn,
 } from './with-dev-data-dir-lib.mjs'
-
-describe('resolveDevAllowedWebOriginsEnv', () => {
-  it('defaults to the project pages.dev origins when unset', () => {
-    const result = resolveDevAllowedWebOriginsEnv({})
-    expect(result.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe(
-      'https://kamiazya-whiteboard.pages.dev,https://*.kamiazya-whiteboard.pages.dev',
-    )
-  })
-
-  it('an explicit env value wins over the dev default', () => {
-    const result = resolveDevAllowedWebOriginsEnv({
-      WHITEBOARD_ALLOWED_WEB_ORIGINS: 'https://example.com',
-    })
-    expect(result.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe('https://example.com')
-  })
-
-  it('an explicit empty string disables the default (deliberate loopback-only)', () => {
-    const result = resolveDevAllowedWebOriginsEnv({ WHITEBOARD_ALLOWED_WEB_ORIGINS: '' })
-    expect(result.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe('')
-  })
-})
 
 describe('resolveDevDataDirEnv', () => {
   const repoRoot = '/repo'
@@ -114,36 +91,6 @@ describe('reraiseSignalOrExit', () => {
     })
 
     expect(exitCalls).toEqual([1])
-  })
-})
-
-describe('injectDerivedPortArg', () => {
-  it('appends --port=<derived> when argv has no --port flag', () => {
-    expect(injectDerivedPortArg(['--daemon', '--token=whiteboard-dev'], 3123)).toEqual([
-      '--daemon',
-      '--token=whiteboard-dev',
-      '--port=3123',
-    ])
-  })
-
-  it('leaves argv untouched (no duplicate) when caller already passed --port', () => {
-    const argv = ['--daemon', '--port=4000']
-
-    expect(injectDerivedPortArg(argv, 3123)).toEqual(['--daemon', '--port=4000'])
-  })
-
-  it('does not mutate the input argv array', () => {
-    const argv = ['--daemon']
-    const result = injectDerivedPortArg(argv, 3123)
-
-    expect(argv).toEqual(['--daemon'])
-    expect(result).not.toBe(argv)
-  })
-
-  it('still appends --port=<derived> for a bare "--port <value>" (space form), because parseArg in server/index.ts only recognizes the "--port=value" form and would otherwise silently fall back to the default port', () => {
-    const argv = ['--daemon', '--port', '4000']
-
-    expect(injectDerivedPortArg(argv, 3123)).toEqual(['--daemon', '--port', '4000', '--port=3123'])
   })
 })
 

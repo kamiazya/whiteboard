@@ -65,7 +65,6 @@ export function createDebugRouter(options: CreateDebugRouterOptions) {
   app.use('/api/debug', async (c, next) => {
     const grant = await options.credentialResolver.resolve({
       secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-      carrier: 'bearer',
     })
     // Judged by KIND, not scopes: a debug dump of live documents is not
     // something a narrow credential gets, however wide its scope set.

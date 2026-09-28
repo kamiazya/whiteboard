@@ -4,17 +4,9 @@ import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRoutesDeps } from './routes/sign-in.js'
 import type { DaemonIdentity } from './security/daemon-identity.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
-import type { MemberProfileStore } from './security/member-profile-store.js'
-import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
-import type { PairingGrantStore } from './security/pairing-grant-store.js'
-import type { PairingCodeStore, PairingTokenStore } from './security/pairing-session.js'
 import type { ServerModePeople } from './security/server-mode-middleware.js'
-import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
-import type { WebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import type { WorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
-import type { WorkspaceRoles } from './security/workspace-roles.js'
-import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
   authMode: 'local-daemon'
@@ -37,54 +29,9 @@ interface LocalDaemonAppOptions {
   instanceId?: string
   touch: () => void
   getStatus: () => RuntimeStatusResponse
-  /** Exact-match hosted origins admitted alongside the fixed loopback set
-   *  (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default — current loopback-only
-   *  behavior is unchanged unless an operator opts in. Local-daemon only;
-   *  server-mode governs its origins solely via allowedOrigins below. */
-  allowedWebOrigins?: AllowedWebOrigins
-  /** Exact-URI redirect_uri registry for the hosted-origin OAuth 2.1
-   *  authorization-server surface (ADR-0005): /.well-known/oauth-protected-
-   *  resource/api, /.well-known/oauth-authorization-server, and /token.
-   *  Empty by default — the whole surface stays unmounted until an operator
-   *  configures at least one client. See oauth-authz-registry.ts for why
-   *  this is never derived from allowedWebOrigins. */
-  oauthClientRegistry?: OAuthClientRegistry
-  /** Backing store for POST /api/ws-ticket (ADR-0005). Owned by
-   *  http-server.ts, which is the only other place that needs this exact
-   *  instance — the raw WS `upgrade` handler redeems the ticket the route
-   *  below mints. Defaults to a private, unshared store when omitted (tests
-   *  exercising this app in isolation), which still makes the route work,
-   *  just not reachable from a real WS upgrade outside this process. */
-  wsTicketStore?: WsTicketStore
-  /** Pairing-grant flow stores (hosted-PWA-first pairing). When present the
-   *  /api/pairing routes mount, pairing session tokens are accepted by the
-   *  /api auth middleware, and the caller is expected to fold
-   *  `pairing.grants.origins()` into allowedWebOrigins via a provider. */
-  pairing?: {
-    grants: PairingGrantStore
-    codes: PairingCodeStore
-    tokens: PairingTokenStore
-    /** Passkey pins paired origins registered (ADR-0039); durable like grants. */
-    credentials: WebAuthnCredentialStore
-  }
-  /** The daemon's MemberProfile store (ADR-0041). When present alongside
-   *  `pairing` and `serverDeps`, /api/workspaces/:workspaceId/members mounts
-   *  and session-assert answers a real `profileId` for a pinned passkey that
-   *  has been admitted to L1. Absent in ad-hoc/test callers, which get no
-   *  membership surface and a session-assert `profileId` of null — the same
-   *  answer S0-2 always gave. */
-  members?: MemberProfileStore
-  /** A workspace's roles as the local daemon keeps them, where the machine's
-   *  owner owns every workspace (ADR-0049 decision 5). With `members`,
-   *  `pairing` and `serverDeps`, /api/workspaces/:workspace/people mounts —
-   *  the same people API server mode serves. */
-  workspaceRoles?: WorkspaceRoles
-  /** The read plane's workspace-key store (ADR-0042 decisions 1/3/5). When
-   *  present alongside `pairing`, `members` and `serverDeps`,
-   *  POST /api/workspaces/:workspaceId/replica-key mounts — same mount
-   *  condition as the membership router, since a member's session is what
-   *  this route hands the key to. Absent in ad-hoc/test callers, which get
-   *  no replica-key surface at all. */
+  /** The read plane's workspace-key store (ADR-0042 decisions 1/3/5). With
+   *  `serverDeps`, POST /api/workspaces/:workspaceId/replica-key mounts.
+   *  Absent in ad-hoc/test callers, which get no replica-key surface. */
   replicaKeys?: WorkspaceReplicaKeyStore
   /** How long a `bounded`-tier lease lasts (replica-env.ts's
    *  WHITEBOARD_REPLICA_LEASE_TTL_MS). Only read when `replicaKeys` is
@@ -101,12 +48,6 @@ interface LocalDaemonAppOptions {
    *  silently refuses every macaroon, which is why `http-server.ts` supplies
    *  it rather than leaving each caller to remember. */
   macaroonRootKey?: Uint8Array
-  /** This daemon's own bare origin (e.g. `http://127.0.0.1:3099`), threaded
-   *  into wb_pairing_link_create so the tool embeds the daemon's real
-   *  address instead of reading it from process.env. Absent in ad-hoc/test
-   *  callers with no real listener — the tool still registers and answers
-   *  isError, the same standalone behavior the stdio entrypoint gets. */
-  daemonBaseUrl?: string
   /** Hands the composition root the checkpoint trigger the document router
    *  creates, so its shutdown can flush what an edit left pending. The
    *  checkpoint lands at a PAUSE in editing, so a shutdown that does not

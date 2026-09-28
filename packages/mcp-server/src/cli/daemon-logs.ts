@@ -85,7 +85,6 @@ function buildInputs(
           message: 'Daemon record present but has no token.',
           fields: {
             pid: result.record.pid,
-            port: result.record.port,
             version: result.record.version,
             status: 'token-missing',
           },
@@ -103,7 +102,6 @@ function buildInputs(
             : 'Daemon record present but process is not running.',
           fields: {
             pid: result.record.pid,
-            port: result.record.port,
             version: result.record.version,
             status: alive ? 'ok' : 'process-not-running',
           },

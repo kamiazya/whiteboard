@@ -134,7 +134,7 @@ try {
       join(dataDir, 'daemon.json'),
       JSON.stringify({
         pid: 99999,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 'Authorization: Bearer secret-token-XYZ at /opt/wb/server.ts:42',
         version: '0.0.4-smoke',
         startedAt: '2026-05-10T00:00:00.000Z',

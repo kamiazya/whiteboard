@@ -6,7 +6,7 @@ import type {
   ViewportResponse,
 } from '../../shared/api-contracts/document-runtime.js'
 import { onDocumentAction } from './document/path-route.js'
-import { getClientCount, sendViewportRequest } from './ws.js'
+import { getClientCount, sendViewportRequest } from './sync-audience.js'
 
 // requestId -> { resolve, reject }
 // viewport does not return payload data, only an ACK, so it reuses the export-style pending map.

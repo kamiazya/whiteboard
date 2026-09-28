@@ -17,6 +17,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { socketFetch, testSocketPath } from '../shared/test-utils/socket-fetch.js'
 
 let tempDir: string
 
@@ -31,7 +32,6 @@ vi.mock('./config.js', async () => {
   }
 })
 
-const { findAvailablePort } = await import('../cli/daemon-run.js')
 const { startHttpServer } = await import('./http-server.js')
 
 describe('startHttpServer on a data dir nothing has migrated', () => {
@@ -44,10 +44,10 @@ describe('startHttpServer on a data dir nothing has migrated', () => {
   })
 
   it('serves /api/v1 rather than answering "no such table"', async () => {
-    const port = await findAvailablePort(0)
-    const running = await startHttpServer({ port, host: '127.0.0.1' })
+    const socketPath = testSocketPath()
+    const running = await startHttpServer({ socketPath })
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/v1/workspaces/default/documents`)
+      const res = await socketFetch(socketPath)('/api/v1/workspaces/default/documents')
       // Any answer the surface itself chose is fine — what must not happen is
       // the 500 an unmigrated schema produces.
       expect(res.status).not.toBe(500)

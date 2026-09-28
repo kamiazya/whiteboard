@@ -1,16 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
-import type { IncomingMessage } from 'node:http'
-import type { Socket } from 'node:net'
-import { join } from 'node:path'
-import type { Duplex } from 'node:stream'
-import { serve } from '@hono/node-server'
+import { accessSync, constants as fsConstants } from 'node:fs'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { WHITEBOARD_WS_PROTOCOL } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
 import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { WebSocketServer } from 'ws'
 import { listenOnSocket } from '../daemon/daemon-socket.js'
 import { IdleTimer } from '../daemon/idle-timer.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
@@ -20,35 +13,16 @@ import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { createCanvasClientNotifier } from './canvas-client-notifier.js'
-import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
+import { getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
-import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
-import { getLogger } from './log.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
-import { openSyncStreamCount } from './routes/sync-sse.js'
-import {
-  getConnectionStats,
-  handleWsUpgrade,
-  installWsUpdateFanout,
-  setRuntimeTouchFn,
-  subscribedWorkspaceIds,
-} from './routes/ws.js'
-import { authorizeWsUpgrade } from './routes/ws-auth.js'
-import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
-import type { ResolvedGrant } from './security/credential-resolver.js'
+import { subscribedWorkspaceIds } from './routes/sync-audience.js'
+import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
-import type { MemberProfileStore } from './security/member-profile-store.js'
-import { createMemberProfileStore } from './security/member-profile-store.js'
-import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
-import { createSelfHostOriginTrustStores } from './security/origin-trust-stores.js'
-import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
-import { membershipRefusal, workspaceAccess } from './security/workspace-access.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
-import { createWorkspaceRoles } from './security/workspace-roles.js'
-import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
@@ -60,66 +34,23 @@ import {
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
-import { validationErrorBody } from './validators.js'
-import { resolveWorkspaceHandleToId } from './workspace-handle.js'
-
-/**
- * Answer an upgrade the daemon will not accept, and close the socket.
- *
- * A half-open socket with no response is the worst outcome here — the client
- * hangs — so every refusal path writes a status line before destroying.
- */
-function refuseUpgrade(socket: Duplex, statusCode: number, body = ''): void {
-  const statusText = WS_UPGRADE_REFUSAL_TEXT[statusCode] ?? 'Unauthorized'
-  const bodyHeaders =
-    body === ''
-      ? ''
-      : `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n`
-  socket.write(
-    `HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n${bodyHeaders}\r\n${body}`,
-  )
-  socket.destroy()
-}
-
-const WS_UPGRADE_REFUSAL_TEXT: Record<number, string> = {
-  400: 'Bad Request',
-  401: 'Unauthorized',
-  403: 'Forbidden',
-}
-
-/**
- * The workspace and path this upgrade names, or `null` once the socket has
- * been refused for naming an unusable one.
- */
-function wsUpgradeTarget(
-  req: IncomingMessage,
-  socket: Duplex,
-): { workspaceId: string; path: string } | null {
-  try {
-    return parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
-  } catch (error) {
-    const issue = validationErrorBody(error)
-    refuseUpgrade(socket, 400, issue ? JSON.stringify(issue) : '')
-    return null
-  }
-}
 
 export type RuntimeStatus = RuntimeStatusResponse
 
+/**
+ * The local daemon. It listens on ONE owner-only socket — a Unix socket, or a
+ * named pipe on Windows — and on no TCP port (ADR-0050 decisions 2-4): the
+ * hosted app reaches it through the extension's native host, and the CLI and
+ * the stdio proxy reach it there too. Server mode's HTTP listener is
+ * `server-mode-http.ts`.
+ */
 export interface StartHttpServerOptions {
-  port: number
-  host?: string
+  /** Where to listen (`daemon-socket.ts`'s `daemonSocketPath`). */
+  socketPath: string
   token?: string
   mcpProtectedResourceMetadata?: McpProtectedResourceMetadataConfig
   idleTimeoutMs?: number
   onClose?: () => Promise<void> | void
-  /** Exact-match hosted origins admitted alongside loopback, on /api CORS,
-   *  /mcp, and WS upgrade (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default. */
-  allowedWebOrigins?: readonly string[]
-  /** Registered OAuth clients and their exact redirect_uris
-   *  (WHITEBOARD_OAUTH_CLIENT_REGISTRY). Empty by default, which leaves the
-   *  hosted-origin authorization-server surface entirely unmounted. */
-  oauthClientRegistry?: OAuthClientRegistry
   /**
    * The plugin set this deployment registers (ADR-0013 decision 3), default
    * the bundled one. A distribution that embeds this daemon composes its own
@@ -140,13 +71,6 @@ export interface StartHttpServerOptions {
    *  exactly once, and only when a destination is configured" is the part
    *  that would fail silently. */
   backupSchedulerFactory?: typeof createBackupScheduler
-  /** Test-only seam: overrides `process.exit` for the fatal-bind-error path
-   *  below, so a test can observe the exit call instead of actually killing
-   *  the test process. */
-  exitProcess?: (code: number) => void
-  /** ADR-0050 decision 2: also serve the app on this owner-only socket.
-   *  Omitted (or null, on a platform without one) serves loopback alone. */
-  socketPath?: string | null
   /** The read plane's default tier (WHITEBOARD_REPLICA_TIER, replica-env.ts).
    *  Defaults to `offline` when omitted — see replica-env.ts's own default. */
   replicaTier?: ReplicaTier
@@ -156,20 +80,14 @@ export interface StartHttpServerOptions {
 }
 
 export interface RunningServer {
-  port: number
   /** Unique per process-start id; used by CLI stop/status/doctor to verify
    *  they are talking to the daemon they recorded, not a PID-reuse impostor. */
   instanceId: string
-  /** The socket it also answers on, when one was asked for. */
-  socketPath?: string
+  /** The socket it answers on. */
+  socketPath: string
   close: () => Promise<void>
   touch: () => void
   getRuntimeStatus: () => RuntimeStatus
-}
-
-type ClosableHttpServer = ReturnType<typeof serve> & {
-  closeIdleConnections?: () => void
-  closeAllConnections?: () => void
 }
 
 // Bounds how long close() waits for an in-flight file-gc pass (see
@@ -179,95 +97,15 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
 // instead of shutting down promptly.
 const FILE_GC_STOP_TIMEOUT_MS = 5_000
 
-/**
- * One tenant's origin trust, as the pairing composition reads it.
- *
- * Called only AFTER `prepareDataDir`: both stores read their file once, at
- * construction, and that file is what the boot move puts under the tenant on
- * this very start. Built before it they hold nothing — the daemon refuses an
- * origin the user had already paired, and the next write persists that empty
- * set over the migrated file.
- */
-function originTrustFor(dataDir: string, envOrigins: readonly string[] | undefined) {
-  const originTrust = createSelfHostOriginTrustStores(dataDir)
-  const envWebOrigins = envOrigins ?? []
-  return {
-    pairing: {
-      grants: originTrust.grants,
-      codes: createPairingCodeStore(),
-      tokens: createPairingTokenStore(),
-      credentials: originTrust.credentials,
-    },
-    allowedWebOrigins: (): readonly string[] => {
-      const grantOrigins = originTrust.grants.origins()
-      if (grantOrigins.length === 0 && Array.isArray(envWebOrigins)) return envWebOrigins
-      return [...envWebOrigins, ...grantOrigins]
-    },
-  }
-}
-
-/**
- * The membership decision the HTTP middleware gates individual routes with,
- * run on the upgrade path because a WS upgrade never passes through that
- * middleware. `grant` is present on every accepted decision (ws-auth.ts).
- * Answers true after writing the 403 and destroying the socket.
- */
-async function refuseWsUpgradeUnlessMember(
-  grant: ResolvedGrant | undefined,
-  workspaceHandle: string,
-  members: MemberProfileStore,
-  socket: Duplex,
-): Promise<boolean> {
-  if (grant === undefined) return false
-  const workspaceId = await resolveWorkspaceHandleToId(workspaceHandle)
-  const access = await workspaceAccess(grant, workspaceId, members)
-  if (access === 'admitted') return false
-  getLogger('http-server').warning(
-    { workspaceId, reason: access },
-    'websocket upgrade refused: membership',
-  )
-  const body = JSON.stringify(membershipRefusal(access))
-  socket.write(
-    `HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
-  )
-  socket.destroy()
-  return true
-}
-
-/**
- * Only the Hono app goes on the socket: its websocket surface is being retired
- * for SSE (ADR-0050 decision 1), so no upgrade handler follows it. A socket
- * that cannot be made safe stops the daemon rather than leaving it
- * half-started on loopback alone.
- */
-async function listenOnSocketOrClose(
-  fetch: Parameters<typeof listenOnSocket>[0],
-  socketPath: string | null | undefined,
-  close: () => Promise<void>,
-): Promise<Awaited<ReturnType<typeof listenOnSocket>> | undefined> {
-  if (!socketPath) return undefined
-  try {
-    return await listenOnSocket(fetch, socketPath)
-  } catch (err) {
-    await close()
-    throw err
-  }
-}
-
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
-  const host = normalizeBindHost(options.host ?? '127.0.0.1')
   const instanceId = randomUUID()
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
-  let server: ReturnType<typeof serve>
-  let wss: WebSocketServer
   let closePromise: Promise<void> | null = null
   let socketListener: Awaited<ReturnType<typeof listenOnSocket>> | undefined
-  const sockets = new Set<Socket>()
 
-  // Constructed once per daemon start, independent of the WS ticket store
-  // above -- there is no shared-instance hazard here (see
-  // file-gc-sweeper.ts's own comment on why it constructs its own
+  // Constructed once per daemon start. There is no shared-instance hazard
+  // here (see file-gc-sweeper.ts's own comment on why it constructs its own
   // FileVersionStore), so this can be created any time before close() needs
   // to reference it.
   const fileGcSweeper: FileGcSweeper = (options.fileGcSweeperFactory ?? createFileGcSweeper)()
@@ -314,26 +152,24 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           intervalMs: workspaceTailIntervalMs,
         })
 
-  // A page holding a sync stream or a socket makes no request while nobody
-  // types, and must not have the daemon stop under it.
+  // A page holding a sync stream makes no request while nobody types, and
+  // must not have the daemon stop under it.
   const idleTimer = new IdleTimer(
     options.idleTimeoutMs ?? 15 * 60_000,
     () => {
       void close()
     },
     undefined,
-    () => getConnectionStats().connectedClients > 0 || openSyncStreamCount() > 0,
+    () => openSyncStreamCount() > 0,
   )
 
   const touch = () => idleTimer.touch()
   const getRuntimeStatus = (): RuntimeStatusResponse => {
-    const stats = getConnectionStats()
+    const stats = syncStreamStats()
     return {
       ok: true,
       pid: process.pid,
-      host,
-      port: options.port,
-      baseUrl: `http://${host}:${options.port}`,
+      socketPath: options.socketPath,
       version: PACKAGE_VERSION,
       startedAt,
       uptimeMs: Date.now() - startedAtMs,
@@ -350,43 +186,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           }
         })(),
       },
-      app: {
-        served: true,
-        buildPresent: existsSync(join(DIST_WEB_APP_DIR, 'index.html')),
-        ui: 'pair-only',
-      },
-      mcp: { httpEnabled: true, endpoint: `http://${host}:${options.port}/mcp` },
-      clients: { connected: stats.connectedClients, ready: stats.readyClients },
+      mcp: { httpEnabled: true },
+      clients: stats,
     }
   }
 
   const performClose = async (): Promise<void> => {
     await backgroundWork.stopAll()
-    setRuntimeTouchFn(() => {})
     await socketListener?.close()
-
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => {
-        if (err) {
-          reject(err)
-          return
-        }
-        resolve()
-      })
-      const closeableServer = server as ClosableHttpServer
-      // Idle shutdown must not leave keep-alive HTTP sockets behind, otherwise the
-      // process can linger in a half-closed state where WS upgrades return 503.
-      closeableServer.closeIdleConnections?.()
-      closeableServer.closeAllConnections?.()
-      for (const socket of sockets) {
-        socket.destroy()
-      }
-    })
-
-    for (const client of wss.clients) {
-      client.terminate()
-    }
-    await new Promise<void>((resolve) => wss.close(() => resolve()))
 
     await options.onClose?.()
 
@@ -394,8 +201,8 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     // request has finished.
     //
     // The registry's stop already flushed, and that one is not redundant: it
-    // is what runs on a bind-failure teardown, where there is no server to
-    // close. But `server.close()` keeps serving the requests already in
+    // is what runs on a listen-failure teardown, where there is no server to
+    // close. But closing the listener keeps serving the requests already in
     // progress, and an update handler completing during that window arms a
     // fresh debounce — against a timer that is `unref`ed and will never fire,
     // so the checkpoint it scheduled would leave with the process. Flushing
@@ -406,28 +213,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // Memoized so concurrent/repeated close() calls (idle timeout racing an
   // explicit shutdown route, or a caller invoking close() twice) all await
   // the SAME shutdown instead of a second call resolving immediately while
-  // the listener and WebSockets are still tearing down.
+  // the listener is still tearing down.
   const close = (): Promise<void> => {
     if (!closePromise) closePromise = performClose()
     return closePromise
   }
 
-  // Shared with the raw `upgrade` handler below (ADR-0005): a ticket minted
-  // by the POST /api/ws-ticket route mounted inside `app` must be redeemable
-  // by the WS upgrade that follows it, which happens outside Hono entirely.
-  // Two separate store instances would mean every minted ticket 401s at
-  // upgrade — the route and the upgrade path have to agree on which store.
-  const wsTicketStore = createWsTicketStore()
-
-  // Pairing-grant flow: durable origin grants + in-memory codes/tokens.
-  // The allowlist PROVIDER folds granted origins into the env-configured
-  // set per request, so an Approve on /pair takes effect on /api, /mcp,
-  // and WS without a restart (see the tri-surface provider contract test).
-  // ADR-0043 decision 4's root key, loaded or created once here so both the
-  // `/api` guard and the websocket upgrade chain from the SAME secret. A
-  // second `createMacaroonRootKey` call would read the same file and agree,
-  // but two call sites is two places for one to be forgotten — and a
-  // forgotten one does not fail loudly, it refuses every macaroon.
+  // ADR-0043 decision 4's root key, loaded or created once here. A composition
+  // that forgets it does not fail loudly, it refuses every macaroon.
   const macaroonRootKey = createMacaroonRootKey({ dataDir: getDataDir() }).rootKey
 
   // /api/v1 document surface: same libSQL database as the MCP tools
@@ -449,7 +242,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // a state the document browser can select out of. Memoized per data dir, so
   // the per-request MCP callers below share this one resolve.
   await ensureWorkspaceId(dataDir)
-  const { pairing, allowedWebOrigins } = originTrustFor(dataDir, options.allowedWebOrigins)
   const db = await getDb(dataDir)
   const resolvedDeps = resolveServerDeps(
     createContainer(createSelfHostStoreLocalModule(db, dataDir)),
@@ -458,30 +250,18 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       daemonActor: daemonDeviceActor(dataDir),
     },
   )
-  // The daemon's MemberProfile store (ADR-0041), built from the same
-  // post-migration handle the container above gets — migrations already ran
-  // via prepareDataDir before this point.
-  const members = createMemberProfileStore(db)
-  // ADR-0049 decision 5: the same people API as server mode, over roles where
-  // the machine's owner owns every workspace.
-  const workspaceRoles = createWorkspaceRoles(db, { ownedByTheMachine: true })
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
-  // from the same post-migration handle as `members` above.
+  // from the same post-migration handle as the container above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {
     defaultTier: options.replicaTier ?? DEFAULT_REPLICA_TIER,
   })
-  // The WS-route bridge is attached HERE, not in resolveServerDeps: the di
-  // graph must not import the routes layer (value cycle), and this root is
-  // one of the two places a live-socket audience exists.
+  // The live-audience bridge is attached HERE, not in resolveServerDeps: the
+  // di graph must not import the routes layer (value cycle), and this root is
+  // one of the two places a live audience exists.
   const serverDeps: ServerDeps = {
     ...resolvedDeps,
     clientNotifier: createCanvasClientNotifier(resolvedDeps.documentIndex),
   }
-  // Eagerly, not only per-upgrade: an SSE-only audience (or a workspace-tail
-  // record arriving before any socket) must reach connected ws clients the
-  // moment the first one appears — and the ws fan-out listener costs nothing
-  // while nobody is connected.
-  installWsUpdateFanout(serverDeps)
 
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.
@@ -496,23 +276,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     instanceId,
     touch,
     getStatus: getRuntimeStatus,
-    allowedWebOrigins,
-    oauthClientRegistry: options.oauthClientRegistry,
-    wsTicketStore,
-    pairing,
-    members,
-    workspaceRoles,
     replicaKeys,
     replicaLeaseTtlMs: options.replicaLeaseTtlMs,
     macaroonRootKey,
     serverDeps,
-    // host is the bare form normalizeBindHost produced for server.listen();
-    // pairing-link.ts parses this string with `new URL(...)`, which needs
-    // an IPv6 literal bracketed.
-    daemonBaseUrl: buildDaemonBaseUrl(host, options.port),
   })
 
-  setRuntimeTouchFn(touch)
   // Everything the daemon runs on its own goes through the registry, which is
   // where each one answers who runs it and what it costs the serving loop.
   // See background-work.ts for why that is a registry rather than four calls.
@@ -543,7 +312,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     },
     {
       name: 'idle-shutdown',
-      trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms and no stream or socket open`,
+      trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms and no sync stream open`,
       instances: {
         runs: 'every-instance',
         because: 'it is about THIS process being idle, which no other process can answer for it',
@@ -592,89 +361,19 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     },
   ])
 
-  server = serve({ fetch: app.fetch, port: options.port, hostname: host })
-  // `serve()` returns before the underlying bind resolves, so a bind failure
-  // (EADDRINUSE from a losing concurrent bootstrap, EACCES from a privileged
-  // port) would otherwise hit Node's default 'error' behavior: an unhandled
-  // throw dumping a raw stack trace to this process's stdio. Log one
-  // classified, path-free record instead and exit, per this package's
-  // no-console / no-leaked-path logging discipline.
-  server.on('error', (err: NodeJS.ErrnoException) => {
-    const log = getLogger('http-server')
-    log.error({ port: options.port, code: err.code ?? 'unknown' }, 'http listener failed to bind')
-    // A real process.exit() would terminate the process outright, making
-    // these timers moot. But `exitProcess` is an injectable seam (tests pass
-    // a no-op stub), so without an explicit stop here the 15-min idle timer
-    // and the GC sweeper's interval would keep firing in whatever process
-    // hosts this call for the seam's lifetime.
-    void backgroundWork.stopAll()
-    ;(options.exitProcess ?? process.exit)(1)
-  })
-  server.on('connection', (socket) => {
-    sockets.add(socket)
-    socket.on('close', () => {
-      sockets.delete(socket)
-    })
-  })
-  wss = new WebSocketServer({
-    noServer: true,
-    // Per-frame limit. Keep enough room for Loro snapshots and large image imports
-    // (8 MiB) while avoiding OOM if a malicious client sends the ws default 100 MiB.
-    // When exceeded, ws closes the connection automatically with 1009 (Message Too Big).
-    maxPayload: 8 * 1024 * 1024,
-    handleProtocols: (protocols) =>
-      protocols.has(WHITEBOARD_WS_PROTOCOL) ? WHITEBOARD_WS_PROTOCOL : false,
-  })
-
-  // Async because `authorizeWsUpgrade` verifies a macaroon's HMAC chain
-  // through WebCrypto, which has no synchronous form. Node does not await an
-  // 'upgrade' listener, so the whole body is wrapped: an exception that
-  // escaped would be an unhandled rejection leaving the socket open and the
-  // client hanging, where a destroyed socket is the correct failure.
-  server.on('upgrade', (req, socket, head) => {
-    void (async () => {
-      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
-      if (!url.pathname.startsWith('/ws/')) {
-        socket.destroy()
-        return
-      }
-      // The SAME resolver instance the Hono app's surfaces use — see the end
-      // of `createApp`. Two resolvers built from two copies of the config is
-      // how a credential ends up admitted on one surface and refused on
-      // another, which is what this component exists to prevent.
-      const decision = await authorizeWsUpgrade(
-        req.headers,
-        app.credentialResolver,
-        allowedWebOrigins,
-      )
-      if (!decision.accept) {
-        refuseUpgrade(socket, decision.statusCode ?? 401)
-        return
-      }
-      const target = wsUpgradeTarget(req, socket)
-      if (target === null) return
-      if (await refuseWsUpgradeUnlessMember(decision.grant, target.workspaceId, members, socket)) {
-        return
-      }
-      touch()
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        void handleWsUpgrade(req, ws, decision.scopes, serverDeps)
-      })
-    })().catch((err) => {
-      // Fail closed. The socket is half-open at this point and nothing else
-      // will close it; a client left hanging on a silent error is the worse
-      // outcome than a dropped connection it can retry.
-      getLogger('http-server').error({ err }, 'websocket upgrade failed; destroying the socket')
-      socket.destroy()
-    })
-  })
-
-  socketListener = await listenOnSocketOrClose(app.fetch, options.socketPath, close)
+  // A socket that cannot be made safe (another user's directory, a daemon
+  // still answering on it) stops the daemon rather than leaving it
+  // half-started with its background work running.
+  try {
+    socketListener = await listenOnSocket(app.fetch, options.socketPath)
+  } catch (err) {
+    await close()
+    throw err
+  }
 
   return {
-    port: options.port,
     instanceId,
-    socketPath: socketListener?.path,
+    socketPath: socketListener.path,
     close,
     touch,
     getRuntimeStatus,

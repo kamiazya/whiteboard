@@ -2,7 +2,6 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AppOptions, ServerModeAppOptions } from './app.js'
 import type { AuthScope } from './security/auth-strategy.js'
@@ -409,40 +408,6 @@ describe('app — server-mode composition', () => {
     })
   })
 
-  // Regression: app.ts's pairingLinkContext is undefined for server-mode
-  // exactly as it is for the stdio entrypoint, so without a threaded
-  // unavailableReason the tool's refusal message wrongly told an
-  // already-connected server-mode HTTP caller to "connect through its HTTP
-  // /mcp endpoint instead" — which it is already doing.
-  describe('server-mode wb_pairing_link_create over the real /mcp endpoint', () => {
-    it('answers isError naming server-mode, never the stdio-standalone message', async () => {
-      const app = createApp(makeServerModeOptions(['mcp:call']))
-      const client = new Client({ name: 'server-mode-pairing-test', version: '1.0.0' })
-      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-        fetch: (input, init) => {
-          const headers = new Headers(init?.headers)
-          headers.set('Authorization', BEARER)
-          headers.set('Origin', PUBLIC_URL)
-          return app.request(input instanceof URL ? input.toString() : String(input), {
-            ...init,
-            headers,
-          })
-        },
-      })
-      await client.connect(transport)
-      try {
-        const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
-        expect(res.isError).toBe(true)
-        const text = (res.content as Array<{ text: string }>)[0]?.text ?? ''
-        expect(text).toMatch(/server-mode/i)
-        expect(text).not.toMatch(/standalone over stdio/i)
-        expect(text).not.toMatch(/connect through its HTTP/i)
-      } finally {
-        await transport.close()
-      }
-    })
-  })
-
   // Req 5: canvas scope through composed app
   describe('server-mode canvas scope via composed app', () => {
     it('GET /api/workspaces → 401 without auth header', async () => {
@@ -480,26 +445,6 @@ describe('app — server-mode composition', () => {
         headers: { authorization: BEARER },
       })
       expect(res.status).toBe(403)
-    })
-  })
-
-  // POST /api/ws-ticket (ADR-0005) is local-daemon-only wiring in app.ts —
-  // route-scope-registry.ts still declares a scope for it so /api/*
-  // registry-wide coverage stays complete, but that declaration alone would
-  // let a regression that mounts the route for server-mode too go unnoticed
-  // (the auth middleware would just accept a well-scoped bearer and 401 an
-  // unscoped one, either way never proving the route itself is unreachable).
-  // Granting the declared scope here isolates that: if the route were ever
-  // mistakenly mounted, this request would reach its handler instead of
-  // falling through to the 404 catch-all.
-  describe('server-mode ws-ticket route stays unmounted', () => {
-    it('POST /api/ws-ticket → 404, not reachable even with the scope it declares', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/ws-ticket', {
-        method: 'POST',
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(404)
     })
   })
 

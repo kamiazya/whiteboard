@@ -1,11 +1,11 @@
 // `whiteboard daemon run --json` business logic.
 //
-// Starts the HTTP server in-process, writes the daemon record, emits the ready
-// JSON, and installs SIGTERM/SIGINT handlers that close the server before
-// exiting. However the server closes — a signal or its own idle timer — the
-// record is removed and `stopped` settles; the dispatcher waits on it.
+// Starts the daemon in-process on its owner-only socket (ADR-0050: it listens
+// on no TCP port), writes the daemon record, emits the ready JSON, and
+// installs SIGTERM/SIGINT handlers that close the server before exiting.
+// However the server closes — a signal or its own idle timer — the record is
+// removed and `stopped` settles; the dispatcher waits on it.
 
-import { createServer } from 'node:net'
 import { nanoid } from 'nanoid'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
 import {
@@ -16,12 +16,9 @@ import {
 } from '../daemon/daemon-registry.js'
 import { daemonSocketPath } from '../daemon/daemon-socket.js'
 import { purgeLegacyWebOriginTrustFile } from '../daemon/purge-legacy-trust-file.js'
-import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
 import { getLogger } from '../server/log.js'
 import { resolveReplicaEnv } from '../server/replica-env.js'
-import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
-import { loadAllowedWebOriginsFromEnv } from '../server/security/web-origin-allowlist.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
 import {
   type DaemonRunReadyResult,
@@ -35,11 +32,7 @@ export type DaemonRunOutcome =
   | {
       kind: 'input-error'
       message: string
-      code?:
-        | 'invalid_allowed_web_origins'
-        | 'invalid_oauth_client_registry'
-        | 'token_source_conflict'
-        | 'startup_env'
+      code?: 'token_source_conflict' | 'startup_env'
     }
   | { kind: 'refused'; message: string }
   | {
@@ -52,38 +45,10 @@ export type DaemonRunOutcome =
 type DaemonStopReason = 'idle' | 'signal'
 
 export interface DaemonRunOptions {
-  host?: string
-  port?: number
   dataDir?: string
   tokenStdin: boolean
   /** Defaults to process.env; overridable for tests. */
   env?: Readonly<Record<string, string | undefined>>
-}
-
-// Exported for unit testing of the EADDRINUSE-only retry contract.
-export async function findAvailablePort(start = 3099): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer()
-    server.listen(start, '127.0.0.1', () => {
-      const addr = server.address()
-      const port = typeof addr === 'object' && addr ? addr.port : start
-      server.close(() => resolve(port))
-    })
-    server.on('error', (error: NodeJS.ErrnoException) => {
-      // Only retry the next port when this one is in use. Any other error (EACCES,
-      // EADDRNOTAVAIL, …) is permanent for this scan and must reject immediately
-      // instead of walking ~62k ports and hiding the real cause behind a generic message.
-      if (error.code !== 'EADDRINUSE') {
-        reject(error)
-        return
-      }
-      if (start >= 65535) {
-        reject(new Error('No available TCP port found'))
-        return
-      }
-      findAvailablePort(start + 1).then(resolve, reject)
-    })
-  })
 }
 
 async function readTokenFromStdin(): Promise<string> {
@@ -134,45 +99,10 @@ function configError(
 }
 
 /**
- * The two VALUES an operator's environment supplies, or the refusal that
- * says one of them could not be understood. Fail-fast for the same reason in
- * both cases: a daemon that starts with a silently-empty allowlist, or with
- * its authorization surface absent, is worse than one that does not start.
- * `loadAllowedWebOriginsFromEnv` logs the structured failure via `getLogger`
- * without echoing the raw offending value.
- */
-function resolveEnvConfig(env: NodeJS.ProcessEnv):
-  | {
-      allowedWebOrigins: NonNullable<ReturnType<typeof loadAllowedWebOriginsFromEnv>>
-      oauthClientRegistry: Extract<
-        ReturnType<typeof parseOAuthClientRegistryEnv>,
-        { ok: true }
-      >['registry']
-    }
-  | { outcome: DaemonRunOutcome } {
-  const allowedWebOrigins = loadAllowedWebOriginsFromEnv(env)
-  if (allowedWebOrigins === null) {
-    return configError(
-      'Invalid WHITEBOARD_ALLOWED_WEB_ORIGINS entry. See the daemon log for details.',
-      'invalid_allowed_web_origins',
-    )
-  }
-
-  const oauthRegistry = parseOAuthClientRegistryEnv(env.WHITEBOARD_OAUTH_CLIENT_REGISTRY)
-  if (!oauthRegistry.ok) {
-    return configError(
-      `Invalid WHITEBOARD_OAUTH_CLIENT_REGISTRY (${oauthRegistry.error}).`,
-      'invalid_oauth_client_registry',
-    )
-  }
-
-  return { allowedWebOrigins, oauthClientRegistry: oauthRegistry.registry }
-}
-
-/**
- * The two refusals that produce no value of their own.
+ * Every gate an operator's configuration has to pass BEFORE any lock or
+ * filesystem work.
  *
- * The first covers every remaining setting an operator can configure
+ * The first covers every setting an operator can configure
  * (WHITEBOARD_REPLICA_TIER, the storage family, WHITEBOARD_LOG_LEVEL — see
  * startup-env.ts). This is the packaged `whiteboard daemon run` command, a
  * separate startup path from server/index.ts's dev entrypoint, and must apply
@@ -207,33 +137,6 @@ function startupEnvRefusal(
   }
 
   return null
-}
-
-/**
- * Every gate an operator's configuration has to pass BEFORE any lock or
- * filesystem work, and the two values that survive them.
- */
-function resolveStartupConfig(
-  host: string,
-  options: DaemonRunOptions,
-): ReturnType<typeof resolveEnvConfig> {
-  // local-daemon is loopback-only regardless of --host. Refusing here means
-  // a non-loopback bind never reaches startHttpServer, so an unauthenticated
-  // daemon cannot be exposed beyond loopback even by operator error.
-  if (!assertLoopbackBindHost(host).ok) {
-    return {
-      outcome: {
-        kind: 'refused',
-        message:
-          'Refusing to bind the local daemon to a non-loopback host. Use 127.0.0.1, localhost, or ::1.',
-      },
-    }
-  }
-
-  const env = options.env ?? process.env
-  const config = resolveEnvConfig(env)
-  if ('outcome' in config) return config
-  return startupEnvRefusal(env, options) ?? config
 }
 
 /**
@@ -274,10 +177,8 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
 
   await purgeLegacyTrustFile(dataDir)
 
-  const host = options.host ?? '127.0.0.1'
-
-  const config = resolveStartupConfig(host, options)
-  if ('outcome' in config) return config.outcome
+  const refusal = startupEnvRefusal(options.env ?? process.env, options)
+  if (refusal !== null) return refusal.outcome
 
   const existing = await loadDaemonRecord(dataDir)
   if (existing !== null && isPidAlive(existing.pid)) {
@@ -292,8 +193,6 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   const token = resolved.token
 
   return await withDaemonStartupLock(dataDir, async () => {
-    const port = options.port ?? (await findAvailablePort())
-
     // Read once here, after the startup-issue gate above already validated
     // it — never re-read process.env inside a route.
     const replicaEnv = resolveReplicaEnv(options.env ?? process.env)
@@ -308,11 +207,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     })
 
     const running = await startHttpServer({
-      port,
-      host,
       token,
-      allowedWebOrigins: config.allowedWebOrigins,
-      oauthClientRegistry: config.oauthClientRegistry,
       replicaTier: replicaEnv.tier,
       replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
       socketPath: daemonSocketPath(dataDir),
@@ -327,7 +222,6 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     await saveDaemonRecord(
       {
         pid: process.pid,
-        port: running.port,
         token,
         version: PACKAGE_VERSION,
         startedAt,
@@ -347,8 +241,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
         schemaVersion: 1,
         ok: true,
         pid: process.pid,
-        port: running.port,
-        host,
+        socketPath: running.socketPath,
         version: PACKAGE_VERSION,
         startedAt,
       }),

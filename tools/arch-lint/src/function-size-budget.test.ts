@@ -604,7 +604,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/server-run.ts#runServerRun': 139,
   'packages/mcp-server/src/cli/server-status.ts#runServerStatus': 78,
   'packages/mcp-server/src/cli/server-support-bundle.ts#runServerSupportBundle': 105,
-  'packages/mcp-server/src/daemon/ensure-daemon.ts#ensureDaemon': 84,
   'packages/mcp-server/src/di/container.ts#resolveServerDeps': 94,
   // 424 -> 433 (ADR-0041 S8 slice 2): the membership gate argument and the admit wiring threaded from membershipWiring().
   'packages/mcp-server/src/server/app.ts#createApp': 433,
@@ -618,7 +617,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/index.ts#createMcpServer': 88,
   'packages/mcp-server/src/server/mcp/index.ts#main': 61,
   'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts#runE2eCheckpointSmoke': 230,
-  'packages/mcp-server/src/server/mcp/pairing-link.ts#registerPairingLinkTool': 74,
   'packages/mcp-server/src/server/mcp/startup.smoke-impl.ts#runStartupSmoke': 67,
   'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 115,
   'packages/mcp-server/src/server/mcp/stdio-lifecycle.ts#installStdioLifecycle': 68,
@@ -641,22 +639,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 117,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 142,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
-  // 112 -> 136: a FOURTH route in a four-route router (the members-only
-  // reopen, user decision 2026-09-21). Paid for partly first — the bar's
-  // rationale moved to the file header, where a statement about the
-  // router's authority model belongs and where the budget does not count
-  // it. What is left is the handler, and extracting one of four while the
-  // other three stay inline would trade a number for an inconsistency.
-  'packages/mcp-server/src/server/routes/membership.ts#createMembershipRouter': 136,
-  'packages/mcp-server/src/server/routes/oauth-authz.ts#createOAuthAuthzRouter': 208,
-  'packages/mcp-server/src/server/routes/pairing.ts#createPairingRouter': 283,
-  // Renamed from replica-key.test.ts#bindSession (extracted to the shared
-  // `_test-*` fixture module both replica-key.test.ts and
-  // replica-key-rotate.test.ts import — see that file's own header for why
-  // it is named `_test-` rather than `*.test.ts`, and this ledger's `isTest`
-  // classifier reads only the `.test.ts` suffix, so the entry moves ledgers
-  // too).
-  'packages/mcp-server/src/server/routes/_test-replica-key-app.ts#bindSession': 64,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
   // same router as POST .../replica-key — one seam for a workspace's whole
   // replica posture rather than a second router with its own mount block.
@@ -667,33 +649,18 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 146,
   // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
   'packages/mcp-server/src/server/routes/viewport.ts#createViewportRouter': 71,
-  // 75 -> 76 (ADR-0041 S8 slice 2): every accepted decision carries the resolved grant for the upgrade's membership check.
-  'packages/mcp-server/src/server/routes/ws-auth.ts#authorizeWsUpgrade': 76,
-  // Raised 291 -> 311: the one inline `ws.on('message')` wall became five
-  // named inner functions (onTextFrame / onClientReady / onBinaryFrame /
-  // persistUpdate / signalPersisted), each carrying the rationale that was
-  // previously buried mid-handler. The closure is longer by those doc
-  // comments and shorter by nothing — the next real shrink is moving them
-  // out of the closure, which needs a context object this change does not
-  // introduce.
-  'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 311,
   // 117 -> 59: the methods that start from a binding (`profileForBinding`,
   // `isDeactivated`, `ensureProfile`) moved to `bindingLookups`, the user
   // listing to `usersOf` and the role lookup to `roleIn`, in the same file,
   // so the membership insert and its clear still sit together here.
   'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 59,
-  'packages/mcp-server/src/server/security/oauth-authz-transactions.ts#createOAuthTransactionStore': 299,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
-  'packages/mcp-server/src/server/security/pairing-grant-store.ts#createPairingGrantStore': 67,
-  'packages/mcp-server/src/server/security/pairing-session.ts#createPairingTokenStore': 55,
-  'packages/mcp-server/src/server/security/webauthn-credential-store.ts#createWebAuthnCredentialStore': 65,
   // New (ADR-0042 decision 1 addendum): the setter's write-side validation
   // and the boolean answer to the lazy-row hazard both belong beside
   // tierFor/effectiveTier rather than in a second file over the same table.
   // 62 -> 82 (ADR-0042 decision 1, 2026-09-21 rotation addendum): rotateKey
   // belongs beside keyFor/setTier for the same reason.
   'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 82,
-  'packages/mcp-server/src/server/security/ws-ticket-store.ts#createWsTicketStore': 52,
   'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 202,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
   // 53 -> 58: the refresh interval's in-flight write is now held and awaited

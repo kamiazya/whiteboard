@@ -25,7 +25,7 @@ describe('grantCoversRoute — full authority does not consult the registry', ()
 })
 
 describe('grantCoversRoute — a narrow credential is judged by the decision', () => {
-  const narrow = grant('oauth-grant', ['canvas:read'])
+  const narrow = grant('macaroon', ['canvas:read'])
 
   it('fails closed on an undeclared route', () => {
     // A route added later must be given a scope deliberately, never inherit
@@ -52,21 +52,11 @@ describe('grantCoversRoute — a narrow credential is judged by the decision', (
 // credential can mint a path back to the full one.
 describe('grantCoversRoute — daemon-token-only refuses every narrow credential', () => {
   it.each([
-    ['oauth-grant', ['runtime:admin']],
-    ['pairing', ALL_AUTH_SCOPES],
+    ['macaroon', ['runtime:admin']],
     ['macaroon', ALL_AUTH_SCOPES],
-    ['ws-ticket', ALL_AUTH_SCOPES],
+    ['signed-in', ALL_AUTH_SCOPES],
+    ['external-bearer', ALL_AUTH_SCOPES],
   ] as const)('refuses %s even holding %j', (kind, scopes) => {
     expect(grantCoversRoute(grant(kind, scopes), { kind: 'daemon-token-only' })).toBe(false)
-  })
-
-  // The one that was silently exempt before the unification: the pairing
-  // token skipped the registry entirely, so it alone could have reached such
-  // a route. Holding the FULL scope set is exactly why the kind has to decide
-  // this rather than the scopes.
-  it('refuses a pairing token holding the full scope set', () => {
-    expect(grantCoversRoute(grant('pairing', ALL_AUTH_SCOPES), { kind: 'daemon-token-only' })).toBe(
-      false,
-    )
   })
 })

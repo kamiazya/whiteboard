@@ -42,14 +42,6 @@
       "types": "./src/api-contracts/workspace-people.ts",
       "import": "./src/api-contracts/workspace-people.ts"
     },
-    "./api-contracts/pairing": {
-      "types": "./src/api-contracts/pairing.ts",
-      "import": "./src/api-contracts/pairing.ts"
-    },
-    "./api-contracts/pairing-link": {
-      "types": "./src/api-contracts/pairing-link.ts",
-      "import": "./src/api-contracts/pairing-link.ts"
-    },
     "./api-contracts/promotion": {
       "types": "./src/api-contracts/promotion.ts",
       "import": "./src/api-contracts/promotion.ts"
@@ -117,10 +109,6 @@
     "./ws-messages": {
       "types": "./src/ws-messages.ts",
       "import": "./src/ws-messages.ts"
-    },
-    "./ws-protocol": {
-      "types": "./src/ws-protocol.ts",
-      "import": "./src/ws-protocol.ts"
     }
   },
   "scripts": {

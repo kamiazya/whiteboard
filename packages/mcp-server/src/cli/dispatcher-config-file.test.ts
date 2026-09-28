@@ -6,7 +6,7 @@ import { captureLogsForTests } from '../server/log.js'
 
 // Exercises the REAL dispatcher path (`whiteboard daemon run`) with a config
 // file on disk, mocking only `daemon-run.js` so we can inspect exactly what
-// options the dispatcher resolved (port / dataDir) without booting a server.
+// options the dispatcher resolved (dataDir / token) without booting a server.
 
 const runDaemonRun = vi.fn(async () => ({
   kind: 'refused' as const,
@@ -19,7 +19,6 @@ const { main } = await import('./dispatcher.js')
 let dir: string
 let originalCwd: string
 const ENV_KEYS = [
-  'WHITEBOARD_ALLOWED_WEB_ORIGINS',
   'WHITEBOARD_TOKEN',
   'WHITEBOARD_DAEMON_TOKEN',
   'WHITEBOARD_LOG_LEVEL',
@@ -46,14 +45,12 @@ afterEach(() => {
 })
 
 describe('whiteboard daemon run — config file wiring', () => {
-  it('threads config-file port, dataDir, token, and allowedWebOrigins into the run', async () => {
+  it('threads config-file dataDir and token into the run', async () => {
     writeFileSync(
       join(dir, '.whiteboardrc.json'),
       JSON.stringify({
-        port: 4321,
         dataDir: join(dir, 'data'),
         token: 'file-token-value',
-        allowedWebOrigins: ['https://allowed.example'],
       }),
     )
 
@@ -65,24 +62,14 @@ describe('whiteboard daemon run — config file wiring', () => {
     }
 
     expect(runDaemonRun).toHaveBeenCalledTimes(1)
-    const options = runDaemonRun.mock.calls[0][0]
-    expect(options.port).toBe(4321)
     expect(process.env.WHITEBOARD_DATA_DIR).toBe(join(dir, 'data'))
     expect(process.env.WHITEBOARD_TOKEN).toBe('file-token-value')
     expect(process.env.WHITEBOARD_DAEMON_TOKEN).toBe('file-token-value')
-    expect(process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe('https://allowed.example')
 
     const loadRecord = capture.records.find((r) => r.msg.includes('loaded whiteboard config file'))
     expect(loadRecord).toBeDefined()
     expect(loadRecord?.data?.filepath).toMatch(/\.whiteboardrc\.json$/)
     expect(JSON.stringify(capture.records)).not.toContain('file-token-value')
-  })
-
-  it('--port on the CLI beats the config file port', async () => {
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 4321 }))
-    await main(['daemon', 'run', '--json', '--port=5555'])
-    const options = runDaemonRun.mock.calls[0][0]
-    expect(options.port).toBe(5555)
   })
 
   it('--data-dir on the CLI beats the config file dataDir', async () => {
@@ -94,14 +81,25 @@ describe('whiteboard daemon run — config file wiring', () => {
     expect(process.env.WHITEBOARD_DATA_DIR).toBe(join(dir, 'from-cli'))
   })
 
-  it('leaves options.port undefined (auto-scan) when neither CLI nor file specify a port', async () => {
-    await main(['daemon', 'run', '--json'])
-    const options = runDaemonRun.mock.calls[0][0]
-    expect(options.port).toBeUndefined()
+  // The daemon listens on no port (ADR-0050), so a file still naming one is
+  // told so and the rest of it is honoured, rather than the key being
+  // silently dropped or refusing the whole start.
+  it('warns about a config-file port and still runs the daemon', async () => {
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 4321 }))
+    const capture = captureLogsForTests()
+    try {
+      await main(['daemon', 'run', '--json'])
+    } finally {
+      capture.restore()
+    }
+    expect(runDaemonRun).toHaveBeenCalledTimes(1)
+    expect(runDaemonRun.mock.calls[0][0]).not.toHaveProperty('port')
+    const warning = capture.records.find((r) => r.msg.includes('unknown whiteboard config'))
+    expect(warning?.data?.unknownKeys).toEqual(['port'])
   })
 
   it('reports an invalid config file as a clean exit-1 error instead of an unhandled rejection', async () => {
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 'not-a-number' }))
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ logLevel: 'not-a-level' }))
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
     try {
       const exitCode = await main(['daemon', 'run', '--json'])

@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import {
@@ -27,11 +27,10 @@ vi.mock('./config.js', () => ({
 vi.mock('../daemon/ensure-daemon.js', () => ({
   ensureDaemon: vi.fn(async () => ({
     pid: 1,
-    port: 3099,
+    socketPath: '/run/user/1000/whiteboard/d.sock',
     token: 'secret',
     version: '0.1.0',
     startedAt: '2026-04-24T00:00:00.000Z',
-    baseUrl: 'http://daemon.test',
   })),
 }))
 
@@ -49,21 +48,17 @@ function createRuntimeOptions(
     token,
     mcpProtectedResourceMetadata: options?.protectedResourceMetadata,
     touch: vi.fn(),
-    shutdown: vi.fn(async () => undefined),
     getStatus: () => ({
       ok: true,
       pid: 10,
-      host: '127.0.0.1',
-      port: 3099,
-      baseUrl: 'http://127.0.0.1:3099',
+      socketPath: '/run/user/1000/whiteboard/d.sock',
       version: PACKAGE_VERSION,
       startedAt: '2026-04-23T00:00:00.000Z',
       uptimeMs: 100,
       idleForMs: 10,
       auth: { mode: 'local-token', hasToken: Boolean(token) },
       storage: { dataDir: '/tmp', dataDirWritable: true },
-      app: { served: true, buildPresent: false, ui: 'web-app' },
-      mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
+      mcp: { httpEnabled: true },
       clients: { connected: 0, ready: 0 },
     }),
   }
@@ -146,110 +141,6 @@ describe('createApp daemon mutation auth', () => {
       },
     })
     expect(authedDebugRes.status).toBe(200)
-  })
-
-  it('injects the daemon token into its own dedicated global, not the runtime-config object', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-    const res = await app.request('/pair')
-    expect(res.status).toBe(200)
-    const html = await res.text()
-    expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
-    expect(html).not.toContain('daemonToken')
-    expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
-  })
-
-  it('redirects every non-/pair UI path to the official hosted app', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-    for (const path of ['/', '/document/session1/demo', '/local/abc', '/w/ws/c/alias']) {
-      const res = await app.request(path)
-      expect(res.status).toBe(302)
-      expect(res.headers.get('location')).toBe('https://kamiazya-whiteboard.pages.dev/')
-      // The redirect must never leak the daemon token anywhere.
-      expect(res.headers.get('location')).not.toContain('secret')
-    }
-    // Reserved paths keep their existing semantics (404, not redirect).
-    const reserved = await app.request('/token')
-    expect(reserved.status).toBe(404)
-  })
-
-  it('still serves the injected app shell on /pair (the consent trust anchor)', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-    const res = await app.request('/pair?origin=https%3A%2F%2Fapp.example&challenge=c&state=s')
-    expect(res.status).toBe(200)
-    const html = await res.text()
-    expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
-    expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
-  })
-
-  it('omits the token script entirely when no daemon token is configured', async () => {
-    const app = createApp(createRuntimeOptions(undefined))
-    const res = await app.request('/pair')
-    expect(res.status).toBe(200)
-    const html = await res.text()
-    expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
-    expect(html).not.toContain('__WHITEBOARD_DAEMON_TOKEN__')
-  })
-
-  it('adds baseline security headers to HTML responses', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-
-    const res = await app.request('/pair')
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('X-Frame-Options')).toBe('DENY')
-    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
-    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer')
-    expect(res.headers.get('Cross-Origin-Resource-Policy')).toBe('same-origin')
-  })
-
-  // /pair is the pairing consent trust anchor and the only real page this
-  // daemon serves, so it carries a full page policy rather than the
-  // frame-ancestors-only floor that suits an API JSON response.
-  it('serves /pair under a full page CSP, not the frame-ancestors-only floor', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-
-    const res = await app.request('/pair')
-
-    const csp = res.headers.get('Content-Security-Policy') ?? ''
-    expect(csp).toContain("default-src 'self'")
-    expect(csp).toContain("base-uri 'none'")
-    expect(csp).toContain("object-src 'none'")
-    expect(csp).toContain("frame-ancestors 'none'")
-    // A consent page embeds nothing, so it does not inherit the hosted app's
-    // `frame-src https:` — pinned so a later policy edit cannot quietly let
-    // this trust anchor frame remote content.
-    expect(csp).toContain("frame-src 'none'")
-    // The daemon-fetched thumbnails this app renders are blob: URLs.
-    expect(csp).toMatch(/img-src[^;]*\bblob:/)
-  })
-
-  it('authorizes the two injected inline scripts on /pair with a per-response nonce', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-
-    const res = await app.request('/pair')
-
-    const csp = res.headers.get('Content-Security-Policy') ?? ''
-    const nonce = /'nonce-([A-Za-z0-9+/=_-]+)'/.exec(csp)?.[1]
-    expect(nonce).toBeDefined()
-    // Without the nonce on the tags, `script-src 'self'` would block the
-    // runtime-config and token scripts and the pairing page would boot blind.
-    const html = await res.text()
-    expect(html).toContain(`<script nonce="${nonce}">window.__WHITEBOARD_RUNTIME_CONFIG__`)
-    expect(html).toContain(`<script nonce="${nonce}">window.__WHITEBOARD_DAEMON_TOKEN__`)
-    const scriptSrc = /script-src ([^;]*)/.exec(csp)?.[1] ?? ''
-    expect(scriptSrc).not.toContain("'unsafe-inline'")
-  })
-
-  it('issues a fresh nonce per /pair response', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-
-    const first = await app.request('/pair')
-    const second = await app.request('/pair')
-
-    const nonceOf = (res: Response) =>
-      /'nonce-([A-Za-z0-9+/=_-]+)'/.exec(res.headers.get('Content-Security-Policy') ?? '')?.[1]
-    expect(nonceOf(first)).toBeDefined()
-    expect(nonceOf(first)).not.toBe(nonceOf(second))
   })
 
   it('adds the same baseline security headers to API responses', async () => {
@@ -337,36 +228,6 @@ describe('createApp daemon mutation auth', () => {
     expect(unauthorizedRes.headers.get('WWW-Authenticate')).toBe(
       'Bearer resource_metadata="http://127.0.0.1/.well-known/oauth-protected-resource/mcp"',
     )
-  })
-
-  it('rejects /mcp requests from disallowed browser origins', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-
-    const res = await app.request('http://127.0.0.1/mcp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer secret',
-        Origin: 'https://evil.example',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'evil-origin-test', version: '1.0.0' },
-        },
-      }),
-    })
-
-    expect(res.status).toBe(403)
-    await expect(res.json()).resolves.toEqual({
-      jsonrpc: '2.0',
-      error: { code: -32000, message: 'forbidden origin' },
-      id: null,
-    })
   })
 
   it('returns package-synced server metadata and tool capabilities on initialize', async () => {
@@ -793,412 +654,6 @@ describe('createApp daemon mutation auth', () => {
   // 500 propagation needs a dedicated harness. Re-add as a follow-up once the
   // version-store conversion lands and the cache invalidation path is settled.
 
-  it('OPTIONS /mcp with loopback Origin carries Access-Control-Allow-Private-Network: true', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-    const res = await app.request('http://127.0.0.1/mcp', {
-      method: 'OPTIONS',
-      headers: {
-        Origin: 'http://localhost:5173',
-      },
-    })
-    expect(res.status).toBe(204)
-    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
-    expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-  })
-
-  describe('/api/* loopback CORS (local-daemon mode)', () => {
-    it('reflects Access-Control-Allow-Origin and Vary for a loopback Origin on GET /api/runtime/ping', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'http://localhost:5173' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
-      expect(res.headers.get('Vary')).toContain('Origin')
-    })
-
-    it('returns 204 with Access-Control-Allow-Private-Network and reflected ACAO on OPTIONS /api/runtime/ping', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/runtime/ping', {
-        method: 'OPTIONS',
-        headers: { Origin: 'http://localhost:5173' },
-      })
-      expect(res.status).toBe(204)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
-      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-    })
-
-    it('does NOT reflect Access-Control-Allow-Origin for a non-loopback Origin but still responds 200', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'https://evil.example' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    })
-
-    it('responds 200 with no CORS regression when no Origin header is present', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/runtime/ping')
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    })
-
-    it('rejects a GET with a spoofed non-loopback Host with 403 (DNS-rebinding guard)', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Host: 'evil.example' },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('rejects an OPTIONS preflight with a spoofed non-loopback Host with 403 before any CORS short-circuit', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/workspaces/session1/documents', {
-        method: 'OPTIONS',
-        headers: { Host: 'evil.example', Origin: 'http://localhost:5173' },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('cross-origin loopback POST to a mutation route without Authorization returns 401 (auth ordering)', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/workspaces/session1/documents', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'http://localhost:5173',
-        },
-        body: JSON.stringify({ path: 'demo' }),
-      })
-      expect(res.status).toBe(401)
-    })
-
-    it('OPTIONS preflight for a mutation route returns 204 with CORS+PNA headers', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/workspaces/session1/documents', {
-        method: 'OPTIONS',
-        headers: { Origin: 'http://localhost:5173' },
-      })
-      expect(res.status).toBe(204)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
-      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-    })
-
-    it('does not invent an Access-Control-Allow-Local-Network response header', async () => {
-      // Local Network Access gates on a user permission and defines no
-      // response header, so emitting one states a capability the server does
-      // not have: it cannot unblock an LNA denial no matter what it answers.
-      // Re-adding it would send the client looking for a server-side fix to a
-      // problem only the browser's permission can resolve.
-      // https://wicg.github.io/local-network-access/
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/runtime/ping', {
-        method: 'OPTIONS',
-        headers: { Origin: 'http://localhost:5173' },
-      })
-      expect(res.status).toBe(204)
-      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBeNull()
-      // Asserted together so the pair is pinned as a contract: dropping BOTH
-      // headers would satisfy the absence check alone and look like a pass.
-      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-    })
-  })
-
-  describe('/api/* hosted-origin allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
-    const allowedWebOrigins = ['https://kamiazya-whiteboard.pages.dev']
-
-    it('reflects ACAO for an allowlisted hosted origin on GET', async () => {
-      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
-        'https://kamiazya-whiteboard.pages.dev',
-      )
-      expect(res.headers.get('Vary')).toContain('Origin')
-    })
-
-    it('OPTIONS preflight for an allowlisted hosted origin returns the PNA header', async () => {
-      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('/api/runtime/ping', {
-        method: 'OPTIONS',
-        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(204)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
-        'https://kamiazya-whiteboard.pages.dev',
-      )
-      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-    })
-
-    it('does NOT reflect ACAO for an evil-prefix lookalike origin', async () => {
-      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'https://evil-kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    })
-
-    it('does NOT reflect ACAO for a suffix-match lookalike origin', async () => {
-      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev.evil.com' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    })
-
-    it('does NOT reflect ACAO for an http:// scheme variant of the allowlisted origin', async () => {
-      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'http://kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    })
-
-    it('does NOT reflect ACAO for the hosted origin when no allowlist is configured (default preserved)', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    })
-
-    it('mutation route from an allowlisted hosted origin without Bearer still 401s', async () => {
-      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('/api/workspaces/session1/documents', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: 'https://kamiazya-whiteboard.pages.dev',
-        },
-        body: JSON.stringify({ path: 'demo' }),
-      })
-      expect(res.status).toBe(401)
-    })
-  })
-
-  describe('/api/* wildcard subdomain allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
-    const wildcardAllowedWebOrigins = ['https://*.kamiazya-whiteboard.pages.dev']
-
-    it('reflects ACAO for a wildcard-matched preview origin on GET', async () => {
-      const app = createApp({
-        ...createRuntimeOptions('secret'),
-        allowedWebOrigins: wildcardAllowedWebOrigins,
-      })
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'https://pr-42.kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
-        'https://pr-42.kamiazya-whiteboard.pages.dev',
-      )
-    })
-
-    it('OPTIONS preflight for a wildcard-matched origin returns PNA + ALN headers', async () => {
-      const app = createApp({
-        ...createRuntimeOptions('secret'),
-        allowedWebOrigins: wildcardAllowedWebOrigins,
-      })
-      const res = await app.request('/api/runtime/ping', {
-        method: 'OPTIONS',
-        headers: { Origin: 'https://pr-42.kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(204)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
-        'https://pr-42.kamiazya-whiteboard.pages.dev',
-      )
-      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-    })
-
-    it('does NOT reflect ACAO for an origin outside the wildcard suffix', async () => {
-      const app = createApp({
-        ...createRuntimeOptions('secret'),
-        allowedWebOrigins: wildcardAllowedWebOrigins,
-      })
-      const res = await app.request('/api/runtime/ping', {
-        headers: { Origin: 'https://evil.com' },
-      })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
-    })
-  })
-
-  describe('/mcp hosted-origin allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
-    const allowedWebOrigins = ['https://kamiazya-whiteboard.pages.dev']
-
-    it('OPTIONS /mcp with an allowlisted hosted Origin returns the PNA header', async () => {
-      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
-      const res = await app.request('http://127.0.0.1/mcp', {
-        method: 'OPTIONS',
-        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(204)
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
-        'https://kamiazya-whiteboard.pages.dev',
-      )
-      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
-    })
-
-    it('OPTIONS /mcp with a non-allowlisted hosted Origin is still forbidden (default preserved)', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('http://127.0.0.1/mcp', {
-        method: 'OPTIONS',
-        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
-      })
-      expect(res.status).toBe(403)
-    })
-  })
-
-  describe('runtime config injection', () => {
-    it('injects daemonBaseUrl composed from 127.0.0.1 and port into served HTML, with no daemonToken key', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/pair')
-      expect(res.status).toBe(200)
-      const html = await res.text()
-      expect(html).toContain('"daemonBaseUrl":"http://127.0.0.1:3099"')
-      // Token separation (ADR-0002 addendum): the config object never carries
-      // the token; it travels via window.__WHITEBOARD_DAEMON_TOKEN__ instead.
-      expect(html).not.toContain('daemonToken')
-      expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
-    })
-
-    it('emitted runtime-config is accepted by the shared api-client reader (strict, token-free)', async () => {
-      const { runtimeConfigSchema } = await import('@kamiazya/whiteboard-daemon-client/api-client')
-      const emittedConfig = { daemonBaseUrl: 'http://127.0.0.1:3099' }
-      expect(() => runtimeConfigSchema.parse(emittedConfig)).not.toThrow()
-    })
-
-    it('shared api-client strict runtimeConfigSchema REJECTS a payload that includes daemonToken', async () => {
-      // .strict() forbids unknown keys. daemonToken is NOT in the schema, so
-      // .parse({ daemonToken, daemonBaseUrl }) must throw. This locks the
-      // token-channel split as a deliberate guarded step.
-      const { runtimeConfigSchema } = await import('@kamiazya/whiteboard-daemon-client/api-client')
-      const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
-      expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
-    })
-  })
-
-  describe('wb_pairing_link_create daemonBaseUrl wiring (createApp -> pairingLinkContext)', () => {
-    // Exercises the real composition path — createApp's daemonBaseUrl option
-    // through to the tool's actual /mcp response — rather than
-    // registerPairingLinkTool called directly with a hand-built context
-    // (pairing-link.test.ts), which cannot see a wiring regression in app.ts
-    // or http-server.ts (wrong host/port composition, or the
-    // authMode/daemonBaseUrl condition silently never true).
-    it('embeds the daemonBaseUrl passed into createApp in the minted pairing link', async () => {
-      const { decodeBase64UrlText } = await import(
-        '@kamiazya/whiteboard-daemon-client/api-contracts/pairing-link'
-      )
-      const token = 'secret-daemon-token'
-      const app = createApp({
-        ...createRuntimeOptions(token),
-        daemonBaseUrl: 'http://127.0.0.1:3099',
-      })
-      const client = new Client({ name: 'app-test-client', version: '1.0.0' })
-      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-        fetch: (input, init) => {
-          const headers = new Headers(init?.headers)
-          headers.set('Authorization', `Bearer ${token}`)
-          headers.set('Origin', 'http://127.0.0.1:6274')
-          return app.request(input instanceof URL ? input.toString() : String(input), {
-            ...init,
-            headers,
-          })
-        },
-      })
-      await client.connect(transport)
-
-      const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
-      expect(res.isError, JSON.stringify(res)).not.toBe(true)
-      const result = res.structuredContent as { url: string }
-
-      const fragment = result.url.split('#wb=')[1]
-      const decoded = JSON.parse(decodeBase64UrlText(fragment)) as Record<string, unknown>
-      expect(decoded.baseUrl).toBe('http://127.0.0.1:3099')
-      // The daemon token reaches createApp here and must not reach the link:
-      // this is the wiring test, so it is the one that can prove the token
-      // the composition root holds is not the token a URL carries.
-      expect(JSON.stringify(decoded)).not.toContain(token)
-
-      await transport.close()
-    })
-
-    it('answers isError over the real /mcp endpoint when createApp received no daemonBaseUrl', async () => {
-      const app = createApp(createRuntimeOptions('secret'))
-      const client = new Client({ name: 'app-test-client', version: '1.0.0' })
-      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-        fetch: (input, init) => {
-          const headers = new Headers(init?.headers)
-          headers.set('Authorization', 'Bearer secret')
-          headers.set('Origin', 'http://127.0.0.1:6274')
-          return app.request(input instanceof URL ? input.toString() : String(input), {
-            ...init,
-            headers,
-          })
-        },
-      })
-      await client.connect(transport)
-
-      const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
-      expect(res.isError).toBe(true)
-
-      await transport.close()
-    })
-
-    it('re-reads a live allowedWebOrigins() provider on every call rather than snapshotting it once at createApp time', async () => {
-      // options.allowedWebOrigins in local-daemon mode is a FUNCTION backed
-      // by pairing grants approved at runtime (see http-server.ts), so /api
-      // CORS, /mcp origin, and WS upgrade all read it live. This exercises
-      // the real createApp -> pairingLinkContext wiring to confirm the
-      // pairing-link tool's own advisory text tracks the same live set
-      // instead of freezing whatever the provider returned at construction.
-      const token = 'secret-daemon-token'
-      let origins: readonly string[] = []
-      const app = createApp({
-        ...createRuntimeOptions(token),
-        daemonBaseUrl: 'http://127.0.0.1:3099',
-        allowedWebOrigins: () => origins,
-      })
-      const client = new Client({ name: 'app-test-client', version: '1.0.0' })
-      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-        fetch: (input, init) => {
-          const headers = new Headers(init?.headers)
-          headers.set('Authorization', `Bearer ${token}`)
-          headers.set('Origin', 'http://127.0.0.1:6274')
-          return app.request(input instanceof URL ? input.toString() : String(input), {
-            ...init,
-            headers,
-          })
-        },
-      })
-      await client.connect(transport)
-
-      const before = await client.callTool({
-        name: 'wb_pairing_link_create',
-        arguments: { webOrigin: 'https://granted-later.example.com' },
-      })
-      const beforeText = (before.content as Array<{ text: string }>)[0]?.text ?? ''
-      expect(beforeText).toContain('would be rejected by CORS/origin checks')
-
-      origins = ['https://granted-later.example.com']
-
-      const after = await client.callTool({
-        name: 'wb_pairing_link_create',
-        arguments: { webOrigin: 'https://granted-later.example.com' },
-      })
-      const afterText = (after.content as Array<{ text: string }>)[0]?.text ?? ''
-      expect(afterText).not.toContain('would be rejected by CORS/origin checks')
-
-      await transport.close()
-    })
-  })
-
   describe('/api/runtime/ping Zod schema', () => {
     it('ping response parses via daemonPingResponseSchema', async () => {
       const { daemonPingResponseSchema } = await import(
@@ -1224,116 +679,24 @@ describe('createApp daemon mutation auth', () => {
     })
   })
 
-  describe('local-daemon serves /pair only (hosted-first UI end state)', () => {
-    it('serves dist/web-app/index.html on /pair with runtime config injected', async () => {
-      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
-      await writeFile(
-        join(tmp.dir, 'web-app', 'index.html'),
-        '<!DOCTYPE html><html><head><title>apps/web</title></head><body><div id="root">apps-web-marker</div></body></html>',
-      )
+  // ADR-0050 decision 3: the hosted app reaches the daemon through the
+  // extension, so the daemon serves no page at all.
+  it('serves no page: the root, /pair and a deep route all answer 404', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    for (const path of ['/', '/pair', '/documents/board']) {
+      const res = await app.request(path)
+      expect(res.status, path).toBe(404)
+      expect(res.headers.get('Content-Type') ?? '', path).not.toContain('text/html')
+    }
+  })
 
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/pair')
-      expect(res.status).toBe(200)
-      const html = await res.text()
-      expect(html).toContain('apps-web-marker')
-      expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
-      expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
+  it('answers no CORS preflight, so no web origin can call it directly', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    const res = await app.request('/api/runtime/ping', {
+      method: 'OPTIONS',
+      headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'GET' },
     })
-
-    it('the root redirects to the hosted app even when the build is present', async () => {
-      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
-      await writeFile(join(tmp.dir, 'web-app', 'index.html'), '<!DOCTYPE html><html></html>')
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/')
-      expect(res.status).toBe(302)
-      expect(res.headers.get('location')).toBe('https://kamiazya-whiteboard.pages.dev/')
-    })
-
-    it('returns the clean 404 on /pair when dist/web-app is absent', async () => {
-      await rm(join(tmp.dir, 'web-app', 'index.html'), { force: true })
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/pair')
-      expect(res.status).toBe(404)
-      const body = await res.text()
-      expect(body).toBe('Not found. Run `pnpm build` first.')
-    })
-
-    it('returns 404 (not the SPA HTML) for unmatched paths under reserved prefixes', async () => {
-      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
-      await writeFile(
-        join(tmp.dir, 'web-app', 'index.html'),
-        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
-      )
-
-      const app = createApp(createRuntimeOptions('secret'))
-
-      // Auth runs ahead of routing for all of /api/*, so an unauthenticated
-      // request 401s regardless of whether the path is real; only an
-      // authenticated request reaches the "does this route exist" question.
-      const unauthedApiRes = await app.request('/api/not-real')
-      expect(unauthedApiRes.status).toBe(401)
-
-      const apiRes = await app.request('/api/not-real', {
-        headers: { Authorization: 'Bearer secret' },
-      })
-      expect(apiRes.status).toBe(404)
-      expect(await apiRes.text()).not.toContain('apps-web-marker')
-
-      const wsRes = await app.request('/ws/foo')
-      expect(wsRes.status).toBe(404)
-
-      const wellKnownRes = await app.request('/.well-known/unknown')
-      expect(wellKnownRes.status).toBe(404)
-    })
-
-    it('still serves the SPA for a deep, non-reserved route', async () => {
-      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
-      await writeFile(
-        join(tmp.dir, 'web-app', 'index.html'),
-        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
-      )
-
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/pair')
-      expect(res.status).toBe(200)
-      expect(await res.text()).toContain('apps-web-marker')
-    })
-
-    it('returns 404 (not the SPA HTML) for the bare /api path with no trailing segment', async () => {
-      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
-      await writeFile(
-        join(tmp.dir, 'web-app', 'index.html'),
-        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
-      )
-
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/api')
-      expect(res.status).toBe(404)
-      expect(await res.text()).not.toContain('apps-web-marker')
-    })
-
-    it('does not re-invoke getStatus (and its buildPresent existsSync check) on every SPA page request', async () => {
-      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
-      await writeFile(
-        join(tmp.dir, 'web-app', 'index.html'),
-        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
-      )
-
-      const baseOptions = createRuntimeOptions('secret')
-      const getStatus = vi.fn(baseOptions.getStatus)
-      const app = createApp({ ...baseOptions, getStatus })
-
-      // The catch-all HTML route only needs the daemon's port (fixed for the
-      // app instance's lifetime) to build daemonBaseUrl — it must not pull
-      // this from a fresh getStatus() call on every page load, since
-      // getStatus() also computes app.buildPresent via a synchronous
-      // existsSync() the real http-server.ts implementation performs.
-      const callsBeforeRequests = getStatus.mock.calls.length
-      await app.request('/document/session1/demo')
-      await app.request('/document/session2/other')
-      await app.request('/')
-      expect(getStatus.mock.calls.length).toBe(callsBeforeRequests)
-    })
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    expect(res.headers.get('Access-Control-Allow-Private-Network')).toBeNull()
   })
 })

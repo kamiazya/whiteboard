@@ -13,7 +13,6 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { cpSync as nodeCpSync, existsSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { deriveDevPort } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -57,8 +56,8 @@ export function runWireStep({ scriptPath, wtPath, spawn = spawnSync, log = (msg)
  * substitute for building — anything editing mcp-server rebuilds anyway.
  *
  * `dist/web-app` is the ONE subtree that argument does not cover, so it is never seeded. It is not
- * tooling the worktree runs: it is the built web app that two browser smokes SERVE as the
- * subject under test (`mcp-passkey-promote`, `mcp-daemon-origin`). Seeded, a
+ * tooling the worktree runs: it is the built web app a server-mode daemon SERVES, so a smoke
+ * over it has it as the subject under test. Seeded, a
  * fresh worktree tests whatever bundle the main checkout last built — from another branch, any
  * number of days old — and says nothing about the tree it is in.
  *
@@ -138,15 +137,10 @@ function main() {
   seedBuiltDist({ mainRoot: repoRoot, worktreeRoot: wtPath })
   run('pnpm', ['--dir', wtPath, 'install', '--prefer-offline'])
 
-  // A linked worktree always has a `.git` FILE (not a directory) at its root,
-  // so it's never the main checkout — deriveDevPort hashes its path instead
-  // of returning the 3099 main-checkout default.
-  const devPort = deriveDevPort({ repoRoot: wtPath, isMainCheckout: false, env: process.env })
-
   console.log(`\nready worktree: ${wtPath}`)
   console.log(`  branch: ${name} (from ${base})`)
   console.log(`  launch a dev-loop with cwd="${wtPath}" (tests run isolated here).`)
-  console.log(`  dev daemon port: ${devPort} (pnpm mcp:http:dev in this worktree binds here)`)
+  console.log('  dev daemon: pnpm mcp:http:dev here listens on this worktree\'s own socket')
 
   runWireStep({ scriptPath: resolve(__dirname, 'wire-worktree-mcp.mjs'), wtPath })
 

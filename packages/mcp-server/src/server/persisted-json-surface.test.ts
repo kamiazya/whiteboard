@@ -76,8 +76,6 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
   'daemon/daemon-record.ts': 'round-tripped: the daemon record',
   'daemon/daemon-registry.ts': 'round-tripped: the daemon record',
   'server/security/server-mode-record.ts': 'round-tripped: the server-mode record',
-  'server/security/pairing-grant-store.ts': 'round-tripped: the pairing grants file',
-  'server/security/webauthn-credential-store.ts': 'round-tripped: the webauthn credentials file',
   'server/store/backup-in-progress.ts': 'round-tripped: the backup-in-progress marker',
   'server/store/backup-blob-mirror.ts': 'round-tripped: the blob manifest',
   'server/store/backup-subprocess.ts': 'round-tripped: the backup result',
@@ -103,11 +101,6 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'is the reclaim protocol rather than the shape. mkdir-lock.test.ts drives that protocol, ' +
       'including a lock left by a dead holder',
   ),
-  'server/security/webauthn-assertion.ts': notModelled(
-    'the clientDataJSON a browser sends inside a WebAuthn assertion, so this package is the reader ' +
-      'alone and the authenticator the writer. webauthn-assertion.test.ts builds every field a ' +
-      'real one carries and refuses each malformed shape without throwing',
-  ),
   'server/release/sbom-artifact-state.ts': notModelled(
     'the sidecar is written by a .mjs release script rather than by this package, and ' +
       'sbom-fingerprint.test.ts already asserts that every sidecar that writer can produce parses ' +
@@ -120,21 +113,12 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
 
   // Not persistence. Classified rather than filtered out, because what
   // covers each is a different lane and naming it is the useful half.
-  'server/security/oauth-authz-registry.ts': notModelled(
-    'parsed from WHITEBOARD_OAUTH_CLIENT_REGISTRY, which an operator writes and nothing here ' +
-      'emits, so there is no writer to round-trip against. Its refusals are ' +
-      'oauth-authz-registry.test.ts',
-  ),
   'server/security/macaroon.ts': notModelled(
     'a bearer token rather than a stored shape — it reaches the schema through JSON.parse because ' +
       'a macaroon serializes to base64url JSON, and the daemon is both its writer and its reader. ' +
       'macaroon.test.ts round-trips serialize(parse(token)) back to the same token, refuses every ' +
       'malformed and unknown-caveat shape without throwing, and pins the SIGNATURE against ' +
       "libmacaroons' published values — which is what a round trip over this shape could not say",
-  ),
-  'server/routes/ws-validation.ts': notModelled(
-    'a frame a CLIENT sends, so this package is the reader alone. The frames the daemon emits are ' +
-      "round-tripped by server/routes/ws-emitters.property.test.ts against the browser's own parser",
   ),
   'server/security/sign-in-config-file.ts': notModelled(
     'the sign-in configuration an OPERATOR writes; this package reads it and never writes it, so ' +

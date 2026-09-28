@@ -12,26 +12,14 @@
 // the wiring itself cannot see a root that does not, which is why the first
 // test below reads the ROOT'S OWN SOURCE for the option.
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createApp } from '../app.js'
-import { createDaemonIdentity } from '../security/daemon-identity.js'
-import { createPairingGrantStore } from '../security/pairing-grant-store.js'
-import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
-import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
-import { tenantRoot } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-const tempDirs: string[] = []
-afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true })
-})
 
 describe('server mode mounts the same /api surface as the local daemon', () => {
   it("server-mode-http.ts passes serverDeps to createApp — the root's own wiring, not a test's", () => {
@@ -46,7 +34,7 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
     ).toBe(true)
   })
 
-  it('the two modes register identical /api/* route sets, minus the declared local-only routes', () => {
+  it('the two modes register identical /api/* route sets', () => {
     const serverMode = createApp({
       authMode: 'server-mode',
       publicBaseUrl: 'https://example.com',
@@ -58,23 +46,11 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
       serverDeps: resolveServerDeps(createContainer()),
     })
 
-    const pairingDir = mkdtempSync(join(tmpdir(), 'route-parity-'))
-    tempDirs.push(pairingDir)
     const localDaemon = createApp({
       authMode: 'local-daemon',
       token: 'test-token',
-      publicBaseUrl: 'http://127.0.0.1:3099',
-      allowedOrigins: ['http://127.0.0.1:3099'],
       touch: () => {},
       getStatus: () => ({}) as never,
-      shutdown: () => Promise.resolve(),
-      identity: createDaemonIdentity({ dataDir: pairingDir }),
-      pairing: {
-        grants: createPairingGrantStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
-        codes: createPairingCodeStore(),
-        tokens: createPairingTokenStore(),
-        credentials: createWebAuthnCredentialStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
-      },
       serverDeps: resolveServerDeps(createContainer()),
     })
 
@@ -88,20 +64,7 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
     const server = apiRoutes(serverMode)
     const local = apiRoutes(localDaemon)
 
-    // Local-only BY DESIGN, each with the reason recorded where it is
-    // enforced: pairing-grant consent assumes the daemon's own served UI
-    // and loopback reachability (app.ts's pairing mount comment), and the
-    // ws-ticket mint pairs with the WS upgrade endpoint that only the local
-    // daemon's HTTP server hosts (server mode installs no upgrade handler —
-    // whether any client uses the ticket flow at all is a separate open
-    // question, issues/adr-0005-ws-ticket-fate).
-    const LOCAL_ONLY_PREFIXES = ['/api/pairing', '/api/ws-ticket']
-
-    const missingFromServerMode = [...local].filter(
-      (route) =>
-        !server.has(route) &&
-        !LOCAL_ONLY_PREFIXES.some((prefix) => route.split(' ')[1]?.startsWith(prefix)),
-    )
+    const missingFromServerMode = [...local].filter((route) => !server.has(route))
     const extraInServerMode = [...server].filter((route) => !local.has(route))
 
     // Not vacuous: both sets must actually carry the surfaces this test is

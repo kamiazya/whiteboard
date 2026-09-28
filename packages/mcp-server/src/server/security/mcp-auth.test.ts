@@ -7,7 +7,6 @@ import {
   type McpHttpAuthStrategy,
   resolveMcpProtectedResourceMetadataFromEnv,
 } from './mcp-auth.js'
-import { createOAuthTransactionStore } from './oauth-authz-transactions.js'
 
 describe('MCP auth strategy', () => {
   it('parses protected resource metadata config from env', () => {
@@ -74,14 +73,12 @@ describe('MCP auth strategy', () => {
  */
 describe('what reaches /mcp in local-daemon mode', () => {
   const ROOT_KEY = new Uint8Array(32).fill(7)
-  const ORIGIN = 'https://app.example.com'
 
   const post = (strategy: McpHttpAuthStrategy, authorizationHeader?: string) =>
     strategy.authorize({
       method: 'POST',
       authorizationHeader,
-      requestUrl: 'http://127.0.0.1:3099/mcp',
-      origin: ORIGIN,
+      requestUrl: 'http://localhost/mcp',
     })
 
   it('admits the daemon token, which holds every scope', async () => {
@@ -98,32 +95,6 @@ describe('what reaches /mcp in local-daemon mode', () => {
     })
 
     expect(await post(strategy)).toEqual({ ok: true })
-  })
-
-  it('admits an OAuth grant that carries mcp:call', async () => {
-    const grantStore = createOAuthTransactionStore()
-    const { accessToken } = grantStore.mintAccessToken(['canvas:read', 'mcp:call'], 'client-a')
-    const strategy = createLocalTokenMcpHttpAuthStrategy({
-      resolver: createCredentialResolver({ daemonToken: 'secret', grantStore }),
-    })
-
-    expect(await post(strategy, `Bearer ${accessToken}`)).toEqual({ ok: true })
-  })
-
-  it('refuses an OAuth grant without mcp:call with 403 and no challenge', async () => {
-    const grantStore = createOAuthTransactionStore()
-    const { accessToken } = grantStore.mintAccessToken(['canvas:read'], 'client-a')
-    const strategy = createLocalTokenMcpHttpAuthStrategy({
-      resolver: createCredentialResolver({ daemonToken: 'secret', grantStore }),
-      protectedResourceMetadata: { authorizationServers: ['https://auth.example.com'] },
-    })
-
-    const decision = await post(strategy, `Bearer ${accessToken}`)
-    if (decision.ok) throw new Error('expected a refusal')
-    // 403, not 401: the credential verified and is understood. Re-presenting
-    // it cannot help, so there is no `WWW-Authenticate` challenge to offer.
-    expect(decision.status).toBe(403)
-    expect(decision.headers.get('WWW-Authenticate')).toBeNull()
   })
 
   it('admits a macaroon that carries mcp:call', async () => {
@@ -151,27 +122,10 @@ describe('what reaches /mcp in local-daemon mode', () => {
 
     const decision = await post(strategy, `Bearer ${token}`)
     if (decision.ok) throw new Error('expected a refusal')
+    // 403, not 401: the credential verified and is understood. Re-presenting
+    // it cannot help, so there is no `WWW-Authenticate` challenge to offer.
     expect(decision.status).toBe(403)
-  })
-
-  it('refuses a pairing token although it carries every scope', async () => {
-    const strategy = createLocalTokenMcpHttpAuthStrategy({
-      resolver: createCredentialResolver({
-        daemonToken: 'secret',
-        pairingTokens: {
-          validate: (token, origin) => token === 'paired' && origin === ORIGIN,
-          bindingOf: () => null,
-        },
-      }),
-    })
-
-    // A recorded decision, not a scope outcome: a paired browser origin talks
-    // to `/api/*`, and nothing about the web app needs the MCP endpoint. The
-    // scope test could never produce this refusal on its own, because a
-    // pairing token holds ALL_AUTH_SCOPES today.
-    const decision = await post(strategy, 'Bearer paired')
-    if (decision.ok) throw new Error('expected a refusal')
-    expect(decision.status).toBe(403)
+    expect(decision.headers.get('WWW-Authenticate')).toBeNull()
   })
 
   it('still answers 401 with a challenge when nothing verifies', async () => {

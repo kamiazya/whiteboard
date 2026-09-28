@@ -1,8 +1,7 @@
 /**
  * S8 (ADR-0041 L1, ADR-0042 d3-d4, user decision 2026-09-21): membership
  * gates ONLINE access. `workspaceAccess` is the ONE decision — every
- * membership-gated surface (replica-key today, the registry-driven routes,
- * SSE and the WS upgrade later) is meant to call this rather than keep its
+ * membership-gated surface (the registry-driven routes and SSE) is meant to call this rather than keep its
  * own copy, which is exactly the shape that let an L1 revoke bite only the
  * OFFLINE replica key while the same removed person kept reading and
  * writing live through every other route.
@@ -50,7 +49,7 @@ function grantOf(
   }
 }
 
-const UNBOUND_PAIRING = grantOf('pairing')
+const UNBOUND_SESSION = grantOf('signed-in')
 
 // Hardcoded independently of OPERATOR_ISSUED_KINDS: the table below must
 // notice a kind DROPPED from that export, and iterating the export itself
@@ -58,13 +57,11 @@ const UNBOUND_PAIRING = grantOf('pairing')
 const EXPECTED_OPERATOR_ISSUED_KINDS = [
   'anonymous',
   'daemon-token',
-  'oauth-grant',
   'macaroon',
-  'ws-ticket',
 ] as const satisfies readonly ResolvedGrant['kind'][]
 
 describe('workspaceAccess — operator-issued kinds (arm 1)', () => {
-  it('OPERATOR_ISSUED_KINDS is exactly the five operator-issued kinds', () => {
+  it('OPERATOR_ISSUED_KINDS is exactly the three operator-issued kinds', () => {
     expect([...OPERATOR_ISSUED_KINDS].sort()).toEqual([...EXPECTED_OPERATOR_ISSUED_KINDS].sort())
   })
 
@@ -81,19 +78,19 @@ describe('workspaceAccess — operator-issued kinds (arm 1)', () => {
 })
 
 describe('workspaceAccess — member-less workspace (arm 2)', () => {
-  it('admits an unbound pairing session when the workspace has zero members', async () => {
-    expect(await workspaceAccess(UNBOUND_PAIRING, WS, members)).toBe('admitted')
+  it('admits an unbound session when the workspace has zero members', async () => {
+    expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('admitted')
   })
 })
 
 describe('workspaceAccess — a member-gated workspace', () => {
-  it('requires a person session for an unbound pairing grant', async () => {
+  it('requires a person session for an unbound session', async () => {
     const profile = await members.ensureProfile({
       binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
-    expect(await workspaceAccess(UNBOUND_PAIRING, WS, members)).toBe('requires_person_session')
+    expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
   })
 
   it('refuses a bound session whose passkey was never pinned as a profile', async () => {
@@ -102,7 +99,7 @@ describe('workspaceAccess — a member-gated workspace', () => {
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
-    const grant = grantOf('pairing', { origin: ORIGIN, credentialId: 'unknown-cred' })
+    const grant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'unknown-cred' })
     expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
   })
 
@@ -116,7 +113,7 @@ describe('workspaceAccess — a member-gated workspace', () => {
       binding: passkeyBinding(ORIGIN, 'cred-outsider'),
       displayName: 'Bea',
     })
-    const grant = grantOf('pairing', { origin: ORIGIN, credentialId: 'cred-outsider' })
+    const grant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-outsider' })
     expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
     expect(outsider.id).not.toBe(gatingMember.id)
   })
@@ -127,22 +124,22 @@ describe('workspaceAccess — a member-gated workspace', () => {
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
-    const grant = grantOf('pairing', { origin: ORIGIN, credentialId: 'cred-1' })
+    const grant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-1' })
     expect(await workspaceAccess(grant, WS, members)).toBe('admitted')
   })
 })
 
 describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)', () => {
-  it('revoking the LAST member keeps the workspace person-gated for an unbound pairing grant', async () => {
+  it('revoking the LAST member keeps the workspace person-gated for an unbound session', async () => {
     const profile = await members.ensureProfile({
       binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
-    expect(await workspaceAccess(UNBOUND_PAIRING, WS, members)).toBe('requires_person_session')
+    expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
 
     await members.revokeL1Membership(WS, profile.id)
-    expect(await workspaceAccess(UNBOUND_PAIRING, WS, members)).toBe('requires_person_session')
+    expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
   })
 
   it('revoking the last member refuses that former member’s own passkey as not_a_member', async () => {
@@ -153,12 +150,12 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
     await members.addMember(WS, profile.id)
     await members.revokeL1Membership(WS, profile.id)
 
-    const grant = grantOf('pairing', { origin: ORIGIN, credentialId: 'cred-1' })
+    const grant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-1' })
     expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
   })
 
   it('a workspace that never had a member keeps origin trust', async () => {
-    expect(await workspaceAccess(UNBOUND_PAIRING, 'ws-never-had-one', members)).toBe('admitted')
+    expect(await workspaceAccess(UNBOUND_SESSION, 'ws-never-had-one', members)).toBe('admitted')
   })
 
   it('revoking one member does not change another bound member’s answer', async () => {
@@ -175,8 +172,8 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
 
     await members.revokeL1Membership(WS, removed.id)
 
-    const stayingGrant = grantOf('pairing', { origin: ORIGIN, credentialId: 'cred-staying' })
-    const removedGrant = grantOf('pairing', { origin: ORIGIN, credentialId: 'cred-removed' })
+    const stayingGrant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-staying' })
+    const removedGrant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-removed' })
     expect(await workspaceAccess(stayingGrant, WS, members)).toBe('admitted')
     expect(await workspaceAccess(removedGrant, WS, members)).toBe('not_a_member')
   })
@@ -203,7 +200,7 @@ describe('workspaceAccess — any authenticator', () => {
   it('admits a member signed in through a non-passkey authenticator', async () => {
     const profile = await members.ensureProfile({ binding: person, displayName: 'Ada' })
     await members.addMember(WS, profile.id)
-    expect(await workspaceAccess({ kind: 'pairing', scopes: [], person }, WS, members)).toBe(
+    expect(await workspaceAccess({ kind: 'signed-in', scopes: [], person }, WS, members)).toBe(
       'admitted',
     )
   })
@@ -213,7 +210,7 @@ describe('workspaceAccess — any authenticator', () => {
     await members.addMember(WS, profile.id)
     const impostor = { authenticator: 'oidc:other', subject: person.subject }
     expect(
-      await workspaceAccess({ kind: 'pairing', scopes: [], person: impostor }, WS, members),
+      await workspaceAccess({ kind: 'signed-in', scopes: [], person: impostor }, WS, members),
     ).toBe('not_a_member')
   })
 })

@@ -146,7 +146,7 @@ try {
       join(dataDir, 'daemon.json'),
       JSON.stringify({
         pid: 99999,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 'Authorization: Bearer secret-token-XYZ',
         version: '0.0.4-smoke',
         startedAt: '2026-05-09T00:00:00.000Z',
@@ -168,7 +168,7 @@ try {
       fail('expected fields.status=process-not-running for dead PID', { line })
     }
     const fieldKeys = Object.keys(line.fields).sort().join(',')
-    if (fieldKeys !== 'pid,port,status,version') {
+    if (fieldKeys !== 'pid,status,version') {
       fail('unexpected fields keys', { fields: line.fields, fieldKeys })
     }
     assertNoLeakLogs(res.stdout)

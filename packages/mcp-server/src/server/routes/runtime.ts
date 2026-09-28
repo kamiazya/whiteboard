@@ -103,10 +103,8 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // /api/* middleware in app.ts. This per-router layer is defense in depth
     // (the global daemon-mutation middleware skips /api/runtime/*), so it
     // must accept the same credential set as the global layer for READ
-    // routes: daemon token, scope-checked OAuth grant, or an origin-bound
-    // pairing session token. The admin routes (touch, logs prune) accept the
-    // daemon token only — a paired web origin can inspect the daemon but
-    // never delete its logs. Stopping the daemon is not an HTTP route at
+    // routes: the daemon token, or a scope-checked narrower credential. The
+    // admin routes (touch, logs prune) accept the daemon token only. Stopping the daemon is not an HTTP route at
     // all: `whiteboard daemon stop` signals the process and the idle timer
     // calls close() directly, so no credential ends it.
     const scope = resolveApiRouteScope(c.req.method, c.req.path)
@@ -114,8 +112,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
 
     const grant = await options.credentialResolver.resolve({
       secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-      carrier: 'bearer',
-      origin: c.req.header('origin'),
     })
     if (grant === null) return c.json({ error: 'unauthorized' }, 401)
     if (grant.kind === 'anonymous' || grant.kind === 'daemon-token') return next()
@@ -166,7 +162,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // no second place that compares a secret.
     const grant = await options.credentialResolver.resolve({
       secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-      carrier: 'bearer',
     })
     if (grant?.kind !== 'daemon-token' && grant?.kind !== 'anonymous') {
       return c.json({ error: 'unauthorized' }, 401)

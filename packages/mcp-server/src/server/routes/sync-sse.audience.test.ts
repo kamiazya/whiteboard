@@ -12,8 +12,8 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
 import { captureLogsForTests } from '../log.js'
+import { subscribedWorkspaceIds } from './sync-audience.js'
 import { resetSyncStreamsForTests } from './sync-sse.js'
-import { subscribedWorkspaceIds } from './ws.js'
 
 // Its own data dir, through the seam every reader goes through: opening a
 // stream opens the store, and a store shared with another file running in

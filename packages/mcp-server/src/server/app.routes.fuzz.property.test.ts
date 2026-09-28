@@ -5,8 +5,7 @@
  * server-core's `create-server.routes.fuzz` covers the `/api/v1` surface it
  * owns; this is the same question asked of everything else `createApp`
  * mounts: the legacy `/api/workspaces` and `/api/w` document routes, sync,
- * runtime, fonts, files, export, viewport, debug, ws-ticket and the OAuth
- * metadata. A route may answer (2xx, or 501 saying the composition lacks the
+ * runtime, fonts, files, export, viewport, debug and the OAuth metadata. A route may answer (2xx, or 501 saying the composition lacks the
  * feature), or refuse a request it understood (4xx with a JSON body naming
  * why) — never a 5xx, and never a body the browser client cannot read.
  *
@@ -299,7 +298,7 @@ const RULES: Record<string, Rule> = {
   },
   'POST /api/w/:workspaceId/document/*/viewport': {
     // No browser is connected, so every well-formed request is a 503.
-    refusesOnly: 'needs a connected WebSocket client to apply the viewport',
+    refusesOnly: 'needs an open page to apply the viewport',
     body: viewportRequestParamsSchema,
   },
   'POST /api/w/:workspaceId/document/*/update': {
@@ -357,9 +356,6 @@ const RULES: Record<string, Rule> = {
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },
   'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },
-  'POST /api/ws-ticket': {
-    refusesOnly: 'no OAuth registry is configured, so no grant can be presented',
-  },
   // RFC 9728 discovery: with no OAuth resource metadata the answer is a
   // bare 404, which is what a discovery client expects and not a refusal
   // this lane's JSON contract covers.

@@ -29,7 +29,7 @@ import { chmodSync, existsSync, lstatSync, readFileSync, realpathSync, renameSyn
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
+import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/checkout-kind-lib.mjs'
 import {
   assertNotTrackedSettingsPath,
   buildClaudeMcpAddArgs,

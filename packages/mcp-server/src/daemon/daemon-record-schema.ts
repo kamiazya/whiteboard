@@ -1,21 +1,17 @@
 import { z } from 'zod'
 
-// daemon.json is the persisted contract for the local daemon's HTTP/WS
-// Bearer token plus process identity. This schema is the single source of
-// truth for both the registry loader (daemon-registry.ts) and the CLI-facing
-// parser (daemon-record.ts) — do not hand-write a parallel interface.
-// TCP ports are 1-65535 (0 is reserved for "any port", never a listening
-// daemon's own bound port).
-const MAX_TCP_PORT = 65535
-
+// daemon.json is the persisted contract for the local daemon's bearer token,
+// process identity and the socket it answers on. This schema is the single
+// source of truth for both the registry loader (daemon-registry.ts) and the
+// CLI-facing parser (daemon-record.ts) — do not hand-write a parallel
+// interface.
 export const daemonRecordBaseSchema = z.object({
   pid: z.number().int().positive(),
-  port: z.number().int().positive().max(MAX_TCP_PORT),
   version: z.string(),
   startedAt: z.string(),
-  // ADR-0050 decision 2: the owner-only socket the daemon also answers on.
-  // Absent where the platform has none, or from a daemon that predates it.
-  socketPath: z.string().min(1).optional(),
+  // ADR-0050 decision 2: the owner-only socket (a named pipe on Windows) the
+  // daemon answers on, and the only place it answers: it listens on no port.
+  socketPath: z.string().min(1),
 })
 
 export const daemonRecordSchema = daemonRecordBaseSchema.extend({

@@ -23,9 +23,10 @@ const { getDoc, saveDocument, getDocumentKind, loadDocument, onWorkspaceDocUpdat
 )
 const { countAliveNodes } = await import('@kamiazya/whiteboard-server-core')
 const { createDocumentRouter } = await import('../document.js')
-// Pre-load ws.js before any restore call, mirroring restore-race.test.ts's
-// documented cycle workaround for document.ts's dynamic import.
-await import('../ws.js')
+// Pre-load sync-audience.js before any restore call, mirroring
+// restore-race.test.ts's documented cycle workaround for document.ts's
+// dynamic import.
+await import('../sync-audience.js')
 
 beforeEach(() => {
   clearCache()
@@ -734,7 +735,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   // change that stopped emitting them would leave every one of those tests
   // green while the overlay silently stopped appearing and, worse, stopped
   // being dismissed.
-  it('brackets a restore with restore_started and restore_complete for a connected client', async () => {
+  it('brackets a restore with restore_started and restore_complete for the open pages', async () => {
     const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const initial = new LoroDoc()
     const vv0 = initial.version()
@@ -755,20 +756,8 @@ describe('overwrite restore reconciles instead of replacing', () => {
     })
     const { version } = (await saveRes.json()) as { version: { id: string } }
 
-    const sent: string[] = []
-    const socket = {
-      send: (data: unknown) => {
-        if (typeof data === 'string') sent.push(data)
-      },
-      on: () => {},
-      close: () => {},
-    }
-    const { handleWsUpgrade } = await import('../ws.js')
-    await handleWsUpgrade(
-      { url: '/ws/session1/canvas-a', headers: { host: 'localhost:3099' } } as never,
-      socket as never,
-    )
-    sent.length = 0
+    const syncAudience = await import('../sync-audience.js')
+    const announce = vi.spyOn(syncAudience, 'sendRestoreEvent')
 
     const res = await app.request(
       `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/restore`,
@@ -776,18 +765,12 @@ describe('overwrite restore reconciles instead of replacing', () => {
     )
     expect(res.status).toBe(200)
 
-    const phases = sent
-      .flatMap((raw) => {
-        try {
-          return [JSON.parse(raw) as { type?: string }]
-        } catch {
-          return []
-        }
-      })
-      .map((m) => m.type)
-      .filter((t) => t === 'restore_started' || t === 'restore_complete')
+    const phases = announce.mock.calls
+      .filter(([workspaceId, path]) => workspaceId === 'session1' && path === 'canvas-a')
+      .map(([, , phase]) => phase)
+    announce.mockRestore()
     // Both, and in that order: `complete` is what releases the overlay, so a
     // restore that only announced its start would lock the client forever.
-    expect(phases).toEqual(['restore_started', 'restore_complete'])
+    expect(phases).toEqual(['started', 'complete'])
   })
 })

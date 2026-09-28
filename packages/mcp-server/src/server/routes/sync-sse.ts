@@ -1,11 +1,7 @@
-// SSE sync transport: the downstream half of the sync path for a caller that
-// cannot open a WebSocket to this daemon.
-//
-// A page served over https cannot open a `ws://` socket to loopback — mixed
-// content blocks it before the upgrade is even attempted — while a plain
-// `http://` fetch to loopback stays allowed. The hosted web app therefore has
-// no WebSocket route to a local daemon at all, and rides SSE downstream with
-// ordinary POSTs upstream instead.
+// SSE sync transport: the downstream half of the sync path, with ordinary
+// POSTs upstream. It is the only live transport a page has — the WebSocket
+// is retired (ADR-0050 decision 1) — whether the page reaches a local daemon
+// through the extension bridge or a server-mode keeper directly.
 //
 // One stream serves MANY documents. Browsers cap concurrent HTTP/1.1
 // connections per origin at six, and a stream per open canvas tab would starve
@@ -56,18 +52,16 @@ export const syncClientMessageRequestSchema = z
   .object({
     streamId: z.string().min(1),
     doc: z.string().min(1),
-    // Reuses the WebSocket client-message union so both transports validate
-    // against one declaration instead of drifting apart.
+    // The client-message union the browser writes against.
     message: clientTextMessageSchema,
   })
   .strict()
 
 export type SyncClientMessageRequest = z.infer<typeof syncClientMessageRequestSchema>
 
-// Injected by ws.ts, which owns the viewport cache and the pending-request
-// resolver. ws.ts already imports this module for the broadcast fan-out, so
-// importing it back would close a cycle — this mirrors the setBroadcastFn /
-// setResolveViewportFn idiom already used between these modules.
+// Injected by sync-audience.ts, which owns the viewport cache and the
+// pending-request resolver. It already imports this module for the
+// broadcast fan-out, so importing it back would close a cycle.
 let getCachedViewportRequest: (docKey: string) => string | undefined = () => undefined
 let resolveViewportRequest: (requestId: string) => void = () => {}
 
@@ -81,9 +75,9 @@ export function setSyncSseHooks(hooks: {
 
 /**
  * `ready` says the stream has signalled `client_ready` for that document. A
- * viewport request is withheld until then and replayed from cache on ready,
- * matching the WebSocket path — a pre-ready client cannot apply a viewport,
- * and sending it both now and on replay would deliver it twice.
+ * viewport request is withheld until then and replayed from cache on ready —
+ * a pre-ready client cannot apply a viewport, and sending it both now and on
+ * replay would deliver it twice.
  *
  * It is a field on the subscription rather than a second set keyed by the same
  * document, so readiness cannot outlive the subscription it describes:
@@ -111,15 +105,24 @@ interface SyncStream {
 
 const streams = new Map<string, SyncStream>()
 
-/**
- * The workspaces a stream here subscribed to at workspace granularity — the
- * record the workspace tail follows. A per-document key carries text only.
- */
 /** How many sync streams are held open right now — each one a page being served. */
 export function openSyncStreamCount(): number {
   return streams.size
 }
 
+/** The pages being served, and how many of them have signalled `client_ready` for a document. */
+export function syncStreamStats(): { connected: number; ready: number } {
+  let ready = 0
+  for (const stream of streams.values()) {
+    if ([...stream.docs.values()].some((doc) => doc.ready)) ready++
+  }
+  return { connected: streams.size, ready }
+}
+
+/**
+ * The workspaces a stream here subscribed to at workspace granularity — the
+ * record the workspace tail follows. A per-document key carries text only.
+ */
 export function sseSubscribedWorkspaceIds(): string[] {
   const ids = new Set<string>()
   for (const stream of streams.values()) {
@@ -177,12 +180,10 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
 
 /**
  * Fan a server text message (version_created, head_changed, …) out to SSE
- * subscribers, wrapped with the document it belongs to.
- *
- * A WebSocket is per-canvas, so its text frames need no addressing. One SSE
- * stream serves many documents, so an unaddressed frame would be applied to
- * whichever canvas happened to be listening — a head_changed for one canvas
- * landing on another.
+ * subscribers, wrapped with the document it belongs to. One stream serves
+ * many documents, so an unaddressed frame would be applied to whichever
+ * canvas happened to be listening — a head_changed for one canvas landing on
+ * another.
  */
 export function sseBroadcastText(workspaceId: string, path: string, raw: string): void {
   sendText(docKey(workspaceId, path), raw, () => true)
@@ -200,8 +201,7 @@ function sendText(key: string, raw: string, admits: (entry: SyncStreamDoc) => bo
 
 /**
  * How many streams are subscribed to one document, or only those that have
- * signalled `client_ready` for it. The page a stream serves has no socket, so
- * a count of browsers on a document has to add these to the WebSocket's.
+ * signalled `client_ready` for it.
  */
 export function sseClientCount(workspaceId: string, path: string, readyOnly: boolean): number {
   const key = docKey(workspaceId, path)
@@ -278,17 +278,15 @@ export function resetSyncStreamsForTests(): void {
 }
 
 // This transport's own funnel subscription, installed by its own entry
-// point (stream-open) — an SSE-only audience must hear persisted updates
-// whether or not a websocket ever connected (ws.ts installs its own; see
-// installWsUpdateFanout). Subscribed through the WorkspaceDocuments seam
+// point (stream-open). Subscribed through the WorkspaceDocuments seam
 // (ADR-0018) via the same wiring production resolves; memoized as a promise
 // so concurrent first opens install once, and a failed resolve retries on
 // the next open instead of poisoning the flag.
 let sseFanoutInstall: Promise<void> | null = null
 function ensureSseUpdateFanout(): Promise<void> {
   sseFanoutInstall ??= (async () => {
-    // Dynamic for the same value-cycle reason ws.ts gives: the di wiring's
-    // import chain reaches back into the routes through canvas-client-notifier.
+    // Dynamic: the di wiring's import chain reaches back into the routes
+    // through canvas-client-notifier, and a static edge closes a value cycle.
     const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
     const deps = await getDefaultServerDeps()
     deps.workspaceDocuments.onUpdated((workspaceId, update) => {
@@ -421,10 +419,8 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
   return c.json({ ok: true, docs })
 }
 
-// The client->server half of the sync protocol. A WebSocket carries these as
-// text frames; an SSE client has no upstream channel of its own, so they
-// arrive here instead. The payload reuses clientTextMessageSchema so both
-// transports validate against the same declaration rather than drifting.
+// The client->server half of the sync protocol: an SSE client has no
+// upstream channel of its own, so its messages arrive here.
 async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
   const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
   if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)

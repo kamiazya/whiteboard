@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises'
-import { createServer } from 'node:http'
+import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,152 +25,111 @@ vi.mock('./daemon-lock.js', () => ({
 }))
 
 vi.mock('../shared/data-dir-secure.js', () => ({
-  DATA_DIR: '/tmp/excalidraw-data',
+  DATA_DIR: '/tmp/whiteboard-data',
   WHITEBOARD_ROOT: '/repo/packages/mcp-server',
 }))
 
 const { ensureDaemon } = await import('./ensure-daemon.js')
 
-describe('ensureDaemon', () => {
-  const originalFetch = globalThis.fetch
+/**
+ * A daemon answering on a real socket, the only place the local daemon
+ * listens (ADR-0050): ensureDaemon has no port to reach it on.
+ */
+let dir: string
+let daemon: Server | undefined
+async function answeringSocket(): Promise<string> {
+  const socketPath = join(dir, 'daemon.sock')
+  daemon = createServer((req, res) => {
+    res.statusCode = req.url === '/api/runtime/ping' ? 200 : 404
+    res.end()
+  })
+  await new Promise<void>((resolve) => daemon?.listen(socketPath, resolve))
+  return socketPath
+}
 
-  beforeEach(() => {
+function record(overrides: Record<string, unknown>) {
+  return {
+    pid: 42,
+    token: 'secret',
+    version: '0.1.0',
+    startedAt: '2026-04-23T00:00:00.000Z',
+    socketPath: join(dir, 'nobody-listens.sock'),
+    ...overrides,
+  }
+}
+
+describe('ensureDaemon', () => {
+  beforeEach(async () => {
     vi.resetAllMocks()
+    dir = await mkdtemp(join(tmpdir(), 'wb-ensure-'))
     withDaemonStartupLockMock.mockImplementation(
       async (_dataDir: string, fn: () => Promise<unknown>) => fn(),
     )
   })
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch
+  afterEach(async () => {
+    await new Promise<void>((resolve) => (daemon ? daemon.close(() => resolve()) : resolve()))
+    daemon = undefined
+    await rm(dir, { recursive: true, force: true })
   })
 
-  it('reuses an existing healthy daemon record', async () => {
-    loadDaemonRecordMock.mockResolvedValue({
-      pid: 42,
-      port: 3099,
-      token: 'secret',
-      version: '0.1.0',
-      startedAt: '2026-04-23T00:00:00.000Z',
-    })
+  it('reuses a daemon that answers on the socket its record names', async () => {
+    const socketPath = await answeringSocket()
+    loadDaemonRecordMock.mockResolvedValue(record({ socketPath }))
     isPidAliveMock.mockReturnValue(true)
-    globalThis.fetch = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as typeof globalThis.fetch
 
-    const result = await ensureDaemon({ dataDir: '/tmp/excalidraw-data' })
+    const result = await ensureDaemon({ dataDir: '/tmp/whiteboard-data' })
 
-    expect(result).toMatchObject({
-      pid: 42,
-      port: 3099,
-      token: 'secret',
-      baseUrl: 'http://127.0.0.1:3099',
-    })
+    expect(result).toMatchObject({ pid: 42, token: 'secret', socketPath })
     expect(spawnMock).not.toHaveBeenCalled()
     expect(deleteDaemonRecordMock).not.toHaveBeenCalled()
   })
 
-  // ADR-0050 decision 2: a daemon that records a socket is asked there, so
-  // the check still answers once its loopback port is gone.
-  it('pings a daemon over the socket its record names', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wb-ensure-socket-'))
-    const socketPath = join(dir, 'daemon.sock')
-    const daemon = createServer((req, res) => {
-      res.statusCode = req.url === '/api/runtime/ping' ? 200 : 404
-      res.end()
-    })
-    await new Promise<void>((resolve) => daemon.listen(socketPath, resolve))
-    try {
-      loadDaemonRecordMock.mockResolvedValue({
-        pid: 42,
-        port: 3099,
-        token: 'secret',
-        version: '0.1.0',
-        startedAt: '2026-04-23T00:00:00.000Z',
-        socketPath,
-      })
-      isPidAliveMock.mockReturnValue(true)
-      globalThis.fetch = vi.fn(async () => {
-        throw new TypeError('fetch failed')
-      }) as typeof globalThis.fetch
+  it('spawns a new daemon when the registry is stale and returns the record it writes', async () => {
+    const socketPath = await answeringSocket()
+    loadDaemonRecordMock
+      .mockResolvedValueOnce(record({ pid: 10, token: 'old-token' }))
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(record({ pid: 777, token: 'new-token', socketPath }))
+    isPidAliveMock.mockImplementation((pid: number) => pid === 777)
+    spawnMock.mockReturnValue({ pid: 777, unref: vi.fn() })
 
-      const result = await ensureDaemon({ dataDir: '/tmp/excalidraw-data' })
+    const result = await ensureDaemon({ dataDir: '/tmp/whiteboard-data', startupTimeoutMs: 2_000 })
 
-      expect(result).toMatchObject({ pid: 42, socketPath })
-      expect(spawnMock).not.toHaveBeenCalled()
-    } finally {
-      await new Promise<void>((resolve) => daemon.close(() => resolve()))
-      await rm(dir, { recursive: true, force: true })
-    }
+    expect(deleteDaemonRecordMock).toHaveBeenCalledWith('/tmp/whiteboard-data')
+    expect(spawnMock).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({ pid: 777, token: 'new-token', socketPath })
   })
 
-  it('spawns a new daemon when the registry is stale and returns the saved record', async () => {
+  it('spawns the daemon with no port and no host to bind', async () => {
+    const socketPath = await answeringSocket()
     loadDaemonRecordMock
-      .mockResolvedValueOnce({
-        pid: 10,
-        port: 3099,
-        token: 'old-token',
-        version: '0.1.0',
-        startedAt: '2026-04-23T00:00:00.000Z',
-      })
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        pid: 777,
-        port: 45001,
-        token: 'new-token',
-        version: '0.1.0',
-        startedAt: '2026-04-23T00:05:00.000Z',
-      })
-    isPidAliveMock.mockReturnValue(false)
-    spawnMock.mockReturnValue({
-      pid: 777,
-      unref: vi.fn(),
-    })
-    let polls = 0
-    globalThis.fetch = vi.fn(async (url: string | URL) => {
-      polls += 1
-      expect(url.toString()).toBe('http://127.0.0.1:45001/api/runtime/ping')
-      return new Response(JSON.stringify({ ok: true }), { status: 200 })
-    }) as typeof globalThis.fetch
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(record({ pid: 888, socketPath }))
+    isPidAliveMock.mockReturnValue(true)
+    spawnMock.mockReturnValue({ pid: 888, unref: vi.fn() })
 
-    const result = await ensureDaemon({
-      dataDir: '/tmp/excalidraw-data',
-      startPort: 45001,
-      startupTimeoutMs: 500,
-    })
+    await ensureDaemon({ dataDir: '/tmp/whiteboard-data', startupTimeoutMs: 2_000 })
 
-    expect(deleteDaemonRecordMock).toHaveBeenCalledWith('/tmp/excalidraw-data')
-    expect(spawnMock).toHaveBeenCalledOnce()
-    expect(result).toMatchObject({
-      pid: 777,
-      port: 45001,
-      token: 'new-token',
-      baseUrl: 'http://127.0.0.1:45001',
-    })
-    expect(polls).toBeGreaterThan(0)
+    const [, args] = spawnMock.mock.calls[0]
+    expect(args.some((arg: string) => arg.startsWith('--port'))).toBe(false)
+    expect(args.some((arg: string) => arg.startsWith('--host'))).toBe(false)
   })
 
   it('uses node --watch + tsx/esm in dev mode so server changes restart without restarting the MCP session', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      pid: 888,
-      port: 45002,
-      token: 'watch-token',
-      version: '0.1.0',
-      startedAt: '2026-04-23T00:05:00.000Z',
-    })
-    spawnMock.mockReturnValue({
-      pid: 888,
-      unref: vi.fn(),
-    })
-    globalThis.fetch = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as typeof globalThis.fetch
+    const socketPath = await answeringSocket()
+    loadDaemonRecordMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(record({ pid: 888, socketPath }))
+    isPidAliveMock.mockReturnValue(true)
+    spawnMock.mockReturnValue({ pid: 888, unref: vi.fn() })
 
     await ensureDaemon({
-      dataDir: '/tmp/excalidraw-data',
+      dataDir: '/tmp/whiteboard-data',
       env: { WHITEBOARD_DEV: '1' },
-      startPort: 45002,
-      startupTimeoutMs: 500,
+      startupTimeoutMs: 2_000,
     })
 
     expect(spawnMock).toHaveBeenCalledOnce()
@@ -180,41 +139,27 @@ describe('ensureDaemon', () => {
     expect(args).toContain('--import')
     expect(args).toContain('tsx/esm')
     expect(args).toContain('/repo/packages/mcp-server/src/server/daemon-entry.ts')
-    expect(args).toContain('--daemon')
-    expect(args).toContain('--port=45002')
   })
 
   it('omits --watch in dev mode when WHITEBOARD_NO_WATCH is set to avoid EMFILE on fd-heavy machines', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      pid: 889,
-      port: 45003,
-      token: 'no-watch-token',
-      version: '0.1.0',
-      startedAt: '2026-04-23T00:05:00.000Z',
-    })
-    spawnMock.mockReturnValue({
-      pid: 889,
-      unref: vi.fn(),
-    })
-    globalThis.fetch = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as typeof globalThis.fetch
+    const socketPath = await answeringSocket()
+    loadDaemonRecordMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(record({ pid: 889, socketPath }))
+    isPidAliveMock.mockReturnValue(true)
+    spawnMock.mockReturnValue({ pid: 889, unref: vi.fn() })
 
     await ensureDaemon({
-      dataDir: '/tmp/excalidraw-data',
+      dataDir: '/tmp/whiteboard-data',
       env: { WHITEBOARD_DEV: '1', WHITEBOARD_NO_WATCH: '1' },
-      startPort: 45003,
-      startupTimeoutMs: 500,
+      startupTimeoutMs: 2_000,
     })
 
-    expect(spawnMock).toHaveBeenCalledOnce()
     const [command, args] = spawnMock.mock.calls[0]
     expect(command).toBe('node')
     expect(args).not.toContain('--watch')
-    expect(args).toContain('--import')
-    expect(args).toContain('tsx/esm')
     expect(args).toContain('/repo/packages/mcp-server/src/server/daemon-entry.ts')
-    expect(args).toContain('--daemon')
   })
 
   // The daemon token is a full-authority bearer credential. On Linux
@@ -227,24 +172,15 @@ describe('ensureDaemon', () => {
     ['packaged', {} as NodeJS.ProcessEnv],
     ['dev', { WHITEBOARD_DEV: '1' } as NodeJS.ProcessEnv],
   ])('never puts the daemon token on the spawned argv (%s mode)', async (_label, env) => {
-    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      pid: 890,
-      port: 45010,
-      token: 'record-token',
-      version: '0.1.0',
-      startedAt: '2026-04-23T00:05:00.000Z',
-    })
+    const socketPath = await answeringSocket()
+    loadDaemonRecordMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(record({ pid: 890, socketPath }))
+    isPidAliveMock.mockReturnValue(true)
     spawnMock.mockReturnValue({ pid: 890, unref: vi.fn() })
-    globalThis.fetch = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as typeof globalThis.fetch
 
-    await ensureDaemon({
-      dataDir: '/tmp/excalidraw-data',
-      env,
-      startPort: 45010,
-      startupTimeoutMs: 500,
-    })
+    await ensureDaemon({ dataDir: '/tmp/whiteboard-data', env, startupTimeoutMs: 2_000 })
 
     expect(spawnMock).toHaveBeenCalledOnce()
     const [, args, options] = spawnMock.mock.calls[0]
@@ -262,41 +198,25 @@ describe('ensureDaemon', () => {
   })
 
   it('re-checks the registry after taking the startup lock and reuses a daemon started by another caller', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      pid: 91,
-      port: 45100,
-      token: 'shared-token',
-      version: '0.1.0',
-      startedAt: '2026-04-23T00:06:00.000Z',
-    })
+    const socketPath = await answeringSocket()
+    loadDaemonRecordMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(record({ pid: 91, token: 'shared-token', socketPath }))
     isPidAliveMock.mockReturnValue(true)
-    globalThis.fetch = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    ) as typeof globalThis.fetch
 
-    const result = await ensureDaemon({
-      dataDir: '/tmp/excalidraw-data',
-      startupTimeoutMs: 500,
-    })
+    const result = await ensureDaemon({ dataDir: '/tmp/whiteboard-data', startupTimeoutMs: 500 })
 
     expect(withDaemonStartupLockMock).toHaveBeenCalledOnce()
     expect(spawnMock).not.toHaveBeenCalled()
-    expect(result).toMatchObject({
-      pid: 91,
-      port: 45100,
-      token: 'shared-token',
-      baseUrl: 'http://127.0.0.1:45100',
-    })
+    expect(result).toMatchObject({ pid: 91, token: 'shared-token', socketPath })
   })
 
-  it('fails fast with a clear bind error when loopback listen is not permitted', async () => {
-    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+  it('gives up with the startup-timeout error when the spawned daemon never answers', async () => {
+    loadDaemonRecordMock.mockResolvedValue(null)
+    spawnMock.mockReturnValue({ pid: 999, unref: vi.fn() })
+
     await expect(
-      ensureDaemon({
-        dataDir: '/tmp/excalidraw-data',
-        startPort: 65536,
-        startupTimeoutMs: 500,
-      }),
-    ).rejects.toThrow(/Invalid daemon startPort/)
+      ensureDaemon({ dataDir: '/tmp/whiteboard-data', startupTimeoutMs: 200 }),
+    ).rejects.toThrow('Daemon startup timeout')
   })
 })

@@ -44,6 +44,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
+import { request } from 'node:http'
 import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -55,7 +56,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
 const DIST_CLI = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
 
-const DAEMON_PORT = 4292
 const SERVER_PORT = 4295
 const SEED_TOKEN = 'smoke-cli-seed-token-x7z9q'
 const SMOKE_ISSUER = 'https://auth.server-cli-smoke.example'
@@ -143,6 +143,18 @@ async function waitForHttpReady(url, timeoutMs = 15_000) {
     await delay(300)
   }
   return false
+}
+
+/** One request over the local daemon's socket; answers the status code. */
+function socketRequest(socketPath, method, path, headers, body) {
+  return new Promise((done, reject) => {
+    const req = request({ socketPath, method, path, headers }, (res) => {
+      res.resume()
+      res.on('end', () => done(res.statusCode))
+    })
+    req.on('error', reject)
+    req.end(body)
+  })
 }
 
 function killProc(proc) {
@@ -297,34 +309,23 @@ try {
   {
     seedDaemon = spawn(
       process.execPath,
-      [
-        DIST_CLI,
-        'daemon',
-        'run',
-        '--json',
-        '--host=127.0.0.1',
-        `--port=${DAEMON_PORT}`,
-        `--data-dir=${srcDataDir}`,
-      ],
+      [DIST_CLI, 'daemon', 'run', '--json', `--data-dir=${srcDataDir}`],
       { stdio: 'pipe', env: { ...scrubDevEnv(process.env), WHITEBOARD_DAEMON_TOKEN: SEED_TOKEN } },
     )
 
     const ready = await waitForReadyJson(seedDaemon)
     if (!ready) fail('scenario 2: daemon did not emit ready JSON')
-    if (!(await waitForHttpReady(`http://127.0.0.1:${DAEMON_PORT}/api/runtime/ping`))) {
-      fail('scenario 2: daemon HTTP not ready')
-    }
 
-    // Seed workspace + canvas.
-    const createRes = await fetch(
-      `http://127.0.0.1:${DAEMON_PORT}/api/workspaces/${WORKSPACE_ID}/documents`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SEED_TOKEN}` },
-        body: JSON.stringify({ path: CANVAS_PATH }),
-      },
+    // Seed workspace + canvas, over the local daemon's socket (ADR-0050: it
+    // listens on no TCP port).
+    const createStatus = await socketRequest(
+      ready.socketPath,
+      'POST',
+      `/api/workspaces/${WORKSPACE_ID}/documents`,
+      { 'Content-Type': 'application/json', Authorization: `Bearer ${SEED_TOKEN}` },
+      JSON.stringify({ path: CANVAS_PATH }),
     )
-    if (!createRes.ok) fail('scenario 2: canvas create failed', { status: createRes.status })
+    if (createStatus !== 200) fail('scenario 2: canvas create failed', { status: createStatus })
 
     killProc(seedDaemon)
     // Give the daemon time to flush and write its record.

@@ -3,8 +3,6 @@ import { maybeOpenDaemonBrowser } from './daemon-run-auto-open.js'
 
 function baseInput(overrides: Partial<Parameters<typeof maybeOpenDaemonBrowser>[0]> = {}) {
   return {
-    host: '127.0.0.1',
-    port: 3099,
     noOpenFlag: false,
     configOpenBrowser: undefined,
     isTTY: true,
@@ -54,12 +52,6 @@ describe('maybeOpenDaemonBrowser', () => {
 
   it('does not open inside a container', async () => {
     const input = baseInput({ isContainerFn: () => true })
-    await maybeOpenDaemonBrowser(input)
-    expect(input.openFn).not.toHaveBeenCalled()
-  })
-
-  it('does not open on a non-loopback host', async () => {
-    const input = baseInput({ host: '0.0.0.0' })
     await maybeOpenDaemonBrowser(input)
     expect(input.openFn).not.toHaveBeenCalled()
   })

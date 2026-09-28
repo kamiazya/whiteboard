@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { ClientCountResponse } from '../../shared/api-contracts/document-runtime.js'
 import { onDocumentAction } from './document/path-route.js'
-import { getClientCount, getReadyClientCount } from './ws.js'
+import { getClientCount, getReadyClientCount } from './sync-audience.js'
 
 // Lightweight route for polling whether a browser has connected to a canvas.
 // It reads the browsers on the document over either transport (getClientCount).

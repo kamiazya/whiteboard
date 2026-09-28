@@ -20,17 +20,9 @@ vi.mock('./config.js', async () => {
   }
 })
 
-const { findAvailablePort } = await import('../cli/daemon-run.js')
 const { startHttpServer } = await import('./http-server.js')
 const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 const { closeDb } = await import('./store/db/index.js')
-
-let nextPortBase = 5600
-async function acquirePort(): Promise<number> {
-  const port = await findAvailablePort(nextPortBase)
-  nextPortBase = port + 1
-  return port
-}
 
 function getOverSocket(
   socketPath: string,
@@ -48,7 +40,7 @@ function getOverSocket(
 }
 
 // ADR-0050 decision 2: the daemon answers its API on a socket only its owner
-// can open, beside the loopback port it keeps until browsers have a bridge.
+// can open, and nowhere else.
 describe('startHttpServer on a local socket (ADR-0050)', () => {
   let running: RunningServer | undefined
 
@@ -67,7 +59,7 @@ describe('startHttpServer on a local socket (ADR-0050)', () => {
 
   it('serves the API on an owner-only socket and removes it on close', async () => {
     const socketPath = join(tempDir, 'run', 'daemon.sock')
-    running = await startHttpServer({ port: await acquirePort(), host: '127.0.0.1', socketPath })
+    running = await startHttpServer({ socketPath })
 
     expect(await getOverSocket(socketPath, '/api/runtime/ping')).toBe(200)
     expect(statSync(socketPath).mode & 0o777).toBe(0o600)
@@ -78,14 +70,9 @@ describe('startHttpServer on a local socket (ADR-0050)', () => {
   })
   // Reaching the socket is not itself a credential: the directory keeps other
   // users out, and the token still decides for everyone who gets that far.
-  it('asks for the daemon token on the socket as on loopback', async () => {
+  it('asks for the daemon token on the socket', async () => {
     const socketPath = join(tempDir, 'run', 'daemon.sock')
-    running = await startHttpServer({
-      port: await acquirePort(),
-      host: '127.0.0.1',
-      token: 'socket-token',
-      socketPath,
-    })
+    running = await startHttpServer({ token: 'socket-token', socketPath })
 
     expect(await getOverSocket(socketPath, '/api/workspaces')).toBe(401)
     expect(

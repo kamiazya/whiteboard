@@ -115,7 +115,7 @@ now fails until someone raises the ceiling deliberately, and paying one off
 fails until someone lowers it. ADR-0018 is **Accepted** (2026-08-31) and
 carried the burn-down order, and that scheduled burn-down is **COMPLETE**
 (2026-09-02): `restore.ts`, `live-doc.ts`, `workspace-document.ts` and
-`ws.ts` are all translation-only over the `LiveDocuments` /
+the since-deleted websocket route were all translation-only over the `LiveDocuments` /
 `WorkspaceDocuments` seams. The 21 edges left belong to the unscheduled
 adapters; paying one off still lowers the ceiling the same way.
 

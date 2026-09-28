@@ -120,7 +120,6 @@ export async function runDaemonSupportBundle(
       record: status.record
         ? {
             pid: status.record.pid,
-            port: status.record.port,
             version: status.record.version,
             startedAt: status.record.startedAt,
           }

@@ -6,7 +6,7 @@ artifacts — npm tarball and Docker image — against real process boundaries.
 ## test:e2e:distribution
 
 The `test:e2e:distribution` root script runs the full distribution verification chain.
-The chain has seventeen steps after the initial build prerequisite:
+The chain has fifteen steps after the initial build prerequisite:
 
 1. `pnpm smoke:e2e` — full stdio MCP round-trip against the source entry point (canvas create → checkpoint → restore → export)
 2. `pnpm smoke:tarball` — validates the packed `.tgz` is installable and functional
@@ -14,17 +14,15 @@ The chain has seventeen steps after the initial build prerequisite:
 4. `pnpm smoke:codex-config` — validates the Codex plugin manifest and published MCP config
 5. `pnpm smoke:claude` — end-to-end Claude CLI integration smoke
 6. `pnpm smoke:codex` — end-to-end Codex CLI integration smoke
-7. `pnpm smoke:daemon-origin` — real-browser proof the daemon origin 302s every UI path to the hosted app, and that the web app offers no consent on its remaining `/pair` path
-8. `pnpm smoke:passkey-promote` — real-browser proof of the passkey attestation seam (ADR-0039): a Chromium virtual authenticator on a paired origin registers, promotes with an assertion the daemon verifies, is refused on tamper/replay/wrong workspace, and the History row carries the evidence
-9. `pnpm smoke:read-plane` — real-browser proof of the read plane (ADR-0042) through the extension: a sealed replica in real IndexedDB, the locked page a cold start lands on with the daemon gone, and the daemon page back on Reconnect
-10. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
-11. packaged daemon backup/restore smoke
-12. packaged daemon logs smoke
-13. packaged daemon support-bundle smoke
-14. packaged daemon token smoke
-15. packaged server-mode app smoke
-16. packaged server-mode CLI smoke
-17. packaged server-mode entrypoint smoke
+7. `pnpm smoke:read-plane` — real-browser proof of the read plane (ADR-0042) through the extension: a sealed replica in real IndexedDB, the locked page a cold start lands on with the daemon gone, and the daemon page back on Reconnect
+8. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
+9. packaged daemon backup/restore smoke
+10. packaged daemon logs smoke
+11. packaged daemon support-bundle smoke
+12. packaged daemon token smoke
+13. packaged server-mode app smoke
+14. packaged server-mode CLI smoke
+15. packaged server-mode entrypoint smoke
 
 ## Vitest-backed vs Node-script smokes
 

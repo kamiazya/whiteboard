@@ -38,8 +38,7 @@ function isNamedPipe(path: string): boolean {
 }
 
 /**
- * The socket for the daemon keeping `dataDir`, or null where the platform has
- * none.
+ * The socket for the daemon keeping `dataDir`.
  *
  * Windows takes a named pipe (ADR-0050 decision 9). A pipe has no directory
  * to close, so its name is random rather than derived: another user who could
@@ -50,7 +49,7 @@ function isNamedPipe(path: string): boolean {
 export function daemonSocketPath(
   dataDir: string,
   context: SocketPathContext = defaultContext(),
-): string | null {
+): string {
   if (context.platform === 'win32')
     return `${PIPE_PREFIX}whiteboard-${randomBytes(16).toString('hex')}`
   const name = `${createHash('sha256').update(resolve(dataDir)).digest('hex').slice(0, 16)}.sock`
@@ -95,9 +94,9 @@ export async function clearStaleSocket(path: string): Promise<void> {
 }
 
 /**
- * Serves `fetch` on the socket at `path` — the same app the loopback port
- * serves, so its auth applies unchanged. Closing the server unlinks the file;
- * one a killed daemon left behind is `clearStaleSocket`'s.
+ * Serves `fetch` on the socket at `path` — the daemon's only listener, so its
+ * auth is the app's own. Closing the server unlinks the file; one a killed
+ * daemon left behind is `clearStaleSocket`'s.
  */
 export async function listenOnSocket(
   fetch: (request: Request) => Response | Promise<Response>,

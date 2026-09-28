@@ -48,10 +48,6 @@ const BACKUP_DISPOSITION = {
 
   'daemon-identity.json':
     'never-copied: the Ed25519 private key that signs version attestations and is the source of the daemon did:key. Decided 2026-09-19 against a real cost — a restored daemon gets a fresh identity, so pairings must be redone and old attestations no longer verify. Taken because that is recoverable and a signing key in a backup is not.',
-  'pairing-grants.json':
-    'copied: a record of which origins the user trusted, not a key — the session tokens minted against a grant are memory-only (pairing-token-store.ts). A restore that lost it would silently un-pair every origin.',
-  'webauthn-credentials.json':
-    'copied: passkey PUBLIC keys and signature counters. Not a secret, and a restore without them cannot verify any registered passkey.',
   'storage.json':
     'copied: the database location record. A restore needs it to find the database it just restored.',
   'whiteboard.db':

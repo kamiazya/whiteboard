@@ -107,10 +107,10 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
   })
 
   it('every /api/* route mounted on the local-daemon app resolves to a scope decision', async () => {
-    // POST /api/ws-ticket only mounts under authMode: 'local-daemon' (see
-    // app.ts), so the server-mode walk above never sees it — a local-daemon
-    // app is built here too, or a newly local-daemon-only route could ship
-    // with a registry gap the guard above would never catch.
+    // The replica-key routes mount only under authMode: 'local-daemon' (see
+    // app.ts), so the server-mode walk above never sees them — a
+    // local-daemon app is built here too, or a newly local-daemon-only route
+    // could ship with a registry gap the guard above would never catch.
     const app = createApp({
       authMode: 'local-daemon',
       touch: () => {},
@@ -155,13 +155,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     ).toEqual([])
   })
 
-  it('POST /api/ws-ticket requires canvas:read (ADR-0005 connection ticket mint)', () => {
-    expect(resolveApiRouteScope('POST', '/api/ws-ticket')).toEqual({
-      kind: 'scoped',
-      scopes: ['canvas:read'],
-    })
-  })
-
   // The reconnect surface that used to occupy these paths is gone. Removing
   // its registry entries must move the paths from a decision to null
   // (fail closed), never silently to a default-allow.
@@ -197,46 +190,10 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     expect(resolveApiRouteScope('GET', '/api/some-route-nobody-declared-yet')).toBeNull()
   })
 
-  it('POST /api/pairing/token is public — it authenticates via PKCE code or Origin-vs-grant, not a bearer', () => {
-    expect(resolveApiRouteScope('POST', '/api/pairing/token')).toEqual({ kind: 'public' })
-    expect(resolveApiRouteScope('POST', '/api/pairing/grants')).toEqual({
-      kind: 'scoped',
-      scopes: ['runtime:admin'],
-    })
-    expect(resolveApiRouteScope('GET', '/api/pairing/grants')).toEqual({
-      kind: 'scoped',
-      scopes: ['runtime:admin'],
-    })
-    expect(resolveApiRouteScope('DELETE', '/api/pairing/grants/abc123')).toEqual({
-      kind: 'scoped',
-      scopes: ['runtime:admin'],
-    })
-  })
-
   it('promotion needs both the canvas write and the versions write', () => {
     expect(resolveApiRouteScope('POST', '/api/w/ws-1/workspace-document/promote')).toEqual({
       kind: 'scoped',
       scopes: ['canvas:write', 'versions:write'],
-    })
-  })
-
-  it('credential pins sit at the grant-management bar (runtime:admin)', () => {
-    for (const [method, path] of [
-      ['POST', '/api/pairing/credentials'],
-      ['GET', '/api/pairing/credentials'],
-      ['DELETE', '/api/pairing/credentials/Y3JlZC0x'],
-    ] as const) {
-      expect(resolveApiRouteScope(method, path)).toEqual({
-        kind: 'scoped',
-        scopes: ['runtime:admin'],
-      })
-    }
-  })
-
-  it('adding a passkey member sits at the same admin bar as grants and credential pins', () => {
-    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/members')).toEqual({
-      kind: 'scoped',
-      scopes: ['runtime:admin'],
     })
   })
 
@@ -261,23 +218,11 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
-  it('session assertion routes are scoped (the handler itself checks for a bound session)', () => {
-    for (const path of [
-      '/api/pairing/session-assert/challenge',
-      '/api/pairing/session-assert',
-    ] as const) {
-      expect(resolveApiRouteScope('POST', path)).toEqual({
-        kind: 'scoped',
-        scopes: ['runtime:admin'],
-      })
-    }
-  })
-
   it('GET /api/runtime/ping is a declared public route', () => {
     expect(resolveApiRouteScope('GET', '/api/runtime/ping')).toEqual({ kind: 'public' })
   })
 
-  it('POST /api/runtime/verify is public — the identity challenge must precede any pairing', () => {
+  it('POST /api/runtime/verify is public — the identity challenge must precede any credential', () => {
     expect(resolveApiRouteScope('POST', '/api/runtime/verify')).toEqual({ kind: 'public' })
   })
 
@@ -347,11 +292,9 @@ const CLAIMED_BY = {
   'versions/prune-sandwiched': ['POST', '/api/workspaces/ws1/versions/prune-sandwiched'],
   'files/purge-dangling': ['POST', '/api/workspaces/ws1/files/purge-dangling'],
   'documents/optimize-all': ['POST', '/api/workspaces/ws1/documents/optimize-all'],
-  'workspace members': ['POST', '/api/workspaces/ws1/members'],
   // DELETE specifically: the rule claims that verb alone, so a GET of the
   // same path falls through to 'workspaces (rest)' and is a different
   // decision entirely.
-  'workspace members-only reopen': ['DELETE', '/api/workspaces/ws1/members-only'],
   'workspace replica-key': ['POST', '/api/workspaces/ws1/replica-key'],
   'workspace replica-key rotate': ['POST', '/api/workspaces/ws1/replica-key/rotate'],
   'workspace replica-tier': ['PUT', '/api/workspaces/ws1/replica-tier'],
@@ -361,10 +304,6 @@ const CLAIMED_BY = {
   'runtime (rest)': ['GET', '/api/runtime/status'],
   debug: ['GET', '/api/debug'],
   fonts: ['GET', '/api/fonts'],
-  'ws-ticket': ['POST', '/api/ws-ticket'],
-  'pairing/token': ['POST', '/api/pairing/token'],
-  'pairing grants and credentials': ['GET', '/api/pairing/grants'],
-  'pairing/session-assert': ['POST', '/api/pairing/session-assert'],
 } satisfies Record<string, readonly [string, string]>
 
 describe('no rule in the table is shadowed by an earlier one', () => {
@@ -413,14 +352,6 @@ const ORIGIN_TRUSTED = [
   'runtime/ping',
   'runtime/verify',
   'sync transport',
-  'workspace members',
-  // ORIGIN_TRUSTED, and NOT because it is unimportant: the membership gate
-  // is the thing this route turns off, so running it through the gate would
-  // make the escape unreachable in exactly the state it exists for. Its own
-  // bar is `daemon-token-only`, which is stricter than the gate rather than
-  // weaker — judged by grant KIND, so a pairing grant's full scope set does
-  // not reach it.
-  'workspace members-only reopen',
   'workspace replica-key',
   'workspace replica-key rotate',
   'workspace replica-tier',
@@ -431,10 +362,6 @@ const ORIGIN_TRUSTED = [
   'runtime (rest)',
   'debug',
   'fonts',
-  'ws-ticket',
-  'pairing/token',
-  'pairing grants and credentials',
-  'pairing/session-assert',
 ]
 
 describe('S8: the membership-gate partition covers every rule', () => {

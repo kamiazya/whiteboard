@@ -1,14 +1,13 @@
 import { z } from 'zod'
 
-// Wire contract for the `whiteboard daemon run --json` ready payload.
-// Transcribes the pre-existing DaemonRunReadyResult interface
-// (cli/daemon-run.ts) field for field — binding increment, not a rename.
+// Wire contract for the `whiteboard daemon run --json` ready payload. The
+// daemon listens on its owner-only socket and no TCP port (ADR-0050), so the
+// socket is where a caller reaches it.
 export const daemonRunReadyResultSchema = z.object({
   schemaVersion: z.literal(1),
   ok: z.literal(true),
   pid: z.number(),
-  port: z.number(),
-  host: z.string(),
+  socketPath: z.string(),
   version: z.string(),
   startedAt: z.string(),
 })

@@ -35,7 +35,7 @@ const { createDocumentRouter } = await import('../document.js')
 // restore; racing the two first-time loads of the same circularly-
 // dependent module is a separate, pre-existing module-init hazard this
 // test does not intend to exercise.
-await import('../ws.js')
+await import('../sync-audience.js')
 
 describe('restore targetPath-overwrite vs delete race', () => {
   beforeEach(() => {

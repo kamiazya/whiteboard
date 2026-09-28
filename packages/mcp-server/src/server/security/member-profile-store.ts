@@ -1,7 +1,6 @@
 /**
  * ADR-0041's L1 subject: a MemberProfile is a PERSON, identified by the
- * passkey credentials the daemon has already pinned
- * (webauthn-credential-store.ts) — never by a paired browser origin. A
+ * credentials bound to them — never by a browser origin. A
  * profile holds no key material; a credential id is only a public handle
  * (decision 1).
  *
@@ -38,8 +37,7 @@
  * empty table correctly means "nobody is a member", and there is
  * deliberately NO seeded owner row, at migration time or anywhere else.
  *
- * This diverges on purpose from pairing-grant-store.ts and
- * webauthn-credential-store.ts, which are Zod-validated JSON files that
+ * This diverges on purpose from the Zod-validated JSON-file stores, which
  * degrade to empty on a corrupt read (a dead daemon is worse than a lost
  * pin). This store is DB rows: a corrupt database never reaches this seam at
  * all, because the migrator already refuses to boot on one
@@ -114,8 +112,6 @@ export interface MemberProfileStore {
    *  administrator picks from. */
   listUsers(): Promise<{ id: string; displayName: string; deactivated: boolean }[]>
   addMember(workspaceId: string, profileId: string): Promise<void>
-  /** The passkeys a user holds, which a local daemon's sessions are bound to. */
-  passkeysOf(profileId: string): Promise<{ origin: string; credentialId: string }[]>
   revokeL1Membership(
     workspaceId: string,
     profileId: string,
@@ -189,8 +185,7 @@ async function deleteMembership(db: TenantScoped, workspaceId: string, profileId
 }
 
 // `accountBindings` is keeper-wide, so this reads every passkey the account
-// holds — the tenant's own pins (webauthn-credential-store.ts) are what say
-// which of them this tenant accepts.
+// holds.
 async function passkeysOf(db: TenantScoped, accountId: string) {
   const rows = await db
     .selectFrom('accountBindings')
@@ -330,8 +325,6 @@ async function roleIn(db: TenantScoped, workspaceId: string, profileId: string) 
   return row?.role ?? null
 }
 
-const userById = (db: TenantScoped, profileId: string) => loadProfileWhere(db, 'id', profileId)
-
 export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     ...bindingLookups(db),
@@ -354,8 +347,6 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
     },
 
     listUsers: () => usersOf(db),
-
-    passkeysOf: async (profileId) => (await userById(db, profileId))?.credentials ?? [],
 
     async addMember(workspaceId, profileId) {
       await insertMembership(db, workspaceId, profileId)

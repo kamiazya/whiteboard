@@ -5,7 +5,7 @@ import { runDaemonStatus } from './daemon-status.js'
 
 const validRecord = {
   pid: 12345,
-  port: 3099,
+  socketPath: '/run/user/1000/whiteboard/d.sock',
   version: '1.2.3',
   startedAt: '2024-06-01T00:00:00.000Z',
   token: 'tok',
@@ -62,7 +62,7 @@ describe('runDaemonStatus: token missing', () => {
   it('returns exitCode 1, ok=false, reason=record-token-missing', async () => {
     const tokenMissingRecord = {
       pid: validRecord.pid,
-      port: validRecord.port,
+      socketPath: validRecord.socketPath,
       version: validRecord.version,
       startedAt: validRecord.startedAt,
     }
@@ -81,7 +81,7 @@ describe('runDaemonStatus: token missing', () => {
   it('includes record fields in result', async () => {
     const tokenMissingRecord = {
       pid: 42,
-      port: 3099,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
       version: '0.1.0',
       startedAt: '2024-01-01T00:00:00.000Z',
     }
@@ -91,7 +91,7 @@ describe('runDaemonStatus: token missing', () => {
       isPidAlive: () => false,
     })
     expect(result.record?.pid).toBe(42)
-    expect(result.record?.port).toBe(3099)
+    expect(result.record?.version).toBe('0.1.0')
   })
 })
 
@@ -149,9 +149,8 @@ describe('runDaemonStatus: valid record, process alive', () => {
       parseRecord: async () => ({ kind: 'valid', record: validRecord }),
       isPidAlive: () => true,
     })
-    expect(result.record).toMatchObject({
+    expect(result.record).toEqual({
       pid: validRecord.pid,
-      port: validRecord.port,
       version: validRecord.version,
       startedAt: validRecord.startedAt,
     })

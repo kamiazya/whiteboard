@@ -55,7 +55,7 @@ describe('parseDaemonRecord', () => {
   it('returns "token-missing" with the base record when the token is absent', async () => {
     const base = {
       pid: 123,
-      port: 3099,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
       version: '0.1.0',
       startedAt: '2026-04-23T00:00:00.000Z',
     }
@@ -69,7 +69,7 @@ describe('parseDaemonRecord', () => {
   it('returns "token-missing" when the token is present but empty', async () => {
     const base = {
       pid: 123,
-      port: 3099,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
       version: '0.1.0',
       startedAt: '2026-04-23T00:00:00.000Z',
       token: '',
@@ -84,7 +84,7 @@ describe('parseDaemonRecord', () => {
   it('returns "malformed" for a present-but-wrong-typed token (not token-missing)', async () => {
     const record = {
       pid: 123,
-      port: 3099,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
       version: '0.1.0',
       startedAt: '2026-04-23T00:00:00.000Z',
       token: 123,
@@ -107,7 +107,7 @@ describe('parseDaemonRecord', () => {
   it('returns "valid" with the full record when all fields including token parse', async () => {
     const record = {
       pid: 123,
-      port: 3099,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
       version: '0.1.0',
       startedAt: '2026-04-23T00:00:00.000Z',
       token: 'secret',

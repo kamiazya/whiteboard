@@ -99,31 +99,8 @@ const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, 'models']
 export async function moveLegacyDataDirUnderTenant(
   dataDir: string,
   tenantId: string,
-  /**
-   * Files at the top of the data directory that belong to the tenant, named by
-   * whoever owns them — a store knows its own filename, and this module knows
-   * where a tenant's things live.
-   */
-  options: { files: readonly string[] },
-): Promise<{ blobs: boolean; workspaces: string[]; files: string[] }> {
-  return {
-    files: await moveTenantFiles(dataDir, tenantId, options.files),
-    ...(await moveTenantDirectories(dataDir, tenantId)),
-  }
-}
-
-async function moveTenantFiles(
-  dataDir: string,
-  tenantId: string,
-  files: readonly string[],
-): Promise<string[]> {
-  const moved: string[] = []
-  for (const name of files) {
-    if (await moveFile(join(dataDir, name), join(tenantRoot(dataDir, tenantId), name))) {
-      moved.push(name)
-    }
-  }
-  return moved
+): Promise<{ blobs: boolean; workspaces: string[] }> {
+  return moveTenantDirectories(dataDir, tenantId)
 }
 
 async function moveTenantDirectories(
@@ -154,23 +131,6 @@ async function isWorkspaceDir(dir: string): Promise<boolean> {
 async function isDirectory(path: string): Promise<boolean> {
   return await stat(path)
     .then((s) => s.isDirectory())
-    .catch(() => false)
-}
-
-async function moveFile(from: string, to: string): Promise<boolean> {
-  if (!(await isFile(from))) return false
-  if (await isFile(to)) {
-    log.warning({ from, to }, 'left a legacy file in place: the tenant already holds one')
-    return false
-  }
-  await mkdir(dirname(to), { recursive: true })
-  await rename(from, to)
-  return true
-}
-
-async function isFile(path: string): Promise<boolean> {
-  return await stat(path)
-    .then((s) => s.isFile())
     .catch(() => false)
 }
 

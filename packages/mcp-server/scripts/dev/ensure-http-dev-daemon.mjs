@@ -16,7 +16,6 @@ import { spawn } from 'node:child_process'
 import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { readDaemonRecord, requestDaemon } from './dev-daemon-socket-lib.mjs'
-import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   acquireSpawnLock,
   releaseSpawnLock,
@@ -35,12 +34,6 @@ import {
 } from './with-dev-data-dir-lib.mjs'
 
 const REPO_ROOT = resolveRepoRootFromGit(process.cwd())
-// Only handed to the daemon this spawns, which still listens on loopback.
-const PORT = deriveDevPort({
-  repoRoot: REPO_ROOT,
-  isMainCheckout: isMainCheckout(REPO_ROOT),
-  env: process.env,
-})
 const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
 // Upper bound on how long we'll wait for `pnpm mcp:http:dev` to answer.
 // Defaults to 30s (tsx + happy-dom + canvas + resvg cold start +
@@ -130,7 +123,6 @@ const SPAWN_LOCK_STALE_MS = resolveSpawnLockStaleMs(process.env)
 const lockMeta = {
   pid: process.pid,
   startedAt: new Date().toISOString(),
-  port: PORT,
   repoRoot: REPO_ROOT,
 }
 
@@ -182,7 +174,7 @@ async function runAsWinner() {
   const logFile = await open(LOG_PATH, 'a')
   const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
-  const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN, PORT), {
+  const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN), {
     cwd: REPO_ROOT,
     detached: true,
     stdio: ['ignore', logFile.fd, logFile.fd],

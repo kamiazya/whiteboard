@@ -5,7 +5,7 @@ const sendAgentActivity = vi.fn()
 const sendViewportRequest = vi.fn()
 const getReadyClientCount = vi.fn(() => 1)
 
-vi.mock('./routes/ws.js', () => ({
+vi.mock('./routes/sync-audience.js', () => ({
   sendAgentActivity: (...args: unknown[]) => sendAgentActivity(...args),
   sendViewportRequest: (...args: unknown[]) => sendViewportRequest(...args),
   getReadyClientCount: (...args: unknown[]) => getReadyClientCount(...args),

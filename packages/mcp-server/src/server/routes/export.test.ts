@@ -22,7 +22,7 @@ vi.mock('../config.js', () => ({
 const mockGetClientCount = vi.fn<(workspaceId: string, path: string) => number>()
 const mockSendExportRequest = vi.fn<(...args: unknown[]) => void>()
 
-vi.mock('./ws.js', () => ({
+vi.mock('./sync-audience.js', () => ({
   getClientCount: (workspaceId: string, path: string) => mockGetClientCount(workspaceId, path),
   sendExportRequest: (...args: unknown[]) => mockSendExportRequest(...args),
 }))

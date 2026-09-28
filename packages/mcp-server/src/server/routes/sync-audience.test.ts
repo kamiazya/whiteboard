@@ -1,17 +1,14 @@
 /**
- * Every text frame the daemon emits is one the browser reads.
+ * Every text event the daemon emits is one the browser reads.
  *
- * The emitters in `ws.ts` are hand-written literals sent as
- * `JSON.stringify(message)`; the browser parses each frame with
- * `serverTextMessageSchema` and DROPS one it refuses, warning into a
- * console nobody watches. A property over the schema alone cannot see a
- * drift here — the generator would narrow with the schema — so this one
- * drives the emitters themselves with what their parameters admit and
- * parses what reached a connected socket the way the browser does.
+ * The emitters in `sync-audience.ts` are hand-written literals sent as
+ * `JSON.stringify(message)`; the browser parses each with
+ * `serverTextMessageSchema` and DROPS one it refuses, warning into a console
+ * nobody watches. A property over the schema alone cannot see a drift here —
+ * the generator would narrow with the schema — so this one drives the
+ * emitters themselves with what their parameters admit and parses what
+ * reached the SSE transport the way the browser does.
  */
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { versionEntrySchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   agentActivityMessageSchema,
@@ -20,50 +17,33 @@ import {
   viewportRequestParamsSchema,
 } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
-import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
+import { afterAll, describe, expect, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 
-let tempDir: string
+/** Every raw event handed to the SSE transport, whichever broadcaster carried it. */
+const sent: string[] = []
 
-vi.mock('../config.js', () => ({
-  get DATA_DIR() {
-    return tempDir
+vi.mock('./sync-sse.js', () => ({
+  setSyncSseHooks: () => {},
+  sseBroadcastText: (_workspaceId: string, _path: string, raw: string) => {
+    sent.push(raw)
   },
-  getDataDir: () => tempDir,
-  WHITEBOARD_ROOT: '/tmp/whiteboard',
-  REPO_ROOT: '/tmp',
+  sseBroadcastTextToReady: (_workspaceId: string, _path: string, raw: string) => {
+    sent.push(raw)
+  },
+  sseClientCount: () => 0,
+  sseSubscribedWorkspaceIds: () => [],
 }))
 
-const { clearCache } = await import('../store/doc-cache.js')
-const { saveDocument } = await import('../store/document-store.js')
 const {
-  handleWsUpgrade,
   sendAgentActivity,
   sendHeadChanged,
   sendRestoreEvent,
   sendVersionCreated,
   sendViewportRequest,
-} = await import('./ws.js')
-
-class FakeWebSocket {
-  sent: string[] = []
-  private listeners = new Map<string, Array<(...args: unknown[]) => void>>()
-  send(data: string | Uint8Array | ArrayBuffer): void {
-    if (typeof data === 'string') this.sent.push(data)
-  }
-  on(event: string, handler: (...args: unknown[]) => void): void {
-    this.listeners.set(event, [...(this.listeners.get(event) ?? []), handler])
-  }
-  close(): void {}
-  async emitMessage(data: Buffer, isBinary: boolean): Promise<void> {
-    for (const handler of this.listeners.get('message') ?? []) await handler(data, isBinary)
-  }
-}
+} = await import('./sync-audience.js')
 
 const WORKSPACE = 'session1'
-// `ws.ts` keys its registries by `<workspaceId>/<path>` as module state, so
-// this canvas is one no other file's test connects to.
 const CANVAS = 'emitter-property-canvas'
 
 const versionArb = arbitraryForSchema(versionEntrySchema)
@@ -140,24 +120,9 @@ function emit(emission: Emission): void {
 
 const viaJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
 const kinds = new Map<string, number>()
-const socket = new FakeWebSocket()
 
-describe('every text frame the daemon emits is one the browser reads', () => {
-  beforeAll(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-emitters-'))
-    await mkdir(join(tempDir, WORKSPACE), { recursive: true })
-    await saveDocument(WORKSPACE, 'registered-seed', new LoroDoc())
-    clearCache()
-    await handleWsUpgrade(
-      { url: `/ws/${WORKSPACE}/${CANVAS}`, headers: { host: 'localhost:3099' } } as never,
-      socket as never,
-    )
-    await socket.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
-  })
-
-  afterAll(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-    clearCache()
+describe('every text event the daemon emits is one the browser reads', () => {
+  afterAll(() => {
     const unreached = [
       'version_created',
       'restore',
@@ -169,12 +134,12 @@ describe('every text frame the daemon emits is one the browser reads', () => {
   })
 
   fcTest.prop([emissionArb], withDefaults())(
-    'the frame parses under the browser schema, equal to what was asked',
+    'the event parses under the browser schema, equal to what was asked',
     (emission) => {
       kinds.set(emission.kind, (kinds.get(emission.kind) ?? 0) + 1)
-      const before = socket.sent.length
+      const before = sent.length
       emit(emission)
-      const frames = socket.sent.slice(before)
+      const frames = sent.slice(before)
       expect(frames, JSON.stringify(emission)).toHaveLength(1)
       const raw: unknown = JSON.parse(frames[0] as string)
       const parsed = serverTextMessageSchema.safeParse(raw)

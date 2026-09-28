@@ -4,7 +4,7 @@
  * carry (a Date, a bigint, a transform) would be a frame the browser
  * loses. That is all this lane can say: its generator is built from the
  * parser's own schema, so a drift between the two ends is invisible here
- * and is mcp-server's `ws-emitters.property.test.ts` to catch, by driving
+ * and is mcp-server's `sync-audience.test.ts` to catch, by driving
  * the daemon's emitters against this parser. What this file adds beside
  * the round trip is the arms tally: every message kind is drawn.
  */

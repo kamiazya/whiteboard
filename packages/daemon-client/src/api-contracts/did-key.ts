@@ -30,9 +30,7 @@ const ED25519_PUBLIC_KEY_BYTES = 32
 
 const DID_KEY_PREFIX = 'did:key:'
 
-// btoa/atob rather than Buffer: this package runs in the browser too, and
-// `pairing-link.ts` beside it already takes the same route for the same
-// reason.
+// btoa/atob rather than Buffer: this package runs in the browser too.
 function base64UrlToBytes(value: string): Uint8Array | null {
   const normalized = value.replaceAll('-', '+').replaceAll('_', '/')
   const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)

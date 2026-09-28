@@ -3,7 +3,7 @@
  * `with-dev-data-dir.mjs`, or says why it does not.
  *
  * The wrapper is what keeps a dev session out of the real `~/.whiteboard`
- * (and gives it this worktree's port, its allowed origins and its marker).
+ * (and gives it this worktree's marker).
  * `mcp:http:dev` has always run through it; `dev` — the daemon half of
  * `pnpm dev`, the command `development.md` names first — ran
  * `tsx watch src/server/daemon-entry.ts` directly, so the most obvious way to

@@ -1,7 +1,7 @@
 /**
  * Classification integrity tests for mcp-smoke-coverage.ts.
  *
- * This test verifies that ALL_REGISTERED_TOOLS and the four category arrays
+ * This test verifies that ALL_REGISTERED_TOOLS and the three category arrays
  * are internally consistent: no duplicates, no gaps, and DEFERRED entries
  * carry the required metadata. It does NOT compare against the live runtime
  * registration — that cross-check is done by the smoke script
@@ -13,21 +13,15 @@ import {
   ALL_REGISTERED_TOOLS,
   COVERED_TOOLS,
   DEFERRED_TOOLS,
-  ERROR_PATH_ONLY_TOOLS,
   UNIT_ONLY_TOOLS,
 } from './mcp-smoke-coverage.js'
 
 describe('mcp-smoke-coverage classification', () => {
-  // Derive the union from the four category arrays independently of ALL_REGISTERED_TOOLS.
+  // Derive the union from the three category arrays independently of ALL_REGISTERED_TOOLS.
   // Comparing these two lets us catch both directions of drift:
   //   - tool in ALL_REGISTERED_TOOLS but in no category
   //   - tool in a category but missing from ALL_REGISTERED_TOOLS
-  const categoryUnion = [
-    ...COVERED_TOOLS,
-    ...ERROR_PATH_ONLY_TOOLS,
-    ...UNIT_ONLY_TOOLS,
-    ...DEFERRED_TOOLS.map((d) => d.name),
-  ]
+  const categoryUnion = [...COVERED_TOOLS, ...UNIT_ONLY_TOOLS, ...DEFERRED_TOOLS.map((d) => d.name)]
 
   it('ALL_REGISTERED_TOOLS has no duplicates', () => {
     const seen = new Set<string>()

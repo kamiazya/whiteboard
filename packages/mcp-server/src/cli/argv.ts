@@ -36,37 +36,21 @@ export type DaemonRunArgs =
   | {
       kind: 'ok'
       json: true
-      host?: string
-      port?: number
       dataDir?: string
       tokenStdin: boolean
       noOpen: boolean
     }
   | { kind: 'usage-error'; message: string }
 
-/**
- * `--port`'s own check, so an out-of-range port is reported as a port
- * problem rather than as an empty value — and reported where it is read,
- * before a later unknown argument.
- */
-function checkPort(value: string): string | undefined {
-  const num = Number(value)
-  if (!value || !Number.isInteger(num) || num <= 0 || num > 65535) {
-    return '--port=<value> requires a valid port number (1–65535)'
-  }
-  return undefined
-}
-
-const RUN_FLAGS: FlagTable<'host' | 'port' | 'dataDir'> = {
+const RUN_FLAGS: FlagTable<'dataDir'> = {
   booleans: ['--json', '--token-stdin', '--no-open'],
-  values: { '--host': 'host', '--port': 'port', '--data-dir': 'dataDir' },
+  values: { '--data-dir': 'dataDir' },
   // The value must never reach an error message, so the flag is refused in
   // both forms rather than falling through to the redacting default.
   rejected: {
     '--token':
       '--token is not accepted. Use --token-stdin or the WHITEBOARD_DAEMON_TOKEN env variable.',
   },
-  checks: { '--port': checkPort },
 }
 
 export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
@@ -81,8 +65,6 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
   return {
     kind: 'ok',
     json: true,
-    host: scan.values.host,
-    port: scan.values.port === undefined ? undefined : Number(scan.values.port),
     dataDir: scan.values.dataDir,
     tokenStdin: scan.seen.has('--token-stdin'),
     noOpen: scan.seen.has('--no-open'),

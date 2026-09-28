@@ -10,8 +10,8 @@
  * The work that built the resolver started from a hand-written survey of
  * "four auth surfaces". There were SEVEN. `routes/runtime.ts` was found by a
  * typecheck error after a truncated grep dropped it; `routes/debug.ts` and
- * `routes/ws-ticket.ts` were found by the confinement scan on its first run.
- * Of those three, `runtime.ts` had no macaroon branch — so the route-scope
+ * a since-deleted websocket-ticket route were found by the confinement scan
+ * on its first run. Of those three, `runtime.ts` had no macaroon branch — so the route-scope
  * registry said `runtime:read` opened `/api/runtime/storage`, the global gate
  * agreed, and the inner middleware refused. Nothing was red, because a
  * surface that quietly admits less than the registry declares fails closed.
@@ -46,20 +46,11 @@ const AUTH_SURFACES = {
   'packages/mcp-server/src/server/routes/runtime.ts':
     'resolver: /api/runtime/*. STRICTER than /api/* on purpose — a narrow credential reaches only routes declaring `runtime:read`, whatever scopes it holds, so a grant carrying `runtime:admin` still cannot reach shutdown. The logs-prune handler re-checks by KIND for its own file-deleting reason.',
 
-  'packages/mcp-server/src/server/routes/ws-auth.ts':
-    'resolver: the websocket upgrade. NO scope policy here by design — `routes/ws.ts` enforces per operation against `ws-scope-registry.ts`, so the handshake only establishes the grant and hands its scopes along. Two lanes: a single-use ticket, and everything else on the daemon-token subprotocol carrier.',
-
   'packages/mcp-server/src/server/security/mcp-auth.ts':
-    'resolver: /mcp in local-daemon mode. Full authority passes; an OAuth grant or a macaroon passes iff it carries `mcp:call`, the same scope server-mode enforces on this route. A pairing token is refused as a DECISION rather than on scopes (it holds them all today) — a paired browser origin speaks `/api/*`, not MCP. A verified credential this surface will not admit gets 403 without a challenge.',
+    'resolver: /mcp in local-daemon mode. Full authority passes; a macaroon passes iff it carries `mcp:call`, the same scope server-mode enforces on this route. A verified credential this surface will not admit gets 403 without a challenge.',
 
   'packages/mcp-server/src/server/routes/debug.ts':
     'resolver: /api/debug, mounted only when the debug endpoint is enabled. Judged by KIND — a dump of live document state is not something a narrow credential gets, however wide its scope set.',
-
-  'packages/mcp-server/src/server/routes/ws-ticket.ts':
-    'resolver: POST /api/ws-ticket. Judged by KIND, and only `oauth-grant` mints: a ticket exists to bridge an OAuth grant onto the websocket, so it needs WHICH grant is asking, not merely that someone may act. The daemon token has never minted one.',
-
-  'packages/mcp-server/src/server/routes/replica-key.ts':
-    "resolver: POST /api/workspaces/:workspaceId/replica-key. `anonymous`/`daemon-token` bypass membership entirely (already full authority over the data this key decrypts); every other grant must carry a PASSKEY BINDING (`grant.passkey`), which only the `pairing` kind ever sets — the registry's `workspace:read` scope alone is not enough, an OAuth grant holding it is refused with no binding to check.",
 
   'packages/mcp-server/src/server/security/server-mode-middleware.ts':
     'own-strategy: server-mode validates a JWT against an external IdP, so there is no credential this daemon issued to resolve. Folding it into the resolver is a separate increment with its own review; what it shares today is the scope vocabulary and the route-scope registry.',
@@ -108,9 +99,10 @@ describe('every auth surface answers for itself', () => {
 
   // The count IS the finding. Seven was a surprise to the person who had just
   // refactored all of them, so it is worth a reader having to change a number
-  // deliberately rather than watching one drift. Eight, since the read
-  // plane's replica-key route (ADR-0042 decisions 1/3/5) added a surface.
-  it('holds the surface count at eight', () => {
-    expect(scan().surfaces).toHaveLength(8)
+  // deliberately rather than watching one drift. Five, since ADR-0050 took
+  // the local daemon off loopback TCP and its browser-facing surfaces (the
+  // websocket, its ticket, and the replica-key route's passkey binding) went.
+  it('holds the surface count at five', () => {
+    expect(scan().surfaces).toHaveLength(5)
   })
 })

@@ -32,50 +32,50 @@ describe('loadConfigFile', () => {
   it('parses a .whiteboardrc.json file', () => {
     writeFileSync(
       join(dir, '.whiteboardrc.json'),
-      JSON.stringify({ allowedWebOrigins: ['https://a.example'], port: 4000 }),
+      JSON.stringify({ logLevel: 'info', openBrowser: false }),
     )
     const loaded = loadConfigFile(dir)
-    expect(loaded?.config).toEqual({ allowedWebOrigins: ['https://a.example'], port: 4000 })
+    expect(loaded?.config).toEqual({ logLevel: 'info', openBrowser: false })
     expect(loaded?.filepath).toBe(join(dir, '.whiteboardrc.json'))
   })
 
   it('parses YAML from .whiteboard/config.yaml', () => {
     mkdirSync(join(dir, '.whiteboard'))
-    writeFileSync(
-      join(dir, '.whiteboard', 'config.yaml'),
-      'allowedWebOrigins:\n  - https://a.example\nport: 4001\n',
-    )
+    writeFileSync(join(dir, '.whiteboard', 'config.yaml'), 'logLevel: debug\nopenBrowser: true\n')
     const loaded = loadConfigFile(dir)
-    expect(loaded?.config).toEqual({ allowedWebOrigins: ['https://a.example'], port: 4001 })
+    expect(loaded?.config).toEqual({ logLevel: 'debug', openBrowser: true })
   })
 
   it('parses an extensionless .whiteboardrc (JSON body)', () => {
-    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ port: 4002 }))
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ logLevel: 'notice' }))
     const loaded = loadConfigFile(dir)
-    expect(loaded?.config).toEqual({ port: 4002 })
+    expect(loaded?.config).toEqual({ logLevel: 'notice' })
   })
 
   it('reads package.json#whiteboard when nothing else matches', () => {
     writeFileSync(
       join(dir, 'package.json'),
-      JSON.stringify({ name: 'x', whiteboard: { port: 4003 } }),
+      JSON.stringify({ name: 'x', whiteboard: { logLevel: 'error' } }),
     )
     const loaded = loadConfigFile(dir)
-    expect(loaded?.config).toEqual({ port: 4003 })
+    expect(loaded?.config).toEqual({ logLevel: 'error' })
   })
 
   it('prefers .whiteboardrc over .whiteboardrc.yaml and package.json in the same directory', () => {
-    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ port: 1 }))
-    writeFileSync(join(dir, '.whiteboardrc.yaml'), 'port: 2\n')
-    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'x', whiteboard: { port: 3 } }))
+    writeFileSync(join(dir, '.whiteboardrc'), JSON.stringify({ logLevel: 'debug' }))
+    writeFileSync(join(dir, '.whiteboardrc.yaml'), 'logLevel: info\n')
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'x', whiteboard: { logLevel: 'error' } }),
+    )
     const loaded = loadConfigFile(dir)
-    expect(loaded?.config.port).toBe(1)
+    expect(loaded?.config.logLevel).toBe('debug')
   })
 
   it('does NOT walk up to a parent directory: a config file above cwd is ignored', () => {
     // An ancestor directory (e.g. the root of an untrusted cloned repo) must
     // not be able to plant a config that a nested cwd picks up implicitly.
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 4004 }))
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ logLevel: 'debug' }))
     const nested = join(dir, 'a', 'b', 'c')
     mkdirSync(nested, { recursive: true })
     const homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
@@ -90,20 +90,23 @@ describe('loadConfigFile', () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
     try {
       mkdirSync(join(homeDir, '.whiteboard'), { recursive: true })
-      writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'port: 4005\n')
+      writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'logLevel: debug\n')
       const loaded = loadConfigFile(dir, { homeDir })
-      expect(loaded?.config).toEqual({ port: 4005 })
+      expect(loaded?.config).toEqual({ logLevel: 'debug' })
     } finally {
       rmSync(homeDir, { recursive: true, force: true })
     }
   })
 
   it('warns and drops unknown keys but still loads known ones', () => {
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 4006, extraKey: 'nope' }))
+    writeFileSync(
+      join(dir, '.whiteboardrc.json'),
+      JSON.stringify({ logLevel: 'debug', extraKey: 'nope' }),
+    )
     const capture = captureLogsForTests()
     try {
       const loaded = loadConfigFile(dir)
-      expect(loaded?.config).toEqual({ port: 4006 })
+      expect(loaded?.config).toEqual({ logLevel: 'debug' })
       const warning = capture.records.find((r) => r.msg.includes('unknown whiteboard config'))
       expect(warning).toBeDefined()
       expect(warning?.data?.filepath).toBe(join(dir, '.whiteboardrc.json'))
@@ -114,9 +117,9 @@ describe('loadConfigFile', () => {
   })
 
   it('fails fast with the file path and key on an invalid value', () => {
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 'not-a-number' }))
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ logLevel: 'not-a-level' }))
     expect(() => loadConfigFile(dir)).toThrow(/\.whiteboardrc\.json/)
-    expect(() => loadConfigFile(dir)).toThrow(/port/)
+    expect(() => loadConfigFile(dir)).toThrow(/logLevel/)
   })
 
   it('parses the openBrowser key', () => {
@@ -133,7 +136,7 @@ describe('loadConfigFile', () => {
   it('never includes the token value in a thrown validation message for another key', () => {
     writeFileSync(
       join(dir, '.whiteboardrc.json'),
-      JSON.stringify({ token: 'super-secret-token', port: 'bad' }),
+      JSON.stringify({ token: 'super-secret-token', logLevel: 'bad' }),
     )
     try {
       loadConfigFile(dir)
@@ -158,7 +161,7 @@ describe('loadConfigFile', () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
     try {
       mkdirSync(join(homeDir, '.whiteboard'), { recursive: true })
-      writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'port: [1, 2\n')
+      writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'logLevel: [1, 2\n')
       expect(() => loadConfigFile(dir, { homeDir })).toThrow()
     } finally {
       rmSync(homeDir, { recursive: true, force: true })
@@ -171,14 +174,12 @@ describe('applyConfigFileToEnv', () => {
     const env: Record<string, string | undefined> = {}
     applyConfigFileToEnv(
       {
-        allowedWebOrigins: ['https://a.example', 'https://b.example'],
         token: 'file-token',
         logLevel: 'debug',
         dataDir: '/tmp/whiteboard-data',
       },
       env,
     )
-    expect(env.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe('https://a.example,https://b.example')
     expect(env.WHITEBOARD_TOKEN).toBe('file-token')
     expect(env.WHITEBOARD_DAEMON_TOKEN).toBe('file-token')
     expect(env.WHITEBOARD_LOG_LEVEL).toBe('debug')
@@ -204,7 +205,6 @@ describe('applyConfigFileToEnv', () => {
 
   it('never overwrites an already-set env key (env wins over file)', () => {
     const env: Record<string, string | undefined> = {
-      WHITEBOARD_ALLOWED_WEB_ORIGINS: 'https://env.example',
       WHITEBOARD_TOKEN: 'env-token',
       WHITEBOARD_DAEMON_TOKEN: 'env-daemon-token',
       WHITEBOARD_LOG_LEVEL: 'error',
@@ -212,14 +212,12 @@ describe('applyConfigFileToEnv', () => {
     }
     applyConfigFileToEnv(
       {
-        allowedWebOrigins: ['https://file.example'],
         token: 'file-token',
         logLevel: 'debug',
         dataDir: '/file/data',
       },
       env,
     )
-    expect(env.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe('https://env.example')
     expect(env.WHITEBOARD_TOKEN).toBe('env-token')
     expect(env.WHITEBOARD_DAEMON_TOKEN).toBe('env-daemon-token')
     expect(env.WHITEBOARD_LOG_LEVEL).toBe('error')

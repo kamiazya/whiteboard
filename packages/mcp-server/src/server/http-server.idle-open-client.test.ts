@@ -3,7 +3,7 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { findAvailablePort } from '../cli/daemon-run.js'
+import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
 
 /**
  * "Idle" is no CLIENT, not no REQUEST. A page holding a sync stream open is
@@ -44,12 +44,11 @@ afterEach(async () => {
 })
 
 /** Opens the sync stream and resolves once its first frame has arrived. */
-function openStream(port: number): Promise<{ end: () => void; ended: Promise<void> }> {
+function openStream(socketPath: string): Promise<{ end: () => void; ended: Promise<void> }> {
   return new Promise((resolve, reject) => {
     const req = request(
       {
-        host: '127.0.0.1',
-        port,
+        socketPath,
         path: '/api/sync/stream',
         headers: { Authorization: `Bearer ${TOKEN}`, Accept: 'text/event-stream' },
       },
@@ -66,16 +65,15 @@ function openStream(port: number): Promise<{ end: () => void; ended: Promise<voi
 }
 
 it('stays up while a sync stream is open, and stops once it closes', async () => {
-  const port = await findAvailablePort(4300)
+  const socketPath = testSocketPath()
   const closed = vi.fn()
   running = await startHttpServer({
-    port,
-    host: '127.0.0.1',
+    socketPath,
     token: TOKEN,
     idleTimeoutMs: IDLE_MS,
     onClose: closed,
   })
-  const stream = await openStream(port)
+  const stream = await openStream(socketPath)
 
   // Well past the timeout with no request but the held stream.
   await vi.waitFor(

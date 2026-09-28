@@ -9,6 +9,8 @@
  * local daemon. A keeper run without a build — from source, say — keeps the
  * placeholder, so a browser always gets an answer.
  */
+
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
@@ -20,12 +22,12 @@ import {
   SERVER_MODE_PLACEHOLDER_HTML,
   toInlineScriptJson,
 } from './app-helpers.js'
-import { createCspNonce } from './pair-page-csp.js'
 
 const RUNTIME_CONFIG: RuntimeConfig = { keeper: 'server' }
 
-// The pairing page's policy, less what only a loopback daemon needs: the app
-// talks to the origin it was served from and nothing else.
+// A full page policy, since the baseline headers set only
+// `frame-ancestors`: the app talks to the origin it was served from and
+// nothing else, and the one inline script it needs is admitted by nonce.
 function serverModeCsp(nonce: string): string {
   return [
     "default-src 'self'",
@@ -42,7 +44,7 @@ function serverModeCsp(nonce: string): string {
 }
 
 function shellWithConfig(html: string): { html: string; csp: string } {
-  const nonce = createCspNonce()
+  const nonce = randomBytes(16).toString('base64')
   const script = `<script nonce="${nonce}">window.__WHITEBOARD_RUNTIME_CONFIG__ = ${toInlineScriptJson(RUNTIME_CONFIG)}</script>`
   const withConfig = html.includes('</head>')
     ? html.replace('</head>', `${script}</head>`)
