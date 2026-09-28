@@ -13,6 +13,13 @@ offline — the one real conflict with local-first behaviour — is
 [ADR-0042](0042-offline-revocation.md), taken the same day on an axis this ADR
 did not anticipate.
 
+*Status note (2026-09-28):* the local-daemon half is retired.
+[ADR-0050](0050-local-daemon-trust.md) decision 3 gives the local daemon one
+person, the machine's owner, so its members, passkey-bound sessions, the
+passkey-bind page and the L2 credential routes and screen are gone (#1982,
+#1983). The L1 membership gate stands on server mode, where ADR-0046 and
+ADR-0049 put it.
+
 ## Context
 
 ADR-0039 decision 9 put the device→user table in a "profile" and did not say
