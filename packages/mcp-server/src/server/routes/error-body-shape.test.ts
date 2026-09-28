@@ -14,9 +14,9 @@
  *   issues: parsed.error.issues }`), which `apiErrorReason` discards whole.
  *
  * Measured when this was written: 98 refusal literals under `routes/`, of
- * which 26 were one of those two shapes, across `pairing.ts` (18),
- * `runtime.ts` (3), `membership.ts` (3) and `document/versions.ts` (2).
- * `pairing.ts` already had a local `refuse(error, message)` helper doing it
+ * which 26 were one of those two shapes, across the since-deleted pairing
+ * route (18), `runtime.ts` (3), a since-deleted membership route (3) and
+ * `document/versions.ts` (2). The pairing route already had a local `refuse(error, message)` helper doing it
  * correctly for ONE endpoint while eighteen call sites in the same file did
  * not — which is the whole argument for a constructor rather than a habit.
  *

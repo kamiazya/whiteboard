@@ -52,26 +52,6 @@ export function resolveRepoRootFromGit(cwd) {
  * sharing (and corrupting) one another's canvas data.
  */
 // The project's own hosted-app origins (production + preview deployments).
-// Dev-only default: the hosted app pairing with a local dev daemon is this
-// repo's primary dogfood loop, and a hook-respawned daemon silently losing
-// the allowance was a real dead end (2026-08-07). The published daemon keeps
-// its loopback-only default — widening THAT is a product decision
-// (see the default-allow-official-hosted-origins canvas).
-const DEV_DEFAULT_ALLOWED_WEB_ORIGINS =
-  'https://kamiazya-whiteboard.pages.dev,https://*.kamiazya-whiteboard.pages.dev'
-
-/**
- * Returns a new env object with WHITEBOARD_ALLOWED_WEB_ORIGINS defaulted to
- * the project's own pages.dev origins. Any explicit caller value wins —
- * including the empty string, which deliberately restores loopback-only.
- */
-export function resolveDevAllowedWebOriginsEnv(env) {
-  if (env.WHITEBOARD_ALLOWED_WEB_ORIGINS !== undefined) {
-    return { ...env }
-  }
-  return { ...env, WHITEBOARD_ALLOWED_WEB_ORIGINS: DEV_DEFAULT_ALLOWED_WEB_ORIGINS }
-}
-
 export function resolveDevDataDirEnv(env, repoRoot) {
   if (env.WHITEBOARD_DATA_DIR) {
     return { ...env }
@@ -95,40 +75,6 @@ export function reraiseSignalOrExit(
   } catch {
     exit(1)
   }
-}
-
-const PORT_FLAG_PREFIX = '--port='
-
-/**
- * Finds the effective `--port=<value>` flag in argv, matching exactly what
- * `parseArg` in server/index.ts recognizes (first match wins). A bare,
- * space-separated `--port <value>` is NOT a recognized override — parseArg
- * only ever looks for the `--port=` prefix — so it must not be treated as
- * one here either, or injection and the server's actual listening port
- * disagree.
- *
- * @param {string[]} argv
- * @returns {number | undefined}
- */
-function findPortFlagValue(argv) {
-  const match = argv.find((arg) => arg.startsWith(PORT_FLAG_PREFIX))
-  return match === undefined ? undefined : Number(match.slice(PORT_FLAG_PREFIX.length))
-}
-
-/**
- * Appends `--port=<derivedPort>` to argv unless the caller already passed
- * an explicit `--port=value`, which always wins. Returns a new array
- * (immutable).
- *
- * @param {string[]} argv
- * @param {number} derivedPort
- * @returns {string[]}
- */
-export function injectDerivedPortArg(argv, derivedPort) {
-  if (findPortFlagValue(argv) !== undefined) {
-    return [...argv]
-  }
-  return [...argv, `${PORT_FLAG_PREFIX}${derivedPort}`]
 }
 
 /**

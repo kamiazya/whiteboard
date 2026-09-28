@@ -58,7 +58,7 @@ const originPatternSchema = z.discriminatedUnion('kind', [
 
 export type OriginPattern = z.infer<typeof originPatternSchema>
 
-export type OriginPatternFailureReason =
+type OriginPatternFailureReason =
   | 'unparseable'
   | 'wildcard'
   | 'not_https'

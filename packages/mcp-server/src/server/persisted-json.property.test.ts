@@ -24,13 +24,11 @@ import { parseDaemonRecord } from '../daemon/daemon-record.js'
 import { daemonRecordSchema } from '../daemon/daemon-record-schema.js'
 import { loadDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
-import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import {
   readServerModeRecord,
   serverModeRecordSchema,
   writeServerModeRecord,
 } from './security/server-mode-record.js'
-import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import { mirrorBlobsIntoBackup, readBackupBlobManifest } from './store/backup-blob-mirror.js'
 import { backupIsInProgress, withBackupMarker } from './store/backup-in-progress.js'
 import { serverBackupResultSchema } from './store/backup-pass.js'
@@ -40,7 +38,7 @@ import {
   writeDatabaseLocationRecord,
 } from './store/db/location-record.js'
 import { FsBlobStore } from './store/fs/fs-blob-store.js'
-import { blobsRoot, tenantRoot } from './tenant/data-layout.js'
+import { blobsRoot } from './tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from './tenant/id.js'
 
 const viaJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
@@ -120,89 +118,6 @@ describe('the daemon record', () => {
       })
     },
   )
-})
-
-describe('the pairing grants file', () => {
-  /** What a consent page can be asked for: any http(s) URL, at the spellings the origin refinement is strictest about. */
-  const originInputArb = fc.oneof(
-    { weight: 4, arbitrary: fc.webUrl() },
-    {
-      weight: 1,
-      arbitrary: fc.constantFrom(
-        'http://[::1]:3000/pair',
-        'https://EXAMPLE.com:443/',
-        'http://example.com:80/x?y#z',
-        'http://müller.de/',
-        'https://xn--mller-kva.de:8443',
-        'http://localhost:3099',
-        'http://127.0.0.1:1',
-        'http://example.com./',
-      ),
-    },
-  )
-
-  fcTest.prop(
-    [fc.array(originInputArb, { minLength: 1, maxLength: 6 }), fc.nat()],
-    withDefaults({ numRuns: 100 }),
-  )('lists after a restart exactly the grants it listed before', async (inputs, revokeSeed) => {
-    const dataDir = await freshDir('grants')
-    const store = createPairingGrantStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
-    const granted = inputs.map((input) => store.addGrant(input))
-    // A grant survives a restart, and a revocation does too.
-    const revoked = granted[revokeSeed % granted.length]
-    if (revoked !== undefined && revokeSeed % 2 === 0) store.revoke(revoked.grantId)
-
-    const reopened = createPairingGrantStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
-    expect(reopened.list()).toEqual(store.list())
-    expect(reopened.origins()).toEqual(store.origins())
-    for (const origin of reopened.origins()) {
-      // The stored spelling is the canonical one, or the refinement rejects the whole file.
-      expect(new URL(origin).origin).toBe(origin)
-    }
-    expect(new Set(reopened.origins()).size).toBe(reopened.origins().length)
-  })
-})
-
-describe('the webauthn credentials file', () => {
-  const b64uArb = fc
-    .uint8Array({ minLength: 16, maxLength: 64 })
-    .map((bytes) => Buffer.from(bytes).toString('base64url'))
-  const registrationArb = fc.record({
-    origin: fc.constantFrom(
-      'https://latest.kamiazya-whiteboard.pages.dev',
-      'http://localhost:5173',
-    ),
-    rpId: fc.constantFrom('latest.kamiazya-whiteboard.pages.dev', 'localhost'),
-    credentialId: b64uArb,
-    publicKeyJwk: fc.record({
-      kty: fc.constant('EC' as const),
-      crv: fc.constant('P-256' as const),
-      x: b64uArb,
-      y: b64uArb,
-    }),
-    backupEligible: fc.boolean(),
-    signCount: fc.integer({ min: 0, max: 0xffffffff }),
-  })
-
-  fcTest.prop(
-    [fc.array(registrationArb, { minLength: 1, maxLength: 6 }), fc.nat()],
-    withDefaults({ numRuns: 60 }),
-  )('lists after a restart exactly the pins it listed before', async (inputs, seed) => {
-    const dataDir = await freshDir('credentials')
-    const store = createWebAuthnCredentialStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
-    for (const input of inputs) store.register(input)
-    const pin = store.list()[seed % store.list().length]
-    if (pin !== undefined && seed % 3 === 0) store.revoke(pin.origin, pin.credentialId)
-    if (pin !== undefined && seed % 3 === 1) {
-      store.recordSignCount(pin.origin, pin.credentialId, pin.signCount + 1)
-    }
-
-    const reopened = createWebAuthnCredentialStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
-    expect(reopened.list()).toEqual(store.list())
-    for (const listed of reopened.list()) {
-      expect(reopened.find(listed.origin, listed.credentialId)).toEqual(listed)
-    }
-  })
 })
 
 describe('the database location record', () => {

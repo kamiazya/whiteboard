@@ -262,16 +262,12 @@ Not included in `pnpm test`. Requires `dist/server/mcp/index.js` to exist. `test
 ### Real-browser smokes — opt-in, require `pnpm build` + Chromium
 
 Not included in `pnpm test` or `test:distribution`. Each launches a real
-Chromium (via Playwright) against a real daemon and the real built web app.
-`smoke:daemon-origin` and `smoke:passkey-promote` serve `dist/web-app`, so
-`pnpm build` (from the repo root, so `apps/web`'s postbuild copy runs) must
-have already produced it; run them directly with
-`node --import tsx/esm scripts/smoke/mcp-*.mjs` or through the `pnpm smoke:*`
-alias. `smoke:read-plane` reaches the daemon through the extension (ADR-0050),
-so it lives beside the bridge smokes in `apps/extension/scripts/`, builds the
-extension and the web app itself, and needs Playwright's own Chromium
+Chromium (via Playwright) against a real daemon and the real built web app,
+reached through the extension (ADR-0050), so they live in
+`apps/extension/scripts/`, build the extension and the web app themselves,
+and need Playwright's own Chromium
 (`pnpm --filter @kamiazya/whiteboard-extension exec playwright install
-chromium`). All three run in CI's `verify` job.
+chromium`).
 
 `smoke:read-plane` joined last: its replica pull used to fail to fire in 2 of 6
 local runs — a race between a daemon deep link's reconnection and the
@@ -282,12 +278,11 @@ which ADR-0050 retired.
 
 | Script | What it crosses for real |
 |---|---|
-| `pnpm smoke:daemon-origin` | The daemon serves only `/pair` and 302s every other UI path — a real redirect, not a mocked route — and the web app offers no consent at `/pair` |
-| `pnpm smoke:passkey-promote` | Chromium's virtual authenticator against the daemon's real WebAuthn verifier, through the pairing bearer under a browser-enforced Origin (ADR-0039) |
+| `pnpm --filter @kamiazya/whiteboard-extension smoke:bridge` | A page reaching the daemon through the extension, the native host and the owner-only socket: the daemon's credential rather than the page's, an SSE stream as written, the web app editing live, and a browser-kept record promoted into a daemon workspace (an attested promote refused) |
 | `pnpm smoke:read-plane` | Through the extension (ADR-0050): a sealed replica in real IndexedDB, the real locked page a cold start lands on with the daemon gone, and the daemon page back on Reconnect (ADR-0042). Lives in `apps/extension/scripts/` and needs the extension build |
 
 Every one of these fakes something in the Vitest browser-mode suites — the
-daemon at `fetch`, the browser's own routing, or the authenticator — so this
+daemon at `fetch`, the browser's own routing, or the extension — so this
 is the one place each side meets what the other actually produces.
 
 ### External CLI smokes — not Vitest, require external tooling

@@ -13,13 +13,6 @@ interface McpAuthRequestContext {
   method: string
   authorizationHeader?: string
   requestUrl: string
-  /**
-   * The browser-enforced `Origin`, when the request carried one. A pairing
-   * token is bound to an origin, so without this the resolver cannot identify
-   * one — and an unidentified pairing token refuses as `null`, which is a 401
-   * inviting a retry rather than the 403 this surface means.
-   */
-  origin?: string
 }
 
 type McpAuthDecision =
@@ -140,17 +133,8 @@ function admitsMcp(grant: ResolvedGrant): boolean {
     case 'daemon-token':
     case 'anonymous':
       return true
-    case 'oauth-grant':
     case 'macaroon':
       return hasRequiredScopes(grant.scopes, ['mcp:call'])
-    // A paired browser origin talks to `/api/*`; the web app speaks no MCP.
-    case 'pairing':
-      return false
-    // Unreachable on this surface — a ticket only resolves under the
-    // `ws-ticket` carrier — and answered rather than left to a default so the
-    // switch stays exhaustive if that ever changes.
-    case 'ws-ticket':
-      return false
     // Server mode's kinds: this resolver never produces them, and server
     // mode's `/mcp` is authorized by its own middleware.
     case 'signed-in':
@@ -168,17 +152,7 @@ function admitsMcp(grant: ResolvedGrant): boolean {
  * **Full authority passes; a narrow credential passes iff it carries
  * `mcp:call`** — the same scope server-mode already enforces on this route
  * (`app.ts` mounts `createServerModeAsyncAuthMiddleware(..., ['mcp:call'])`),
- * so the two modes now agree rather than each having their own rule. The
- * daemon's own OAuth consent screen already offers `mcp:call` and marks it a
- * write scope, so a user could approve it and then be refused by this surface
- * outright: the same shape `routes/runtime.ts` had, where the route-scope
- * registry declared an opening the surface did not honour. Failing closed, so
- * not a hole — a feature that did not work where the daemon said it did.
- *
- * **A pairing token is refused, and that is a decision rather than an
- * absence.** It holds every scope today, so no scope test can express this:
- * a paired browser origin reaches `/api/*`, and nothing in the web app speaks
- * MCP. Narrowing what a pairing token carries is its own increment.
+ * so the two modes agree rather than each having their own rule.
  *
  * A verified credential that this surface will not admit gets **403 without a
  * challenge**, per the 401/403 contract in `auth-strategy.ts`: re-presenting
@@ -197,8 +171,6 @@ export function createLocalTokenMcpHttpAuthStrategy(options: {
 
       const grant = await options.resolver.resolve({
         secret: parseBearerAuthorizationHeader(context.authorizationHeader),
-        carrier: 'bearer',
-        origin: context.origin,
       })
 
       if (grant === null) {

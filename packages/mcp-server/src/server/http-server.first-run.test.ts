@@ -8,10 +8,11 @@
  * skeleton indefinitely, because the documents fetch that ends that state is
  * keyed on a selected workspace.
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { socketFetch, testSocketPath } from '../shared/test-utils/socket-fetch.js'
 
 let tempDir: string
 
@@ -26,7 +27,6 @@ vi.mock('./config.js', async () => {
   }
 })
 
-const { findAvailablePort } = await import('../cli/daemon-run.js')
 const { startHttpServer } = await import('./http-server.js')
 const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 
@@ -41,37 +41,11 @@ describe('startHttpServer on a data dir nothing has ever written to', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('trusts an origin whose grant was written before tenants existed', async () => {
-    // The legacy layout: the grants file at the top of the data directory.
-    // prepareDataDir moves it under the tenant on this very start, so a store
-    // built BEFORE that move loads nothing and the daemon refuses an origin
-    // the user had already paired — and the next write persists that empty
-    // set over the migrated file.
-    const granted = 'https://paired.example'
-    await writeFile(
-      join(tempDir, 'pairing-grants.json'),
-      JSON.stringify({
-        version: 1,
-        grants: [{ grantId: 'g1', origin: granted, createdAt: '2026-01-01T00:00:00.000Z' }],
-      }),
-    )
-    const port = await findAvailablePort(0)
-    const running = await startHttpServer({ port, host: '127.0.0.1' })
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/workspaces`, {
-        headers: { Origin: granted },
-      })
-      expect(res.headers.get('access-control-allow-origin')).toBe(granted)
-    } finally {
-      await running.close()
-    }
-  })
-
   it("lists the daemon's own workspace rather than nothing at all", async () => {
-    const port = await findAvailablePort(0)
-    const running = await startHttpServer({ port, host: '127.0.0.1' })
+    const socketPath = testSocketPath()
+    const running = await startHttpServer({ socketPath })
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/workspaces`)
+      const res = await socketFetch(socketPath)('/api/workspaces')
       expect(res.status).toBe(200)
       const body = (await res.json()) as { workspaces: { workspaceId: string }[] }
       expect(body.workspaces).toHaveLength(1)

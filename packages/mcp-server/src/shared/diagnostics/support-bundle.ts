@@ -54,7 +54,7 @@ function assertIsoTimestamp(value: string, label: string): string {
 //   - raw MCP tool input / output
 //   - tokens (daemon token / PAT / cookie / session / pairing material)
 //   - absolute local paths (the `dataDir` etc. become `[REDACTED_PATH]`
-//     via the redactor; structural fields like `pid`/`port`/`status`
+//     via the redactor; structural fields like `pid`/`status`
 //     pass the allow-list)
 //   - Problem Details `detail` strings
 //   - raw `Error.message` from caller-side throws
@@ -102,7 +102,7 @@ interface SupportBundleStatusInput {
   pidAlive?: boolean
   pingOk?: boolean
   statusOk?: boolean
-  record?: { pid: number; port: number; version: string; startedAt: string }
+  record?: { pid: number; version: string; startedAt: string }
 }
 
 interface SupportBundleStatusSection {
@@ -114,7 +114,7 @@ interface SupportBundleStatusSection {
   pidAlive: boolean | null
   pingOk: boolean | null
   statusOk: boolean | null
-  record: { pid: number; port: number; version: string; startedAt: string } | null
+  record: { pid: number; version: string; startedAt: string } | null
 }
 
 function buildStatusSection(input: SupportBundleStatusInput): SupportBundleStatusSection {
@@ -130,7 +130,6 @@ function buildStatusSection(input: SupportBundleStatusInput): SupportBundleStatu
     record: input.record
       ? {
           pid: input.record.pid,
-          port: input.record.port,
           version: redactStrict(input.record.version),
           // ISO-validated rather than redacted: the redactor would
           // mangle the timestamp shape, but flowing it through

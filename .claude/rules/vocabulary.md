@@ -28,7 +28,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Member** | a `MemberProfile` a workspace's keeper has admitted to that workspace — [ADR-0041](../../docs/contributing/adr/0041-profile-and-authority.md)'s L1 access, granted per PERSON (identified by their pinned passkey credentials) rather than per paired browser origin | a credential, an origin, or L2 (acceptance of a *credential* — see `revoke` below) |
 | **Membership** | the row recording that a member has L1 access to a workspace — kept OUTSIDE the CRDT-synced workspace record (ADR-0019) so a sync merge cannot resurrect one a keeper revoked; revocation is a plain delete, no tombstone ([ADR-0042](../../docs/contributing/adr/0042-offline-revocation.md) decision 3: reversing it costs nothing) | a role, a permission level, or anything the mergeable document itself carries |
 
-`revoke` alone is ambiguous in this codebase: `revokeL1Membership` (member-profile-store.ts) removes a PERSON's access to a workspace, while `webauthn-credential-store.ts`'s `revoke` removes acceptance of a single CREDENTIAL (L2). New code must name which layer it revokes rather than writing a bare `revoke`.
+`revoke` alone is ambiguous in this codebase: `revokeL1Membership` (member-profile-store.ts) removes a PERSON's access to a workspace, while revoking a single CREDENTIAL is L2. New code must name which layer it revokes rather than writing a bare `revoke`.
 
 Two consequences that catch people out:
 

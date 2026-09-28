@@ -2,22 +2,12 @@ import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { captureLogsForTests } from '../server/log.js'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
-
-const { createServerSpy } = vi.hoisted(() => ({ createServerSpy: vi.fn() }))
-
-// Partial mock: keep the real node:net surface (BlockList etc. used elsewhere in
-// the import graph) and override only createServer.
-vi.mock('node:net', async (importOriginal) => {
-  const real = await importOriginal<typeof import('node:net')>()
-  return { ...real, createServer: createServerSpy }
-})
 
 const { loadDaemonRecordMock, startHttpServerMock } = vi.hoisted(() => ({
   loadDaemonRecordMock: vi.fn(async () => null),
   startHttpServerMock: vi.fn(async () => ({
-    port: 3099,
+    socketPath: '/run/user/1000/whiteboard/d.sock',
     close: vi.fn(async () => undefined),
     touch: vi.fn(),
     getRuntimeStatus: vi.fn(),
@@ -35,143 +25,27 @@ vi.mock('../server/http-server.js', () => ({
   startHttpServer: startHttpServerMock,
 }))
 
-const { findAvailablePort, runDaemonRun } = await import('./daemon-run.js')
+const { runDaemonRun } = await import('./daemon-run.js')
 
-// A minimal net.Server stand-in: EventEmitter for .on()/.emit() plus the
-// listen/close/address surface findAvailablePort touches. Mocking createServer
-// drives the 'error' path deterministically without binding real ports, which is
-// flaky under parallel runs and restricted CI sandboxes.
-function fakeServer(opts: { errorCode?: string; port?: number }) {
-  const server = new EventEmitter() as EventEmitter & {
-    listen: (port: number, host: string, cb: () => void) => void
-    close: (cb?: () => void) => void
-    address: () => { port: number }
-  }
-  server.listen = (_port, _host, cb) => {
-    queueMicrotask(() => {
-      if (opts.errorCode) {
-        server.emit('error', Object.assign(new Error(opts.errorCode), { code: opts.errorCode }))
-      } else {
-        cb()
-      }
-    })
-  }
-  server.close = (cb?: () => void) => cb?.()
-  server.address = () => ({ port: opts.port ?? 0 })
-  return server
-}
-
-describe('findAvailablePort', () => {
+describe('runDaemonRun listens on its socket alone', () => {
   afterEach(() => vi.clearAllMocks())
 
-  it('rejects immediately on a non-EADDRINUSE error and does not scan further ports', async () => {
-    createServerSpy.mockImplementation(() => fakeServer({ errorCode: 'EACCES' }))
-    await expect(findAvailablePort(4000)).rejects.toMatchObject({ code: 'EACCES' })
-    // A permanent error must stop the scan at the first port, not walk ~62k ports.
-    expect(createServerSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it('retries the next port on EADDRINUSE until one binds', async () => {
-    let call = 0
-    createServerSpy.mockImplementation(() => {
-      call += 1
-      return call === 1 ? fakeServer({ errorCode: 'EADDRINUSE' }) : fakeServer({ port: 5005 })
-    })
-    await expect(findAvailablePort(5004)).resolves.toBe(5005)
-    expect(createServerSpy).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('runDaemonRun bind-host guard', () => {
-  afterEach(() => vi.clearAllMocks())
-
-  it.each([
-    '0.0.0.0',
-    '192.168.1.5',
-    'evil.example',
-  ])('refuses to start the daemon bound to non-loopback host %s and never calls startHttpServer', async (host) => {
-    const outcome = await runDaemonRun({ host, tokenStdin: false, dataDir: '/tmp/whiteboard-test' })
-    expect(outcome.kind).toBe('refused')
-    expect(startHttpServerMock).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    '127.0.0.1',
-    'localhost',
-    '::1',
-  ])('starts the daemon when bound to loopback host %s', async (host) => {
-    const outcome = await runDaemonRun({ host, tokenStdin: false, dataDir: '/tmp/whiteboard-test' })
-    expect(outcome.kind).toBe('running')
-    expect(startHttpServerMock).toHaveBeenCalled()
-  })
-})
-
-describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
-  afterEach(() => vi.clearAllMocks())
-
-  it('fails fast with a structured outcome and logs an error record on an invalid env value', async () => {
-    const capture = captureLogsForTests('debug')
-    try {
-      const outcome = await runDaemonRun({
-        host: '127.0.0.1',
-        tokenStdin: false,
-        dataDir: '/tmp/whiteboard-test',
-        env: { WHITEBOARD_ALLOWED_WEB_ORIGINS: 'not a url' },
-      })
-      expect(outcome).toEqual({
-        kind: 'input-error',
-        message: expect.stringContaining('WHITEBOARD_ALLOWED_WEB_ORIGINS'),
-        code: 'invalid_allowed_web_origins',
-      })
-      expect(startHttpServerMock).not.toHaveBeenCalled()
-      const record = capture.records.find(
-        (r) => r.scope === 'web-origin-allowlist' && r.level === 'error',
-      )
-      expect(record).toBeDefined()
-    } finally {
-      capture.restore()
-    }
-  })
-
-  it('threads a valid allowlist through to startHttpServer', async () => {
+  // ADR-0050: the local daemon listens on no TCP port. What a caller learns
+  // is the socket, and the daemon is never handed a port or host to bind.
+  it('reports the socket in the ready JSON and hands the server no port or host', async () => {
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      tokenStdin: false,
-      dataDir: '/tmp/whiteboard-test',
-      env: { WHITEBOARD_ALLOWED_WEB_ORIGINS: 'https://kamiazya-whiteboard.pages.dev' },
-    })
-    expect(outcome.kind).toBe('running')
-    expect(startHttpServerMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        allowedWebOrigins: ['https://kamiazya-whiteboard.pages.dev'],
-      }),
-    )
-  })
-
-  it('defaults to the official hosted origin when the env var is unset', async () => {
-    const outcome = await runDaemonRun({
-      host: '127.0.0.1',
       tokenStdin: false,
       dataDir: '/tmp/whiteboard-test',
       env: {},
     })
-    expect(outcome.kind).toBe('running')
-    expect(startHttpServerMock).toHaveBeenCalledWith(
-      expect.objectContaining({ allowedWebOrigins: ['https://kamiazya-whiteboard.pages.dev'] }),
-    )
-  })
-
-  it('an explicitly empty env value opts out of the default allowlist', async () => {
-    const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      tokenStdin: false,
-      dataDir: '/tmp/whiteboard-test',
-      env: { WHITEBOARD_ALLOWED_WEB_ORIGINS: '' },
-    })
-    expect(outcome.kind).toBe('running')
-    expect(startHttpServerMock).toHaveBeenCalledWith(
-      expect.objectContaining({ allowedWebOrigins: [] }),
-    )
+    if (outcome.kind !== 'running') throw new Error(`expected running, got ${outcome.kind}`)
+    expect(outcome.result.socketPath).toBe('/run/user/1000/whiteboard/d.sock')
+    expect(outcome.result).not.toHaveProperty('port')
+    expect(outcome.result).not.toHaveProperty('host')
+    const [options] = startHttpServerMock.mock.calls[0] as unknown as [Record<string, unknown>]
+    expect(options).not.toHaveProperty('port')
+    expect(options).not.toHaveProperty('host')
+    expect(typeof options.socketPath).toBe('string')
   })
 })
 
@@ -184,7 +58,6 @@ describe('runDaemonRun WHITEBOARD_REPLICA_TIER wiring', () => {
   // dev entrypoint, which already gated on it.
   it('fails fast with a structured outcome on an invalid value and never starts the daemon', async () => {
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
       tokenStdin: false,
       dataDir: '/tmp/whiteboard-test',
       env: { WHITEBOARD_REPLICA_TIER: 'Offline' },
@@ -199,7 +72,6 @@ describe('runDaemonRun WHITEBOARD_REPLICA_TIER wiring', () => {
 
   it('threads a valid override through to startHttpServer', async () => {
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
       tokenStdin: false,
       dataDir: '/tmp/whiteboard-test',
       env: { WHITEBOARD_REPLICA_TIER: 'no-offline' },
@@ -212,7 +84,6 @@ describe('runDaemonRun WHITEBOARD_REPLICA_TIER wiring', () => {
 
   it('defaults to offline when the env var is unset', async () => {
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
       tokenStdin: false,
       dataDir: '/tmp/whiteboard-test',
       env: {},
@@ -233,8 +104,6 @@ describe('runDaemonRun --data-dir storage redirection', () => {
   it('redirects the shared data-dir seam so all storage follows the explicit dataDir', async () => {
     const dir = join(tmpdir(), `daemon-run-datadir-${Date.now()}`)
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      port: 3099,
       dataDir: dir,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
@@ -259,8 +128,6 @@ describe('runDaemonRun --data-dir storage redirection', () => {
     if (isAbsolute(rel)) ctx.skip()
     expect(resolve(rel).startsWith(process.cwd())).toBe(false)
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      port: 3099,
       dataDir: rel,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
@@ -274,8 +141,6 @@ describe('runDaemonRun --data-dir storage redirection', () => {
   it('leaves the seam untouched when no dataDir option is given', async () => {
     const before = getDataDir()
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      port: 3099,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
     expect(outcome.kind).toBe('running')
@@ -297,8 +162,6 @@ describe('runDaemonRun legacy reconnect trust-file purge', () => {
     await fs.writeFile(trustFile, '{"schemaVersion":2,"origins":[]}')
 
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      port: 3099,
       dataDir: dir,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
@@ -318,8 +181,6 @@ describe('runDaemonRun legacy reconnect trust-file purge', () => {
       // ENOENT/permission cases the function already swallows internally)
       // must not change runDaemonRun's outcome — it can only add a log line.
       const outcome = await runDaemonRun({
-        host: '127.0.0.1',
-        port: 3099,
         dataDir: dir,
         env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
       })
@@ -335,7 +196,6 @@ describe('runDaemonRun token source conflict', () => {
 
   it('rejects with an input-error and never starts the daemon when --token-stdin and WHITEBOARD_DAEMON_TOKEN are both set', async () => {
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
       tokenStdin: true,
       dataDir: '/tmp/whiteboard-test',
       env: { WHITEBOARD_DAEMON_TOKEN: 'env-token-should-never-leak' },
@@ -350,7 +210,6 @@ describe('runDaemonRun token source conflict', () => {
 
   it('still uses the env token when only WHITEBOARD_DAEMON_TOKEN is set (no --token-stdin)', async () => {
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
       tokenStdin: false,
       dataDir: '/tmp/whiteboard-test',
       env: { WHITEBOARD_DAEMON_TOKEN: 'env-only-token' },
@@ -377,7 +236,6 @@ describe('runDaemonRun token source conflict', () => {
         })
       })
       const outcomePromise = runDaemonRun({
-        host: '127.0.0.1',
         tokenStdin: true,
         dataDir: '/tmp/whiteboard-test',
         env: {},
@@ -396,59 +254,12 @@ describe('runDaemonRun token source conflict', () => {
   })
 })
 
-describe('runDaemonRun WHITEBOARD_OAUTH_CLIENT_REGISTRY wiring', () => {
-  afterEach(() => vi.clearAllMocks())
-
-  it('fails fast with a structured outcome on an invalid env value and never calls startHttpServer', async () => {
-    const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      tokenStdin: false,
-      dataDir: '/tmp/whiteboard-test',
-      env: { WHITEBOARD_OAUTH_CLIENT_REGISTRY: 'not json' },
-    })
-    expect(outcome).toEqual({
-      kind: 'input-error',
-      message: expect.stringContaining('WHITEBOARD_OAUTH_CLIENT_REGISTRY'),
-      code: 'invalid_oauth_client_registry',
-    })
-    expect(startHttpServerMock).not.toHaveBeenCalled()
-  })
-
-  it('threads a valid registry through to startHttpServer', async () => {
-    const registry = [{ clientId: 'test-client', redirectUris: ['https://example.com/callback'] }]
-    const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      tokenStdin: false,
-      dataDir: '/tmp/whiteboard-test',
-      env: { WHITEBOARD_OAUTH_CLIENT_REGISTRY: JSON.stringify(registry) },
-    })
-    expect(outcome.kind).toBe('running')
-    expect(startHttpServerMock).toHaveBeenCalledWith(
-      expect.objectContaining({ oauthClientRegistry: registry }),
-    )
-  })
-
-  it('defaults to an empty registry when the env var is unset', async () => {
-    const outcome = await runDaemonRun({
-      host: '127.0.0.1',
-      tokenStdin: false,
-      dataDir: '/tmp/whiteboard-test',
-      env: {},
-    })
-    expect(outcome.kind).toBe('running')
-    expect(startHttpServerMock).toHaveBeenCalledWith(
-      expect.objectContaining({ oauthClientRegistry: [] }),
-    )
-  })
-})
-
 describe('runDaemonRun when the server closes itself', () => {
   it('an idle close removes the daemon record and settles the run as idle', async () => {
     const registry = await import('../daemon/daemon-registry.js')
     vi.mocked(registry.deleteDaemonRecord).mockClear()
     startHttpServerMock.mockClear()
     const outcome = await runDaemonRun({
-      host: '127.0.0.1',
       tokenStdin: false,
       dataDir: '/tmp/whiteboard-test',
     })

@@ -4,15 +4,14 @@
  * `runtime:admin` bar — one step above the plain key route's workspace:read
  * and the tier route's own admin bar, since rotation is at least as
  * consequential as either. Wired through the real
- * `createDaemonAuthMiddleware` chain, the same pattern replica-key.test.ts
- * and membership.test.ts use, sharing this file's `makeApp` fixture.
+ * `createDaemonAuthMiddleware` chain, sharing replica-key.test.ts's `makeApp`
+ * fixture.
  */
 import { replicaKeyResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { mintMacaroon } from '../security/macaroon.js'
 import {
-  bindSession,
   DAEMON_TOKEN,
   disposeApp,
   MACAROON_ROOT_KEY,
@@ -152,15 +151,6 @@ describe('POST /api/workspaces/:workspaceId/replica-key/rotate', () => {
   // session (ALL_AUTH_SCOPES under the accepted v1 posture) still reaches
   // it, the same honest limit #1752 recorded for the tier route: this bar
   // does not today separate an operator from a paired browser session.
-  it('a passkey-bound member session (ALL_AUTH_SCOPES) also clears the bar, per the accepted v1 posture', async () => {
-    const fixture = await makeApp()
-    const { token } = await bindSession(fixture)
-    const res = await rotate(fixture.app, WS, {
-      Authorization: `Bearer ${token}`,
-      Origin: 'https://latest.kamiazya-whiteboard.pages.dev',
-    })
-    expect(res.status).toBe(200)
-  })
 
   it('never mints a workspaces row as a side effect', async () => {
     const fixture = await makeApp()

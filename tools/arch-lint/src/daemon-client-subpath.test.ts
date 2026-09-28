@@ -12,7 +12,7 @@
  * Twice measured, both times in gzipped critical-path JS against a 152 KB
  * budget:
  *
- * - `pairing.ts` imported the root for one schema — 144.5 KB in 27 files
+ * - the since-deleted pairing contract imported the root for one schema — 144.5 KB in 27 files
  *   became 413.8 KB in 31, loro's WASM bindings included. `daemon-client`
  *   is `sideEffects: false`, so a module the critical path never needs is
  *   dropped whole; one it DOES need keeps every import it makes, and

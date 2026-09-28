@@ -24,10 +24,9 @@ export async function runDaemonStatus(
 
   const recordSummary = ({
     pid,
-    port,
     version,
     startedAt,
-  }: NonNullable<DaemonStatusResult['record']>) => ({ pid, port, version, startedAt })
+  }: NonNullable<DaemonStatusResult['record']>) => ({ pid, version, startedAt })
 
   if (parsed.kind === 'missing') {
     return {

@@ -39,11 +39,8 @@ const DATA_DIR = '/var/lib/whiteboard'
  * they did not ask for, and nothing anywhere says so — the operator believes
  * the retention window they configured is in force.
  *
- * This is not a new posture. `server/index.ts` already fails fast on a
- * malformed `WHITEBOARD_ALLOWED_WEB_ORIGINS` and a malformed OAuth client
- * registry, for the reason its own comment gives: a silent fallback "would
- * look identical to 'the operator never configured it'". The storage settings
- * were simply never held to it, and drifted into four different answers —
+ * A silent fallback "would look identical to 'the operator never configured
+ * it'". The storage settings were simply never held to that rule, and drifted into four different answers —
  * default, `Number.parseInt` prefix, off, and abort.
  */
 describe('the storage-setting convention', () => {

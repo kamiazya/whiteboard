@@ -7,8 +7,7 @@
 // tests run in well under the mcp-node project's 10s testTimeout.
 //
 // Behavior is entirely env-driven so the test controls timing without
-// touching argv (which the real pnpm script also receives --port=/--token=
-// for):
+// touching argv (which the real pnpm script also receives --token= for):
 //   FAKE_PNPM_INVOKED_SENTINEL     - path written immediately on
 //     invocation, so a test can assert this process was (or was not) ever
 //     spawned.
@@ -28,18 +27,15 @@
 //     against the hook's own exit time (happens-before assertion).
 //
 // Like the real daemon, it listens on a socket and then writes daemon.json
-// naming that socket into WHITEBOARD_DATA_DIR; the port it is handed is only
-// recorded, never bound.
+// naming that socket into WHITEBOARD_DATA_DIR.
 
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { startFakeMcpResponder } from './fake-mcp-daemon.mjs'
 
-const PORT_FLAG = '--port='
 const TOKEN_FLAG = '--token='
 const args = process.argv.slice(2)
-const port = Number(args.find((arg) => arg.startsWith(PORT_FLAG))?.slice(PORT_FLAG.length))
 const token =
   args.find((arg) => arg.startsWith(TOKEN_FLAG))?.slice(TOKEN_FLAG.length) ?? 'whiteboard-dev'
 
@@ -93,10 +89,7 @@ try {
   process.exit(1)
 }
 
-writeFileSync(
-  join(dataDir, 'daemon.json'),
-  JSON.stringify({ pid: process.pid, port, token, socketPath }),
-)
+writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ pid: process.pid, token, socketPath }))
 
 const bindSentinel = process.env.FAKE_PNPM_BIND_SENTINEL
 if (bindSentinel) {

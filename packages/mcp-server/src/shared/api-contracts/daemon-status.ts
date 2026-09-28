@@ -19,7 +19,6 @@ export const daemonStatusResultSchema = z
     record: z
       .object({
         pid: z.number(),
-        port: z.number(),
         version: z.string(),
         startedAt: z.string(),
       })

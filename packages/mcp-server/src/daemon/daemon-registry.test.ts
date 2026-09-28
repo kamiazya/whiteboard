@@ -29,7 +29,7 @@ describe('daemon-registry', () => {
     await saveDaemonRecord(
       {
         pid: 123,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 'secret',
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
@@ -39,7 +39,7 @@ describe('daemon-registry', () => {
 
     await expect(loadDaemonRecord(dataDir)).resolves.toEqual({
       pid: 123,
-      port: 3099,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
       token: 'secret',
       version: '0.1.0',
       startedAt: '2026-04-23T00:00:00.000Z',
@@ -55,7 +55,7 @@ describe('daemon-registry', () => {
       await saveDaemonRecord(
         {
           pid: 123,
-          port: 3099,
+          socketPath: '/run/user/1000/whiteboard/d.sock',
           token: 'secret',
           version: '0.1.0',
           startedAt: '2026-04-23T00:00:00.000Z',
@@ -86,7 +86,7 @@ describe('daemon-registry', () => {
       getDaemonRecordPath(dataDir),
       JSON.stringify({
         pid: DEAD_PID,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: '',
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
@@ -100,7 +100,7 @@ describe('daemon-registry', () => {
       getDaemonRecordPath(dataDir),
       JSON.stringify({
         pid: DEAD_PID,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
       }),
@@ -111,7 +111,12 @@ describe('daemon-registry', () => {
   it('returns null for a record it cannot interpret whose process is gone', async () => {
     await writeFile(
       getDaemonRecordPath(dataDir),
-      JSON.stringify({ pid: DEAD_PID, port: 3099, token: 7, version: '9.0.0' }),
+      JSON.stringify({
+        pid: DEAD_PID,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
+        token: 7,
+        version: '9.0.0',
+      }),
     )
     await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
   })
@@ -121,7 +126,12 @@ describe('daemon-registry', () => {
     // deleted it and started a second daemon beside the one still serving.
     await writeFile(
       getDaemonRecordPath(dataDir),
-      JSON.stringify({ pid: process.pid, port: 3099, token: 7, version: '9.0.0' }),
+      JSON.stringify({
+        pid: process.pid,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
+        token: 7,
+        version: '9.0.0',
+      }),
     )
     await expect(loadDaemonRecord(dataDir)).rejects.toThrow(
       new RegExp(`daemon record .* pid ${process.pid}`),
@@ -132,7 +142,7 @@ describe('daemon-registry', () => {
     await saveDaemonRecord(
       {
         pid: 321,
-        port: 4242,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 'abc',
         version: '0.2.0',
         startedAt: '2026-04-23T00:00:00.000Z',
@@ -141,7 +151,10 @@ describe('daemon-registry', () => {
     )
 
     const contents = await readFile(getDaemonRecordPath(dataDir), 'utf-8')
-    expect(JSON.parse(contents)).toMatchObject({ pid: 321, port: 4242 })
+    expect(JSON.parse(contents)).toMatchObject({
+      pid: 321,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
+    })
     await expect(readFile(`${getDaemonRecordPath(dataDir)}.tmp`, 'utf-8')).rejects.toThrow()
   })
 
@@ -149,7 +162,7 @@ describe('daemon-registry', () => {
     await saveDaemonRecord(
       {
         pid: 1,
-        port: 2,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 't',
         version: 'v',
         startedAt: '2026-04-23T00:00:00.000Z',

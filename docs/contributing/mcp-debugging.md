@@ -32,8 +32,8 @@ When upgrading the `@modelcontextprotocol/*` packages, re-check this matrix, the
 
 ## Recommended Flow
 
-1. Start the daemon-hosted HTTP MCP server in watch mode.
-2. Connect Inspector to `http://127.0.0.1:3099/mcp`.
+1. Start the dev daemon in watch mode (`pnpm mcp:http:dev`).
+2. Open Inspector on the development stdio proxy (`pnpm mcp:inspect`), which reaches the daemon's `/mcp` over its socket.
 3. Verify `initialize` and `tools/list` first.
 4. Reproduce the target tool call in Inspector before debugging inside Codex or Claude Code.
 5. If the problem only appears in a real client, compare:
@@ -54,8 +54,8 @@ pnpm mcp:debug:http
 
 What each does:
 
-- `pnpm mcp:http:dev`: starts the local daemon in watch mode and exposes MCP at `http://127.0.0.1:3099/mcp`
-- Claude Code / Codex sessions reach that endpoint through the stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` (spawned per session; ensures the daemon, waits for readiness, retries per request across watch restarts). It forwards over the owner-only Unix socket the daemon names in `<dataDir>/daemon.json` (`socketPath`, ADR-0050 decision 2), and never over the port: while there is no record — the daemon is starting, or between the halves of a watch restart — a request waits within the retry budget for one to appear. A client on that socket still sends the bearer token and a loopback `Host` (`localhost`), since the socket serves the same app with the same checks — `curl --unix-socket <path> http://localhost/mcp …`. Claude Code reads the proxy from a LOCAL-scope registration (`claude mcp add --scope local … mcp-http-stdio-proxy.mjs`, once per checkout), which shadows `.mcp.json`'s published `npx` definition; `settings.json` has no `mcpServers` field, so never define servers there. Inspector goes through the same proxy.
+- `pnpm mcp:http:dev`: starts the local daemon in watch mode; it serves `/mcp` on its owner-only socket (a named pipe on Windows) and listens on no TCP port (ADR-0050)
+- Claude Code / Codex sessions reach that endpoint through the stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` (spawned per session; ensures the daemon, waits for readiness, retries per request across watch restarts). It forwards over the owner-only socket the daemon names in `<dataDir>/daemon.json` (`socketPath`, ADR-0050 decision 2): while there is no record — the daemon is starting, or between the halves of a watch restart — a request waits within the retry budget for one to appear. A client on that socket still sends the bearer token, since the socket serves the same app with the same checks — `curl --unix-socket <path> http://localhost/mcp …`. Claude Code reads the proxy from a LOCAL-scope registration (`claude mcp add --scope local … mcp-http-stdio-proxy.mjs`, once per checkout), which shadows `.mcp.json`'s published `npx` definition; `settings.json` has no `mcpServers` field, so never define servers there. Inspector goes through the same proxy.
 - `pnpm mcp:inspect`: starts the official MCP Inspector UI on the same stdio proxy, so it reaches this checkout's dev daemon over its socket (starting one if none answers). Inspector has no Unix-socket transport of its own.
 - `pnpm mcp:inspect:stdio`: starts Inspector against the raw stdio MCP entrypoint
 - `pnpm mcp:debug:http`: runs `mcp:http:dev` and Inspector together for quick iteration
@@ -113,8 +113,7 @@ Log format:
 
 - Does the daemon answer on its socket, the way the proxy and the hooks reach it? From the checkout root:
   `curl --unix-socket "$(node -p "require('./.dev-data/daemon.json').socketPath")" http://localhost/api/runtime/ping` should return `200`. No `daemon.json` means no daemon is running for this checkout's data dir.
-- Does `http://127.0.0.1:3099/api/runtime/ping` return `200`? (The port Inspector uses; a worktree's is its derived one.)
-- Does Inspector connect to `http://127.0.0.1:3099/mcp`?
+- Does Inspector (`pnpm mcp:inspect`) connect through the proxy?
 - Does `tools/list` succeed?
 
 ### 2. Capability negotiation
@@ -221,11 +220,10 @@ If MCP tools go missing mid-session with no error, check whether the daemon is s
 its socket (the `curl --unix-socket` line in the checklist above) before assuming a client bug — `mcp:http:dev` passes
 `--idle-timeout-ms=0` specifically so the dev daemon never self-terminates on idle, but a daemon
 started without that flag (a stale build, a hand-run `pnpm --filter @kamiazya/whiteboard-mcp exec
-node dist/server/index.js --daemon`) still inherits the packaged 15-minute idle-shutdown default and
+node dist/server/index.js`) still inherits the packaged 15-minute idle-shutdown default and
 can vanish silently, since the `SessionStart` hook only fires once per session and never re-spawns
-mid-session. If two processes race to bind the same port, the loser now logs one classified
-`{ port, code: 'EADDRINUSE' }` record via `getLogger('http-server')` and exits, instead of the raw
-unhandled-`'error'`-event stack trace `tmp/logs/mcp-http-dev.log` used to accumulate.
+mid-session. A second daemon started for the same data dir finds the socket answering and exits
+with `another daemon is already listening on this socket` rather than taking it over.
 
 If the hook itself times out waiting for the spawned daemon to answer the ping on its socket, it
 prints `MCP tools will be unavailable for this session` and exits non-zero — the session

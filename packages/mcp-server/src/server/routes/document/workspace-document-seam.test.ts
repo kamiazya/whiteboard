@@ -26,7 +26,7 @@ const { seedWorkspaceRow } = await import('../_test-helpers.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
 // workaround for document.ts's dynamic import.
-await import('../ws.js')
+await import('../sync-audience.js')
 
 const WS = 'seam-ws'
 

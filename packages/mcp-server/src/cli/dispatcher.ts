@@ -42,7 +42,7 @@ whiteboard daemon doctor         --json [--data-dir=<path>]
 whiteboard daemon stop           --json [--data-dir=<path>]
 whiteboard daemon logs           --json [--data-dir=<path>]
 whiteboard daemon support-bundle --json --output-dir=<path> [--data-dir=<path>]
-whiteboard daemon run            --json [--host=<host>] [--port=<port>] [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
+whiteboard daemon run            --json [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
 whiteboard server status         --json [--data-dir=<path>]
 whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [options...]
 whiteboard server stop           --json [--data-dir=<path>]
@@ -505,16 +505,14 @@ async function dispatchServerSupportBundle(rest: readonly string[]): Promise<num
 }
 
 type ConfigFileEnvResult =
-  | { kind: 'ok'; port: number | undefined; openBrowser: boolean | undefined }
+  | { kind: 'ok'; openBrowser: boolean | undefined }
   | { kind: 'error'; message: string }
 
 // Loads the nearest whiteboard config file (if any), layers its values
 // under process.env (env-over-file precedence, see config-file.ts), logs
-// the file path at info level, and returns the file's `port` and
-// `openBrowser` (if set) so the caller can thread them into daemon-run's
-// own precedence chains — neither is a simple set-if-unset env key like the
-// other fields (port already had its own chain; openBrowser is a boolean
-// with a `--no-open`-first override, not an env var at all).
+// the file path at info level, and returns the file's `openBrowser` (if set)
+// so the caller can thread it into daemon-run's own precedence chain — it is
+// a boolean with a `--no-open`-first override, not an env var at all.
 // loadConfigFile throws on a malformed file (by design, see config-file.ts);
 // that throw is caught here and turned into the same structured
 // stderr + exit-1 contract every other startup validation failure in this
@@ -527,12 +525,12 @@ function applyLoadedConfigFileToDispatcherEnv(): ConfigFileEnvResult {
     const message = err instanceof Error ? err.message : String(err)
     return { kind: 'error', message: `whiteboard config file error: ${message}` }
   }
-  if (loaded === null) return { kind: 'ok', port: undefined, openBrowser: undefined }
+  if (loaded === null) return { kind: 'ok', openBrowser: undefined }
 
   applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
   getLogger('cli-dispatcher').info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
 
-  return { kind: 'ok', port: loaded.config.port, openBrowser: loaded.config.openBrowser }
+  return { kind: 'ok', openBrowser: loaded.config.openBrowser }
 }
 
 async function dispatchRun(rest: readonly string[]): Promise<number> {
@@ -557,8 +555,7 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   // BEFORE the dynamic daemon-run import below, so file dataDir only wins
   // when neither --data-dir nor WHITEBOARD_DATA_DIR is already set, and the
   // shared/data-dir-secure.ts import-time DATA_DIR snapshot (pulled in via
-  // daemon-run.js) sees the layered value. Config-file port is threaded
-  // through separately (below) since --port and env don't share one seam.
+  // daemon-run.js) sees the layered value.
   const configFileResult = applyLoadedConfigFileToDispatcherEnv()
   if (configFileResult.kind === 'error') {
     process.stderr.write(`${configFileResult.message}\n`)
@@ -569,8 +566,6 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   // at module load) out of the read-only command path.
   const { runDaemonRun } = await import('./daemon-run.js')
   const outcome = await runDaemonRun({
-    host: parsed.host,
-    port: parsed.port ?? configFileResult.port,
     dataDir: runDataDir,
     tokenStdin: parsed.tokenStdin,
   })
@@ -590,8 +585,6 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   // the JSON line above and its own errors are only logged, never thrown.
   const { maybeOpenDaemonBrowser } = await import('./daemon-run-auto-open.js')
   await maybeOpenDaemonBrowser({
-    host: outcome.result.host,
-    port: outcome.result.port,
     noOpenFlag: parsed.noOpen,
     configOpenBrowser: configFileResult.openBrowser,
   })

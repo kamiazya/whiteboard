@@ -7,7 +7,7 @@ import { captureLogsForTests } from './log.js'
 
 const { startHttpServerMock, saveDaemonRecordMock, deleteDaemonRecordMock } = vi.hoisted(() => ({
   startHttpServerMock: vi.fn(async () => ({
-    port: 3099,
+    socketPath: '/run/user/1000/whiteboard/d.sock',
     getRuntimeStatus: () => ({ startedAt: '2026-01-01T00:00:00.000Z' }),
   })),
   saveDaemonRecordMock: vi.fn(async () => undefined),
@@ -60,7 +60,7 @@ describe('server/index main() data dir startup log', () => {
   })
 })
 
-describe('server/index main() daemon mode data dir threading', () => {
+describe('server/index main() data dir threading', () => {
   const originalArgv = process.argv
 
   afterEach(() => {
@@ -74,7 +74,6 @@ describe('server/index main() daemon mode data dir threading', () => {
     const scratchDir = '/tmp/whiteboard-index-daemon-mode-test'
     setDataDirForTests(scratchDir)
     process.env.WHITEBOARD_TOKEN = 'test-token'
-    process.argv = [...originalArgv, '--daemon']
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     try {
       await main()
@@ -91,7 +90,6 @@ describe('server/index main() daemon mode data dir threading', () => {
     const scratchDir = '/tmp/whiteboard-index-daemon-mode-test-close'
     setDataDirForTests(scratchDir)
     process.env.WHITEBOARD_TOKEN = 'test-token'
-    process.argv = [...originalArgv, '--daemon']
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     try {
       await main()
@@ -104,85 +102,33 @@ describe('server/index main() daemon mode data dir threading', () => {
   })
 })
 
-describe('server/index main() WHITEBOARD_ALLOWED_WEB_ORIGINS startup gate', () => {
+// ADR-0050: the daemon listens on its owner-only socket and nowhere else.
+describe('server/index main() listens on its socket alone', () => {
   afterEach(() => {
     vi.clearAllMocks()
-    vi.unstubAllEnvs()
-    delete process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS
-  })
-
-  it('aborts before startHttpServer and logs a structured record on an invalid env value', async () => {
-    process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS = 'not a url'
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called')
-    })
-    const capture = captureLogsForTests('debug')
-    try {
-      await expect(main()).rejects.toThrow('process.exit called')
-      expect(exitSpy).toHaveBeenCalledWith(1)
-      expect(startHttpServerMock).not.toHaveBeenCalled()
-      const record = capture.records.find(
-        (r) => r.scope === 'web-origin-allowlist' && r.level === 'error',
-      )
-      expect(record).toBeDefined()
-      expect(JSON.stringify(record)).not.toContain('not a url')
-    } finally {
-      capture.restore()
-      exitSpy.mockRestore()
-    }
-  })
-
-  it('refuses to start when an allowlist is set but no auth token is provided', async () => {
-    process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS = 'https://kamiazya-whiteboard.pages.dev'
     delete process.env.WHITEBOARD_TOKEN
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called')
-    })
-    const capture = captureLogsForTests('debug')
-    try {
-      await expect(main()).rejects.toThrow('process.exit called')
-      expect(exitSpy).toHaveBeenCalledWith(1)
-      expect(startHttpServerMock).not.toHaveBeenCalled()
-      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'error')
-      expect(record).toBeDefined()
-    } finally {
-      capture.restore()
-      exitSpy.mockRestore()
-    }
   })
 
-  it('threads a valid allowlist through to startHttpServer and never exits', async () => {
-    process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS = 'https://kamiazya-whiteboard.pages.dev'
+  it('hands startHttpServer a socket and no port or host, and records the socket', async () => {
     process.env.WHITEBOARD_TOKEN = 'test-token'
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called')
-    })
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     try {
       await main()
-      expect(exitSpy).not.toHaveBeenCalled()
-      expect(startHttpServerMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          allowedWebOrigins: ['https://kamiazya-whiteboard.pages.dev'],
-        }),
+      const [options] = startHttpServerMock.mock.calls[0] as unknown as [Record<string, unknown>]
+      expect(typeof options.socketPath).toBe('string')
+      expect(options).not.toHaveProperty('port')
+      expect(options).not.toHaveProperty('host')
+      expect(saveDaemonRecordMock).toHaveBeenCalledWith(
+        expect.objectContaining({ socketPath: '/run/user/1000/whiteboard/d.sock' }),
+        expect.any(String),
       )
+      expect(saveDaemonRecordMock.mock.calls[0]?.[0]).not.toHaveProperty('port')
     } finally {
-      exitSpy.mockRestore()
       stdoutSpy.mockRestore()
-      delete process.env.WHITEBOARD_TOKEN
     }
   })
 })
 
-/**
- * The same fail-fast posture, extended to the settings that decide what is
- * kept and for how long.
- *
- * Setting a value is how an operator states a requirement. Starting on the
- * default instead answers it with behaviour nobody asked for, and says so
- * nowhere — `1h` on the grace window silently meant one millisecond, and the
- * protection the operator configured was simply gone.
- */
 describe('server/index main() storage settings startup gate', () => {
   afterEach(() => {
     vi.clearAllMocks()
@@ -229,53 +175,6 @@ describe('server/index main() storage settings startup gate', () => {
     } finally {
       capture.restore()
       exitSpy.mockRestore()
-    }
-  })
-})
-
-describe('server/index main() WHITEBOARD_OAUTH_CLIENT_REGISTRY startup gate', () => {
-  afterEach(() => {
-    vi.clearAllMocks()
-    vi.unstubAllEnvs()
-    delete process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY
-    delete process.env.WHITEBOARD_TOKEN
-  })
-
-  it('aborts before startHttpServer and logs a structured record on an invalid env value', async () => {
-    process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY = 'not json'
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called')
-    })
-    const capture = captureLogsForTests('debug')
-    try {
-      await expect(main()).rejects.toThrow('process.exit called')
-      expect(exitSpy).toHaveBeenCalledWith(1)
-      expect(startHttpServerMock).not.toHaveBeenCalled()
-      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'error')
-      expect(record).toBeDefined()
-    } finally {
-      capture.restore()
-      exitSpy.mockRestore()
-    }
-  })
-
-  it('threads a valid registry through to startHttpServer and never exits', async () => {
-    const registry = [{ clientId: 'test-client', redirectUris: ['https://example.com/callback'] }]
-    process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY = JSON.stringify(registry)
-    process.env.WHITEBOARD_TOKEN = 'test-token'
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called')
-    })
-    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    try {
-      await main()
-      expect(exitSpy).not.toHaveBeenCalled()
-      expect(startHttpServerMock).toHaveBeenCalledWith(
-        expect.objectContaining({ oauthClientRegistry: registry }),
-      )
-    } finally {
-      exitSpy.mockRestore()
-      stdoutSpy.mockRestore()
     }
   })
 })
@@ -367,7 +266,7 @@ describe('server/index main() config-file wiring', () => {
     dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
     originalCwd = process.cwd()
     process.chdir(dir)
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 'not-a-number' }))
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ logLevel: 'not-a-level' }))
 
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called')
@@ -383,28 +282,6 @@ describe('server/index main() config-file wiring', () => {
     } finally {
       capture.restore()
       exitSpy.mockRestore()
-    }
-  })
-
-  it('drops the default hosted-origin admission on a tokenless start instead of refusing', async () => {
-    delete process.env.WHITEBOARD_TOKEN
-    delete process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS
-
-    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    const capture = captureLogsForTests()
-    try {
-      await main()
-      expect(startHttpServerMock).toHaveBeenCalledWith(
-        expect.objectContaining({ allowedWebOrigins: [] }),
-      )
-      const notice = capture.records.find(
-        (r) =>
-          r.scope === 'server-index' && r.msg.includes('default hosted-origin admission disabled'),
-      )
-      expect(notice).toBeDefined()
-    } finally {
-      capture.restore()
-      stdoutSpy.mockRestore()
     }
   })
 

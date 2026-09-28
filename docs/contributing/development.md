@@ -28,17 +28,17 @@ pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chrom
 
 This installs Playwright's own Chromium, which is what a local browser-mode run uses. **CI does not**: every browser job in `.github/workflows/ci.yml` sets `WHITEBOARD_CHROME_PATH=/usr/bin/google-chrome-stable`, so CI drives the runner's system Chrome. Local and CI therefore execute browser tests in *different* browser builds — worth remembering when a browser test disagrees between them, since the browser itself is one of the variables. Set `WHITEBOARD_CHROME_PATH` locally to match CI when you are chasing exactly that kind of divergence.
 
-## Recommended: develop over HTTP MCP
+## Recommended: develop against the dev daemon's `/mcp`
 
-For active MCP development, connect Claude Code or Codex to the daemon-hosted `/mcp` endpoint over HTTP rather than wiring the client to `stdio` directly. A `tsx watch` daemon restart does not force the MCP client to reconnect.
+For active MCP development, connect Claude Code or Codex to the dev daemon's `/mcp` endpoint through the development stdio proxy rather than wiring the client to the packaged `stdio` entry directly. A `tsx watch` daemon restart does not force the MCP client to reconnect: the proxy retries each request across it.
 
 ```bash
 pnpm mcp:http:dev
 ```
 
-The daemon listens on `http://127.0.0.1:3099/mcp` from the main checkout, and on an owner-only Unix socket whose path it records as `socketPath` in `<dataDir>/daemon.json` (ADR-0050 decision 2). **The development tools reach it through that socket, never through the port**: the stdio proxy, the `SessionStart` hooks (`ensure-http-dev-daemon.mjs`, `stale-issues.mjs`), and each worktree's Claude Code registration. The loopback port is still bound, for the browser and MCP Inspector.
+The daemon listens on an owner-only Unix socket (a named pipe on Windows) whose path it records as `socketPath` in `<dataDir>/daemon.json`, and on **no TCP port** (ADR-0050). Every development tool reaches it there: the stdio proxy, the `SessionStart` hooks (`ensure-http-dev-daemon.mjs`, `stale-issues.mjs`), each worktree's Claude Code registration, MCP Inspector (through `pnpm mcp:inspect`, which runs it on the proxy), and the web app (through the development build of the extension; see below).
 
-> **Auto-start:** The repo's `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`) reads the daemon record in this checkout's data dir and pings `/api/runtime/ping` over the socket it names. If nothing answers — no record, or a record a crashed daemon left behind — it spawns the daemon, and waits until the ping answers, when Claude Code or Codex opens the repo. If the daemon does not start automatically (hooks disabled, project not yet trusted, or the port it is spawned with already in use by another process), run `pnpm mcp:http:dev` manually in a separate terminal before making MCP calls. A daemon that answers but was started with a different token than `WHITEBOARD_TOKEN` (default `whiteboard-dev`) is reported rather than reused, because it would refuse every request the proxy sends.
+> **Auto-start:** The repo's `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`) reads the daemon record in this checkout's data dir and pings `/api/runtime/ping` over the socket it names. If nothing answers — no record, or a record a crashed daemon left behind — it spawns the daemon, and waits until the ping answers, when Claude Code or Codex opens the repo. If the daemon does not start automatically (hooks disabled, or project not yet trusted), run `pnpm mcp:http:dev` manually in a separate terminal before making MCP calls. A daemon that answers but was started with a different token than `WHITEBOARD_TOKEN` (default `whiteboard-dev`) is reported rather than reused, because it would refuse every request the proxy sends.
 
 > **Data lives in `.dev-data/`, not your real `~/.whiteboard`:** `pnpm dev` and `pnpm mcp:http:dev` (and anything that shells out to either — `mcp:debug:http`, the `SessionStart` hook) run through `packages/mcp-server/scripts/dev/with-dev-data-dir.mjs`, which sets `WHITEBOARD_DATA_DIR` to `<repo root>/.dev-data` unless you already set it yourself. This keeps dev canvases, the SQLite metadata DB, and daemon tokens out of the real `~/.whiteboard` a packaged (npm/Docker/stdio) install uses. Launching from a `git worktree` gets that worktree's own `.dev-data` — intentional, so parallel dev-loop lanes never share (or corrupt) each other's canvas data. If you have existing dev data under `~/.whiteboard` from before this change, move its *contents* into `.dev-data` at the repo root — the `SessionStart` hook typically creates an empty `.dev-data/` before you get to this step, so a plain `mv ~/.whiteboard .dev-data` nests the old directory one level too deep (`.dev-data/.whiteboard/whiteboard.db` instead of `.dev-data/whiteboard.db`) and your canvases will look missing. From the repo root:
 
@@ -46,23 +46,15 @@ The daemon listens on `http://127.0.0.1:3099/mcp` from the main checkout, and on
 mkdir -p .dev-data && mv ~/.whiteboard/* ~/.whiteboard/.[!.]* .dev-data/ 2>/dev/null; rmdir ~/.whiteboard
 ```
 
-Do this only while no dev daemon is running — an already-running old daemon on `:3099` keeps writing to `~/.whiteboard` until you restart it.
+Do this only while no dev daemon is running — an already-running old daemon keeps writing to `~/.whiteboard` until you restart it.
 
-> **Per-worktree sockets and ports:** every worktree reaches its own daemon, because the socket path is a hash of the data dir (`daemonSocketPath`) and every worktree has its own data dir. Nothing in the development tooling derives a port to find a daemon. The daemon still binds a loopback port, though, so every worktree also gets its own port to hand it at spawn. `packages/mcp-server/scripts/dev/dev-port-lib.mjs` is the single place this is derived, and both `with-dev-data-dir.mjs` (the spawn wrapper) and `ensure-http-dev-daemon.mjs` (the spawn hook) import it. The rule: the **main checkout always gets 3099** (back-compat with every doc, hook, and packaged script written before per-worktree ports existed); every **linked worktree** gets a deterministic port in `[3100, 3999]` derived by hashing its absolute repo root path. Run `node .claude/scripts/new-worktree.mjs <name>` to see a new worktree's port in its summary output, or compute it directly:
->
-> ```bash
-> node -e "import('./packages/mcp-server/scripts/dev/dev-port-lib.mjs').then(({deriveDevPort, isMainCheckout}) => { const repoRoot = process.cwd(); console.log(deriveDevPort({ repoRoot, isMainCheckout: isMainCheckout(repoRoot), env: process.env })) })"
-> ```
->
-> Set `WHITEBOARD_DEV_PORT` in the shell to override the derived port for a checkout (useful if two worktrees happen to hash-collide, or you just want a fixed value).
->
-> Two worktrees whose ports hash-collide can no longer reach each other's daemon, since neither looks for one on the port. The second daemon fails to bind instead, and its hook times out naming `tmp/logs/mcp-http-dev.log`, where the daemon's one-line `EADDRINUSE` record says why. Set `WHITEBOARD_DEV_PORT` for one of them.
+> **Per-worktree sockets:** every worktree reaches its own daemon, because the socket path is a hash of the data dir (`daemonSocketPath`) and every worktree has its own data dir. There is no port to derive, share or collide on.
 >
 > **The dev daemon never idles out.** `mcp:http:dev` passes `--idle-timeout-ms=0`, disabling the packaged daemon's 15-minute idle-shutdown default (`server/index.ts`'s own default, unaffected). Without this, a dev session idle past 15 minutes would silently close its own listener — the `SessionStart` hook only runs once per session, so nothing re-spawns it and the client loses its MCP tools with no error at all. Kill a dev daemon explicitly (`pkill -f mcp:http:dev`) rather than relying on it to time out.
 >
-> **A losing port-bind race logs one line, not a stack trace.** If two processes race to bind the same derived port (concurrent worktree sessions, a manual `pnpm mcp:http:dev` alongside the `SessionStart` hook), the loser's `EADDRINUSE` used to surface as Node's default unhandled `'error'` event — a raw stack trace dumped into `tmp/logs/mcp-http-dev.log`. The HTTP server now catches that event, logs one classified record (`{ port, code: 'EADDRINUSE' | 'EACCES' | ... }`, no stack, no filesystem paths) via `getLogger('http-server')`, and exits. This EADDRINUSE case should now be rare in practice — see the spawn lock below, which closes the startup TOCTOU race that used to cause it.
+> **A second daemon for the same data dir refuses to start.** The socket path is the data dir's, so a second `pnpm mcp:http:dev` alongside the `SessionStart` hook's finds the socket answering, stops the work it had already armed, and exits with `another daemon is already listening on this socket` rather than taking the socket over. This should be rare in practice — see the spawn lock below, which closes the startup race that used to cause it.
 >
-> **The probe-decide-spawn sequence is mutually exclusive across processes.** Two `SessionStart` hooks starting close together (a new editor session plus a `new-worktree.mjs` run, say) used to both observe the derived port free and both spawn `pnpm mcp:http:dev`, producing exactly the `EADDRINUSE` churn described above — and worse, a window where nothing answered the port, which an MCP client starting during that window would see as a connection failure for its entire session (clients connect once at startup and don't retry). `ensure-http-dev-daemon.mjs` now acquires an exclusive, atomically-created lock file (`<dataDir>/dev-daemon-spawn.lock`, so it is scoped per-worktree exactly like the socket) *before* its decisive check for a daemon, and holds it until the spawned daemon is confirmed reachable or the attempt definitively fails. A hook that loses the lock does not exit or spawn a competitor — it polls for the daemon to become reachable (the same wait the winner does, bounded by `WHITEBOARD_DEV_READY_TIMEOUT_MS`) and exits 0 once it answers, since the developer's session needs a working daemon regardless of which process started it. A lock left behind by a hook that crashed before releasing it is self-healing: it is stolen once its recorded pid is no longer running, or once it exceeds `WHITEBOARD_DEV_SPAWN_LOCK_STALE_MS` (default 45s, deliberately longer than the ready-timeout default so a legitimately slow cold start is never mistaken for a crashed holder). The already-answering fast path is unaffected — it still exits without ever touching the lock file.
+> **The probe-decide-spawn sequence is mutually exclusive across processes.** Two `SessionStart` hooks starting close together (a new editor session plus a `new-worktree.mjs` run, say) used to both observe no daemon and both spawn `pnpm mcp:http:dev`, producing exactly the churn described above — and worse, a window where nothing answered the socket, which an MCP client starting during that window would see as a connection failure for its entire session (clients connect once at startup and don't retry). `ensure-http-dev-daemon.mjs` now acquires an exclusive, atomically-created lock file (`<dataDir>/dev-daemon-spawn.lock`, so it is scoped per-worktree exactly like the socket) *before* its decisive check for a daemon, and holds it until the spawned daemon is confirmed reachable or the attempt definitively fails. A hook that loses the lock does not exit or spawn a competitor — it polls for the daemon to become reachable (the same wait the winner does, bounded by `WHITEBOARD_DEV_READY_TIMEOUT_MS`) and exits 0 once it answers, since the developer's session needs a working daemon regardless of which process started it. A lock left behind by a hook that crashed before releasing it is self-healing: it is stolen once its recorded pid is no longer running, or once it exceeds `WHITEBOARD_DEV_SPAWN_LOCK_STALE_MS` (default 45s, deliberately longer than the ready-timeout default so a legitimately slow cold start is never mistaken for a crashed holder). The already-answering fast path is unaffected — it still exits without ever touching the lock file.
 >
 > **Claude Code auto-wiring — usually a no-op today:** `node .claude/scripts/new-worktree.mjs <name>` calls `.claude/scripts/wire-worktree-mcp.mjs` as its last step, which *attempts* to add a `--scope local` `claude mcp add` entry named `whiteboard` for the new worktree, pointed at that worktree's own stdio proxy (which reaches the worktree's own daemon over its socket). That attempt only goes through if the main checkout has no `whiteboard` entry registered yet: `~/.claude.json` keys a `--scope local` registration by the project the CLI resolves, and `claude mcp add` resolves every linked worktree of a repo to the same project — the main checkout's absolute path — so there is one `whiteboard` slot per repository, not one per worktree. Following the day-to-day setup in [CONTRIBUTING.md](../../CONTRIBUTING.md) (register the `mcp-http-stdio-proxy.mjs` stdio proxy once, at `--scope local` under the name `whiteboard`, from the main checkout) fills that slot ahead of time, so in practice every worktree's wiring attempt finds it already taken and logs a skip instead of registering anything:
 >
@@ -130,9 +122,11 @@ This does not affect normal published usage through `npx -y @kamiazya/whiteboard
 
 ## The browser extension and its native host (ADR-0050)
 
-The hosted app is moving to reach the local daemon through a browser extension
-rather than a loopback port. It runs beside the pairing connection until
-loopback closes (ADR-0050 stage 4).
+The hosted app reaches the local daemon only through a browser extension; the
+daemon listens on no loopback port (ADR-0050, closing-loopback stage done
+2026-09-28). The web app in development reaches the dev daemon the same way,
+through the development build of the extension, which also admits
+`localhost`.
 
 - `apps/extension` is a Manifest V3 extension that relays each page connection
   to one native messaging host process. `pnpm --filter @kamiazya/whiteboard-extension build`
@@ -147,12 +141,16 @@ loopback closes (ADR-0050 stage 4).
   `about:debugging` (pick its `manifest.json`); it lasts until Firefox restarts.
 - `whiteboard native-host install --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]`
   registers the host with each browser this user has run (Chrome, Chromium,
-  Edge, Brave and Firefox, Ubuntu's snap Firefox included; Linux and macOS). It
-  writes a launcher under the data dir and, per browser, a manifest that lets
+  Edge, Brave and Firefox, Ubuntu's snap Firefox included) on Linux and macOS,
+  and on Windows with Chrome, Chromium, Edge and Firefox through a per-user
+  registry key naming a manifest kept under the data dir (the daemon's socket
+  there is a named pipe). It writes a launcher under the data dir and, per
+  browser, a manifest that lets
   only the extension above start it — Chromium's naming the extension's origin,
   Firefox's its id, since Firefox refuses a manifest that carries both. The snap
   Firefox asks once, through a desktop dialog, before it first starts the host,
-  and remembers the answer — a refusal too. One host name
+  and remembers the answer — a refusal too; the user guide says how to clear
+  it. One host name
   means one data dir per browser: installing for `.dev-data` replaces the
   registration for `~/.whiteboard`.
 - The host relays only `/api/` requests, to the owner-only socket the daemon
@@ -200,7 +198,7 @@ Two layers close that gap:
 ## Test commands
 
 ```bash
-pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's port)
+pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket)
 pnpm mcp             # MCP server only (tsx)
 pnpm build           # dist/server (apps/web build copies dist/web-app in via its postbuild step)
 pnpm test            # Vitest (all projects)

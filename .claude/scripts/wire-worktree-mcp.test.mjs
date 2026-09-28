@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Regression coverage for wire-worktree-mcp.mjs: the cross-package import of
-// dev-port-lib.mjs (mirrors new-worktree.test.mjs's guard for the same
-// relative filesystem path, which nothing in the module graph otherwise
-// flags on a future move/rename), plus execution-level coverage of the I/O
+// checkout-kind-lib.mjs (a relative filesystem path, which nothing in the
+// module graph otherwise flags on a future move/rename), plus execution-level coverage of the I/O
 // entry's decision sequencing via an injectable `main()`.
 //
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
@@ -15,9 +14,9 @@ import { main } from './wire-worktree-mcp.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-test('the relative path wire-worktree-mcp.mjs imports dev-port-lib.mjs from resolves and exposes isMainCheckout', async () => {
-  const devPortLibPath = resolve(__dirname, '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs')
-  const { isMainCheckout } = await import(devPortLibPath)
+test('the relative path wire-worktree-mcp.mjs imports checkout-kind-lib.mjs from resolves and exposes isMainCheckout', async () => {
+  const libPath = resolve(__dirname, '../../packages/mcp-server/scripts/dev/checkout-kind-lib.mjs')
+  const { isMainCheckout } = await import(libPath)
 
   assert.equal(typeof isMainCheckout, 'function')
 })

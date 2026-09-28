@@ -13,16 +13,17 @@
 //      daemon, not via fixture writes).
 //   2. Stop daemon A cleanly via `whiteboard daemon stop --json`.
 //   3. backupDataDir(src, backup) → restoreDataDir(backup, restored).
-//   4. Spawn daemon B at <restored> on a different port. Verify ping,
+//   4. Spawn daemon B at <restored>, on its own socket. Verify ping,
 //      runtime status, and that the seeded canvas survives the round
 //      trip via the live daemon (NOT via fixture reads).
 //   5. CLI status against <restored> reports a fresh record matching
-//      daemon B's pid / port / baseUrl.
+//      daemon B's pid.
 //   6. Token must never reach daemon stdout/stderr, runtime status
 //      body, or CLI output.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -32,14 +33,9 @@ import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
 
-// 4290/4291 are picked to keep this smoke off the ports the other
-// distribution smokes already claim (4270 startup, 4280 lifecycle)
-// AND off the browser E2E layer (4250 vite, 4260 daemon) so the full
-// `pnpm test:e2e:distribution` chain can run back-to-back without
-// bind collisions.
-const HOST = '127.0.0.1'
-const PORT_A = 4290
-const PORT_B = 4291
+// Each daemon listens on its own data dir's owner-only socket and no TCP
+// port (ADR-0050), so the two cannot collide with each other or with any
+// other smoke in the chain.
 const TOKEN_A = 'whiteboard-backup-restore-smoke-token-a'
 const TOKEN_B = 'whiteboard-backup-restore-smoke-token-b'
 const READINESS_TIMEOUT_MS = 15_000
@@ -80,28 +76,24 @@ const restoredDataDir = join(tempRoot, 'restored')
 
 const daemons = []
 
-function startDaemon({ dataDir, port, token, label }) {
+function startDaemon({ dataDir, token, label }) {
   let stdoutBuf = ''
   let stderrBuf = ''
   let spawnError = null
-  const child = spawn(
-    process.execPath,
-    [DAEMON_ENTRY, '--daemon', `--host=${HOST}`, `--port=${port}`],
-    {
-      cwd: REPO_ROOT,
-      env: {
-        ...scrubDevEnv(process.env),
-        WHITEBOARD_DATA_DIR: dataDir,
-        // DAEMON_ENTRY is spawned directly (not via `whiteboard daemon run`),
-        // so resolveToken() in server/index.ts only honours --token= or
-        // WHITEBOARD_TOKEN. WHITEBOARD_DAEMON_TOKEN is read by the `daemon
-        // run` CLI subcommand only and has no effect here.
-        WHITEBOARD_TOKEN: token,
-        WHITEBOARD_LOG_LEVEL: process.env.WHITEBOARD_LOG_LEVEL ?? 'warning',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const child = spawn(process.execPath, [DAEMON_ENTRY], {
+    cwd: REPO_ROOT,
+    env: {
+      ...scrubDevEnv(process.env),
+      WHITEBOARD_DATA_DIR: dataDir,
+      // DAEMON_ENTRY is spawned directly (not via `whiteboard daemon run`),
+      // so resolveToken() in server/index.ts only honours --token= or
+      // WHITEBOARD_TOKEN. WHITEBOARD_DAEMON_TOKEN is read by the `daemon
+      // run` CLI subcommand only and has no effect here.
+      WHITEBOARD_TOKEN: token,
+      WHITEBOARD_LOG_LEVEL: process.env.WHITEBOARD_LOG_LEVEL ?? 'warning',
     },
-  )
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
   child.stdout.on('data', (c) => {
     stdoutBuf += c.toString()
   })
@@ -123,7 +115,7 @@ function startDaemon({ dataDir, port, token, label }) {
   const handle = {
     label,
     child,
-    port,
+    socketPath: null,
     token,
     dataDir,
     closed,
@@ -160,7 +152,11 @@ async function pollPing(daemon) {
       )
     }
     try {
-      const res = await fetch(`http://${HOST}:${daemon.port}/api/runtime/ping`)
+      // The record names the socket once the daemon is listening on it.
+      daemon.socketPath ??= JSON.parse(
+        readFileSync(join(daemon.dataDir, 'daemon.json'), 'utf8'),
+      ).socketPath
+      const res = await socketFetch(daemon.socketPath, '/api/runtime/ping')
       if (!res.ok) throw new Error(`ping returned status ${res.status}`)
       return await res.json()
     } catch (err) {
@@ -174,10 +170,33 @@ async function pollPing(daemon) {
   )
 }
 
+/** One request over a unix socket, answered as a buffered `Response`. */
+function socketFetch(socketPath, path, init = {}) {
+  return new Promise((done, reject) => {
+    const req = request(
+      {
+        socketPath,
+        path,
+        method: init.method ?? 'GET',
+        headers: Object.fromEntries(new Headers(init.headers)),
+      },
+      (res) => {
+        const chunks = []
+        res.on('data', (chunk) => chunks.push(chunk))
+        res.on('end', () =>
+          done(new Response(Buffer.concat(chunks), { status: res.statusCode ?? 0 })),
+        )
+      },
+    )
+    req.on('error', reject)
+    req.end(init.body)
+  })
+}
+
 async function authedFetch(daemon, path, init = {}) {
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${daemon.token}`)
-  return fetch(`http://${HOST}:${daemon.port}${path}`, { ...init, headers })
+  return socketFetch(daemon.socketPath, path, { ...init, headers })
 }
 
 async function shutdownDaemon(daemon) {
@@ -212,7 +231,6 @@ try {
   // ───────── Phase 1: seed via daemon A ─────────
   const daemonA = startDaemon({
     dataDir: srcDataDir,
-    port: PORT_A,
     token: TOKEN_A,
     label: 'daemon A (src)',
   })
@@ -378,7 +396,6 @@ try {
   // ───────── Phase 3: boot daemon B against restored dir ─────────
   const daemonB = startDaemon({
     dataDir: restoredDataDir,
-    port: PORT_B,
     token: TOKEN_B,
     label: 'daemon B (restored)',
   })
@@ -498,21 +515,11 @@ try {
   assertNoLeak('cli status stdout', cliRun.stdout, [TOKEN_B])
   assertNoLeak('cli status stderr', cliRun.stderr, [TOKEN_B])
   const cliResult = JSON.parse(cliRun.stdout.trim())
-  // `whiteboard daemon status --json` (see daemon-status.ts DaemonStatusResult)
-  // has never had a top-level baseUrl field — only record.port/pid. Derive
-  // the expected base URL from record.port instead of asserting a field the
-  // CLI contract does not emit.
   const cliExpectations = [
     ['ok', cliResult.ok, true],
     ['reason', cliResult.reason, null],
     ['recordFresh', cliResult.recordFresh, true],
     ['record.pid', cliResult.record?.pid, daemonB.child.pid],
-    ['record.port', cliResult.record?.port, PORT_B],
-    [
-      'derived baseUrl (host + record.port)',
-      `http://${HOST}:${cliResult.record?.port}`,
-      `http://${HOST}:${PORT_B}`,
-    ],
   ]
   for (const [field, actual, expected] of cliExpectations) {
     if (actual !== expected) {

@@ -23,8 +23,8 @@ scan says.
   a store, 501 when the composition lacks the feature) or refuse with a
   JSON reason (4xx, and 503 for "no browser is connected"); a 5xx or a
   plain-text body is a failure. `refusesOnly:` names why the seed cannot
-  reach a route (sync needs an open stream, ws-ticket needs an OAuth
-  registry, a fresh data dir has no installed font) and is checked to stay
+  reach a route (sync needs an open stream, a fresh data dir has no
+  installed font) and is checked to stay
   true; `skip:` names why a route is not requested (the SSE stream holds
   the response open, font install reaches the network, RFC 9728 discovery
   answers a bare 404 by design).
@@ -61,7 +61,7 @@ scan says.
   catch-all (now mapped).
 - **Every JSON this package writes and reads back is round-tripped from its
   schema** (`server/persisted-json.property.test.ts`): the server-mode and
-  daemon records, the pairing grants file, the database location record,
+  daemon records, the database location record,
   the backup-in-progress marker, the blob envelope, the mirror manifest, and
   the backup result the scheduled pass reads off the CLI's stdout. Each is
   declared once and read through Zod, so the SHAPES cannot drift; what the

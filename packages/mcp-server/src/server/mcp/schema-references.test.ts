@@ -17,7 +17,6 @@ import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-versio
 import type { ListedTool } from '../../shared/test-utils/tool-surface-metrics.js'
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 import { registerDocumentTools } from './document-tools.js'
-import { registerPairingLinkTool } from './pairing-link.js'
 
 async function listTools(): Promise<readonly ListedTool[]> {
   const server = new McpServer({ name: 'whiteboard-refs', version: '0.0.0' })
@@ -27,7 +26,6 @@ async function listTools(): Promise<readonly ListedTool[]> {
     documentIndex: new InMemoryDocumentIndex(),
     versions: new InMemoryVersionHistory(),
   } as never)
-  registerPairingLinkTool(server, undefined, undefined)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)
   const client = new Client({ name: 'refs', version: '0.0.0' })

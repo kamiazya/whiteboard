@@ -27,16 +27,13 @@ import type { MemberProfileStore } from './member-profile-store.js'
  * workspace gains its first member — the "person-required everywhere"
  * option the ADR-0041 addendum lists as NOT chosen. Each is already
  * operator-consented at mint time: `daemon-token`/`anonymous` hold the
- * daemon's own authority, an `oauth-grant` exists only through the
- * daemon-served consent page, a `macaroon` is minted from the daemon root
- * key, and a `ws-ticket` is mintable only by an `oauth-grant`.
+ * daemon's own authority, and a `macaroon` is minted from the daemon root
+ * key.
  */
 export const OPERATOR_ISSUED_KINDS = [
   'anonymous',
   'daemon-token',
-  'oauth-grant',
   'macaroon',
-  'ws-ticket',
 ] as const satisfies readonly ResolvedGrant['kind'][]
 
 export type WorkspaceAccessDecision = 'admitted' | 'requires_person_session' | 'not_a_member'

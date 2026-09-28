@@ -15,7 +15,7 @@ import {
   sendRestoreEvent,
   sendVersionCreated,
   sendViewportRequest,
-} from './routes/ws.js'
+} from './routes/sync-audience.js'
 
 const log = getLogger('canvas-client-notifier')
 

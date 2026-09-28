@@ -51,36 +51,6 @@ export {
 export * from './document.js'
 export * from './document-url.js'
 export * from './fonts.js'
-export type {
-  CreateGrantResponse,
-  ListCredentialsResponse,
-  ListGrantsResponse,
-  PairingTokenResponse,
-  PinnedCredentialSummary,
-  RegisterCredentialRequest,
-} from './pairing.js'
-export {
-  createGrantRequestSchema,
-  createGrantResponseSchema,
-  listCredentialsResponseSchema,
-  listGrantsResponseSchema,
-  pairingTokenNonceSchema,
-  pairingTokenRequestSchema,
-  pairingTokenResponseSchema,
-  pinnedCredentialSummarySchema,
-  registerCredentialRequestSchema,
-} from './pairing.js'
-// The daemon-pairing-link fragment contract: shared by the wb_pairing_link_create
-// MCP tool (mints the link) and apps/web's fragment parser (reads it back), so
-// the two cannot silently disagree on the payload shape.
-export type { DaemonConnectionPayload, DaemonConnectionTarget } from './pairing-link.js'
-export {
-  DAEMON_CONNECTION_FRAGMENT_KEY,
-  daemonConnectionPayloadSchema,
-  daemonConnectionTargetSchema,
-  decodeBase64UrlText,
-  encodeBase64UrlText,
-} from './pairing-link.js'
 export type { Attestation, PromoteWorkspaceRequest, PromoteWorkspaceResponse } from './promotion.js'
 export {
   base64urlSchema,

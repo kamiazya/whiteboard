@@ -8,8 +8,8 @@ import { didKeyToEd25519PublicKey } from './did-key.js'
 // for the CLI's stop/status/doctor checks that read this endpoint.
 // The daemon's durable signing identity (see server/security/daemon-identity.ts).
 // publicKey is the raw Ed25519 public key, base64url. Advertising it is safe:
-// trust comes from the web app PINNING the key at /pair consent time and
-// verifying signatures against the pin, never from the advertisement itself.
+// trust comes from whoever verifies a signature against a key they already
+// hold, never from the advertisement itself.
 // `did` is the same key under the name the rest of the world uses for one
 // (ADR-0035 decision 1) — derived from publicKey, never a second credential,
 // and never what a pin is taken on. Optional for the same wire-compat reason
@@ -84,28 +84,34 @@ export type RuntimeVerifyResponse = z.infer<typeof runtimeVerifyResponseSchema>
 export const runtimeStatusResponseSchema = z.object({
   ok: z.boolean(),
   pid: z.number(),
-  host: z.string(),
-  port: z.number(),
-  baseUrl: z.string(),
+  // The HTTP listener, where there is one — server mode's. The local daemon
+  // listens on no port at all (ADR-0050): it answers on `socketPath`, a Unix
+  // socket or a Windows named pipe only its owner can open.
+  host: z.string().optional(),
+  port: z.number().optional(),
+  baseUrl: z.string().optional(),
+  socketPath: z.string().optional(),
   version: z.string(),
   startedAt: z.string(),
   uptimeMs: z.number(),
   idleForMs: z.number(),
   auth: z.object({ mode: z.string(), hasToken: z.boolean() }),
   storage: z.object({ dataDir: z.string(), dataDirWritable: z.boolean() }),
-  // 'pair-only' is the local daemon's hosted-first end state: it serves the
-  // apps/web build only on /pair (the consent trust anchor) and redirects
-  // every other UI path to the official hosted app. 'web-app' is retained
-  // for wire-compat with older daemons that served the full build.
-  // 'server-placeholder' is the minimal static page served at server-mode's
-  // root (apps/web is not served there — server-mode has no token/session-
-  // acquisition flow apps/web's provider model can use).
-  app: z.object({
-    served: z.boolean(),
-    buildPresent: z.boolean(),
-    ui: z.enum(['pair-only', 'web-app', 'server-placeholder']),
-  }),
-  mcp: z.object({ httpEnabled: z.boolean(), endpoint: z.string() }),
+  // What UI the keeper serves: server mode serves the web app (or a
+  // placeholder page when its image carries no build). The local daemon
+  // serves none — the hosted app reaches it through the extension — so it
+  // reports no `app` at all.
+  app: z
+    .object({
+      served: z.boolean(),
+      buildPresent: z.boolean(),
+      ui: z.enum(['web-app', 'server-placeholder']),
+    })
+    .optional(),
+  // `endpoint` is where an HTTP MCP client reaches `/mcp`: server mode's
+  // public URL. The local daemon's `/mcp` is reached over its socket, through
+  // the stdio proxy, so it names none.
+  mcp: z.object({ httpEnabled: z.boolean(), endpoint: z.string().optional() }),
   clients: z.object({ connected: z.number(), ready: z.number() }),
   publicBaseUrl: z.string().optional(),
 })

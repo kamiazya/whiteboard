@@ -30,7 +30,7 @@ describe('runDaemonLogs (whiteboard daemon logs --json)', () => {
       kind: 'valid',
       record: {
         pid: 1234,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 'should-never-leak',
         version: '0.0.4',
         startedAt: FIXED_TS,
@@ -57,7 +57,6 @@ describe('runDaemonLogs (whiteboard daemon logs --json)', () => {
     expect(parsed.source).toBe('daemon')
     expect(parsed.fields).toEqual({
       pid: 1234,
-      port: 3099,
       version: '0.0.4',
       status: 'ok',
     })
@@ -70,7 +69,7 @@ describe('runDaemonLogs (whiteboard daemon logs --json)', () => {
       kind: 'valid',
       record: {
         pid: 999,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 't',
         version: '0.0.4',
         startedAt: FIXED_TS,
@@ -132,7 +131,7 @@ describe('runDaemonLogs (whiteboard daemon logs --json)', () => {
       kind: 'valid',
       record: {
         pid: 1,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 't',
         version: '0.0.4',
         startedAt: FIXED_TS,
@@ -152,7 +151,7 @@ describe('runDaemonLogs (whiteboard daemon logs --json)', () => {
     // Sanity: known operational keys ARE present.
     const [line] = parseJsonLines(stdout)
     const parsed = daemonLogEntrySchema.parse(line)
-    expect(Object.keys(parsed.fields).sort()).toEqual(['pid', 'port', 'status', 'version'])
+    expect(Object.keys(parsed.fields).sort()).toEqual(['pid', 'status', 'version'])
   })
 
   it('invalid timestamp from the source fails closed: empty stdout + generic stderr + non-zero exit', async () => {
@@ -179,7 +178,7 @@ describe('runDaemonLogs (whiteboard daemon logs --json)', () => {
       kind: 'valid',
       record: {
         pid: 7,
-        port: 3099,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
         token: 't',
         version: '0.0.4',
         startedAt: FIXED_TS,

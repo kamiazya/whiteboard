@@ -5,7 +5,6 @@ import { decideAutoOpenBrowser } from './browser-open-policy.js'
 // to isolate which guard is responsible for the resulting skip.
 function baseInput() {
   return {
-    host: '127.0.0.1',
     isTTY: true,
     isContainer: false,
     env: {} as Readonly<Record<string, string | undefined>>,
@@ -14,7 +13,7 @@ function baseInput() {
 }
 
 describe('decideAutoOpenBrowser', () => {
-  it('opens when interactive, loopback, not a container, and not opted out', () => {
+  it('opens when interactive, not a container, and not opted out', () => {
     expect(decideAutoOpenBrowser(baseInput())).toEqual({ shouldOpen: true })
   })
 
@@ -43,13 +42,6 @@ describe('decideAutoOpenBrowser', () => {
     expect(decideAutoOpenBrowser({ ...baseInput(), isContainer: true })).toEqual({
       shouldOpen: false,
       reason: 'container',
-    })
-  })
-
-  it('skips when the bind host is not loopback', () => {
-    expect(decideAutoOpenBrowser({ ...baseInput(), host: '0.0.0.0' })).toEqual({
-      shouldOpen: false,
-      reason: 'non-loopback-host',
     })
   })
 

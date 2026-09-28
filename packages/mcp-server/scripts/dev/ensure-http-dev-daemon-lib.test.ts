@@ -77,19 +77,20 @@ describe('resolveDevBearerToken', () => {
 
 describe('buildMcpHttpDevSpawnArgs', () => {
   it('injects --token when token differs from the package-script default', () => {
-    const args = buildMcpHttpDevSpawnArgs('my-custom-token', 3123)
+    const args = buildMcpHttpDevSpawnArgs('my-custom-token')
     expect(args).toContain('--token=my-custom-token')
   })
 
   it('does NOT inject --token when token is the package-script default', () => {
     // pnpm mcp:http:dev already passes --token=whiteboard-dev; no duplication needed
-    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev', 3123)
+    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev')
     expect(args.some((a) => a.startsWith('--token='))).toBe(false)
   })
 
-  it("appends --port=<derived> so the spawned daemon binds to this worktree's port", () => {
-    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev', 3123)
-    expect(args).toContain('--port=3123')
+  // The daemon listens on its data dir's socket and no TCP port (ADR-0050).
+  it('hands the spawned daemon no port', () => {
+    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev')
+    expect(args.some((a) => a.startsWith('--port'))).toBe(false)
   })
 })
 

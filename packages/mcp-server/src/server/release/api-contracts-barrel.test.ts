@@ -62,11 +62,6 @@ describe('api-contracts barrel scope', () => {
       // picker sends an id the daemon gave it. Publishing the contract is
       // what keeps a URL out of the request (ADR-0012).
       './fonts.js',
-      './pairing.js',
-      // pairing-link: the daemon-pairing-link `#wb=` fragment contract,
-      // exported so apps/web parses the same schema wb_pairing_link_create
-      // writes instead of a hand-written mirror that can silently drift.
-      './pairing-link.js',
       // promotion: the promote request/response and the challenge input
       // both sides hash (ADR-0039), exported so the browser signs exactly
       // the bytes the daemon recomputes instead of a mirror of them.

@@ -3,8 +3,7 @@ import { getLogger } from '../log.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
-import type { MemberProfileStore } from '../security/member-profile-store.js'
-import { membershipRefusalFor, rememberGrant } from '../security/membership-gate.js'
+import { rememberGrant } from '../security/membership-gate.js'
 import { type RouteScopeDecision, resolveApiRouteScope } from '../security/route-scope-registry.js'
 
 const _log = getLogger('daemon-auth')
@@ -43,11 +42,7 @@ export function requiresDaemonAuth(path: string): boolean {
  * this check on the resource server.
  *
  * Said once for every narrow credential rather than per credential, which is
- * the point of the resolver. It also closes a shape: the pairing token used to
- * skip this check entirely, so it alone could have reached a
- * `daemon-token-only` route. No route produces that decision today, so nothing
- * changes in behaviour — but the exemption was an omission rather than a
- * decision, and now there is nowhere for it to live.
+ * the point of the resolver.
  */
 export function grantCoversRoute(
   grant: ResolvedGrant,
@@ -67,16 +62,7 @@ export function grantCoversRoute(
   return hasRequiredScopes(grant.scopes, required.scopes)
 }
 
-/** S8 slice 2: the membership gate this middleware applies to a gated route
- *  before `next()`. Absent means no gate — a composition with no member store. */
-export interface DaemonAuthGate {
-  members: MemberProfileStore
-}
-
-export function createDaemonAuthMiddleware(
-  resolver: CredentialResolver,
-  gate?: DaemonAuthGate,
-): MiddlewareHandler {
+export function createDaemonAuthMiddleware(resolver: CredentialResolver): MiddlewareHandler {
   return async (c, next) => {
     // The route-scope registry is the single source of truth for which routes
     // are public; consult it first so a route declared public there can never
@@ -91,8 +77,6 @@ export function createDaemonAuthMiddleware(
 
     const grant = await resolver.resolve({
       secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-      carrier: 'bearer',
-      origin: c.req.header('origin'),
     })
 
     if (
@@ -113,12 +97,6 @@ export function createDaemonAuthMiddleware(
     }
 
     rememberGrant(c, grant)
-
-    if (gate !== undefined) {
-      const refused = await membershipRefusalFor(c, grant, gate.members)
-      if (refused !== undefined) return refused
-    }
-
     return next()
   }
 }

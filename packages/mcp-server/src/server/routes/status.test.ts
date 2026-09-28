@@ -1,13 +1,13 @@
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('./ws.js', () => ({
+vi.mock('./sync-audience.js', () => ({
   getClientCount: vi.fn(),
   getReadyClientCount: vi.fn(),
 }))
 
-const { getClientCount } = await import('./ws.js')
-const { getReadyClientCount } = await import('./ws.js')
+const { getClientCount } = await import('./sync-audience.js')
+const { getReadyClientCount } = await import('./sync-audience.js')
 const { createStatusRouter } = await import('./status.js')
 
 describe('GET /api/w/:workspaceId/document/:path/client-count', () => {

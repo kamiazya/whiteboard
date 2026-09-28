@@ -136,15 +136,9 @@ destinations.add(stderrDestination)
 // Every path below is a real secret/PII carrier found in this codebase, or
 // a common credential name a careless call site could introduce later:
 //   - token / daemonToken / bootstrapToken: the local-daemon bearer token
-//     (see shared/token-store.ts, mcp/tools/pairing-link.ts) — a `#wb=`
-//     pairing URL or an Authorization header round-trips this value, and it
-//     grants full daemon access to whoever holds it.
+//     (see shared/token-store.ts) — an Authorization header round-trips
+//     this value, and it grants full daemon access to whoever holds it.
 //   - accessToken: OAuth access tokens (security/oauth-resource-strategy.ts).
-//   - wsTicket: the short-lived single-use WS connection ticket (ADR-0005,
-//     security/ws-ticket-store.ts) that bridges an OAuth grant to a
-//     WebSocket upgrade — a distinct field name from `token` so a raw
-//     ticket value is never mistaken for something safe to log just because
-//     it isn't literally called "token".
 //   - authorization / cookie: raw auth headers a route handler might log
 //     wholesale while debugging (`c.req.header('authorization')`).
 //   - password / secret / apiKey: not currently produced by this codebase,
@@ -172,7 +166,6 @@ const REDACTED_PATHS = [
   'daemonToken',
   'bootstrapToken',
   'accessToken',
-  'wsTicket',
   'authorization',
   'cookie',
   'password',
@@ -185,7 +178,6 @@ const REDACTED_PATHS = [
   '*.daemonToken',
   '*.bootstrapToken',
   '*.accessToken',
-  '*.wsTicket',
   '*.authorization',
   '*.cookie',
   '*.password',

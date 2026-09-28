@@ -3,15 +3,11 @@
 // that decides whether a key is handed out at all (PUT .../replica-tier).
 //
 // POST /api/workspaces/:workspaceId/replica-key (ADR-0042 decisions 1/3/5,
-// ADR-0043 decision 3): hands a member's session the workspace's read-plane
-// content key, per tier, and withholds it once L1 removal has taken effect.
-//
-// The grant is re-resolved here rather than read off the request context —
-// the same shape ws-ticket.ts, runtime.ts and debug.ts already use — because
-// only a PASSKEY-BOUND grant may hold this key, and the surrounding /api/*
-// auth middleware only checks SCOPE, not the passkey binding. The decision
-// itself — which grant kinds bypass membership, and why a member-less
-// workspace keeps origin trust — is `workspace-access.ts`.
+// ADR-0043 decision 3): hands the caller the workspace's read-plane content
+// key, per tier. This router is the LOCAL daemon's, and a local daemon has
+// one person — whoever holds the operator-issued token the native host
+// attaches (ADR-0050 decision 3) — so the /api/* auth middleware's scope
+// check is the whole gate: there is no member to tell apart.
 //
 // This route issues a `bounded`-tier LEASE (a timestamp, nothing more) —
 // there is deliberately no server-side lease table. The browser is what
@@ -28,9 +24,7 @@
 // every document key derived from the OLD pair (and every browser replica
 // sealed under it) stops opening the instant this lands. Not gated on
 // tier itself — a `no-offline` workspace must still be rotatable, or a
-// compromised one becomes unfixable. Like the tier route, and unlike the
-// plain key route above, the handler does not re-resolve the grant or
-// check a passkey binding: the registry bar is the whole gate.
+// compromised one becomes unfixable.
 //
 // PUT /api/workspaces/:workspaceId/replica-tier (ADR-0042 decision 1
 // addendum, 2026-09-21): sets or clears the tier itself. Gated at
@@ -38,9 +32,7 @@
 // rather than the `workspace:write` the rest of a workspace's fields sit
 // behind — a tier is a security-posture change about whether a copy may
 // leave the daemon at all, an operator decision rather than something any
-// member may relax for everyone. Unlike the key route above, the handler
-// does not re-resolve the grant or check a passkey binding: the registry
-// bar is the whole gate.
+// member may relax for everyone.
 import type { MembershipRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   type ReplicaKeyResponse,
@@ -54,12 +46,8 @@ import {
 import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
-import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
-import type { CredentialResolver } from '../security/credential-resolver.js'
-import type { MemberProfileStore } from '../security/member-profile-store.js'
-import { membershipRefusal, workspaceAccess } from '../security/workspace-access.js'
 import type { WorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
-import { badWorkspaceIdBody, unknownWorkspaceRefusal } from './membership.js'
+import { validateWorkspaceId, validationErrorBody } from '../validators.js'
 
 const log = getLogger('replica-key')
 
@@ -67,20 +55,36 @@ function toBase64Url(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64url')
 }
 
+/** A malformed workspaceId (path-traversal-shaped, non-ASCII, etc.) is a 400,
+ *  not the uncaught ValidationError `workspaceExists` throws underneath. */
+function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
+  try {
+    validateWorkspaceId(workspaceId)
+    return null
+  } catch (err) {
+    const body = validationErrorBody(err)
+    if (body === null) throw err
+    return { error: 'invalid_workspace_id', message: body.message } satisfies MembershipRefusal
+  }
+}
+
+function unknownWorkspaceRefusal(workspaceId: string): MembershipRefusal {
+  return {
+    error: 'unknown_workspace',
+    message: `no such workspace: ${workspaceId}`,
+  } satisfies MembershipRefusal
+}
+
 export interface ReplicaKeyRouterOptions {
   keys: WorkspaceReplicaKeyStore
-  members: MemberProfileStore
   leaseTtlMs: number
   workspaceExists: (workspaceId: string) => Promise<boolean>
-  credentialResolver: CredentialResolver
 }
 
 export function createReplicaKeyRouter({
   keys,
-  members,
   leaseTtlMs,
   workspaceExists,
-  credentialResolver,
 }: ReplicaKeyRouterOptions) {
   const app = new Hono()
 
@@ -91,21 +95,6 @@ export function createReplicaKeyRouter({
     if (!(await workspaceExists(workspaceId))) {
       log.warning({ workspaceId, reason: 'unknown_workspace' }, 'replica-key refused')
       return c.json(unknownWorkspaceRefusal(workspaceId), 404)
-    }
-
-    const grant = await credentialResolver.resolve({
-      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-      carrier: 'bearer',
-      origin: c.req.header('origin'),
-    })
-    if (grant === null) {
-      return c.json({ error: 'unauthorized' }, 401)
-    }
-
-    const access = await workspaceAccess(grant, workspaceId, members)
-    if (access !== 'admitted') {
-      log.warning({ workspaceId, reason: access }, 'replica-key refused')
-      return c.json(membershipRefusal(access), 403)
     }
 
     const tier = await keys.effectiveTier(workspaceId)

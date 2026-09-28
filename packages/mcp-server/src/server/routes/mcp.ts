@@ -20,7 +20,6 @@ import {
 } from '../app-helpers.js'
 import { getLogger } from '../log.js'
 import { createMcpServer } from '../mcp/index.js'
-import type { PairingLinkContext, PairingUnavailableReason } from '../mcp/pairing-link.js'
 
 /** The same logger name the wiring used, so a record reads the same. */
 const httpLog = getLogger('mcp-http')
@@ -28,8 +27,6 @@ const httpLog = getLogger('mcp-http')
 export interface McpRouterDeps {
   /** The SDK handler  built; this router only routes to it. */
   readonly modernMcpHandler: ReturnType<typeof createMcpHandler>
-  readonly pairingLinkContext: PairingLinkContext | undefined
-  readonly pairingUnavailableReason: PairingUnavailableReason
 }
 
 /**
@@ -118,7 +115,6 @@ async function jsonBodyOf(c: Context): Promise<unknown> {
  */
 async function handleLegacy(
   c: Context,
-  deps: McpRouterDeps,
   parsedBody: unknown,
   startedAt: number,
   trace: McpHttpTrace,
@@ -127,10 +123,7 @@ async function handleLegacy(
   let response: Response | undefined
   try {
     const constructStartedAt = trace.at()
-    const server = await createMcpServer({
-      pairing: deps.pairingLinkContext,
-      pairingUnavailableReason: deps.pairingUnavailableReason,
-    })
+    const server = await createMcpServer()
     trace.construct(constructStartedAt)
     await server.connect(transport)
     response = await transport.handleRequest(c.req.raw, { parsedBody })
@@ -187,7 +180,7 @@ export function createMcpRouter(deps: McpRouterDeps): Hono {
       parsedBody !== undefined
         ? await isLegacyRequest(c.req.raw, parsedBody)
         : await isLegacyRequest(c.req.raw)
-    if (legacy) return handleLegacy(c, deps, parsedBody, startedAt, trace)
+    if (legacy) return handleLegacy(c, parsedBody, startedAt, trace)
 
     const response = await deps.modernMcpHandler.fetch(c.req.raw, { parsedBody })
     trace.exchange({ c, parsedBody, status: response.status, startedAt, era: 'modern' })

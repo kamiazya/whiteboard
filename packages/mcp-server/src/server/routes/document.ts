@@ -3,7 +3,6 @@ import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-co
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
-import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import {
@@ -53,8 +52,6 @@ export interface DocumentRouterOptions {
   onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
   /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
   daemonActor?: string
-  /** Passkey pins for the promote route (ADR-0039); see `WorkspaceDocumentRouterOptions`. */
-  credentials?: WebAuthnCredentialStore
   /** Resolves the read plane's effective tier for GET /api/workspaces to
    *  echo per row (ADR-0042 decisions 1/3/5). Absent means the listing omits
    *  `tier` entirely — see `WorkspacesRouterOptions`. */
@@ -76,7 +73,7 @@ function armAutoVersionTrigger(
     // The checkpoint lands long after the update that signalled it, so the
     // broadcast is the trigger's to make rather than the caller's.
     onSaved: (workspaceId, path, entry) => {
-      void import('./ws.js')
+      void import('./sync-audience.js')
         .then(({ sendVersionCreated }) => sendVersionCreated(workspaceId, path, entry))
         .catch((err: unknown) => {
           getLogger('auto-version').error({ err: err as Error }, 'version_created broadcast failed')
@@ -132,7 +129,6 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
     createWorkspaceDocumentRouter({
       triggerAutoVersion,
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
-      ...(options.credentials === undefined ? {} : { credentials: options.credentials }),
       ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
     }),
   )
@@ -153,7 +149,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   // Restore progress goes out over the WS surface; same dynamic import as
   // setAutoVersionTrigger above, for the same eval-order reason.
   const restoreProgress: RestoreProgress = async (event) => {
-    const { sendRestoreEvent } = await import('./ws.js')
+    const { sendRestoreEvent } = await import('./sync-audience.js')
     sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
   }
   app.route(

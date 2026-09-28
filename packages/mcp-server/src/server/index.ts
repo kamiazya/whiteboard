@@ -9,19 +9,12 @@ import { startHttpServer } from './http-server.js'
 import { getLogger } from './log.js'
 import { resolveReplicaEnv } from './replica-env.js'
 import { resolveMcpProtectedResourceMetadataFromEnv } from './security/mcp-auth.js'
-import { parseOAuthClientRegistryEnv } from './security/oauth-authz-registry.js'
-import {
-  DEFAULT_ALLOWED_WEB_ORIGINS,
-  loadAllowedWebOriginsFromEnv,
-} from './security/web-origin-allowlist.js'
 import { collectStartupEnvIssues } from './startup-env.js'
 
 /**
  * Reads a `--name=value` flag out of an argv list. When the same flag is
- * passed more than once, `Array.prototype.find` returns the FIRST match —
- * this is a load-bearing detail for `mcp:http:dev`, which relies on its
- * caller-provided `--port` winning over any port this process's own
- * wrapper might append later in the argv list.
+ * passed more than once, `Array.prototype.find` returns the FIRST match, so a
+ * caller's own value wins over one a wrapper appends later.
  */
 export function parseArg(
   argv: readonly string[],
@@ -36,16 +29,11 @@ function readArg(name: string, fallback?: string): string | undefined {
   return parseArg(process.argv, name, fallback)
 }
 
-function hasFlag(name: string): boolean {
-  return process.argv.includes(`--${name}`)
-}
-
 /**
  * Resolves the bearer token from CLI args then env.
  * --token=<value> takes precedence so packaged scripts that bake in a
- * default value work predictably; WHITEBOARD_TOKEN lets all three
- * processes (daemon, Vite plugin, ensure-daemon probe) stay in sync
- * from a single shell export.
+ * default value work predictably; WHITEBOARD_TOKEN lets the daemon and
+ * whatever spawned it stay in sync from a single shell export.
  */
 export function resolveToken(
   argv: readonly string[],
@@ -74,11 +62,11 @@ export { startHttpServer } from './http-server.js'
 // would be silently too-late; warn instead of pretending it worked.
 //
 // loadConfigFile throws on a malformed file (by design). Catch it here and
-// fail the same way the WHITEBOARD_ALLOWED_WEB_ORIGINS gate below does
+// fail the same way the startup-settings gate below does
 // (structured getLogger record + process.exit(1)) instead of letting the
 // throw propagate to the generic top-level `main().catch` at the bottom of
 // this file, which would echo the raw error/stack on stderr unredacted.
-function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
+function applyLoadedConfigFileForServerEntrypoint(): void {
   let loaded: ReturnType<typeof loadConfigFile>
   try {
     loaded = loadConfigFile()
@@ -90,7 +78,7 @@ function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
     )
     process.exit(1)
   }
-  if (loaded === null) return undefined
+  if (loaded === null) return
 
   // dataDir is dropped before applying: DATA_DIR (shared/data-dir-secure.ts)
   // was resolved at module import time on this entrypoint, so writing the
@@ -107,55 +95,6 @@ function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
       'config file dataDir is not honored on this entrypoint; set WHITEBOARD_DATA_DIR instead',
     )
   }
-
-  return loaded.config.port
-}
-
-/**
- * The browser origins this daemon admits, or an abort.
- *
- * The DEFAULT hosted-origin admission (env var unset) pairs with the auth
- * guard: with no token, missing-token auth strategies treat every request as
- * authenticated, so admitting a hosted origin would expose the daemon
- * unauthenticated. An operator-SET allowlist refuses to start in that state;
- * the built-in default must not brick the tokenless local-dev path, so it
- * drops to loopback-only instead.
- */
-function checkedWebOrigins(
-  token: string | undefined,
-  log: ReturnType<typeof getLogger>,
-): readonly string[] {
-  // An invalid WHITEBOARD_ALLOWED_WEB_ORIGINS must abort rather than silently
-  // fall back to an empty (loopback-only) allowlist. The failure record is
-  // logged by loadAllowedWebOriginsFromEnv itself, with no raw value echoed.
-  let allowedWebOrigins = loadAllowedWebOriginsFromEnv(process.env)
-  if (allowedWebOrigins === null) process.exit(1)
-
-  // The DEFAULT hosted-origin admission (env var unset) pairs with the auth
-  // guard below: with no token, missing-token auth strategies treat every
-  // request as authenticated, so admitting a hosted origin would expose the
-  // daemon unauthenticated. An operator-SET allowlist refuses to start in
-  // that state; the built-in default must not brick the tokenless local-dev
-  // path, so it drops to loopback-only instead.
-  if (!token && allowedWebOrigins === DEFAULT_ALLOWED_WEB_ORIGINS) {
-    log.notice('no auth token provided; default hosted-origin admission disabled (loopback-only)')
-    allowedWebOrigins = []
-  }
-
-  // A hosted origin in the allowlist widens which browser origins may reach
-  // /api CORS, /mcp and the WS upgrade. Without a Bearer token that would let
-  // an allowlisted hosted page mutate the daemon with no auth barrier at all
-  // — so this refuses to start rather than silently downgrade the
-  // allowlist's promise that it "does not change authentication".
-  if (allowedWebOrigins.length > 0 && !token) {
-    log.error(
-      { allowedOriginCount: allowedWebOrigins.length },
-      'WHITEBOARD_ALLOWED_WEB_ORIGINS is set but no auth token was provided (--token or WHITEBOARD_TOKEN); refusing to start',
-    )
-    process.exit(1)
-  }
-
-  return allowedWebOrigins
 }
 
 /**
@@ -168,26 +107,8 @@ function checkedWebOrigins(
  * for someone who asked for `debug` to investigate an incident. Every bad
  * variable is named at once, so one restart is enough to fix them all.
  */
-function checkedStartupConfig(token: string | undefined): {
-  allowedWebOrigins: readonly string[]
-  oauthRegistry: Extract<ReturnType<typeof parseOAuthClientRegistryEnv>, { ok: true }>
-} {
+function checkStartupConfig(): void {
   const log = getLogger('server-index')
-
-  const allowedWebOrigins = checkedWebOrigins(token, log)
-
-  // A malformed registry must abort rather than leave the authorization-server
-  // surface silently unmounted, which would look identical to "the operator
-  // never configured it".
-  const oauthRegistry = parseOAuthClientRegistryEnv(process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY)
-  if (!oauthRegistry.ok) {
-    log.error(
-      { reason: oauthRegistry.error },
-      'WHITEBOARD_OAUTH_CLIENT_REGISTRY could not be parsed; refusing to start',
-    )
-    process.exit(1)
-  }
-
   const startupIssues = collectStartupEnvIssues(getDataDir(), process.env)
   if (startupIssues.length > 0) {
     log.error(
@@ -196,8 +117,6 @@ function checkedStartupConfig(token: string | undefined): {
     )
     process.exit(1)
   }
-
-  return { allowedWebOrigins, oauthRegistry }
 }
 
 /**
@@ -234,20 +153,22 @@ async function prewarmExporter(): Promise<void> {
   }
 }
 
+/**
+ * The daemon process: it listens on its owner-only socket and nowhere else
+ * (ADR-0050), writes the record every client reads that socket from, and
+ * removes it again when it stops.
+ */
 export async function main() {
-  const configFilePort = applyLoadedConfigFileForServerEntrypoint()
+  applyLoadedConfigFileForServerEntrypoint()
 
-  const port = parseInt(readArg('port') ?? String(configFilePort ?? 3099), 10)
-  const host = readArg('host', '127.0.0.1') ?? '127.0.0.1'
   const token = resolveToken(process.argv, process.env)
   const idleTimeoutMs = parseInt(
     readArg('idle-timeout-ms', `${15 * 60_000}`) ?? `${15 * 60_000}`,
     10,
   )
 
-  const { allowedWebOrigins, oauthRegistry } = checkedStartupConfig(token)
+  checkStartupConfig()
 
-  const daemonMode = hasFlag('daemon')
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
   // Only the discovery metadata travels from here. The strategy that checks
   // the credential is built inside `createApp`, over the one resolver.
@@ -258,7 +179,7 @@ export async function main() {
   // SDK is a no-op unless WHITEBOARD_OTEL=1 or OTEL_EXPORTER_OTLP_ENDPOINT
   // is set, so this costs nothing in the default path.
   const { initTracing } = await import('./observability/tracing.js')
-  await initTracing({ role: daemonMode ? 'daemon' : 'http' })
+  await initTracing({ role: 'daemon' })
 
   // Block startup until the schema is migrated so route handlers never see
   // a half-initialized data directory.
@@ -275,31 +196,25 @@ export async function main() {
     'resolved data dir',
   )
 
-  if (daemonMode) await prewarmExporter()
+  await prewarmExporter()
 
   // Read once here, after the startup-issue gate above already validated it
   // — never re-read process.env inside a route.
   const replicaEnv = resolveReplicaEnv(process.env)
 
   const running = await startHttpServer({
-    port,
-    host,
     token,
     mcpProtectedResourceMetadata,
     idleTimeoutMs,
-    allowedWebOrigins,
-    oauthClientRegistry: oauthRegistry.registry,
     replicaTier: replicaEnv.tier,
     replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
-    socketPath: daemonMode ? daemonSocketPath(dataDir) : null,
-    onClose: daemonMode
-      ? async () => {
-          await deleteDaemonRecord(dataDir)
-        }
-      : undefined,
+    socketPath: daemonSocketPath(dataDir),
+    onClose: async () => {
+      await deleteDaemonRecord(dataDir)
+    },
   })
 
-  if (daemonMode && token) {
+  if (token) {
     // Pass the resolved `dataDir` explicitly rather than relying on
     // saveDaemonRecord's default parameter (the frozen DATA_DIR const) — the
     // default would silently diverge from where this process actually
@@ -308,7 +223,6 @@ export async function main() {
     await saveDaemonRecord(
       {
         pid: process.pid,
-        port: running.port,
         token,
         version,
         startedAt: running.getRuntimeStatus().startedAt,

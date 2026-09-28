@@ -28,9 +28,8 @@ export type RouteScopeDecision =
   // authority: a scope-limited hosted-origin grant that could reach such a
   // route would let itself mint a path back to the full, unscoped daemon
   // token, escaping the very scopes it was approved for. No route currently
-  // produces this decision (the silent-reconnect surface that introduced it
-  // was removed), but it is kept as defense-in-depth for a future
-  // daemon-authority route rather than deleted.
+  // produces this decision today, but it is kept as defense-in-depth for a
+  // future daemon-authority route rather than deleted.
   | { kind: 'daemon-token-only' }
 
 function isWriteMethod(method: string): boolean {
@@ -61,10 +60,9 @@ interface RouteScopeRule {
   readonly decide: (isWrite: boolean) => RouteScopeDecision
   /**
    * S8: which WORKSPACE this route reaches, for the membership gate
-   * (`workspace-access.ts`). Absent means origin-trusted — the route is not
-   * gated on membership at all: pairing/runtime/debug/etc; `workspace
-   * members` and `workspace replica-key`, which decide membership
-   * themselves at a finer grain than this table can see; and `workspace
+   * (`workspace-access.ts`). Absent means the route is not gated on
+   * membership at all: runtime/debug/etc; the local daemon's `workspace
+   * replica-key` routes, which serve its one person; and `workspace
    * replica-tier`, an operator decision with no membership concept at all
    * (the bar IS the whole gate — see routes/replica-key.ts's header).
    *
@@ -136,8 +134,9 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   { name: 'runtime/ping', claims: exactly('/api/runtime/ping'), decide: publicRoute },
 
   // Same carve-out class as ping: the identity challenge (POST-only) must be
-  // answerable BEFORE any pairing exists — it is how a browser decides
-  // whether a responder is trustworthy at all. Rate-limited in the router.
+  // answerable before a caller holds any credential — it is how a caller
+  // decides whether a responder is trustworthy at all. Rate-limited in the
+  // router.
   { name: 'runtime/verify', claims: exactly('/api/runtime/verify'), decide: publicRoute },
 
   // File routes: reading/writing a canvas's attached binary file. The
@@ -251,49 +250,9 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: workspacesHandle,
   },
 
-  // Returning a workspace to ORIGIN TRUST (user decision 2026-09-21): the
-  // gate's only exit, and the FIRST live user of `daemon-token-only`.
-  //
-  // It sits ABOVE 'workspace members' because the two paths are one
-  // character apart and the ordering is the whole of this table's control
-  // flow. The regex below it requires `members` to be followed by `/` or
-  // the end, so `members-only` does not in fact match it today — declared
-  // above anyway, because relying on that is relying on a negative nobody
-  // will re-derive when either pattern is edited.
-  //
-  // The bar is by KIND rather than scope, which is the point rather than a
-  // detail: a pairing grant carries EVERY scope, so `runtime:admin` — the
-  // bar the member routes beside this one use — would not separate an
-  // operator from a paired browser session. Whoever holds the daemon token
-  // owns the data directory, and a taken-over origin cannot open the gate
-  // for itself. `grantCoversRoute` (routes/auth.ts) is what enforces it,
-  // and server mode refuses the variant outright since no daemon token
-  // exists there — which matches, the membership router being
-  // local-daemon-only already.
-  {
-    name: 'workspace members-only reopen',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/members-only$/, 'DELETE'),
-    decide: () => ({ kind: 'daemon-token-only' }) as const,
-  },
-
-  // Membership (ADR-0041/0042): adding a pinned passkey as a person with L1
-  // access, the one local-daemon way in. Same bar as pairing-grant and
-  // credential-pin management — a paired browser session that can manage
-  // grants and passkey pins can add members too (accepted v1 posture;
-  // narrowing what a pairing session may do is its own future increment,
-  // per routes/membership.ts's header). Listing, role changes and removal
-  // are the shared people surface (ADR-0049 decision 5).
-  {
-    name: 'workspace members',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/members$/, 'POST'),
-    decide: always('runtime:admin'),
-  },
-
   // The read plane's workspace content key (ADR-0042 decisions 1/3/5). The
   // key confers READ, so workspace:read is the bar here rather than the
-  // catch-all's write-by-default answer below — a grant lacking the
-  // required passkey binding is refused by the handler itself regardless of
-  // scope.
+  // catch-all's write-by-default answer below.
   {
     name: 'workspace replica-key',
     claims: matching(/^\/api\/workspaces\/[^/]+\/replica-key$/, 'POST'),
@@ -317,8 +276,8 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
 
   // The tier itself (ADR-0042 decision 1 addendum, 2026-09-21): a security-
   // posture change about whether a copy of this workspace may leave the
-  // daemon at all, so it sits at the same admin bar as membership and grant
-  // management above — an operator decision, not the workspace:write below
+  // daemon at all, so it sits at the admin bar — an operator decision, not
+  // the workspace:write below
   // that any member's write-scoped grant already carries. Placed above
   // `workspaces (rest)` so first-match-wins cannot let a PUT on this path
   // fall through to that broader, weaker scope.
@@ -386,53 +345,6 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'fonts',
     claims: (path) => path === '/api/fonts' || path.startsWith('/api/fonts/'),
     decide: byAccess('runtime:admin', 'runtime:read'),
-  },
-
-  // POST /api/ws-ticket (ADR-0005): mints a WS connection ticket bound to
-  // the caller's own OAuth grant scopes. canvas:read is the floor any live
-  // grant is assumed to hold — the minted ticket never carries more than
-  // the presented grant's own scopes regardless of this route's own
-  // requirement, so this is a "can you ask at all" gate, not an escalation.
-  { name: 'ws-ticket', claims: exactly('/api/ws-ticket'), decide: always('canvas:read') },
-
-  // POST /api/pairing/token — the pairing-grant flow's deliberately PUBLIC
-  // endpoint (the third of exactly three public routes, with
-  // /api/runtime/ping and /api/runtime/verify): it authenticates by other
-  // means — a single-use PKCE-bound code, or the browser-enforced Origin
-  // header matched against a persisted grant — and it must be reachable by
-  // an origin that does not hold a bearer yet. Guard enumeration lives in
-  // routes/pairing.ts.
-  { name: 'pairing/token', claims: exactly('/api/pairing/token'), decide: publicRoute },
-
-  // Persisting a grant is a consent decision made on the daemon's own
-  // served UI (which carries the daemon token); nothing below admin may
-  // widen the origin allowlist. Listing and revoking grants (the
-  // management surface, including DELETE /api/pairing/grants/:grantId)
-  // sit behind the same bar.
-  //
-  // Credential pins (ADR-0039) sit at the same bar: a pin is what an
-  // attestation is verified against, so planting or revoking one is the
-  // consent surface's, not a scoped OAuth client's. A paired origin's
-  // session token reaches it the way it reaches grant management.
-  {
-    name: 'pairing grants and credentials',
-    claims: (path) =>
-      path === '/api/pairing/grants' ||
-      path.startsWith('/api/pairing/grants/') ||
-      path === '/api/pairing/credentials' ||
-      path.startsWith('/api/pairing/credentials/'),
-    decide: always('runtime:admin'),
-  },
-
-  // Session assertion (ADR-0041 S0-2): the scope check here only keeps a
-  // narrower OAuth grant out. The real gate is the handler's own token-store
-  // check (a valid pairing SESSION token for the requesting Origin) — an
-  // open daemon's `anonymous` grant carries this scope too but has no
-  // session to bind, and the handler refuses it with no bearer at all.
-  {
-    name: 'pairing/session-assert',
-    claims: exactly('/api/pairing/session-assert', '/api/pairing/session-assert/challenge'),
-    decide: always('runtime:admin'),
   },
 ]
 

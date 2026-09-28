@@ -3,7 +3,7 @@
  *
  * ALL_REGISTERED_TOOLS is the authoritative list that mirrors what
  * createMcpServer (index.ts) registers at runtime via registerDocumentTools.
- * It is defined independently of the four category arrays below so that the
+ * It is defined independently of the three category arrays below so that the
  * meta-property test can verify category completeness without self-reference.
  *
  * Adding or removing a tool touches four places, and each is checked against
@@ -25,9 +25,6 @@
  *
  * Category meanings:
  *   COVERED_TOOLS       — exercised end-to-end in the smoke (success path).
- *   ERROR_PATH_ONLY     — exercised only via their expected error path
- *                         (no browser client → immediate rejection). Route
- *                         wiring is confirmed; success path needs a live browser.
  *   UNIT_ONLY_TOOLS     — covered by unit tests but not yet wired into the smoke.
  *   DEFERRED_TOOLS      — require infrastructure the offline smoke cannot provide.
  *                         Each entry carries reason and unblock.
@@ -59,7 +56,6 @@ export const ALL_REGISTERED_TOOLS = [
   'wb_document_search',
   'wb_document_list',
   'canvas_view',
-  'wb_pairing_link_create',
 ] as const satisfies readonly string[]
 
 export const COVERED_TOOLS = [
@@ -80,14 +76,6 @@ export const COVERED_TOOLS = [
   'wb_document_get',
   'wb_document_list',
 ] as const
-
-// wb_pairing_link_create's smoke coverage is deliberately its error path
-// only: the offline stdio smoke has no HTTP daemon to pair with, so it can
-// only exercise the standalone-stdio refusal. The success path (a real
-// daemon origin threaded in) is covered at the unit layer
-// (pairing-link.test.ts, a real MCP client over an in-memory transport) and
-// by the HTTP-daemon verification recorded outside this repeatable smoke.
-export const ERROR_PATH_ONLY_TOOLS = ['wb_pairing_link_create'] as const
 
 // MCP Apps (SEP-1865) UI-linked tools: their registered definition carries
 // `_meta.ui.resourceUri` pointing at CANVAS_VIEW_RESOURCE_URI (mcp-apps.ts).

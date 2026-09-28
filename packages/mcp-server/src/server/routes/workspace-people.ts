@@ -95,7 +95,6 @@ function mountRemoval(app: Hono, roles: WorkspaceRoles, keeper: WorkspacePeopleK
     // First, before anything that can fail: a stream they already hold would
     // otherwise keep delivering the workspace (ADR-0042).
     endSyncStreamsOf(userId)
-    await keeper.afterRemove?.(userId)
     return c.json(removeWorkspacePersonResponseSchema.parse({ removed: true }), 200)
   })
 }

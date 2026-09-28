@@ -2,7 +2,8 @@
 
 **Status:** Proposed. The owner chose the extension route on 2026-09-26,
 after three steps: an audit, a survey of how comparable products are built,
-and a measured spike. Nothing is built.
+and a measured spike. Built through the closing-loopback stage
+(2026-09-28); Safari and distribution remain.
 
 This ADR supersedes three earlier decisions:
 - [ADR-0002](0002-browser-to-daemon-transport.md)'s choice of loopback HTTP
@@ -340,3 +341,17 @@ The closing-loopback stage lands as a sequence, each part merged on its own:
   there;
 - the daemon stops listening on loopback, and its browser-only routes go;
 - development tooling, smokes and documentation follow.
+
+**Done 2026-09-28: the closing-loopback stage.** Every part above has
+landed. The local daemon listens on its owner-only socket (a named pipe on
+Windows) and on no TCP port: `daemon run` takes no `--port` or `--host`,
+and its record and ready line carry `socketPath` and no port. Its
+browser-only surface is deleted — the pairing page, `/api/pairing/*`,
+WebAuthn and local member management, loopback CORS, the `/mcp` origin
+guard, the hosted-origin authorization server, the WebSocket transport, and
+the `wb_pairing_link_create` tool. The replica-key route stays behind the
+daemon's token; a promote that carries an attestation is refused, since no
+local daemon pins a passkey. The development tooling, the smokes and the
+documentation reach the daemon through its socket or the extension. Server
+mode keeps its HTTP listener. The remaining stage is Safari and
+distribution.

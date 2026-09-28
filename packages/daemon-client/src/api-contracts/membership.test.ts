@@ -1,102 +1,13 @@
 /**
- * Roundtrip serialization tests for the membership api-contract schemas
- * (ADR-0041). Each schema gets a valid-fixture roundtrip plus a refusal per
- * constraint the `.strict()` shape declares.
+ * Roundtrip serialization tests for the membership refusal contract
+ * (ADR-0041): a valid-fixture roundtrip plus a refusal per constraint the
+ * `.strict()` shape declares.
  */
 
 import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core/api-errors'
 import { describe, expect, it } from 'vitest'
-import {
-  type AddMemberRequest,
-  addMemberRequestSchema,
-  type MemberProfileSummary,
-  memberProfileSummarySchema,
-  membershipRefusalSchema,
-} from './membership.js'
+import { membershipRefusalSchema } from './membership.js'
 import { roundtrip } from './roundtrip.test-helper.js'
-
-describe('memberProfileSummarySchema', () => {
-  const valid: MemberProfileSummary = {
-    profileId: '01J9Z8QK2N3X4Y5Z6A7B8C9D0E',
-    displayName: 'Ada Lovelace',
-    credentials: [
-      { credentialId: 'Y3JlZC0x', origin: 'https://a.example' },
-      { credentialId: 'Y3JlZC0y', origin: 'https://b.example' },
-    ],
-    createdAt: '2026-09-20T00:00:00.000Z',
-  }
-
-  it('roundtrips a well-formed profile with two credentials', () => {
-    const result = roundtrip(memberProfileSummarySchema, valid)
-    expect(result).toEqual(valid)
-  })
-
-  it('rejects an empty displayName', () => {
-    expect(memberProfileSummarySchema.safeParse({ ...valid, displayName: '' }).success).toBe(false)
-  })
-
-  it('rejects a credential carrying its public key (never travels on the wire)', () => {
-    expect(
-      memberProfileSummarySchema.safeParse({
-        ...valid,
-        credentials: [{ ...valid.credentials[0], publicKey: 'MFkwEw...' }],
-      }).success,
-    ).toBe(false)
-  })
-
-  it('rejects a profile-level extra field carrying a public key', () => {
-    expect(
-      memberProfileSummarySchema.safeParse({ ...valid, publicKeyJwk: { kty: 'EC' } }).success,
-    ).toBe(false)
-  })
-
-  it('rejects a credential missing origin', () => {
-    const { origin: _omit, ...credentialMissingOrigin } = valid.credentials[0] as {
-      credentialId: string
-      origin: string
-    }
-    expect(
-      memberProfileSummarySchema.safeParse({
-        ...valid,
-        credentials: [credentialMissingOrigin],
-      }).success,
-    ).toBe(false)
-  })
-})
-
-describe('addMemberRequestSchema', () => {
-  const valid: AddMemberRequest = {
-    credentialId: 'Y3JlZC0x',
-    origin: 'https://a.example',
-    displayName: 'Ada Lovelace',
-  }
-
-  it('roundtrips a well-formed request', () => {
-    expect(roundtrip(addMemberRequestSchema, valid)).toEqual(valid)
-  })
-
-  it('rejects an empty displayName', () => {
-    expect(addMemberRequestSchema.safeParse({ ...valid, displayName: '' }).success).toBe(false)
-  })
-
-  it('rejects a 121-char displayName and accepts 120', () => {
-    expect(
-      addMemberRequestSchema.safeParse({ ...valid, displayName: 'x'.repeat(121) }).success,
-    ).toBe(false)
-    expect(
-      addMemberRequestSchema.safeParse({ ...valid, displayName: 'x'.repeat(120) }).success,
-    ).toBe(true)
-  })
-
-  it('rejects a missing origin', () => {
-    const { origin: _omit, ...missing } = valid
-    expect(addMemberRequestSchema.safeParse(missing).success).toBe(false)
-  })
-
-  it('rejects an extra publicKey field', () => {
-    expect(addMemberRequestSchema.safeParse({ ...valid, publicKey: 'MFkw...' }).success).toBe(false)
-  })
-})
 
 describe('membershipRefusalSchema', () => {
   const codes = [

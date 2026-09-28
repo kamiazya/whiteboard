@@ -2,7 +2,7 @@
 // than a closure inside `createApp`: it claims exactly `/mcp`, it hands a
 // modern request to the SDK handler it was given, and it answers with that
 // handler's response unchanged. The protocol itself is the SDK's and is
-// covered end to end by `scripts/smoke/mcp-http-convergence-smoke.mjs`.
+// covered end to end by `scripts/smoke/mcp-e2e-smoke.mjs`.
 
 import { describe, expect, it, vi } from 'vitest'
 import { createMcpRouter, type McpRouterDeps } from './mcp.js'

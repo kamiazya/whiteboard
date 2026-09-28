@@ -15,8 +15,7 @@ const runDaemonRun = vi.fn(async () => ({
     schemaVersion: 1 as const,
     ok: true as const,
     pid: process.pid,
-    port: 3099,
-    host: '127.0.0.1',
+    socketPath: '/run/user/1000/whiteboard/d.sock',
     version: '0.0.0-test',
     startedAt: new Date().toISOString(),
   },
@@ -31,7 +30,6 @@ const { main } = await import('./dispatcher.js')
 let dir: string
 let originalCwd: string
 const ENV_KEYS = [
-  'WHITEBOARD_ALLOWED_WEB_ORIGINS',
   'WHITEBOARD_TOKEN',
   'WHITEBOARD_DAEMON_TOKEN',
   'WHITEBOARD_LOG_LEVEL',
@@ -68,7 +66,7 @@ function captureStdout(): { restore: () => void; get: () => string } {
 }
 
 describe('whiteboard daemon run — auto-open-browser wiring', () => {
-  it('calls maybeOpenDaemonBrowser with the resolved host/port after the ready JSON, with noOpenFlag=false by default', async () => {
+  it('calls maybeOpenDaemonBrowser after the ready JSON, with noOpenFlag=false by default', async () => {
     const stdout = captureStdout()
     const runningPromise = main(['daemon', 'run', '--json'])
     await new Promise<void>((r) => setImmediate(r))
@@ -77,8 +75,6 @@ describe('whiteboard daemon run — auto-open-browser wiring', () => {
     const parsed = JSON.parse(stdout.get())
     expect(parsed.ok).toBe(true)
     expect(maybeOpenDaemonBrowser).toHaveBeenCalledWith({
-      host: '127.0.0.1',
-      port: 3099,
       noOpenFlag: false,
       configOpenBrowser: undefined,
     })

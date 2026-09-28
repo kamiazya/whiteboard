@@ -22,7 +22,7 @@ const mockSendViewportRequest =
     (workspaceId: string, path: string, requestId: string, params: Record<string, unknown>) => void
   >()
 
-vi.mock('./ws.js', () => ({
+vi.mock('./sync-audience.js', () => ({
   getClientCount: (workspaceId: string, path: string) => mockGetClientCount(workspaceId, path),
   sendViewportRequest: (
     workspaceId: string,

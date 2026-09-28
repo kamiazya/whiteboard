@@ -791,8 +791,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 1308 -> 1324: an unchanged canvas reconciling to no ops, which the
   // "writes only what changed" test above it could not see.
   'packages/loro-adapter/src/loro-bridge.test.ts': 1324,
-  'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
-  'packages/mcp-server/src/server/app.test.ts': 1339,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
@@ -804,7 +802,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stays green with the refusal DELETED, so without the note the next
   // reader loosens it again.
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1317,
-  'packages/mcp-server/src/server/routes/ws.test.ts': 980,
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
   // +17 for the tenant layout: this file's subject IS filesystem paths, so

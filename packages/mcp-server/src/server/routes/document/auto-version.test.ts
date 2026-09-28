@@ -22,7 +22,7 @@ const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
 const { clearCache } = await import('../../store/doc-cache.js')
 const { loadDocument } = await import('../../store/document-store.js')
 const { createDocumentRouter } = await import('../document.js')
-const wsModule = await import('../ws.js')
+const wsModule = await import('../sync-audience.js')
 const { FileVersionStore } = await import('../../store/version-store.js')
 
 describe('auto-version', () => {

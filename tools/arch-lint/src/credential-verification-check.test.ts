@@ -39,9 +39,6 @@ const SCAN_DIR = 'packages/mcp-server/src'
 const PRIMITIVES: readonly { readonly pattern: RegExp; readonly what: string }[] = [
   { pattern: /\bisAuthorized\s*\(/, what: 'the daemon-token comparison' },
   { pattern: /\bverifyMacaroon\s*\(/, what: "a macaroon's HMAC chain" },
-  { pattern: /\.verifyAccessToken\s*\(/, what: 'an OAuth access token' },
-  { pattern: /\bpairingTokens\s*\.\s*validate\s*\(/, what: 'an origin-bound pairing token' },
-  { pattern: /\bredeemTicket\s*\(/, what: 'a single-use websocket ticket' },
 ]
 
 /**
@@ -55,15 +52,12 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
     'the one place a credential is verified — this is the rule, not an exemption',
   'packages/mcp-server/src/server/security/bearer-token.ts': 'defines isAuthorized',
   'packages/mcp-server/src/server/security/macaroon.ts': 'defines verifyMacaroon',
-  'packages/mcp-server/src/server/security/ws-ticket-store.ts': 'defines redeemTicket',
 }
 
-// `oauth-authz-transactions.ts` and `oauth-resource-strategy.ts` are NOT here
-// on purpose: neither matches. The first declares `verifyAccessToken` with no
-// receiver, and the patterns look for `.verifyAccessToken(` — a CALL through a
-// store. The second validates a JWT against an external IdP and touches none
-// of these primitives at all. An entry for either would be an exemption for
-// something that was never flagged, which the staleness check below refuses.
+// `oauth-resource-strategy.ts` is NOT here on purpose: it validates a JWT
+// against an external IdP and touches none of these primitives at all. An
+// entry for it would be an exemption for something that was never flagged,
+// which the staleness check below refuses.
 
 /**
  * The scan reading its own blind spot. A quote inside a regex used to blank

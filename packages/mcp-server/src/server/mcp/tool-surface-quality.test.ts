@@ -32,7 +32,6 @@ import {
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 import { registerDocumentTools } from './document-tools.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
-import { registerPairingLinkTool } from './pairing-link.js'
 
 async function connect(): Promise<{ client: Client; tools: readonly ListedTool[] }> {
   const server = new McpServer({ name: 'whiteboard-surface', version: '0.0.0' })
@@ -45,9 +44,6 @@ async function connect(): Promise<{ client: Client; tools: readonly ListedTool[]
     documentIndex: new InMemoryDocumentIndex(),
     versions: new InMemoryVersionHistory(),
   } as never)
-  // Registered separately in index.ts, so registered separately here: the
-  // scoreboard reads the whole table, not the document half of it.
-  registerPairingLinkTool(server, undefined, undefined)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)
   const client = new Client({ name: 'surface', version: '0.0.0' })
@@ -660,22 +656,6 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: ['wb_facet_list'],
       },
-      // Moved down when the link stopped carrying a credential: the
-      // description's SECURITY warning ("this URL embeds the daemon
-      // bootstrap token — treat it like a credential") described something
-      // that no longer exists, and the output schema's `authMode` and
-      // `expiresHint` described the same vanished token. 1257 -> 994
-      // visible bytes (-263, -21%) and 70 -> 35 description words, for a
-      // tool whose input schema did not change at all.
-      wb_pairing_link_create: {
-        visibleBytes: 994,
-        wireBytes: 1442,
-        descriptionWords: 35,
-        parameters: 4,
-        undescribed: 0,
-        strays: 'refused',
-        names: [],
-      },
       wb_scene_render: {
         visibleBytes: 2221,
         wireBytes: 2568,
@@ -694,8 +674,8 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
-      // The version tools, the pairing tool and now wb_facet_set are the
-      // ones whose every parameter is described. They are the shape to copy.
+      // The version tools and wb_facet_set are the ones whose every
+      // parameter is described. They are the shape to copy.
       wb_version_list: {
         visibleBytes: 604,
         wireBytes: 1535,
@@ -771,7 +751,12 @@ describe('what the tool table costs to read', () => {
       // id's path, is a column of every wb_document_list row, so the table
       // lost 442 bytes and no errand lost a way to be done. Rung 3 after:
       // see the ADR's baseline.
-      tools: 17,
+      // 16: wb_pairing_link_create retired with the pairing link itself
+      // (ADR-0050 decision 3) — the daemon it minted a link for no longer
+      // listens where a browser could follow one, so the tool could only
+      // ever refuse. -994 visible, -1,442 wire, -4 parameters (all four
+      // described, so `undescribed` does not move).
+      tools: 16,
       // +1,122 for wb_facet_set's tags (see its row), +464 for every tool
       // refusing a stray key (see canvas_view; sixteen tools, the two that
       // already registered the object unchanged), +379 for a search filter
@@ -919,7 +904,8 @@ describe('what the tool table costs to read', () => {
       // The reading is 39,520 — this branch's figure plus main's +60 for
       // `document.create`'s bare body, since the two changes touch different
       // tools and neither re-prices the other's rows.
-      visibleBytes: 39520,
+      // Then -994 for wb_pairing_link_create's retirement (see `tools`).
+      visibleBytes: 38526,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -934,8 +920,9 @@ describe('what the tool table costs to read', () => {
       // Read beside the visible column: wire moves by the same +60 while
       // parameters and undescribed do not move at all, because a bare-body
       // arm reuses a parameter this table already counted.
-      wireBytes: 109927,
-      parameters: 344,
+      // Then -1,442 for wb_pairing_link_create's retirement.
+      wireBytes: 108485,
+      parameters: 340,
       undescribed: 217,
     })
   })
@@ -965,12 +952,7 @@ describe('what the tool table costs to read', () => {
       if (required.length === 0) continue
       const result = await client.callTool({ name: tool.name, arguments: {} })
       expect(result.isError, tool.name).toBe(true)
-      const text = firstText(result)
-      // wb_pairing_link_create refuses for want of a daemon before it
-      // validates; that refusal is a tool error too, but names no field.
-      if (text.startsWith('Input validation error')) {
-        expect(text, tool.name).toContain(required[0])
-      }
+      expect(firstText(result), tool.name).toContain(required[0])
     }
   })
 })

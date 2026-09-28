@@ -26,19 +26,14 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createApp } from '../app.js'
 import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-route.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
-import { createDaemonIdentity } from '../security/daemon-identity.js'
 import { createInvitationStore } from '../security/invitation-store.js'
 import { createMemberProfileStore } from '../security/member-profile-store.js'
-import { createPairingGrantStore } from '../security/pairing-grant-store.js'
-import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createSignInSessionStore } from '../security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import { createUserDeactivation } from '../security/user-deactivation.js'
-import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { createWorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
 import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
-import { tenantRoot } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -155,29 +150,14 @@ function serverModeApp(
   })
 }
 
-function localDaemonApp(members: ReturnType<typeof createMemberProfileStore>) {
-  const pairingDir = tempDir()
-  // The membership routes mount only when the daemon also has a member
-  // store and server deps (app.ts), the way http-server.ts composes it; a
-  // fixture without them would report apps/web's members requests as
-  // unmounted while production serves them.
+function localDaemonApp(db: IsolatedDbHandle['db']) {
   return createApp({
     authMode: 'local-daemon',
     token: 'test-token',
-    publicBaseUrl: 'http://127.0.0.1:3099',
-    allowedOrigins: ['http://127.0.0.1:3099'],
     touch: () => {},
     getStatus: () => ({}) as never,
-    shutdown: () => Promise.resolve(),
-    identity: createDaemonIdentity({ dataDir: pairingDir }),
-    pairing: {
-      grants: createPairingGrantStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
-      codes: createPairingCodeStore(),
-      tokens: createPairingTokenStore(),
-      credentials: createWebAuthnCredentialStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
-    },
-    members,
     serverDeps: resolveServerDeps(createContainer()),
+    replicaKeys: createWorkspaceReplicaKeyStore(db, { defaultTier: 'offline' }),
   })
 }
 
@@ -185,8 +165,8 @@ function localDaemonApp(members: ReturnType<typeof createMemberProfileStore>) {
  * Every /api route the daemon can mount, across BOTH supported modes.
  *
  * Neither mode alone is the surface: `/api/v1` mounts only when ServerDeps are
- * supplied (server-mode), and `/api/pairing` only under local-daemon with
- * pairing stores. A guard built on one mode would report the other's routes as
+ * supplied, and the people routes only under server-mode with people to
+ * manage. A guard built on one mode would report the other's routes as
  * missing — which is the same failure as not checking at all, only louder and
  * wrong. The reach assertions below pin that both halves are present.
  */
@@ -194,7 +174,7 @@ async function mountedApiRoutes(): Promise<string[]> {
   dbHandle = await createIsolatedDb({ dataDir: tempDir() })
   const members = createMemberProfileStore(dbHandle.db)
   const serverMode = serverModeApp(dbHandle.db, members)
-  const localDaemon = localDaemonApp(members)
+  const localDaemon = localDaemonApp(dbHandle.db)
 
   return [
     ...new Set(
@@ -253,8 +233,8 @@ describe('apps/web only asks for /api routes the daemon mounts', () => {
   it('finds the routes the daemon mounts, in both modes', () => {
     expect(routes.length).toBeGreaterThan(20)
     expect(routes.some((route) => route.startsWith('/api/v1/'))).toBe(true)
-    expect(routes.some((route) => route.startsWith('/api/pairing'))).toBe(true)
-    expect(routes).toContain('/api/workspaces/:workspaceId/members')
+    expect(routes).toContain('/api/workspaces/:workspaceId/replica-key')
+    expect(routes).toContain('/api/workspaces/:workspace/people')
   })
 
   it('finds the paths apps/web asks for', () => {

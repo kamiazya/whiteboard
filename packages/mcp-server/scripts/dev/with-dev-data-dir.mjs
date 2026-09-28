@@ -2,12 +2,9 @@
 
 import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
-import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   ensureDevDataDirSecured,
-  injectDerivedPortArg,
   reraiseSignalOrExit,
-  resolveDevAllowedWebOriginsEnv,
   resolveDevDataDirEnv,
   resolveRepoRootFromGit,
   resolveTsxWatchSpawn,
@@ -20,7 +17,7 @@ import {
 const repoRoot = resolveRepoRootFromGit(process.cwd())
 const packageRoot = resolve(repoRoot, 'packages/mcp-server')
 const hadExplicitDataDirOverride = Boolean(process.env.WHITEBOARD_DATA_DIR)
-const env = resolveDevAllowedWebOriginsEnv(resolveDevDataDirEnv(process.env, repoRoot))
+const env = resolveDevDataDirEnv(process.env, repoRoot)
 
 // resolveDataDir() (shared/data-dir-secure.ts) only hardens permissions on
 // its own home-directory default; an explicit WHITEBOARD_DATA_DIR — which is
@@ -38,18 +35,9 @@ if (!hadExplicitDataDirOverride) {
 // dist/cli.mjs rather than node_modules/.bin/tsx: that .bin entry is a POSIX
 // shell shim (with separate .cmd/.ps1 wrappers on Windows), which `shell:
 // false` cannot execute on native Windows.
-// Derived once here so with-dev-data-dir and ensure-http-dev-daemon can
-// never disagree about which port a given worktree's daemon belongs on —
-// both consult this same shared helper rather than a baked-in constant.
-const derivedPort = deriveDevPort({
-  repoRoot,
-  isMainCheckout: isMainCheckout(repoRoot),
-  env: process.env,
-})
-const argvWithPort = injectDerivedPortArg(process.argv.slice(2), derivedPort)
 
 const entryPath = resolve(packageRoot, 'src/server/daemon-entry.ts')
-const { command, args } = resolveTsxWatchSpawn(packageRoot, entryPath, argvWithPort)
+const { command, args } = resolveTsxWatchSpawn(packageRoot, entryPath, process.argv.slice(2))
 
 const child = spawn(command, args, {
   cwd: packageRoot,

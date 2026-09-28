@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import { nanoid } from 'nanoid'
 import { DATA_DIR, WHITEBOARD_ROOT } from '../shared/data-dir-secure.js'
 import { parseOptionalMilliseconds } from '../shared/env-setting.js'
-import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { withDaemonStartupLock } from './daemon-lock.js'
 import {
   type DaemonRecord,
@@ -37,54 +36,16 @@ function openDaemonLogFile(dataDir: string): number | null {
   }
 }
 
-export interface EnsureDaemonResult extends DaemonRecord {
-  baseUrl: string
-}
-
 export interface EnsureDaemonOptions {
   dataDir?: string
   env?: NodeJS.ProcessEnv
-  host?: string
   idleTimeoutMs?: number
   startupTimeoutMs?: number
-  startPort?: number
 }
 
 interface SpawnArgs {
   command: string
   args: string[]
-}
-
-async function findAvailablePort(start = 3099): Promise<number> {
-  const { createServer } = await import('node:net')
-  return new Promise((resolve, reject) => {
-    if (start < 0 || start > 65535) {
-      reject(new Error(`No available TCP port found starting from 3099`))
-      return
-    }
-    const server = createServer()
-    server.listen(start, '127.0.0.1', () => {
-      const address = server.address()
-      if (!address || typeof address === 'string') {
-        server.close(() => reject(new Error('Failed to allocate port')))
-        return
-      }
-      server.close(() => resolve(address.port))
-    })
-    server.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        void findAvailablePort(start + 1)
-          .then(resolve)
-          .catch(reject)
-        return
-      }
-      reject(
-        new Error(
-          `Failed to bind daemon port ${start} on 127.0.0.1 (${error.code ?? 'unknown error'}: ${error.message})`,
-        ),
-      )
-    })
-  })
 }
 
 // The token is deliberately NOT a parameter here: it travels in the spawned
@@ -93,22 +54,13 @@ async function findAvailablePort(start = 3099): Promise<number> {
 // by default while /proc/<pid>/environ is 0400 owner-only, and argv also
 // reaches every `ps aux`, monitoring agent, and pasted bug report — so a
 // full-authority bearer credential on the command line is strictly worse than
-// the 0600 daemon.json it is written to moments later. `cli/argv.ts` already
-// refuses `--token` on the user-facing CLI for this reason; this spawn path
-// does not go through that parser, which is how it kept the flag.
+// the 0600 daemon.json it is written to moments later.
 function buildDaemonSpawnArgs(options: {
   env: NodeJS.ProcessEnv
-  port: number
-  host: string
   idleTimeoutMs: number
 }): SpawnArgs {
-  const { env, port, host, idleTimeoutMs } = options
-  const baseArgs = [
-    '--daemon',
-    `--port=${port}`,
-    `--host=${host}`,
-    `--idle-timeout-ms=${idleTimeoutMs}`,
-  ]
+  const { env, idleTimeoutMs } = options
+  const baseArgs = [`--idle-timeout-ms=${idleTimeoutMs}`]
 
   if (env.WHITEBOARD_DEV === '1') {
     const nodeArgs =
@@ -125,15 +77,7 @@ function buildDaemonSpawnArgs(options: {
   }
 }
 
-async function pingDaemon(port: number, host: string): Promise<boolean> {
-  try {
-    const res = await fetch(`http://${host}:${port}/api/runtime/ping`)
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
+/** ADR-0050 decision 2: the daemon answers only on the socket its record names. */
 function pingDaemonSocket(socketPath: string): Promise<boolean> {
   return new Promise((resolvePing) => {
     const req = request({ socketPath, path: '/api/runtime/ping' }, (res) => {
@@ -145,11 +89,10 @@ function pingDaemonSocket(socketPath: string): Promise<boolean> {
   })
 }
 
-/** ADR-0050 decision 2: a daemon that recorded a socket is asked there. */
-function pingRecordedDaemon(record: DaemonRecord, host: string): Promise<boolean> {
-  return record.socketPath !== undefined
-    ? pingDaemonSocket(record.socketPath)
-    : pingDaemon(record.port, host)
+async function answeringRecord(dataDir: string): Promise<DaemonRecord | null> {
+  const record = await loadDaemonRecord(dataDir)
+  if (record === null || !isPidAlive(record.pid)) return null
+  return (await pingDaemonSocket(record.socketPath)) ? record : null
 }
 
 const DAEMON_STARTUP_TIMEOUT_ENV = 'WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS'
@@ -182,57 +125,36 @@ export function resolveStartupTimeoutMs(env: NodeJS.ProcessEnv, override?: numbe
   return parsed.value
 }
 
-async function waitForDaemon(port: number, host: string, timeoutMs: number): Promise<void> {
+/** Waits for the spawned daemon to write its record and answer on the socket it names. */
+async function waitForDaemon(dataDir: string, timeoutMs: number): Promise<DaemonRecord> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    if (await pingDaemon(port, host)) return
+    const record = await answeringRecord(dataDir)
+    if (record !== null) return record
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   throw new Error('Daemon startup timeout')
 }
 
-export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<EnsureDaemonResult> {
+export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<DaemonRecord> {
   const dataDir = options.dataDir ?? DATA_DIR
   const env = options.env ?? process.env
-  const host = options.host ?? '127.0.0.1'
   const idleTimeoutMs = options.idleTimeoutMs ?? 15 * 60_000
   const startupTimeoutMs = resolveStartupTimeoutMs(env, options.startupTimeoutMs)
-  if (
-    options.startPort !== undefined &&
-    (!Number.isInteger(options.startPort) || options.startPort < 0 || options.startPort > 65535)
-  ) {
-    throw new Error(`Invalid daemon startPort: ${options.startPort}`)
-  }
-  const existing = await loadDaemonRecord(dataDir)
 
-  if (existing && isPidAlive(existing.pid) && (await pingRecordedDaemon(existing, host))) {
-    return {
-      ...existing,
-      baseUrl: `http://${host}:${existing.port}`,
-    }
-  }
+  const existing = await answeringRecord(dataDir)
+  if (existing !== null) return existing
 
   return withDaemonStartupLock(
     dataDir,
     async () => {
-      const fresh = await loadDaemonRecord(dataDir)
-      if (fresh && isPidAlive(fresh.pid) && (await pingRecordedDaemon(fresh, host))) {
-        return {
-          ...fresh,
-          baseUrl: `http://${host}:${fresh.port}`,
-        }
-      }
+      const fresh = await answeringRecord(dataDir)
+      if (fresh !== null) return fresh
 
       await deleteDaemonRecord(dataDir)
 
-      const port = options.startPort ?? (await findAvailablePort(3099))
       const token = nanoid(32)
-      const { command, args } = buildDaemonSpawnArgs({
-        env,
-        port,
-        host,
-        idleTimeoutMs,
-      })
+      const { command, args } = buildDaemonSpawnArgs({ env, idleTimeoutMs })
       // Send stdout/stderr to ~/.whiteboard/logs/daemon-YYYY-MM-DD.log.
       // If opening the file fails, fall back to 'ignore' without blocking startup.
       const logFd = openDaemonLogFile(dataDir)
@@ -241,11 +163,9 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
         env: {
           ...env,
           WHITEBOARD_DATA_DIR: dataDir,
-          // Set LAST, so it overrides any ambient WHITEBOARD_TOKEN. This
-          // reproduces the precedence the old `--token=` flag had (argv beat
-          // env in resolveToken): the daemon must come up holding the token
-          // this call generated, since that is the one the record and every
-          // caller derived from it will carry.
+          // Set LAST, so it overrides any ambient WHITEBOARD_TOKEN: the daemon
+          // must come up holding the token this call generated, since that is
+          // the one the record and every caller derived from it will carry.
           WHITEBOARD_TOKEN: token,
         },
         detached: true,
@@ -253,24 +173,7 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
       })
       child.unref()
 
-      await waitForDaemon(port, host, startupTimeoutMs)
-
-      const record = await loadDaemonRecord(dataDir)
-      if (record && record.port === port) {
-        return {
-          ...record,
-          baseUrl: `http://${host}:${record.port}`,
-        }
-      }
-
-      return {
-        pid: child.pid ?? -1,
-        port,
-        token,
-        version: env.npm_package_version ?? PACKAGE_VERSION,
-        startedAt: new Date().toISOString(),
-        baseUrl: `http://${host}:${port}`,
-      }
+      return await waitForDaemon(dataDir, startupTimeoutMs)
     },
     { timeoutMs: startupTimeoutMs },
   )

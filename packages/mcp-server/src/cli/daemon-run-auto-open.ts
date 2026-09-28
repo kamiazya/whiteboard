@@ -1,8 +1,7 @@
-// Opens the user's default browser at the daemon's own origin once
-// `whiteboard daemon run` is listening. Since ADR 0001 R3, the daemon serves
-// the same apps/web build at its own origin and injects the daemon token
-// server-side into the HTML it returns, so this origin needs no pairing
-// link and no token ever appears in a URL.
+// Opens the user's default browser at the hosted app once `whiteboard daemon
+// run` is listening. The daemon serves no UI of its own: the hosted app
+// reaches it through the whiteboard browser extension (ADR-0050), so the
+// hosted app is where a person starts.
 //
 // All environment reads (TTY, env vars, container probe, the `open` call
 // itself) are injected so every guard combination is a plain unit test with
@@ -15,13 +14,13 @@ import {
   isRunningInContainer,
 } from '../daemon/container-detection.js'
 import { getLogger } from '../server/log.js'
-import { OFFICIAL_HOSTED_APP_URL } from '../server/security/web-origin-allowlist.js'
 
 const log = getLogger('daemon-run-auto-open')
 
+/** The hosted app — the one place a person uses the daemon from. */
+const OFFICIAL_HOSTED_APP_URL = 'https://kamiazya-whiteboard.pages.dev/'
+
 export interface MaybeOpenDaemonBrowserInput {
-  host: string
-  port: number
   /** Resolved --no-open flag. */
   noOpenFlag: boolean
   /** Resolved config-file `openBrowser` key, if any. */
@@ -48,14 +47,10 @@ export async function maybeOpenDaemonBrowser(input: MaybeOpenDaemonBrowserInput)
   // propagate: the caller does not — and must not have to — wrap this call
   // in its own try/catch. The URL is computed up front so every failure
   // path below can tell the user what to open manually.
-  // Hosted-first: the browser opens the official hosted app, which reaches
-  // this daemon via its default origin admission + a pairing grant. The
-  // daemon's own origin now serves only the /pair consent page.
   const url = OFFICIAL_HOSTED_APP_URL
   try {
     const env = input.env ?? process.env
     const decision = decideAutoOpenBrowser({
-      host: input.host,
       isTTY: input.isTTY ?? Boolean(process.stdout.isTTY),
       isContainer: (
         input.isContainerFn ?? (() => isRunningInContainer(env, defaultContainerDetectionDeps))
@@ -70,7 +65,7 @@ export async function maybeOpenDaemonBrowser(input: MaybeOpenDaemonBrowserInput)
     }
 
     await (input.openFn ?? open)(url)
-    log.info({ url }, 'opened the default browser at the daemon origin')
+    log.info({ url }, 'opened the default browser at the hosted app')
   } catch (err) {
     // A failed browser launch (no display, sandboxed environment, missing
     // `xdg-open`, a bug in the policy/container-detection code, …) must

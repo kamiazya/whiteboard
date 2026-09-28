@@ -32,7 +32,7 @@ describe('daemonStatusResultSchema', () => {
       reason: 'record-token-missing',
       recordFound: true,
       recordFresh: false,
-      record: { pid: 123, port: 3099, version: '1.2.3', startedAt: '2024-06-01T00:00:00.000Z' },
+      record: { pid: 123, version: '1.2.3', startedAt: '2024-06-01T00:00:00.000Z' },
     }
     expect(roundtrip(daemonStatusResultSchema, value)).toEqual(value)
   })
@@ -45,7 +45,7 @@ describe('daemonStatusResultSchema', () => {
       recordFound: true,
       recordFresh: false,
       pidAlive: false,
-      record: { pid: 123, port: 3099, version: '1.2.3', startedAt: '2024-06-01T00:00:00.000Z' },
+      record: { pid: 123, version: '1.2.3', startedAt: '2024-06-01T00:00:00.000Z' },
     }
     expect(roundtrip(daemonStatusResultSchema, value)).toEqual(value)
   })
@@ -60,7 +60,7 @@ describe('daemonStatusResultSchema', () => {
       pidAlive: true,
       pingOk: true,
       statusOk: true,
-      record: { pid: 123, port: 3099, version: '1.2.3', startedAt: '2024-06-01T00:00:00.000Z' },
+      record: { pid: 123, version: '1.2.3', startedAt: '2024-06-01T00:00:00.000Z' },
     }
     expect(roundtrip(daemonStatusResultSchema, value)).toEqual(value)
   })
@@ -101,7 +101,7 @@ describe('daemonStatusResultSchema', () => {
     ).toThrow(/daemonToken/)
   })
 
-  it('refuses a record widened past the four fields the contract publishes — the class tsc cannot see', () => {
+  it('refuses a record widened past the three fields the contract publishes — the class tsc cannot see', () => {
     // A result assembled with a SPREAD compiles clean however wide it is:
     // TypeScript's excess-property check does not apply to spread
     // properties. `.strict()` is the only thing between that and stdout.
@@ -114,7 +114,6 @@ describe('daemonStatusResultSchema', () => {
         recordFresh: true,
         record: {
           pid: 1,
-          port: 2,
           version: 'v',
           startedAt: 's',
           dataDir: '/home/someone/.whiteboard',

@@ -22,7 +22,7 @@ const { currentAutoVersionSignal, setAutoVersionTrigger } = await import(
 
 describe('auto-version signal registration', () => {
   it('is registered by the time the router exists, with no import left in flight', () => {
-    // The registration used to ride on `void import('./ws.js').then(...)`,
+    // The registration used to ride on `void import('./sync-audience.js').then(...)`,
     // which nobody awaited. Two consequences, and this pins both: a WS
     // message arriving before it landed signalled the no-op and took no
     // checkpoint, and the promise outlived the test that built the router —

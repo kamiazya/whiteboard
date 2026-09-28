@@ -1,10 +1,9 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { findAvailablePort } from '../cli/daemon-run.js'
+import { socketFetch, testSocketPath } from '../shared/test-utils/socket-fetch.js'
 
 /**
  * A checkpoint is taken once a document has been QUIET for five minutes, so
@@ -16,17 +15,6 @@ import { findAvailablePort } from '../cli/daemon-run.js'
  * document router, and what has to be true is that closing the SERVER reaches
  * it.
  */
-function waitUntilListening(port: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = request({ host: '127.0.0.1', port, path: '/', method: 'GET' }, (res) => {
-      res.resume()
-      res.on('end', () => resolve())
-    })
-    req.on('error', reject)
-    req.end()
-  })
-}
-
 let tmpRoot: string
 
 vi.mock('./config.js', () => ({
@@ -72,11 +60,10 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from })
 
-    const port = await findAvailablePort(4300)
-    running = await startHttpServer({ port, host: '127.0.0.1' })
-    await waitUntilListening(port)
+    const socketPath = testSocketPath()
+    running = await startHttpServer({ socketPath })
 
-    const res = await fetch(`http://127.0.0.1:${port}/api/w/session1/document/canvas-a/update`, {
+    const res = await socketFetch(socketPath)('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,

@@ -12,16 +12,20 @@
 //    document and lands on the fresh daemon's own workspace, ready to use;
 //    then it reads what an agent wrote on the daemon, writes back, and sees
 //    the agent's next edit arrive live.
-// 5. The production build admits no loopback page at all.
+// 5. A browser-kept record promotes into a daemon workspace through the
+//    bridge, unattested (the local daemon pins no passkeys), and a request
+//    carrying an attestation is refused and lands nothing.
+// 6. The production build admits no loopback page at all.
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
 // Chromium: `pnpm exec playwright install chromium`.
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
 import {
   agentEdits,
   buildAll,
+  callTool,
   clientCount,
   createSmoke,
   daemonNoteContains,
@@ -57,6 +61,21 @@ port.postMessage({ type: 'request', id: 'workspaces', method: 'GET', path: '/api
 port.postMessage({ type: 'request', id: 'stream', method: 'GET', path: '/api/sync/stream', headers: { accept: 'text/event-stream' } })
 port.postMessage({ type: 'request', id: 'mcp', method: 'POST', path: '/mcp', headers: {} })
 window.results = results
+// One request over its own port, answered with its status and its body as
+// base64 — the shape every later step reads.
+window.bridgeRequest = (method, path, body) => new Promise((done) => {
+  const own = chrome.runtime.connect('${EXTENSION_ID}')
+  let status = 0
+  let data = ''
+  own.onMessage.addListener((m) => {
+    if (m.type === 'head') status = m.status
+    if (m.type === 'chunk') data += atob(m.data)
+    if (m.type === 'end' || m.type === 'error') done({ status, data: btoa(data), reason: m.reason })
+  })
+  own.postMessage({ type: 'request', id: 'r', method, path,
+    headers: body === undefined ? {} : { 'content-type': 'application/json' },
+    ...(body === undefined ? {} : { body: btoa(JSON.stringify(body)) }) })
+})
 </script>`
 
 async function openPage(extensionDir, pageUrl) {
@@ -76,6 +95,72 @@ async function openPage(extensionDir, pageUrl) {
   const page = await context.newPage()
   await page.goto(pageUrl)
   return { context, page }
+}
+
+/**
+ * The promote a person takes from Settings, as its requests travel: the
+ * record's bytes out of one workspace and into a fresh one, all through the
+ * extension. The source is the daemon's own `default` record, read over the
+ * bridge, so the smoke needs no CRDT of its own to build one.
+ */
+async function promoteThroughBridge(pageUrl) {
+  const { context, page } = await openPage(join(EXTENSION_DIR, 'dist/development'), pageUrl)
+  try {
+    await page.waitForFunction(() => typeof window.bridgeRequest === 'function')
+    const outcome = await page.evaluate(async () => {
+      const json = (answer) => JSON.parse(atob(answer.data) || 'null')
+      const b64u = (b64) => b64.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
+      const source = await window.bridgeRequest('GET', '/api/w/default/workspace-document/snapshot')
+      const created = await window.bridgeRequest('POST', '/api/workspaces', {
+        displayName: 'promoted',
+      })
+      const target = json(created)?.workspaceId
+      const path = `/api/w/${target}/workspace-document/promote`
+      const snapshot = b64u(source.data)
+      // Refused first, so a refusal that merged anyway shows up in the
+      // unattested promote's own `recorded`, which would then be empty.
+      const attested = await window.bridgeRequest('POST', path, {
+        snapshot,
+        attestation: {
+          kind: 'webauthn',
+          credentialId: 'AAAA',
+          authenticatorData: 'AAAA',
+          clientDataJSON: 'AAAA',
+          signature: 'AAAA',
+        },
+      })
+      const promoted = await window.bridgeRequest('POST', path, { snapshot })
+      return {
+        source: source.status,
+        created: created.status,
+        target,
+        attested: { status: attested.status, body: json(attested) },
+        promoted: { status: promoted.status, body: json(promoted) },
+      }
+    })
+    check(
+      outcome.source === 200 && typeof outcome.target === 'string',
+      'the page reads a record and makes a workspace through the extension',
+      JSON.stringify(outcome),
+    )
+    check(
+      outcome.attested.status === 403 && outcome.attested.body?.error === 'attestation_rejected',
+      'a promote carrying an attestation is refused, since the local daemon pins no passkey',
+      JSON.stringify(outcome.attested),
+    )
+    const body = outcome.promoted.body
+    check(
+      outcome.promoted.status === 200 &&
+        body?.attested === false &&
+        body.recorded.length > 0 &&
+        body.shadowed.length === 0,
+      'an unattested promote through the extension lands the whole record',
+      JSON.stringify(outcome.promoted),
+    )
+    return outcome.target
+  } finally {
+    await context.close()
+  }
 }
 
 /** Connect from a browser-kept document, open an agent's note, and type into it. */
@@ -289,6 +374,15 @@ try {
     daemon = again.daemon
     return again.record
   })
+
+  const target = await promoteThroughBridge(pageUrl)
+  const current = JSON.parse(readFileSync(join(dataDir, 'daemon.json'), 'utf8'))
+  const listed = await callTool(current, 'wb_document_list', { workspaceId: target })
+  check(
+    JSON.stringify(listed ?? {}).includes('bridge-note'),
+    'an agent finds the promoted note in the target workspace',
+    JSON.stringify(listed),
+  )
 
   const prod = await openPage(join(EXTENSION_DIR, 'dist/production'), pageUrl)
   const exposed = await prod.page.evaluate(() => typeof globalThis.chrome?.runtime?.connect)

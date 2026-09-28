@@ -1,21 +1,15 @@
 // Decision policy for whether `whiteboard daemon run` should open the
-// user's default browser at its own origin once the HTTP server is
-// listening. Kept as a pure function (all environment reads injected by the
-// caller) so every guard can be pinned by a nearest-layer test without
-// touching a real TTY, process.env, or the filesystem.
+// user's default browser at the hosted app once the daemon is listening.
+// Kept as a pure function (all environment reads injected by the caller) so
+// every guard can be pinned by a nearest-layer test without touching a real
+// TTY, process.env, or the filesystem.
 //
 // Auto-opening a browser is only correct for a human running the packaged
 // CLI interactively on their own machine. Every other context — CI runners,
-// containers, a non-loopback bind, or an explicit opt-out — must suppress
-// it, because popping a browser tab is either meaningless (no display) or
-// actively wrong (server-mode, a non-loopback bind whose semantics differ)
-// in those cases.
-
-import { isLoopbackHost } from '../server/daemon-auth-binding.js'
+// containers, or an explicit opt-out — must suppress it, because popping a
+// browser tab is meaningless there.
 
 export interface AutoOpenBrowserInput {
-  /** The host the daemon actually bound to. */
-  host: string
   /** process.stdout.isTTY (or an equivalent interactive-terminal check). */
   isTTY: boolean
   /** Result of a container-environment probe (Docker, Podman, etc). */
@@ -26,12 +20,7 @@ export interface AutoOpenBrowserInput {
   openOption: boolean
 }
 
-type AutoOpenBrowserSkipReason =
-  | 'opted-out'
-  | 'non-interactive'
-  | 'ci'
-  | 'container'
-  | 'non-loopback-host'
+type AutoOpenBrowserSkipReason = 'opted-out' | 'non-interactive' | 'ci' | 'container'
 
 export type AutoOpenBrowserDecision =
   | { shouldOpen: true }
@@ -53,9 +42,6 @@ export function decideAutoOpenBrowser(input: AutoOpenBrowserInput): AutoOpenBrow
   }
   if (input.isContainer) {
     return { shouldOpen: false, reason: 'container' }
-  }
-  if (!isLoopbackHost(input.host)) {
-    return { shouldOpen: false, reason: 'non-loopback-host' }
   }
   return { shouldOpen: true }
 }

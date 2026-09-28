@@ -52,19 +52,15 @@ export function resolveDevBearerToken(env) {
  * Appends `--token=<value>` only when the token differs from the value
  * already baked into the package script (`--token=whiteboard-dev`), so
  * a custom WHITEBOARD_TOKEN is honoured without duplicating the flag on
- * the default path. Always appends `--port=<derivedPort>`: the daemon still
- * listens on loopback, and the package script bakes in no port. No dev tool
- * reaches it there — they go through the socket its record names.
+ * the default path.
  *
  * @param {string} token
- * @param {number} derivedPort
  * @returns {string[]}
  */
-export function buildMcpHttpDevSpawnArgs(token, derivedPort) {
+export function buildMcpHttpDevSpawnArgs(token) {
   const base = ['mcp:http:dev']
   if (token !== PACKAGE_SCRIPT_DEFAULT_TOKEN) {
     base.push(`--token=${token}`)
   }
-  base.push(`--port=${derivedPort}`)
   return base
 }

@@ -48,7 +48,7 @@ const LOCAL_DAEMON_ALLOWED_ORIGINS: readonly string[] = [
   'http://[::1]',
 ]
 
-export type ServerModeExposureMode = 'local-daemon' | 'server-mode'
+type ServerModeExposureMode = 'local-daemon' | 'server-mode'
 
 export type ServerModeExposureFailureCode =
   | 'local_daemon.non_loopback_forbidden'

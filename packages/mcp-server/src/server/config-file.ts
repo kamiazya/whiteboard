@@ -1,6 +1,6 @@
 // Auto-loads .whiteboardrc / whiteboard.config.json / .whiteboard/config.yaml
 // (and a package.json#whiteboard field) for the LOCAL DAEMON, so operators can
-// keep WHITEBOARD_ALLOWED_WEB_ORIGINS / port / token / logLevel / dataDir in a
+// keep token / logLevel / dataDir / openBrowser in a
 // checked-in-or-dotfile config instead of exporting env vars by hand.
 //
 // cosmiconfig (not lilconfig) is used deliberately: the user's actual ask was
@@ -17,8 +17,8 @@
 // itself (searchStrategy 'none', no ancestor walk-up, no OS-level global
 // config directory) and the explicit `~/.whiteboard/config.yaml` fallback.
 // An ancestor of cwd — e.g. the root of an untrusted cloned repo — must
-// never be able to plant a config that injects `token` or
-// `allowedWebOrigins` into a nested project's daemon.
+// never be able to plant a config that injects `token` into a nested
+// project's daemon.
 //
 // Server-mode env config (security/server-mode-env-config.ts) is out of
 // scope here: that surface is env-first by design for hosted operators.
@@ -72,14 +72,7 @@ const SAFE_LOADERS: LoadersSync = {
   '.ts': refuseCodeLoader,
 }
 
-const KNOWN_KEYS = [
-  'allowedWebOrigins',
-  'port',
-  'token',
-  'logLevel',
-  'dataDir',
-  'openBrowser',
-] as const
+const KNOWN_KEYS = ['token', 'logLevel', 'dataDir', 'openBrowser'] as const
 type KnownKey = (typeof KNOWN_KEYS)[number]
 
 // token is intentionally a plain string: file-stored tokens are a dev-only
@@ -87,8 +80,6 @@ type KnownKey = (typeof KNOWN_KEYS)[number]
 // Docs must say so; this module never logs the value.
 const whiteboardConfigFileSchema = z
   .object({
-    allowedWebOrigins: z.array(z.string()).optional(),
-    port: z.number().int().min(1).max(65535).optional(),
     token: z.string().optional(),
     logLevel: z.enum(LOG_LEVELS).optional(),
     dataDir: z.string().optional(),
@@ -164,8 +155,8 @@ export function loadConfigFile(
   // through ancestors and no probe of an OS-level global config directory.
   // This is a deliberate trust-boundary choice, not cosmiconfig's default —
   // an ancestor of cwd (e.g. the root of an untrusted cloned repo) must not
-  // be able to plant a config that injects `token` / `allowedWebOrigins`
-  // into a nested project's daemon. The only other place consulted is the
+  // be able to plant a config that injects `token` into a nested project's
+  // daemon. The only other place consulted is the
   // explicit home-directory fallback below.
   const explorer = cosmiconfigSync('whiteboard', {
     searchPlaces: [...CONFIG_FILE_SEARCH_PLACES],
@@ -200,19 +191,14 @@ export function loadConfigFile(
 // Layers validated config-file values under process.env, dotenv-style: only
 // sets a WHITEBOARD_* key that is CURRENTLY UNSET. This is a deliberate,
 // narrow exception to the repo's immutability discipline — every existing
-// env reader (web-origin-allowlist, resolveToken, the daemon-run token read,
-// data-dir-secure) already treats process.env as its seam, so layering file
-// values here gives them env-over-file precedence for free without touching
-// each seam individually. `port` is excluded: its own precedence chain
-// (CLI --port > file port > auto-scan) is not a simple set-if-unset case, so
-// callers read `config.port` directly instead.
+// env reader (resolveToken, the daemon-run token read, data-dir-secure)
+// already treats process.env as its seam, so layering file values here gives
+// them env-over-file precedence for free without touching each seam
+// individually.
 export function applyConfigFileToEnv(
   config: WhiteboardConfigFile,
   env: Record<string, string | undefined> = process.env,
 ): void {
-  if (config.allowedWebOrigins !== undefined && env.WHITEBOARD_ALLOWED_WEB_ORIGINS === undefined) {
-    env.WHITEBOARD_ALLOWED_WEB_ORIGINS = config.allowedWebOrigins.join(',')
-  }
   // The file token feeds BOTH env seams or NEITHER: filling only the unset
   // one would leave the daemon and the server entrypoint holding two
   // different tokens (env value on one side, file value on the other).
