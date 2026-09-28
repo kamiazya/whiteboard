@@ -124,16 +124,12 @@ import { isInFlightGesture } from './drag-preview.js'
 import type { EditorGesture } from './editor-gesture.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import { isFollowableUrl } from './followable-url.js'
-import { GhostOverlay } from './GhostOverlay.js'
+import { GestureOverlays } from './gesture-overlays.js'
 import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
-import { InkDraftLayer } from './InkDraftLayer.js'
 import { LegendOverlay } from './LegendOverlay.js'
-import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
-import { MarqueeOverlay } from './MarqueeOverlay.js'
-import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import { MarkdownBodyEditorOverlay } from './markdown-body-editor-overlay.js'
 import {
@@ -145,7 +141,6 @@ import {
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
 import { RoutableHandles } from './routable-handles.js'
-import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
 import { SelectionHandles } from './selection-handles.js'
 import { SelectionInspector } from './selection-inspector.js'
@@ -160,7 +155,7 @@ import { useEditSessionState } from './use-edit-session-state.js'
 import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { useEditorPointer } from './use-editor-pointer.js'
-import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
+import { useFileSeamScene } from './use-file-seam-scene.js'
 import { useInteractionState } from './use-interaction-state.js'
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
 import { useLockPolicy } from './use-lock-policy.js'
@@ -1870,69 +1865,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             dangerouslySetInnerHTML={{ __html: liveNode.svg }}
           />
         )}
-        {/* Editor-only iframe embeds for link nodes (never in exports).
-          Rides the same transform as every canvas-space overlay; the
-          LOD gate mirrors the canvas-embed thresholds. */}
-        <LinkEmbedLayer
-          canvas={canvas}
-          interactive={tool !== 'hand'}
-          shouldOffer={(node) =>
-            node.width * viewport.zoom >= EXPAND_MIN_W &&
-            node.height * viewport.zoom >= EXPAND_MIN_H
-          }
+        <GestureOverlays
+          gesture={gesture}
+          tool={tool}
+          marquee={marquee}
+          snapGuides={snapGuides}
+          inkStroke={palette.edgeStroke}
+          boxes={boxes}
+          cutIds={pendingCut?.snapshot}
+          members={isMultiSelection ? selectionMembers : undefined}
+          edgePaths={edgePaths}
+          agentTouchedNodeIds={agentTouchedNodeIds}
         />
-        {marquee !== null && <MarqueeOverlay marquee={marquee} zoom={viewport.zoom} />}
-        {gestureState.kind === 'drawing' && (
-          <InkDraftLayer
-            points={gestureState.points}
-            zoom={viewport.zoom}
-            stroke={palette.edgeStroke}
-          />
-        )}
-        {snapGuides !== null && (
-          <SnapGuidesOverlay guides={snapGuides} boxes={boxes} zoom={viewport.zoom} />
-        )}
-        {/* Which nodes are in the selection. The overlay above outlines the
-        region the handles act on, which says nothing about membership —
-        outlining only the extras left the primary looking untouched, so a
-        Select All over three nodes read as though it had skipped one.
-        Hidden while a move is in flight: every member travels with the
-        ghost, so these outlines (boxes and internal-edge highlights,
-        both derived from the committed scene) would mark geometry that
-        is no longer drawn there. */}
-        {pendingCut !== null && (
-          <GhostOverlay
-            boxes={canvas.nodes.flatMap((n) =>
-              pendingCut.snapshot.has(n.id)
-                ? [{ id: n.id, x: n.x, y: n.y, width: n.width, height: n.height }]
-                : [],
-            )}
-            zoom={viewport.zoom}
-          />
-        )}
-        {isMultiSelection && gestureState.kind !== 'moving' && (
-          <MemberOutlinesOverlay
-            selectionMembers={selectionMembers}
-            edges={canvas.edges}
-            edgePaths={edgePaths}
-            zoom={viewport.zoom}
-          />
-        )}
-        {/* The same drawing as above in a different colour: "these boxes,
-        outlined". `edges` is empty on purpose — an agent reports the
-        edges it touched, but an edge outline is far less legible than a
-        box one and the nodes are what actually moved. Add it if edge-only
-        batches turn out to be a real case. */}
-        {agentTouchedNodeIds !== undefined && agentTouchedNodeIds.size > 0 && (
-          <MemberOutlinesOverlay
-            testId="agent-touch-outlines"
-            stroke="var(--accent-foreground)"
-            selectionMembers={boxes.filter((entry) => agentTouchedNodeIds.has(entry.id))}
-            edges={[]}
-            edgePaths={[]}
-            zoom={viewport.zoom}
-          />
-        )}
         {selectionAndEditorLayers()}
       </div>
     )

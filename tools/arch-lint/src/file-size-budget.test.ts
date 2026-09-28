@@ -562,7 +562,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Lowered 2270 -> 2222: the selection handles became
   // `selection-handles.tsx` through the same bundle; the menu the ⋯ opens
   // stays the host's.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2222,
+  // Lowered 2222 -> 2166: the canvas-space overlays about the gesture in
+  // progress and what it reached became `gesture-overlays.tsx`.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2166,
 }
 
 describe('the path form both ledgers are keyed with', () => {
