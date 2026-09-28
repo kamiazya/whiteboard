@@ -63,16 +63,6 @@ describe('deriveDaemonPageState', () => {
         refusal: { code: 'not_a_member', workspaceId: 'ws-1' },
       }),
     ).toEqual({ kind: 'membership-refused', code: 'not_a_member', workspaceId: 'ws-1' })
-    expect(
-      deriveDaemonPageState({
-        ...editingInput,
-        refusal: { code: 'requires_person_session', workspaceId: 'ws-1' },
-      }),
-    ).toEqual({
-      kind: 'membership-refused',
-      code: 'requires_person_session',
-      workspaceId: 'ws-1',
-    })
   })
 
   it('loading beats a refusal, same as every other field', () => {
@@ -97,7 +87,6 @@ describe('deriveDaemonPageState', () => {
             for (const documentAtPath of [false, true]) {
               for (const refusal of [
                 null,
-                { code: 'requires_person_session' as const, workspaceId: 'ws-1' },
                 { code: 'not_a_member' as const, workspaceId: 'ws-1' },
               ]) {
                 kinds.add(

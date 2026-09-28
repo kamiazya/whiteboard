@@ -32,14 +32,6 @@ import {
 import { getAppLogger } from '../../lib/app-logger.js'
 import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
 import type { ConnectedDaemon } from '../../lib/daemon-auth-fetch.js'
-import {
-  type AttestOutcome,
-  attestPromotion,
-  getRegisteredPasskey,
-  type PasskeyCredentials,
-  passkeySupported,
-  registerPasskey,
-} from '../../lib/passkey-attestation.js'
 import type { PromoteWorkspaceResult } from '../../lib/promote-workspace.js'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
 import type { PromotionResultRecord, UserSettings } from '../../lib/user-settings-store.js'
@@ -69,51 +61,11 @@ export interface PromoteWorkspaceSectionProps {
   /** Test seam for the daemon HTTP surface; production uses window.fetch. */
   baseFetch?: typeof globalThis.fetch
   /**
-   * Test seam for WebAuthn: the page's own `navigator.credentials` when
-   * omitted, `null` to stand in for a browser without passkeys.
-   */
-  passkeyCredentials?: PasskeyCredentials | null
-  /**
    * The daemon-kept workspace in view. The line about what this device
    * keeps of it is hidden without one — a cold load with a daemon merely
    * detected names no workspace yet.
    */
   workspaceId?: string
-}
-
-/**
- * The passkey a promotion is confirmed with (ADR-0039 decision 4: asked at
- * the trust boundary, and nowhere else). `none` BLOCKS the move now (user
- * decision, 2026-09-22): the destination generalised from the daemon on
- * this machine to a keeper the user does not own, so an unconfirmed
- * crossing is no longer a thing to record and say so about. `unsupported`
- * blocks it for the same reason and is the sharper cost — a browser without
- * WebAuthn cannot transfer at all.
- */
-type PasskeyState =
-  | { kind: 'unsupported' }
-  | { kind: 'none' }
-  | { kind: 'registering' }
-  | { kind: 'registered' }
-  | { kind: 'error'; detail: string }
-
-/**
- * The question `promoteWorkspace` always asks. It is ALWAYS passed, and
- * answering `null` refuses the move — a credential registered then
- * forgotten, or a browser that cannot hold one, is exactly the case a
- * keeper the user does not own must not accept unconfirmed (ADR-0039's
- * 2026-09-22 addendum). The button is disabled without a passkey, so the
- * `undefined` arm is the race rather than the normal path.
- */
-function signerFor(
-  daemonBaseUrl: string,
-  workspaceId: string,
-  credentials: PasskeyCredentials | undefined,
-): (snapshot: Uint8Array) => Promise<AttestOutcome | null> {
-  return (snapshot) =>
-    credentials === undefined
-      ? Promise.resolve(null)
-      : attestPromotion({ daemonBaseUrl, workspaceId, snapshot, credentials })
 }
 
 type PromoteFlow =
@@ -126,18 +78,6 @@ type PromoteFlow =
     }
   | { step: 'running'; phase: 'record' | 'blobs' }
   | { step: 'unavailable'; reason: string }
-
-/**
- * Whether the destination confirmed what this side signed. `false` is the
- * DESTINATION reporting it did not record a confirmation — not an
- * unconfirmed move, which is refused before the POST — so it is said rather
- * than left silent.
- */
-function attestationNote(result: PromotionResultRecord & { ok: true }): string | undefined {
-  if (result.attested === true) return 'Your passkey confirmed this move'
-  if (result.attested === false) return 'The destination did not record a confirmation'
-  return undefined
-}
 
 /** What a move could not carry, counted. Each is retryable and says so. */
 function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
@@ -251,89 +191,6 @@ async function cacheAndMaybeDemote({
 }
 
 /**
- * What this browser can say about the passkey a move is confirmed with, and
- * what it offers next in each case.
- *
- * `unsupported` offers nothing on purpose: a browser that cannot use
- * passkeys cannot move the workspace at all, so a register button there
- * would be a control that can only fail. `registering`'s status region is
- * MOUNTED before it speaks (polite-live-region.test.ts): a status region
- * that arrives already carrying its message is announced inconsistently, so
- * it is always in the tree and only its text changes.
- */
-function PasskeyState({
-  passkey,
-  onRegister,
-}: {
-  passkey: { kind: string; detail?: string }
-  onRegister: () => void
-}) {
-  return (
-    <div
-      data-testid="promote-passkey"
-      className="flex flex-col gap-1.5 rounded-md border px-3 py-2 text-xs"
-    >
-      {passkey.kind === 'registered' && (
-        <p>
-          A passkey is registered for this daemon. You will be asked to confirm the move with it.
-        </p>
-      )}
-      {passkey.kind === 'none' && (
-        <>
-          <p>
-            No passkey for this daemon yet. Register one to move the workspace — a move to another
-            keeper is confirmed with a passkey.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="self-start"
-            data-testid="promote-register-passkey"
-            onClick={onRegister}
-          >
-            Register a passkey
-          </Button>
-        </>
-      )}
-      {/* Mounted before it speaks (polite-live-region.test.ts):
-        a status region that arrives with its message is
-        announced inconsistently, so this one is always in the
-        tree and only its text changes. */}
-      <p
-        role="status"
-        aria-live="polite"
-        data-testid="promote-passkey-status"
-        className={passkey.kind === 'registering' ? undefined : 'sr-only'}
-      >
-        {passkey.kind === 'registering' ? 'Waiting for your passkey…' : ''}
-      </p>
-      {passkey.kind === 'error' && (
-        <>
-          <p>Registering the passkey failed: {passkey.detail}</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="self-start"
-            data-testid="promote-register-passkey"
-            onClick={onRegister}
-          >
-            Try again
-          </Button>
-        </>
-      )}
-      {passkey.kind === 'unsupported' && (
-        <p>
-          This browser cannot use passkeys, so it cannot move the workspace. Open this page in a
-          browser that can, or export the documents you need.
-        </p>
-      )}
-    </div>
-  )
-}
-
-/**
  * What is left in THIS browser afterwards. The two are independent: a
  * replica can be cached whether or not the original was removed, and the
  * removal is what a reader most needs told.
@@ -355,10 +212,8 @@ function describeResult(result: PromotionResultRecord): string {
   if (!result.ok) {
     return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason}`
   }
-  const attestation = attestationNote(result)
   const parts = [
     `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
-    ...(attestation === undefined ? [] : [attestation]),
     ...carryNotes(result),
     ...browserCopyNotes(result),
   ]
@@ -370,13 +225,11 @@ export function PromoteWorkspaceSection({
   settingsStore,
   reload,
   baseFetch,
-  passkeyCredentials,
   workspaceId,
 }: PromoteWorkspaceSectionProps) {
   const targetSelectId = useId()
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const [flow, setFlow] = useState<PromoteFlow>({ step: 'idle' })
-  const [passkey, setPasskey] = useState<PasskeyState>({ kind: 'none' })
   const [tier, setTier] = useState<ReplicaTier>()
 
   // What this device keeps of the workspace in view (ADR-0042's read plane).
@@ -406,13 +259,6 @@ export function PromoteWorkspaceSection({
       cancelled = true
     }
   }, [daemon?.baseUrl, daemon?.token, baseFetch, workspaceId])
-  // Resolved per call rather than once: a test seam is fixed, but the page's
-  // own API is read when it is needed.
-  const credentialsOf = useCallback((): PasskeyCredentials | undefined => {
-    if (passkeyCredentials === null) return undefined
-    if (passkeyCredentials !== undefined) return passkeyCredentials
-    return passkeySupported() ? globalThis.navigator.credentials : undefined
-  }, [passkeyCredentials])
   const [lastResult, setLastResult] = useState<PromotionResultRecord | undefined>(
     () => settingsStore.load().migration.promotion,
   )
@@ -466,13 +312,6 @@ export function PromoteWorkspaceSection({
         })
         return
       }
-      setPasskey(
-        credentialsOf() === undefined
-          ? { kind: 'unsupported' }
-          : getRegisteredPasskey(daemon.baseUrl) === null
-            ? { kind: 'none' }
-            : { kind: 'registered' },
-      )
       setFlow({
         step: 'confirm',
         documentCount,
@@ -482,31 +321,11 @@ export function PromoteWorkspaceSection({
     } catch {
       setFlow({ step: 'unavailable', reason: 'Could not reach the daemon to prepare the move.' })
     }
-  }, [daemon, baseFetch, credentialsOf])
-
-  const registerHere = useCallback(async () => {
-    const credentials = credentialsOf()
-    if (!daemon || credentials === undefined) return
-    setPasskey({ kind: 'registering' })
-    const result = await registerPasskey({
-      daemonBaseUrl: daemon.baseUrl,
-      fetch: daemonFetch(daemon, baseFetch),
-      credentials,
-    })
-    if (result.ok) setPasskey({ kind: 'registered' })
-    else if (result.reason === 'cancelled') setPasskey({ kind: 'none' })
-    else if (result.reason === 'unsupported') setPasskey({ kind: 'unsupported' })
-    else setPasskey({ kind: 'error', detail: result.detail ?? result.reason })
-  }, [daemon, baseFetch, credentialsOf])
+  }, [daemon, baseFetch])
 
   const runPromotion = useCallback(
     async (targetId: string, target?: WorkspaceIdentity) => {
-      // The button is disabled in every other passkey state, and this is
-      // the same rule written where the move actually happens: a transfer
-      // to another keeper is confirmed with a passkey, so one that is
-      // absent, unsupported, failed or still being registered is not a
-      // move to be attempted.
-      if (!daemon || passkey.kind !== 'registered') return
+      if (!daemon) return
       setFlow({ step: 'running', phase: 'record' })
       let record: PromotionResultRecord
       try {
@@ -521,7 +340,6 @@ export function PromoteWorkspaceSection({
           workspaceId: targetId,
           workspaceDocs: new BrowserWorkspaceDocs(),
           onProgress: (phase) => setFlow({ step: 'running', phase }),
-          attest: signerFor(daemon.baseUrl, targetId, credentialsOf()),
         })
         const after =
           outcome.kind === 'ok'
@@ -546,7 +364,6 @@ export function PromoteWorkspaceSection({
                 ...(replicaSyncedAt === undefined ? {} : { replicaSyncedAt }),
                 localCopyRemoved,
                 ok: true,
-                attested: outcome.attested,
                 promotedCount: outcome.promotedDocumentIds.length,
                 shadowedPaths: outcome.shadowedPaths,
                 blobsMissing: outcome.blobs.missing,
@@ -578,7 +395,7 @@ export function PromoteWorkspaceSection({
       setLastResult(record)
       setFlow({ step: 'idle' })
     },
-    [daemon, baseFetch, settingsStore, credentialsOf, passkey.kind],
+    [daemon, baseFetch, settingsStore],
   )
 
   return (
@@ -708,14 +525,6 @@ export function PromoteWorkspaceSection({
                   </>
                 )}
               </div>
-              {/* The passkey block: what the move will be confirmed with,
-                  and the one place a passkey is registered (ADR-0039).
-                  Anything but `registered` BLOCKS the move (user decision,
-                  2026-09-22) — the destination is a keeper the user may not
-                  own, so there is no unconfirmed crossing to record. The
-                  block says which state it is in, because a disabled button
-                  with no reason beside it is the same as a broken one. */}
-              <PasskeyState passkey={passkey} onRegister={() => void registerHere()} />
               <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setFlow({ step: 'idle' })}>
                   Cancel
@@ -723,7 +532,6 @@ export function PromoteWorkspaceSection({
                 <Button
                   type="button"
                   data-testid="promote-confirm"
-                  disabled={passkey.kind !== 'registered'}
                   onClick={() =>
                     void runPromotion(
                       flow.targetId,

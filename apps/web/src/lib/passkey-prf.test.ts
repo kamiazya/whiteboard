@@ -1,6 +1,6 @@
 /**
- * Asking the authenticator for a `prf` output on the assertion this app
- * ALREADY performs (ADR-0042 d6 + ADR-0039 d6, one gesture).
+ * Reading the `prf` output an assertion carried (ADR-0042 d6), which is
+ * what wraps a copy made readable offline.
  *
  * Every case here is about the PROBE rather than the crypto: what the code
  * must never do is decide from a user-agent string or assume support,
@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { prfInputForDaemon, prfOutputOf } from './passkey-prf.js'
+import { prfOutputOf } from './passkey-prf.js'
 
 function credentialWith(results: unknown): PublicKeyCredential {
   return {
@@ -48,23 +48,5 @@ describe('prfOutputOf', () => {
 
   it('answers null rather than throwing when the credential exposes no extension results', () => {
     expect(prfOutputOf({} as PublicKeyCredential)).toBeNull()
-  })
-})
-
-describe('prfInputForDaemon', () => {
-  it('is stable for one daemon and differs between daemons', async () => {
-    const a = await prfInputForDaemon('http://127.0.0.1:3099')
-
-    // Stable, because a random input would hand every session a different
-    // wrapping key and every blob already on disk would be unopenable.
-    expect(await prfInputForDaemon('http://127.0.0.1:3099')).toEqual(a)
-    // Two daemons differing ONLY in their port: the first version filled 32
-    // bytes by repeating the encoded text, whose prefix is already longer
-    // than 32 bytes, so both produced the same input.
-    expect(await prfInputForDaemon('http://127.0.0.1:4000')).not.toEqual(a)
-  })
-
-  it('is 32 bytes, which is what the extension takes', async () => {
-    expect(await prfInputForDaemon('http://127.0.0.1:3099')).toHaveLength(32)
   })
 })

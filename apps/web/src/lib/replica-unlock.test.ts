@@ -1,7 +1,7 @@
 /**
  * The cold start itself (ADR-0042 decision 6): a replica this browser
- * already holds, opened from disk by one passkey gesture, with the daemon
- * unreachable.
+ * already holds, opened from disk by one gesture of the passkey kept for it
+ * in this browser (ADR-0050 decision 11), with the daemon unreachable.
  *
  * What these cases hold is that every way it can fail says which — and that
  * the two failures which can never resolve on their own (a blob no
@@ -11,8 +11,7 @@
 
 import { adoptSessionKey, forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PasskeyCredentials } from './passkey-attestation.js'
-import { prfInputForDaemon } from './passkey-prf.js'
+import { type OfflinePasskeyCredentials, saveOfflinePasskey } from './replica-offline-passkey.js'
 import { rememberReplicaKey, unlockReplicaKey } from './replica-unlock.js'
 import { loadWrappedKey, saveWrappedKey } from './replica-wrapped-key-store.js'
 
@@ -34,39 +33,20 @@ const RESPONSE = {
   tier: 'offline' as const,
 }
 
-function storageWithPasskey(): Storage {
-  const map = new Map<string, string>()
-  const storage: Storage = {
-    get length() {
-      return map.size
-    },
-    clear: () => map.clear(),
-    getItem: (k) => map.get(k) ?? null,
-    key: (i) => [...map.keys()][i] ?? null,
-    removeItem: (k) => void map.delete(k),
-    setItem: (k, v) => void map.set(k, v),
-  }
-  storage.setItem(
-    'whiteboard:daemon-passkeys',
-    JSON.stringify({
-      [DAEMON]: { credentialId: 'AQIDBA', registeredAt: '2026-09-21T00:00:00Z' },
-    }),
-  )
-  return storage
+/** The passkey this browser keeps for the copy, as Settings' opt-in leaves it. */
+const OFFLINE_PASSKEY = { credentialId: 'AQIDBA', prfSalt: 'BQYHCA' }
+
+function keepOfflinePasskey(): void {
+  saveOfflinePasskey(DAEMON, WORKSPACE, OFFLINE_PASSKEY)
 }
 
 /** Credentials whose assertion carries `prf`, or carries nothing when `prf` is undefined. */
-function credentialsYielding(prf?: Uint8Array): PasskeyCredentials {
+function credentialsYielding(prf?: Uint8Array): OfflinePasskeyCredentials {
   return {
     create: async () => null,
     get: async () =>
       ({
         rawId: new Uint8Array([1, 2, 3, 4]).buffer,
-        response: {
-          authenticatorData: new Uint8Array([9]).buffer,
-          clientDataJSON: new Uint8Array([8]).buffer,
-          signature: new Uint8Array([7]).buffer,
-        },
         getClientExtensionResults: () =>
           (prf === undefined ? {} : { prf: { results: { first: prf.buffer } } }) as never,
       }) as unknown as PublicKeyCredential,
@@ -74,8 +54,9 @@ function credentialsYielding(prf?: Uint8Array): PasskeyCredentials {
 }
 
 beforeEach(() => {
-  localStorage.removeItem('whiteboard:replica-sealed-keys')
+  localStorage.clear()
   forgetAll()
+  keepOfflinePasskey()
 })
 
 afterEach(() => {
@@ -111,13 +92,12 @@ describe('unlockReplicaKey', () => {
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
       credentials: credentialsYielding(PRF),
-      storage: storageWithPasskey(),
     })
 
     expect(outcome).toEqual({ ok: true, tier: 'offline' })
   })
 
-  it('asks the authenticator for the daemon-derived prf input, on one assertion', async () => {
+  it('asks the passkey kept for this copy, with its own salt, on one assertion', async () => {
     await rememberReplicaKey({
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
@@ -131,15 +111,17 @@ describe('unlockReplicaKey', () => {
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
       credentials,
-      storage: storageWithPasskey(),
     })
 
     // ONE prompt, verifying the person and yielding the key material at once.
     expect(get).toHaveBeenCalledTimes(1)
     const asked = get.mock.calls[0]?.[0]?.publicKey
     expect(asked?.userVerification).toBe('required')
+    expect(new Uint8Array(asked?.allowCredentials?.[0]?.id as ArrayBuffer)).toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    )
     expect(new Uint8Array(asked?.extensions?.prf?.eval?.first as ArrayBuffer)).toEqual(
-      await prfInputForDaemon(DAEMON),
+      new Uint8Array([5, 6, 7, 8]),
     )
   })
 
@@ -151,7 +133,6 @@ describe('unlockReplicaKey', () => {
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
       credentials,
-      storage: storageWithPasskey(),
     })
 
     // Prompting when there is nothing to open teaches a person the gesture
@@ -172,7 +153,6 @@ describe('unlockReplicaKey', () => {
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
       credentials: credentialsYielding(undefined),
-      storage: storageWithPasskey(),
     })
 
     // A browser without the extension is a browser, not a verdict: another
@@ -193,7 +173,6 @@ describe('unlockReplicaKey', () => {
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
       credentials: credentialsYielding(OTHER_PRF),
-      storage: storageWithPasskey(),
     })
 
     // Ciphertext nothing on this device can read is not a copy, it is
@@ -218,24 +197,29 @@ describe('unlockReplicaKey', () => {
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
       credentials: credentialsYielding(PRF),
-      storage: storageWithPasskey(),
     })
 
     expect(outcome).toEqual({ ok: false, reason: 'lapsed' })
     expect(loadWrappedKey(DAEMON, WORKSPACE)).toBeNull()
   })
 
-  it('says no passkey when this daemon has none registered', async () => {
+  it('drops a blob no passkey in this browser was kept for, without prompting', async () => {
+    localStorage.clear()
     saveWrappedKey(DAEMON, WORKSPACE, { v: 1, iv: 'AAECAwQFBgcICQoL', ct: 'DA0ODxAREhMUFRYX' })
+    const credentials = credentialsYielding(PRF)
+    const get = vi.spyOn(credentials, 'get')
 
     const outcome = await unlockReplicaKey({
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
-      credentials: credentialsYielding(PRF),
-      storage: localStorage,
+      credentials,
     })
 
-    expect(outcome).toEqual({ ok: false, reason: 'no-passkey' })
+    // A copy wrapped under a passkey a daemon's pairing once registered has
+    // nothing left here that can open it.
+    expect(outcome).toEqual({ ok: false, reason: 'unopenable' })
+    expect(get).not.toHaveBeenCalled()
+    expect(loadWrappedKey(DAEMON, WORKSPACE)).toBeNull()
   })
 
   it('reports a key this session already holds as open, without a prompt', async () => {
@@ -253,7 +237,6 @@ describe('unlockReplicaKey', () => {
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
       credentials,
-      storage: storageWithPasskey(),
     })
 
     // Asking someone to prove themselves for something already open is the

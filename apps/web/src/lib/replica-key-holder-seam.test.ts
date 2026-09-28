@@ -42,10 +42,10 @@ describe('the replica session-key holder is imported from exactly one module', (
   })
 
   it('imports sessionKey/replicaKeyProviderFor from src/lib/replica-store.ts and nowhere else', () => {
-    // `passkey-session.ts` legitimately imports the SIBLING `BindOutcome`
-    // type from the same subpath, so the scan matches the two named values
-    // that actually decide sealed-vs-plaintext rather than the module
-    // specifier alone.
+    // Other modules legitimately import SIBLING names from the same subpath
+    // (`replica-unlock.ts` adopts a key, ReplicaReadPage reads a status), so
+    // the scan matches the two named values that actually decide
+    // sealed-vs-plaintext rather than the module specifier alone.
     const importLine =
       /import\s+(?:type\s+)?\{[^}]*\}\s+from\s+['"][^'"]*replica-session-key(\.js)?['"]/g
     const importers = paths.filter((path) => {

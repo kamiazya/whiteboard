@@ -44,11 +44,11 @@ import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTr
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
-import type { ReplicaKeyInput, ReplicaRenewalInput } from '../lib/replica-page-state.js'
+import type { ReplicaKeyInput } from '../lib/replica-page-state.js'
 import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-state.js'
 import { lockedDetail, REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
 import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
-import { hasRememberedReplicaKey, unlockReplicaKey } from '../lib/replica-unlock.js'
+import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 
 export interface ReplicaReadPageProps {
@@ -62,8 +62,6 @@ export interface ReplicaReadPageProps {
   syncedAt?: string
   /** The daemon this replica belongs to — what a Reconnect forgets keys for. */
   daemonBaseUrl: string
-  /** What App's silent renewal answered: reached-and-refused, or not reached at all (ADR-0042 decisions 3-5). */
-  renewal: ReplicaRenewalInput
   /**
    * A membership refusal the DAEMON already answered directly (not from the
    * replica-key holder), so the page never opens the replica record at all
@@ -547,7 +545,7 @@ function replicaLiveStatus({
 }): string | null {
   if (state.kind === 'loading') return 'Loading…'
   if (reconnecting) return 'Reconnecting…'
-  if (pageState === 'removed' || pageState === 'unpaired') return REPLICA_STATE_COPY[pageState].body
+  if (pageState === 'removed') return REPLICA_STATE_COPY.removed.body
   if (pageState === 'locked' || pageState === 'needs-connection') {
     return REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')
   }
@@ -560,7 +558,6 @@ export function ReplicaReadPage({
   displayName,
   syncedAt,
   daemonBaseUrl,
-  renewal,
   withheld,
   onReconnect,
 }: ReplicaReadPageProps) {
@@ -581,11 +578,9 @@ export function ReplicaReadPage({
   // remembered flag captured once would go on offering an unlock that has
   // just been established to be impossible. The `attempt` bump an unlock ends
   // with is what re-reads it.
-  const remembered = hasRememberedReplicaKey(daemonBaseUrl, workspaceId)
+  const remembered = isReplicaReadableOffline(daemonBaseUrl, workspaceId)
   const pageState =
-    state.kind === 'loading'
-      ? null
-      : replicaPageState({ renewal, key: keyInputFor(state), remembered })
+    state.kind === 'loading' ? null : replicaPageState({ key: keyInputFor(state), remembered })
 
   /**
    * The cold start (ADR-0042 decision 6). No `forget` first, unlike
@@ -695,9 +690,9 @@ export function ReplicaReadPage({
           onAction={() => void handleUnlock()}
         />
       )}
-      {(pageState === 'removed' || pageState === 'unpaired') && (
-        <p className="p-4 text-sm text-muted-foreground" data-testid={`replica-state-${pageState}`}>
-          {REPLICA_STATE_COPY[pageState].body}
+      {pageState === 'removed' && (
+        <p className="p-4 text-sm text-muted-foreground" data-testid="replica-state-removed">
+          {REPLICA_STATE_COPY.removed.body}
         </p>
       )}
     </div>

@@ -64,7 +64,7 @@ import {
 } from './smoke-kit.mjs'
 
 const BRIDGE_DAEMON_BASE_URL = 'https://daemon.whiteboard.invalid'
-const SETTINGS_KEY = 'whiteboard:user-settings:v3'
+const SETTINGS_KEY = 'whiteboard:user-settings:v4'
 const DOCUMENT_PATH = 'read-plane-note'
 const MARKER = 'read-plane-smoke-marker-body-text'
 const smoke = createSmoke('read-plane-smoke')
@@ -73,7 +73,7 @@ const { check, dataDir, scratch } = smoke
 // Runs IN the page (serialised by Playwright), so it may close over nothing.
 const replicaRegistered = (ws) => {
   try {
-    const raw = window.localStorage.getItem('whiteboard:user-settings:v3')
+    const raw = window.localStorage.getItem('whiteboard:user-settings:v4')
     return raw !== null && JSON.parse(raw)?.storage?.replicas?.[ws] !== undefined
   } catch {
     return false
@@ -260,7 +260,7 @@ async function openBrowser() {
       window.localStorage.setItem(
         key,
         JSON.stringify({
-          version: 3,
+          version: 4,
           storage: { daemonBaseUrl: base },
           migration: {},
           capabilities: {},

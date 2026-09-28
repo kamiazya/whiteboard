@@ -62,9 +62,8 @@ afterAll(async () => {
  * `/api/v1` is a prefix a caller concatenates onto, never fetched whole.
  * (Prose inside a doc comment used to need an entry here too — `/api/...` —
  * until comments were stripped before matching below; a doc comment that
- * spells a real backtick-quoted route, like `/api/pairing/session-assert*`
- * in passkey-session.ts, would otherwise be read as a literal request this
- * app makes and fail as an unmounted route.)
+ * spells a real backtick-quoted route would otherwise be read as a literal
+ * request this app makes and fail as an unmounted route.)
  */
 const NOT_A_REQUEST_TARGET = new Set(['/api/v1'])
 

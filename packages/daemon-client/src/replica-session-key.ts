@@ -16,40 +16,13 @@ import { fromBase64 } from './sse-stream-hub.js'
  * is to never hand them anywhere but `replicaKeyProviderFor`'s derived,
  * non-extractable `CryptoKey`.
  *
- * Deliberately free of any node:* import and any DOM global — `fetch` and
- * passkey binding are injected via `ReplicaSource` so this module runs
- * unchanged in the browser and in a test.
+ * Deliberately free of any node:* import and any DOM global — `fetch` is
+ * injected via `ReplicaSource` so this module runs unchanged in the browser
+ * and in a test.
  */
-
-export type BindOutcome =
-  | {
-      ok: true
-      /**
-       * The key material the binding assertion carried, when the
-       * authenticator produced it (ADR-0042 decision 6). The SAME gesture
-       * that proves who is asking is the one that yields this, so a cold
-       * start costs no second prompt.
-       *
-       * Absent is ORDINARY: prf support is broad and not universal, and
-       * the session is bound either way — only the cold start is lost.
-       */
-      prfOutput?: Uint8Array<ArrayBuffer>
-    }
-  | { ok: false; reason: 'no-passkey' | 'cancelled' | 'rejected' | 'unreachable' }
 
 export interface ReplicaSource {
   fetch: typeof fetch
-  bindSession: () => Promise<BindOutcome>
-  /**
-   * Called with each response the daemon MINTS, so a caller can wrap and
-   * persist it for a cold start (ADR-0042 decision 6). The parsed response
-   * rather than the decoded bytes: a cold start rebuilds this holder's
-   * state through `adoptSessionKey`, which takes the same shape, so there
-   * is never a second hand-written idea of what a replica key is.
-   *
-   * Not called for a withheld answer — there is nothing to keep.
-   */
-  onKeyResponse?: (response: ReplicaKeyResponse) => void
 }
 
 export type SessionKeyResult =
@@ -184,7 +157,6 @@ async function fetchSessionKey(
     if (!parsed.success) {
       return { kind: 'withheld', reason: 'unreachable' }
     }
-    source.onKeyResponse?.(parsed.data)
     return heldFrom(parsed.data)
   }
 
@@ -220,22 +192,6 @@ function readCache(key: string): SessionKeyResult | null {
   return cached
 }
 
-async function requestSessionKey(
-  daemonBaseUrl: string,
-  workspaceId: string,
-  source: ReplicaSource,
-): Promise<SessionKeyResult> {
-  const result = await fetchSessionKey(daemonBaseUrl, workspaceId, source)
-  if (result.kind === 'withheld' && result.reason === 'requires_person_session') {
-    const bindOutcome = await source.bindSession()
-    if (!bindOutcome.ok) {
-      return result
-    }
-    return fetchSessionKey(daemonBaseUrl, workspaceId, source)
-  }
-  return result
-}
-
 /**
  * Answers this session's key for a (daemon, workspace) pair. A live cached
  * key answers immediately; a `bounded` lease past `leaseExpiresAt` is
@@ -268,7 +224,7 @@ export async function sessionKey(
   // may remove (or replace) this entry while the request is outstanding, and
   // a request that settles after that must not resurrect what was just
   // forgotten, nor leave a rejected request stuck in `inFlight` forever.
-  const promise: Promise<SessionKeyResult> = requestSessionKey(
+  const promise: Promise<SessionKeyResult> = fetchSessionKey(
     daemonBaseUrl,
     workspaceId,
     source,

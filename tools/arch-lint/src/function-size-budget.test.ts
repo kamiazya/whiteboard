@@ -158,7 +158,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
   'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
-  'apps/web/src/components/PasskeysCard.tsx#PasskeysCard': 184,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 441,
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 332,
   'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
@@ -226,7 +225,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // its read-back has a try/catch of its own now lives.
   'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 399,
   'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#cacheAndMaybeDemote': 70,
-  'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PasskeyState': 71,
   // 163 -> 81: the ladder is `journeySteps` and one function per rung, so
   // "which state is this environment in" is answered once rather than in
   // the middle of the list that draws it.
@@ -413,7 +411,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // (ADR-0042 d6), which several authenticators decide there rather than at
   // assertion time. One property on the options object; its reasoning is a
   // named constant beside the function rather than a comment inside it.
-  'apps/web/src/lib/passkey-attestation.ts#registerPasskey': 87,
   'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 95,
   'apps/web/src/lib/spatial/commands.ts#applyCommand': 146,
   'apps/web/src/lib/spatial/commands.ts#buildFragmentInsertCommand': 84,

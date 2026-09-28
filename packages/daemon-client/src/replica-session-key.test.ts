@@ -36,15 +36,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-function sourceWith(
-  fetchImpl: typeof fetch,
-  bindSession?: ReplicaSource['bindSession'],
-): ReplicaSource {
-  return {
-    fetch: fetchImpl,
-    bindSession:
-      bindSession ?? vi.fn(async () => ({ ok: false as const, reason: 'no-passkey' as const })),
-  }
+function sourceWith(fetchImpl: typeof fetch): ReplicaSource {
+  return { fetch: fetchImpl }
 }
 
 describe('replica-session-key: sessionKey', () => {
@@ -122,28 +115,11 @@ describe('replica-session-key: sessionKey', () => {
     expect(result).toEqual({ kind: 'withheld', reason: 'replica_not_allowed' })
   })
 
-  it('requires_person_session: binds once and retries once, succeeding on retry', async () => {
-    let calls = 0
-    const fetchImpl = vi.fn(async () => {
-      calls += 1
-      return calls === 1
-        ? jsonResponse({ error: 'requires_person_session', message: 'not signed in' }, 403)
-        : jsonResponse(keyResponse())
-    })
-    const bindSession = vi.fn(async () => ({ ok: true as const }))
-    const result = await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl, bindSession))
-    expect(bindSession).toHaveBeenCalledTimes(1)
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-    expect(result.kind).toBe('key')
-  })
-
-  it('requires_person_session: bind failure withholds with no retry', async () => {
+  it('requires_person_session is withheld after one request, never retried', async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ error: 'requires_person_session', message: 'not signed in' }, 403),
     )
-    const bindSession = vi.fn(async () => ({ ok: false as const, reason: 'no-passkey' as const }))
-    const result = await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl, bindSession))
-    expect(bindSession).toHaveBeenCalledTimes(1)
+    const result = await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ kind: 'withheld', reason: 'requires_person_session' })
   })
@@ -186,33 +162,6 @@ describe('replica-session-key: sessionKey', () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ oops: 'not a refusal' }, 500))
     const result = await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
     expect(result).toEqual({ kind: 'withheld', reason: 'unreachable' })
-  })
-
-  it('a rejecting bindSession does not poison the cache — the next call retries instead of replaying the rejection', async () => {
-    let fetchCalls = 0
-    const fetchImpl = vi.fn(async () => {
-      fetchCalls += 1
-      // Every request starts by being told it needs a person session; only
-      // the fetch that follows a successful bind (the 3rd overall) answers
-      // with a key.
-      return fetchCalls <= 2
-        ? jsonResponse({ error: 'requires_person_session', message: 'not signed in' }, 403)
-        : jsonResponse(keyResponse())
-    })
-    const bindSession = vi.fn<ReplicaSource['bindSession']>()
-    bindSession.mockImplementationOnce(async () => {
-      throw new Error('WebAuthn ceremony threw')
-    })
-    bindSession.mockImplementation(async () => ({ ok: true as const }))
-    const source = sourceWith(fetchImpl, bindSession)
-
-    await expect(sessionKey(DAEMON, WORKSPACE, source)).rejects.toThrow('WebAuthn ceremony threw')
-
-    // Without the fix, the rejected promise stays in `inFlight` forever and
-    // this second call would be handed the SAME rejected promise back.
-    const second = await sessionKey(DAEMON, WORKSPACE, source)
-    expect(second.kind).toBe('key')
-    expect(bindSession).toHaveBeenCalledTimes(2)
   })
 })
 

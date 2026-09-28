@@ -29,7 +29,6 @@ import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
-import type { PasskeyCredentials } from '../../lib/passkey-attestation.js'
 import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
@@ -51,8 +50,6 @@ interface StubOptions {
   failUpdateStatus?: number
   /** Every promote body the daemon received — what travelled, not what was meant to. */
   promotes?: Array<{ snapshot: string; attestation?: { credentialId: string } }>
-  /** Every credential registration the daemon received. */
-  registrations?: Array<{ credentialId: string; publicKey: string; authenticatorData: string }>
   /** Refuse blob PUTs, so the demote gate has a real failed transfer. */
   failPutStatus?: number
   /** Serve THESE bytes from the snapshot route instead of the merged target. */
@@ -64,46 +61,6 @@ function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/')
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
   return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-}
-
-const b64u = (bytes: Uint8Array): string =>
-  btoa(String.fromCharCode(...bytes))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replaceAll('=', '')
-
-const RAW_ID = Uint8Array.from({ length: 16 }, (_, i) => i + 1)
-const PASSKEYS_KEY = 'whiteboard:daemon-passkeys'
-
-/** A platform authenticator as the flow sees it: one registration, and assertions that sign whatever they are asked. */
-function fakePasskey(): PasskeyCredentials & { asked: CredentialRequestOptions[] } {
-  const asked: CredentialRequestOptions[] = []
-  return {
-    asked,
-    create: async () =>
-      ({
-        id: b64u(RAW_ID),
-        type: 'public-key',
-        rawId: RAW_ID.buffer,
-        response: {
-          getPublicKey: () => Uint8Array.from([48, 89, 48, 19]).buffer,
-          getAuthenticatorData: () => new Uint8Array(37).buffer,
-        },
-      }) as unknown as Credential,
-    get: async (options) => {
-      asked.push(options)
-      return {
-        id: b64u(RAW_ID),
-        type: 'public-key',
-        rawId: RAW_ID.buffer,
-        response: {
-          authenticatorData: new Uint8Array(37).buffer,
-          clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer,
-          signature: Uint8Array.from([1, 2, 3]).buffer,
-        },
-      } as unknown as Credential
-    },
-  }
 }
 
 /**
@@ -150,23 +107,6 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
         recorded: readWorkspaceDocuments(target).map((entry) => entry.documentId),
         shadowed: [],
       })
-    }
-    if (url.endsWith('/api/pairing/credentials') && init?.method === 'POST') {
-      const body = JSON.parse(init.body as string) as {
-        credentialId: string
-        publicKey: string
-        authenticatorData: string
-      }
-      opts.registrations?.push(body)
-      return Response.json(
-        {
-          credentialId: body.credentialId,
-          origin: location.origin,
-          backupEligible: true,
-          createdAt: '2026-09-16T00:00:00.000Z',
-        },
-        { status: 201 },
-      )
     }
     if (url.includes('/file/') && init?.method === 'PUT') {
       if (opts.putDelayMs) await new Promise((r) => setTimeout(r, opts.putDelayMs))
@@ -283,19 +223,9 @@ beforeEach(async () => {
   // and view-mode state out from under concurrently running files
   // (view-mode-isolation.test.ts guards exactly this).
   localStorage.removeItem(STORAGE_KEY)
-  // A passkey registered for the destination is the PRECONDITION for moving
-  // at all (ADR-0039's 2026-09-22 addendum), so it is the default setup and
-  // the three tests about its absence call `forgetPasskeyHere()`. Before
-  // that rule a move without one landed and said so, and every test here
-  // could reach the confirm button without arranging anything.
-  localStorage.setItem(
-    PASSKEYS_KEY,
-    JSON.stringify({ [BASE]: { credentialId: b64u(RAW_ID), registeredAt: 'x' } }),
-  )
   await clearWhiteboardDb()
 })
 
-const forgetPasskeyHere = (): void => localStorage.removeItem(PASSKEYS_KEY)
 afterEach(() => {
   cleanup()
   connectReplicaKeeper(null)
@@ -304,138 +234,26 @@ afterEach(() => {
 })
 
 describe('PromoteWorkspaceSection', () => {
-  it('with a passkey registered here, the move is confirmed with it, the assertion travels, and the result says so', async () => {
+  it('moves the workspace to this daemon with no passkey, and sends no attestation', async () => {
     await seedTwoDocuments()
-    const passkey = fakePasskey()
     const promotes: StubOptions['promotes'] = []
     render(
       <PromoteWorkspaceSection
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc(), { promotes })}
-        passkeyCredentials={passkey}
         reload={vi.fn()}
       />,
     )
     await userEvent.click(screen.getByTestId('promote-workspace-open'))
-    expect((await screen.findByTestId('promote-passkey')).textContent).toMatch(
-      /you will be asked to confirm the move with it/i,
-    )
-    await userEvent.click(screen.getByTestId('promote-confirm'))
+    const confirm = await screen.findByTestId('promote-confirm')
+    expect(screen.queryByTestId('promote-passkey')).toBeNull()
+    await userEvent.click(confirm)
     const result = await screen.findByTestId('promote-last-result')
-    expect(result.textContent).toMatch(/your passkey confirmed this move/i)
-    // One assertion, for the credential registered here, with user verification.
-    expect(passkey.asked).toHaveLength(1)
-    expect(passkey.asked[0]?.publicKey?.userVerification).toBe('required')
+    expect(result.textContent).toMatch(/moved 2 documents/i)
+    expect(result.textContent).not.toMatch(/passkey|confirmation/i)
     expect(promotes).toHaveLength(1)
-    expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
-  })
-
-  it('without a passkey the move is refused until one is registered here, and then it is asked for', async () => {
-    forgetPasskeyHere()
-    await seedTwoDocuments()
-    const passkey = fakePasskey()
-    const promotes: StubOptions['promotes'] = []
-    const registrations: StubOptions['registrations'] = []
-    render(
-      <PromoteWorkspaceSection
-        daemon={DAEMON}
-        settingsStore={createUserSettingsStore()}
-        baseFetch={daemonStub(new LoroDoc(), { promotes, registrations })}
-        passkeyCredentials={passkey}
-        reload={vi.fn()}
-      />,
-    )
-    await userEvent.click(screen.getByTestId('promote-workspace-open'))
-    expect((await screen.findByTestId('promote-passkey')).textContent).toMatch(
-      /no passkey for this daemon yet/i,
-    )
-    // Refused before the registration, not merely unattested after it.
-    expect((screen.getByTestId('promote-confirm') as HTMLButtonElement).disabled).toBe(true)
-    await userEvent.click(screen.getByTestId('promote-register-passkey'))
-    await waitFor(() =>
-      expect(screen.getByTestId('promote-passkey').textContent).toMatch(/is registered/i),
-    )
-    expect(registrations).toHaveLength(1)
-    expect(registrations[0]?.credentialId).toBe(b64u(RAW_ID))
-    await userEvent.click(screen.getByTestId('promote-confirm'))
-    expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(
-      /your passkey confirmed this move/i,
-    )
-    expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
-  })
-
-  it('while a passkey is being registered the move waits, so it cannot slip through unattested', async () => {
-    forgetPasskeyHere()
-    await seedTwoDocuments()
-    const passkey = fakePasskey()
-    let release = (): void => {}
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    const create = passkey.create
-    passkey.create = async (options) => {
-      await gate
-      return create(options)
-    }
-    const promotes: StubOptions['promotes'] = []
-    render(
-      <PromoteWorkspaceSection
-        daemon={DAEMON}
-        settingsStore={createUserSettingsStore()}
-        baseFetch={daemonStub(new LoroDoc(), { promotes, registrations: [] })}
-        passkeyCredentials={passkey}
-        reload={vi.fn()}
-      />,
-    )
-    await userEvent.click(screen.getByTestId('promote-workspace-open'))
-    await userEvent.click(await screen.findByTestId('promote-register-passkey'))
-    await waitFor(() =>
-      expect(screen.getByTestId('promote-passkey-status').textContent).toMatch(/waiting/i),
-    )
-    const confirm = screen.getByTestId('promote-confirm') as HTMLButtonElement
-    expect(confirm.disabled).toBe(true)
-    // A click that lands anyway (a stale handle, a programmatic call) moves nothing.
-    confirm.click()
-    expect(promotes).toHaveLength(0)
-    release()
-    await waitFor(() =>
-      expect(screen.getByTestId('promote-passkey').textContent).toMatch(/is registered/i),
-    )
-    expect((screen.getByTestId('promote-confirm') as HTMLButtonElement).disabled).toBe(false)
-    await userEvent.click(screen.getByTestId('promote-confirm'))
-    expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(
-      /your passkey confirmed this move/i,
-    )
-    expect(promotes).toHaveLength(1)
-    expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
-  })
-
-  it('a browser that cannot use passkeys cannot move the workspace, and is told what it can do', async () => {
-    forgetPasskeyHere()
-    await seedTwoDocuments()
-    const promotes: StubOptions['promotes'] = []
-    render(
-      <PromoteWorkspaceSection
-        daemon={DAEMON}
-        settingsStore={createUserSettingsStore()}
-        baseFetch={daemonStub(new LoroDoc(), { promotes })}
-        passkeyCredentials={null}
-        reload={vi.fn()}
-      />,
-    )
-    await userEvent.click(screen.getByTestId('promote-workspace-open'))
-    const block = await screen.findByTestId('promote-passkey')
-    expect(block.textContent).toMatch(/cannot use passkeys/i)
-    // A dead end needs a way out, so the copy names one.
-    expect(block.textContent).toMatch(/browser that can|export/i)
-    // Nothing to register with, so nothing is offered — and the move is off.
-    expect(screen.queryByTestId('promote-register-passkey')).toBeNull()
-    const confirm = screen.getByTestId('promote-confirm') as HTMLButtonElement
-    expect(confirm.disabled).toBe(true)
-    // A click that lands anyway moves nothing.
-    confirm.click()
-    expect(promotes).toEqual([])
+    expect(promotes[0]).not.toHaveProperty('attestation')
   })
 
   it('confirmation dialog traps focus and Escape returns it to the trigger', async () => {
@@ -445,7 +263,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc())}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -479,7 +296,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc(), { updateDelayMs: 150, putDelayMs: 400 })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -521,7 +337,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target)}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -552,7 +367,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target)}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -569,7 +383,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc(), { failUpdateStatus: 404 })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -590,7 +403,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc(), { updateGate: running.gate })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -615,7 +427,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc())}
-        passkeyCredentials={fakePasskey()}
         reload={reload}
       />,
     )
@@ -638,7 +449,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc())}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -654,7 +464,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={{ baseUrl: 'http://127.0.0.1:4200', token: 'tok-2' }}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc())}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -675,7 +484,6 @@ describe('PromoteWorkspaceSection', () => {
         baseFetch={daemonStub(target, {
           workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }, { workspaceId: 'ws-b' }],
         })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -701,7 +509,6 @@ describe('PromoteWorkspaceSection', () => {
         baseFetch={daemonStub(new LoroDoc(), {
           workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }],
         })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -727,7 +534,6 @@ describe('PromoteWorkspaceSection', () => {
         baseFetch={daemonStub(new LoroDoc(), {
           workspaces: [{ workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', segment: 'design-team' }],
         })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -751,7 +557,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target)}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -774,7 +579,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target)}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -804,7 +608,6 @@ describe('PromoteWorkspaceSection', () => {
         baseFetch={daemonStub(target, {
           workspaces: [{ workspaceId: 'ws-a', segment: 'team', displayName: 'Team docs' }],
         })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -833,7 +636,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target)}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -889,7 +691,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target)}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -918,7 +719,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target, { failPutStatus: 507 })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -947,7 +747,6 @@ describe('PromoteWorkspaceSection', () => {
         baseFetch={daemonStub(target, {
           snapshotBytes: () => new LoroDoc().export({ mode: 'snapshot' }),
         })}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )
@@ -1007,7 +806,6 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={interceptingFetch}
-        passkeyCredentials={fakePasskey()}
         reload={vi.fn()}
       />,
     )

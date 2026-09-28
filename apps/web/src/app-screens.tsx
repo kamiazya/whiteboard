@@ -245,11 +245,9 @@ export function InvalidConfigScreen({ message }: { message: string }) {
  */
 function ReplicaReadScreen({
   replica,
-  renewal,
   onReconnect,
 }: {
   replica: ReplicaMatch
-  renewal: 'unreachable'
   onReconnect: () => void | Promise<void>
 }) {
   return (
@@ -258,7 +256,6 @@ function ReplicaReadScreen({
       {...(replica.displayName === undefined ? {} : { displayName: replica.displayName })}
       syncedAt={replica.syncedAt}
       daemonBaseUrl={replica.daemonBaseUrl}
-      renewal={renewal}
       onReconnect={onReconnect}
     />
   )
@@ -288,11 +285,7 @@ export function BrowserWorkspaceScreen({
       <div className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
           {replica !== null ? (
-            <ReplicaReadScreen
-              replica={replica.match}
-              renewal={replica.renewal}
-              onReconnect={onReconnect}
-            />
+            <ReplicaReadScreen replica={replica.match} onReconnect={onReconnect} />
           ) : (
             <BrowserWorkspaceContent
               path={path}
