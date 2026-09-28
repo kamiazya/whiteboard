@@ -120,7 +120,7 @@ describe('the gate judges the run, and refuses everything but success', () => {
   })
 
   it('passes a real green run of this workflow', () => {
-    // Captured from an actual run (35167383035, the first with `test-shared`),
+    // Captured from an actual run (36360686717, the first with `native-host-windows`),
     // so the fixture cannot drift into a shape the gate happens to like.
     expect(run(fixture('green'))).toEqual([])
   })
