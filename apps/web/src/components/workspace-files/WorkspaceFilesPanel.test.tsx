@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceMissingError } from '../../lib/files-source.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
@@ -289,7 +289,9 @@ describe('WorkspaceFilesPanel — a create that succeeded is not a refusal', () 
     // wait passes on the poll that lands between the two renders — which is
     // exactly how the earlier version of this test went green against two
     // alerts.
-    await screen.findByText(/already exists/)
+    // Scoped to the dialog: the panel's own line now carries the reason too,
+    // behind the modal where Radix hides it from the accessibility tree.
+    await within(await screen.findByRole('dialog')).findByText(/already exists/)
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
@@ -308,7 +310,9 @@ describe('WorkspaceFilesPanel — a create that succeeded is not a refusal', () 
     fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
     fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
     fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
-    await screen.findByText(/already exists/)
+    // Scoped to the dialog: the panel's own line now carries the reason too,
+    // behind the modal where Radix hides it from the accessibility tree.
+    await within(await screen.findByRole('dialog')).findByText(/already exists/)
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 

@@ -131,6 +131,15 @@ through the extension**. The app reloads onto the daemon's workspaces.
 
 ## Move this workspace to the daemon
 
+A browser can keep only so many documents in one workspace, because the
+whole workspace lives in the tab's memory. On a desktop the limit is 2,000
+documents, and on a phone or tablet (or a device reporting 4 GB of memory or
+less) it is 500. From 1,400 documents (300 on a phone) the document list
+suggests moving the workspace. At the limit, creating or duplicating
+another document is refused with that same suggestion. Editing
+the documents you already have keeps working
+([ADR-0044](../contributing/adr/0044-workspace-capacity.md)).
+
 Once a daemon is connected, you can move everything this browser keeps in
 one step from **Settings → Connections → This workspace**:
 

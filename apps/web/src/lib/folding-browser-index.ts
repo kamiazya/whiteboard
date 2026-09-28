@@ -34,6 +34,11 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { getAppLogger } from './app-logger.js'
+import {
+  browserKeeperCapacity,
+  type KeeperCapacity,
+  WorkspaceCapacityReachedError,
+} from './browser-keeper-capacity.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -45,8 +50,13 @@ export class FoldingBrowserIndex implements DocumentIndex {
   private readonly inner: LoroWorkspaceDocumentIndex
   private readonly legacy: IdbDocumentIndex
   private folded: Promise<void> | null = null
+  private readonly capacity: KeeperCapacity
 
-  constructor(private readonly dbName?: string) {
+  constructor(
+    private readonly dbName?: string,
+    options: { capacity?: KeeperCapacity } = {},
+  ) {
+    this.capacity = options.capacity ?? browserKeeperCapacity()
     this.legacy = new IdbDocumentIndex(dbName)
     this.inner = new LoroWorkspaceDocumentIndex(
       new BrowserWorkspaceDocs(dbName),
@@ -151,8 +161,18 @@ export class FoldingBrowserIndex implements DocumentIndex {
     return this.inner.createWorkspace(input)
   }
 
+  /**
+   * Every way a browser-kept workspace gains a document ends here, so this is
+   * where its capacity is held (ADR-0044 decision 2). Only GROWTH is refused:
+   * the cost follows the document count, so editing what is already there
+   * stays open, and nothing already kept becomes unreadable.
+   */
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
     await this.ensureFolded()
+    const held = await this.listDocuments({ workspaceId: input.workspaceId })
+    if (held.length >= this.capacity.limit) {
+      throw new WorkspaceCapacityReachedError(this.capacity.limit)
+    }
     return this.inner.createDocument(input)
   }
 

@@ -1,11 +1,13 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { BrowserCapacityNotice } from '../components/BrowserCapacityNotice.js'
 import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
+import { browserKeeperCapacity, type KeeperCapacity } from '../lib/browser-keeper-capacity.js'
 import {
   browserWorkspaceIdentitySnapshot,
   getBrowserWorkspaceId,
@@ -49,6 +51,8 @@ export interface BrowserIndexPageProps {
    * from a Back (measured: keyed on it, the stale list survived).
    */
   revision?: unknown
+  /** The keeper's declared capacity; the device's own unless a test injects one. */
+  capacity?: KeeperCapacity
 }
 
 // The browser keeper's landing surface: the same three-pane document browser
@@ -347,6 +351,7 @@ interface BrowserIndexBodyProps {
   onCreate: (kind: DocumentKind) => void | Promise<void>
   onDuplicate: (path: string) => void | Promise<void>
   onRequestDelete: (pending: PendingDelete) => void
+  capacity: KeeperCapacity
 }
 
 function BrowserIndexBody(props: BrowserIndexBodyProps) {
@@ -402,6 +407,18 @@ function BrowserIndexBody(props: BrowserIndexBodyProps) {
 /** The panel itself, once the list has arrived. */
 function BrowserFilesSection(props: BrowserIndexBodyProps) {
   return (
+    <>
+      <BrowserCapacityNotice
+        documentCount={props.snapshots?.length ?? 0}
+        capacity={props.capacity}
+      />
+      <BrowserFilesPanel {...props} />
+    </>
+  )
+}
+
+function BrowserFilesPanel(props: BrowserIndexBodyProps) {
+  return (
     <WorkspaceFilesPanel
       source={props.filesSource}
       // Read from the subscribed identity rather than the address: this
@@ -438,6 +455,7 @@ export function BrowserIndexPage({
   clock = defaultClock,
   onOpenDocument,
   revision,
+  capacity = browserKeeperCapacity(),
 }: BrowserIndexPageProps) {
   const {
     snapshots,
@@ -595,6 +613,7 @@ export function BrowserIndexPage({
         onCreate={handleCreate}
         onDuplicate={handleDuplicate}
         onRequestDelete={setPendingDelete}
+        capacity={capacity}
       />
       <DeleteDocumentDialog
         pending={

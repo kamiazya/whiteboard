@@ -89,7 +89,8 @@ export function PanelRefusals({ outcome }: { outcome: ReturnType<typeof useWrite
     <>
       {outcome.createRefusal !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {outcome.createRefusal.kind} document here.
+          Could not create a {outcome.createRefusal.kind} document here.{' '}
+          {outcome.createRefusal.reason}
         </p>
       )}
 
