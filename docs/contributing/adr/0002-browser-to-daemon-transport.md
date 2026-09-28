@@ -1,6 +1,12 @@
 # ADR-0002: Browser-to-daemon transport for Stage 4
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0050](0050-local-daemon-trust.md), in effect
+2026-09-28. *Status note (2026-09-28):* the local daemon no longer serves
+loopback HTTP to browsers — it listens on its owner-only socket (a named pipe
+on Windows) alone, and a page reaches it through the whiteboard extension and
+its native host. The loopback CORS, pairing and the Safari
+browser-storage-only tier decided below are gone. The text below is kept as
+the record of what was decided.
 
 ## Context
 

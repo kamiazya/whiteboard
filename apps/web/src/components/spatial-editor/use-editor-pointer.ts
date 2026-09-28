@@ -73,7 +73,6 @@ import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
-import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import type { PickInputs } from './element-pick.js'
 import { pickContentAt, pressProbes, shiftPress } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
@@ -93,12 +92,12 @@ import {
   commentHoldsPress,
   commitCommentDrag,
   dismissCommentCard,
-  openCommentMenuAt,
   releaseCommentPress,
   rememberCommentPress,
   startCommentPinDrag,
 } from './pointer-comment-claim.js'
 import { advanceDrawing, armInkDrag, beginDrawStroke, releaseInkDrag } from './pointer-ink-claim.js'
+import { handleContextMenu as handleMenu, openContextMenuAt } from './pointer-menu-claim.js'
 import {
   cancelProposalPress,
   claimProposalBubble,
@@ -281,7 +280,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     selectableBoxes,
     boxes,
     openContextMenuAtRef,
-    setContextMenu,
     tool,
     viewport,
     canvas,
@@ -294,7 +292,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     extraIds,
     isOverlayEvent,
     lastStrokeRef,
-    menuPickInputs,
     pickInputs,
     rootRef,
     runNavigation,
@@ -542,132 +539,8 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     pressOnNode(hitId, point)
   }
 
-  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
-    const root = rootRef.current
-    if (root === null) return
-    // Inside a node's text editor the object is the TEXT: the menu is the
-    // editing catalog (the note editor's own, Comment included), the way
-    // the note editor answers a right-click on a selection.
-    const editor = getActiveMarkdownEditor()
-    if (
-      editor !== null &&
-      e.target instanceof Element &&
-      e.target.closest('[data-testid="text-node-editor"]') !== null
-    ) {
-      e.preventDefault()
-      const at = clientPointToRootLocal(e, root)
-      setContextMenu({
-        x: at.x,
-        y: at.y,
-        nodeId: undefined,
-        edgeId: undefined,
-        point: screenToCanvas(at, viewport),
-        editor,
-      })
-      return
-    }
-    if (isOverlayEvent(e)) return
-    // Replace the browser menu with the object's own action menu.
-    e.preventDefault()
-    openContextMenuAt(clientPointToRootLocal(e, root))
-  }
-
-  /**
-   * In hand mode the menu carries the ANNOTATION verbs and nothing else.
-   *
-   * Hand mode keeps CONTENT out of reach — a press pans, nothing selects,
-   * nothing edits — but a conversation about what is on screen is not
-   * content, and a reader panning has as much reason to open one as a reader
-   * selecting. The press selects nothing along the way: an editing affordance
-   * surfacing mid-pan was the harm (user report 2026-08-08), and a comment
-   * verb is not one.
-   */
-  const openHandModeMenuAt = (
-    screenPoint: Point,
-    point: Point,
-    hitId: string | undefined,
-    hitPathId: string | undefined,
-  ): boolean => {
-    if (tool !== 'hand') return false
-    setContextMenu({
-      x: screenPoint.x,
-      y: screenPoint.y,
-      nodeId: hitId,
-      edgeId: hitPathId,
-      point,
-      verbs: 'annotation',
-    })
-    return true
-  }
-
-  /**
-   * What a right-click selects before its menu opens.
-   *
-   * Node and edge selection stay mutually exclusive here, as on the press
-   * path: Delete acts on a selected edge FIRST, so leaving the other object
-   * type selected makes Delete remove the wrong thing.
-   *
-   * A press on a MEMBER keeps the whole set and leads with the pressed one; a
-   * press on anything else replaces it. Both collections follow that rule now
-   * — ink had the other one, where `setSelectedEdgeId` collapsed the
-   * selection to a single id, so right-clicking one stroke of a gathered
-   * scribble threw the rest away and every verb that acts on the SET could
-   * never be offered from the menu that is supposed to offer them.
-   */
-  const settleMenuSelection = (hitId: string | undefined, hitPathId: string | undefined): void => {
-    // Node and edge selection stay mutually exclusive here too (see the
-    // pointerdown path): Delete acts on a selected edge FIRST, so leaving
-    // the other object type selected makes Delete remove the wrong thing.
-    if (hitId !== undefined && !isLocked(hitId)) {
-      // Right-clicking a member of an existing multi-selection must not
-      // shrink it: the target is promoted to primary and the old primary
-      // stays in the extras, or "Group selection" silently loses a node.
-      // An OUTSIDER collapses the selection to itself, same as a plain
-      // left press — old extras must not ride along into its menu actions.
-      applySelection(
-        hitId === selectedId || extraIds.has(hitId)
-          ? { type: 'promote', id: hitId }
-          : { type: 'set-members', ids: [hitId] },
-      )
-      setSelectedEdgeId(null)
-    }
-    if (hitPathId !== undefined) {
-      // A press on a MEMBER keeps the whole set and leads with the pressed
-      // one; a press on anything else replaces it. That is the rule the
-      // node branch above already follows (`promote` against
-      // `set-members`), and ink had the other one: `setSelectedEdgeId`
-      // collapses the selection to a single id, so right-clicking one
-      // stroke of a gathered scribble threw the rest away — and every verb
-      // that acts on the SET (Group, and whatever joins it) could never be
-      // offered from the menu that is supposed to offer them.
-      setSelectedInkIds((current) =>
-        current.includes(hitPathId)
-          ? [hitPathId, ...current.filter((id) => id !== hitPathId)]
-          : [hitPathId],
-      )
-      applySelection({ type: 'clear' })
-    }
-  }
-
-  const openContextMenuAt = (screenPoint: Point) => {
-    const point = screenToCanvas(screenPoint, viewport)
-    if (openCommentMenuAt(inputs, screenPoint, point)) return
-    const menuPick = pickContentAt(pressProbes(menuPickInputs), point)
-    const hitId = menuPick?.kind === 'nodes' ? menuPick.id : undefined
-    // An edge and a line alike: the menu builder resolves which it is out
-    // of the canvas, the same way the selection does.
-    const hitPathId = menuPick !== undefined && menuPick.kind !== 'nodes' ? menuPick.id : undefined
-    if (openHandModeMenuAt(screenPoint, point, hitId, hitPathId)) return
-    settleMenuSelection(hitId, hitPathId)
-    setContextMenu({
-      x: screenPoint.x,
-      y: screenPoint.y,
-      nodeId: hitId,
-      edgeId: hitPathId,
-      point,
-    })
-  }
-  openContextMenuAtRef.current = openContextMenuAt
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => handleMenu(inputs, e)
+  openContextMenuAtRef.current = (screenPoint: Point) => openContextMenuAt(inputs, screenPoint)
 
   /**
    * The steps `handlePointerMove` runs, in the order it runs them — which

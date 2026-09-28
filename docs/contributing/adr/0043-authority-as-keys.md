@@ -13,8 +13,8 @@ mints a per-workspace content key at `POST /api/workspaces/:id/replica-key`
 and `apps/web` seals a daemon-kept workspace's IndexedDB replica under it,
 held in memory only for the tab's life (see
 [`docs/explanation/security-model.md`](../../explanation/security-model.md)).
-Not yet reached: `prf`-wrapped cold-start-offline unlock (ADR-0042 decision
-6), still deferred. Gives
+`prf`-wrapped cold-start-offline unlock (ADR-0042 decision 6) shipped
+2026-09-21 and is opt-in from Settings since ADR-0050 (#1981). Gives
 [ADR-0041](0041-profile-and-authority.md)'s "authority" and
 [ADR-0042](0042-offline-revocation.md)'s content key one mechanism, and brings
 the attenuation [ADR-0005](0005-hosted-origin-authorization.md) built for

@@ -113,6 +113,22 @@ it('the context menu offers Unlock on a locked node, and Lock on a free one', ()
   expect(latest.toggles.at(-1)).toEqual(['free', true])
 })
 
+it('a right-click on a locked node opens its menu and leaves the selection alone', () => {
+  // The menu picks a locked node on purpose, so Unlock has somewhere to live.
+  // Taking it as the new selection would drop the node already selected —
+  // for a lock that then removes the locked one too, leaving nothing.
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  pressAt(root, 400, 80)
+  expect(container.querySelector('[data-testid="selection-overlay"]')).not.toBeNull()
+
+  fireEvent.contextMenu(root, { clientX: r.left + 120, clientY: r.top + 80 })
+  expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+  expect(container.querySelector('[data-testid="selection-overlay"]')).not.toBeNull()
+})
+
 it('a locked node shows no destructive or edit actions in its menu', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
