@@ -28,12 +28,6 @@ function targetOf(record) {
   if (typeof record.socketPath === 'string' && record.socketPath !== '') {
     return { socketPath: record.socketPath }
   }
-  // ponytail: on Windows the daemon records no socket until it listens on a
-  // named pipe, so its recorded port is the only way in. Goes when the
-  // daemon stops listening on loopback.
-  if (process.platform === 'win32' && Number.isInteger(record.port)) {
-    return { host: '127.0.0.1', port: record.port }
-  }
   return null
 }
 
@@ -41,7 +35,7 @@ function targetOf(record) {
  * One HTTP exchange with the daemon a record names. `socketPath` is a Unix
  * socket, or a named pipe on Windows — `http.request` takes either.
  *
- * @param {{ socketPath?: string, port?: number }} record
+ * @param {{ socketPath?: string }} record
  * @param {{ method?: string, path: string, headers?: Record<string, string>, body?: string, timeoutMs?: number }} req
  * @returns {Promise<{ status: number, contentType: string, text: string }>}
  */
