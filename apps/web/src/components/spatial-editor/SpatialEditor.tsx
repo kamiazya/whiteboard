@@ -116,7 +116,7 @@ import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
-import { CommentComposeOverlay, commentComposeStyle } from './comment-compose-overlay.js'
+import { commentComposeStyle } from './comment-compose-overlay.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -127,11 +127,10 @@ import { isFollowableUrl } from './followable-url.js'
 import { GestureOverlays } from './gesture-overlays.js'
 import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import { InPlaceEditors } from './in-place-editors.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
-import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
-import { MarkdownBodyEditorOverlay } from './markdown-body-editor-overlay.js'
 import {
   createIdleNavigation,
   type NavigationEvent,
@@ -1317,76 +1316,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       beginOverlay: beginOverlayGesture,
     }
 
-    /**
-     * The editors that open ON the canvas rather than in a panel: an edge's
-     * label, a group's label, a new comment, and a node's own text.
-     */
-    const inPlaceEditors = () => (
-      <>
-        {edgeLabelEditId !== null && (
-          <EdgeLabelEditorOverlay
-            editId={edgeLabelEditId}
-            canvas={canvas}
-            fontFamily={editingFontFamily}
-            edgePaths={edgePaths}
-            zoom={viewport.zoom}
-            palette={palette}
-            applyResult={applyResult}
-            onClose={() => setEdgeLabelEditId(null)}
-          />
-        )}
-        {groupLabelEditId !== null && (
-          <GroupLabelEditorOverlay
-            editId={groupLabelEditId}
-            canvas={canvas}
-            fontFamily={editingFontFamily}
-            zoom={viewport.zoom}
-            palette={palette}
-            applyResult={applyResult}
-            onClose={() => setGroupLabelEditId(null)}
-          />
-        )}
-        {commentCompose !== null && (
-          <CommentComposeOverlay
-            compose={commentCompose}
-            canvas={canvas}
-            edgePathOf={edgePathOf}
-            obstacles={commentPlacementObstacles()}
-            createId={createId}
-            zoom={viewport.zoom}
-            palette={palette}
-            applyResult={applyResult}
-            onClose={() => setCommentCompose(null)}
-          />
-        )}
-        {gestureState.kind === 'editing-text' &&
-          selectedNode !== undefined &&
-          nodeKind(selectedNode) === 'text' &&
-          selection !== undefined && (
-            <MarkdownBodyEditorOverlay
-              node={selectedNode}
-              fontFamily={editingFontFamily}
-              selectionBox={selection.box}
-              sceneNodes={scene.nodes}
-              sceneCurrent={sceneCurrent}
-              threads={threads}
-              onRequestComment={(anchor) => {
-                setCommentCompose({
-                  point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
-                  targetNodeId: selectedNode.id,
-                  threadAnchor: { ...anchor, nodeId: selectedNode.id },
-                })
-                return true
-              }}
-              zoom={viewport.zoom}
-              theme={theme}
-              palette={palette}
-              canvas={canvas}
-              gestureState={gestureState}
-              applyResult={applyResult}
-            />
-          )}
-      </>
+    /** The editors that open ON the canvas rather than in a panel. */
+    const inPlaceEditors = (
+      <InPlaceEditors
+        gesture={gesture}
+        fontFamily={editingFontFamily}
+        palette={palette}
+        theme={theme}
+        edgePaths={edgePaths}
+        edgeLabel={{ id: edgeLabelEditId, close: () => setEdgeLabelEditId(null) }}
+        groupLabel={{ id: groupLabelEditId, close: () => setGroupLabelEditId(null) }}
+        compose={commentCompose}
+        setCompose={setCommentCompose}
+        edgePathOf={edgePathOf}
+        placementObstacles={commentPlacementObstacles}
+        createId={createId}
+        textTarget={
+          selectedNode !== undefined && nodeKind(selectedNode) === 'text' && selection !== undefined
+            ? { node: selectedNode, box: selection.box }
+            : undefined
+        }
+        sceneNodes={scene.nodes}
+        sceneCurrent={sceneCurrent}
+        threads={threads}
+      />
     )
 
     const selectionOverlay = () =>
@@ -1483,7 +1436,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           selectableBoxes={selectableBoxes}
           createId={createId}
         />
-        {inPlaceEditors()}
+        {inPlaceEditors}
       </>
     )
 

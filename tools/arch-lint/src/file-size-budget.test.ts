@@ -564,7 +564,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stays the host's.
   // Lowered 2222 -> 2166: the canvas-space overlays about the gesture in
   // progress and what it reached became `gesture-overlays.tsx`.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2166,
+  // Lowered 2166 -> 2119: the in-place editors (edge and group labels, a new
+  // comment, a node's body) became `in-place-editors.tsx`.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2119,
 }
 
 describe('the path form both ledgers are keyed with', () => {

@@ -274,7 +274,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the tree the inline JSX built.
   // 139 -> 88: its gesture and reach overlays became `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasSpaceLayers': 88,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#inPlaceEditors': 67,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 119,
