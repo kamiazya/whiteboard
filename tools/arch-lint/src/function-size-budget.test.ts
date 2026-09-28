@@ -273,7 +273,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // stateful surface, for no reader benefit. The tree they build is exactly
   // the tree the inline JSX built.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasSpaceLayers': 139,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#selectionOverlay': 84,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#inPlaceEditors': 67,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,

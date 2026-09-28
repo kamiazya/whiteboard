@@ -559,7 +559,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Lowered 2325 -> 2270: the routable handles became `routable-handles.tsx`,
   // the first layer to move through `EditorGesture` — the bundle the note
   // above said a gesture-dispatching layer would need before it could leave.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2270,
+  // Lowered 2270 -> 2222: the selection handles became
+  // `selection-handles.tsx` through the same bundle; the menu the ⋯ opens
+  // stays the host's.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2222,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
   // 1052 -> 1240: the press and release paths became claimant chains and the
