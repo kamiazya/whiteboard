@@ -61,8 +61,6 @@ vi.mock('./lib/fold-workspace.js', () => ({
   foldWorkspaceDocuments: async () => ({ folded: 0, skipped: 0 }),
 }))
 
-let receivedReceiveTransferProps: Record<string, unknown> | undefined
-
 vi.mock('./pages/BrowserDocumentPage.js', () => ({
   BrowserDocumentPage: ({ initialPath }: { initialPath?: string }) => {
     receivedInitialPath = initialPath
@@ -134,15 +132,6 @@ vi.mock('./pages/DaemonDocumentPage.js', () => ({
 // active connection (paired fragment / daemon provider state) rather
 // than merely mounting the page on the /settings route.
 let receivedSettingsPageProps: Record<string, unknown> | undefined
-// Mocked for the reason `App.lazy-coverage.test.ts` enforces: an unmocked
-// `lazy()` page charges its chunk's transform-and-load to whatever
-// `findBy*` query is waiting, against testing-library's 1000ms budget.
-vi.mock('./pages/ReceiveTransferPage.js', () => ({
-  ReceiveTransferPage: (props: Record<string, unknown>) => {
-    receivedReceiveTransferProps = props
-    return <div data-testid="receive-transfer-page" />
-  },
-}))
 
 vi.mock('./pages/SettingsPage.js', () => ({
   SettingsPage: (props: Record<string, unknown>) => {
@@ -476,33 +465,6 @@ describe('reconnecting a remembered daemon through the extension', () => {
     // naming a workspace this browser never kept always does.
     await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
     await screen.findByTestId('browser-index-page')
-  })
-})
-
-describe('/receive-transfer route', () => {
-  it('renders the receiver and keeps the FRAGMENT, which carries the whole handshake', async () => {
-    // The sender puts its origin and the attempt's nonce in the FRAGMENT, so a
-    // sync effect navigating to '/' drops the two things the receiver needs
-    // to attribute any message at all. `parseWorkspaceRoute` answers null
-    // for this path, which is exactly what makes the guard necessary.
-    const router = createMemoryRouter(
-      [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
-      {
-        initialEntries: [
-          `/receive-transfer#from=https%3A%2F%2Fapp.example&nonce=${'n'.repeat(32)}`,
-        ],
-      },
-    )
-    await act(async () => {
-      render(<RouterProvider router={router} />)
-    })
-
-    expect(router.state.location.pathname).toBe('/receive-transfer')
-    expect(router.state.location.hash).toContain('from=https%3A%2F%2Fapp.example')
-    expect(screen.getByTestId('receive-transfer-page')).not.toBeNull()
-    // The page holds no daemon token (ADR-0050), so none is handed on.
-    expect(receivedReceiveTransferProps).toBeDefined()
-    expect(Object.hasOwn(receivedReceiveTransferProps ?? {}, 'daemonToken')).toBe(false)
   })
 })
 

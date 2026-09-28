@@ -10,7 +10,8 @@ export function isJsonObject(value: unknown): value is Record<string, unknown> {
 // route already chose would silently *downgrade* it — the OAuth approval page
 // ships a `default-src 'none'` CSP that this baseline would otherwise replace
 // with the far weaker frame-ancestors-only policy. Every header below is
-// applied unconditionally except CSP, whose value is route-specific by nature.
+// applied unconditionally except CSP, whose value is route-specific by nature,
+// and COOP, which the transfer receiver must relax (server-mode-web-app.ts).
 export function setBaselineSecurityHeaders(headers: Headers): void {
   if (!headers.has('Content-Security-Policy')) {
     headers.set('Content-Security-Policy', "frame-ancestors 'none'")
@@ -18,7 +19,9 @@ export function setBaselineSecurityHeaders(headers: Headers): void {
   headers.set('X-Frame-Options', 'DENY')
   headers.set('X-Content-Type-Options', 'nosniff')
   headers.set('Referrer-Policy', 'no-referrer')
-  headers.set('Cross-Origin-Opener-Policy', 'same-origin')
+  if (!headers.has('Cross-Origin-Opener-Policy')) {
+    headers.set('Cross-Origin-Opener-Policy', 'same-origin')
+  }
   headers.set('Cross-Origin-Resource-Policy', 'same-origin')
 }
 

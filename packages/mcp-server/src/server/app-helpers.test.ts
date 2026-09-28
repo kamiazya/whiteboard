@@ -73,6 +73,12 @@ describe('setBaselineSecurityHeaders', () => {
     expect(headers.get('Content-Security-Policy')).toBe("default-src 'none'")
   })
 
+  it('does not clobber a pre-set Cross-Origin-Opener-Policy', () => {
+    const headers = new Headers({ 'Cross-Origin-Opener-Policy': 'unsafe-none' })
+    setBaselineSecurityHeaders(headers)
+    expect(headers.get('Cross-Origin-Opener-Policy')).toBe('unsafe-none')
+  })
+
   it('sets the floor CSP plus the unconditional headers on empty Headers', () => {
     const headers = new Headers()
     setBaselineSecurityHeaders(headers)
