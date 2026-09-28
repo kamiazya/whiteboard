@@ -3,7 +3,6 @@ import {
   type TransferStage,
   useTransferHandshake,
 } from '../hooks/use-transfer-handshake.js'
-import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
 
 /**
  * The keeper-served /receive-transfer surface: where a workspace record
@@ -15,10 +14,12 @@ import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
  * arbitrary keeper, and enumerating every self-hosted address someone might
  * run is not a list anyone can keep. A window at the DESTINATION's origin is
  * under no such rule, and three properties follow from that rather than
- * being bolted on: the passkey asked here is one registered against THIS
- * origin (so WebAuthn's rpId is the keeper's real domain, not a loopback
- * host anything can later claim); the person sees that domain in the URL
- * bar; and the keeper's own rules are applied by the side that owns them.
+ * being bolted on: the request carries the session of the person signed in
+ * HERE (a server-mode keeper's host-only cookie, ADR-0047), so the keeper
+ * authorises the merge exactly as it authorises any other write by them; the
+ * person sees that domain in the URL bar; and the keeper's own rules are
+ * applied by the side that owns them. Only a server-mode keeper serves this
+ * page: the local daemon serves no web origin at all (ADR-0050).
  *
  * A POPUP and not an iframe, because this app sets `frame-ancestors 'none'`
  * — the receiver is this same app, so it refuses to be framed by its own
@@ -30,28 +31,21 @@ import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
  */
 
 export interface ReceiveTransferPageProps {
-  /** The keeper's daemon token. Absent means this page is not being served
-   *  by a keeper, so accepting is impossible. */
-  daemonToken?: string
+  /** Same-origin to this keeper, so the session cookie rides along. */
   fetchFn?: typeof globalThis.fetch
   opener?: TransferOpener
-  /** Test seam, as on `PromoteWorkspaceSection`: omitted, the real authenticator. */
-  passkeyCredentials?: PasskeyCredentials
 }
 
 export function ReceiveTransferPage({
-  daemonToken,
   fetchFn = globalThis.fetch.bind(globalThis),
   opener = globalThis.opener as TransferOpener,
-  passkeyCredentials,
 }: ReceiveTransferPageProps): React.JSX.Element {
-  const { session, stage, targets, targetId, setTargetId, accept } = useTransferHandshake({
-    hash: globalThis.location?.hash ?? '',
-    daemonToken,
-    fetchFn,
-    opener,
-    ...(passkeyCredentials === undefined ? {} : { credentials: passkeyCredentials }),
-  })
+  const { session, stage, targets, targetsUnavailable, targetId, setTargetId, accept } =
+    useTransferHandshake({
+      hash: globalThis.location?.hash ?? '',
+      fetchFn,
+      opener,
+    })
 
   if (stage.kind === 'not-a-transfer') {
     return (
@@ -87,11 +81,12 @@ export function ReceiveTransferPage({
           targets={targets}
           targetId={targetId}
           onTargetChange={setTargetId}
-          canAccept={daemonToken !== undefined && targetId !== ''}
-          servedByKeeper={daemonToken !== undefined}
+          canAccept={targetId !== ''}
           onAccept={() => void accept()}
         />
       )}
+
+      {stage.kind === 'offered' && targetsUnavailable && <SignInNotice />}
 
       {stage.kind === 'accepting' && (
         <p className="mt-4 text-sm" data-testid="receive-transfer-status">
@@ -110,13 +105,22 @@ export function ReceiveTransferPage({
   )
 }
 
+// Signing in HERE would navigate this window away and lose the handshake in
+// its fragment, so the person signs in elsewhere and the sender sends again.
+function SignInNotice(): React.JSX.Element {
+  return (
+    <p className="mt-2 text-sm text-muted-foreground" data-testid="receive-transfer-sign-in">
+      Sign in to this keeper in another tab, then send the workspace again from the other app.
+    </p>
+  )
+}
+
 function OfferPanel({
   documentCount,
   targets,
   targetId,
   onTargetChange,
   canAccept,
-  servedByKeeper,
   onAccept,
 }: {
   documentCount: number
@@ -124,7 +128,6 @@ function OfferPanel({
   targetId: string
   onTargetChange: (id: string) => void
   canAccept: boolean
-  servedByKeeper: boolean
   onAccept: () => void
 }): React.JSX.Element {
   return (
@@ -168,11 +171,6 @@ function OfferPanel({
           Accept
         </button>
       </div>
-      {!servedByKeeper && (
-        <p className="mt-2 text-sm text-muted-foreground">
-          This page is not being served by a keeper, so it cannot accept a workspace.
-        </p>
-      )}
     </>
   )
 }

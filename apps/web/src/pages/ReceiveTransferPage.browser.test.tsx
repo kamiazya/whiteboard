@@ -6,7 +6,9 @@
  *
  * The keeper is stubbed at the fetch seam the way the promote tests stub it:
  * its promote route imports the posted bytes into a real `LoroDoc`, which is
- * the verification, and its document list answers from that same doc.
+ * the verification, and its document list answers from that same doc. It is
+ * a server-mode keeper, so the credential is the signed-in person's session
+ * cookie, which a same-origin fetch carries without this page touching it.
  */
 import {
   createWorkspaceDocumentAtPath,
@@ -21,22 +23,13 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { CROSS_ORIGIN_TRANSFER_PROTOCOL } from '../lib/cross-origin-transfer-protocol.js'
-import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
 import { ReceiveTransferPage } from './ReceiveTransferPage.js'
 
 const SENDER = 'https://app.example'
 const NONCE = 'n'.repeat(32)
-const PASSKEYS_KEY = 'whiteboard:daemon-passkeys'
-const RAW_ID = Uint8Array.from({ length: 16 }, (_, i) => i + 1)
 const MARKDOWN_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const SPATIAL_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
 const IMAGE_ID = 'arrived-image-1'
-
-const b64u = (bytes: Uint8Array): string =>
-  btoa(String.fromCharCode(...bytes))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replaceAll('=', '')
 
 function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/')
@@ -63,12 +56,15 @@ function senderSnapshot(): Uint8Array {
   return new Uint8Array(record.export({ mode: 'snapshot' }))
 }
 
-function keeperStub(target: LoroDoc, promotes: unknown[]): typeof globalThis.fetch {
+function keeperStub(
+  target: LoroDoc,
+  promotes: unknown[],
+  { signedIn = true }: { signedIn?: boolean } = {},
+): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
-    // A keeper refuses what carries no credential — so a request that skipped
-    // the auth seam fails here the way it would against a real one.
-    if (new Headers(init?.headers).get('Authorization') !== 'Bearer t') {
+    // A server-mode keeper answers 401 to a browser with no session.
+    if (!signedIn) {
       return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
     }
     if (url.endsWith('/api/workspaces')) {
@@ -98,23 +94,6 @@ function keeperStub(target: LoroDoc, promotes: unknown[]): typeof globalThis.fet
   }) as typeof globalThis.fetch
 }
 
-function fakePasskey(): PasskeyCredentials {
-  return {
-    create: async () => null,
-    get: async () =>
-      ({
-        id: b64u(RAW_ID),
-        type: 'public-key',
-        rawId: RAW_ID.buffer,
-        response: {
-          authenticatorData: new Uint8Array(37).buffer,
-          clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer,
-          signature: Uint8Array.from([1, 2, 3]).buffer,
-        },
-      }) as unknown as Credential,
-  }
-}
-
 /** A message exactly as the browser delivers one: `origin` is its word, not the body's. */
 function arrive(origin: string, data: unknown): void {
   window.dispatchEvent(new MessageEvent('message', { origin, data }))
@@ -138,27 +117,16 @@ beforeEach(() => {
     '',
     `/receive-transfer#${new URLSearchParams({ from: SENDER, nonce: NONCE })}`,
   )
-  localStorage.setItem(
-    PASSKEYS_KEY,
-    JSON.stringify({ [window.location.origin]: { credentialId: b64u(RAW_ID), registeredAt: 'x' } }),
-  )
 })
 afterEach(() => {
   cleanup()
-  localStorage.removeItem(PASSKEYS_KEY)
   history.replaceState(null, '', returnTo)
 })
 
 describe('ReceiveTransferPage', () => {
   it('announces itself to the opener, at the sender origin and never to "*"', async () => {
     const opener = { postMessage: vi.fn() }
-    render(
-      <ReceiveTransferPage
-        daemonToken="t"
-        fetchFn={keeperStub(new LoroDoc(), [])}
-        opener={opener}
-      />,
-    )
+    render(<ReceiveTransferPage fetchFn={keeperStub(new LoroDoc(), [])} opener={opener} />)
     await waitFor(() => expect(opener.postMessage).toHaveBeenCalled())
     expect(opener.postMessage.mock.calls[0]).toEqual([
       { type: 'transfer-ready', protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL, nonce: NONCE },
@@ -170,14 +138,7 @@ describe('ReceiveTransferPage', () => {
     const target = new LoroDoc()
     const promotes: unknown[] = []
     const opener = { postMessage: vi.fn() }
-    render(
-      <ReceiveTransferPage
-        daemonToken="t"
-        fetchFn={keeperStub(target, promotes)}
-        opener={opener}
-        passkeyCredentials={fakePasskey()}
-      />,
-    )
+    render(<ReceiveTransferPage fetchFn={keeperStub(target, promotes)} opener={opener} />)
     arrive(SENDER, offer())
     expect((await screen.findByTestId('receive-transfer-offer')).textContent).toMatch(
       /says it is sending 2 documents/,
@@ -205,20 +166,16 @@ describe('ReceiveTransferPage', () => {
       workspaceId: 'ws-here',
     })
     expect((reply[0] as { imagesMissing: string[] }).imagesMissing).toHaveLength(1)
-    // The passkey asked here signed it, and the keeper recorded that.
+    // No passkey is asked: no keeper pins one any more, and every keeper
+    // refuses a promote that carries an attestation. The session is the
+    // authority.
     expect(promotes).toHaveLength(1)
-    expect((reply[0] as { attested: boolean }).attested).toBe(true)
+    expect(promotes[0]).not.toHaveProperty('attestation')
   })
 
   it('shows nothing for an offer from another origin, however well-formed', async () => {
     const promotes: unknown[] = []
-    render(
-      <ReceiveTransferPage
-        daemonToken="t"
-        fetchFn={keeperStub(new LoroDoc(), promotes)}
-        opener={null}
-      />,
-    )
+    render(<ReceiveTransferPage fetchFn={keeperStub(new LoroDoc(), promotes)} opener={null} />)
     // `act` flushes whatever state the listener set, so the assertion below
     // reads the settled page rather than racing a render — a condition, not
     // a wait for time.
@@ -230,7 +187,7 @@ describe('ReceiveTransferPage', () => {
 
   it('refuses an offer from another attempt, and merges nothing', async () => {
     const target = new LoroDoc()
-    render(<ReceiveTransferPage daemonToken="t" fetchFn={keeperStub(target, [])} opener={null} />)
+    render(<ReceiveTransferPage fetchFn={keeperStub(target, [])} opener={null} />)
     arrive(SENDER, offer({ nonce: 'x'.repeat(32) }))
     expect((await screen.findByTestId('receive-transfer-refused')).textContent).toMatch(
       /different transfer attempt/,
@@ -238,35 +195,25 @@ describe('ReceiveTransferPage', () => {
     expect(readWorkspaceDocuments(target)).toEqual([])
   })
 
-  it('without a passkey registered here, refuses the merge and tells the sender', async () => {
-    localStorage.removeItem(PASSKEYS_KEY)
-    const target = new LoroDoc()
+  it('signed out, says to sign in and cannot accept', async () => {
     const promotes: unknown[] = []
-    const opener = { postMessage: vi.fn() }
     render(
       <ReceiveTransferPage
-        daemonToken="t"
-        fetchFn={keeperStub(target, promotes)}
-        opener={opener}
-        passkeyCredentials={fakePasskey()}
+        fetchFn={keeperStub(new LoroDoc(), promotes, { signedIn: false })}
+        opener={null}
       />,
     )
     arrive(SENDER, offer())
-    await userEvent.click(await screen.findByTestId('receive-transfer-accept'))
-    expect((await screen.findByTestId('receive-transfer-refused')).textContent).toMatch(
-      /Register a passkey for this keeper first/,
+    expect((await screen.findByTestId('receive-transfer-sign-in')).textContent).toMatch(
+      /Sign in to this keeper/,
     )
-    // Refused BEFORE the POST: the keeper never saw the bytes.
+    expect(screen.getByTestId<HTMLButtonElement>('receive-transfer-accept').disabled).toBe(true)
     expect(promotes).toEqual([])
-    expect(readWorkspaceDocuments(target)).toEqual([])
-    expect(opener.postMessage.mock.calls.at(-1)?.[0]).toMatchObject({ ok: false, nonce: NONCE })
   })
 
   it('says there is nothing to receive when opened without a transfer fragment', () => {
     history.replaceState(null, '', '/receive-transfer')
-    render(
-      <ReceiveTransferPage daemonToken="t" fetchFn={keeperStub(new LoroDoc(), [])} opener={null} />,
-    )
+    render(<ReceiveTransferPage fetchFn={keeperStub(new LoroDoc(), [])} opener={null} />)
     expect(screen.getByText('Nothing to receive')).not.toBeNull()
   })
 })

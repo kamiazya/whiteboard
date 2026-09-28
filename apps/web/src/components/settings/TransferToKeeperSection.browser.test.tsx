@@ -22,7 +22,6 @@ import { userEvent } from 'vitest/browser'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
-import type { PasskeyCredentials } from '../../lib/passkey-attestation.js'
 import type { PopupHandle } from '../../lib/send-transfer.js'
 import { ReceiveTransferPage } from '../../pages/ReceiveTransferPage.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -32,13 +31,6 @@ import { TransferToKeeperSection } from './TransferToKeeperSection.js'
 claimIsolatedWhiteboardDb('transfer-to-keeper')
 
 const KEEPER = 'https://keeper.example'
-const PASSKEYS_KEY = 'whiteboard:daemon-passkeys'
-const RAW_ID = Uint8Array.from({ length: 16 }, (_, i) => i + 1)
-const b64u = (bytes: Uint8Array): string =>
-  btoa(String.fromCharCode(...bytes))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replaceAll('=', '')
 
 function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/')
@@ -53,11 +45,11 @@ function keeperStub(target: LoroDoc): typeof globalThis.fetch {
       return Response.json({ workspaces: [{ workspaceId: 'ws-there', displayName: 'There' }] })
     }
     if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
-      const body = JSON.parse(init.body as string) as { snapshot: string; attestation?: unknown }
+      const body = JSON.parse(init.body as string) as { snapshot: string }
       target.import(base64UrlToBytes(body.snapshot))
       return Response.json({
         ok: true,
-        attested: body.attestation !== undefined,
+        attested: false,
         recorded: readWorkspaceDocuments(target).map((entry) => entry.documentId),
         shadowed: [],
       })
@@ -76,23 +68,6 @@ function keeperStub(target: LoroDoc): typeof globalThis.fetch {
   }) as typeof globalThis.fetch
 }
 
-function fakePasskey(): PasskeyCredentials {
-  return {
-    create: async () => null,
-    get: async () =>
-      ({
-        id: b64u(RAW_ID),
-        type: 'public-key',
-        rawId: RAW_ID.buffer,
-        response: {
-          authenticatorData: new Uint8Array(37).buffer,
-          clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer,
-          signature: Uint8Array.from([1, 2, 3]).buffer,
-        },
-      }) as unknown as Credential,
-  }
-}
-
 /** A popup that is really the receiver, one microtask away, talking back as KEEPER. */
 function loopbackTo(target: LoroDoc): (url: string) => PopupHandle {
   const self = window.location.origin
@@ -101,9 +76,7 @@ function loopbackTo(target: LoroDoc): (url: string) => PopupHandle {
       history.replaceState(null, '', `/receive-transfer#${url.split('#')[1]}`)
       render(
         <ReceiveTransferPage
-          daemonToken="t"
           fetchFn={keeperStub(target)}
-          passkeyCredentials={fakePasskey()}
           opener={{
             postMessage: (data, targetOrigin) => {
               if (targetOrigin !== self) return
@@ -127,16 +100,9 @@ const returnTo = window.location.pathname
 
 beforeEach(async () => {
   await clearWhiteboardDb()
-  localStorage.setItem(
-    PASSKEYS_KEY,
-    JSON.stringify({
-      [window.location.origin]: { credentialId: b64u(RAW_ID), registeredAt: 'x' },
-    }),
-  )
 })
 afterEach(() => {
   cleanup()
-  localStorage.removeItem(PASSKEYS_KEY)
   history.replaceState(null, '', returnTo)
 })
 

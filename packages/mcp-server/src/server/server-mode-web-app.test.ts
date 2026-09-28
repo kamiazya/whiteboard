@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { setBaselineSecurityHeaders } from './app-helpers.js'
 import { mountServerModeWebApp, serverModeUiStatus } from './server-mode-web-app.js'
 
 let dir: string
@@ -51,6 +52,26 @@ describe('mountServerModeWebApp', () => {
     expect(html).toContain(RUNTIME_CONFIG)
     const nonce = /nonce="([^"]+)"/.exec(html)?.[1]
     expect(res.headers.get('content-security-policy')).toContain(`'nonce-${nonce}'`)
+  })
+
+  // The transfer receiver is a popup opened by ANOTHER origin, and the
+  // handshake is `window.opener.postMessage`: under the baseline's
+  // `same-origin` COOP the browser severs the opener and the sender waits
+  // forever. Only that page gives it up.
+  it.for([
+    ['/receive-transfer', 'unsafe-none'],
+    ['/', 'same-origin'],
+  ])('answers %s with Cross-Origin-Opener-Policy %s', async ([path, coop]) => {
+    await withBuild()
+    const hono = new Hono()
+    hono.use('*', async (c, next) => {
+      await next()
+      setBaselineSecurityHeaders(c.res.headers)
+    })
+    mountServerModeWebApp(hono, dir)
+    const res = await hono.request(path)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cross-Origin-Opener-Policy')).toBe(coop)
   })
 
   it('serves the build’s files as they are', async () => {

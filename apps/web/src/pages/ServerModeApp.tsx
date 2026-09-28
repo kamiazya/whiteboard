@@ -20,6 +20,7 @@ import { buttonVariants } from '../components/ui/button.js'
 import { workspacePath } from '../lib/app-routes.js'
 import { listMemberWorkspaces, type MemberWorkspace } from '../lib/member-workspaces.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
+import { ReceiveTransferPage } from './ReceiveTransferPage.js'
 import { TenantPeoplePage, WorkspacePeoplePage } from './ServerModePeoplePage.js'
 import { ServerModeWorkspace } from './ServerModeWorkspace.js'
 
@@ -223,6 +224,10 @@ export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps)
     <Routes>
       <Route path="/sign-in" element={<SignInPage fetchFn={fetchFn} />} />
       <Route path="/invite" element={<InvitePage fetchFn={fetchFn} />} />
+      {/* Outside SignedInOnly: sending a signed-out popup to /sign-in would
+          drop the fragment that carries the handshake, so the page says what
+          to do instead. */}
+      <Route path="/receive-transfer" element={<ReceiveTransferPage fetchFn={fetchFn} />} />
       <Route
         path="/w/*"
         element={
