@@ -35,7 +35,7 @@ identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub
 
 ## How whiteboard works
 
-You and your agent both reach the same whiteboard — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser over WebSocket.
+You and your agent both reach the same whiteboard — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser through the whiteboard extension.
 
 <p align="center">
   <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP controls the Browser Canvas via HTTP/WS." width="780" />
@@ -43,7 +43,7 @@ You and your agent both reach the same whiteboard — they talk, the agent acts,
   <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.canvas">architecture.canvas</a> to open it as a JSON Canvas document and remix.</i></sub>
 </p>
 
-`@kamiazya/whiteboard-mcp` runs a spatial canvas editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and are stored as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.
+`@kamiazya/whiteboard-mcp` runs a spatial canvas editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync live to the browser, and are stored as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.
 
 <p align="center">
   <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, live diagram synced from the agent in real time" width="780" />
@@ -147,27 +147,24 @@ Add to `~/.gemini/settings.json`:
 
 ### Verify
 
-In your agent session, ask it to call `wb_workspace_edit({ workspaceId: "default", ops: [{ op: "document.create", path: "smoke", kind: "spatial" }] })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/w/{workspaceId}/d/smoke` in a browser tab to see it.
+In your agent session, ask it to call `wb_workspace_edit({ workspaceId: "default", ops: [{ op: "document.create", path: "smoke", kind: "spatial" }] })`. The call creates the document in the daemon's data directory (`~/.whiteboard` by default); with the web app connected to the daemon (below), open `smoke` in it to see it.
 
-## Pair with your local daemon
+## Connect the web app to your local daemon
 
 Already have the browser canvas open (see [Get started](docs/tutorials/getting-started.md))
-and a local daemon running? Ask your AI agent to call the `wb_pairing_link_create`
-MCP tool. It mints a `#wb=` link that carries the daemon's bootstrap token —
-the same full-authority credential that authenticates every `/api/*` request,
-valid until it is rotated, not a short-lived or single-use token — open it in
-your browser to connect that tab to the daemon's workspaces — with live sync
-over WebSocket, automatic version checkpoints and thumbnails on top of the
-manual version history the browser keeps on its own.
+and a local daemon running? The hosted app reaches it through the
+**whiteboard browser extension** and a native messaging host that
+`whiteboard native-host install` registers with your browser. The daemon
+listens on an owner-only local socket and no network port, so no web page
+can reach it directly, and nothing needs pasting or approving: once
+connected, the tab works on the daemon's workspaces with live sync,
+automatic version checkpoints and thumbnails on top of the manual version
+history the browser keeps on its own.
 
-- Loopback web origins (`http://127.0.0.1:...`) need no extra configuration.
-- The official hosted web app (`https://kamiazya-whiteboard.pages.dev`) can
-  pair out of the box; other HTTPS hosted origins must be added to
-  `WHITEBOARD_ALLOWED_WEB_ORIGINS` (which, when set, replaces that default). This setting governs
-  local-daemon pairing only; [server mode](docs/how-to/self-host-with-docker.md)
-  reads the separate `WHITEBOARD_SERVER_ALLOWED_ORIGINS` variable instead.
-- Treat the pairing link like a credential: anyone who has it can pair with
-  your daemon until the token is rotated.
+- Chrome, Edge, Brave and Firefox are supported; Safari keeps its data in
+  the browser for now.
+- While releases are `0.0.x` the extension is loaded by hand from a build
+  of this repository.
 - Prefer a config file over exporting env vars by hand? See
   [Configuration → Config file](docs/reference/configuration.md#config-file-local-daemon)
   for the `.whiteboardrc` / `.whiteboard/config.yaml` auto-load and
@@ -219,8 +216,8 @@ The agent returns the `wb_scene_render` result so the next turn can reason about
 | Export formats (SVG, OKF Markdown, JSON Canvas) and their tools | [docs/reference/export-formats.md](docs/reference/export-formats.md) |
 | MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
 | Trust model for all three runtimes (browser, local daemon, server mode) | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
-| Pairing a browser tab to a local daemon, moving a browser workspace into it | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
-| WebSocket message shapes between daemon and browser | [docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md) |
+| Connecting a browser tab to a local daemon, moving a browser workspace into it | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
+| Live-sync message shapes between daemon and browser | [docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md) |
 | Test layers, commit conventions, release process | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## Limitations

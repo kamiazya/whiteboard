@@ -8,7 +8,7 @@ paths:
 ## What belongs here
 
 - The `/api` Zod contracts apps/web parses (`api-contracts/`): documents,
-  branches, errors, fonts, pairing, runtime, and the URL builders. The barrel
+  branches, errors, fonts, runtime, and the URL builders. The barrel
   (`api-contracts/index.ts`) is deliberately NARROW — it is the whole
   contract surface apps/web reads (`api-contracts-barrel.test.ts` pins it).
 - The document backends the browser drives a daemon with: `daemon-backend`
@@ -61,7 +61,7 @@ imports it — the resolve error is loud if forgotten.
 Vitest project `daemon-client-node`. Contract round-trips use the package's
 own `test-utils/fast-check.ts` (per-package numRuns default, the repo norm).
 
-**The WebSocket text messages are guarded from the emitting side, not
+**The live-sync text messages are guarded from the emitting side, not
 only the parsing side.** `ws-messages.property.test.ts` here draws every
 arm of `serverTextMessageSchema` and round-trips it through
 `parseServerTextMessage`, which says only that what the schema admits is

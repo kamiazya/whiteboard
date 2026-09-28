@@ -30,7 +30,6 @@ const { main } = await import('./dispatcher.js')
 let dir: string
 let originalCwd: string
 const ENV_KEYS = [
-  'WHITEBOARD_ALLOWED_WEB_ORIGINS',
   'WHITEBOARD_TOKEN',
   'WHITEBOARD_DAEMON_TOKEN',
   'WHITEBOARD_LOG_LEVEL',

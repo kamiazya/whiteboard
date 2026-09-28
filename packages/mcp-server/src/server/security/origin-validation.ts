@@ -1,9 +1,7 @@
-// Neutral per-origin validation rules shared by every allowlist that must
-// accept exact HTTPS origins: server-mode's WHITEBOARD_SERVER_ALLOWED_ORIGINS
-// and the local-daemon's WHITEBOARD_ALLOWED_WEB_ORIGINS. Kept caller-agnostic
-// (no server_mode.* / web_origins.* failure codes here) so each caller can map
-// the neutral reason onto its own stable failure-code namespace without this
-// module knowing about either.
+// Neutral per-origin validation rules for an allowlist that must accept
+// exact HTTPS origins (server-mode's WHITEBOARD_SERVER_ALLOWED_ORIGINS). Kept
+// caller-agnostic (no server_mode.* failure codes here) so a caller maps the
+// neutral reason onto its own stable failure-code namespace.
 
 type OriginValidationFailureReason = 'unparseable' | 'wildcard' | 'not_https' | 'not_origin'
 

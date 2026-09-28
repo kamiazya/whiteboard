@@ -140,9 +140,8 @@ describe('runServerRun — config-error', () => {
  * A storage setting the operator configured and this process cannot honour
  * stops the server, rather than starting it on a default nobody asked for.
  *
- * Same posture `server/index.ts` already takes for a malformed
- * WHITEBOARD_ALLOWED_WEB_ORIGINS: a silent fallback "would look identical to
- * 'the operator never configured it'". Setting a value IS the requirement,
+ * A silent fallback "would look identical to 'the operator never configured
+ * it'". Setting a value IS the requirement,
  * and starting anyway answers it with behaviour that was not requested.
  */
 describe('runServerRun — storage config', () => {

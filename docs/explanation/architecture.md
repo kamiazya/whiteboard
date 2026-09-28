@@ -9,7 +9,7 @@
 This project is split into three main runtime layers:
 
 1. A `stdio` MCP server that tools like Claude Code and Codex connect to.
-2. A local daemon that serves HTTP and WebSocket endpoints on loopback.
+2. A local daemon that serves its HTTP API on an owner-only local socket (a named pipe on Windows), on no network port.
 3. A browser canvas built with React, a spatial canvas editor, and Loro-backed synchronization.
 
 ## Main components
@@ -17,23 +17,22 @@ This project is split into three main runtime layers:
 - **stdio MCP server**
   - Entry point: `dist/server/mcp/index.js`
   - Registers tools, prompts, and resources
-  - Talks to the daemon over local HTTP
+  - Talks to the daemon over HTTP on its local socket
 - **daemon**
-  - Entry point: `dist/server/index.js --daemon`
-  - Serves `/api/*`, `/mcp`, static app assets, and WebSocket updates
-  - Owns token-gated local HTTP transport and runtime lifecycle
-  - Serves the canonical `apps/web` build (`dist/web-app`, copied in by its
-    postbuild step) as its own same-origin UI (see
-    [ADR-0001](../contributing/adr/0001-apps-web-canonical-frontend.md));
-    server-mode serves a minimal static placeholder at its root instead
+  - Entry point: `dist/server/index.js`
+  - Serves `/api/*` (including the live-sync SSE stream) and `/mcp` on its
+    owner-only socket, token-gated, and owns the runtime lifecycle
+  - Serves no page; the browser reaches it through the whiteboard extension
+    and its native messaging host
+    ([ADR-0050](../contributing/adr/0050-local-daemon-trust.md)). Server mode
+    listens on HTTP and serves the `apps/web` build at its root instead
 - **browser canvas**
   - React app in `apps/web` rendering document content through the
     `SpatialEditor` component (select, move, resize, connect, and edit
-    existing nodes), deployable standalone or served same-origin by the
-    daemon
-  - Connects to a daemon over WebSocket (same-origin when daemon-served, or
-    paired via a credential-free `#wb=` link plus a pairing grant when hosted
-    separately)
+    existing nodes), deployed as the hosted app or served by a server-mode
+    keeper
+  - Connects to a local daemon through the whiteboard extension, and syncs
+    over the daemon's SSE stream
   - Applies remote updates and emits local edits
 - **storage**
   - Lives under `~/.whiteboard/{workspaceId}/`
@@ -53,7 +52,7 @@ This project is split into three main runtime layers:
 1. A browser opens `/w/{workspaceId}/document/{path}`.
 2. The app loads the current canvas snapshot from the daemon.
 3. Local edits update the in-memory document and are persisted through daemon routes.
-4. WebSocket events broadcast document changes and version events.
+4. SSE events broadcast document changes and version events.
 
 ## MCP tool surface
 

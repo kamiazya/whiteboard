@@ -1,204 +1,133 @@
 # Connect the web app to a local daemon
 
 The web app (`apps/web`) can run entirely in the browser with no daemon —
-canvases are stored in IndexedDB and never leave the device. This guide
-covers what happens once a local daemon (started via `whiteboard mcp` or an
-MCP client) is also running on the same machine, and how to move a
-canvas kept in your browser onto it.
+documents are stored in IndexedDB and never leave the device. This guide
+covers connecting it to a local daemon (started with `whiteboard daemon run`,
+or by an MCP client), and moving a workspace kept in your browser onto it.
 
 The web app UI calls these "variations" and "combining changes," but the
-underlying MCP tools your AI agent calls (`create_branch`, `merge`, and so
-on) intentionally keep their git-derived names — the UI vocabulary is a
-presentation-layer choice and does not change the tool contract.
+underlying MCP tools your AI agent calls keep their own names — the UI
+vocabulary is a presentation-layer choice and does not change the tool
+contract.
 
-## The daemon serves only the pairing page
+## How the app reaches the daemon
 
-The local daemon is a backend: the one page it serves is `/pair`, the
-pairing consent page (which must come from the daemon's own origin — it is
-the trust anchor that pins the daemon's identity key). Opening
-`http://127.0.0.1:<port>/` (default port `3099`) in a browser redirects to
-the official hosted app, which connects back to the daemon through its
-default origin admission and a pairing grant.
+The hosted app reaches a local daemon only through the **whiteboard browser
+extension** ([ADR-0050](../contributing/adr/0050-local-daemon-trust.md)):
+
+1. The page asks the extension.
+2. The extension starts a small **native messaging host** — a program the
+   `whiteboard` command registers with your browser.
+3. The host relays the request to the daemon over the daemon's owner-only
+   local socket, and adds the daemon's credential itself.
+
+The daemon listens on **no network port**. On Linux and macOS it listens on
+a Unix socket in your per-user runtime directory (`$XDG_RUNTIME_DIR/whiteboard/`,
+or a `whiteboard-<uid>` directory under the system temp directory), readable
+by you alone. On Windows it listens on a named pipe whose name is random per
+start. Its record in the data directory (`daemon.json`, owner-only) says
+where; the CLI, the stdio MCP entry and the native host all read it there.
+
+The browser starts the native host only for the extension its manifest
+names, so no web page and no other extension can take its place. A page
+never talks to the daemon over HTTP, and the daemon serves no page of its
+own.
+
+**Without the extension**, the hosted app keeps its data in the browser, and
+says that the extension is what connects it to a local daemon.
 
 Running `whiteboard daemon run` interactively opens the hosted app in your
-default browser automatically once the daemon is listening. Pass `--no-open`
-(or set `openBrowser: false` in a
-[config file](../reference/configuration.md#config-file-local-daemon))
-to disable this. See
+default browser once the daemon is listening. Pass `--no-open` (or set
+`openBrowser: false` in a
+[config file](../reference/configuration.md#config-file-local-daemon)) to
+disable this. See
 [Auto-opening the browser](../reference/configuration.md#auto-opening-the-browser-whiteboard-daemon-run)
-for the full list of conditions under which it is suppressed (CI, containers,
-non-interactive shells, non-loopback binds).
+for the conditions under which it is suppressed (CI, containers,
+non-interactive shells).
 
 A daemon that receives no request for 15 minutes stops on its own, unless a
-page is still connected to it: an open tab keeps it running however long nobody
-types. `whiteboard daemon run` then prints `whiteboard daemon stopped: no request within its idle
-timeout.` to stderr and exits `0`; run it again to continue.
+page is still connected to it: an open tab keeps it running however long
+nobody types. `whiteboard daemon run` then prints `whiteboard daemon stopped:
+no request within its idle timeout.` to stderr and exits `0`; run it again to
+continue.
 
-Note the tradeoff this design accepts: with no network access and no
-previously-installed PWA, there is no canvas UI on a first run — install the
-hosted app as a PWA while online to keep an offline-capable editor.
+## Set it up
 
-## How detection works
+While releases are `0.0.x`, the extension is not published to any store; you
+load it by hand.
 
-The web app probes `GET /api/runtime/ping` on the daemon's default loopback
-origin (`http://127.0.0.1:3099`, or a custom `daemonBaseUrl` from your
-settings). That endpoint is unauthenticated and only confirms a daemon is
-listening — it does not grant access to any workspace or canvas data.
+### 1. Build the extension
 
-- On an `http:` page origin (the common case for local development), the
-  probe runs automatically once per browser session.
-- On an `https:` page origin, the browser's Local Network Access permission
-  model requires an explicit user gesture before a page can reach a loopback
-  address, so the probe only runs when you click **Check for local daemon**.
+From a checkout of this repository:
 
-If a daemon is detected, a banner offers to connect. Dismissing it hides the
-banner for 14 days or until a different daemon instance is detected,
-whichever comes first.
+```bash
+pnpm install
+pnpm --filter @kamiazya/whiteboard-extension build
+```
 
-## Browser support for daemon pairing
+This writes one build per engine under `apps/extension/dist/`:
+`production` (Chrome, Edge and other Chromium browsers) and
+`firefox-production` (Firefox). The `development` builds additionally admit
+a `localhost` page, for working on the web app itself.
 
-Whether your browser can reach a loopback daemon from a hosted `https:` page
-depends on capability, not a fixed version list:
+### 2. Load it into your browser
 
-- **Any browser on an `http:` loopback page origin** (the common local
-  development setup) can always reach the daemon — there is no cross-scheme
-  restriction to work around.
-- **Chromium-based browsers on a hosted `https:` origin** can reach the
-  daemon once you grant the Local Network Access permission prompt.
-- **Firefox on a hosted `https:` origin** can reach the daemon without an
-  extra permission prompt, because Firefox does not yet gate loopback
-  fetches behind Local Network Access.
-- **Safari/WebKit on a hosted `https:` origin cannot reach the daemon.**
-  WebKit blocks the request as mixed content with no override. On this
-  browser, canvases stay in this browser (IndexedDB) — the app shows an
-  explicit notice instead of a silently missing "connect" option, with a
-  link to this page.
+- **Chrome, Edge, Brave, Chromium:** open the extensions page
+  (`chrome://extensions`, `edge://extensions`), turn on **Developer mode**,
+  choose **Load unpacked**, and pick `apps/extension/dist/production`.
+- **Firefox:** open `about:debugging#/runtime/this-firefox`, choose **Load
+  Temporary Add-on…**, and pick `manifest.json` inside
+  `apps/extension/dist/firefox-production`. A temporary add-on is removed
+  when Firefox closes, so load it again after a restart.
+- **Safari:** not yet. Safari's extension ships inside a macOS app, which is
+  a later stage; in Safari the app keeps its data in the browser.
 
-This is determined by probing the daemon, not by inspecting your browser's
-identity string: the app only shows the "not supported" notice once a probe
-has actually proven the browser blocked the request.
+### 3. Register the native host
 
-**On an unsupported browser, daemon connectivity is currently unavailable.**
-The daemon no longer serves a full UI at its own origin (it serves only the
-`/pair` consent page), so the previous escape hatch — opening
-`http://127.0.0.1:3099` directly — no longer applies. Use a Chromium-based
-browser (Chrome, Edge, Brave, Arc) to connect the hosted app to a local
-daemon; on other engines the hosted app keeps working with browser
-storage only.
+```bash
+whiteboard native-host install --json
+```
 
-## How pairing works
+This needs no administrator rights: it writes the host's manifest at user
+level, naming only the whiteboard extension as allowed to start it, plus a
+small launcher that records which Node, which `whiteboard` install and which
+data directory the host relays to. Pass `--data-dir=<path>` if your daemon
+uses a data directory other than the default. Run it again after moving or
+reinstalling `whiteboard`.
 
-Detecting a daemon is not the same as pairing with it. Actually connecting
-the web app's canvas editor to a specific workspace requires a pairing link,
-which the web app cannot mint itself — it can only detect that *a* daemon is
-reachable and prompt you toward the pairing flow below.
+Where the manifest goes depends on the platform:
 
-## Connect from the hosted app (pairing grant)
+- **Linux:** into each installed browser's user directory — Chrome
+  (`~/.config/google-chrome/NativeMessagingHosts`), Chromium, Edge, Brave,
+  Firefox (`~/.mozilla/native-messaging-hosts`) and the Snap Firefox
+  (`~/snap/firefox/common/.mozilla/native-messaging-hosts`). A browser whose
+  directory does not exist yet is skipped; start it once, then run `install`
+  again.
+- **macOS:** into each installed browser's directory under
+  `~/Library/Application Support/` (Chrome, Chromium, Edge, Brave, and
+  Firefox's `Mozilla/NativeMessagingHosts`).
+- **Windows:** the manifests are kept under the data directory, and a
+  per-user registry key names each one (`HKCU\Software\Google\Chrome\NativeMessagingHosts`,
+  and the Chromium, Edge and Mozilla equivalents). Every one is registered,
+  whether or not that browser is installed.
 
-The hosted web app can pair itself — no agent required:
+`--manifest-dir=<path>` and `--firefox-manifest-dir=<path>` write to one
+directory of your choosing instead.
 
-1. In the hosted app, use "Check for local daemon" and click **Use here**
-   (or **connect anyway** from the failure notice when the daemon has not
-   allowed this origin yet — the consent navigation is not subject to the
-   CORS block that hides the daemon from the check).
-2. The browser navigates to the daemon's own `/pair` consent page, which
-   shows the requesting origin. Click **Approve**.
-3. The daemon persists an origin grant, allowlists the origin on every
-   surface immediately, and sends the browser back with a single-use
-   PKCE-bound code (never a token). The hosted app exchanges it for a
-   24-hour, origin-scoped session token and opens the daemon's workspaces
-   in place.
+**Snap Firefox on Ubuntu asks you once.** Its native messaging goes through
+a desktop portal, and the first time the extension starts the host Firefox
+shows a permission prompt. Setup never grants it for you. If you refused
+and want to be asked again, remove the stored answer with
+`flatpak permission-remove webextensions io.github.kamiazya.whiteboard snap.firefox`
+(the `flatpak` command manages the portal's permission store even without
+any Flatpak apps), or reset every portal permission Firefox holds with
+`flatpak permission-reset snap.firefox`.
 
-Grants persist across daemon restarts; session tokens do not (a restart is
-a deliberate global session kill). Approving is always an explicit click on
-the daemon's own page — there is no silent grant path.
+### 4. Connect
 
-## Connect with an agent-minted link
-
-1. Ask your AI agent (Claude, Codex, or any MCP client connected to the
-   whiteboard daemon) to call the `wb_pairing_link_create` MCP tool. Optionally
-   pass `workspaceId` / `path` to target a specific canvas, or `webOrigin` to
-   point at a non-default web app deployment.
-2. The tool returns a URL carrying a `#wb=` fragment. **The fragment holds no
-   credential** — only which daemon to reach and what to open. Open that URL
-   in your browser.
-3. On a hosted `https:` origin, the browser's Local Network Access permission
-   prompt appears — grant it to let the page reach your loopback daemon.
-4. The web app reads the fragment and asks that daemon for access, through
-   exactly the same pairing grant as the section above: silently if this
-   browser origin was approved before, otherwise by sending you to the
-   daemon's own `/pair` consent page for one **Approve** click. Then it opens
-   the workspace or document the link named.
-
-Earlier versions embedded the daemon's bootstrap token in the fragment — the
-same full-authority credential that authenticates every `/api/*` request,
-valid until rotated. Anyone who saw the link could pair with that daemon, and
-a pairing link is exactly the kind of thing that gets pasted into a chat, a
-terminal transcript, or a screen share. It no longer carries one, and a link
-minted by an older daemon is now **refused** by the web app rather than used,
-so re-mint it instead of re-opening it.
-
-The hosted app's "Check for local daemon" does not assume the default
-port: it re-checks daemons it has successfully found before (remembered in
-the browser, most recent first) and scans a small range above the default
-(3099–3108) in parallel, because the daemon binds the first free port from
-3099 upward. When several daemons respond — one per dev worktree is
-common — the banner lists each of them.
-
-For hosted (non-loopback) `webOrigin` values other than the official web app
-(`https://kamiazya-whiteboard.pages.dev`, admitted by default), the daemon
-must also be configured to accept that origin via
-`WHITEBOARD_ALLOWED_WEB_ORIGINS` — either
-as an exact match or via a `https://*.example.com` wildcard subdomain pattern
-that covers it (see
-[Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)).
-`wb_pairing_link_create` cannot confirm that allowlist coverage on its own, so
-verify it yourself before sharing a hosted pairing link. Loopback origins
-need no allowlist entry.
-
-## Pairing is required every session
-
-Earlier versions of the web app offered a "silent reconnect" that skipped
-re-pairing on a reload by minting a possession credential (a WebCrypto
-keypair, with a plaintext-secret fallback for older daemons) and storing it
-in the browser origin's own IndexedDB/localStorage. That feature has been
-**removed**.
-
-The reason is loopback-port squatting: on `http://localhost:<port>`, any
-process that later takes over that port inherits the full origin, including
-everything IndexedDB and localStorage hold for it — Vite's dev port (5173)
-in particular is one of the most commonly contended ports on a developer
-machine. A same-origin script does not need to exfiltrate a non-extractable
-key to abuse it; it can read the `CryptoKey` object straight out of
-IndexedDB and call `crypto.subtle.sign()` with it, and a plaintext secret in
-`localStorage` is even more directly readable. Removing the credential
-entirely, rather than trying to hedge it, means this version of the app
-never creates or uses one again.
-
-Credentials written by an earlier version are a separate matter. The app
-erases them the first time it boots on that origin: the `reconnectKeypairs`
-object store is dropped during the IndexedDB upgrade, and the legacy
-localStorage secret is removed at startup regardless of whether the database
-is opened. Until that boot happens the old values are still sitting in the
-origin's storage, so a process that claims the port and serves the origin
-first can still read them. If you have an origin you no longer open with
-this app — an abandoned dev port, for instance — clear its site data in the
-browser rather than relying on a startup path that will never run.
-
-The cost: reloading the hosted web app, or opening it in a fresh tab, no
-longer reconnects automatically. Each session re-pairs via a fresh `#wb=`
-link (or the one-click `DaemonDetectedBanner` reconnect below, which is a
-plain top-level navigation to the daemon's own origin — not a stored
-credential). See the [security model](../explanation/security-model.md) for
-the full trust-boundary discussion, including why this does not extend to
-canvas *data* itself when the browser is the keeper.
-
-A daemon upgraded from a version that had silent reconnect may still hold
-origin trust records from that era in `trusted-web-origins.json`. The daemon
-now removes that file automatically on its first start after the upgrade —
-no operator action is needed, and no CLI command exists to inspect or revoke
-individual entries any more. If you are auditing the data directory after an
-upgrade and the file is gone, this is why.
+Start the daemon (`whiteboard daemon run`, or let an MCP client start it),
+then in the hosted app open the workspace popover and choose **Connect
+through the extension**. The app reloads onto the daemon's workspaces.
 
 ## Move this workspace to the daemon
 
@@ -212,32 +141,6 @@ one step from **Settings → Connections → This workspace**:
    **Reload and continue from the daemon** to switch to working from the
    daemon, or keep working in the browser.
 
-Moving a workspace **requires a passkey**. The confirmation shows whether
-one is registered for this daemon; with one, the move asks you to confirm it
-with your passkey (Face ID, Touch ID, Windows Hello, or a security key), and
-the daemon records that a person made the move beside the checkpoint it saves
-for each document — the History panel then shows those points as *verified*.
-Without one, **Move workspace** stays disabled and you register a passkey
-right there in the dialog. A browser that cannot use passkeys at all cannot
-move a workspace; open the app in one that can, or export the documents you
-need. A passkey belongs to the web app's origin and to that daemon: pairing
-another daemon, or using the app from another address, means registering
-another.
-
-## Manage this daemon's passkeys
-
-**Settings → Connections → Passkeys** lists every passkey this daemon will
-accept a move from — the address it was registered from, whether it is synced
-across your devices or stays on this one, and which of them this browser will
-use. You can register one here rather than waiting for a move, and remove any
-of them.
-
-Removing a passkey does not change history: moves you already confirmed stay
-*verified* in the History panel, because what proves them is kept with the
-version and not with the passkey. What it ends is future confirmations from
-that passkey — register another and the next move is confirmed again. The same
-is true if you lose the device holding it.
-
 The move carries your documents, their full edit history, and the images
 they reference. Documents keep their identity, so links between them keep
 working on the daemon. If a path already exists in the chosen daemon
@@ -250,12 +153,9 @@ keeps a **cached replica** instead — it opens read-only when the daemon
 cannot be reached, so your data stays viewable offline. What it shows
 depends on what is actually on this device and what the daemon last said:
 a copy that is readable in memory, a copy that only your passkey can open
-(with an **Unlock with your passkey** action that needs no network), a copy
-that is present but locked until the daemon can be reached again (with a
-Reconnect action), a notice that this device is no longer paired with the
-daemon and must be paired again, or — if you were removed from the
-workspace — a plain notice that you were removed and that nothing you
-changed since is sent anywhere.
+(with an **Unlock with your passkey** action that needs no network), or a
+copy that is present but locked until the daemon can be reached again (with
+a Reconnect action).
 
 The passkey unlock is what lets a copy survive closing the tab, and you
 switch it on per copy: see
@@ -304,67 +204,6 @@ passkey.* The next time the daemon cannot be reached, the copy offers
 - **Turn off** on the row removes the locked key, so the copy is again
   readable only while a tab holds it. The passkey stays in your passkey
   manager; delete it there if you no longer want it.
-
-## Manage who can use a workspace
-
-Once a workspace is kept by a daemon, **Settings → Connections → Members**
-lists everyone the daemon has let in — their name, and whether they are an
-owner or a member. It only appears once the app knows which workspace you
-are looking at. It is the same list, over the same
-`/api/workspaces/<workspace>/people` API, that a self-hosted server shows
-under **People**; what differs is who may change it. On a daemon that is the
-machine's owner: a credential carrying `runtime:admin`, as the daemon's own
-token does. Anyone else sees the list without the controls.
-
-To add someone, first register their passkey under **Settings → Connections
-→ Passkeys**, then pick it from the list here and give them a name. **Make …
-an owner** and **Make … a member** record a role. Because the machine's owner
-owns every workspace on it, a daemon never refuses to demote or remove the
-last recorded owner, as a server does. To remove someone, click **Remove** on
-their row and confirm — this ends their access immediately, and anything they
-changed offline after that point is not kept. The next time a removed
-person's browser tries to reach the workspace, it is told plainly that they
-were removed, rather than reading as an ordinary connection problem.
-
-**Adding the first member changes how the workspace is protected.** A
-workspace with no members added yet trusts anyone whose browser is paired
-with the daemon at all (origin trust) — the ordinary single-user case. The
-moment you add the first member, the workspace becomes member-gated:
-every document, sync and workspace-listing route on it now requires a
-session signed in as one of the listed members, for everyone, including
-whoever added the first member. Removing someone is felt immediately, not
-just in what they can read offline — their browser's live session ends
-right away, and its next request for anything in this workspace is
-refused rather than answered stale.
-
-The first time a browser opens a member-gated workspace in a given
-session, it asks once — confirming with the passkey registered for this
-daemon — before the workspace opens; after that it stays signed in for
-the rest of the session and is never asked again mid-session.
-
-Removing everyone does not return the workspace to origin trust; it stays
-member-gated, and nobody is admitted until a member is added again. There
-is no button in this app to reopen it, and there is not meant to be: that
-would let a browser reopen the gate that protects the workspace from
-browsers.
-
-**If you have locked yourself out**, which happens if you remove the last
-member and that member was you, the way back is from the machine running
-the daemon, using its token:
-
-```bash
-curl -X DELETE \
-  -H "Authorization: Bearer $WHITEBOARD_DAEMON_TOKEN" \
-  http://127.0.0.1:3099/api/workspaces/<workspaceId>/members-only
-```
-
-It answers `{"wasMembersOnly":true}` if the workspace was gated and
-`false` if it already trusted paired origins, so running it twice tells you
-which happened. The people who were members stay members; the workspace
-simply also trusts paired origins again, until you add a member to it. Only
-the daemon's own token works here — a paired browser's credentials are
-refused however broad they are, which is what makes this a way back rather
-than a way in.
 
 ## See what this device keeps of a daemon-kept workspace
 

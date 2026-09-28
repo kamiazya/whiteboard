@@ -9,11 +9,8 @@ import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
  * `shared/env-setting.ts`: an unset setting takes its default, a setting that
  * is present and cannot be understood aborts startup.
  *
- * This is not a new posture for this codebase — it is the one
- * `server/index.ts` already takes for `WHITEBOARD_ALLOWED_WEB_ORIGINS` and the
- * OAuth client registry, for the reason its own comment gives: a silent
- * fallback "would look identical to 'the operator never configured it'". The
- * storage settings were never held to it and had drifted into four different
+ * A silent fallback "would look identical to 'the operator never configured
+ * it'". The storage settings were never held to it and had drifted into four different
  * answers for a malformed value — default, `Number.parseInt` prefix, off, and
  * abort.
  */
