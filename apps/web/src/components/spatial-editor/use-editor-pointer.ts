@@ -88,6 +88,18 @@ import {
   type NavigationEvent,
   type NavigationResult,
 } from './navigation.js'
+import {
+  advanceCommentDrag,
+  COMMENT_PRESS_SLOP_PX,
+  cancelCommentPress,
+  commentHoldsPress,
+  commitCommentDrag,
+  dismissCommentCard,
+  openCommentMenuAt,
+  releaseCommentPress,
+  rememberCommentPress,
+  startCommentPinDrag,
+} from './pointer-comment-claim.js'
 import { commitRelease, releaseDrawing, releaseMarquee } from './pointer-release.js'
 import type { SpatialEditorProps } from './SpatialEditor.js'
 import type { useCommentState } from './use-comment-state.js'
@@ -123,7 +135,6 @@ const LONG_PRESS_SLOP_PX = 10
  * than a tap. A finger's tap is never perfectly still, and below this the
  * release opens the card instead of moving the comment by nothing.
  */
-const COMMENT_PRESS_SLOP_PX = 4
 
 /** Screen distance between two points — how far a press travelled. */
 function travelled(from: Point, to: Point): number {
@@ -243,15 +254,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     createNodeAt,
     pasteClipboard,
     openLinkNode,
-    commentById,
     commentDrag,
-    commentPlacementObstacles,
-    hitTestComment,
-    openCommentId,
-    pressedCommentRef,
-    setCommentDrag,
-    setOpenCommentId,
-    toggleCommentCard,
     pendingCut,
     selectedEdgeId,
     selectedInkIds,
@@ -331,35 +334,10 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
    * Not a claimant: it dismisses and lets the press carry on.
    */
   const dismissOpenCards = (point: Point): void => {
-    if (openCommentId !== null && hitTestComment(point) !== openCommentId) {
-      setOpenCommentId(null)
-    }
+    dismissCommentCard(inputs, point)
     if (openProposalId !== null && hitTestProposal(point) !== openProposalId) {
       setOpenProposalId(null)
     }
-  }
-
-  /**
-   * A press on a comment's chrome is remembered BEFORE navigation gets the
-   * press, because in hand mode navigation takes every plain press as a pan
-   * and never hands it back — and a comment is chrome, not content: a reader
-   * panning around a canvas has as much reason to open a conversation as one
-   * selecting on it.
-   *
-   * The release decides (see `handlePointerUp`): a press that never travelled
-   * opens the card under either tool; one that travelled was the pan (hand)
-   * or the pin drag (select) it became on the way.
-   */
-  const rememberPressedComment = (
-    e: React.PointerEvent<HTMLDivElement>,
-    point: Point,
-    screenPoint: Point,
-  ): void => {
-    const hitCommentId = e.button === 0 ? hitTestComment(point) : undefined
-    if (hitCommentId === undefined) return
-    const comment = commentById(hitCommentId)
-    if (comment === undefined) return
-    pressedCommentRef.current = { comment, startScreen: screenPoint, startPoint: point }
   }
 
   /**
@@ -568,7 +546,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     hitId: string | undefined,
   ): boolean => {
     dismissOpenCards(point)
-    rememberPressedComment(e, point, screenPoint)
+    rememberCommentPress(inputs, e, point, screenPoint)
     // Navigation answers for its own state. Everything it owns — which finger
     // is down, whether two of them are driving the viewport, whether this
     // press continues a gather — lives in one value in `navigation.ts` rather
@@ -594,7 +572,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // through to node or marquee handling. There is deliberately no
     // double-press-to-edit: a single press opens the card, whose own Edit is
     // the successor, and the second press of a pair would land on that card.
-    if (pressedCommentRef.current !== null) return true
+    if (commentHoldsPress(inputs)) return true
     return claimProposalBubble(point, screenPoint)
   }
 
@@ -666,24 +644,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // Replace the browser menu with the object's own action menu.
     e.preventDefault()
     openContextMenuAt(clientPointToRootLocal(e, root))
-  }
-
-  /**
-   * A comment under the pointer gets ITS menu — and leaves the node or edge
-   * selection alone, since the menu is about the comment.
-   */
-  const openCommentMenuAt = (screenPoint: Point, point: Point): boolean => {
-    const hitCommentId = hitTestComment(point)
-    if (hitCommentId === undefined) return false
-    setContextMenu({
-      x: screenPoint.x,
-      y: screenPoint.y,
-      nodeId: undefined,
-      edgeId: undefined,
-      commentId: hitCommentId,
-      point,
-    })
-    return true
   }
 
   /**
@@ -765,7 +725,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
 
   const openContextMenuAt = (screenPoint: Point) => {
     const point = screenToCanvas(screenPoint, viewport)
-    if (openCommentMenuAt(screenPoint, point)) return
+    if (openCommentMenuAt(inputs, screenPoint, point)) return
     const menuPick = pickContentAt(pressProbes(menuPickInputs), point)
     const hitId = menuPick?.kind === 'nodes' ? menuPick.id : undefined
     // An edge and a line alike: the menu builder resolves which it is out
@@ -788,12 +748,11 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
    * is the semantics rather than a detail: a pointer move belongs to at
    * most one gesture, and an earlier step winning is how that is decided.
    *
-   * They stay in THIS scope rather than becoming module functions because
-   * the handler closes over 32 values (counted, not guessed); moving them
-   * out turns those into 32 parameters, which is the same knot with a
-   * longer signature. What the split buys is that each step has a name and
-   * keeps its own reason beside it, and the handler below reads as the
-   * order.
+   * A step leaves this scope with its CLAIMANT, not on its own: moved
+   * singly, the handler's 32 closed-over values become 32 parameters, the
+   * same knot with a longer signature. A claimant (`pointer-comment-claim.ts`)
+   * carries its press, move and release together and takes only the inputs
+   * that gesture reads. The handler below still reads as the order.
    *
    * A step that ANSWERS the move returns true; one that only has a side
    * effect returns nothing.
@@ -828,70 +787,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     ) {
       capturePointer(root, e.pointerId)
     }
-  }
-
-  /**
-   * A comment press that travels past the slop is spent as a press.
-   *
-   * Under the select tool it becomes the pin drag of a point-anchored
-   * comment (a node-anchored one's anchor is its node's corner, and moving
-   * the node is how it moves); under the hand tool it was a pan, which
-   * navigation is already running and which the release must not turn into
-   * an opened card. Decided BEFORE navigation because a pan's moves never
-   * fall through. Capture FIRST for the drag: it takes the committed copy
-   * out of the surface, and a touch pointer's implicit capture sits on that
-   * copy.
-   *
-   * The press is spent either way — `pressedCommentRef` is cleared before
-   * the tool is consulted — so a hand-tool press that travelled does not
-   * come back as a card on release.
-   */
-  const startCommentPinDrag = (
-    e: React.PointerEvent<HTMLDivElement>,
-    root: HTMLElement,
-    screenPoint: Point,
-  ): boolean => {
-    const pressedComment = pressedCommentRef.current
-    if (
-      pressedComment === null ||
-      commentDrag !== null ||
-      Math.hypot(
-        screenPoint.x - pressedComment.startScreen.x,
-        screenPoint.y - pressedComment.startScreen.y,
-      ) < COMMENT_PRESS_SLOP_PX
-    ) {
-      return false
-    }
-    pressedCommentRef.current = null
-    if (
-      tool === 'hand' ||
-      spaceDownRef.current ||
-      pressedComment.comment.targetNodeId !== undefined
-    ) {
-      return false
-    }
-    capturePointer(root, e.pointerId)
-    setCommentDrag({
-      comment: pressedComment.comment,
-      startPoint: pressedComment.startPoint,
-      live: screenToCanvas(screenPoint, viewport),
-      obstacles: commentPlacementObstacles(pressedComment.comment.id),
-      dropped: null,
-    })
-    return true
-  }
-
-  /**
-   * A pin already in flight follows the pointer until it is dropped. A
-   * dropped one still ANSWERS the move — it is the same drag, finished —
-   * so nothing below runs for it.
-   */
-  const advanceCommentDrag = (screenPoint: Point): boolean => {
-    if (commentDrag === null) return false
-    if (commentDrag.dropped === null) {
-      setCommentDrag({ ...commentDrag, live: screenToCanvas(screenPoint, viewport) })
-    }
-    return true
   }
 
   const advanceMarquee = (screenPoint: Point): boolean => {
@@ -952,7 +847,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     cancelLongPressPastSlop(e, root)
     const screenPoint = clientPointToRootLocal(e, root)
     captureOnFirstMove(e, root)
-    if (startCommentPinDrag(e, root, screenPoint)) return
+    if (startCommentPinDrag(inputs, e, root, screenPoint)) return
     const navigation = runNavigation(
       root,
       {
@@ -964,7 +859,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       e.timeStamp,
     )
     if (!navigation.fallThrough) return
-    if (advanceCommentDrag(screenPoint)) return
+    if (advanceCommentDrag(inputs, screenPoint)) return
     if (advanceMarquee(screenPoint)) return
     if (gestureState.kind === 'idle' && gestureStateRef.current.kind !== 'drawing') return
     if (advanceDrawing(screenPoint)) return
@@ -1003,24 +898,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   }
 
   /**
-   * A press on a comment's chrome, answered at the release.
-   *
-   * Consumed here whatever happens next, so a press on a comment can never
-   * open its card two gestures later. A press that never travelled opens the
-   * card under EITHER tool: in hand mode the press armed a pan that this
-   * release is ending, and the machine answers for that pan — but the pan
-   * moved nothing, and the comment's answer comes first. A travelled press
-   * was spent on the first move.
-   */
-  const releasePressedComment = (): boolean => {
-    const pressedComment = pressedCommentRef.current
-    pressedCommentRef.current = null
-    if (pressedComment === null || commentDrag !== null) return false
-    toggleCommentCard(pressedComment.comment.id)
-    return true
-  }
-
-  /**
    * A press on a proposal's bubble, answered at the release.
    *
    * Consumed here whatever happens next, like the comment press above. A
@@ -1036,47 +913,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       COMMENT_PRESS_SLOP_PX
     if (!stayed) return false
     setOpenProposalId((current) => (current === pressedProposal.id ? null : pressedProposal.id))
-    return true
-  }
-
-  /**
-   * The end of a comment-pin drag.
-   *
-   * A press that never travelled is a PRESS (the card toggle owns it), not a
-   * zero-distance move. The anchor is ROUNDED because the model requires an
-   * integer and a reader silently drops a comment that fails the schema — a
-   * fractional anchor from a zoomed viewport would survive this session and
-   * vanish on the next undo, reload or remote import. The preview parks
-   * exactly on the rounded anchor, so the committed copy takes over without a
-   * sub-pixel step.
-   */
-  const commitCommentDrag = (e: React.PointerEvent<HTMLDivElement>, root: HTMLElement): boolean => {
-    if (commentDrag === null) return false
-    if (commentDrag.dropped !== null) return true
-    const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
-    const dx = released.x - commentDrag.startPoint.x
-    const dy = released.y - commentDrag.startPoint.y
-    if (dx === 0 && dy === 0) {
-      setCommentDrag(null)
-      toggleCommentCard(commentDrag.comment.id)
-      return true
-    }
-    const dropped = {
-      x: Math.round(commentDrag.comment.x + dx),
-      y: Math.round(commentDrag.comment.y + dy),
-    }
-    setCommentDrag({
-      ...commentDrag,
-      live: {
-        x: commentDrag.startPoint.x + (dropped.x - commentDrag.comment.x),
-        y: commentDrag.startPoint.y + (dropped.y - commentDrag.comment.y),
-      },
-      dropped,
-    })
-    applyResult({
-      state: { kind: 'idle' },
-      commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
-    })
     return true
   }
 
@@ -1127,10 +963,10 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     root: HTMLElement,
     navigationFellThrough: boolean,
   ): boolean => {
-    if (releasePressedComment()) return true
+    if (releaseCommentPress(inputs)) return true
     if (releasePressedProposal(e, root)) return true
     if (!navigationFellThrough) return true
-    return commitCommentDrag(e, root)
+    return commitCommentDrag(inputs, e, root)
   }
 
   /**
@@ -1188,9 +1024,8 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // and the press that armed it is spent — left set, the next unrelated
     // release would read the stale id and open that comment's card. The
     // same is true of a proposal's press.
-    pressedCommentRef.current = null
+    cancelCommentPress(inputs)
     pressedProposalRef.current = null
-    setCommentDrag(null)
   }
 
   /**
