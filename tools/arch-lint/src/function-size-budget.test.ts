@@ -311,7 +311,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // press-side module beside it is the named follow-up that brings this back
   // down rather than a ceiling that keeps rising.
   // 1000 -> 824: the comment claimant left for `pointer-comment-claim.ts`.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 824,
+  // 824 -> 784: the proposal claimant, for `pointer-proposal-claim.ts`.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 784,
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 103,
