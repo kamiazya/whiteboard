@@ -556,7 +556,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `selection-inspector.tsx`, the first layer to leave for a sibling
   // module. It could, where the others cannot yet, because it reads nine of
   // the editor's values rather than forty.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2325,
+  // Lowered 2325 -> 2270: the routable handles became `routable-handles.tsx`,
+  // the first layer to move through `EditorGesture` — the bundle the note
+  // above said a gesture-dispatching layer would need before it could leave.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2270,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
   // 1052 -> 1240: the press and release paths became claimant chains and the

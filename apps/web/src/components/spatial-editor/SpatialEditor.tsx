@@ -95,7 +95,7 @@ import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { findFreeSpot, hitTest, indexNodeBoxes } from '../../lib/spatial/geometry.js'
+import { findFreeSpot, indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
@@ -113,7 +113,6 @@ import {
 } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
-import { BoxTargetOverlay } from './BoxTargetOverlay.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
@@ -122,13 +121,10 @@ import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
-import { EdgeBendLayer } from './EdgeBendLayer.js'
-import { EdgeEndHandles } from './EdgeEndHandles.js'
-import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
+import type { EditorGesture } from './editor-gesture.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
-import { otherEndNodeOf } from './gesture-ends.js'
 import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { InkDraftLayer } from './InkDraftLayer.js'
@@ -148,6 +144,7 @@ import {
 } from './navigation.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { ProposalCard } from './ProposalCard.js'
+import { RoutableHandles } from './routable-handles.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
@@ -1314,6 +1311,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       toggleSelectionMember,
     })
 
+    // The gesture as the layers see it, built once for this render.
+    const gesture: EditorGesture = {
+      state: gestureState,
+      canvas,
+      viewport,
+      livePoint,
+      dispatch: (event) => applyResult(reduceGesture(gestureState, canvas, event)),
+      apply: applyResult,
+      beginOverlay: beginOverlayGesture,
+    }
+
     /**
      * The editors that open ON the canvas rather than in a panel: an edge's
      * label, a group's label, a new comment, and a node's own text.
@@ -1476,78 +1484,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
 
     /**
-     * The handles for whatever is selected that has a PATH: an ink stroke's
-     * bends, an edge's ends, and the live connect/reattach preview.
-     */
-    const routableHandles = () => (
-      <>
-        {selectedInkIds.length > 0 && (
-          <EdgeSelectionHighlight
-            selectedEdgeIds={selectedInkIds}
-            edgePaths={edgePaths}
-            // The live half of the ink drag: the committed strokes stay
-            // where they are and their outlines travel, which is the
-            // same bargain the node drag makes with its ghost box. A
-            // full re-layout per frame is what the preview overlay
-            // exists to avoid (see `drag-preview.ts`'s header).
-            offset={
-              gestureState.kind === 'moving-ink'
-                ? {
-                    x: (livePoint?.x ?? gestureState.startPoint.x) - gestureState.startPoint.x,
-                    y: (livePoint?.y ?? gestureState.startPoint.y) - gestureState.startPoint.y,
-                  }
-                : undefined
-            }
-          />
-        )}
-        {selectedRoutable !== undefined && (
-          <EdgeEndHandles
-            path={edgePathOf(selectedRoutable.id) ?? []}
-            zoom={viewport.zoom}
-            onArm={(endpoint, event) => {
-              if (event !== undefined) beginOverlayGesture(event)
-              applyResult(
-                reduceGesture(gestureState, canvas, {
-                  type: 'pointerdown-end',
-                  elementId: selectedRoutable.id,
-                  endpoint,
-                }),
-              )
-            }}
-          />
-        )}
-        {selectedRoutable !== undefined && (
-          <EdgeBendLayer
-            edge={selectedRoutable}
-            path={edgePathOf(selectedRoutable.id) ?? []}
-            viewport={viewport}
-            begin={beginOverlayGesture}
-            dispatch={(event) => applyResult(reduceGesture(gestureState, canvas, event))}
-          />
-        )}
-        {(gestureState.kind === 'connecting' || gestureState.kind === 'reattaching') && (
-          <BoxTargetOverlay
-            gestureState={gestureState}
-            sourceNodeId={
-              gestureState.kind === 'connecting'
-                ? gestureState.fromNodeId
-                : // The box the OTHER end is on, which this end may not
-                  // land on either: the write refuses a self-loop, so
-                  // offering it as a target would offer a no-op.
-                  otherEndNodeOf(canvas, gestureState.elementId, gestureState.endpoint)
-            }
-            hoveredNodeId={livePoint === null ? undefined : hitTest(selectableBoxes, livePoint)}
-            canvas={canvas}
-            boxes={boxes}
-            selectableBoxes={selectableBoxes}
-            createId={createId}
-            applyResult={applyResult}
-          />
-        )}
-      </>
-    )
-
-    /**
      * What is drawn ABOUT the current selection and the edit in progress:
      * the outline, the multi-selection box, the routable handles, and the
      * in-place label and comment editors.
@@ -1590,7 +1526,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             obstacles={commentDrag.obstacles}
           />
         )}
-        {routableHandles()}
+        <RoutableHandles
+          gesture={gesture}
+          selectedInkIds={selectedInkIds}
+          selectedRoutable={selectedRoutable}
+          edgePaths={edgePaths}
+          edgePathOf={edgePathOf}
+          boxes={boxes}
+          selectableBoxes={selectableBoxes}
+          createId={createId}
+        />
         {inPlaceEditors()}
       </>
     )
