@@ -221,9 +221,11 @@ Use E2E when the behavior depends on real app composition rather than an isolate
 
 **E2E placement:**
 
-- `tests/e2e/browser/` — Playwright browser journeys against real app/server surfaces
-- `tests/e2e/mcp/` — MCP protocol and client/server smoke behavior
-- `tests/e2e/distribution/` — packaged daemon, tarball, binary, and install-layout checks
+- **MCP protocol and client/server smokes** — `packages/mcp-server/scripts/smoke/*.mjs` (`smoke:e2e`, `smoke:packaged`, `smoke:tarball`, `smoke:codex-config`), plus the `mcp-smoke` Vitest project described below.
+- **Real-browser journeys across composed surfaces** — standalone Playwright scripts beside the surface they drive: `packages/mcp-server/scripts/smoke/cross-origin-transfer-smoke.mjs` (`pnpm smoke:transfer`: a built web app at one origin, a real server-mode keeper at another) and `apps/extension/scripts/*-smoke.mjs` (`smoke:bridge`, `smoke:read-plane`). A journey that component mount plus mocked fetches can cover belongs in `web-browser` / `canvas-viewer-browser` instead.
+- **Packaged daemon and server-mode checks** — `tests/e2e/distribution/` (daemon backup/restore, logs, support bundle, token, server-mode app/CLI/entrypoint/docker).
+
+None of these is discovered by a glob. A new script runs only once it has a `package.json` script AND a step in `.github/workflows/ci.yml` (or a place in the `smoke:distribution:packaged` / `test:e2e:distribution:only` chains, and `tests/e2e/distribution/release-gate-matrix.json` when it gates a release), so wire it in the same change.
 
 Keep E2E suites small and focused. If E2E finds a bug, add the nearest-layer regression unless the root cause only exists at the composed-system boundary.
 
