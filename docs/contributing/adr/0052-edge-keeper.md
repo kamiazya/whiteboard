@@ -157,8 +157,18 @@ one is enough by itself:
   co-resident objects, and that headroom is measured on the hosted platform
   with several objects loaded, not assumed.
 
-Until that calibration exists, a real allocation failure is the backstop.
-It must surface as a refused write with a reason, not as a dead isolate.
+**The refusal happens BEFORE the allocation, never at it.** An isolate that
+runs out of memory is killed, not handed a catchable error, so an
+allocation failure cannot be the mechanism that says "too large". The
+keeper refuses by document count at admission, the way the browser keeper
+does, so the write is turned away with its reason before it grows the
+record.
+
+Until the hosted calibration exists, that count is a conservative
+PROVISIONAL limit, taken from the local curve with room to spare. Pick the
+largest count whose local peak, plus one more full export, stays under
+HALF the isolate, since a co-resident object may hold the other half. It
+is raised only by the calibration.
 
 ## Consequences
 
@@ -205,8 +215,10 @@ In dependency order. Each slice lands on its own with its verification.
 4. **The sign-in extraction** into a shared package. Server mode's suites
    stay unchanged.
 5. **Sign-in and the served web app** on the edge keeper.
-6. **Capacity** per decision 5. Measure the curve locally, calibrate the
-   ceiling on hosted Cloudflare with co-resident objects, then declare.
+6. **Capacity** per decision 5. Declare the provisional limit from the
+   local curve and refuse at admission, before any allocation. Then
+   calibrate the ceiling on hosted Cloudflare with co-resident objects,
+   and only then raise it.
 7. **The way in.** A transfer from the browser keeper is received and
    merged, end to end. It extends `pnpm smoke:transfer`.
 8. **Deployment and docs.** `wrangler deploy` from CI to a staging object,
