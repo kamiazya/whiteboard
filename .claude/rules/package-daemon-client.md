@@ -46,7 +46,7 @@ job (`fetch`, `ReadableStream`) — exempted as `dom-global` in
 Both composition roots import this package directly; the `src/shared/*`
 re-export shims and mcp-server's published client subpaths are retired
 (`publish-contract.test.ts` pins the exports map — `.` and `./package.json`
-only). tsup's `noExternal` MUST list this package or the published tarball
+only). tsdown's `noExternal` MUST list this package or the published tarball
 carries a bare specifier for an unpublished workspace dep.
 
 ## The exports map is explicit, and that is the dead-export gate
