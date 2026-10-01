@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseServerRunArgs } from './server-run-args.js'
+import { mergeCliFlagsIntoEnv, parseServerRunArgs } from './server-run-args.js'
 
 const MINIMAL_VALID = [
   '--json',
@@ -193,5 +193,42 @@ describe('parseServerRunArgs — a flag name is not an object key', () => {
     if (result.kind !== 'usage-error') return
     expect(result.message).toContain('Unknown argument')
     expect(result.message).not.toContain('whatever')
+  })
+})
+
+describe('mergeCliFlagsIntoEnv', () => {
+  // Every value flag the parser accepts lands in the env, so `server run`
+  // and `server doctor` — which share this function — agree on what a flag
+  // does. Read off the parser's own table rather than written out again.
+  it('maps every value flag the parser knows onto an env key', () => {
+    const values = [
+      '--external-url=https://wb.example',
+      '--allowed-origins=https://a.example',
+      '--auth-strategy=oauth-jwt',
+      '--jwt-issuer=https://issuer.example',
+      '--jwt-audience=aud',
+      '--jwks-uri=https://issuer.example/jwks',
+      '--jwt-clock-skew=30',
+      '--jwt-scope-claim=scp',
+      '--host=127.0.0.1',
+      '--port=8080',
+      '--data-dir=/tmp/wb',
+    ]
+    const parsed = parseServerRunArgs(['--json', '--trusted-proxy', ...values])
+    if (parsed.kind !== 'ok') throw new Error(parsed.message)
+    const env = mergeCliFlagsIntoEnv({}, parsed)
+    // One env entry per value flag, plus the boolean — so a flag added to
+    // the parser and not to the merge shows up here as a missing key.
+    expect(Object.keys(env)).toHaveLength(values.length + 1)
+    expect(env.WHITEBOARD_SERVER_PORT).toBe('8080')
+    expect(env.WHITEBOARD_SERVER_TRUSTED_PROXY).toBe('true')
+  })
+
+  it('leaves the base env alone and writes nothing for an absent flag', () => {
+    const parsed = parseServerRunArgs(['--json'])
+    if (parsed.kind !== 'ok') throw new Error(parsed.message)
+    const base = { KEEP: 'me' }
+    expect(mergeCliFlagsIntoEnv(base, parsed)).toEqual({ KEEP: 'me' })
+    expect(base).toEqual({ KEEP: 'me' })
   })
 })
