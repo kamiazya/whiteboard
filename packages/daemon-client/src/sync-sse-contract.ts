@@ -8,6 +8,7 @@
  * declaration; the hub cannot import from `server/`.
  */
 import { z } from 'zod'
+import { clientTextMessageSchema } from './ws-messages.js'
 
 /**
  * These are deliberately NOT `.strict()`, unlike the request DTOs elsewhere in
@@ -49,3 +50,49 @@ export type SyncUpdateEvent = z.infer<typeof syncUpdateEventSchema>
 export const syncMessageEventSchema = z.object({ doc: z.string().min(1), raw: z.string() })
 
 export type SyncMessageEvent = z.infer<typeof syncMessageEventSchema>
+
+// ── Requests: the client -> daemon half ──────────────────────────────────────
+//
+// Declared beside the frames rather than in the daemon's route, because the
+// hub posts these bodies and the route parses them `.strict()`: a field the
+// hub renamed or added would answer 400, and the hub swallows a refused
+// control message as best-effort — sync would silently stop delivering
+// subscriptions or readiness. One declaration is what keeps the two ends
+// from drifting that way.
+
+/**
+ * How many documents one stream may follow. A real client holds one workspace
+ * key plus the documents it has open; the bound is what keeps a caller from
+ * making every membership check and every tail pass as long as it likes.
+ */
+export const MAX_DOCS_PER_STREAM = 256
+
+export const syncSubscribeRequestSchema = z
+  .object({
+    streamId: z.string().min(1),
+    // Doc keys are `${workspaceId}/${path}`, matching the connection registry.
+    subscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
+    unsubscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
+  })
+  .strict()
+
+export type SyncSubscribeRequest = z.infer<typeof syncSubscribeRequestSchema>
+
+/** What a subscribe answers: the documents the stream now follows. */
+export const syncSubscribeResponseSchema = z.object({
+  ok: z.literal(true),
+  docs: z.array(z.string().min(1)),
+})
+
+export type SyncSubscribeResponse = z.infer<typeof syncSubscribeResponseSchema>
+
+export const syncClientMessageRequestSchema = z
+  .object({
+    streamId: z.string().min(1),
+    doc: z.string().min(1),
+    // The client-message union the browser writes against.
+    message: clientTextMessageSchema,
+  })
+  .strict()
+
+export type SyncClientMessageRequest = z.infer<typeof syncClientMessageRequestSchema>

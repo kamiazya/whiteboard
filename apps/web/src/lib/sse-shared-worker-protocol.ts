@@ -5,6 +5,7 @@
  * drift — a mismatch here fails silently at runtime (a message nobody handles)
  * rather than at build time.
  */
+import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { z } from 'zod'
 
 export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
@@ -25,7 +26,11 @@ export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
   // Named `control` rather than `message` so it never reads as the mirror of
   // the worker->tab `message` event below, which travels the other way and
   // carries an already-serialized server frame.
-  z.object({ type: z.literal('control'), doc: z.string().min(1), message: z.unknown() }),
+  z.object({
+    type: z.literal('control'),
+    doc: z.string().min(1),
+    message: clientTextMessageSchema,
+  }),
   // --- authority replica ---
   //
   // The worker keeps a Loro replica of each subscribed document, so the

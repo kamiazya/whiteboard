@@ -89,7 +89,7 @@ const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store
 const { seedWorkspaceRow } = await import('./routes/_test-helpers.js')
 const { resetSyncStreamsForTests } = await import('./routes/sync-sse.js')
 const { syncSubscribeRequestSchema, syncClientMessageRequestSchema } = await import(
-  './routes/sync-sse.js'
+  '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
 )
 
 const TOKEN = 'fuzz-token'

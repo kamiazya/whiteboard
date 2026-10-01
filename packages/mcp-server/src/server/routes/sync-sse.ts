@@ -13,51 +13,24 @@ import {
   workspaceDocKey,
   workspaceIdOfDocKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
-import type {
-  SyncMessageEvent,
-  SyncReadyEvent,
-  SyncUpdateEvent,
+import {
+  MAX_DOCS_PER_STREAM,
+  type SyncMessageEvent,
+  type SyncReadyEvent,
+  type SyncSubscribeResponse,
+  type SyncUpdateEvent,
+  syncClientMessageRequestSchema,
+  syncSubscribeRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
-import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { z } from 'zod'
 import { getLogger } from '../log.js'
 import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import { membershipRefusal } from '../security/workspace-access.js'
 import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
 
 const log = getLogger('sync-sse')
-
-/**
- * How many documents one stream may follow. A real client holds one workspace
- * key plus the documents it has open; the bound is what keeps a caller from
- * making every membership check and every tail pass as long as it likes.
- */
-const MAX_DOCS_PER_STREAM = 256
-
-export const syncSubscribeRequestSchema = z
-  .object({
-    streamId: z.string().min(1),
-    // Doc keys are `${workspaceId}/${path}`, matching the WS connection registry.
-    subscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
-    unsubscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
-  })
-  .strict()
-
-export type SyncSubscribeRequest = z.infer<typeof syncSubscribeRequestSchema>
-
-export const syncClientMessageRequestSchema = z
-  .object({
-    streamId: z.string().min(1),
-    doc: z.string().min(1),
-    // The client-message union the browser writes against.
-    message: clientTextMessageSchema,
-  })
-  .strict()
-
-export type SyncClientMessageRequest = z.infer<typeof syncClientMessageRequestSchema>
 
 // Injected by sync-audience.ts, which owns the viewport cache and the
 // pending-request resolver. It already imports this module for the
@@ -416,7 +389,7 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
     },
     'sync subscriptions changed',
   )
-  return c.json({ ok: true, docs })
+  return c.json({ ok: true, docs } satisfies SyncSubscribeResponse)
 }
 
 // The client->server half of the sync protocol: an SSE client has no
