@@ -196,6 +196,9 @@ Two findings, both load-bearing for ADR-0005's connection-ticket design:
 Re-run `pnpm --filter @kamiazya/whiteboard-mcp smoke:lna-transport` whenever
 a browser build moves, to catch the day Chromium's WS gating ships.
 
+
+> **Note (2026-10-01):** the `smoke:lna-transport` script and its harness were removed with the TCP loopback transport (#1983, 2026-09-28) — the daemon listens on its socket alone (ADR-0050). The command above no longer exists; the measurement stands as history.
+
 ### Decision (supersedes the Approach A/B framing above)
 
 - **Approach B (mkcert) is demoted** from "the only viable path for hosted

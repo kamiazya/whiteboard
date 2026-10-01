@@ -245,7 +245,7 @@ machinery load-bearing rather than precautionary:
 - **Decision 4's precondition is satisfied by an existing mechanism.** A
   keeper may not declare a limit it can reach until a migration target and a
   path exist — and the path is the cross-origin transfer
-  ([ADR-0023](0023-keeper-and-replica.md)'s promote, generalised to any
+  ([ADR-0023](0023-replica-model.md)'s promote, generalised to any
   keeper by the direct-transfer decisions of the same day). So the capacity
   story and the transfer story are one mechanism: the band tells a person to
   move, and the transfer is how they move.
