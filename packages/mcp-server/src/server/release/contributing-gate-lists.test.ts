@@ -185,3 +185,31 @@ describe('the release documentation describes the workflow that ships', () => {
     )
   })
 })
+
+// AGENTS.md's completion checklist says full suites are CI's job and a local
+// full run is the same work twice. The two documents a contributor meets
+// first said the opposite — "`pnpm test` is green", "passes locally" — so the
+// same repo asked for a gate its own rules call redundant. `pnpm test` stays
+// the optional everything command; it just is not a requirement.
+describe('no contributor-facing checklist requires a local full-suite run', () => {
+  const CHECKBOX_NAMING_FULL_SUITE = /^\s*(?:- \[[ x]\]|-) .*`pnpm test`/m
+
+  it("AGENTS.md still says full suites are CI's job, which is the premise", () => {
+    expect(readFileSync(join(ROOT, 'AGENTS.md'), 'utf-8')).toContain('Full suites are CI')
+  })
+
+  it("CONTRIBUTING's pull request checklist does not require `pnpm test`", () => {
+    const text = contributing()
+    const start = text.indexOf('## Pull request checklist')
+    expect(start).toBeGreaterThan(-1)
+    const section = text.slice(start, text.indexOf('\n## ', start + 1))
+    expect(section).toContain('pnpm check:local')
+    expect(section).not.toMatch(CHECKBOX_NAMING_FULL_SUITE)
+  })
+
+  it('the pull request template does not require `pnpm test`', () => {
+    const template = readFileSync(join(ROOT, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf-8')
+    expect(template).toContain('- [ ]')
+    expect(template).not.toMatch(CHECKBOX_NAMING_FULL_SUITE)
+  })
+})
