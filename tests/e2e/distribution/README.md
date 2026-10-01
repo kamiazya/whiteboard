@@ -6,7 +6,7 @@ artifacts — npm tarball and Docker image — against real process boundaries.
 ## test:e2e:distribution
 
 The `test:e2e:distribution` root script runs the full distribution verification chain.
-The chain has fifteen steps after the initial build prerequisite:
+The chain has sixteen steps after the initial build prerequisite:
 
 1. `pnpm smoke:e2e` — full stdio MCP round-trip against the source entry point (canvas create → checkpoint → restore → export)
 2. `pnpm smoke:tarball` — validates the packed `.tgz` is installable and functional
