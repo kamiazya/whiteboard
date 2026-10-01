@@ -44,7 +44,7 @@ store, above the workspace-document cache:
 
 > Soft cap for snapshot size. Do not block saves when exceeded because
 > preserving user data is more important; emit one warning per threshold
-> breach and suggest compactDocument().
+> breach and suggest compactWorkspace().
 
 The constant and the warning code are gone; the sentence remains. It is the
 right policy for a limit the product chooses, and the wrong policy for a

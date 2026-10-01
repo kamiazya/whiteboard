@@ -132,9 +132,6 @@ describe('createDocumentRouter composition', () => {
     const restore = await app.request(`${P}/versions/${versionId}/restore`, { method: 'POST' })
     expect(restore.status).toBe(200)
 
-    // compact (POST with suffix)
-    expect((await app.request(`${P}/compact`, { method: 'POST' })).status).toBe(200)
-
     // rename moves the whole subtree address
     const renamed = await app.request(`${P}/path`, {
       method: 'PUT',

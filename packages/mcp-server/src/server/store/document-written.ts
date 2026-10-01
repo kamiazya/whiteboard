@@ -1,10 +1,6 @@
-import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentWritten } from '@kamiazya/whiteboard-server-core'
 
-import { getDataDir } from '../config.js'
 import { scheduleAutoCompact } from './auto-compact.js'
-import { prepareDataDir } from './db/prepare.js'
-import { openWorkspaceDocIfStored } from './document-store.js'
 import { FileVersionStore } from './version-store.js'
 
 /**
@@ -21,23 +17,17 @@ import { FileVersionStore } from './version-store.js'
  * modules are reachable and `auto-compact.ts` is not among them, so there
  * was no emitter AND no subscriber.
  *
+ * The document id goes unread: compaction folds the WORKSPACE record, which
+ * every document shares, so the write's workspace is the whole address. This
+ * used to open the workspace doc and resolve the id to a path on every agent
+ * write, only so the scheduler could build a per-document key it then
+ * collapsed anyway.
+ *
  * Deliberately NOT placed in document-store.ts beside `documentTeardown`,
  * which is where it belongs by subject: `auto-compact.ts` imports
- * `compactDocument` from there, so that would close an import cycle
+ * `compactWorkspace` from there, so that would close an import cycle
  * `cycle-check.ts` rejects.
  */
-export const documentWritten: DocumentWritten = async ({ workspaceId, documentId }) => {
-  const dataDir = getDataDir()
-  await prepareDataDir(dataDir)
-  // The compaction path addresses a document by (workspaceId, path) while a
-  // tool call knows the workspace and the id, so this is the one lookup that
-  // bridges them. It runs once per save rather than per operation.
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc === null) return
-  // A write to a document the tree has not been told about is possible — a
-  // tool can save bytes for an id with no placement — and there is nothing
-  // to compact under a name that does not exist.
-  const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
-  if (entry === null) return
-  scheduleAutoCompact(workspaceId, entry.path, new FileVersionStore())
+export const documentWritten: DocumentWritten = async ({ workspaceId }) => {
+  scheduleAutoCompact(workspaceId, new FileVersionStore())
 }

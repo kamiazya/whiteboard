@@ -202,11 +202,11 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     decide: always('canvas:read'),
   },
 
-  // Version history, restore, compact — version-control operations scoped
-  // to a single canvas.
+  // Version history and restore — version-control operations scoped to a
+  // single document.
   {
-    name: 'document versions/compact',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|compact)/),
+    name: 'document versions',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/versions/),
     decide: byAccess('versions:write', 'versions:read'),
     workspace: workspacesHandle,
   },

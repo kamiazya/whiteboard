@@ -633,7 +633,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document.ts#createDocumentRouter': 81,
   'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 112,
   'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
-  'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 101,
+  // 101 -> 66: the per-document compact route went, and optimize-all is one
+  // fold of the workspace record rather than a loop over documents.
+  'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 66,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 88,
   'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 82,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 132,
@@ -679,7 +681,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,
   'packages/mcp-server/src/server/store/db/index.ts#buildDb': 62,
-  'packages/mcp-server/src/server/store/document-store.ts#compactDocument': 93,
+  // 93 -> 87, renamed from compactDocument: the per-document address went.
+  'packages/mcp-server/src/server/store/document-store.ts#compactWorkspace': 87,
   'packages/mcp-server/src/server/store/document-store.ts#saveDocument': 66,
   'packages/mcp-server/src/server/store/file-gc-sweeper.ts#createFileGcSweeper': 124,
   'packages/mcp-server/src/server/store/file-gc.ts#purgeDanglingFiles': 110,

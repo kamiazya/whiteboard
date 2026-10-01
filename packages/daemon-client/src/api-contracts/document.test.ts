@@ -12,9 +12,11 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  type CompactWorkspaceResult,
   type CreateDocumentRequest,
   type CreateDocumentResponse,
   type CreateWorkspaceRequest,
+  compactWorkspaceResultSchema,
   createDocumentRequestSchema,
   createDocumentResponseSchema,
   createWorkspaceRequestSchema,
@@ -29,9 +31,7 @@ import {
   listVersionsResponseSchema,
   listWorkspacesResponseSchema,
   type OperatorInfo,
-  type OptimizeAllDocumentsResponse,
   operatorInfoSchema,
-  optimizeAllDocumentsResponseSchema,
   type PruneSandwichedVersionsResponse,
   type PurgeResult,
   pruneSandwichedVersionsResponseSchema,
@@ -522,37 +522,44 @@ describe('listDocumentsResponseSchema', () => {
   })
 })
 
-describe('optimizeAllDocumentsResponseSchema', () => {
-  const valid: OptimizeAllDocumentsResponse = { totalBeforeBytes: 4096, totalAfterBytes: 1024 }
+describe('compactWorkspaceResultSchema', () => {
+  const valid: CompactWorkspaceResult = {
+    compacted: true,
+    beforeBytes: 4096,
+    afterBytes: 1024,
+    reason: 'ok',
+  }
 
   it('parses a well-formed value', () => {
-    const result: OptimizeAllDocumentsResponse = optimizeAllDocumentsResponseSchema.parse(valid)
-    expect(result.totalBeforeBytes).toBe(4096)
+    const result: CompactWorkspaceResult = compactWorkspaceResultSchema.parse(valid)
+    expect(result.beforeBytes).toBe(4096)
   })
 
   it('roundtrip preserves fields', () => {
-    const result: OptimizeAllDocumentsResponse = roundtrip(
-      optimizeAllDocumentsResponseSchema,
-      valid,
-    )
+    const result: CompactWorkspaceResult = roundtrip(compactWorkspaceResultSchema, valid)
     expect(result).toEqual(valid)
   })
 
-  it('rejects missing totalAfterBytes', () => {
-    expect(optimizeAllDocumentsResponseSchema.safeParse({ totalBeforeBytes: 4096 }).success).toBe(
+  it('rejects a result that says nothing about why', () => {
+    expect(
+      compactWorkspaceResultSchema.safeParse({
+        compacted: false,
+        beforeBytes: 4096,
+        afterBytes: 4096,
+      }).success,
+    ).toBe(false)
+    expect(compactWorkspaceResultSchema.safeParse({ ...valid, reason: 'because' }).success).toBe(
       false,
     )
   })
 
-  it('rejects negative or fractional byte totals', () => {
-    expect(
-      optimizeAllDocumentsResponseSchema.safeParse({ totalBeforeBytes: -1, totalAfterBytes: 0 })
-        .success,
-    ).toBe(false)
-    expect(
-      optimizeAllDocumentsResponseSchema.safeParse({ totalBeforeBytes: 1.5, totalAfterBytes: 0 })
-        .success,
-    ).toBe(false)
+  it('rejects negative or fractional byte counts', () => {
+    expect(compactWorkspaceResultSchema.safeParse({ ...valid, beforeBytes: -1 }).success).toBe(
+      false,
+    )
+    expect(compactWorkspaceResultSchema.safeParse({ ...valid, afterBytes: 1.5 }).success).toBe(
+      false,
+    )
   })
 })
 

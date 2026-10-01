@@ -20,12 +20,13 @@ vi.mock('../config.js', () => ({
 const {
   saveDocument,
   loadDocument,
-  compactDocument,
+  compactWorkspace,
   setDocumentSavedListener,
   openWorkspaceDocIfStored,
 } = await import('./document-store.js')
 const {
   scheduleAutoCompact,
+  installAutoCompact,
   uninstallAutoCompact,
   disposeAutoCompact,
   _inFlightAutoCompactCountForTests,
@@ -132,7 +133,7 @@ async function teardownIsolatedDb(): Promise<void> {
 // Split from document-store.test.ts by topic (compaction: manual + auto);
 // the vi.mock + awaited-import harness is per-file by necessity.
 
-describe('compactDocument', () => {
+describe('compactWorkspace', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-compact-test-'))
     await setupIsolatedDb()
@@ -152,14 +153,14 @@ describe('compactDocument', () => {
     await saveDocument('session1', 'test', doc)
 
     const store = new FileVersionStore()
-    const result = await compactDocument('session1', 'test', store)
+    const result = await compactWorkspace('session1', store)
     expect(result.compacted).toBe(false)
     expect(result.reason).toBe('no-versions')
   })
 
-  it('returns no-file when the .loro file is missing', async () => {
+  it('returns no-file when nothing is stored under the workspace', async () => {
     const store = new FileVersionStore()
-    const result = await compactDocument('session1', 'missing', store)
+    const result = await compactWorkspace('never-written', store)
     expect(result).toEqual({ compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' })
   })
 
@@ -192,13 +193,13 @@ describe('compactDocument', () => {
     })
     _clearWorkspaceDocCacheForTests()
 
-    await expect(compactDocument('session1', 'broken', store)).rejects.toThrow()
+    await expect(compactWorkspace('session1', store)).rejects.toThrow()
   })
 
   it('compacts at a version cut point while keeping restore working', async () => {
     const { store, version: v } = await buildCompactableCanvas('test')
 
-    const result = await compactDocument('session1', 'test', store)
+    const result = await compactWorkspace('session1', store)
     expect(result.compacted).toBe(true)
     expect(result.afterBytes).toBeLessThan(result.beforeBytes)
 
@@ -233,7 +234,7 @@ describe('compactDocument', () => {
     empty.commit()
     await saveDocument('session1', 'untouched', empty)
     const noopStore = new FileVersionStore()
-    const noop = await compactDocument('session1', 'untouched', noopStore)
+    const noop = await compactWorkspace('session1', noopStore)
     expect(noop.reason).toBe('no-versions')
     expect(await readLastCompactedAt()).toBeNull()
 
@@ -241,7 +242,7 @@ describe('compactDocument', () => {
     const { store } = await buildCompactableCanvas('big')
 
     const before = Date.now()
-    const result = await compactDocument('session1', 'big', store)
+    const result = await compactWorkspace('session1', store)
     expect(result.compacted).toBe(true)
     const after = Date.now()
     const stamp = await readLastCompactedAt()
@@ -263,7 +264,7 @@ describe('compactDocument', () => {
     expect(wsStamp).toBeLessThanOrEqual(after)
   })
 
-  // compactDocument reads the workspace record, exports the shallow
+  // compactWorkspace reads the workspace record, exports the shallow
   // snapshot from the live workspace doc, and writes it back — all under the
   // workspace write lock, the same lock every content writer holds. A
   // concurrent tool write therefore lands strictly before or strictly after
@@ -312,7 +313,7 @@ describe('compactDocument', () => {
       },
     })
 
-    const compactPromise = compactDocument('session1', 'test', delayedStore)
+    const compactPromise = compactWorkspace('session1', delayedStore)
     await new Promise((r) => setTimeout(r, 20))
     const routed = new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db))
     const docRef = { kind: 'document' as const, workspaceId: 'session1', documentId }
@@ -366,6 +367,25 @@ describe('auto-compact', () => {
     expect(trigger).toHaveBeenCalledWith('session1', 'foo')
   })
 
+  // Every document in a workspace lives in the one workspace record, and
+  // compaction folds THAT record — so two documents saved in one burst have
+  // one thing to compact between them, not two. Keyed per document, the
+  // second timer fired a second fold that could only answer 'no-gain' after
+  // a full shallow export of the record: N documents edited, N-1 exports for
+  // nothing, and `documentWritten` resolving an id to a path on every agent
+  // write only so the key could be built.
+  it('collapses saves to different documents of one workspace into one pending compaction', async () => {
+    const store = new FileVersionStore()
+    installAutoCompact(store)
+    await saveDocument('session1', 'first', new LoroDoc())
+    await saveDocument('session1', 'second', new LoroDoc())
+    expect(_autoCompactTimerCountForTests()).toBe(1)
+
+    // A second workspace is a second record, so it keeps a timer of its own.
+    await saveDocument('session2', 'third', new LoroDoc())
+    expect(_autoCompactTimerCountForTests()).toBe(2)
+  })
+
   it('scheduleAutoCompact debounces rapid triggers into a single compaction', async () => {
     // A version cut with history on both sides, so the debounced firing has
     // something to gain rather than answering 'no-versions' or 'no-gain'.
@@ -379,10 +399,10 @@ describe('auto-compact', () => {
     const logs = captureLogsForTests('info')
 
     // Three rapid triggers within the debounce window must collapse into
-    // a single compactDocument run. Use a tiny debounce so the test stays fast.
-    scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
-    scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
-    scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
+    // a single compactWorkspace run. Use a tiny debounce so the test stays fast.
+    scheduleAutoCompact('session1', store, { debounceMs: 50 })
+    scheduleAutoCompact('session1', store, { debounceMs: 50 })
+    scheduleAutoCompact('session1', store, { debounceMs: 50 })
 
     // The collapse itself, asserted where it is a FACT rather than a race:
     // three schedules leave one timer, and the count is readable synchronously
@@ -393,7 +413,7 @@ describe('auto-compact', () => {
       'three rapid triggers did not collapse into exactly one pending debounce',
     ).toBe(1)
 
-    // Wait for the debounce to fire and its compactDocument write to settle.
+    // Wait for the debounce to fire and its compactWorkspace write to settle.
     // The seam waits for that event rather than for a budget to elapse — the
     // budget is what used to fail here under a shared runner's contention.
     await _awaitAutoCompactIdleForTests()
@@ -408,7 +428,7 @@ describe('auto-compact', () => {
     expect(stamp, why).not.toBeNull()
 
     // The PREMISE, asserted on the same path that flaked. Not on a direct
-    // `compactDocument` call: measured, the two paths do not share a margin
+    // `compactWorkspace` call: measured, the two paths do not share a margin
     // — the direct one reads 302 on a fixture this one reads 24 on, so a
     // floor placed there cannot see a thinned fixture at all.
     //
@@ -463,7 +483,7 @@ describe('auto-compact', () => {
     await getDoc('session1', 'cached')
     expect(peekDoc('session1', 'cached')).toBeDefined()
 
-    scheduleAutoCompact('session1', 'cached', store, { debounceMs: 50 })
+    scheduleAutoCompact('session1', store, { debounceMs: 50 })
     await _awaitAutoCompactIdleForTests()
     {
       const { openWorkspaceDocIfStored } = await import('./document-store.js')
@@ -509,9 +529,9 @@ describe('auto-compact disposal', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  // compactDocument normally settles fast enough (in-memory DB, tiny fixture)
+  // compactWorkspace normally settles fast enough (in-memory DB, tiny fixture)
   // that polling for "in flight" would race the compaction to zero. Delay
-  // just the cut lookup — an await compactDocument makes early on — so tests
+  // just the cut lookup — an await compactWorkspace makes early on — so tests
   // can deterministically observe the in-flight window instead of depending
   // on real-clock luck.
   function withDelayedEarliestFrontiers(
@@ -564,7 +584,7 @@ describe('auto-compact disposal', () => {
     })
 
     const logs = captureLogsForTests('info')
-    scheduleAutoCompact('session1', 'idle-seam', gatedStore, { debounceMs: 1 })
+    scheduleAutoCompact('session1', gatedStore, { debounceMs: 1 })
     // Throws naming the premise if the schedule was a no-op, instead of
     // leaving that to be inferred from a null stamp three lines later.
     await _awaitAutoCompactFiredForTests()
@@ -616,7 +636,7 @@ describe('auto-compact disposal', () => {
     })
 
     expect(_loopHoldersCountForTests()).toBe(0)
-    scheduleAutoCompact('session1', 'abandoned-wait', gatedStore, { debounceMs: 1 })
+    scheduleAutoCompact('session1', gatedStore, { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
 
     // Started and deliberately NOT awaited: this is a wait whose test timed
@@ -651,7 +671,7 @@ describe('auto-compact disposal', () => {
   })
 
   it('logs which reason a scheduled compaction declined for, instead of dropping it and leaving a null stamp to explain itself', async () => {
-    // `compactDocument` names four reasons it writes no stamp — `no-file`,
+    // `compactWorkspace` names four reasons it writes no stamp — `no-file`,
     // `no-versions`, `no-gain`, `raced`. The scheduler read only
     // `result.compacted`, so all four reached a reader as the same silence:
     // a null stamp and no record of why.
@@ -661,7 +681,7 @@ describe('auto-compact disposal', () => {
     await saveDocument('session1', 'undeclared', empty)
 
     const logs = captureLogsForTests('info')
-    scheduleAutoCompact('session1', 'undeclared', new FileVersionStore(), { debounceMs: 1 })
+    scheduleAutoCompact('session1', new FileVersionStore(), { debounceMs: 1 })
     await _awaitAutoCompactIdleForTests()
     logs.restore()
 
@@ -679,12 +699,12 @@ describe('auto-compact disposal', () => {
     // Do NOT call uninstallAutoCompact() here — the point of this test
     // is that DB disposal alone (without that manual call) must cancel the
     // pending timer.
-    scheduleAutoCompact('session1', 'big', store, { debounceMs: 20 })
+    scheduleAutoCompact('session1', store, { debounceMs: 20 })
     await teardownIsolatedDb()
     disposedDb = true
 
     // Wait past the debounce window. If the timer was not cancelled, its
-    // fired compactDocument call would hit the destroyed driver and log a
+    // fired compactWorkspace call would hit the destroyed driver and log a
     // 'failed' warning.
     await new Promise((r) => setTimeout(r, 150))
     logs.restore()
@@ -696,7 +716,7 @@ describe('auto-compact disposal', () => {
   it('disposeAutoCompact awaits an already-fired in-flight compaction before resolving', async () => {
     const { store } = await buildCompactableCanvas('cached')
 
-    scheduleAutoCompact('session1', 'cached', withDelayedEarliestFrontiers(store, 100), {
+    scheduleAutoCompact('session1', withDelayedEarliestFrontiers(store, 100), {
       debounceMs: 1,
     })
     await _awaitAutoCompactFiredForTests()
@@ -740,7 +760,7 @@ describe('auto-compact disposal', () => {
         if (prop === 'earliestWorkspaceFrontiers') {
           return async (workspaceId: string) => {
             await rescheduleGate
-            scheduleAutoCompact('session1', 'reentrant', countingStore, { debounceMs: 0 })
+            scheduleAutoCompact('session1', countingStore, { debounceMs: 0 })
             return target.earliestWorkspaceFrontiers(workspaceId)
           }
         }
@@ -748,7 +768,7 @@ describe('auto-compact disposal', () => {
       },
     })
 
-    scheduleAutoCompact('session1', 'reentrant', reentrantStore, { debounceMs: 1 })
+    scheduleAutoCompact('session1', reentrantStore, { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
     expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
@@ -789,7 +809,7 @@ describe('auto-compact disposal', () => {
       },
     })
 
-    scheduleAutoCompact('session1', 'lifecycle', reentrantStore, { debounceMs: 1 })
+    scheduleAutoCompact('session1', reentrantStore, { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
     expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
@@ -810,7 +830,7 @@ describe('auto-compact disposal', () => {
     await disposeAutoCompact()
     await disposeAutoCompact()
 
-    scheduleAutoCompact('session1', 'again', store, { debounceMs: 20 })
+    scheduleAutoCompact('session1', store, { debounceMs: 20 })
     await _awaitAutoCompactIdleForTests()
     expect(await readLastCompactedAt()).not.toBeNull()
   })
@@ -818,7 +838,7 @@ describe('auto-compact disposal', () => {
   it('composes with uninstallAutoCompact() in either order without dropping in-flight work', async () => {
     const { store } = await buildCompactableCanvas('composed')
 
-    scheduleAutoCompact('session1', 'composed', withDelayedEarliestFrontiers(store, 100), {
+    scheduleAutoCompact('session1', withDelayedEarliestFrontiers(store, 100), {
       debounceMs: 1,
     })
     await _awaitAutoCompactFiredForTests()
@@ -868,7 +888,7 @@ describe('auto-compact disposal', () => {
     theirs.commit()
     await docs.save('session1', theirs)
 
-    const result = await compactDocument('session1', 'page', store)
+    const result = await compactWorkspace('session1', store)
     // Asserted, not assumed: a `no-gain` or `no-versions` answer means the
     // fold never ran and everything below would pass for the wrong reason.
     expect(result.reason).toBe('ok')

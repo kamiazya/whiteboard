@@ -99,11 +99,11 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   const versionStore = options.versionStore ?? new FileVersionStore()
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
 
-  // Auto-compact debounce: every successful saveDocument reschedules a per-
-  // canvas compaction. The 30s default lets active editing sessions burst
-  // without thrashing the op-log; once the user pauses, the shallow-snapshot
-  // runs in the background. A test that wants the save path isolated from the
-  // compact path calls `uninstallAutoCompact()`.
+  // Auto-compact debounce: every successful saveDocument reschedules a
+  // compaction of its WORKSPACE record. The 30s default lets active editing
+  // sessions burst without thrashing the op-log; once the user pauses, the
+  // shallow-snapshot runs in the background. A test that wants the save path
+  // isolated from the compact path calls `uninstallAutoCompact()`.
   installAutoCompact(versionStore)
 
   app.route(

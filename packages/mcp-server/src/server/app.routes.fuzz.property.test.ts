@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   canvasExistsResponseSchema,
+  compactWorkspaceResultSchema,
   createDocumentRequestSchema,
   createDocumentResponseSchema,
   createWorkspaceRequestSchema,
@@ -28,7 +29,6 @@ import {
   listTrashResponseSchema,
   listVersionsResponseSchema,
   listWorkspacesResponseSchema,
-  optimizeAllDocumentsResponseSchema,
   pruneSandwichedVersionsResponseSchema,
   renameDocumentPathRequestSchema,
   renameDocumentPathResponseSchema,
@@ -249,7 +249,7 @@ const RULES: Record<string, Rule> = {
   },
   'POST /api/workspaces/:workspaceId/documents/optimize-all': {
     answers: 'json',
-    response: optimizeAllDocumentsResponseSchema,
+    response: compactWorkspaceResultSchema,
   },
   'POST /api/workspaces/:workspaceId/files/purge-dangling': { answers: 'json' },
   'GET /api/workspaces/:workspaceId/documents/*/versions': {
@@ -282,7 +282,6 @@ const RULES: Record<string, Rule> = {
     body: renameDocumentPathRequestSchema,
     response: renameDocumentPathResponseSchema,
   },
-  'POST /api/workspaces/:workspaceId/documents/*/compact': { answers: 'json' },
   'DELETE /api/workspaces/:workspaceId/documents/*': {
     answers: 'json',
     response: deleteDocumentResponseSchema,

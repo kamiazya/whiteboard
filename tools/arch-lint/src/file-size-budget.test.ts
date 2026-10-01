@@ -807,7 +807,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stays green with the refusal DELETED, so without the note the next
   // reader loosens it again.
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1317,
-  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
+  // 881 -> 901 when compaction became workspace-keyed: one test pins that
+  // saves to two documents of one workspace collapse into one compaction.
+  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
   // +17 for the tenant layout: this file's subject IS filesystem paths, so
   // every seed now names a tenant's workspaces root, and three symlink seeds
