@@ -180,7 +180,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     }
   })
 
-  it('returns 404 with canvas_not_found when the canvas does not exist', async () => {
+  it('returns 404 with not_found when the document does not exist', async () => {
     // Headless rendering does NOT verify the canvas exists: getDoc / loadDocument
     // return an empty LoroDoc on cache miss, so a typo would otherwise
     // silently produce a blank PNG. Surfaced as 404 unconditionally now that
@@ -192,7 +192,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
     expect(res.status).toBe(404)
     const body = (await res.json()) as { error: string; message?: string }
-    expect(body.error).toBe('canvas_not_found')
+    expect(body.error).toBe('not_found')
     // Refuse before paying the resvg startup cost.
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })

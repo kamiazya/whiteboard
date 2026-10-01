@@ -111,7 +111,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       // nothing. Its absence here was the asymmetry, not a decision.
       if (!(await documentExists(workspaceId, path))) {
         const errBody: ExportErrorBody = {
-          error: 'canvas_not_found',
+          error: 'not_found',
           message: `Canvas not found: ${workspaceId}/${path}`,
         }
         return c.json(errBody, 404)

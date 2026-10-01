@@ -105,7 +105,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     // Without the guard this is a 200 and a well-formed SVG of nothing, which
     // a caller cannot tell from a canvas that is genuinely empty.
     expect(res.status).toBe(404)
-    expect(await res.json()).toMatchObject({ error: 'canvas_not_found' })
+    expect(await res.json()).toMatchObject({ error: 'not_found' })
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
