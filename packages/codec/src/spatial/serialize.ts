@@ -11,8 +11,8 @@ export type SpatialSerializeMode = 'strict' | 'extended'
  * becomes a JSON Canvas document and `JSON_CANVAS_PROJECTION` is the only
  * account of what that costs.
  *
- * `extended` is lossless over what the extension key can hold (round-trip
- * property in serialize.property.test.ts). `strict` applies
+ * `extended` is lossless over what the extension key can hold (the idempotent
+ * round trip in codecs.property.test.ts). `strict` applies
  * {@link strictDegrade} and re-validates against the wire schema — a degraded
  * document must still BE a JSON Canvas 1.0 document, not merely close enough
  * JSON.

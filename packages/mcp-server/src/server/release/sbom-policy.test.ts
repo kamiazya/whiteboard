@@ -394,8 +394,8 @@ describe('generated SBOM content regression', () => {
       // No @excalidraw/* pattern belongs here: those were production deps of
       // the headless export renderer that moved to canvas-render + resvg, so
       // they are not dev-only. They get their own explicit regression check
-      // in the removed-packages test below, plus a manifest-level guard in
-      // published-dependencies.test.ts.
+      // in the removed-packages test below, plus an import-side guard in
+      // export/import-guard.test.ts.
       '%40stryker-mutator/', // @stryker-mutator/* mutation testing
       'pkg:npm/playwright@', // playwright core
       '%40playwright/', // @playwright/* scoped

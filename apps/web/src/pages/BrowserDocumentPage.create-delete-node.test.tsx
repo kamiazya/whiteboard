@@ -4,7 +4,7 @@
  * through the dedicated `create-node` fine-grained write survives a remount,
  * and a node removed through `delete-node` stays gone after another remount.
  *
- * SpatialEditor is mocked (see BrowserDocumentPage.reload-elements.browser.test.tsx
+ * SpatialEditor is mocked (see BrowserDocumentPage.reload-elements.test.tsx
  * for why) so the test can drive `onChange` deterministically with the exact
  * command shape a real create/delete gesture would report.
  */

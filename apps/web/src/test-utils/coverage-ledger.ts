@@ -33,8 +33,59 @@
  */
 import { expect, vi } from 'vitest'
 
+// Basenames only, from the glob's KEYS — nothing is loaded, so this stays a
+// directory listing in every project, and it reaches past apps/web because a
+// ledger here legitimately points at a daemon-side or package test. Vite
+// ignores `node_modules` by default.
+const KNOWN_TEST_FILES = import.meta.glob('../../../../{apps,packages,tools}/**/*.test.{ts,tsx}')
+
+/** Every test file basename in the repo, which is what a `not modelled` reason may cite. */
+export const KNOWN_TEST_BASENAMES: ReadonlySet<string> = new Set(
+  Object.keys(KNOWN_TEST_FILES).map((path) => path.slice(path.lastIndexOf('/') + 1)),
+)
+
 /** Whether a test exercises a member of the surface, or deliberately does not. */
 export type SurfaceCoverage = 'covered' | `not modelled: ${string}`
+
+/**
+ * The test files a `not modelled:` reason names that exist nowhere in the tree.
+ *
+ * A reason is the only thing standing between an unmodelled member and the
+ * omission with a word in front of it, and its usual shape is "covered by
+ * <test file>" — so a reason pointing at a file that is gone says that
+ * something covers the member when nothing does, and no other gate reads a
+ * string. Resolved by basename, the way `comment-file-pointers.test.ts`
+ * resolves a comment's pointer. A leading dot is a suffix pattern
+ * (`.browser.test.tsx`), prose about a naming convention rather than a name.
+ */
+export function danglingTestCitations(
+  ledger: Record<string, unknown>,
+  known: ReadonlySet<string> = KNOWN_TEST_BASENAMES,
+): { readonly entry: string; readonly cited: string }[] {
+  const dangling: { entry: string; cited: string }[] = []
+  for (const [entry, coverage] of Object.entries(ledger)) {
+    if (typeof coverage !== 'string' || !coverage.startsWith('not modelled:')) continue
+    for (const match of coverage.matchAll(/[\w./-]*[\w-]\.test\.tsx?(?![\w-])/g)) {
+      const cited = match[0].slice(match[0].lastIndexOf('/') + 1)
+      if (cited.startsWith('.') || known.has(cited)) continue
+      dangling.push({ entry, cited })
+    }
+  }
+  return dangling
+}
+
+function assertNoDanglingCitations(what: string, ledger: Record<string, unknown>): void {
+  const dangling = danglingTestCitations(ledger)
+  if (dangling.length === 0) return
+  expect.fail(
+    dangling
+      .map(
+        ({ entry, cited }) =>
+          `${what} "${entry}" says it is covered by ${cited}, which is not a test file anywhere in the repo — correct the name, or say what covers it instead`,
+      )
+      .join('\n'),
+  )
+}
 
 /** A zeroed counter per ledger entry, ready to tick as the run produces them. */
 export function emptyTally<K extends string>(
@@ -62,6 +113,7 @@ export const assertLedger = vi.defineHelper(function assertLedger<K extends stri
   ledger: Record<K, SurfaceCoverage>,
   tally: Record<K, number>,
 ): void {
+  assertNoDanglingCitations(what, ledger)
   for (const [key, coverage] of Object.entries(ledger) as [K, SurfaceCoverage][]) {
     if (coverage === 'covered') {
       expect(
@@ -101,6 +153,7 @@ export const assertScannedLedger = vi.defineHelper(function assertScannedLedger(
   ledger: Record<string, unknown>,
   messages: { readonly unclassified: string; readonly stale: string },
 ): void {
+  assertNoDanglingCitations('scanned ledger entry', ledger)
   const held = new Set(scanned)
   const declared = new Set(Object.keys(ledger))
   expect(

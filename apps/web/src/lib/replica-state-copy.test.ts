@@ -3,7 +3,7 @@ import { REPLICA_PAGE_STATES } from './replica-page-state.js'
 import { lockedDetail, REPLICA_STATE_COPY } from './replica-state-copy.js'
 import { REPLICA_TIER_COPY } from './replica-tier-copy.js'
 
-// The same jargon guard PromoteWorkspaceSection.tier.test.ts uses — this
+// The same jargon guard PromoteWorkspaceSection.tier.test.tsx uses — this
 // copy reaches someone who has never heard "tier", "replica", "epoch" or
 // "key", the same audience replica-tier-copy.ts already writes for.
 const JARGON = /\b(tier|replica|epoch|key)\b/i

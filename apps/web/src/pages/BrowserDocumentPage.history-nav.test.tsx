@@ -4,7 +4,7 @@
  * (proving the URL->switchDocument direction fires), then Forward to the
  * second again.
  *
- * SpatialEditor is mocked (see BrowserDocumentPage.reload-elements.browser.test.tsx's
+ * SpatialEditor is mocked (see BrowserDocumentPage.reload-elements.test.tsx's
  * doc comment for why) so each canvas's edit is driven deterministically via
  * onChange — this suite's subject is router<->canvas-id sync, not gesture
  * input.

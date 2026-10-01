@@ -36,6 +36,18 @@ import { describe, expect, it } from 'vitest'
 // character class below, which admits no `*`, `{` or space: a looser probe
 // invented the work, and the guard's own rule answered 25 where the probe
 // said 27.
+//
+// A test-file NAME written without backticks is a pointer too, and it is the
+// commonest way one is written: a name in running prose, which the scan above
+// never looked at. Ten sat there when this was widened — five with the wrong
+// extension or infix (`.test.ts` for `.test.tsx`, a `.browser.` that was never
+// in the name), one missing its prefix, three at a file that never existed,
+// and one wrapped across a line so only its tail survived. Only `.test.ts(x)`
+// is read this way, because an ordinary source file's bare name is prose and
+// measured as noise, while a name ending in `.test.ts` is a file or a mistake.
+// A leading dot is the suffix-pattern shape and is excluded by shape, like the
+// backticked scan's. Resolution is by basename alone, which is also all a bare
+// name carries, so a basename existing in ANY directory resolves.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 
 /** Every tracked path, which is what a pointer may name. */
@@ -64,6 +76,14 @@ function isPointer(name: string): boolean {
   if (name.startsWith('.') && !name.startsWith('./')) return false
   return !/(^|\/)[A-Z]\.tsx?$/.test(name)
 }
+
+/**
+ * A bare test-file name in prose. Not preceded by anything that makes it a
+ * fragment of a longer path or glob, not followed by anything that makes it a
+ * longer name (`foo.test.tsx.snap`, `foo.test.ts-ish`) — a sentence's own full
+ * stop is fine.
+ */
+const BARE_TEST_FILE = /(?<![\w./*-])([\w][\w.-]*\.test\.tsx?)(?![\w-]|\.\w)/g
 
 /**
  * Names that resolve to nothing AND are meant to. Each says why, because a
@@ -135,6 +155,14 @@ function unresolvedPointers(): Pointer[] {
         seen.add(key)
         found.push({ key, file, name })
       }
+      for (const match of line.matchAll(BARE_TEST_FILE)) {
+        const name = match[1] ?? ''
+        if (byBasename.has(name)) continue
+        const key = `${file}#${name}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        found.push({ key, file, name })
+      }
     }
   }
   return found
@@ -142,7 +170,7 @@ function unresolvedPointers(): Pointer[] {
 
 const UNRESOLVED = unresolvedPointers()
 
-describe('a backticked filename in a comment names a file that exists', () => {
+describe('a filename in a comment, backticked or a bare test file, names a file that exists', () => {
   it('read a plausible number of comment pointers', () => {
     // This half is the SCAN: an `ls-files` that answered nothing would report
     // every pointer as resolving, which is the same shape as a clean tree.

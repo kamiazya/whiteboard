@@ -5,7 +5,7 @@
  * cannot see (a subpath that resolves in dev and breaks in the production
  * bundle, or vice versa), so this renders genuine TeX through the genuine
  * engine. The mermaid half needs a real DOM and is smoked in
- * markdown-fragment-renderers.browser.test.ts instead.
+ * markdown-fragment-renderers.browser.test.tsx instead.
  */
 import { describe, expect, it } from 'vitest'
 import { renderDiagramFragment, renderMathFragment } from './markdown-fragment-renderers.js'

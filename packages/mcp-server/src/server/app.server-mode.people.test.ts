@@ -8,26 +8,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
+import {
+  bearerNamesItsSubject,
+  ISSUER,
+  PUBLIC_URL,
+  serverModePeople,
+} from './_test-server-mode-harness.js'
 import type { ServerModeAppOptions } from './app.js'
 import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './routes/sync-sse.js'
-import { createAdministratorCheck } from './security/administrator-check.js'
-import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
-import { createInvitationStore } from './security/invitation-store.js'
-import {
-  createMemberProfileStore,
-  type MemberProfileStore,
-} from './security/member-profile-store.js'
-import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
-import {
-  createSignInSessionStore,
-  SESSION_COOKIE,
-  type SignInSessionStore,
-} from './security/sign-in-session-store.js'
+import type { MemberProfileStore } from './security/member-profile-store.js'
+import { SESSION_COOKIE, type SignInSessionStore } from './security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
-import { createUserDeactivation } from './security/user-deactivation.js'
-import { createUserDeletion } from './security/user-deletion.js'
-import { createWorkspaceRoles } from './security/workspace-roles.js'
-import { accountRetirementFor } from './store/db/account-retirement.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
 let tempDir: string
@@ -44,25 +35,6 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 
-const ISSUER = 'oidc:https://idp.test'
-const PUBLIC_URL = 'https://example.com'
-
-const bearerNamesItsSubject: AsyncAuthStrategy = {
-  async authorize({ authorizationHeader }) {
-    const sub = authorizationHeader?.replace(/^Bearer /, '')
-    if (!sub) return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
-    return {
-      ok: true,
-      context: {
-        kind: 'oauth-resource-server',
-        subject: sub,
-        scopes: ALL_AUTH_SCOPES,
-      },
-      person: { authenticator: ISSUER, subject: sub },
-    }
-  },
-}
-
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
 let sessions: SignInSessionStore
@@ -71,31 +43,16 @@ let app: ReturnType<typeof createApp>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'wb-server-mode-people-app-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  members = createMemberProfileStore(handle.db)
-  sessions = createSignInSessionStore(handle.db)
+  const stores = serverModePeople(handle.db, tempDir)
+  members = stores.members
+  sessions = stores.sessions
   const options: ServerModeAppOptions = {
     authMode: 'server-mode',
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
     serverDeps: resolveServerDeps(createContainer()),
-    people: {
-      members,
-      sessions,
-      roles: createWorkspaceRoles(handle.db),
-      invitations: createInvitationStore(handle.db),
-      administration: {
-        check: createAdministratorCheck({
-          admins: createTenantAdministratorStore(handle.db),
-          members: createMemberProfileStore(handle.db),
-          configured: [],
-        }),
-        appointments: createTenantAdministratorStore(handle.db),
-        deactivation: createUserDeactivation(handle.db),
-        deletion: createUserDeletion(handle.db, accountRetirementFor(tempDir)),
-      },
-      origin: PUBLIC_URL,
-    },
+    people: stores.people,
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')

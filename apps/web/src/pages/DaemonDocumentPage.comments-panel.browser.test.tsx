@@ -64,8 +64,8 @@ function render(ui: ReactElement) {
 
 /**
  * One open thread, seeded at document root — matches how an injected
- * `createBackend` scopes a connection (see DaemonDocumentPage.comments-
- * panel.test.tsx's own note on `contentDocumentId`).
+ * `createBackend` scopes a connection (see the note on `contentDocumentId` in
+ * DaemonDocumentPage.comments-panel.test.tsx).
  */
 function seededSnapshot(): Uint8Array {
   const doc = new LoroDoc()

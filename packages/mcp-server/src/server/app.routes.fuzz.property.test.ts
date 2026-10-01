@@ -1,68 +1,45 @@
 /**
- * Every HTTP route the daemon registers, requested with what its own input
- * schema admits — and with what it does not.
+ * Every HTTP route the local daemon registers, requested with what its own
+ * input schema admits — and with what it does not.
  *
  * server-core's `create-server.routes.fuzz` covers the `/api/v1` surface it
  * owns; this is the same question asked of everything else `createApp`
  * mounts: the legacy `/api/workspaces` and `/api/w` document routes, sync,
- * runtime, fonts, files, export, debug and the OAuth metadata. A route may answer (2xx, or 501 saying the composition lacks the
- * feature), or refuse a request it understood (4xx with a JSON body naming
- * why) — never a 5xx, and never a body the browser client cannot read.
+ * runtime, fonts, files, export, debug and the OAuth metadata. A route may
+ * answer (2xx, or 501 saying the composition lacks the feature), or refuse a
+ * request it understood (4xx with a JSON body naming why) — never a 5xx, and
+ * never a body the browser client cannot read.
+ *
+ * The routers only server mode mounts (a workspace's people, the tenant's
+ * people, sign-in) need a signed-in person and an OIDC provider to answer
+ * anything but a refusal, so they are
+ * `app.routes.fuzz.server-mode.property.test.ts`'s. That lane reads this
+ * lane's rules to tell them from the routes both compositions serve.
  *
  * Routes are read off `app.routes`, so one added without a rule here fails.
  * The three wildcard patterns dispatch on the URL's tail, so their actions
  * are read off the registration calls in the routes directory and expanded.
+ * A router mounted in neither composition is invisible to both lanes: the
+ * replica-key router mounts only when `replicaKeys` is supplied, which
+ * neither composition does.
  */
 
-import { readdirSync, readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  canvasExistsResponseSchema,
-  compactWorkspaceResultSchema,
-  createDocumentRequestSchema,
-  createDocumentResponseSchema,
-  createWorkspaceRequestSchema,
-  deleteDocumentResponseSchema,
-  listDocumentsResponseSchema,
-  listTrashResponseSchema,
-  listVersionsResponseSchema,
-  listWorkspacesResponseSchema,
-  pruneSandwichedVersionsResponseSchema,
-  purgeResultSchema,
-  renameDocumentPathRequestSchema,
-  renameDocumentPathResponseSchema,
-  renameWorkspaceRequestSchema,
-  restoreTrashResponseSchema,
-  restoreVersionRequestSchema,
-  restoreVersionResponseSchema,
-  saveVersionRequestSchema,
-  saveVersionResponseSchema,
-  setNameRequestSchema,
-  setPinnedRequestSchema,
-  storageReportPayloadSchema,
-  updateDocumentResponseSchema,
-  versionDocumentResponseSchema,
-  workspaceNamesSchema,
-  workspaceSummarySchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { listFontsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
-import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import {
-  daemonPingResponseSchema,
-  runtimeStatusResponseSchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
-import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
-import type { z } from 'zod'
-import { clientCountResponseSchema } from '../shared/api-contracts/document-runtime.js'
-import { exportRequestSchema, exportResponseSchema } from '../shared/api-contracts/export.js'
-import { exportSvgRequestSchema } from '../shared/api-contracts/export-svg.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
+import { fc, fcTest } from '../shared/test-utils/fast-check.js'
+import { RULES } from './_test-route-fuzz-daemon-rules.js'
+import {
+  assertLedger,
+  fuzzRows,
+  type Harness,
+  type Override,
+  registeredKeys,
+  segmentArb,
+  type Target,
+} from './_test-route-fuzz-lane.js'
 
 let tempDir = ''
 // One data dir per seeded app: the legacy document store and its db handle
@@ -90,9 +67,6 @@ const { clearCache } = await import('./store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store.js')
 const { seedWorkspaceRow } = await import('./routes/_test-helpers.js')
 const { resetSyncStreamsForTests } = await import('./routes/sync-sse.js')
-const { syncSubscribeRequestSchema, syncClientMessageRequestSchema } = await import(
-  '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
-)
 
 const TOKEN = 'fuzz-token'
 // A handle per seed: the daemon's document store is module-level and keyed
@@ -190,191 +164,8 @@ async function seededApp(): Promise<Seeded> {
 }
 
 // ---------------------------------------------------------------------------
-// What each route may do, keyed by `METHOD pattern` as the app registers it
-// (wildcards expanded with their action). `answers` is what a 2xx carries;
-// `refuses-only:` says why the seeding cannot reach one and is checked to
-// still be true; `skip:` says why the lane does not request it at all.
-// ---------------------------------------------------------------------------
-type Rule =
-  | {
-      readonly answers: 'json' | 'bytes' | 'none'
-      readonly body?: z.ZodTypeAny
-      readonly raw?: true
-      /** What raw bytes are sent as; the file route stores images only. */
-      readonly contentType?: string
-      /** Fewer draws for a route whose every answer is a real render. */
-      readonly runs?: number
-      /**
-       * The schema a typed client reads a 2xx with. A body that fails it is
-       * drift between what the route emits and what its readers expect —
-       * the handler is typed, but nothing parses on the way out. Absent
-       * where no client contract exists for the answer.
-       */
-      readonly response?: z.ZodTypeAny
-    }
-  | { readonly refusesOnly: string; readonly body?: z.ZodTypeAny }
-  | { readonly skip: string }
-
-const RULES: Record<string, Rule> = {
-  'GET /api/workspaces': { answers: 'json', response: listWorkspacesResponseSchema },
-  'POST /api/workspaces': {
-    answers: 'json',
-    body: createWorkspaceRequestSchema,
-    response: workspaceSummarySchema,
-  },
-  'PATCH /api/workspaces/:workspaceId': {
-    answers: 'json',
-    body: renameWorkspaceRequestSchema,
-    response: workspaceSummarySchema,
-  },
-  'GET /api/workspaces/:workspaceId/documents': {
-    answers: 'json',
-    response: listDocumentsResponseSchema,
-  },
-  'POST /api/workspaces/:workspaceId/documents': {
-    answers: 'json',
-    body: createDocumentRequestSchema,
-    response: createDocumentResponseSchema,
-  },
-  'GET /api/workspaces/:workspaceId/names': { answers: 'json', response: workspaceNamesSchema },
-  'PUT /api/workspaces/:workspaceId/name': {
-    answers: 'json',
-    body: setNameRequestSchema,
-    response: workspaceNamesSchema,
-  },
-  'GET /api/workspaces/:workspaceId/trash': { answers: 'json', response: listTrashResponseSchema },
-  'POST /api/workspaces/:workspaceId/trash/:documentId/restore': {
-    answers: 'json',
-    response: restoreTrashResponseSchema,
-  },
-  'POST /api/workspaces/:workspaceId/versions/prune-sandwiched': {
-    answers: 'json',
-    response: pruneSandwichedVersionsResponseSchema,
-  },
-  'POST /api/workspaces/:workspaceId/documents/optimize-all': {
-    answers: 'json',
-    response: compactWorkspaceResultSchema,
-  },
-  'POST /api/workspaces/:workspaceId/files/purge-dangling': {
-    answers: 'json',
-    response: purgeResultSchema,
-  },
-  'GET /api/workspaces/:workspaceId/documents/*/versions': {
-    answers: 'json',
-    response: listVersionsResponseSchema,
-  },
-  'GET /api/workspaces/:workspaceId/documents/*/versions/:id/document': {
-    answers: 'json',
-    response: versionDocumentResponseSchema,
-  },
-  'POST /api/workspaces/:workspaceId/documents/*/versions': {
-    answers: 'json',
-    body: saveVersionRequestSchema,
-    response: saveVersionResponseSchema,
-  },
-  'POST /api/workspaces/:workspaceId/documents/*/versions/:id/restore': {
-    answers: 'json',
-    body: restoreVersionRequestSchema,
-    response: restoreVersionResponseSchema,
-  },
-  'PUT /api/workspaces/:workspaceId/documents/*/name': {
-    answers: 'json',
-    body: setNameRequestSchema,
-    response: workspaceNamesSchema,
-  },
-  'PUT /api/workspaces/:workspaceId/documents/*/pin': {
-    answers: 'json',
-    body: setPinnedRequestSchema,
-    response: workspaceNamesSchema,
-  },
-  'PUT /api/workspaces/:workspaceId/documents/*/path': {
-    answers: 'json',
-    body: renameDocumentPathRequestSchema,
-    response: renameDocumentPathResponseSchema,
-  },
-  'DELETE /api/workspaces/:workspaceId/documents/*': {
-    answers: 'json',
-    response: deleteDocumentResponseSchema,
-  },
-  'GET /api/w/:workspaceId/document/*/exists': {
-    answers: 'json',
-    response: canvasExistsResponseSchema,
-  },
-  'GET /api/w/:workspaceId/document/*/snapshot': { answers: 'bytes' },
-  'GET /api/w/:workspaceId/document/*/client-count': {
-    answers: 'json',
-    response: clientCountResponseSchema,
-  },
-  'POST /api/w/:workspaceId/document/*/update': {
-    answers: 'json',
-    raw: true,
-    response: updateDocumentResponseSchema,
-  },
-  'POST /api/w/:workspaceId/document/*/export': {
-    answers: 'json',
-    body: exportRequestSchema,
-    runs: 24,
-    response: exportResponseSchema,
-  },
-  'POST /api/w/:workspaceId/document/*/export-svg': {
-    answers: 'json',
-    body: exportSvgRequestSchema,
-    runs: 24,
-    response: exportResponseSchema,
-  },
-  'PUT /api/w/:workspaceId/document/*/file/:fileId': {
-    answers: 'none',
-    raw: true,
-    contentType: 'image/png',
-  },
-  'GET /api/w/:workspaceId/document/*/file/:fileId': { answers: 'bytes' },
-  'GET /api/w/:workspaceId/workspace-document/snapshot': { answers: 'bytes' },
-  'POST /api/w/:workspaceId/workspace-document/update': {
-    answers: 'json',
-    raw: true,
-    response: updateDocumentResponseSchema,
-  },
-  'POST /api/w/:workspaceId/workspace-document/promote': {
-    refusesOnly:
-      'a schema-drawn snapshot is random base64url and never a Loro record; the merge, the rows and the attestation verdicts are routes/document/workspace-promote.test.ts',
-    body: promoteWorkspaceRequestSchema,
-  },
-  'GET /api/sync/stream': { skip: 'holds the response open until the client goes away' },
-  'POST /api/sync/subscribe': {
-    refusesOnly: 'needs the stream id of an open /api/sync/stream, which this lane never opens',
-    body: syncSubscribeRequestSchema,
-  },
-  'POST /api/sync/message': {
-    refusesOnly: 'needs the stream id of an open /api/sync/stream, which this lane never opens',
-    body: syncClientMessageRequestSchema,
-  },
-  'GET /api/runtime/ping': { answers: 'json', response: daemonPingResponseSchema },
-  'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
-  'GET /api/runtime/storage': { answers: 'json', response: storageReportPayloadSchema },
-  'POST /api/runtime/logs/prune': { answers: 'json', response: purgeResultSchema },
-  'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },
-  'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
-  'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },
-  // RFC 9728 discovery: with no OAuth resource metadata the answer is a
-  // bare 404, which is what a discovery client expects and not a refusal
-  // this lane's JSON contract covers.
-  'GET /.well-known/oauth-protected-resource': {
-    skip: 'RFC 9728 discovery answers a bare 404 when no OAuth metadata exists',
-  },
-  'GET /.well-known/oauth-protected-resource/mcp': {
-    skip: 'RFC 9728 discovery answers a bare 404 when no OAuth metadata exists',
-  },
-}
-
-// ---------------------------------------------------------------------------
 // Generators
 // ---------------------------------------------------------------------------
-/** A segment the URL parser leaves alone (`.` and `..` resolve away before any route sees them). */
-const reachesRoute = (segment: string) =>
-  new URL(`http://fuzz/${encodeURIComponent(segment)}`).pathname ===
-  `/${encodeURIComponent(segment)}`
-const segmentArb = fc.string({ minLength: 1, maxLength: 8 }).filter(reachesRoute)
-
 const workspaceArb = (seed: Seeded) =>
   fc.oneof(
     { weight: 6, arbitrary: fc.constant(seed.workspace) },
@@ -396,14 +187,6 @@ const documentPathArb = fc.oneof(
       .map(([a, b]) => `${a}/${b}`),
   },
 )
-/** A real Loro update — one map write from a fresh peer — so a raw-bytes route can answer. */
-const loroUpdateArb = fc.string({ maxLength: 6 }).map((value) => {
-  const doc = new LoroDoc()
-  const from = doc.version()
-  doc.getMap('fuzz').set('k', value)
-  doc.commit()
-  return doc.export({ mode: 'update', from })
-})
 const NONCES = ['AAAAAAAAAAAAAAAAAAAAAA', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'A'.repeat(43)]
 const OKF_OR_NOT = fc.oneof(
   { weight: 3, arbitrary: fc.constant(OKF_NOTE) },
@@ -411,8 +194,8 @@ const OKF_OR_NOT = fc.oneof(
 )
 
 /** Ids and paths inside a body follow the seed; an export never writes outside the temp dir. */
-function overrideFor(seed: Seeded) {
-  return (path: string, _schema: z.ZodTypeAny): fc.Arbitrary<unknown> | undefined => {
+function overrideFor(seed: Seeded): Override {
+  return (path) => {
     if (path.endsWith('workspaceId')) return fc.constantFrom(seed.workspace, 'nowhere')
     if (path.endsWith('documentId')) return fc.constantFrom(seed.spatialId, seed.markdownId, 'nope')
     if (path.endsWith('.path') || path === 'path' || path.endsWith('doc')) {
@@ -431,48 +214,6 @@ function overrideFor(seed: Seeded) {
     if (path.endsWith('targetPath')) return fc.constant(undefined)
     return undefined
   }
-}
-
-type Body =
-  | { readonly kind: 'json'; readonly json: unknown }
-  | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'bytes'; readonly bytes: Uint8Array }
-
-function bodyArb(method: string, rule: Rule, seed: Seeded): fc.Arbitrary<Body | undefined> {
-  if (method === 'GET') return fc.constant(undefined)
-  const schema = 'body' in rule ? rule.body : undefined
-  const raw = 'raw' in rule && rule.raw === true
-  const arms: fc.WeightedArbitrary<Body | undefined>[] = [
-    {
-      weight: 1,
-      arbitrary: fc.jsonValue({ maxDepth: 2 }).map((json): Body => ({ kind: 'json', json })),
-    },
-    {
-      weight: 1,
-      arbitrary: fc.string({ maxLength: 12 }).map((text): Body => ({ kind: 'text', text })),
-    },
-    { weight: 1, arbitrary: fc.constant(undefined) },
-  ]
-  if (schema !== undefined) {
-    arms.push({
-      weight: 5,
-      arbitrary: arbitraryForSchema(schema, { override: overrideFor(seed) }).map(
-        (json): Body => ({ kind: 'json', json }),
-      ),
-    })
-  }
-  if (raw) {
-    arms.push(
-      {
-        weight: 2,
-        arbitrary: fc
-          .uint8Array({ maxLength: 64 })
-          .map((bytes): Body => ({ kind: 'bytes', bytes })),
-      },
-      { weight: 3, arbitrary: loroUpdateArb.map((bytes): Body => ({ kind: 'bytes', bytes })) },
-    )
-  }
-  return fc.oneof(...arms)
 }
 
 /**
@@ -562,56 +303,26 @@ const authArb = fc.oneof(
 )
 
 // ---------------------------------------------------------------------------
-// The registered surface: plain routes off `app.routes`, wildcard actions off
-// the registration calls in the source.
+// The local daemon: the routes both compositions share.
 // ---------------------------------------------------------------------------
-const ROUTES_DIR = join(import.meta.dirname, 'routes')
-
-function scanWildcardActions(): string[] {
-  const keys = new Set<string>()
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name)
-      if (entry.isDirectory()) walk(full)
-      else if (entry.name.endsWith('.ts') && !entry.name.includes('.test.')) {
-        const source = readFileSync(full, 'utf8')
-        for (const m of source.matchAll(/onDocumentAction\(\s*app,\s*'(\w+)',\s*'([\w-]+)'/g)) {
-          keys.add(`${m[1]!.toUpperCase()} /api/w/:workspaceId/document/*/${m[2]}`)
-        }
-        for (const m of source.matchAll(/onDocumentFile\(\s*app,\s*'(\w+)'/g)) {
-          keys.add(`${m[1]!.toUpperCase()} /api/w/:workspaceId/document/*/file/:fileId`)
-        }
-        for (const m of source.matchAll(/onDocumentsRoute\(\s*app,\s*'(\w+)',\s*\[([^\]]*)\]/g)) {
-          const suffix = [...m[2]!.matchAll(/'([^']+)'/g)].map((s) => s[1]).join('/')
-          const tail = suffix === '' ? '' : `/${suffix}`
-          keys.add(`${m[1]!.toUpperCase()} /api/workspaces/:workspaceId/documents/*${tail}`)
-        }
-      }
-    }
+function daemonHarness(seed: Seeded): Harness {
+  return {
+    request: (path, init) => seed.app.request(path, init),
+    target: (_key, pattern) =>
+      fc.tuple(pathArb(pattern, seed), authArb).map(
+        ([target, auth]): Target => ({
+          path: target.path,
+          headers: auth === undefined ? {} : { Authorization: auth },
+        }),
+      ),
+    override: overrideFor(seed),
+    dispose: async () => undefined,
   }
-  walk(ROUTES_DIR)
-  return [...keys]
 }
 
-const WILDCARDS = new Set([
-  '/api/w/:workspaceId/document/*',
-  '/api/workspaces/:workspaceId/documents/*',
-])
-
-function registeredKeys(app: ReturnType<typeof createApp>): string[] {
-  const keys = new Set<string>()
-  for (const route of app.routes) {
-    if (route.method === 'ALL') continue
-    if (route.path === '*' || route.path === '/*') continue
-    // server-core's mount, fuzzed by its own lane against its own seed.
-    if (route.path.startsWith('/api/v1/')) continue
-    if (WILDCARDS.has(route.path)) continue
-    keys.add(`${route.method} ${route.path}`)
-  }
-  for (const key of scanWildcardActions()) keys.add(key)
-  return [...keys].sort()
-}
-
+// ---------------------------------------------------------------------------
+// The lane
+// ---------------------------------------------------------------------------
 const answered = new Map<string, number>()
 let registered: string[] = []
 
@@ -635,102 +346,7 @@ describe('every daemon route answers or refuses with a reason, never a 5xx', () 
     },
   )
 
-  for (const [key, rule] of Object.entries(RULES)) {
-    if ('skip' in rule) continue
-    const [method, pattern] = key.split(' ') as [string, string]
-    // A ceiling sized on a measurement, not a delay: 40 requests take 0.2-2s
-    // on this container, and a render route's 24 draws took 19-21s — past
-    // the project's 10s default, and a timed-out test keeps rendering into
-    // the next test's fresh database, which then answers SQLITE_BUSY.
-    const ceilingMs = 'runs' in rule && rule.runs !== undefined ? 90_000 : 30_000
-    fcTest.prop([fc.constant(null)], withDefaults({ numRuns: 1 }))(
-      `${key}`,
-      async () => {
-        const seed = await seededApp()
-        const requestArb = fc.record({
-          target: pathArb(pattern, seed),
-          body: bodyArb(method, rule, seed),
-          auth: authArb,
-        })
-        await fc.assert(
-          fc.asyncProperty(requestArb, async ({ target, body, auth }) => {
-            const headers: Record<string, string> = {}
-            if (auth !== undefined) headers.Authorization = auth
-            const init: RequestInit = { method, headers }
-            if (body?.kind === 'json') {
-              init.body = JSON.stringify(body.json)
-              headers['content-type'] = 'application/json'
-            } else if (body?.kind === 'text') {
-              init.body = body.text
-              headers['content-type'] = 'application/json'
-            } else if (body?.kind === 'bytes') {
-              init.body = body.bytes
-              headers['content-type'] =
-                'contentType' in rule && rule.contentType !== undefined
-                  ? rule.contentType
-                  : 'application/octet-stream'
-            }
-            const res = await seed.app.request(target.path, init)
-            const contentType = res.headers.get('content-type') ?? ''
-            const text = contentType.includes('json') || !contentType ? await res.text() : ''
-            const detail = `${method} ${target.path} ${init.body instanceof Uint8Array ? '<bytes>' : (init.body ?? '')} -> ${res.status} ${contentType} ${text.slice(0, 200)}`
-            // 501 (the composition lacks the feature) and 503 (no browser is
-            // connected, the GC scan is incomplete) are declared refusals with
-            // a JSON reason; anything else at or above 500 is a stack trace.
-            expect(res.status === 501 || res.status === 503 || res.status < 500, detail).toBe(true)
-            if (contentType.includes('json')) {
-              expect(() => JSON.parse(text), detail).not.toThrow()
-            } else if (res.status === 204) {
-              expect('answers' in rule && rule.answers === 'none', detail).toBe(true)
-            } else if (res.status < 300) {
-              expect('answers' in rule && rule.answers === 'bytes', detail).toBe(true)
-            } else {
-              // A refusal the client cannot read.
-              expect.fail(detail)
-            }
-            if (res.status >= 400 && contentType.includes('json')) {
-              // The runtime half of `routes/error-body-shape.test.ts`. That
-              // scan reads object LITERALS, so it cannot see a body built by
-              // `errorBody`, whose `code` parameter is a plain `string` — a
-              // sentence passed to it typechecks. This parses what actually
-              // went out, under the same contract the web client reads it
-              // with, including the snake_case code.
-              const refusal = apiErrorBodySchema.safeParse(JSON.parse(text))
-              expect(refusal.success, `${detail}\n${JSON.stringify(refusal.error?.issues)}`).toBe(
-                true,
-              )
-            }
-            if (res.status < 300) {
-              answered.set(key, (answered.get(key) ?? 0) + 1)
-              if (
-                'response' in rule &&
-                rule.response !== undefined &&
-                contentType.includes('json')
-              ) {
-                const read = rule.response.safeParse(JSON.parse(text))
-                expect(read.success, `${detail}\n${JSON.stringify(read.error?.issues)}`).toBe(true)
-              }
-            }
-          }),
-          withDefaults({ numRuns: 'runs' in rule && rule.runs !== undefined ? rule.runs : 40 }),
-        )
-      },
-      ceilingMs,
-    )
-  }
+  fuzzRows(RULES, answered, async () => daemonHarness(await seededApp()))
 
-  afterAll(() => {
-    const silent: string[] = []
-    const loud: string[] = []
-    for (const [key, rule] of Object.entries(RULES)) {
-      const count = answered.get(key) ?? 0
-      if ('answers' in rule && count === 0) silent.push(key)
-      if ('refusesOnly' in rule && count > 0) loud.push(key)
-    }
-    expect(
-      silent,
-      `routes this lane never got a 2xx from: ${JSON.stringify([...answered])}`,
-    ).toEqual([])
-    expect(loud, 'routes marked refuses-only that answered').toEqual([])
-  })
+  afterAll(() => assertLedger(RULES, answered))
 })
