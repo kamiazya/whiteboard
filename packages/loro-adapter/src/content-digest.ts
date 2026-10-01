@@ -29,19 +29,8 @@
  * document a non-event over any plausible history.
  */
 
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
-
-/**
- * Code-unit order, spelled out.
- *
- * Identical to a bare `.sort()` for strings — and written explicitly
- * because a bare one reads as an oversight, and a static analyser
- * (Sonar S2871) asks for `localeCompare` instead. Taking that advice here
- * would be a defect rather than a fix: `localeCompare` reads the runtime's
- * default locale and ICU data, so the digest would differ between two machines
- * holding identical input.
- */
-const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 /**
  * A container that holds nothing is the same as no container. The workspace
@@ -67,7 +56,7 @@ function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
   const record = value as Record<string, unknown>
-  const keys = Object.keys(record).sort(byCodeUnit)
+  const keys = Object.keys(record).sort(compareCodeUnit)
   return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`
 }
 

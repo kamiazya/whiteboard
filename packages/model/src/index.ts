@@ -1,6 +1,7 @@
 export * from './annotation.js'
 export * from './asset-ref.js'
 export * from './clipboard.js'
+export { compareCodeUnit } from './compare.js'
 // The mdast subset is intentionally NOT re-exported here — it is
 // versioned, reached via the package's `./mdast` subpath export instead of
 // the stable public surface.

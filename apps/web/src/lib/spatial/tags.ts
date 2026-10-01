@@ -3,7 +3,7 @@
  * the one place a tag list is written onto an object, what the board
  * already carries, and how one edit reaches several objects.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**
  * A tag list is a SET (model's `tagsWriteSchema` refuses a duplicate), and
@@ -27,8 +27,7 @@ export function collectCanvasTags(canvas: SpatialCanvas): string[] {
   const seen = new Set<string>(canvas.tags ?? [])
   for (const node of canvas.nodes) for (const tag of node.tags ?? []) seen.add(tag)
   for (const edge of canvas.edges) for (const tag of edge.tags ?? []) seen.add(tag)
-  // Code-unit order, not locale order: the same list on every machine.
-  return [...seen].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  return [...seen].sort(compareCodeUnit)
 }
 
 /**

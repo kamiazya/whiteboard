@@ -1,3 +1,4 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { stringify } from 'yaml'
 import type { OkfMarkdownDocument } from './schema.js'
 import { yamlSafeValueSchema } from './yaml-safe.js'
@@ -24,7 +25,7 @@ function canonicalize(
   if (record === undefined) return undefined
   return Object.fromEntries(
     Object.keys(record)
-      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .sort(compareCodeUnit)
       .map((key) => [key, record[key]]),
   )
 }

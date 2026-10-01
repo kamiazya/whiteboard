@@ -14,7 +14,7 @@
  * Emits the WHOLE list, never a patch: the caller decides what an empty list
  * means for its object (a removed field, everywhere it is stored).
  */
-import { parseScopedTag, tagWriteSchema } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, parseScopedTag, tagWriteSchema } from '@kamiazya/whiteboard-model'
 import {
   type TagLibrary,
   type TagLibraryObjection,
@@ -69,7 +69,7 @@ export function tagCompletions(draft: string, suggestions: readonly string[]): s
       if (parseScopedTag(tag)?.key === key) offered.add(tag)
     }
   }
-  return [...offered].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  return [...offered].sort(compareCodeUnit)
 }
 
 export function TagChipsEditor({
