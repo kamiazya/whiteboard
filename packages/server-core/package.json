@@ -24,6 +24,10 @@
       "types": "./src/versions/version-entry.ts",
       "import": "./src/versions/version-entry.ts"
     },
+    "./test-utils/embedder-contract": {
+      "types": "./src/test-utils/embedder-contract.ts",
+      "import": "./src/test-utils/embedder-contract.ts"
+    },
     "./viewport-request": {
       "types": "./src/viewport-request.ts",
       "import": "./src/viewport-request.ts"
