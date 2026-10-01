@@ -8,6 +8,11 @@ import { existsSync, readFileSync } from 'node:fs'
 // mechanism used to reject preview deploys. This test verifies that the built artifact
 // (not just unit tests) correctly enforces that contract end-to-end.
 //
+// A second, plain load of the same build asserts the other half of that story:
+// the hosted app registers its service worker and, after a reload, is controlled
+// by it. Everything else about the worker is unit-tested through injected
+// mocks, which cannot notice a build whose worker never installs.
+//
 // The static bundle check in smoke-artifact.mjs verifies separately that
 // window.location.origin is also wired up as a secondary defense.
 import { createServer } from 'node:http'
@@ -47,6 +52,25 @@ function startServer() {
       resolve({ server, port: server.address().port })
     })
   })
+}
+
+// registerType 'prompt' registers without claiming clients, so the first load
+// is never controlled: the worker takes over on the NEXT navigation. The
+// registration waits for window 'load' behind a dynamic import, hence `ready`
+// (which resolves only once a registration is active) before reloading.
+async function serviceWorkerControlsReload(browser, origin) {
+  const context = await browser.newContext()
+  try {
+    const page = await context.newPage()
+    await page.goto(origin, { waitUntil: 'networkidle' })
+    await page.waitForFunction(() => navigator.serviceWorker.ready.then(() => true), null, {
+      timeout: 30_000,
+    })
+    await page.reload({ waitUntil: 'networkidle' })
+    return await page.evaluate(() => navigator.serviceWorker.controller !== null)
+  } finally {
+    await context.close()
+  }
 }
 
 if (!existsSync(DIST)) {
@@ -94,6 +118,16 @@ try {
       .getAttribute('data-provider')
       .catch(() => '(no main)')
     console.error(`  FAIL  expected data-provider="invalid-config", got: ${provider}`)
+    failed = true
+  }
+
+  const controlled = await serviceWorkerControlsReload(browser, `http://127.0.0.1:${port}/`).catch(
+    () => false,
+  )
+  if (controlled) {
+    console.log('  pass  a service worker controls the page after its registration settles')
+  } else {
+    console.error('  FAIL  no service worker controls the hosted app after a reload')
     failed = true
   }
 } finally {
