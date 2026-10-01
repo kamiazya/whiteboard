@@ -32,8 +32,8 @@ The local daemon has one person: the machine's owner
   does). The native host reads it from `daemon.json` and attaches it
   itself, so the page never holds it. A narrower credential the operator
   mints (a macaroon) is judged against the route-scope registry.
-  `/api/runtime/ping` and `/api/runtime/verify` are public; there is no HTTP
-  route that stops the daemon.
+  `/api/runtime/ping` is public; there is no HTTP route that stops the
+  daemon.
 - **The browser starts the native host only for the whiteboard extension.**
   The host's manifest names the extension's id, and the browser refuses to
   start it for anything else. `whiteboard native-host install` writes that

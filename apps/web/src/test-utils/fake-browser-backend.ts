@@ -61,16 +61,5 @@ export class FakeBrowserBackend {
     return Promise.resolve()
   }
 
-  getFile(_fileId: string): Promise<Blob | null> {
-    return Promise.resolve(null)
-  }
-
-  putFile(newEntries: [string, unknown][], onFileSuccess: (fileId: string) => void): Promise<void> {
-    for (const [fileId] of newEntries) onFileSuccess(fileId)
-    return Promise.resolve()
-  }
-
   sendClientReady(): void {}
-
-  sendExportResponse(_requestId: string, _data: string): void {}
 }

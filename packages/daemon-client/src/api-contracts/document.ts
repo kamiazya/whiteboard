@@ -378,15 +378,27 @@ export type StorageBucket = z.infer<typeof storageBucketSchema>
 export type StorageReportPayload = z.infer<typeof storageReportPayloadSchema>
 
 // POST /api/workspaces/:workspaceId/documents/optimize-all — response body.
-// The route also returns a per-canvas `results` array; the Storage tab only
-// needs the aggregated totals, so that detail is left unvalidated here
-// rather than duplicating compactDocument's result shape.
-export const optimizeAllDocumentsResponseSchema = z.object({
-  totalBeforeBytes: z.number().int().nonnegative(),
-  totalAfterBytes: z.number().int().nonnegative(),
+//
+// The compaction result of the WORKSPACE record. Every document in a
+// workspace lives in that one record, so "optimize all" is one fold of its
+// op-log rather than a loop over documents — and this is the one shape the
+// daemon's store answers with, so the store types its result from here
+// rather than keeping a second interface beside it.
+//
+// `reason` says why a pass compacted nothing when `compacted` is false:
+// `no-file` (nothing stored under this workspace), `no-versions` (no saved
+// version to cut at — the oldest retained version is the fold point),
+// `no-gain` (the folded record would be no shorter), `raced` (another writer
+// replaced the snapshot mid-fold; nothing was lost, the next pass folds
+// again). `ok` accompanies `compacted: true`.
+export const compactWorkspaceResultSchema = z.object({
+  compacted: z.boolean(),
+  beforeBytes: z.number().int().nonnegative(),
+  afterBytes: z.number().int().nonnegative(),
+  reason: z.enum(['no-versions', 'no-file', 'no-gain', 'raced', 'ok']),
 })
 
-export type OptimizeAllDocumentsResponse = z.infer<typeof optimizeAllDocumentsResponseSchema>
+export type CompactWorkspaceResult = z.infer<typeof compactWorkspaceResultSchema>
 
 // POST /api/workspaces/:workspaceId/versions/prune-sandwiched — response body.
 export const pruneSandwichedVersionsResponseSchema = z.object({

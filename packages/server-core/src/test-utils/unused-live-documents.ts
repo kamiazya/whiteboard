@@ -25,6 +25,12 @@ export function unusedLiveDocuments(): LiveDocuments {
     rename: refuse('rename'),
     delete: refuse('delete'),
     evict: refuse('evict'),
-    withWriteLock: refuse('withWriteLock'),
+    // The one method that is NOT refused: every mutating tool takes the
+    // write lock around its load-modify-save, and taking a lock is not
+    // reaching the live-document store — a test of what a tool writes is
+    // not a test of serialisation. Running the bracket's body directly is
+    // what a single caller sees from the real lock too. A test ABOUT
+    // serialisation passes a lock that queues (`write-lock.test.ts`).
+    withWriteLock: (_workspaceId, fn) => fn(),
   }
 }

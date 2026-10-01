@@ -39,6 +39,7 @@ function makeMarkdownDoc(): LoroDoc {
 }
 
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
+import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
 
 const WORKSPACE_ID = 'ws-count'
@@ -112,6 +113,8 @@ async function harness(
     blobStore: {} as never,
     documentIndex,
     versions: new InMemoryVersionHistory(),
+    // The daemon's own seam: every mutating tool takes its write lock.
+    liveDocuments: liveDocuments(),
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

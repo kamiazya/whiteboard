@@ -27,7 +27,7 @@ import { getLogger } from './log.js'
 const log = getLogger('background-work')
 
 /** The shape the composition root drives. Anything long-lived can wear it. */
-interface BackgroundWorker {
+export interface BackgroundWorker {
   start(): void
   stop(): Promise<void>
 }

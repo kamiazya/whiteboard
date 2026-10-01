@@ -74,10 +74,7 @@ function fakeBackend(): DocumentBackend & {
       pushed.push(bytes)
       return Promise.resolve()
     },
-    getFile: () => Promise.resolve(null),
-    putFile: () => Promise.resolve(),
     sendClientReady() {},
-    sendExportResponse() {},
   }
 }
 

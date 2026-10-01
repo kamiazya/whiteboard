@@ -62,12 +62,7 @@ function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
       ctrl.pushLocalUpdateCalls.push(bytes)
       return Promise.resolve()
     },
-    getFile: async () => null,
-    putFile: async (entries, onSuccess) => {
-      for (const [fileId] of entries) onSuccess(fileId)
-    },
     sendClientReady: () => {},
-    sendExportResponse: () => {},
   }
 }
 
@@ -429,10 +424,7 @@ describe('useDocumentSync', () => {
       },
       disconnect() {},
       pushLocalUpdate: () => Promise.resolve(),
-      getFile: async () => null,
-      putFile: async () => {},
       sendClientReady: () => {},
-      sendExportResponse: () => {},
     }
 
     act(() => {
@@ -631,23 +623,6 @@ describe('useDocumentSync', () => {
       expect(() => {
         backend._ctrl.handlers!.onViewportRequest({ mode: 'fit' } as never)
       }).not.toThrow()
-    })
-  })
-
-  describe('onExportRequest', () => {
-    it('queues a request (never sent) since this session has no imperative editor handle to serve it', async () => {
-      const backend = makeFakeBackend()
-      const sendExportResponseSpy = vi.spyOn(backend, 'sendExportResponse')
-      renderHook(() => useDocumentSync(backend))
-
-      await act(async () => {
-        await backend._ctrl.handlers!.onExportRequest({ requestId: 'req-1' } as never)
-      })
-
-      // lane B (document-sync-export.ts) owns replacing the Excalidraw-shaped
-      // ExportRequestHandlerDeps this queues against — until then, every
-      // export request queues and is never actually served.
-      expect(sendExportResponseSpy).not.toHaveBeenCalled()
     })
   })
 

@@ -110,9 +110,10 @@ describe('StorageReportCard', () => {
       if (init?.method === 'POST' && url.endsWith('/documents/optimize-all')) {
         return Promise.resolve(
           jsonResponse({
-            results: [],
-            totalBeforeBytes: url.includes('ws_a') ? 4000 : 1500,
-            totalAfterBytes: url.includes('ws_a') ? 1000 : 1000,
+            compacted: true,
+            beforeBytes: url.includes('ws_a') ? 4000 : 1500,
+            afterBytes: url.includes('ws_a') ? 1000 : 1000,
+            reason: 'ok',
           }),
         )
       }
@@ -539,7 +540,9 @@ describe('StorageReportCard', () => {
         if (url.includes('ws_a')) {
           return Promise.resolve(new Response(null, { status: 500 }))
         }
-        return Promise.resolve(jsonResponse({ totalBeforeBytes: 4000, totalAfterBytes: 1000 }))
+        return Promise.resolve(
+          jsonResponse({ compacted: true, beforeBytes: 4000, afterBytes: 1000, reason: 'ok' }),
+        )
       }
       return Promise.reject(new Error(`unexpected fetch: ${url}`))
     })

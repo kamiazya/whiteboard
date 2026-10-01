@@ -48,10 +48,7 @@ function openSession() {
       new Promise<void>((resolve) => {
         releasePush = resolve
       }),
-    getFile: async () => null,
-    putFile: async () => {},
     sendClientReady() {},
-    sendExportResponse() {},
   } as unknown as DocumentBackend
   const persistence: BrowserPersistenceState['kind'][] = []
   const statuses: string[] = []

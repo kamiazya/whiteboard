@@ -296,7 +296,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // that `reconcileSpatialCanvas` and the resync each spelled out became five
   // named helpers, each carrying the measured reason its behaviour has (op
   // order is part of the bytes; a delete only when present spares the log).
-  'packages/loro-adapter/src/loro-bridge.ts': 1141,
+  // 1141 -> 1152: the node delete cascades to anchored ink too, through the
+  // model's one definition of the sweep, and says why it did not before.
+  'packages/loro-adapter/src/loro-bridge.ts': 1152,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
@@ -792,10 +794,14 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   'packages/canvas-render/src/tidy.test.ts': 1176,
-  'packages/canvas-viewer/src/widget-entry.test.tsx': 1266,
+  // 1266 -> 1301: a referenced canvas arriving in the form canvas_view
+  // sends it (JSON Canvas) reaches the viewer as the model.
+  'packages/canvas-viewer/src/widget-entry.test.tsx': 1301,
   // 1308 -> 1324: an unchanged canvas reconciling to no ops, which the
   // "writes only what changed" test above it could not see.
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1324,
+  // 1324 -> 1354: the delete cascade pinned over ink — anchored ink goes,
+  // free ink stays, the line's lock goes with it.
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1354,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
@@ -807,8 +813,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stays green with the refusal DELETED, so without the note the next
   // reader loosens it again.
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1317,
-  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
-  'packages/mcp-server/src/server/store/document-store.test.ts': 861,
+  // 881 -> 901 when compaction became workspace-keyed: one test pins that
+  // saves to two documents of one workspace collapse into one compaction.
+  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
+  // 861 -> 863: the tool-write half of the race says which lock it holds.
+  'packages/mcp-server/src/server/store/document-store.test.ts': 863,
   // +17 for the tenant layout: this file's subject IS filesystem paths, so
   // every seed now names a tenant's workspaces root, and three symlink seeds
   // gained the parent mkdir that root needs. Splitting it instead would have
@@ -817,7 +826,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3143 -> 3176: the agent-activity summary's only assertion was
   // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
   // pinning its wording and order.
-  'packages/server-core/src/tools/canvas-edit.test.ts': 3176,
+  // 3176 -> 3177: `ViewportRequest` moved to its own module, so the import
+  // it shared with ServerDeps became two.
+  'packages/server-core/src/tools/canvas-edit.test.ts': 3177,
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 

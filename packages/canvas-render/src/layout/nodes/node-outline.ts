@@ -12,9 +12,11 @@
  * `null`/`false` instead of throwing, per the package's never-throw rule.
  */
 
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type {
   BoundingBox,
   NodeOutline,
+  RenderContribution,
   ShapeContribution,
   ShapeTable,
 } from '@kamiazya/whiteboard-scene'
@@ -29,7 +31,7 @@ export type { NodeOutline, ShapeContribution, ShapeTable }
  * (hit-testing, a test) that never went through the layout entry point.
  */
 const lookup = (shapes: ShapeTable, shapeId: string): ShapeContribution | undefined =>
-  shapes[shapeId] ?? BUILT_IN_SHAPES[shapeId]
+  shapes[shapeId] ?? BUNDLED_SHAPE_TABLE[shapeId]
 
 const isFiniteBox = (box: BoundingBox): boolean =>
   Number.isFinite(box.x) &&
@@ -38,155 +40,32 @@ const isFiniteBox = (box: BoundingBox): boolean =>
   Number.isFinite(box.h)
 
 /**
- * The shapes the bundled `visual` plugin declares. They live here only until
- * the plugin owns them; nothing about them is privileged, and a third-party
- * table is merged over this one by exactly the same rule.
+ * The composed shape table a contribution set resolves to — what the SVG
+ * backend must be handed alongside the scene.
  */
-export const BUILT_IN_SHAPES: ShapeTable = {
-  'visual.ellipse': {
-    outline: (box) => ({
-      kind: 'ellipse',
-      cx: box.x + box.w / 2,
-      cy: box.y + box.h / 2,
-      rx: box.w / 2,
-      ry: box.h / 2,
-    }),
-    // 0.15 rather than the exact (1 - 1/√2)/2 ≈ 0.1464: the exact value puts
-    // corners ON the rim, where float error flips containment, and content
-    // should not kiss the stroke anyway.
-    contentBox: (box) => {
-      const dx = box.w * 0.15
-      const dy = box.h * 0.15
-      return { x: box.x + dx, y: box.y + dy, w: box.w - 2 * dx, h: box.h - 2 * dy }
-    },
-  },
-  'visual.diamond': {
-    // Edge-midpoint polygon, clockwise from the top vertex — the corner
-    // order is fixed for deterministic serialization.
-    outline: (box) => {
-      const cx = box.x + box.w / 2
-      const cy = box.y + box.h / 2
-      return {
-        kind: 'polygon',
-        points: [
-          { x: cx, y: box.y },
-          { x: box.x + box.w, y: cy },
-          { x: cx, y: box.y + box.h },
-          { x: box.x, y: cy },
-        ],
-      }
-    },
-    contentBox: (box) => ({
-      x: box.x + box.w / 4,
-      y: box.y + box.h / 4,
-      w: box.w / 2,
-      h: box.h / 2,
-    }),
-  },
-  'visual.hexagon': {
-    // Pointy-left-right six-gon, clockwise from the top-left corner. The
-    // corner inset is a quarter of the width, capped at half the height so
-    // degenerate proportions stay a valid convex polygon.
-    outline: (box) => {
-      const cy = box.y + box.h / 2
-      const inset = Math.min(box.w / 4, box.h / 2)
-      return {
-        kind: 'polygon',
-        points: [
-          { x: box.x + inset, y: box.y },
-          { x: box.x + box.w - inset, y: box.y },
-          { x: box.x + box.w, y: cy },
-          { x: box.x + box.w - inset, y: box.y + box.h },
-          { x: box.x + inset, y: box.y + box.h },
-          { x: box.x, y: cy },
-        ],
-      }
-    },
-    contentBox: (box) => insetHorizontally(box),
-  },
-  'visual.parallelogram': {
-    // Right-leaning skew, clockwise from the top-left vertex; same capped
-    // proportion as the hexagon inset.
-    outline: (box) => {
-      const skew = Math.min(box.w / 4, box.h / 2)
-      return {
-        kind: 'polygon',
-        points: [
-          { x: box.x + skew, y: box.y },
-          { x: box.x + box.w, y: box.y },
-          { x: box.x + box.w - skew, y: box.y + box.h },
-          { x: box.x, y: box.y + box.h },
-        ],
-      }
-    },
-    contentBox: (box) => insetHorizontally(box),
-  },
-  'visual.octagon': {
-    // A rectangle with its four corners taken off — the polygon nearest to
-    // the rounded rectangle every notation draws a running component as,
-    // and `NodeOutline` (a `packages/scene` contract) has no rounded-rect
-    // kind. Clockwise from the top-left cut.
-    //
-    // A SYMMETRIC cut off the smaller dimension, not the hexagon's
-    // `min(w/4, h/2)`: the point of this silhouette is that it still reads
-    // as a rectangle, and a cut sized off the width alone eats a flat box's
-    // whole height. It is also what keeps the two apart — at 200x80 the
-    // hexagon's points run 40px in from each end while this cuts 20px off
-    // each corner, leaving real vertical edges the hexagon does not have.
-    outline: (box) => {
-      const cut = octagonCut(box)
-      return {
-        kind: 'polygon',
-        points: [
-          { x: box.x + cut, y: box.y },
-          { x: box.x + box.w - cut, y: box.y },
-          { x: box.x + box.w, y: box.y + cut },
-          { x: box.x + box.w, y: box.y + box.h - cut },
-          { x: box.x + box.w - cut, y: box.y + box.h },
-          { x: box.x + cut, y: box.y + box.h },
-          { x: box.x, y: box.y + box.h - cut },
-          { x: box.x, y: box.y + cut },
-        ],
-      }
-    },
-    // Half the cut on every side puts each corner exactly ON its diagonal
-    // (`cut/2 / cut + cut/2 / cut = 1`), which counts as inside — the same
-    // exact-boundary inscription the diamond already uses.
-    contentBox: (box) => {
-      const half = octagonCut(box) / 2
-      return { x: box.x + half, y: box.y + half, w: box.w - 2 * half, h: box.h - 2 * half }
-    },
-  },
-  'visual.cylinder': {
-    outline: (box) => ({
-      kind: 'cylinder',
-      x: box.x,
-      y: box.y,
-      w: box.w,
-      h: box.h,
-      ry: Math.min(box.w * 0.1, box.h / 4),
-    }),
-    // Gives up the lid (its drawn front rim dips to 2·ry) and the bottom
-    // bulge.
-    contentBox: (box) => {
-      const ry = Math.min(box.w * 0.1, box.h / 4)
-      return { x: box.x, y: box.y + 2 * ry, w: box.w, h: box.h - 3 * ry }
-    },
-  },
+export function resolveShapeTable(contributions: readonly RenderContribution[]): ShapeTable {
+  const table: Record<string, ShapeContribution> = {}
+  for (const contribution of contributions) {
+    for (const [name, shape] of Object.entries(contribution.shapes ?? {})) {
+      table[`${contribution.namespace}.${name}`] = shape
+    }
+  }
+  return table
 }
 
 /**
- * The octagon's corner cut, off the SMALLER dimension so the shape survives
- * any proportion: a quarter of it is pronounced enough to read as a cut
- * corner and never large enough to make two cuts meet.
+ * The bundled `visual` plugin's silhouettes, resolved the way any
+ * contribution's are — the default a direct caller (hit-testing, a test)
+ * gets, and the fallback a partial table is merged over.
+ *
+ * Resolved from the plugin rather than written out here, because this
+ * module held a second copy of that table for as long as "until the plugin
+ * owns them" lasted, and the copies drifted: `octagon` was drawn here and
+ * declared by the plugin, which could not draw it on its own, and the
+ * fallback below hid that. One producer per geometry, or a parity test —
+ * this is the one producer.
  */
-const octagonCut = (box: BoundingBox): number => Math.min(box.w, box.h) / 4
-
-/** Hexagon and parallelogram give up only their slanted horizontal margins. */
-function insetHorizontally(box: BoundingBox): BoundingBox {
-  const inset = Math.min(box.w / 4, box.h / 2)
-  return { x: box.x + inset, y: box.y, w: box.w - 2 * inset, h: box.h }
-}
+export const BUNDLED_SHAPE_TABLE: ShapeTable = resolveShapeTable([visualRenderContribution])
 
 /**
  * An unknown id degrades to `null` — a plain rect — like any other malformed
@@ -196,7 +75,7 @@ function insetHorizontally(box: BoundingBox): BoundingBox {
 export function nodeOutline(
   shapeId: string,
   box: BoundingBox,
-  shapes: ShapeTable = BUILT_IN_SHAPES,
+  shapes: ShapeTable = BUNDLED_SHAPE_TABLE,
 ): NodeOutline | null {
   if (!isFiniteBox(box)) return null
   return lookup(shapes, shapeId)?.outline(box) ?? null
@@ -218,7 +97,7 @@ export function nodeOutline(
 export function outlineContentBox(
   shapeId: string | undefined,
   box: BoundingBox,
-  shapes: ShapeTable = BUILT_IN_SHAPES,
+  shapes: ShapeTable = BUNDLED_SHAPE_TABLE,
 ): BoundingBox {
   if (shapeId === undefined || !isFiniteBox(box)) return box
   return lookup(shapes, shapeId)?.contentBox?.(box) ?? box
@@ -232,7 +111,7 @@ export function outlineContains(
   shapeId: string,
   box: BoundingBox,
   point: { readonly x: number; readonly y: number },
-  shapes: ShapeTable = BUILT_IN_SHAPES,
+  shapes: ShapeTable = BUNDLED_SHAPE_TABLE,
 ): boolean {
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false
   const outline = nodeOutline(shapeId, box, shapes)
@@ -301,7 +180,7 @@ export function outlineEntryPoint(
   box: BoundingBox,
   from: { readonly x: number; readonly y: number },
   to: { readonly x: number; readonly y: number },
-  shapes: ShapeTable = BUILT_IN_SHAPES,
+  shapes: ShapeTable = BUNDLED_SHAPE_TABLE,
 ): { readonly x: number; readonly y: number } {
   if (!isFiniteBox(box)) return to
   if (![from.x, from.y, to.x, to.y].every(Number.isFinite)) return to

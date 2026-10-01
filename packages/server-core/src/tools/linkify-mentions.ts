@@ -51,13 +51,19 @@ export async function linkifyMentions(
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.targetDocumentId)
   }
   if (target.name === undefined) throw new NamelessLinkifyTargetError(input.targetDocumentId)
+  const targetName = target.name
 
-  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
-  const linked = linkifyMentionsIn(doc, source.kind ?? readDocumentKind(doc) ?? 'spatial', {
-    documentId: input.targetDocumentId,
-    path: target.path,
-    name: target.name,
+  // The lock is the operation's (ADR-0018 §4). This one is reached over
+  // HTTP alone, and ran with no lock while the MCP adapter held one around
+  // its tools — a Link action racing an agent edit could drop either.
+  return deps.liveDocuments.withWriteLock(input.workspaceId, async () => {
+    const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
+    const linked = linkifyMentionsIn(doc, source.kind ?? readDocumentKind(doc) ?? 'spatial', {
+      documentId: input.targetDocumentId,
+      path: target.path,
+      name: targetName,
+    })
+    if (linked > 0) await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+    return { linked }
   })
-  if (linked > 0) await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-  return { linked }
 }

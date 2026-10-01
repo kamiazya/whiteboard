@@ -1,6 +1,7 @@
 import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import {
+  anchoredOnAny,
   canvasCommentSchema,
   canvasEdgeSchema,
   canvasLineSchema,
@@ -466,21 +467,20 @@ const CANVAS_EDIT_HANDLERS: {
         fail(index, op.op, `node "${id}" is locked; unlock it with a node.lock op first`)
       }
     }
-    // Edges touching a removed node go with it. Left behind they are
-    // a canvas spatialCanvasSchema refuses on the next read, so
-    // "apply exactly the op I was handed" would store a board that
-    // cannot be loaded.
+    // Edges and ink anchored on a removed node go with it — the model's
+    // `anchoredOnAny`, the one definition of that sweep. Left behind they
+    // are a canvas spatialCanvasSchema refuses on the next read, so "apply
+    // exactly the op I was handed" would store a board that cannot be
+    // loaded. Ink anchored to nothing stays: a free end names no node and
+    // so cannot dangle (ADR-0038 decision 2).
     for (const edge of ctx.s.edges) {
-      if (endIn(edge.from, ids) || endIn(edge.to, ids)) ctx.s.touchedEdges.add(edge.id)
+      if (anchoredOnAny(edge, ids)) ctx.s.touchedEdges.add(edge.id)
     }
-    ctx.s.edges = ctx.s.edges.filter((edge) => !endIn(edge.from, ids) && !endIn(edge.to, ids))
-    // Ink ANCHORED to a removed node goes with it for the same
-    // reason; ink anchored to nothing stays, because a free end names
-    // no node and so cannot dangle (ADR-0038 decision 2).
+    ctx.s.edges = ctx.s.edges.filter((edge) => !anchoredOnAny(edge, ids))
     for (const line of ctx.s.lines) {
-      if (endIn(line.from, ids) || endIn(line.to, ids)) ctx.s.touchedLines.add(line.id)
+      if (anchoredOnAny(line, ids)) ctx.s.touchedLines.add(line.id)
     }
-    ctx.s.lines = ctx.s.lines.filter((line) => !endIn(line.from, ids) && !endIn(line.to, ids))
+    ctx.s.lines = ctx.s.lines.filter((line) => !anchoredOnAny(line, ids))
     ctx.s.nodes = ctx.s.nodes.filter((node) => !ids.has(node.id))
     for (const id of ids) {
       ctx.s.nodeLocks.delete(id)

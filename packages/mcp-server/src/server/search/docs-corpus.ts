@@ -1,19 +1,9 @@
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { Judgments, QueryCategory } from '@kamiazya/whiteboard-server-core'
 
-/**
- * Code-unit order, spelled out.
- *
- * Identical to a bare `.sort()` for strings — and written explicitly
- * because a bare one reads as an oversight, and a static analyser
- * (Sonar S2871) asks for `localeCompare` instead. Taking that advice here
- * would be a defect rather than a fix: `localeCompare` reads the runtime's
- * default locale and ICU data, so the bytes fed to this hash would differ between two machines
- * holding identical input.
- */
-const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 /**
  * The measurement corpus: this project's own `docs/` tree, read from disk.
  *
@@ -365,7 +355,7 @@ export function queryDigest(queries: readonly DocsJudgedQuery[]): string {
   const hash = createHash('sha256')
   for (const judged of queries) {
     hash.update(`${judged.query}\u0000${judged.category}\u0000`)
-    for (const path of Object.keys(judged.relevant).sort(byCodeUnit)) {
+    for (const path of Object.keys(judged.relevant).sort(compareCodeUnit)) {
       hash.update(`${path}=${judged.relevant[path]}\u0000`)
     }
   }

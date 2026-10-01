@@ -9,10 +9,7 @@
  * treated on the way in.
  */
 
-import type {
-  BinaryFileDataLike,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 // Stays in REAL-browser mode on purpose: this file is part of the real-IDB
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
@@ -33,7 +30,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { BrowserBackend, type BrowserBackendTarget } from './browser-backend.js'
-import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb } from './browser-idb.js'
+import { BROWSER_DEFAULT_SEGMENT } from './browser-idb.js'
 
 /** A canonical id no fixture mints, so a save under it can only be the bug. */
 const ELSEWHERE_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
@@ -71,7 +68,6 @@ function makeHandlers(overrides: Partial<DocumentBackendHandlers> = {}): Documen
     onRestoreComplete: vi.fn(),
     onHeadChanged: vi.fn(),
     onViewportRequest: vi.fn(),
-    onExportRequest: vi.fn(),
     onConnected: vi.fn(),
     onError: vi.fn(),
     ...overrides,
@@ -258,138 +254,9 @@ describe('BrowserBackend', () => {
     expect(handlers.onSnapshot).not.toHaveBeenCalled()
   })
 
-  it('getFile returns null for an unknown fileId', async () => {
-    const backend = new BrowserBackend(target(ID_A))
-    const result = await backend.getFile('any-file-id')
-    expect(result).toBeNull()
-  })
-
-  it('putFile stores two entries, calls onFileSuccess exactly once per fileId, and getFile on a NEW instance returns each Blob', async () => {
-    const backend = new BrowserBackend(target(ID_A))
-    const onFileSuccess = vi.fn()
-    const entries: [string, BinaryFileDataLike][] = [
-      [
-        'file-1',
-        {
-          mimeType: 'image/png',
-          id: 'file-1',
-          dataURL: 'data:image/png;base64,QQ==',
-          created: Date.now(),
-        },
-      ],
-      [
-        'file-2',
-        {
-          mimeType: 'image/jpeg',
-          id: 'file-2',
-          dataURL: 'data:image/jpeg;base64,QkI=',
-          created: Date.now(),
-        },
-      ],
-    ]
-
-    await backend.putFile(entries, onFileSuccess)
-
-    expect(onFileSuccess).toHaveBeenCalledTimes(2)
-    expect(onFileSuccess).toHaveBeenCalledWith('file-1')
-    expect(onFileSuccess).toHaveBeenCalledWith('file-2')
-
-    // Simulated reload: fresh instance, same document.
-    const reloaded = new BrowserBackend(target(ID_A))
-    const blob1 = await reloaded.getFile('file-1')
-    const blob2 = await reloaded.getFile('file-2')
-    expect(blob1).not.toBeNull()
-    expect(blob1?.type).toBe('image/png')
-    expect(blob2).not.toBeNull()
-    expect(blob2?.type).toBe('image/jpeg')
-  })
-
-  it('putFile keys by the tuple fileId, never BinaryFileDataLike.id', async () => {
-    const backend = new BrowserBackend(target(ID_A))
-    const onFileSuccess = vi.fn()
-    const tupleKey = 'tuple-key'
-    const disagreeingDataId = 'data-id-disagrees'
-
-    await backend.putFile(
-      [
-        [
-          tupleKey,
-          {
-            mimeType: 'image/png',
-            id: disagreeingDataId,
-            dataURL: 'data:image/png;base64,QQ==',
-            created: Date.now(),
-          },
-        ],
-      ],
-      onFileSuccess,
-    )
-
-    expect(onFileSuccess).toHaveBeenCalledWith(tupleKey)
-    expect(onFileSuccess).not.toHaveBeenCalledWith(disagreeingDataId)
-    expect(await backend.getFile(tupleKey)).not.toBeNull()
-    expect(await backend.getFile(disagreeingDataId)).toBeNull()
-  })
-
-  it('putFile with an empty newEntries array resolves immediately with no IDB writes and zero onFileSuccess calls', async () => {
-    const backend = new BrowserBackend(target(ID_A))
-    const onFileSuccess = vi.fn()
-    await expect(backend.putFile([], onFileSuccess)).resolves.toBeUndefined()
-    expect(onFileSuccess).not.toHaveBeenCalled()
-  })
-
-  it('getFile returns null for a corrupt stored record and NEVER calls onError (repeated calls produce zero onError invocations)', async () => {
-    await forceCorruptFileRecord('corrupt-file')
-    const handlers = makeHandlers()
-    const backend = new BrowserBackend(target(ID_A))
-    await connectAndWait(backend, handlers)
-
-    expect(await backend.getFile('corrupt-file')).toBeNull()
-    expect(await backend.getFile('corrupt-file')).toBeNull()
-    expect(handlers.onError).not.toHaveBeenCalled()
-    backend.disconnect()
-  })
-
-  it('putFile rejects and calls onError("storage-failure") without calling onFileSuccess when the underlying store put fails', async () => {
-    const handlers = makeHandlers()
-    const faultyStore = {
-      put: vi.fn().mockRejectedValue(new Error('simulated IDB failure')),
-      get: vi.fn().mockResolvedValue(null),
-    }
-    const backend = new BrowserBackend(
-      target(ID_A),
-      undefined,
-      faultyStore as unknown as import('./document-file-store.js').DocumentFileStore,
-    )
-    await connectAndWait(backend, handlers)
-
-    const onFileSuccess = vi.fn()
-    await expect(
-      backend.putFile(
-        [
-          [
-            'file-1',
-            {
-              mimeType: 'image/png',
-              id: 'file-1',
-              dataURL: 'data:image/png;base64,QQ==',
-              created: Date.now(),
-            },
-          ],
-        ],
-        onFileSuccess,
-      ),
-    ).rejects.toThrow()
-
-    expect(onFileSuccess).not.toHaveBeenCalled()
-    expect(handlers.onError).toHaveBeenCalledWith('storage-failure')
-    backend.disconnect()
-  })
-
-  it('sendClientReady and sendExportResponse are no-ops (no WebSocket)', () => {
+  it('sendClientReady is a no-op (no WebSocket)', () => {
     const backend = new BrowserBackend(target(ID_A))
     expect(() => backend.sendClientReady()).not.toThrow()
-    expect(() => backend.sendExportResponse('req-1', 'data:image/png;base64,abc')).not.toThrow()
   })
 
   it('pushLocalUpdate with empty bytes is a no-op — no IDB write, no error', async () => {
@@ -588,22 +455,3 @@ describe('BrowserBackend', () => {
     backend.disconnect()
   })
 })
-
-async function forceCorruptFileRecord(fileId: string): Promise<void> {
-  // The REAL opener, not a hand-rolled schema — see the history on this
-  // helper: a fixture database that drifts from the app's schema stops
-  // exercising anything.
-  const db = await openWhiteboardDb(ISOLATED_DB)
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('documentFiles', 'readwrite')
-      // Missing required fields — fails documentFileRecordSchema.safeParse.
-      tx.objectStore('documentFiles').put({ v: 1, garbage: true }, fileId)
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error)
-      tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'))
-    })
-  } finally {
-    db.close()
-  }
-}

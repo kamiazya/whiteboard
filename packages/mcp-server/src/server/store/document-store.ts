@@ -1,4 +1,7 @@
-import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type {
+  CompactWorkspaceResult,
+  DocumentSummary,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -820,38 +823,29 @@ export async function getDocumentKind(
   return resolveWorkspaceDocument(workspaceDoc, path)?.kind ?? null
 }
 
-export interface CompactResult {
-  compacted: boolean
-  beforeBytes: number
-  afterBytes: number
-  reason?: 'no-versions' | 'no-file' | 'no-gain' | 'raced' | 'ok'
-}
-
 /**
  * Compacts the WORKSPACE record: a shallow snapshot cut at the earliest
  * frontiers any workspace-scoped version still needs, superseding the delta
- * log it folded. The per-document address survives in the signature because
- * the routes and the auto-compact debouncer speak per document, but since
- * every document now lives in the one workspace record, they all compact the
- * same thing — a second call right after answers 'no-gain'.
+ * log it folded. Addressed by workspace, because that is the unit: every
+ * document lives in the one record, so there is nothing smaller to compact,
+ * and a caller that fans out per document only buys N-1 full shallow exports
+ * that answer 'no-gain'.
  *
  * The cut is the earliest workspace-scoped version frontier, full stop.
  * Branch tips used to hold it back — ADR-0029 retired the branch, so there is
  * no second pin and no checkout to protect. Measured on a one-tip fixture
  * before they went: the folded record was ~75% larger with the pin.
+ *
+ * The result is the daemon's published shape (`compactWorkspaceResultSchema`
+ * in daemon-client), typed from the schema so the route that answers with it
+ * and the store that produces it cannot drift apart.
  */
-export async function compactDocument(
+export async function compactWorkspace(
   workspaceId: string,
-  path: string,
   versionStore: VersionStore,
-): Promise<CompactResult> {
+): Promise<CompactWorkspaceResult> {
   validateWorkspaceId(workspaceId)
-  validateDocumentPath(path)
-  const _db = await dbReady()
-  const documentId = await resolveDocumentIdAtPath(workspaceId, path)
-  if (documentId === null) {
-    return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
-  }
+  await dbReady()
   const documentStore = await documentStoreReady()
   const docRef = { kind: 'workspace-tree' as const, workspaceId }
 

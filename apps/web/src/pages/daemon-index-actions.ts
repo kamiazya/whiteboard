@@ -51,19 +51,6 @@ export function duplicateRequest(
 }
 
 /**
- * What the confirm dialog is asking about.
- *
- * A LIST, so one confirmation and one handler serve both the single delete
- * and the selection's bulk delete. A single delete is a list of one, and
- * keeps naming its document.
- */
-export interface PendingDelete {
-  readonly paths: readonly string[]
-  readonly displayName: string
-  readonly kind?: DocumentKind
-}
-
-/**
  * Delete each path, recording rather than throwing on the ones the daemon
  * refuses.
  *
@@ -89,34 +76,4 @@ export async function deleteEach(
     }
   }
   return { failed, lastError }
-}
-
-/**
- * What the confirm dialog offers after a partial delete: exactly the ones the
- * daemon refused, so pressing Delete again retries those. Left un-narrowed, a
- * retry re-sent DELETE for every path the first attempt had already removed.
- *
- * A lone survivor gets its NAME back — a dialog reading `Delete "2
- * documents"?` would be the count of the ATTEMPT, not of what it now offers.
- */
-export function reofferFailures(
-  failed: readonly string[],
-  rows: readonly DocumentRow[],
-): PendingDelete {
-  const only = failed.length === 1 ? rows.find((row) => row.path === failed[0]) : undefined
-  return {
-    paths: [...failed],
-    displayName: only?.displayName ?? only?.path ?? `${failed.length} documents`,
-    ...(only?.kind === undefined ? {} : { kind: only.kind }),
-  }
-}
-
-/** All of them failing reports the daemon's own reason; some of them reports the count. */
-export function partialDeleteMessage(
-  failed: number,
-  attempted: number,
-  lastError: unknown,
-): string {
-  if (failed < attempted) return `${failed} of ${attempted} could not be deleted.`
-  return lastError instanceof Error ? lastError.message : 'Failed to delete document.'
 }

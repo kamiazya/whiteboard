@@ -1,5 +1,5 @@
 import {
-  optimizeAllDocumentsResponseSchema,
+  compactWorkspaceResultSchema,
   pruneSandwichedVersionsResponseSchema,
   purgeResultSchema,
   type StorageCategory,
@@ -176,8 +176,9 @@ export function StorageReportCard() {
 
   const runMaintenance = useMaintenanceRunner(mountedRef, scheduleStatusClear, refresh)
 
-  // Optimize all documents across every workspace. Loops sequentially so the
-  // doc-cache eviction inside each compact stays coherent. Refreshes the
+  // Optimize every workspace: each call folds one workspace record, which
+  // holds all of that workspace's documents. Loops sequentially rather than
+  // fanning out so the daemon folds one record at a time. Refreshes the
   // storage report at the end so the user sees the new totals without a
   // separate Refresh click.
   const [optimizing, setOptimizing] = useState(false)
@@ -194,8 +195,8 @@ export function StorageReportCard() {
             fetchApi,
             (workspaceId) => `/api/workspaces/${workspaceId}/documents/optimize-all`,
             (saved, body) => {
-              const parsed = optimizeAllDocumentsResponseSchema.parse(body)
-              return saved + (parsed.totalBeforeBytes - parsed.totalAfterBytes)
+              const parsed = compactWorkspaceResultSchema.parse(body)
+              return saved + (parsed.beforeBytes - parsed.afterBytes)
             },
             0,
           )

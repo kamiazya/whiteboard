@@ -16,14 +16,16 @@
 
 import { getLogger } from '../log.js'
 import { registerDbDisposeHook } from './db/index.js'
-import { compactDocument, setDocumentSavedListener } from './document-store.js'
+import { compactWorkspace, setDocumentSavedListener } from './document-store.js'
 import type { VersionStore } from './version-store.js'
 
 // ── auto-compact debouncer ────────────────────────────────────────────
 // saveDocument calls a registered trigger after every write. The route layer
 // wires that trigger to scheduleAutoCompact below; tests can register a spy
-// instead to verify call ordering. Per-canvas timers coalesce a burst of
-// edits into a single compaction once the editing pause exceeds debounceMs.
+// instead to verify call ordering. One timer per WORKSPACE coalesces a burst
+// of edits — to any of its documents, since they all live in the one record
+// compaction folds — into a single compaction once the pause exceeds
+// debounceMs.
 
 // Shared by uninstallAutoCompact() and disposeAutoCompact() so the two
 // cancellation paths can never drift out of sync with each other.
@@ -50,8 +52,8 @@ function clearAllAutoCompactTimers(): void {
  * survives the split intact.
  */
 export function installAutoCompact(versionStore: VersionStore): void {
-  setDocumentSavedListener((workspaceId, path) => {
-    scheduleAutoCompact(workspaceId, path, versionStore)
+  setDocumentSavedListener((workspaceId) => {
+    scheduleAutoCompact(workspaceId, versionStore)
   })
 }
 
@@ -71,8 +73,8 @@ export function uninstallAutoCompact(): void {
 const AUTO_COMPACT_DEBOUNCE_MS = 30_000
 const autoCompactTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-// Tracks compactDocument() calls that have already fired but not yet settled.
-// A Set of the promises themselves (not a Map keyed by workspaceId/path) is
+// Tracks compactWorkspace() calls that have already fired but not yet settled.
+// A Set of the promises themselves (not a Map keyed by workspaceId) is
 // required: two overlapping compactions for the same key must both stay
 // tracked until they individually settle, since a keyed map with an
 // unconditional delete-on-settle would let a still-in-flight entry get
@@ -99,26 +101,19 @@ let disposingAutoCompactCount = 0
 
 export function scheduleAutoCompact(
   workspaceId: string,
-  path: string,
   versionStore: VersionStore,
   options: { debounceMs?: number } = {},
 ): void {
   if (disposingAutoCompactCount > 0) return
-  const key = `${workspaceId}/${path}`
-  const existing = autoCompactTimers.get(key)
+  const existing = autoCompactTimers.get(workspaceId)
   if (existing) clearTimeout(existing)
   const timer = setTimeout(() => {
-    autoCompactTimers.delete(key)
-    const compaction = compactDocument(workspaceId, path, versionStore)
+    autoCompactTimers.delete(workspaceId)
+    const compaction = compactWorkspace(workspaceId, versionStore)
       .then((result) => {
         if (result.compacted) {
           getLogger('auto-compact').info(
-            {
-              workspaceId,
-              path,
-              beforeBytes: result.beforeBytes,
-              afterBytes: result.afterBytes,
-            },
+            { workspaceId, beforeBytes: result.beforeBytes, afterBytes: result.afterBytes },
             'compacted',
           )
           return
@@ -127,7 +122,7 @@ export function scheduleAutoCompact(
         // every save schedules a compaction and most have nothing to gain —
         // so `no-gain` and `no-versions` are the scheduler working. What is
         // worth the symmetry with 'compacted' above is that the reason
-        // survives at all. `compactDocument` distinguishes four of them and
+        // survives at all. `compactWorkspace` distinguishes four of them and
         // this was the one place that could record which; reading only
         // `compacted` collapsed them into an absence, so a caller looking at
         // an unwritten `lastCompactedAt` could not tell a fence race
@@ -135,12 +130,12 @@ export function scheduleAutoCompact(
         // ('no-gain'). An absence explains nothing, and three reports of a
         // null stamp in this scheduler's tests are what it cost.
         getLogger('auto-compact').info(
-          { workspaceId, path, reason: result.reason, beforeBytes: result.beforeBytes },
+          { workspaceId, reason: result.reason, beforeBytes: result.beforeBytes },
           'declined',
         )
       })
       .catch((err) => {
-        getLogger('auto-compact').warning({ workspaceId, path, err }, 'failed')
+        getLogger('auto-compact').warning({ workspaceId, err }, 'failed')
       })
       .finally(() => {
         inFlightAutoCompacts.delete(compaction)
@@ -154,12 +149,12 @@ export function scheduleAutoCompact(
   if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
     timer.unref()
   }
-  autoCompactTimers.set(key, timer)
+  autoCompactTimers.set(workspaceId, timer)
 }
 
 // Awaitable superset of uninstallAutoCompact(): cancels every pending
 // timer AND waits for every already-fired compaction to settle, so a caller
-// that awaits this is guaranteed no compactDocument call can still reach the
+// that awaits this is guaranteed no compactWorkspace call can still reach the
 // DB driver afterward. Registered as a DB dispose hook (below) so disposing
 // a store's DB always drains this state first, without every dispose call
 // site having to remember to call it manually. Idempotent: calling it with
@@ -196,7 +191,7 @@ export function _autoCompactTimerCountForTests(): number {
 
 // Test-only introspection, matching the `_destinationCountForTests` pattern
 // in log.ts: lets tests poll for "a compaction has fired and is mid-flight"
-// without a bespoke gate inside compactDocument itself.
+// without a bespoke gate inside compactWorkspace itself.
 export function _inFlightAutoCompactCountForTests(): number {
   return inFlightAutoCompacts.size
 }

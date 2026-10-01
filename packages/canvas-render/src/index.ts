@@ -89,6 +89,7 @@ export {
   outlineContains,
   outlineContentBox,
   outlineEntryPoint,
+  resolveShapeTable,
 } from './layout/nodes/node-outline.js'
 export type {
   SpatialAppearanceResolver,
@@ -122,7 +123,6 @@ export {
   layoutSpatialEdges,
   naturalNodeContentSize,
   paintOrderOf,
-  resolveShapeTable,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
@@ -155,6 +155,12 @@ export {
   referenceWire,
   referenceWireFor,
 } from './references/wire.js'
+export {
+  type LoadedReferenceWire,
+  loadedReferenceFromWire,
+  loadedReferenceToWire,
+  loadedReferenceWireSchema,
+} from './references/wire-schema.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
@@ -194,5 +200,6 @@ export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-them
 export { createSpatialTheme } from './theme/spatial-theme.js'
 export type { ThemedAppearanceOptions } from './theme/theme-asset.js'
 export { createThemedAppearance, paletteFromTokens } from './theme/theme-asset.js'
+export { type ThemeFont, themeFontSchema } from './theme/theme-font.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyBoxes, tidyNodes } from './tidy.js'

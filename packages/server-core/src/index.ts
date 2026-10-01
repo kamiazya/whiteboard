@@ -54,7 +54,6 @@ export type {
   ServerDeps,
   VersionCreated,
   VersionHistory,
-  ViewportRequest,
   WorkspaceDocuments,
 } from './server-deps.js'
 export type { BacklinksInput, BacklinksOutput } from './tools/backlinks.js'
@@ -81,7 +80,6 @@ export type { CanvasViewInput, CanvasViewOutput } from './tools/canvas-view.js'
 export {
   canvasViewInputSchema,
   canvasViewOutputSchema,
-  canvasViewReferenceSchema,
   createCanvasViewTool,
 } from './tools/canvas-view.js'
 export {
@@ -206,3 +204,8 @@ export {
   requestOperatorSchema,
   versionEntrySchema,
 } from './versions/version-entry.js'
+export {
+  type ViewportRequest,
+  type ViewportRequestParams,
+  viewportRequestParamsSchema,
+} from './viewport-request.js'

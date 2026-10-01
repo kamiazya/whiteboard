@@ -81,62 +81,6 @@ export async function withWorkspaceWriteLock<T>(
   }
 }
 
-/**
- * Serializes mutations to ONE canvas document, on the same queue machinery
- * as the workspace lock above (and with the same single-process caveat).
- *
- * Every mutating MCP tool is a load-modify-save against `documentStore`,
- * and `saveSnapshot` writes unconditionally — it carries the new frontier
- * but nothing compares it against the stored one. So two tool calls that
- * load the same base before either saves silently drop one of the two
- * changes, whichever finishes first. That is not hypothetical for a canvas
- * an agent and a user are both touching, and two wb_canvas_edit batches racing
- * can even erase a lock the user just set.
- *
- * The key is namespaced because workspace ids and canvas ids are separate
- * spaces: an unlucky collision would make two unrelated writers share a
- * queue. Correct, but confusing to debug.
- *
- * A per-process queue is the right size for today's single daemon. A
- * multi-instance deployment (the Cloudflare direction) cannot rely on it
- * and needs a compare-and-swap in the DocumentStore contract instead —
- * `saveSnapshot` would take the frontier the caller loaded and reject a
- * stale write, with the shared tool path retrying.
- */
-export function withDocumentWriteLock<T>(documentId: string, fn: () => Promise<T>): Promise<T> {
-  return withWorkspaceWriteLock(`canvas-doc:${documentId}`, fn)
-}
-
-/**
- * Holds the write lock on SEVERAL documents for one critical section, for a
- * tool whose batch spans documents (`wb_version_save`, `wb_facet_set`).
- *
- * **Sorted, and that is the whole point.** The locks nest, so two batches
- * naming the same pair in opposite orders would each hold one and wait for
- * the other forever — a deadlock with no error and no stack, appearing in CI
- * as a timeout on whichever test was unlucky. A canonical acquisition order
- * makes that impossible: whoever gets the lowest id first gets all of them.
- * Duplicates are dropped for the same reason the workspace lock tracks
- * reentrancy — taking one key twice in one chain is the degenerate case of
- * the same deadlock.
- *
- * A batch therefore holds every one of its documents for its whole duration,
- * which is coarser than locking each in turn. That is deliberate: locking one
- * at a time would let another writer interleave between two documents of a
- * batch a caller asked for as a unit.
- */
-export function withDocumentWriteLocks<T>(
-  documentIds: readonly string[],
-  fn: () => Promise<T>,
-): Promise<T> {
-  const ordered = [...new Set(documentIds)].sort()
-  const acquire = (index: number): Promise<T> =>
-    index === ordered.length
-      ? fn()
-      : withDocumentWriteLock(ordered[index] as string, () => acquire(index + 1))
-  return acquire(0)
-}
-
 // Test-only helper.
 export function _resetWorkspaceLocksForTests(): void {
   queues.clear()

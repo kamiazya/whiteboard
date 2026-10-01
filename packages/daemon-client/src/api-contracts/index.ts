@@ -5,8 +5,7 @@
 // rest of runtime.ts stay off the published npm surface — widening this
 // barrel widens semver liability for a public package, so any addition
 // here must be an intentional decision, not incidental scope creep.
-// daemonPingResponseSchema, runtimeVerifyResponseSchema, and
-// listGrantsResponseSchema are promoted so apps/web consumes each contract
+// daemonPingResponseSchema and listGrantsResponseSchema are promoted so apps/web consumes each contract
 // from its single definition instead of a hand-written mirror that can
 // silently drift from the server's shape.
 
@@ -58,8 +57,8 @@ export {
   promoteWorkspaceResponseSchema,
   promotionChallengeInput,
 } from './promotion.js'
-export type { DaemonPingResponse, RuntimeVerifyResponse } from './runtime.js'
-export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime.js'
+export type { DaemonPingResponse } from './runtime.js'
+export { daemonPingResponseSchema } from './runtime.js'
 
 import type {
   exportOkfOutputSchema as _canvasOkfV1ResponseSchema,

@@ -1,12 +1,13 @@
 import type {
   CanvasComment,
   CanvasEdge,
+  CanvasLine,
   ExtensionFacets,
   SpatialCanvas,
   SpatialNode,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { nodeKind, nodeText, withNodeText } from '@kamiazya/whiteboard-model'
+import { nodeKind, nodeText, spatialCanvasSchema, withNodeText } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -339,6 +340,35 @@ describe('loro-bridge', () => {
     const result = readSpatialCanvas(doc)
     expect(result.nodes.map((n) => n.id).sort()).toEqual(['node-1', 'node-3'])
     expect(result.edges).toEqual([survivingEdge])
+  })
+
+  test('deleteSpatialNode cascades to the ink anchored on the node, and leaves free ink alone', () => {
+    // The editor's delete writes through this path, and a line whose node
+    // end names a deleted node is a canvas `spatialCanvasSchema` refuses —
+    // so the in-memory canvas dropped the line while the persisted doc kept
+    // it, and the next agent read of the document failed. A FREE end names
+    // no node and so cannot dangle (ADR-0038 decision 2): that line stays.
+    const doc = makeDoc()
+    const anchored: CanvasLine = {
+      id: 'ink-anchored',
+      from: { kind: 'node', node: TEXT_NODE.id },
+      to: { kind: 'point', point: { x: 400, y: 400 } },
+    }
+    const free: CanvasLine = {
+      id: 'ink-free',
+      from: { kind: 'point', point: { x: 10, y: 10 } },
+      to: { kind: 'point', point: { x: 20, y: 20 } },
+    }
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [], lines: [anchored, free] })
+    // Lines share the edge lock plane, so a cascaded line's lock goes too.
+    setEdgeLock(doc, anchored.id, true)
+
+    deleteSpatialNode(doc, TEXT_NODE.id)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.lines).toEqual([free])
+    expect(readEdgeLocks(doc).has(anchored.id)).toBe(false)
+    expect(spatialCanvasSchema.safeParse(result).success).toBe(true)
   })
 
   test('deleteSpatialNode is idempotent and a no-op for a missing id', () => {

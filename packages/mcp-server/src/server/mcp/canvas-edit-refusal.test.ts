@@ -8,6 +8,7 @@ import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it } from 'vitest'
 import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
+import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
 
 async function connect(): Promise<Client> {
@@ -17,6 +18,8 @@ async function connect(): Promise<Client> {
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
     versions: new InMemoryVersionHistory(),
+    // The daemon's own seam: every mutating tool takes its write lock.
+    liveDocuments: liveDocuments(),
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

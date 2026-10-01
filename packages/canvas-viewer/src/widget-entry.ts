@@ -4,13 +4,16 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
-import { resolveCanvasPalette, spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import {
-  type CommentThread,
-  commentThreadSchema,
-  documentIdSchema,
-  spatialCanvasSchema,
-} from '@kamiazya/whiteboard-model'
+  type LoadedReference,
+  loadedReferenceFromWire,
+  loadedReferenceWireSchema,
+  resolveCanvasPalette,
+  spatialRenderStyleSchema,
+  type ThemeFont,
+  themeFontSchema,
+} from '@kamiazya/whiteboard-canvas-render'
+import { type CommentThread, commentThreadSchema } from '@kamiazya/whiteboard-model'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
 import { dataUriToBytes } from './font-loading.js'
@@ -24,7 +27,7 @@ import { canvasPointFromClick } from './widget/canvas-point.js'
 import { createCommentControl } from './widget/comment-control.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
-import { loadThemeFont, type ThemeFont } from './widget/theme-font.js'
+import { loadThemeFont } from './widget/theme-font.js'
 
 declare global {
   interface Window {
@@ -113,19 +116,12 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 // host, and a malformed entry reaches canvas-render's layout seams as
 // whatever the host sent.
 //
-// Validated as canvas-render's `LoadedReference` — the record `canvas_view`
-// declares its payload with server-side, and the one `referenceSeams` reads
-// — not a looser shape check. A canvas the CANONICAL `spatialCanvasSchema`
-// rejects is not something layout shrugs off, and a body is parsed by the
-// seams themselves, so a raw string is all that crosses.
-//
-// Applied PER REFERENCE, so strictness costs only the reference that fails.
-const referenceSchema = z.object({
-  documentId: documentIdSchema.optional(),
-  name: z.string().optional(),
-  body: z.string().optional(),
-  canvas: spatialCanvasSchema.optional(),
-})
+// Validated with the SAME schema `canvas_view` declares its payload with
+// (canvas-render's `loadedReferenceWireSchema`), then lifted to the
+// `LoadedReference` the seams read. A copy of that schema lived here and
+// drifted: it took the model's canvas where the wire carries JSON Canvas,
+// so every referenced board was dropped. Applied PER REFERENCE, so
+// strictness costs only the reference that fails.
 
 /**
  * Keeps the threads that parse, drops the ones that do not — per thread, like
@@ -146,10 +142,10 @@ function parseThreads(raw: readonly unknown[] | undefined) {
 /** Keeps the references that parse, drops the ones that do not. */
 function parseReferences(raw: Record<string, unknown> | undefined) {
   if (raw === undefined) return undefined
-  const kept: Record<string, z.infer<typeof referenceSchema>> = {}
+  const kept: Record<string, LoadedReference> = {}
   for (const [ref, value] of Object.entries(raw)) {
-    const parsed = referenceSchema.safeParse(value)
-    if (parsed.success) kept[ref] = parsed.data
+    const parsed = loadedReferenceWireSchema.safeParse(value)
+    if (parsed.success) kept[ref] = loadedReferenceFromWire(parsed.data)
     else console.error('[whiteboard-widget] dropping unparseable reference:', ref, parsed.error)
   }
   return Object.keys(kept).length > 0 ? kept : undefined
@@ -179,8 +175,6 @@ const toolResultEnvelopeSchema = z.object({
     .catchall(z.unknown())
     .optional(),
 })
-
-const themeFontSchema = z.object({ family: z.string().min(1), url: z.string().min(1) }).strict()
 
 function extractCanvasIdAndScene(payload: unknown): {
   workspaceId?: string

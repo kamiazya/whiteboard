@@ -1,8 +1,12 @@
 import {
   type LoadedReference,
+  type LoadedReferenceWire,
+  loadedReferenceToWire,
+  loadedReferenceWireSchema,
   referenceTargets,
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
+  themeFontSchema,
 } from '@kamiazya/whiteboard-canvas-render'
 import { jsonCanvasDocumentSchema, toJsonCanvas } from '@kamiazya/whiteboard-codec'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
@@ -15,37 +19,7 @@ import { z } from 'zod'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
-import { themeFontSchema } from '../theme-font.js'
 import { loadDocument } from './document-io.js'
-
-/**
- * What one file reference resolved to, as the widget receives it.
- *
- * Schematized rather than passed as `unknown` because this payload crosses
- * TWO process boundaries — server to MCP host, host to the widget document —
- * and the widget re-validates on arrival. A hand-written type on the widget
- * side paired with an unschematized payload here is exactly the drift
- * zod-schema-discipline exists to prevent.
- */
-/**
- * One referenced document as the widget receives it — canvas-render's
- * `LoadedReference` on the wire, so the widget builds its seams with the
- * same `referenceSeams` every other surface uses and this schema never has
- * to know what a body or a canvas is FOR. Raw body, not parsed: parsing is
- * the seams' job, once, on whichever side lays out.
- */
-export const canvasViewReferenceSchema = z
-  .object({
-    /** The canonical id, so the seams answer by id when the node wrote a path. */
-    documentId: documentIdSchema.optional(),
-    /** The document's display name, so the node's label is not a raw id. */
-    name: z.string().optional(),
-    /** Present only for a markdown document: its raw body. */
-    body: z.string().optional(),
-    /** Present only for a spatial document: its canvas. */
-    canvas: jsonCanvasDocumentSchema.optional(),
-  })
-  .strict()
 
 export const canvasViewInputSchema = z
   .object({
@@ -83,7 +57,7 @@ export const canvasViewOutputSchema = z
      * File reference -> what it resolves to. Keyed by the raw `file` value
      * on the node, which is what the widget's seam is called with.
      */
-    references: z.record(z.string(), canvasViewReferenceSchema),
+    references: z.record(z.string(), loadedReferenceWireSchema),
     /** The caller's `style`, echoed so the widget draws the look that was asked for. */
     style: spatialRenderStyleSchema.optional(),
     /**
@@ -119,29 +93,15 @@ export type CanvasViewOutput = z.infer<typeof canvasViewOutputSchema>
  */
 /**
  * One `[target, wire]` pair for a reference the graph actually resolved, or
- * nothing.
- *
- * Every field is optional and omitted rather than sent as undefined, because
- * the wire is read by a widget that distinguishes "no body" from "an empty
- * one". A canvas crosses as JSON Canvas, which is the only projection a
- * reader of this wire knows.
+ * nothing. The wire shape is canvas-render's, which the widget parses with
+ * the same schema this tool declares.
  */
 function referenceWireEntry(
   target: string,
   loaded: LoadedReference | null | undefined,
-): [string, Record<string, unknown>][] {
+): [string, LoadedReferenceWire][] {
   if (loaded === undefined || loaded === null) return []
-  return [
-    [
-      target,
-      {
-        ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
-        ...(loaded.name !== undefined ? { name: loaded.name } : {}),
-        ...(loaded.body !== undefined ? { body: loaded.body } : {}),
-        ...(loaded.canvas !== undefined ? { canvas: toJsonCanvas(loaded.canvas) } : {}),
-      },
-    ],
-  ]
+  return [[target, loadedReferenceToWire(loaded)]]
 }
 
 export function createCanvasViewTool(deps: ServerDeps) {

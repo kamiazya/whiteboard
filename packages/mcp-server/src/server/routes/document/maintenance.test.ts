@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { compactWorkspaceResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -37,7 +38,7 @@ describe('maintenance router', () => {
   })
 })
 
-describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
+describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt record)', () => {
   function createVersionStoreMock() {
     return {
       save: vi.fn(),
@@ -77,7 +78,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
     _clearWorkspaceDocCacheForTests()
 
     const app = createDocumentRouter({ versionStore: createVersionStoreMock() })
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/compact', {
+    const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
 
@@ -87,11 +88,6 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
       message: expect.stringContaining('workspace-tree:session1'),
     })
   })
-
-  // Canvas blobs live under blobs/{workspaceId}/document/, so the previous
-  // "non-directory session path" stat failure case no longer maps. compact
-  // returns no-file for missing blobs, and the corrupt-snapshot case above
-  // still exercises the corruption branch.
 })
 
 describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
@@ -102,10 +98,8 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       list: vi.fn(),
       saveThumbnail: vi.fn(),
       loadThumbnail: vi.fn(),
-      // No version cut available — each per-canvas compact returns
-      // reason: 'no-versions'. That is the realistic dry-run shape; what
-      // matters is the bulk endpoint loops every canvas and aggregates
-      // totals correctly.
+      // No version cut available — the fold answers reason: 'no-versions',
+      // the realistic dry-run shape.
       earliestWorkspaceFrontiers: vi.fn().mockResolvedValue(null),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
@@ -117,48 +111,42 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
     }
   }
 
-  it('iterates every canvas in the workspace and returns aggregated results', async () => {
+  // Every document lives in the one workspace record, so the route folds it
+  // ONCE and answers with that fold — not with a per-document list that
+  // compacted the same record N times, the first for real and the rest to
+  // find out there was no gain.
+  it('compacts the workspace record once, however many documents it holds', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     await saveDocument('session1', 'canvas-b', new LoroDoc())
 
-    const app = createDocumentRouter({ versionStore: createVersionStoreMock() })
+    const versionStore = createVersionStoreMock()
+    const app = createDocumentRouter({ versionStore })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
 
     expect(res.status).toBe(200)
-    const json = (await res.json()) as {
-      results: Array<{
-        path: string
-        compacted: boolean
-        beforeBytes: number
-        afterBytes: number
-        reason?: string
-      }>
-      totalBeforeBytes: number
-      totalAfterBytes: number
-    }
-    expect(json.results.map((r) => r.path).sort()).toEqual(['canvas-a', 'canvas-b'])
-    expect(json.results.every((r) => r.compacted === false)).toBe(true)
-    expect(json.results.every((r) => r.reason === 'no-versions')).toBe(true)
-    expect(json.totalBeforeBytes).toBeGreaterThan(0)
-    expect(json.totalAfterBytes).toBe(json.totalBeforeBytes)
+    const json = compactWorkspaceResultSchema.parse(await res.json())
+    expect(json.compacted).toBe(false)
+    expect(json.reason).toBe('no-versions')
+    expect(json.beforeBytes).toBeGreaterThan(0)
+    expect(json.afterBytes).toBe(json.beforeBytes)
+    // One fold: the cut is looked up once per compaction.
+    expect(versionStore.earliestWorkspaceFrontiers).toHaveBeenCalledTimes(1)
   })
 
-  it('returns an empty result set when the workspace has no documents', async () => {
+  it('answers no-file for a workspace with nothing stored', async () => {
     const app = createDocumentRouter({ versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
     expect(res.status).toBe(200)
-    const json = (await res.json()) as {
-      results: unknown[]
-      totalBeforeBytes: number
-      totalAfterBytes: number
-    }
-    expect(json.results).toEqual([])
-    expect(json.totalBeforeBytes).toBe(0)
-    expect(json.totalAfterBytes).toBe(0)
+    expect(compactWorkspaceResultSchema.parse(await res.json())).toEqual({
+      compacted: false,
+      beforeBytes: 0,
+      afterBytes: 0,
+      reason: 'no-file',
+    })
   })
 
   it('prune-sandwiched delegates to versionStore.pruneSandwichedAutoVersions for every canvas', async () => {

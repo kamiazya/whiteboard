@@ -16,7 +16,7 @@ paths:
   and the `document-backend-contract` types they implement.
 - `api-client` (same-origin fetch wrapper — injects a `traceparent` header
   through @opentelemetry/api's no-op surface, no SDK shipped),
-  `upload-files`, the ws message/protocol contracts.
+  and the ws message/protocol contracts.
 - `test-utils/`: the backend contract suites apps/web runs against its own
   implementations (`document-backend-contract`, `sse-stream-source-contract`).
 

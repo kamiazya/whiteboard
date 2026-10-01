@@ -58,6 +58,7 @@ const sources = import.meta.glob(
     './pages/use-document-list-refresh.ts',
     './pages/use-duplicate-document.ts',
     './pages/use-delete-document.ts',
+    './pages/use-delete-documents.ts',
     './pages/use-document-actions.tsx',
     './pages/DaemonDocumentPage.tsx',
     './pages/use-connections.ts',
@@ -223,6 +224,8 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
   duplicateError: 'no subject: a refused duplicate; the path it was about is `duplicatingPath`',
   creating: 'no subject: an in-flight flag for this screen’s own submit',
   deleting: 'no subject: an in-flight flag; the path it is about is `pendingDelete`',
+  generation:
+    'no subject: a monotonic stamp the delete hook bumps ON a switch so an attempt begun before it drops its outcome — resetting it would revive the stale re-offer it exists to close',
   selectedWorkspaceRef:
     'no subject: mirrors the selection, written during render so it is current within the very render that changes it',
   addressedWorkspaceRef: 'no subject: mirrors the addressed workspace, written during render',
@@ -497,7 +500,15 @@ const CASES = [
     label: 'WorkspaceFilesPanel',
     scanRefs: true,
   },
-  { files: [DAEMON_INDEX], ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage', scanRefs: true },
+  {
+    // The delete confirmation is BOTH index pages' hook now; its state moved
+    // THERE rather than away, and the page's switch effect clears it through
+    // the hook's own marked reset.
+    files: [DAEMON_INDEX, './pages/use-delete-documents.ts'],
+    ledger: DAEMON_INDEX_STATE,
+    label: 'DaemonIndexPage',
+    scanRefs: true,
+  },
   {
     files: [VERSION_TIMELINE],
     ledger: VERSION_TIMELINE_STATE,

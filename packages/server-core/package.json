@@ -24,6 +24,10 @@
       "types": "./src/versions/version-entry.ts",
       "import": "./src/versions/version-entry.ts"
     },
+    "./viewport-request": {
+      "types": "./src/viewport-request.ts",
+      "import": "./src/viewport-request.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

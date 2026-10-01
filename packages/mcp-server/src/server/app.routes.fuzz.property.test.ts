@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   canvasExistsResponseSchema,
+  compactWorkspaceResultSchema,
   createDocumentRequestSchema,
   createDocumentResponseSchema,
   createWorkspaceRequestSchema,
@@ -28,8 +29,8 @@ import {
   listTrashResponseSchema,
   listVersionsResponseSchema,
   listWorkspacesResponseSchema,
-  optimizeAllDocumentsResponseSchema,
   pruneSandwichedVersionsResponseSchema,
+  purgeResultSchema,
   renameDocumentPathRequestSchema,
   renameDocumentPathResponseSchema,
   renameWorkspaceRequestSchema,
@@ -39,6 +40,7 @@ import {
   saveVersionResponseSchema,
   setNameRequestSchema,
   setPinnedRequestSchema,
+  storageReportPayloadSchema,
   updateDocumentResponseSchema,
   versionDocumentResponseSchema,
   workspaceNamesSchema,
@@ -49,8 +51,6 @@ import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-clien
 import {
   daemonPingResponseSchema,
   runtimeStatusResponseSchema,
-  runtimeVerifyRequestSchema,
-  runtimeVerifyResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
@@ -91,7 +91,7 @@ const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store
 const { seedWorkspaceRow } = await import('./routes/_test-helpers.js')
 const { resetSyncStreamsForTests } = await import('./routes/sync-sse.js')
 const { syncSubscribeRequestSchema, syncClientMessageRequestSchema } = await import(
-  './routes/sync-sse.js'
+  '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
 )
 
 const TOKEN = 'fuzz-token'
@@ -237,7 +237,11 @@ const RULES: Record<string, Rule> = {
     response: createDocumentResponseSchema,
   },
   'GET /api/workspaces/:workspaceId/names': { answers: 'json', response: workspaceNamesSchema },
-  'PUT /api/workspaces/:workspaceId/name': { answers: 'json', body: setNameRequestSchema },
+  'PUT /api/workspaces/:workspaceId/name': {
+    answers: 'json',
+    body: setNameRequestSchema,
+    response: workspaceNamesSchema,
+  },
   'GET /api/workspaces/:workspaceId/trash': { answers: 'json', response: listTrashResponseSchema },
   'POST /api/workspaces/:workspaceId/trash/:documentId/restore': {
     answers: 'json',
@@ -249,9 +253,12 @@ const RULES: Record<string, Rule> = {
   },
   'POST /api/workspaces/:workspaceId/documents/optimize-all': {
     answers: 'json',
-    response: optimizeAllDocumentsResponseSchema,
+    response: compactWorkspaceResultSchema,
   },
-  'POST /api/workspaces/:workspaceId/files/purge-dangling': { answers: 'json' },
+  'POST /api/workspaces/:workspaceId/files/purge-dangling': {
+    answers: 'json',
+    response: purgeResultSchema,
+  },
   'GET /api/workspaces/:workspaceId/documents/*/versions': {
     answers: 'json',
     response: listVersionsResponseSchema,
@@ -272,17 +279,18 @@ const RULES: Record<string, Rule> = {
   'PUT /api/workspaces/:workspaceId/documents/*/name': {
     answers: 'json',
     body: setNameRequestSchema,
+    response: workspaceNamesSchema,
   },
   'PUT /api/workspaces/:workspaceId/documents/*/pin': {
     answers: 'json',
     body: setPinnedRequestSchema,
+    response: workspaceNamesSchema,
   },
   'PUT /api/workspaces/:workspaceId/documents/*/path': {
     answers: 'json',
     body: renameDocumentPathRequestSchema,
     response: renameDocumentPathResponseSchema,
   },
-  'POST /api/workspaces/:workspaceId/documents/*/compact': { answers: 'json' },
   'DELETE /api/workspaces/:workspaceId/documents/*': {
     answers: 'json',
     response: deleteDocumentResponseSchema,
@@ -345,14 +353,9 @@ const RULES: Record<string, Rule> = {
     body: syncClientMessageRequestSchema,
   },
   'GET /api/runtime/ping': { answers: 'json', response: daemonPingResponseSchema },
-  'POST /api/runtime/verify': {
-    answers: 'json',
-    body: runtimeVerifyRequestSchema,
-    response: runtimeVerifyResponseSchema,
-  },
   'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
-  'GET /api/runtime/storage': { answers: 'json' },
-  'POST /api/runtime/logs/prune': { answers: 'json' },
+  'GET /api/runtime/storage': { answers: 'json', response: storageReportPayloadSchema },
+  'POST /api/runtime/logs/prune': { answers: 'json', response: purgeResultSchema },
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },
   'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },

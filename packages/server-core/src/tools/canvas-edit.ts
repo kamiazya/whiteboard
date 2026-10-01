@@ -335,77 +335,85 @@ export function createCanvasEditTool(deps: ServerDeps) {
       'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add or resolve comments (the annotation layer; comments are closed, never removed). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again. A batch of CONTENT changes is stored as a proposal for a person to adopt or dismiss rather than changing the document — that is the default, because nobody watches you type. Pass mode:"apply" to change the document directly, which is what to do when a person just asked you to draw. A batch carrying anything a proposal cannot represent — comments, locks, tidy, region.set — applies whatever the mode, since those are not content. Pass proposalId to keep several calls in one proposal.',
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
-    async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
-      const facetRegistry = await resolveEditRegistry(deps, input)
-      const proposing = decideProposing(input)
-      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-      claimSpatialDocument(doc, input.documentId)
-      const measure = await resolveMeasurerFor(deps, input.ops)
+    execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
+      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
+      // mutating tool is a load-modify-save against a store whose save writes
+      // unconditionally, and the one place that holds the bracket is the one
+      // every surface — MCP, HTTP, the next one — goes through.
+      return deps.liveDocuments.withWriteLock(input.workspaceId, () => editCanvas(deps, input))
+    },
+  }
+}
 
-      // Every op runs against this session; nothing reaches the doc until
-      // the last op has applied. That is what makes the batch all-or-nothing
-      // — including the lock ops, which would otherwise write through to the
-      // doc's sidecar map as they were applied.
-      const s = new CanvasEditSession(canvas, doc, measure)
+async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<CanvasEditOutput> {
+  const facetRegistry = await resolveEditRegistry(deps, input)
+  const proposing = decideProposing(input)
+  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+  const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
+  claimSpatialDocument(doc, input.documentId)
+  const measure = await resolveMeasurerFor(deps, input.ops)
 
-      // One handler per verb, keyed by the schema (canvas-edit-handlers.ts).
-      // It was a 16-case switch inline here, and the shape is what changed:
-      // a verb added to the schema and not to the table no longer compiles,
-      // where the switch simply fell through and reported a batch applied
-      // having ignored the op.
-      const ctx: CanvasEditContext = { s, facetRegistry }
-      input.ops.forEach((op, index) => {
-        applyCanvasOp(ctx, op, index)
-      })
+  // Every op runs against this session; nothing reaches the doc until
+  // the last op has applied. That is what makes the batch all-or-nothing
+  // — including the lock ops, which would otherwise write through to the
+  // doc's sidecar map as they were applied.
+  const s = new CanvasEditSession(canvas, doc, measure)
 
-      // The batch writes back the WHOLE canvas, so the canvas's own facets —
-      // and every comment the batch did not touch — must ride along, or the
-      // save deletes them (writeSpatialCanvas resyncs by omission).
-      const candidate: SpatialCanvas = {
-        nodes: s.nodes,
-        edges: s.edges,
-        ...(canvas.facets !== undefined && { facets: canvas.facets }),
-        ...(s.lines.length > 0 && { lines: s.lines }),
-        ...(s.comments.length > 0 && { comments: s.comments }),
-      }
-      const parsed = spatialCanvasSchema.safeParse(candidate)
-      if (!parsed.success) {
-        throw new CanvasEditError(
-          input.ops.length - 1,
-          'batch',
-          `the resulting canvas is not valid: ${parsed.error.issues}
+  // One handler per verb, keyed by the schema (canvas-edit-handlers.ts).
+  // It was a 16-case switch inline here, and the shape is what changed:
+  // a verb added to the schema and not to the table no longer compiles,
+  // where the switch simply fell through and reported a batch applied
+  // having ignored the op.
+  const ctx: CanvasEditContext = { s, facetRegistry }
+  input.ops.forEach((op, index) => {
+    applyCanvasOp(ctx, op, index)
+  })
+
+  // The batch writes back the WHOLE canvas, so the canvas's own facets —
+  // and every comment the batch did not touch — must ride along, or the
+  // save deletes them (writeSpatialCanvas resyncs by omission).
+  const candidate: SpatialCanvas = {
+    nodes: s.nodes,
+    edges: s.edges,
+    ...(canvas.facets !== undefined && { facets: canvas.facets }),
+    ...(s.lines.length > 0 && { lines: s.lines }),
+    ...(s.comments.length > 0 && { comments: s.comments }),
+  }
+  const parsed = spatialCanvasSchema.safeParse(candidate)
+  if (!parsed.success) {
+    throw new CanvasEditError(
+      input.ops.length - 1,
+      'batch',
+      `the resulting canvas is not valid: ${parsed.error.issues}
             .map((issue) => issue.message)
             .join('; ')}`,
-        )
-      }
+    )
+  }
 
-      if (proposing) {
-        return await commitAsProposal({ deps, input, doc, canvas, after: parsed.data, s })
-      }
+  if (proposing) {
+    return await commitAsProposal({ deps, input, doc, canvas, after: parsed.data, s })
+  }
 
-      // Locks are written only now, after every op has applied — see the
-      // working-copy comment above.
-      for (const node of parsed.data.nodes) setNodeLock(doc, node.id, s.nodeLocks.has(node.id))
-      for (const edge of parsed.data.edges) setEdgeLock(doc, edge.id, s.edgeLocks.has(edge.id))
-      await saveDocumentBodySnapshot(deps, input.workspaceId, input.documentId, doc, parsed.data)
+  // Locks are written only now, after every op has applied — see the
+  // working-copy comment above.
+  for (const node of parsed.data.nodes) setNodeLock(doc, node.id, s.nodeLocks.has(node.id))
+  for (const edge of parsed.data.edges) setEdgeLock(doc, edge.id, s.edgeLocks.has(edge.id))
+  await saveDocumentBodySnapshot(deps, input.workspaceId, input.documentId, doc, parsed.data)
 
-      const touched = {
-        nodes: [...s.touchedNodes].sort(),
-        edges: [...s.touchedEdges].sort(),
-        lines: [...s.touchedLines].sort(),
-        comments: [...s.touchedComments].sort(),
-      }
+  const touched = {
+    nodes: [...s.touchedNodes].sort(),
+    edges: [...s.touchedEdges].sort(),
+    lines: [...s.touchedLines].sort(),
+    comments: [...s.touchedComments].sort(),
+  }
 
-      await announceEdit(deps, input, touched)
+  await announceEdit(deps, input, touched)
 
-      return {
-        documentId: input.documentId,
-        applied: input.ops.length,
-        touched,
-        geometry: [...s.geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
-        snapshot: projectCanvasSnapshot(input.documentId, parsed.data, s.nodeLocks, s.edgeLocks),
-      }
-    },
+  return {
+    documentId: input.documentId,
+    applied: input.ops.length,
+    touched,
+    geometry: [...s.geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    snapshot: projectCanvasSnapshot(input.documentId, parsed.data, s.nodeLocks, s.edgeLocks),
   }
 }

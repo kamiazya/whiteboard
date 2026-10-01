@@ -1,3 +1,4 @@
+import type { ThemeFont } from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace, registerFontBytes } from '../font-loading.js'
 
 /**
@@ -24,11 +25,6 @@ const WIDGET_FONT_SOURCE_ORIGIN = 'https://raw.githubusercontent.com'
  * Only `loaded` is worth redrawing for.
  */
 export type ThemeFontOutcome = 'loaded' | 'present' | 'refused' | 'degraded'
-
-export interface ThemeFont {
-  readonly family: string
-  readonly url: string
-}
 
 /**
  * Fetches a theme's family and registers it in this realm, so the next

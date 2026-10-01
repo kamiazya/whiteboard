@@ -1,7 +1,7 @@
 import { applyNodePatch, nodePatchField } from './node-content.js'
 import type { BodyProposedChange, NodePatchFields, SpatialProposedChange } from './proposal.js'
 import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from './spatial.js'
-import { endNode } from './spatial.js'
+import { withoutNodes } from './spatial-cascade.js'
 
 /**
  * What adopting a proposed change MEANS, and whether it still fits (ADR-0029
@@ -121,24 +121,12 @@ const APPLY: {
 }
 
 /**
- * An edge to a node that is gone is not a canvas anything can render, and
- * `spatialCanvasSchema` refuses it — so removing a node takes the edges that
- * would dangle with it, the way the editor's own delete does. Silently
- * leaving them would make the adopted board unsavable.
- *
- * Ink anchored to the node goes with it for the same reason, and ink
- * anchored to nothing stays: a line's free end names no node, so there is
- * nothing for the removal to dangle (ADR-0038 decision 2).
+ * Removing a node takes the edges and ink anchored on it, the way every other
+ * surface's delete does — `withoutNodes` is the one definition of that sweep.
+ * Silently leaving them would make the adopted board one the model refuses.
  */
 function removeNode(canvas: SpatialCanvas, nodeId: string): SpatialCanvas {
-  const touches = (element: CanvasEdge | CanvasLine) =>
-    endNode(element.from) === nodeId || endNode(element.to) === nodeId
-  return {
-    ...canvas,
-    nodes: canvas.nodes.filter((node) => node.id !== nodeId),
-    edges: canvas.edges.filter((edge) => !touches(edge)),
-    ...(canvas.lines === undefined ? {} : { lines: canvas.lines.filter((line) => !touches(line)) }),
-  }
+  return withoutNodes(canvas, new Set([nodeId]))
 }
 
 const withLines = (canvas: SpatialCanvas, lines: SpatialCanvas['lines']): SpatialCanvas => {

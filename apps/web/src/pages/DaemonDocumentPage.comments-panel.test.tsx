@@ -165,14 +165,7 @@ class FakeBackend implements DocumentBackend {
   pushLocalUpdate(bytes: Uint8Array): void {
     this.pushLocalUpdateCalls.push(bytes)
   }
-  getFile(): Promise<Blob | null> {
-    return Promise.resolve(null)
-  }
-  putFile(): Promise<void> {
-    return Promise.resolve()
-  }
   sendClientReady(): void {}
-  sendExportResponse(): void {}
 }
 
 async function renderSpatial(backend: FakeBackend = new FakeBackend(seededSpatialSnapshot)) {

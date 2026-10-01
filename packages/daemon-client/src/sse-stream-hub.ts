@@ -15,10 +15,13 @@
 import type { z } from 'zod'
 import { documentApiUrl } from './api-contracts/document-url.js'
 import {
+  type SyncClientMessageRequest,
+  type SyncSubscribeRequest,
   syncMessageEventSchema,
   syncReadyEventSchema,
   syncUpdateEventSchema,
 } from './sync-sse-contract.js'
+import type { ClientTextMessage } from './ws-messages.js'
 
 interface SseEvent {
   event: string
@@ -77,7 +80,7 @@ export interface SseStreamSource {
    * which stream that is — with the SharedWorker-backed source the stream is
    * the worker's, not the caller's.
    */
-  sendMessage(doc: string, message: unknown): void
+  sendMessage(doc: string, message: ClientTextMessage): void
   /**
    * Get a document's new state to the authority for it.
    *
@@ -146,31 +149,6 @@ export interface DocListener {
    * rejects instead, which already tells its caller.
    */
   onWriteState?: (landed: boolean) => void
-}
-
-/**
- * Parse one frame's `data` against its contract. A malformed frame is dropped
- * rather than thrown on: the daemon is the only producer, so a mismatch is a
- * version skew, and losing one frame is recoverable where aborting the whole
- * stream would stop every document sharing it.
- */
-function parseFrame<T extends z.ZodTypeAny>(schema: T, data: string): z.infer<T> | null {
-  let json: unknown
-  try {
-    json = JSON.parse(data)
-  } catch {
-    return null
-  }
-  const parsed = schema.safeParse(json)
-  return parsed.success ? parsed.data : null
-}
-
-function isClientReady(message: unknown): boolean {
-  return (
-    typeof message === 'object' &&
-    message !== null &&
-    (message as { type?: unknown }).type === 'client_ready'
-  )
 }
 
 /** Exported so the SharedWorker-backed source decodes with this one
@@ -248,6 +226,23 @@ function canvasDocUrl(baseUrl: string, doc: string, action: 'update' | 'snapshot
   return `${base}${documentApiUrl(workspaceId, doc.slice(workspaceId.length + 1), action)}`
 }
 
+/**
+ * Parse one frame's `data` against its contract. A malformed frame is dropped
+ * rather than thrown on: the daemon is the only producer, so a mismatch is a
+ * version skew, and losing one frame is recoverable where aborting the whole
+ * stream would stop every document sharing it.
+ */
+function parseFrame<T extends z.ZodTypeAny>(schema: T, data: string): z.infer<T> | null {
+  let json: unknown
+  try {
+    json = JSON.parse(data)
+  } catch {
+    return null
+  }
+  const parsed = schema.safeParse(json)
+  return parsed.success ? parsed.data : null
+}
+
 export class SseStreamHub implements SseStreamSource {
   private readonly options: SseStreamHubOptions
   /**
@@ -301,17 +296,21 @@ export class SseStreamHub implements SseStreamSource {
     }
   }
 
-  sendMessage(doc: string, message: unknown): void {
+  sendMessage(doc: string, message: ClientTextMessage): void {
     // Readiness is stream state, not a one-off event: the daemon only routes
     // viewport requests to streams that declared it, and a reconnect gives us
     // a stream that never has.
     const entry = this.docs.get(doc)
-    if (isClientReady(message) && entry) entry.ready = true
+    if (message.type === 'client_ready' && entry) entry.ready = true
     // Before a stream exists there is nothing to address, and the daemon would
     // have nowhere to apply it. Readiness is replayed once one opens; the other
     // control messages are inert server-side, so dropping them costs nothing.
     if (this.streamId === null) return
-    void this.post('/api/sync/message', { streamId: this.streamId, doc, message })
+    void this.post('/api/sync/message', {
+      streamId: this.streamId,
+      doc,
+      message,
+    } satisfies SyncClientMessageRequest)
   }
 
   /**
@@ -358,7 +357,13 @@ export class SseStreamHub implements SseStreamSource {
     return new Uint8Array(await res.arrayBuffer())
   }
 
-  private async post(path: string, body: unknown): Promise<void> {
+  // Typed at every call site against the contract the daemon parses
+  // `.strict()`: a body shaped by hand answered 400, which this swallows as
+  // best-effort, and sync stopped delivering with nothing red.
+  private async post(
+    path: '/api/sync/subscribe' | '/api/sync/message',
+    body: SyncSubscribeRequest | SyncClientMessageRequest,
+  ): Promise<void> {
     try {
       await this.options.fetch(`${this.options.baseUrl}${path}`, {
         method: 'POST',
@@ -370,12 +375,15 @@ export class SseStreamHub implements SseStreamSource {
     }
   }
 
-  private async send(body: { subscribe?: string[]; unsubscribe?: string[] }): Promise<void> {
+  private async send(body: Omit<SyncSubscribeRequest, 'streamId'>): Promise<void> {
     // Same as sendMessage: with no stream there is nothing to address. The full
     // set is announced when one opens, so an early subscribe is not lost.
     if (this.streamId === null) return
     // Best effort: a dropped subscribe is re-sent when the stream reconnects.
-    await this.post('/api/sync/subscribe', { streamId: this.streamId, ...body })
+    await this.post('/api/sync/subscribe', {
+      streamId: this.streamId,
+      ...body,
+    } satisfies SyncSubscribeRequest)
   }
 
   /**
@@ -462,7 +470,7 @@ export class SseStreamHub implements SseStreamSource {
         streamId: payload.streamId,
         doc,
         message: { type: 'client_ready' },
-      })
+      } satisfies SyncClientMessageRequest)
     }
   }
 

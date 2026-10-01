@@ -143,14 +143,7 @@ class FakeBackend implements DocumentBackend {
   pushLocalUpdate(update: Uint8Array): void {
     this.pushed.push(update)
   }
-  getFile(): Promise<Blob | null> {
-    return Promise.resolve(null)
-  }
-  putFile(): Promise<void> {
-    return Promise.resolve()
-  }
   sendClientReady(): void {}
-  sendExportResponse(): void {}
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'

@@ -18,7 +18,6 @@
 // All payload types originate from z.infer<> in ws-messages.ts.
 export type {
   ClientTextMessage,
-  ExportRequestMessage,
   HeadChangedMessage,
   RestoreStartedMessage,
   ServerTextMessage,
@@ -29,8 +28,6 @@ export type {
 export {
   clientReadyMessageSchema,
   clientTextMessageSchema,
-  exportRequestMessageSchema,
-  exportResponseMessageSchema,
   headChangedMessageSchema,
   restoreCompleteMessageSchema,
   restoreStartedMessageSchema,
@@ -44,7 +41,6 @@ export {
 
 import type {
   AgentActivityMessage,
-  ExportRequestMessage,
   HeadChangedMessage,
   RestoreStartedMessage,
   VersionCreatedPayload,
@@ -54,7 +50,6 @@ import type {
 export type RestoreStartedPayload = RestoreStartedMessage
 export type HeadChangedPayload = HeadChangedMessage
 export type ViewportRequestPayload = ViewportRequestMessage
-export type ExportRequestPayload = ExportRequestMessage
 export type AgentActivityPayload = AgentActivityMessage
 
 export interface DocumentBackendHandlers {
@@ -72,8 +67,6 @@ export interface DocumentBackendHandlers {
   onHeadChanged: (payload: Omit<HeadChangedPayload, 'type'>) => void
   /** Server requests the current viewport. Backend ACKs; hook adjusts view. */
   onViewportRequest: (payload: Omit<ViewportRequestPayload, 'type'>) => void
-  /** Server requests a PNG export from this connected client. */
-  onExportRequest: (payload: Omit<ExportRequestPayload, 'type'>) => void
   /**
    * An agent just changed this document. Optional because it is news rather
    * than protocol: a backend that never emits it, and a page that does not
@@ -156,37 +149,6 @@ export interface DocumentBackend {
    */
   pushLocalUpdate(bytes: Uint8Array): void | Promise<void>
 
-  /**
-   * Fetch an image file by fileId. Returns the Blob on success, null on miss.
-   */
-  getFile(fileId: string): Promise<Blob | null>
-
-  /**
-   * Upload new image files. Ordering: upload completes before the hook
-   * commits the Loro doc, matching the existing commitAfterUpload contract.
-   */
-  putFile(
-    newEntries: [string, BinaryFileDataLike][],
-    onFileSuccess: (fileId: string) => void,
-  ): Promise<void>
-
   /** Send client_ready to the server (gated on OPEN state + api present). */
   sendClientReady(): void
-
-  /** Send export_response with the given PNG data for the given requestId. */
-  sendExportResponse(requestId: string, data: string): void
-}
-
-/**
- * Minimal structural type for image file data passed to putFile.
- * Avoids importing from @excalidraw/excalidraw/types in this shared module
- * (which would pull browser-only types into the Node declaration build).
- * Implementors that use Excalidraw's BinaryFileData satisfy this shape.
- */
-export interface BinaryFileDataLike {
-  mimeType: string
-  id: string
-  dataURL: string
-  created: number
-  lastRetrieved?: number
 }

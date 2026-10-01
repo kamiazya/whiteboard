@@ -6,8 +6,16 @@ import { LOOP_COSTS, stallCeilingMs } from './background-work-costs.js'
 
 const SERVER_SRC = fileURLToPath(new URL('.', import.meta.url))
 
-/** Where workers are declared and armed. Same pair `background-work.guard.test.ts` walks. */
-const COMPOSITION_ROOTS = ['http-server.ts', 'server-mode-http.ts'] as const
+/**
+ * Where workers are declared: the shared set both HTTP roots run, and the
+ * roots themselves for what each declares alone. The same files
+ * `background-work.guard.test.ts` walks.
+ */
+const COMPOSITION_ROOTS = [
+  'shared-background-work.ts',
+  'http-server.ts',
+  'server-mode-http.ts',
+] as const
 
 /**
  * Workers whose ceiling no test asserts, and why that is right rather than
@@ -105,15 +113,14 @@ describe('every declared stall ceiling is asserted by a test', () => {
    * publish the wrong worker's ceiling and be asserted by the wrong test.
    */
   it('leaves no worker declaring its cost inline, or under another name', async () => {
+    let found = 0
     for (const root of COMPOSITION_ROOTS) {
       const source = await readFile(join(SERVER_SRC, root), 'utf8')
       // Comments first: these files discuss `loop:` and the registry in prose.
       const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 
       const declarations = [...code.matchAll(/name: '([^']+)',[\s\S]*?loop: ([^,\n]+)/g)]
-      // The scan reached something: a pattern that stopped matching would
-      // otherwise report every root as clean.
-      expect(declarations.length, `${root} declares no workers`).toBeGreaterThan(0)
+      found += declarations.length
 
       for (const declaration of declarations) {
         const [, name, loop] = declaration
@@ -125,6 +132,10 @@ describe('every declared stall ceiling is asserted by a test', () => {
         ).toBe(`LOOP_COSTS['${name}']`)
       }
     }
+    // The scan reached something: a pattern that stopped matching would
+    // otherwise report every file as clean. Server mode declares nothing of
+    // its own — the shared set is all it runs — so the floor is the total.
+    expect(found).toBeGreaterThan(0)
   })
 
   it('refuses to hand a ceiling for a worker that runs in a subprocess', () => {

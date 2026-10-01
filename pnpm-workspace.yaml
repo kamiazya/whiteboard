@@ -101,7 +101,10 @@ overrides:
   protobufjs@<8.6.6: ^8.6.6
   fast-uri@<3.1.6: ^3.1.6
   kysely@<0.28.17: ^0.28.17
-  "@grpc/grpc-js@<1.14.4": ^1.14.4
+  # GHSA-m9gg-hp2v-232j (high): getAuthContext can report an unauthorized
+  # certificate as authorized, cleared at 1.14.5. Reached only through the
+  # OTLP gRPC exporters under @opentelemetry/sdk-node.
+  "@grpc/grpc-js@<1.14.5": ^1.14.5
   shell-quote@<1.9.0: ^1.9.0
   # Not a CVE bump like the rest — a DEDUPE. @libsql/kysely-libsql@0.4.1 is the
   # latest and still asks for @libsql/client@^0.8.0, which drags libsql@0.3.19

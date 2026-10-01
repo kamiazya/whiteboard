@@ -1,17 +1,7 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 
-/**
- * Code-unit order, spelled out.
- *
- * Identical to a bare `.sort()` for strings — and written explicitly
- * because a bare one reads as an oversight, and a static analyser
- * (Sonar S2871) asks for `localeCompare` instead. Taking that advice here
- * would be a defect rather than a fix: `localeCompare` reads the runtime's
- * default locale and ICU data, so this canonical pair, and the digest built from it, would differ between two machines
- * holding identical input.
- */
-const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 /**
  * `sceneDigest`'s output crosses a process boundary as AI-facing JSON, which
  * is why it is schematized at all (this repo's zod-schema-discipline). Its
@@ -140,12 +130,14 @@ function computeOverlaps(entries: readonly DigestEntry[]): [string, string][] {
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       if (overlapArea(entries[i].bbox, entries[j].bbox) > 0) {
-        const [a, b] = [entries[i].id, entries[j].id].sort(byCodeUnit)
+        const [a, b] = [entries[i].id, entries[j].id].sort(compareCodeUnit)
         pairs.push([a, b])
       }
     }
   }
-  return pairs.sort(([a1, b1], [a2, b2]) => (a1 === a2 ? byCodeUnit(b1, b2) : byCodeUnit(a1, a2)))
+  return pairs.sort(([a1, b1], [a2, b2]) =>
+    a1 === a2 ? compareCodeUnit(b1, b2) : compareCodeUnit(a1, a2),
+  )
 }
 
 function computeContainment(entries: readonly DigestEntry[]): { parent: string; child: string }[] {
@@ -158,12 +150,12 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
     if (candidates.length === 0) continue
     const smallest = [...candidates].sort((a, b) => {
       const areaDiff = area(a.bbox) - area(b.bbox)
-      return areaDiff !== 0 ? areaDiff : byCodeUnit(a.id, b.id)
+      return areaDiff !== 0 ? areaDiff : compareCodeUnit(a.id, b.id)
     })[0]
     result.push({ parent: smallest.id, child: child.id })
   }
   return result.sort((a, b) =>
-    a.child === b.child ? byCodeUnit(a.parent, b.parent) : byCodeUnit(a.child, b.child),
+    a.child === b.child ? compareCodeUnit(a.parent, b.parent) : compareCodeUnit(a.child, b.child),
   )
 }
 
@@ -200,13 +192,13 @@ function computeClusters(entries: readonly DigestEntry[]): string[][] {
     groups.set(root, group)
   }
 
-  // `byCodeUnit`, like every other sort here. These two said `localeCompare`,
+  // `compareCodeUnit`, like every other sort here. These two said `localeCompare`,
   // which is the one thing this file's own header calls "a defect rather than
   // a fix" — it reads the runtime's default locale and ICU data, so two
   // machines holding identical input answered different clusters.
   return [...groups.values()]
-    .map((group) => [...group].sort(byCodeUnit))
-    .sort((a, b) => byCodeUnit(a[0], b[0]))
+    .map((group) => [...group].sort(compareCodeUnit))
+    .sort((a, b) => compareCodeUnit(a[0], b[0]))
 }
 
 /**

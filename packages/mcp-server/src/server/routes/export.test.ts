@@ -16,15 +16,12 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Mock ws.ts purely to observe that export never talks to it. getClientCount
-// is kept as a spy so the metamorphic test can vary it; it must have no
-// effect on export behavior post-headless-only.
+// getClientCount is a spy so the metamorphic test can vary it; a connected
+// browser must have no effect on export, which is headless-only.
 const mockGetClientCount = vi.fn<(workspaceId: string, path: string) => number>()
-const mockSendExportRequest = vi.fn<(...args: unknown[]) => void>()
 
 vi.mock('./sync-audience.js', () => ({
   getClientCount: (workspaceId: string, path: string) => mockGetClientCount(workspaceId, path),
-  sendExportRequest: (...args: unknown[]) => mockSendExportRequest(...args),
 }))
 
 // Stub the headless renderer so route tests do not pull jsdom/document/resvg in
@@ -92,7 +89,6 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-test-'))
     mockGetClientCount.mockReset()
-    mockSendExportRequest.mockReset()
     mockExportCanvasHeadless.mockReset()
     mockDocumentExists.mockReset()
     mockDocumentExists.mockResolvedValue(true)
@@ -102,10 +98,8 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  // Load-bearing regression test: with a WS client connected, export must
-  // still be served by the headless renderer, and nothing may be pushed to
-  // the socket. Against the pre-change dual-path code this would take the
-  // browser path (sendExportRequest called, no headless call) and fail.
+  // With a WS client connected, export is still served by the headless
+  // renderer: a watching browser is never asked to draw it.
   it('is served by the headless renderer even when a WS client is connected', async () => {
     mockGetClientCount.mockReturnValue(2)
     const fakePng = Buffer.from('fake-png-bytes')
@@ -125,7 +119,6 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: 's1', path: 'canvas-a' }),
     )
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
 
     const written = await readFile(body.filePath)
     expect(written.equals(fakePng)).toBe(true)
@@ -161,7 +154,6 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
     expect(resWithClients.status).toBe(resNoClient.status)
     expect(argsWithClients).toEqual(argsNoClient)
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
   })
 
   it('generates distinct default filePaths for two headless exports in the same millisecond', async () => {

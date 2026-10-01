@@ -1,9 +1,4 @@
-import {
-  daemonPingResponseSchema,
-  runtimeVerifyRequestSchema,
-  runtimeVerifyResponseSchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
+import { daemonPingResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import { getDataDir } from '../config.js'
@@ -15,12 +10,6 @@ import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
 import { computeStorageReport } from './runtime-storage.js'
-
-// /api/runtime/verify is public and does an Ed25519 sign per call, so cap
-// the rate. Loopback traffic makes per-IP buckets meaningless — one global
-// sliding window is enough to stop a tight local loop from burning CPU.
-const VERIFY_RATE_LIMIT = 60
-const VERIFY_RATE_WINDOW_MS = 60_000
 
 export interface RuntimeRouterOptions {
   instanceId: string
@@ -50,49 +39,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
           publicKey: options.identity.publicKey,
           did: options.identity.did,
         },
-      }),
-    )
-  })
-
-  // Challenge-response proof of identity (see security/daemon-identity.ts).
-  // Public like ping: the response is only useful to a caller that has the
-  // real daemon's key PINNED — a squatter answering with its own key fails
-  // the browser-side verification.
-  let verifyWindowStartMs = 0
-  let verifyWindowCount = 0
-  app.post('/api/runtime/verify', async (c) => {
-    const now = Date.now()
-    if (now - verifyWindowStartMs >= VERIFY_RATE_WINDOW_MS) {
-      verifyWindowStartMs = now
-      verifyWindowCount = 0
-    }
-    verifyWindowCount += 1
-    if (verifyWindowCount > VERIFY_RATE_LIMIT) {
-      return c.json(
-        errorBody('rate_limited', 'too many verification attempts; try again shortly'),
-        429,
-      )
-    }
-
-    let body: unknown
-    try {
-      body = await c.req.json()
-    } catch {
-      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
-    }
-    const parsed = runtimeVerifyRequestSchema.safeParse(body)
-    if (!parsed.success) {
-      return c.json(invalidRequestBody(parsed.error), 400)
-    }
-    // Binding the Origin header stops a relay from farming signatures that
-    // verify for a different origin's challenge; a missing header binds "".
-    const origin = c.req.header('origin') ?? ''
-    const signature = options.identity.sign(['wb-verify-v1', parsed.data.nonce, origin])
-    return c.json(
-      runtimeVerifyResponseSchema.parse({
-        alg: options.identity.alg,
-        publicKey: options.identity.publicKey,
-        signature,
       }),
     )
   })

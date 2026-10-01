@@ -137,7 +137,6 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // answerable before a caller holds any credential — it is how a caller
   // decides whether a responder is trustworthy at all. Rate-limited in the
   // router.
-  { name: 'runtime/verify', claims: exactly('/api/runtime/verify'), decide: publicRoute },
 
   // File routes: reading/writing a canvas's attached binary file. The
   // document path is multi-segment, so the discriminator is the mandatory
@@ -202,11 +201,11 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     decide: always('canvas:read'),
   },
 
-  // Version history, restore, compact — version-control operations scoped
-  // to a single canvas.
+  // Version history and restore — version-control operations scoped to a
+  // single document.
   {
-    name: 'document versions/compact',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|compact)/),
+    name: 'document versions',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/versions/),
     decide: byAccess('versions:write', 'versions:read'),
     workspace: workspacesHandle,
   },

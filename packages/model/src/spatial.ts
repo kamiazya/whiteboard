@@ -362,6 +362,19 @@ export function endIn(end: LineEnd | EdgeEnd, ids: ReadonlySet<string>): boolean
 }
 
 /**
+ * Whether an edge or line has an end on one of these nodes — the element a
+ * node's removal takes with it, since an end naming a node that is gone is
+ * what `spatialCanvasSchema` refuses. A line with two free ends sits on no
+ * node and is never swept up by this (ADR-0038 decision 2).
+ */
+export function anchoredOnAny(
+  element: { readonly from: LineEnd | EdgeEnd; readonly to: LineEnd | EdgeEnd },
+  ids: ReadonlySet<string>,
+): boolean {
+  return endIn(element.from, ids) || endIn(element.to, ids)
+}
+
+/**
  * The node an end sits on, looked up in a map keyed by node id.
  *
  * The companion `endIn` is to a Set: both exist so a caller never writes

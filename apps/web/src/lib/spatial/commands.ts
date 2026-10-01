@@ -49,6 +49,7 @@ import {
   withNodeFile,
   withNodeText,
   withNodeUrl,
+  withoutNodes,
 } from '@kamiazya/whiteboard-model'
 import {
   resolveCanvasEdgeDefaults,
@@ -851,29 +852,16 @@ function deleteLine(canvas: SpatialCanvas, id: string): SpatialCanvas {
 }
 
 /**
- * Removes the node with `id` plus every edge that references it as
- * `fromNode`/`toNode` — the command-layer half of the edge-referential-
- * integrity invariant `deleteSpatialNode` (workspace) also enforces
- * on the Loro side. A no-op (returns the input) when `id` is missing.
+ * Removes the node with `id` plus every edge and line anchored on it, through
+ * the model's one definition of that sweep — the same one the Loro write
+ * (`deleteSpatialNode`) and the agent's `node.remove` apply, so the canvas on
+ * screen and the persisted document cannot disagree about what a delete took.
+ * A no-op (returns the input) when `id` is missing.
  */
 function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
   const idExists = canvas.nodes.some((node) => node.id === id)
   if (!idExists) return canvas
-  return {
-    ...canvas,
-    nodes: canvas.nodes.filter((node) => node.id !== id),
-    edges: canvas.edges.filter((edge) => endNode(edge.from) !== id && endNode(edge.to) !== id),
-    // Lines cascade too, and for the same reason edges do: `endNode` answers
-    // `undefined` for a FREE end, so a line floating in empty space names no
-    // node and is never swept up by this.
-    ...(canvas.lines === undefined
-      ? {}
-      : {
-          lines: canvas.lines.filter(
-            (line) => endNode(line.from) !== id && endNode(line.to) !== id,
-          ),
-        }),
-  }
+  return withoutNodes(canvas, new Set([id]))
 }
 
 /** An empty label removes the field: the model's `label` is optional and an

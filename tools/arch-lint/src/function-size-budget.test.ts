@@ -613,8 +613,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/app.ts#createApp': 433,
   'packages/mcp-server/src/server/canvas-client-notifier.ts#createCanvasClientNotifier': 88,
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
-  // 431 -> 435 (ADR-0041 S8 slice 2): the WS upgrade's membership refusal call and the target binding it reads.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 435,
+  // 435 -> 182: the four workers both HTTP roots run are built and declared
+  // in shared-background-work.ts; what is left here is the daemon's own.
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 182,
   'packages/mcp-server/src/server/index.ts#main': 182,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 305,
@@ -633,7 +634,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document.ts#createDocumentRouter': 81,
   'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 112,
   'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
-  'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 101,
+  // 101 -> 66: the per-document compact route went, and optimize-all is one
+  // fold of the workspace record rather than a loop over documents.
+  'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 66,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 88,
   'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 82,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 132,
@@ -665,7 +668,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 62 -> 82 (ADR-0042 decision 1, 2026-09-21 rotation addendum): rotateKey
   // belongs beside keyFor/setTier for the same reason.
   'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 82,
-  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 202,
+  // 202 -> 132: the same move; server mode declares nothing of its own.
+  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 132,
+  // The shared set: four declarations, each carrying the rationale that
+  // used to be copied in both roots, and the construction of the workers
+  // they wrap. Long because a declaration list is long, not because it
+  // branches — a reader shrinking it would be deleting the reasons.
+  'packages/mcp-server/src/server/shared-background-work.ts#createSharedWorkers': 61,
+  'packages/mcp-server/src/server/shared-background-work.ts#sharedBackgroundWork': 63,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
   // 53 -> 58: the refresh interval's in-flight write is now held and awaited
   // before the marker is removed. `clearInterval` cancels the next tick and
@@ -679,7 +689,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,
   'packages/mcp-server/src/server/store/db/index.ts#buildDb': 62,
-  'packages/mcp-server/src/server/store/document-store.ts#compactDocument': 93,
+  // 93 -> 87, renamed from compactDocument: the per-document address went.
+  'packages/mcp-server/src/server/store/document-store.ts#compactWorkspace': 87,
   'packages/mcp-server/src/server/store/document-store.ts#saveDocument': 66,
   'packages/mcp-server/src/server/store/file-gc-sweeper.ts#createFileGcSweeper': 124,
   'packages/mcp-server/src/server/store/file-gc.ts#purgeDanglingFiles': 110,
@@ -697,9 +708,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/create-server.ts#createServer': 219,
   'packages/server-core/src/operations/restore-version.ts#restoreToTarget': 61,
   'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
-  'packages/server-core/src/tools/body-edit.ts#createBodyEditTool': 70,
-  'packages/server-core/src/tools/canvas-edit.ts#createCanvasEditTool': 222,
-  'packages/server-core/src/tools/canvas-edit.ts#createCanvasEditTool.execute': 213,
+  // The tool bodies left `execute` for module functions when the write
+  // lock became the operation's own: `execute` takes the lock and calls
+  // them. Moved, not grown — recorded at the measurement.
+  'packages/server-core/src/tools/body-edit.ts#editBody': 61,
+  'packages/server-core/src/tools/canvas-edit.ts#editCanvas': 72,
   'packages/server-core/src/tools/document-crud.ts#wbDocumentCreate': 130,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 181,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 169,
@@ -743,7 +756,9 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/daemon-run-auto-open-launch.test.ts#launchDaemonInPty': 70,
   'packages/mcp-server/src/cli/server-args.differential.test.ts#oldBackup': 64,
   'packages/mcp-server/src/server/app.routes.fuzz.property.test.ts#fillPattern': 65,
-  'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 77,
+  // 77 -> 79: the hand-built deps gain the daemon's lock seam, which every
+  // mutating tool now takes itself.
+  'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 79,
   'packages/mcp-server/src/server/security/server-mode-env-config.differential.test.ts#parseOld': 157,
   'packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts#fitCanvasOp': 89,
   'packages/workspace-index/src/loro-workspace-document-index.test.ts#inMemoryWorkspaceDocs': 58,

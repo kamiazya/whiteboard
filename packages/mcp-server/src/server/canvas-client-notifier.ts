@@ -5,6 +5,7 @@ import type {
   RestoreProgressEvent,
   VersionCreated,
   ViewportRequest,
+  ViewportRequestParams,
 } from '@kamiazya/whiteboard-server-core'
 import { nanoid } from 'nanoid'
 import { DAEMON_AGENT_ACTOR } from './daemon-actor.js'
@@ -20,19 +21,14 @@ import {
 const log = getLogger('canvas-client-notifier')
 
 /**
- * The request's optional fields, with the absent ones left OUT rather than
- * sent as `undefined` — the wire message is validated against a schema that
- * distinguishes the two.
+ * The request minus its routing keys, typed as the wire's params rather than
+ * a `Record<string, unknown>` the compiler could not compare — the shape a
+ * field dropped on the way to the browser used to hide in. `sendViewportRequest`
+ * strips any `undefined` a direct caller of the port left in.
  */
-function viewportPayload(request: ViewportRequest): Record<string, unknown> {
-  return {
-    ...(request.mode === undefined ? {} : { mode: request.mode }),
-    ...(request.elementIds === undefined ? {} : { elementIds: [...request.elementIds] }),
-    ...(request.animate === undefined ? {} : { animate: request.animate }),
-    ...(request.scrollX === undefined ? {} : { scrollX: request.scrollX }),
-    ...(request.scrollY === undefined ? {} : { scrollY: request.scrollY }),
-    ...(request.zoom === undefined ? {} : { zoom: request.zoom }),
-  }
+function viewportPayload(request: ViewportRequest): ViewportRequestParams {
+  const { workspaceId: _workspaceId, documentId: _documentId, ...params } = request
+  return params
 }
 
 /**

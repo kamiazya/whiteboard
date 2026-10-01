@@ -18,22 +18,20 @@ import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
-import { subscribedWorkspaceIds } from './routes/sync-audience.js'
 import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
-import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
+import {
+  createSharedWorkers,
+  FILE_GC_STOP_TIMEOUT_MS,
+  sharedBackgroundWork,
+} from './shared-background-work.js'
+import type { createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
-import {
-  cacheBackedWorkspaceDocs,
-  emitWorkspaceDocUpdated,
-  getWorkspaceDoc,
-} from './store/document-store.js'
-import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
-import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
-import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
+import type { createFileGcSweeper } from './store/file-gc-sweeper.js'
+import type { createWorkspaceTail } from './store/workspace-tail.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
 
@@ -90,13 +88,6 @@ export interface RunningServer {
   getRuntimeStatus: () => RuntimeStatus
 }
 
-// Bounds how long close() waits for an in-flight file-gc pass (see
-// file-gc-sweeper.ts's FileGcSweeperStopOptions) before proceeding with the
-// rest of shutdown. A full pass can be expensive; without this cap an
-// idle-timeout-triggered close() could make the daemon appear to hang
-// instead of shutting down promptly.
-const FILE_GC_STOP_TIMEOUT_MS = 5_000
-
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
   const instanceId = randomUUID()
   const startedAtMs = Date.now()
@@ -104,53 +95,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   let closePromise: Promise<void> | null = null
   let socketListener: Awaited<ReturnType<typeof listenOnSocket>> | undefined
 
-  // Constructed once per daemon start. There is no shared-instance hazard
-  // here (see file-gc-sweeper.ts's own comment on why it constructs its own
-  // FileVersionStore), so this can be created any time before close() needs
-  // to reference it.
-  const fileGcSweeper: FileGcSweeper = (options.fileGcSweeperFactory ?? createFileGcSweeper)()
-
-  // Off unless an operator turns it on: one daemon learns about its own
-  // writes through `onWorkspaceDocUpdated` already, and polling for a second
-  // instance that does not exist is pure cost. See ADR-0020.
-  // Off unless a destination is configured (ADR-0021 decision 4). The ADR
-  // asks for backups to be handled rather than remembered, and this is what
-  // handles them — but there is no destination worth guessing, so an operator
-  // still has to say where. `collectStorageEnvIssues` refuses an interval or
-  // a retention count set without one, so a half-configured schedule fails at
-  // startup rather than silently doing nothing.
-  const backupDir = parseBackupDir(process.env)
-  const backupSchedule = parseBackupSchedule(process.env)
-  const backupKeep = parseBackupKeep(process.env)
-  const backupScheduler = (options.backupSchedulerFactory ?? createBackupScheduler)({
-    dataDir: getDataDir(),
-    backupDir: backupDir.ok ? backupDir.value : null,
-    ...(backupSchedule.ok ? { schedule: backupSchedule.value } : {}),
-    ...(backupKeep.ok && backupKeep.value !== null ? { keep: backupKeep.value } : {}),
-    // ADR-0020's leader election, so a deployment running several instances
-    // over one data directory takes ONE backup a night rather than one per
-    // instance — whose retention passes would each delete from a set the
-    // others are changing. A single daemon takes the lease unopposed, so
-    // this is not conditional on being multi-instance: nothing here knows
-    // whether it is, and a deployment that grows a second instance must not
-    // depend on someone remembering to turn coordination on.
-    runExclusively: createBackupLease({ holder: instanceId }),
-  })
-
-  const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
-  const workspaceTail =
-    workspaceTailIntervalMs === null
-      ? null
-      : (options.workspaceTailFactory ?? createWorkspaceTail)({
-          subscribedWorkspaces: subscribedWorkspaceIds,
-          docs: cacheBackedWorkspaceDocs(),
-          // The CACHED document, which is what every reader on this instance
-          // is served from — catching up a fresh copy would leave the one
-          // people actually read untouched.
-          liveDoc: getWorkspaceDoc,
-          emit: emitWorkspaceDocUpdated,
-          intervalMs: workspaceTailIntervalMs,
-        })
+  const shared = createSharedWorkers(instanceId, options)
 
   // A page holding a sync stream makes no request while nobody types, and
   // must not have the daemon stop under it.
@@ -286,30 +231,15 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // where each one answers who runs it and what it costs the serving loop.
   // See background-work.ts for why that is a registry rather than four calls.
   const backgroundWork = startBackgroundWork([
-    {
-      name: 'auto-checkpoint',
-      trigger: 'a document update, taken once that document has been quiet for five minutes',
-      instances: {
-        runs: 'every-instance',
-        because:
-          'the debounce is about documents THIS process is holding edits for — another ' +
-          'instance has neither the pending timer nor the LoroDoc the checkpoint would be ' +
-          'taken from, so a leader could not take it',
+    ...sharedBackgroundWork(shared, {
+      flushCheckpoints: async () => {
+        await autoVersionTrigger?.flush()
       },
-      loop: LOOP_COSTS['auto-checkpoint'],
-      // Nothing to arm: the trigger schedules itself from the update that
-      // signalled it, which is why it is declared here for its STOP rather
-      // than its start. A trailing debounce loses exactly the checkpoint it
-      // exists to take if the process goes away without flushing — the one
-      // at the pause where editing stopped — so shutting down TAKES the
-      // pending checkpoints instead of dropping them.
-      worker: {
-        start: () => {},
-        stop: async () => {
-          await autoVersionTrigger?.flush()
-        },
+      fileGc: {
+        start: () => shared.fileGcSweeper.start(),
+        stop: () => shared.fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
       },
-    },
+    }),
     {
       name: 'idle-shutdown',
       trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms and no sync stream open`,
@@ -319,45 +249,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       },
       loop: LOOP_COSTS['idle-shutdown'],
       worker: { start: () => idleTimer.start(), stop: async () => idleTimer.stop() },
-    },
-    {
-      name: 'file-gc-sweeper',
-      trigger: `every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it`,
-      instances: {
-        runs: 'every-instance',
-        because:
-          'ADR-0020 rejects a GC leader explicitly: it removes GC-versus-GC races and leaves ' +
-          'GC-versus-WRITE untouched, since the write barrier is in-process and another ' +
-          "instance's write never takes it. The grace period is what covers that window.",
-      },
-      loop: LOOP_COSTS['file-gc-sweeper'],
-      // Wrapped rather than passed straight through: its own `stop` takes a
-      // cap on how long shutdown waits for an in-flight pass, and a pass can
-      // be expensive. Handing the bare method to a caller that passes no
-      // options would silently take the sweeper's default instead.
-      worker: {
-        start: () => fileGcSweeper.start(),
-        stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
-      },
-    },
-    {
-      name: 'workspace-tail',
-      trigger: `every ${workspaceTailIntervalMs ?? 0}ms`,
-      instances: {
-        runs: 'every-instance',
-        because:
-          'each instance is catching ITS OWN cached documents up with what another instance ' +
-          'wrote; a leader doing it would leave every follower serving stale reads',
-      },
-      loop: LOOP_COSTS['workspace-tail'],
-      worker: workspaceTail,
-    },
-    {
-      name: 'backup-scheduler',
-      trigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
-      instances: { runs: 'leader-only', lease: 'backup' },
-      loop: LOOP_COSTS['backup-scheduler'],
-      worker: backupScheduler,
     },
   ])
 

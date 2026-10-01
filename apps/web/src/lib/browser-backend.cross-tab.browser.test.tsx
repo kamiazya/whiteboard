@@ -41,7 +41,6 @@ function handlers(): DocumentBackendHandlers {
     onRestoreComplete: vi.fn(),
     onHeadChanged: vi.fn(),
     onViewportRequest: vi.fn(),
-    onExportRequest: vi.fn(),
     onConnected: vi.fn(),
     onError: vi.fn(),
   }

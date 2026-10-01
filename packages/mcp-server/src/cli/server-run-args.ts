@@ -3,6 +3,7 @@
 // The inline-only rule and the redaction are `scanFlags`'; what is here is
 // this subcommand's own flag list and the shape of its ok result.
 
+import { ENV_KEYS } from '../server/security/server-mode-env-config.js'
 import { type FlagTable, scanFlags } from './flag-table.js'
 
 /**
@@ -73,4 +74,31 @@ export function parseServerRunArgs(args: readonly string[]): ServerRunArgs {
     port: scan.values.port,
     dataDir: scan.values.dataDir,
   }
+}
+
+/**
+ * The flags laid over a base env, as `server run` builds the configuration
+ * it starts with. `server doctor` diagnoses the same configuration through
+ * this same function — it carried a copy for a while, so a flag added to
+ * one left the doctor checking a server that would never run.
+ */
+export function mergeCliFlagsIntoEnv(
+  base: NodeJS.ProcessEnv,
+  flags: ServerRunArgs & { kind: 'ok' },
+): NodeJS.ProcessEnv {
+  const env = { ...base }
+  if (flags.externalUrl !== undefined) env[ENV_KEYS.EXTERNAL_URL] = flags.externalUrl
+  if (flags.allowedOrigins !== undefined) env[ENV_KEYS.ALLOWED_ORIGINS] = flags.allowedOrigins
+  if (flags.authStrategy !== undefined) env[ENV_KEYS.AUTH_STRATEGY] = flags.authStrategy
+  if (flags.jwtIssuer !== undefined) env[ENV_KEYS.JWT_ISSUER] = flags.jwtIssuer
+  if (flags.jwtAudience !== undefined) env[ENV_KEYS.JWT_AUDIENCE] = flags.jwtAudience
+  if (flags.jwksUri !== undefined) env[ENV_KEYS.JWKS_URI] = flags.jwksUri
+  if (flags.jwtClockSkew !== undefined) env[ENV_KEYS.JWT_CLOCK_SKEW_SECONDS] = flags.jwtClockSkew
+  if (flags.jwtScopeClaim !== undefined) env[ENV_KEYS.JWT_SCOPE_CLAIM] = flags.jwtScopeClaim
+  if (flags.host !== undefined) env[ENV_KEYS.HOST] = flags.host
+  if (flags.port !== undefined) env[ENV_KEYS.PORT] = flags.port
+  if (flags.dataDir !== undefined) env[ENV_KEYS.DATA_DIR] = flags.dataDir
+  if (flags.trustedProxy === true) env[ENV_KEYS.TRUSTED_PROXY] = 'true'
+  if (flags.trustedProxy === false) env[ENV_KEYS.TRUSTED_PROXY] = 'false'
+  return env
 }

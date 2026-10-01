@@ -227,7 +227,7 @@ describe('layoutSpatialCanvas', () => {
     // The loop value is the facet PAYLOAD, which is a bare kind; the id the
     // outline is looked up by composes the namespace onto it.
     // Derived, not written out: `shape-vocabulary.test.ts` pins that this
-    // enum and BUILT_IN_SHAPES hold the same set, so a sixth silhouette
+    // enum and BUNDLED_SHAPE_TABLE hold the same set, so a sixth silhouette
     // reaches this loop without anyone remembering to add it.
     for (const kind of visualShapeFacetSchema.shape.kind.options) {
       const shapeId = `visual.${kind}`

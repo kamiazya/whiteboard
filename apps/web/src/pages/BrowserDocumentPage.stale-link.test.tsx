@@ -38,14 +38,7 @@ vi.mock('../lib/browser-backend.js', () => ({
     pushLocalUpdate() {
       return Promise.resolve()
     }
-    getFile() {
-      return Promise.resolve(null)
-    }
-    putFile() {
-      return Promise.resolve()
-    }
     sendClientReady() {}
-    sendExportResponse() {}
   },
 }))
 

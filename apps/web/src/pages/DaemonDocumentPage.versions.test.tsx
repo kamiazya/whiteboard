@@ -78,14 +78,7 @@ class FakeBackend implements DocumentBackend {
     this.disconnectCount += 1
   }
   pushLocalUpdate(): void {}
-  getFile(): Promise<Blob | null> {
-    return Promise.resolve(null)
-  }
-  putFile(): Promise<void> {
-    return Promise.resolve()
-  }
   sendClientReady(): void {}
-  sendExportResponse(): void {}
 }
 
 function makeCreateBackend() {

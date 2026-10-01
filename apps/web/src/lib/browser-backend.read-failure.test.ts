@@ -31,7 +31,6 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserBackend } from './browser-backend.js'
-import type { DocumentFileStore } from './document-file-store.js'
 import type { LoroStore } from './loro-store.js'
 
 // jsdom has no IndexedDB, so the startup fold cannot run here: it throws, the
@@ -65,8 +64,7 @@ function docsFailingWith(error: unknown): WorkspaceDocs {
 function connectAgainst(error: unknown): { reasons: string[] } {
   const reasons: string[] = []
   const legacy = { load: async () => ({ kind: 'not-found' }) as const } as unknown as LoroStore
-  const files = {} as unknown as DocumentFileStore
-  const backend = new BrowserBackend(TARGET, docsFailingWith(error), files, legacy)
+  const backend = new BrowserBackend(TARGET, docsFailingWith(error), legacy)
   backend.connect({
     onConnected: () => {},
     onSnapshot: (_snapshot: Uint8Array) => {},
@@ -126,7 +124,7 @@ describe('a legacy record that could not be read is not shadowed', () => {
     } as unknown as LoroStore
 
     const reasons: string[] = []
-    const backend = new BrowserBackend(TARGET, docs, {} as unknown as DocumentFileStore, legacy)
+    const backend = new BrowserBackend(TARGET, docs, legacy)
     backend.connect({
       onConnected: () => {},
       onSnapshot: (_snapshot: Uint8Array) => {},

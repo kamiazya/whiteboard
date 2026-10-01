@@ -15,15 +15,9 @@
  */
 
 import { apiFetch } from './api-client.js'
-import { documentFileApiUrl } from './api-contracts/document-url.js'
-import type {
-  BinaryFileDataLike,
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from './document-backend-contract.js'
+import type { DocumentBackend, DocumentBackendHandlers } from './document-backend-contract.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
-import { uploadFiles } from './upload-files.js'
 import { parseServerTextMessage } from './ws-text-message.js'
 
 export interface SseTransport {
@@ -31,8 +25,6 @@ export interface SseTransport {
 }
 
 export class SseBackend implements DocumentBackend {
-  private readonly workspaceId: string
-  private readonly path: string
   private readonly baseUrl: string
   private readonly transport: SseTransport | undefined
   private readonly docKey: string
@@ -60,8 +52,6 @@ export class SseBackend implements DocumentBackend {
     transport?: SseTransport,
     streamSource?: SseStreamSource,
   ) {
-    this.workspaceId = workspaceId
-    this.path = path
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.transport = transport
     this.streamSource = streamSource
@@ -71,10 +61,6 @@ export class SseBackend implements DocumentBackend {
 
   private get fetchFn(): typeof globalThis.fetch {
     return this.transport?.fetch ?? (apiFetch as unknown as typeof globalThis.fetch)
-  }
-
-  private url(path: string): string {
-    return `${this.baseUrl}${path}`
   }
 
   connect(handlers: DocumentBackendHandlers): void {
@@ -165,7 +151,6 @@ export class SseBackend implements DocumentBackend {
     else if (message.type === 'restore_complete') handlers.onRestoreComplete()
     else if (message.type === 'head_changed') handlers.onHeadChanged(message)
     else if (message.type === 'viewport_request') handlers.onViewportRequest(message)
-    else if (message.type === 'export_request') handlers.onExportRequest(message)
     else if (message.type === 'agent_activity') handlers.onAgentActivity?.(message)
   }
 
@@ -194,26 +179,7 @@ export class SseBackend implements DocumentBackend {
     return this.resolveSource().push(this.binaryKey, bytes)
   }
 
-  async getFile(fileId: string): Promise<Blob | null> {
-    const res = await this.fetchFn(
-      this.url(documentFileApiUrl(this.workspaceId, this.path, fileId)),
-    )
-    if (!res.ok) return null
-    return res.blob()
-  }
-
-  async putFile(
-    newEntries: [string, BinaryFileDataLike][],
-    onFileSuccess: (fileId: string) => void,
-  ): Promise<void> {
-    await uploadFiles(newEntries, this.workspaceId, this.path, onFileSuccess, this.transport?.fetch)
-  }
-
   sendClientReady(): void {
     this.resolveSource().sendMessage(this.docKey, { type: 'client_ready' })
-  }
-
-  sendExportResponse(requestId: string, data: string): void {
-    this.resolveSource().sendMessage(this.docKey, { type: 'export_response', requestId, data })
   }
 }

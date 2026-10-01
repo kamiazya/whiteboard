@@ -19,7 +19,6 @@ import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-
 import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
 import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
 import {
-  ENV_KEYS,
   parseServerModeEnvConfig,
   type ServerModeEnvConfigResult,
 } from '../server/security/server-mode-env-config.js'
@@ -31,7 +30,7 @@ import {
 } from '../server/security/server-mode-record.js'
 import { loadSignInConfig, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
-import type { ServerRunArgs } from './server-run-args.js'
+import { mergeCliFlagsIntoEnv, type ServerRunArgs } from './server-run-args.js'
 
 const SERVER_RUN_SCHEMA_VERSION = 1 as const
 
@@ -106,27 +105,6 @@ export interface RunServerRunOptions {
   writeRecord?: (dataDir: string, record: ServerModeRecord) => void
   /** Injection seam: override record deleter for tests. */
   deleteRecord?: (dataDir: string) => void
-}
-
-function mergeCliFlagsIntoEnv(
-  base: NodeJS.ProcessEnv,
-  flags: ServerRunArgs & { kind: 'ok' },
-): NodeJS.ProcessEnv {
-  const env = { ...base }
-  if (flags.externalUrl !== undefined) env[ENV_KEYS.EXTERNAL_URL] = flags.externalUrl
-  if (flags.allowedOrigins !== undefined) env[ENV_KEYS.ALLOWED_ORIGINS] = flags.allowedOrigins
-  if (flags.authStrategy !== undefined) env[ENV_KEYS.AUTH_STRATEGY] = flags.authStrategy
-  if (flags.jwtIssuer !== undefined) env[ENV_KEYS.JWT_ISSUER] = flags.jwtIssuer
-  if (flags.jwtAudience !== undefined) env[ENV_KEYS.JWT_AUDIENCE] = flags.jwtAudience
-  if (flags.jwksUri !== undefined) env[ENV_KEYS.JWKS_URI] = flags.jwksUri
-  if (flags.jwtClockSkew !== undefined) env[ENV_KEYS.JWT_CLOCK_SKEW_SECONDS] = flags.jwtClockSkew
-  if (flags.jwtScopeClaim !== undefined) env[ENV_KEYS.JWT_SCOPE_CLAIM] = flags.jwtScopeClaim
-  if (flags.host !== undefined) env[ENV_KEYS.HOST] = flags.host
-  if (flags.port !== undefined) env[ENV_KEYS.PORT] = flags.port
-  if (flags.dataDir !== undefined) env[ENV_KEYS.DATA_DIR] = flags.dataDir
-  if (flags.trustedProxy === true) env[ENV_KEYS.TRUSTED_PROXY] = 'true'
-  if (flags.trustedProxy === false) env[ENV_KEYS.TRUSTED_PROXY] = 'false'
-  return env
 }
 
 // The bearer path MCP clients and API callers use: an access token from the

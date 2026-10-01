@@ -104,17 +104,20 @@ describe('documentWritten', () => {
     expect(_autoCompactTimerCountForTests()).toBe(1)
   })
 
-  // A tool can save bytes for an id the tree has never been told about.
-  // There is nothing to compact under a name that does not exist, and that
-  // must not throw into the write that just succeeded.
-  it('does nothing for a documentId with no tree placement', async () => {
+  // The scheduler is keyed by workspace, so the id does not have to resolve
+  // to anything: a write for an id the tree has no placement for still grew
+  // the workspace record, and that record is what gets compacted. Nothing
+  // here opens the workspace doc to find out, which is the lookup this
+  // observer used to make on every agent write.
+  it('schedules for the workspace without resolving the id to a placement', async () => {
     await saveDocument('ws-1', 'seeded', new LoroDoc())
-    const before = _autoCompactTimerCountForTests()
+    uninstallAutoCompact()
+    expect(_autoCompactTimerCountForTests()).toBe(0)
 
     await expect(
       documentWritten({ workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
     ).resolves.toBeUndefined()
 
-    expect(_autoCompactTimerCountForTests()).toBe(before)
+    expect(_autoCompactTimerCountForTests()).toBe(1)
   })
 })

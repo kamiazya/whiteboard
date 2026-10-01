@@ -45,7 +45,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, compactDocument } = await import('./document-store.js')
+const { saveDocument, compactWorkspace } = await import('./document-store.js')
 const { clearCache } = await import('./doc-cache.js')
 const { purgeDanglingFiles } = await import('./file-gc.js')
 const { FileVersionStore } = await import('./version-store.js')
@@ -97,7 +97,7 @@ it('compaction folds to the earliest version alone, with nothing holding it back
   const versionStore = new FileVersionStore()
   await versionStore.save(WS, 'doc', canvasDoc('later content'), { auto: false, label: 'only' })
 
-  const result = await compactDocument(WS, 'doc', versionStore)
+  const result = await compactWorkspace(WS, versionStore)
   expect(result.reason).toBe('ok')
 
   // A ceiling rather than an exact pin, because these bytes are NOT

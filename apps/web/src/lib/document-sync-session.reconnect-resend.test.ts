@@ -51,10 +51,7 @@ it('a failed write is settled by the full re-send a reconnect makes', async () =
     disconnect() {},
     pushLocalUpdate: () =>
       daemonUp ? Promise.resolve() : Promise.reject(new Error('daemon unreachable')),
-    getFile: async () => null,
-    putFile: async () => {},
     sendClientReady() {},
-    sendExportResponse() {},
   } as unknown as DocumentBackend
   const persistence: BrowserPersistenceState['kind'][] = []
   const session = createDocumentSyncSession(backend, {

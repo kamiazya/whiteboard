@@ -63,7 +63,6 @@ function recorder(): Recorded {
       onRestoreComplete: () => calls.push('restoreComplete'),
       onHeadChanged: () => calls.push('head'),
       onViewportRequest: () => calls.push('viewport'),
-      onExportRequest: () => calls.push('export'),
     } satisfies DocumentBackendHandlers,
   }
 }
@@ -135,15 +134,6 @@ export function documentBackendContract(
     h.cleanup()
   })
 
-  it('resolves getFile to null for a file that does not exist', async () => {
-    // Not a throw: a missing attachment is an ordinary outcome on a canvas
-    // whose file was deleted, and the editor renders a placeholder for it.
-    const h = await create()
-
-    await expect(h.backend.getFile('no-such-file')).resolves.toBeNull()
-    h.cleanup()
-  })
-
   it('sends a local update upstream', async () => {
     const h = await create()
     if (!h.sentUpdates) {
@@ -163,13 +153,12 @@ export function documentBackendContract(
   })
 
   it('never throws on a control message sent before connecting', async () => {
-    // The editor can request an export or report readiness while the transport
-    // is still coming up, or after it dropped. Every implementation either
-    // queues or ignores; none may throw into the caller.
+    // The editor can report readiness while the transport is still coming
+    // up, or after it dropped. Every implementation either queues or
+    // ignores; none may throw into the caller.
     const h = await create()
 
     expect(() => h.backend.sendClientReady()).not.toThrow()
-    expect(() => h.backend.sendExportResponse('req-1', 'data:image/png;base64,AAA')).not.toThrow()
     h.cleanup()
   })
 }

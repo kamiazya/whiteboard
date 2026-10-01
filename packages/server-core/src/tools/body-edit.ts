@@ -258,66 +258,73 @@ export function createBodyEditTool(deps: ServerDeps) {
       'Replace passages of a markdown document\'s body. Each op quotes the passage it means and declares what that passage said when the edit was written, so a passage that has since moved is still found and one that has since changed is refused by name rather than overwritten. Passages are stored as a PROPOSAL for a person to adopt or dismiss rather than changing the document — that is the default, since nobody watches an agent type; `mode: "apply"` changes the body directly, which is what a surface a person is looking at passes. `proposalId` keeps several calls in one proposal. Either every passage in a call is accepted or none is.',
     inputSchema: bodyEditInputSchema,
     outputSchema: bodyEditOutputSchema,
-    execute: async (input: BodyEditInput): Promise<BodyEditOutput> => {
-      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
-
-      const kind = readDocumentKind(doc)
-      if (kind !== undefined && kind !== 'markdown') {
-        throw new DocumentKindMismatchError(
-          input.documentId,
-          kind,
-          'wb_body_edit writes prose into a document body, which a spatial document does not have. Use wb_canvas_edit to change a text node.',
-        )
-      }
-
-      const body = readMarkdownBody(doc)
-
-      if (input.mode !== 'apply') {
-        // The rules are about the proposal, not about the call. A
-        // continuation merges into a stored proposal — the container keys
-        // changes by id, so an unrefused reuse REPLACES a passage the agent
-        // proposed, and a whole-proposal Adopt applies every open change at
-        // once, so an overlap spread across two calls corrupts the body just
-        // as one inside a single call would. Both checks therefore see what
-        // the proposal already holds.
-        const continuing = readProposals(doc).find((existing) => existing.id === input.proposalId)
-        const existing = placeExisting(body, continuing)
-        const placed = placeAll(
-          body,
-          input.ops,
-          new Set(continuing?.changes.map((change) => change.id) ?? []),
-        )
-        assertDisjoint([...existing, ...placed])
-        const proposed = await storeBodyProposal({
-          deps,
-          workspaceId: input.workspaceId,
-          documentId: input.documentId,
-          proposalId: input.proposalId,
-          doc,
-          changes: placed.map((entry) => entry.change),
-        })
-        return { documentId: input.documentId, applied: 0, proposed, body }
-      }
-
-      const placed = placeAll(body, input.ops)
-      assertDisjoint(placed)
-
-      assertAssumptionsHold(placed, body)
-
-      // Applied from the LAST passage backwards, so an earlier op's
-      // replacement never shifts the offsets a later one was placed at.
-      // Placement read one body; applying in document order would make every
-      // op after the first act on offsets taken from a body that no longer
-      // exists.
-      const next = [...placed]
-        .sort((a, b) => b.at.start - a.at.start)
-        .reduce((text, { change, at }) => applyBodyChange(text, change, at), body)
-
-      writeMarkdownBody(doc, next)
-      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-
-      return { documentId: input.documentId, applied: placed.length, body: next }
-    },
+    execute: (input: BodyEditInput): Promise<BodyEditOutput> =>
+      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
+      // mutating tool is a load-modify-save against a store whose save writes
+      // unconditionally, and the one place that holds the bracket is the one
+      // every surface — MCP, HTTP, the next one — goes through.
+      deps.liveDocuments.withWriteLock(input.workspaceId, () => editBody(deps, input)),
   }
+}
+
+async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEditOutput> {
+  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
+
+  const kind = readDocumentKind(doc)
+  if (kind !== undefined && kind !== 'markdown') {
+    throw new DocumentKindMismatchError(
+      input.documentId,
+      kind,
+      'wb_body_edit writes prose into a document body, which a spatial document does not have. Use wb_canvas_edit to change a text node.',
+    )
+  }
+
+  const body = readMarkdownBody(doc)
+
+  if (input.mode !== 'apply') {
+    // The rules are about the proposal, not about the call. A
+    // continuation merges into a stored proposal — the container keys
+    // changes by id, so an unrefused reuse REPLACES a passage the agent
+    // proposed, and a whole-proposal Adopt applies every open change at
+    // once, so an overlap spread across two calls corrupts the body just
+    // as one inside a single call would. Both checks therefore see what
+    // the proposal already holds.
+    const continuing = readProposals(doc).find((existing) => existing.id === input.proposalId)
+    const existing = placeExisting(body, continuing)
+    const placed = placeAll(
+      body,
+      input.ops,
+      new Set(continuing?.changes.map((change) => change.id) ?? []),
+    )
+    assertDisjoint([...existing, ...placed])
+    const proposed = await storeBodyProposal({
+      deps,
+      workspaceId: input.workspaceId,
+      documentId: input.documentId,
+      proposalId: input.proposalId,
+      doc,
+      changes: placed.map((entry) => entry.change),
+    })
+    return { documentId: input.documentId, applied: 0, proposed, body }
+  }
+
+  const placed = placeAll(body, input.ops)
+  assertDisjoint(placed)
+
+  assertAssumptionsHold(placed, body)
+
+  // Applied from the LAST passage backwards, so an earlier op's
+  // replacement never shifts the offsets a later one was placed at.
+  // Placement read one body; applying in document order would make every
+  // op after the first act on offsets taken from a body that no longer
+  // exists.
+  const next = [...placed]
+    .sort((a, b) => b.at.start - a.at.start)
+    .reduce((text, { change, at }) => applyBodyChange(text, change, at), body)
+
+  writeMarkdownBody(doc, next)
+  await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+
+  return { documentId: input.documentId, applied: placed.length, body: next }
 }

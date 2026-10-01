@@ -23,7 +23,14 @@ import { describe, expect, it } from 'vitest'
  * by nothing here — `.claude/rules/architecture-map.md` covers that, and
  * prose is the weaker rung on purpose.
  */
-const COMPOSITION_ROOTS = ['http-server.ts', 'server-mode-http.ts'] as const
+// The shared set (`shared-background-work.ts`) is scanned too. It holds no
+// registry call, so every `.start()` there would be a bypass — which is the
+// point: it builds and declares the workers, and the roots arm them.
+const COMPOSITION_ROOTS = [
+  'http-server.ts',
+  'server-mode-http.ts',
+  'shared-background-work.ts',
+] as const
 
 /**
  * Every `.start()` in `source` that is NOT inside the registry call.

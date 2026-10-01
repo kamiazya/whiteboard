@@ -615,9 +615,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/workspaces/:wid/documents/:path/compact → 403 with workspace:write only (requires versions:write)', async () => {
+    it('POST /api/workspaces/:wid/documents/optimize-all → 403 with workspace:write only (requires versions:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:write']))
-      const res = await app.request('/api/workspaces/w1/documents/canvas-a/compact', {
+      const res = await app.request('/api/workspaces/w1/documents/optimize-all', {
         method: 'POST',
         headers: { authorization: BEARER },
       })
