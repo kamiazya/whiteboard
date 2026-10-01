@@ -7,39 +7,39 @@ export {
   writeThreadMessage,
 } from './comment-threads.js'
 export type { DocumentContainers } from './containers.js'
+export { MARKDOWN_BODY_KEY } from './containers.js'
 export { contentDigestOfDocument } from './content-digest.js'
 export { type DocumentBatchWriter, withDocumentBatch } from './document-batch.js'
+export {
+  readCoreFacets,
+  readDocumentKind,
+  readFacets,
+  readTrustFacets,
+  writeCoreFacets,
+  writeDocumentKind,
+  writeFacets,
+  writeTrustFacets,
+} from './document-envelope.js'
 export { collectImageRefIds } from './image-refs.js'
 export {
   CONTENT_CONTAINER_KEYS,
   deleteCanvasComment,
   deleteSpatialEdge,
   deleteSpatialNode,
-  MARKDOWN_BODY_KEY,
-  MARKDOWN_BODY_NODE_ID,
-  readCoreFacets,
-  readDocumentKind,
   readEdgeLocks,
-  readFacets,
-  readMarkdownBody,
   readNodeLocks,
   readSpatialCanvas,
-  readTrustFacets,
   reconcileSpatialCanvas,
   type SpatialBatchWriter,
   setEdgeLock,
   setNodeLock,
   withSpatialBatch,
   writeCanvasComment,
-  writeCoreFacets,
-  writeDocumentKind,
-  writeFacets,
-  writeMarkdownBody,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
-  writeTrustFacets,
 } from './loro-bridge.js'
+export { MARKDOWN_BODY_NODE_ID, readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 export { type MinimalChange, minimalChange } from './minimal-change.js'
 export {
   readProposals,

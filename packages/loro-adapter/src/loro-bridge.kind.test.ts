@@ -1,7 +1,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { readDocumentKind, writeDocumentKind } from './loro-bridge.js'
+import { readDocumentKind, writeDocumentKind } from './document-envelope.js'
 
 /**
  * A document has to say what it is. Before this, nothing in the Loro doc

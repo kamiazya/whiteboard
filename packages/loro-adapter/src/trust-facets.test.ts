@@ -6,7 +6,7 @@ import {
   writeCoreFacets,
   writeDocumentKind,
   writeTrustFacets,
-} from './loro-bridge.js'
+} from './document-envelope.js'
 
 const GENERATED = { by: 'reference_agent/gemini-2.5-pro', at: '2026-06-20T22:53:05Z' } as const
 const VERIFIED = [{ by: 'human:ahormati', at: '2026-06-25T09:00:00Z' }] as const

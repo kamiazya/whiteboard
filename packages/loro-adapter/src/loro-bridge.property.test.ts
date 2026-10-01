@@ -7,15 +7,14 @@ import {
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
+import { readFacets, writeFacets } from './document-envelope.js'
 import {
   deleteCanvasComment,
   deleteSpatialEdge,
   deleteSpatialNode,
-  readFacets,
   readSpatialCanvas,
   withSpatialBatch,
   writeCanvasComment,
-  writeFacets,
   writeSpatialCanvas,
   writeSpatialNode,
 } from './loro-bridge.js'

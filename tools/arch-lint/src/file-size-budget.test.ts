@@ -275,41 +275,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Lowered 1130 -> 879: the pane scroll sync and the preview geometry it
   // shares with the rail now live in their own modules.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 879,
-  // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
-  // (ADR-0029). One line, and it has to be here — the list is what a
-  // tree-node host pre-attaches from, and a container attached on first
-  // READ instead clears the UndoManager's redo stack.
-  // +9: `writeSpatialCanvas` and `writeMarkdownBody` each split into a
-  // committing wrapper over a non-committing `*Into`, so `withDocumentBatch`
-  // can fold a whole act into ONE commit. The bodies did not grow; these are
-  // the two wrappers and the two lines saying what the split is for.
-  // +8: `commentToFields` refuses a comment naming both a node and an edge,
-  // the same loud refusal it already gives a non-finite anchor and for the
-  // same reason — the thread it becomes is one every reader would drop.
-  // +1: an edge's `x-whiteboard` facets bucket crosses the bridge the way a
-  // node's already did, so a per-edge facet survives a round trip.
-  // +3: an edge's `bends`, written as one value — the round-trip property
-  // reported it dropped before the line existed.
-  // +6 for the comment on `edgeToFields` saying WHY an endpoint is stored as
-  // one value: it is one thing with one meaning, so last-writer-wins per key
-  // is the whole merge story, and two peers re-attaching the same end
-  // converge on an end one of them chose rather than on a half of each.
-  // +21: ADR-0038 decision 3's read-side lift (`liftLegacyNodeKind` plus the
-  // `liftStoredNode` that composes it with the ADR-0037 one). Load-bearing,
-  // and the comment is most of the lines: the model is `.strict()`, so a node
-  // stored under the node-kind union fails its schema and the read drops what
-  // fails — the node VANISHES rather than losing its content. Net of the
-  // switch `nodeToFields` no longer needs.
-  // +22 on the merge: a node's stored fields are written once as a
-  // resource (ADR-0038 decision 3) beside the tag write ADR-0040 added,
-  // and the kind switch the resource replaced was the shorter of the two.
-  // 1126 -> 1141: the three id-keyed collections and two optional fields
-  // that `reconcileSpatialCanvas` and the resync each spelled out became five
-  // named helpers, each carrying the measured reason its behaviour has (op
-  // order is part of the bytes; a delete only when present spares the log).
-  // 1141 -> 1152: the node delete cascades to anchored ink too, through the
-  // model's one definition of the sweep, and says why it did not before.
-  'packages/loro-adapter/src/loro-bridge.ts': 1152,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 845,
@@ -811,7 +776,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // "writes only what changed" test above it could not see.
   // 1324 -> 1354: the delete cascade pinned over ink — anchored ink goes,
   // free ink stays, the line's lock goes with it.
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1354,
+  // 1354 -> 1356: the import block names the envelope and body modules the
+  // bridge was split into.
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1356,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

@@ -6,138 +6,44 @@ import {
   type CanvasLine,
   canvasEdgeSchema,
   canvasLineSchema,
-  type DocumentKind,
-  documentKindSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
-  nodeKind,
-  nodeText,
-  RESOURCE_KINDS,
   type SpatialCanvas,
   type SpatialNode,
-  type StoredCoreFacets,
   spatialNodeSchema,
-  storedCoreFacetsSchema,
   storedTagsSchema,
-  type TrustFacets,
   threadFromCanvasComment,
-  trustFacetsSchema,
 } from '@kamiazya/whiteboard-model'
-import type { z } from 'zod'
 import { readCanvasComments } from './annotations.js'
 import {
   migrateCanvasCommentsToThreads,
   readCommentThreads,
   writeThreadInto,
 } from './comment-threads.js'
-import { COMMENTS_KEY, type DocumentContainers, PROPOSALS_KEY, THREADS_KEY } from './containers.js'
-import { spliceText } from './minimal-change.js'
+import {
+  CANVAS_KEY,
+  COMMENTS_KEY,
+  CORE_KEY,
+  DOCUMENT_KEY,
+  type DocumentContainers,
+  EDGE_LOCKS_KEY,
+  EDGES_KEY,
+  FACETS_KEY,
+  type Fields,
+  LINES_KEY,
+  MARKDOWN_BODY_KEY,
+  NODE_LOCKS_KEY,
+  NODES_KEY,
+  PROPOSALS_KEY,
+  THREADS_KEY,
+  TRUST_KEY,
+} from './containers.js'
+import { LEGACY_EXTENSION_FIELD, liftLegacyExtension, liftStoredNode } from './legacy-lifts.js'
 
-const NODES_KEY = 'nodes'
-const EDGES_KEY = 'edges'
-// Ink (ADR-0038 decision 2), in its own plane for the reason edges have one:
-// per-element keys, so two peers drawing concurrently both survive.
-const LINES_KEY = 'lines'
-
-/**
- * The canvas ENVELOPE — properties of the canvas rather than of anything on
- * it (today: the `x-whiteboard` rendering preferences).
- *
- * A third top-level map rather than a field beside the node entries, because
- * the merge story is different in kind. Nodes and edges are keyed per object
- * so two peers editing different objects both survive; a canvas-wide
- * preference is ONE value with one meaning, and last-writer-wins per key is
- * the whole of what it needs.
- */
-const CANVAS_KEY = 'canvas'
 /** The canvas's own facets, one key of the canvas map so its LWW is per-key. */
 const FACETS_FIELD = 'facets'
 /** The board's own tags (ADR-0040): one value under its own key, like the facets. */
 const TAGS_FIELD = 'tags'
-/**
- * The key a canvas's facets, and a node's or edge's facets and embed, were
- * stored under before [ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md):
- * the FORMAT's extension key, because the model was the format.
- *
- * Spelled as it stood, the way a migration's own text always is. It is only
- * ever READ — `liftLegacyExtension` below converts it on the way out, and
- * every write from here on uses the model's own field names, so a record
- * converges the first time anything writes to it.
- */
-const LEGACY_EXTENSION_FIELD = 'x-whiteboard'
-
-/**
- * Convert a stored node or edge written under the old key into the model's
- * shape. A no-op for anything already in it.
- *
- * Load-bearing rather than tidy: the model is `.strict()` now, so a stored
- * node still carrying the old key FAILS its schema, and `readSpatialCanvas`
- * drops what fails to parse — the node would vanish, not merely lose a field.
- */
-function liftLegacyExtension(raw: unknown): unknown {
-  if (raw === null || typeof raw !== 'object') return raw
-  const { [LEGACY_EXTENSION_FIELD]: legacy, ...rest } = raw as Record<string, unknown>
-  if (legacy === null || typeof legacy !== 'object') return raw
-  const extension = legacy as Record<string, unknown>
-  const lifted: Record<string, unknown> = { ...rest }
-  if (extension.facets !== undefined) lifted.facets = extension.facets
-  if (extension.kind === 'embed' && typeof extension.documentId === 'string') {
-    lifted.embed = {
-      documentId: extension.documentId,
-      ...(typeof extension.versionRef === 'string' && { versionRef: extension.versionRef }),
-    }
-  }
-  return lifted
-}
-
-/**
- * Convert a stored node written under the pre-[ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
- * node-kind union into the model's shape. A no-op for anything already in it.
- *
- * Load-bearing for the reason `liftLegacyExtension` is, and by the same
- * mechanism: `spatialNodeSchema` is `.strict()` and names neither `type` nor
- * any kind's own content field, so a stored node still carrying them FAILS
- * its schema and `readSpatialCanvas` drops what fails — the node would
- * vanish, not merely lose its content. `legacy-node-kind.test.ts` measures
- * that; nothing else can, since every other test asserts on a document this
- * version wrote.
- *
- * The literals are the shape as it stood, the way a migration's own text
- * always is. Read-only: every write from here on is `nodeToFields`' resource
- * shape, so a record converges the first time anything saves it.
- */
-function liftLegacyNodeKind(raw: unknown): unknown {
-  if (raw === null || typeof raw !== 'object') return raw
-  const { type, text, file, subpath, url, ...rest } = raw as Record<string, unknown>
-  if (type === undefined) return raw
-  if (typeof text === 'string') {
-    return { ...rest, resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: text } }
-  }
-  if (typeof file === 'string') {
-    return {
-      ...rest,
-      resource: {
-        // A reference alone does not say what it points AT, and the registry
-        // claims any located resource that is not a uri-list.
-        mimeType: RESOURCE_KINDS.file.mimeType,
-        location: file,
-        ...(typeof subpath === 'string' && { subpath }),
-      },
-    }
-  }
-  if (typeof url === 'string') {
-    return { ...rest, resource: { mimeType: RESOURCE_KINDS.link.mimeType, location: url } }
-  }
-  // A `group` showed nothing, which is exactly what a frame is, and its own
-  // fields were already spelled the way the model spells them.
-  return rest
-}
-
-/** Both lifts, in the order the record acquired the two shapes. */
-function liftStoredNode(raw: unknown): unknown {
-  return liftLegacyNodeKind(liftLegacyExtension(raw))
-}
-
 /** The canvas's facets, from this version's key or the one before it. */
 function readCanvasFacets(doc: DocumentContainers): ExtensionFacets | undefined {
   const canvasMap = doc.getMap(CANVAS_KEY)
@@ -155,14 +61,6 @@ function readCanvasTags(doc: DocumentContainers): string[] | undefined {
   const parsed = storedTagsSchema.safeParse(doc.getMap(CANVAS_KEY).get(TAGS_FIELD))
   return parsed.success ? parsed.data : undefined
 }
-const FACETS_KEY = 'facets'
-// Editor state that is NOT canvas content: stored beside the canvas in the
-// same doc (so it survives reload and syncs to peers) but in its own map,
-// which is what keeps it out of every export — `readSpatialCanvas` reads
-// only NODES_KEY/EDGES_KEY, and every export path goes through it.
-const NODE_LOCKS_KEY = 'nodeLocks'
-const EDGE_LOCKS_KEY = 'edgeLocks'
-
 /**
  * Drops a removed element's lock entry. Every node/edge removal path owes
  * this call — an entry left behind for an id the canvas no longer has would
@@ -172,24 +70,6 @@ function dropLockInto(doc: DocumentContainers, mapKey: string, id: string): void
   const locksMap = doc.getMap(mapKey)
   if (locksMap.keys().includes(id)) locksMap.delete(id)
 }
-const CORE_KEY = 'core'
-/**
- * OKF v0.2's trust family gets a bucket of its own rather than joining
- * `core`, because `writeCoreFacets` replaces the whole core bucket and
- * deletes anything the caller omitted — a server-written stamp living there
- * would be erased by any client that rewrote its own tags (ADR-0016).
- */
-const TRUST_KEY = 'trust'
-
-/**
- * Document-level envelope: what the document IS, above any one format's
- * structure. Kept out of `core` because that map is OKF frontmatter, which
- * a JSON Canvas document has no business carrying (ADR-0009 decision 3).
- */
-const DOCUMENT_KEY = 'document'
-
-type Fields = Record<string, unknown>
-
 function nodeToFields(node: SpatialNode): Fields {
   // Refuse non-finite geometry LOUDLY: readSpatialCanvas round-trips every
   // node through the Zod schema and silently drops failures, so a NaN or
@@ -819,304 +699,6 @@ export function writeCanvasComment(doc: DocumentContainers, comment: CanvasComme
  */
 export function deleteCanvasComment(doc: DocumentContainers, commentId: string): void {
   if (deleteCommentInto(doc, commentId)) doc.commit()
-}
-
-/**
- * Replace a whole bucket map: write every incoming key and delete the keys
- * the caller omitted, so a rewrite never merges with stale prior state.
- * Entries stay per-key rather than one opaque object value, so two peers
- * writing different keys converge on both surviving after a CRDT merge.
- */
-function replaceBucket(doc: DocumentContainers, mapKey: string, entries: Fields): void {
-  const map = doc.getMap(mapKey)
-  const existingKeys = map.keys()
-
-  for (const [key, value] of Object.entries(entries)) {
-    map.set(key, value)
-  }
-  for (const key of existingKeys) {
-    if (!Object.hasOwn(entries, key)) map.delete(key)
-  }
-
-  doc.commit()
-}
-
-/**
- * Extension facets (the `{namespace}.{name}/v{n}` keyed bucket from
- * model's `extensionFacetsSchema`) are stored the same way as
- * nodes/edges above: a plain-object-valued `LoroMap` keyed by facet key, so
- * one domain's CRDT merge never overwrites another's.
- */
-export function writeFacets(doc: DocumentContainers, facets: ExtensionFacets): void {
-  replaceBucket(doc, FACETS_KEY, facets)
-}
-
-/**
- * A per-key parse (rather than one whole-record parse) means a single
- * corrupt entry in the underlying LoroMap is dropped instead of failing the
- * entire read — consistent with readSpatialCanvas's per-node tolerance.
- */
-export function readFacets(doc: DocumentContainers): ExtensionFacets {
-  const facetsMap = doc.getMap(FACETS_KEY)
-  const result: ExtensionFacets = {}
-  for (const key of facetsMap.keys()) {
-    const value = facetsMap.get(key)
-    const parsed = extensionFacetsSchema.safeParse({ [key]: value })
-    if (parsed.success) result[key] = parsed.data[key]
-  }
-  return result
-}
-
-/**
- * Prototype-less on purpose. The keys looked up here come from a LoroMap,
- * whose keys are CRDT strings arriving over sync or import — so `__proto__`
- * is a possible key, and on a plain object it would resolve up the chain to
- * `Object.prototype`: truthy, past any `if (!schema)` guard, and without a
- * `safeParse` to call. A null prototype makes every miss a real miss.
- */
-const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
-  Object.create(null),
-  storedCoreFacetsSchema.shape,
-)
-
-/**
- * Core OKF facets (`type`/`title`/`tags`/`view`/`facetsRaw`) are stored the
- * same way as extension facets above: one `LoroMap` keyed per field, not one
- * opaque object value, so two peers writing different core fields converge
- * on both surviving after a merge. `type` is the only required field; a
- * write always replaces the whole document meta (deletes fields the caller
- * omitted) rather than merging with stale prior state, matching
- * `writeFacets`'s replace-on-rewrite convention.
- */
-export function writeCoreFacets(doc: DocumentContainers, meta: StoredCoreFacets): void {
-  replaceBucket(doc, CORE_KEY, { ...meta })
-}
-
-/** Prototype-less for the same reason `CORE_FACET_FIELD_SCHEMAS` is. */
-const TRUST_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
-  Object.create(null),
-  trustFacetsSchema.shape,
-)
-
-/**
- * The OKF v0.2 trust family (§5.2), stored per-key like every other bucket
- * here so two peers writing `generated` and `verified` converge on both.
- * Replace-on-rewrite, matching `writeCoreFacets`/`writeFacets`: a write
- * states the whole family rather than merging with whatever was there.
- */
-export function writeTrustFacets(doc: DocumentContainers, trust: TrustFacets): void {
-  const entries: Fields = {}
-  if (trust.generated !== undefined) entries.generated = { ...trust.generated }
-  if (trust.verified !== undefined) entries.verified = trust.verified.map((event) => ({ ...event }))
-  replaceBucket(doc, TRUST_KEY, entries)
-}
-
-/**
- * A SPATIAL document answers `undefined` whatever its `trust` map holds, for
- * the same reason `readCoreFacets` does: the trust family are OKF root
- * frontmatter keys, and a JSON Canvas document has no frontmatter to project
- * them into (ADR-0016 decision 5).
- *
- * A corrupt field is dropped rather than failing the whole read, matching
- * `readCoreFacets`. Unlike it, there is no required field here — a document
- * with a `verified` list and no `generated` is a perfectly good OKF concept —
- * so an all-dropped read answers `undefined` rather than an empty object.
- */
-export function readTrustFacets(doc: DocumentContainers): TrustFacets | undefined {
-  if (readDocumentKind(doc) === 'spatial') return undefined
-
-  const trustMap = doc.getMap(TRUST_KEY)
-  if (trustMap.keys().length === 0) return undefined
-
-  const candidate: Record<string, unknown> = {}
-  for (const key of trustMap.keys()) {
-    const fieldSchema = TRUST_FACET_FIELD_SCHEMAS[key]
-    if (!fieldSchema) continue
-    const parsed = fieldSchema.safeParse(trustMap.get(key))
-    if (parsed.success) candidate[key] = parsed.data
-  }
-  if (Object.keys(candidate).length === 0) return undefined
-  return trustFacetsSchema.parse(candidate)
-}
-
-/**
- * An empty `core` map (never written, or every field deleted) means no
- * core meta is stored — `undefined`, distinct from an all-optional-fields
- * empty object which is unrepresentable anyway (`type` is required). A
- * single corrupt field is dropped rather than failing the whole read, but
- * a missing/invalid `type` after that per-field filter makes the whole
- * result unrepresentable, since `type` is the one field every consumer
- * (`canvas_export_okf`'s placeholder fallback) depends on being present.
- *
- * A SPATIAL document answers `undefined` whatever its `core` map holds. A
- * facet is OKF frontmatter and a JSON Canvas document has none to put one in
- * (ADR-0009 decision 3), so a spatial document carrying facets is one written
- * before that stopped being true — and every reader that surfaces them
- * (a facet card beside a diagram, an OKF export's frontmatter) is showing
- * metadata the format cannot represent. Enforced on the READ because it is
- * total: it needs no migration, and no writer can reintroduce the state
- * behind it — `wb_facet_set` and `wb_document_set` both refuse a spatial
- * document, and after this there is no other writer.
- *
- * A document with no kind is allowed through, exactly as those tools allow
- * one: an absent kind is not evidence of a format.
- */
-export function readCoreFacets(doc: DocumentContainers): StoredCoreFacets | undefined {
-  if (readDocumentKind(doc) === 'spatial') return undefined
-
-  const coreMap = doc.getMap(CORE_KEY)
-  if (coreMap.keys().length === 0) return undefined
-
-  const candidate: Record<string, unknown> = {}
-  for (const key of coreMap.keys()) {
-    const fieldSchema = CORE_FACET_FIELD_SCHEMAS[key]
-    if (!fieldSchema) continue
-    const parsed = fieldSchema.safeParse(coreMap.get(key))
-    if (parsed.success) candidate[key] = parsed.data
-  }
-
-  const result = storedCoreFacetsSchema.safeParse(candidate)
-  return result.success ? result.data : undefined
-}
-
-/**
- * The Loro text container a markdown document's body lives in, and the one
- * apps/web's browser-local editor binds its CRDT editing session to.
- *
- * Exported because that binding needs the container HANDLE, not its text —
- * `readMarkdownBody` cannot serve it, and a second `'body'` literal on the
- * apps/web side would be a contract duplicated across a package boundary.
- */
-export const MARKDOWN_BODY_KEY = 'body'
-
-/**
- * The stored id of the single text node a markdown document's body USED to
- * live in on the daemon side. Nothing writes it any more — `wb_document_set`
- * writes the text container — but stored documents still hold one, so it is
- * how a reader finds such a body and how that tool recognises a document it
- * could itself have written.
- */
-export const MARKDOWN_BODY_NODE_ID = 'okf-body'
-
-/**
- * A markdown document's body, whichever way this codebase stored it.
- *
- * Every writer now writes the Loro TEXT CONTAINER named `body`
- * (`writeMarkdownBody`). It did not start that way: `wb_document_set` used
- * to store the body as a single `okf-body` TEXT NODE inside the spatial
- * canvas — which is why a markdown document also parsed as a perfectly
- * valid, if odd, canvas — while apps/web's editor wrote the container so a
- * CRDT editing session had something to bind to. Neither side could read
- * the other's documents until this function existed, and stored documents
- * still hold the old shape, so it keeps reading both.
- *
- * The container wins when both are present: writers supersede the node
- * rather than removing it in a migration, so where both exist the container
- * is the newer one.
- *
- * Falls back to the FIRST text node rather than requiring the id, because
- * documents written before the id was stable still have to be readable. An
- * empty string for a document with no body at all is the honest answer: it
- * has no body, which is a valid state, not a failure.
- */
-export function readMarkdownBody(doc: DocumentContainers): string {
-  const container = doc.getText(MARKDOWN_BODY_KEY).toString()
-  if (container.length > 0) return container
-
-  return markdownBodyFromCanvas(readSpatialCanvas(doc))
-}
-
-/**
- * The node a markdown document's body lives in, given an already-read
- * canvas: the stable id first, then the first text node (pre-stable-id
- * documents), matching `readMarkdownBody`'s node-side selection exactly.
- *
- * Asks the content seam what a node HOLDS rather than narrowing on the
- * stored discriminant, so it says the same thing before and after ADR-0038
- * decision 3 dissolves that union. It used to answer a
- * `SpatialNode`, which is a type derived from the
- * union itself — and the only thing the caller wanted from that narrowing
- * was `.text`, which `nodeText` gives without it.
- */
-function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialNode | undefined {
-  const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)
-  if (byId !== undefined && nodeKind(byId) === 'text') return byId
-  return nodes.find((node) => nodeKind(node) === 'text')
-}
-
-/**
- * The node-side half of `readMarkdownBody`. Private on purpose: it is a
- * legacy READ fallback for documents an older writer left, and exporting it
- * is what let a caller treat the node as a live representation to write.
- */
-function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
-  const node = findMarkdownBodyNode(canvas.nodes)
-  return (node === undefined ? undefined : nodeText(node)) ?? ''
-}
-
-/**
- * Replaces a markdown document's body, and makes the document stop being a
- * spatial canvas at the same time.
- *
- * The CONTAINER is the representation, not a text node inside the spatial
- * canvas. Two reasons, and the second is the one that keeps biting:
- *
- * - It is the CRDT-native form. apps/web binds a collaborative editing
- *   session straight to it (`LoroSyncPlugin`), which a plain string field
- *   on a node cannot support — character-level merge is the whole point.
- * - Storing a body as a text NODE made a markdown document parse as a
- *   perfectly valid spatial canvas holding one node. That is why anything
- *   resolving a reference has to ask the document its kind before it can
- *   tell prose from a diagram: "does it parse as a canvas" answers yes for
- *   both. Writing the container and emptying the canvas removes the
- *   ambiguity at the source rather than guarding against it downstream.
- *
- * Clearing the canvas also supersedes a legacy `okf-body` node left by the
- * older writer, so a rewritten document cannot keep a stale second body for
- * a later reader to find.
- */
-export function writeMarkdownBody(doc: DocumentContainers, body: string): void {
-  writeMarkdownBodyInto(doc, body)
-  doc.commit()
-}
-
-/** The body splice itself, without the commit — see `withDocumentBatch`. */
-export function writeMarkdownBodyInto(doc: DocumentContainers, body: string): void {
-  // Only what CHANGED. A whole-document replace is correct and ruinous:
-  // every character is deleted and re-inserted, so one keystroke ships the
-  // document again to every peer, grows the oplog by the document, and takes
-  // every rich-text mark down with the characters it removed — which is the
-  // annotation layer's passages. See `minimalChange` for the measurements.
-  spliceText(doc.getText(MARKDOWN_BODY_KEY), body)
-  // Only when there is something to clear. This runs on every keystroke in
-  // the browser editor, where the canvas is already empty and an
-  // unconditional rewrite would add CRDT operations — and a save — for a
-  // change nobody made.
-  if (doc.getMap(NODES_KEY).size > 0 || doc.getMap(EDGES_KEY).size > 0) {
-    writeSpatialCanvasInto(doc, { nodes: [], edges: [] })
-  }
-}
-
-/**
- * The kind a document was created as. `wb_document_get` serialises through
- * it — a spatial document as JSON Canvas, a markdown one as OKF — so this
- * is what makes a format follow from the document rather than from a
- * caller-supplied parameter (ADR-0009 decision 4).
- */
-export function writeDocumentKind(doc: DocumentContainers, kind: DocumentKind): void {
-  doc.getMap(DOCUMENT_KEY).set('kind', kind)
-  doc.commit()
-}
-
-/**
- * `undefined` for a document written before kinds existed, and for a kind
- * this build does not recognise — a peer on a newer version can write one
- * into the same CRDT map. Both cases are for the caller to report; failing
- * here would replace its message with a parse error from three layers down.
- */
-export function readDocumentKind(doc: DocumentContainers): DocumentKind | undefined {
-  const parsed = documentKindSchema.safeParse(doc.getMap(DOCUMENT_KEY).get('kind'))
-  return parsed.success ? parsed.data : undefined
 }
 
 /**

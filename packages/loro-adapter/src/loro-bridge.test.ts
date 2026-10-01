@@ -12,12 +12,17 @@ import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-mo
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
+  readCoreFacets,
+  readFacets,
+  writeCoreFacets,
+  writeDocumentKind,
+  writeFacets,
+} from './document-envelope.js'
+import {
   deleteCanvasComment,
   deleteSpatialEdge,
   deleteSpatialNode,
-  readCoreFacets,
   readEdgeLocks,
-  readFacets,
   readNodeLocks,
   readSpatialCanvas,
   reconcileSpatialCanvas,
@@ -25,9 +30,6 @@ import {
   setNodeLock,
   withSpatialBatch,
   writeCanvasComment,
-  writeCoreFacets,
-  writeDocumentKind,
-  writeFacets,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,

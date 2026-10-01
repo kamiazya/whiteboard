@@ -10,12 +10,8 @@
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import {
-  readMarkdownBody,
-  readSpatialCanvas,
-  writeMarkdownBody,
-  writeSpatialCanvas,
-} from './loro-bridge.js'
+import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
+import { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 
 const BODY = '# Weekly notes\n\nShipped the markdown file node.'
 

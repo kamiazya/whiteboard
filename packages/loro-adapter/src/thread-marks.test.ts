@@ -4,7 +4,7 @@
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeCommentThread } from './comment-threads.js'
-import { writeMarkdownBody } from './loro-bridge.js'
+import { writeMarkdownBody } from './markdown-body.js'
 import type { PassageRange } from './thread-marks.js'
 import { markThreadPassages, readThreadMarks, threadStyleKey } from './thread-marks.js'
 
