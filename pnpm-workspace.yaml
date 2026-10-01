@@ -36,6 +36,10 @@ catalog:
   vite: "^8.2.2"
   vitest: "^5.0.0"
   "@vitest/browser-playwright": "^5.0.0"
+  # Exact pin, shared by four workspaces: the browser binary a Playwright
+  # release drives is tied to its version, so two versions would run the
+  # browser projects against different Chromium builds.
+  playwright: "1.63.0"
   # codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
   unified: "^11.0.5"
   remark-parse: "^11.0.0"
