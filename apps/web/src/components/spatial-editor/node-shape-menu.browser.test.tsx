@@ -9,6 +9,8 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -21,27 +23,8 @@ const initial: SpatialCanvas = {
 const shapeFacetOf = (canvas: SpatialCanvas) =>
   canvas.nodes[0]?.facets?.['visual.shape/v0'] as VisualShapeFacet | undefined
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 function openNodeMenu(container: HTMLElement): HTMLElement {
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
@@ -63,7 +46,7 @@ function openInspector(container: HTMLElement): HTMLElement {
 }
 
 it('the Shape row stores the facet and the scene draws the silhouette', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
 
   const panel = openInspector(container)
@@ -101,7 +84,7 @@ it('a shape pick from a multi-selection reshapes every selected node', async () 
     )
   }
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
 
   await userEvent.click(root, { position: { x: 160, y: 125 } })
   await userEvent.click(root, { position: { x: 400, y: 125 }, modifiers: ['Shift'] })
@@ -127,7 +110,7 @@ it('a shape pick from a multi-selection reshapes every selected node', async () 
 })
 
 it('Rectangle removes the facet without a trace', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
 
   const first = openInspector(container)

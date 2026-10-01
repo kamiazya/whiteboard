@@ -4,36 +4,15 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
 // Far from the centre of the 800x600 surface, where the free spot would be.
 const AT = { x: 620, y: 460 }
-
-function makeHost() {
-  const latest: { canvas: SpatialCanvas } = { canvas: { nodes: [], edges: [] } }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(latest.canvas)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          fileRefOptions={[{ file: 'doc-a', label: 'Release plan' }]}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
 
 /** Where the created node is centred — the menu places a node ON the click. */
 function centreOf(canvas: SpatialCanvas) {
@@ -56,7 +35,10 @@ function rightClickAt(root: HTMLElement) {
 }
 
 it('a document picked from the empty-canvas menu lands at the right-click', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: { nodes: [], edges: [] },
+    editorProps: { fileRefOptions: [{ file: 'doc-a', label: 'Release plan' }] },
+  })
   const { container } = render(<Host />)
   rightClickAt(rootOf(container))
   await userEvent.click(page.getByRole('menuitem', { name: 'Document' }))
@@ -72,7 +54,10 @@ it('a document picked from the empty-canvas menu lands at the right-click', asyn
 })
 
 it('a link submitted from the empty-canvas menu lands at the right-click', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: { nodes: [], edges: [] },
+    editorProps: { fileRefOptions: [{ file: 'doc-a', label: 'Release plan' }] },
+  })
   const { container } = render(<Host />)
   rightClickAt(rootOf(container))
   await userEvent.click(page.getByRole('menuitem', { name: 'Link' }))

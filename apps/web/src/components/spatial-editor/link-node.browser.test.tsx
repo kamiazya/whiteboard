@@ -8,11 +8,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { nodeUrl, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -32,28 +32,6 @@ const withLink: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(initial: SpatialCanvas) {
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: initial, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 // The dialog sits centered in the editor, which the vitest browser iframe's
 // visible viewport may not fully contain — Playwright then refuses the
 // click as "outside of the viewport". The button itself is static, so a
@@ -66,21 +44,8 @@ function clickOk(container: HTMLElement) {
   fireEvent.click(ok)
 }
 
-function rightClick(el: HTMLElement, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  el.dispatchEvent(
-    new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      button: 2,
-    }),
-  )
-}
-
 it('Add link opens the URL dialog and a valid submit creates a link node', async () => {
-  const { Host, latest } = makeHost(empty)
+  const { Host, latest } = makeEditorHost({ initial: empty })
   const { container } = render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
@@ -93,7 +58,7 @@ it('Add link opens the URL dialog and a valid submit creates a link node', async
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(nodeUrl(latest.canvas.nodes[0] as SpatialNode)).toBe('https://jsoncanvas.org/spec/1.0/')
-  expect(latest.commands).toContain('create-node')
+  expect(latest.kinds).toContain('create-node')
   // The dialog closes and the node renders its URL as the label — cut to the
   // prefix that fits the default node width, since a label never wraps.
   expect(container.querySelector('[data-testid="link-url-dialog"]')).toBeNull()
@@ -107,7 +72,7 @@ it('Add link opens the URL dialog and a valid submit creates a link node', async
 })
 
 it('an invalid URL cannot be submitted', async () => {
-  const { Host, latest } = makeHost(empty)
+  const { Host, latest } = makeEditorHost({ initial: empty })
   const { container } = render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
@@ -131,7 +96,7 @@ it('an invalid URL cannot be submitted', async () => {
 })
 
 it('a real double-click on a link node opens its URL in a new tab', async () => {
-  const { Host } = makeHost(withLink)
+  const { Host } = makeEditorHost({ initial: withLink })
   const { container } = render(<Host />)
   const opened: string[] = []
   const openSpy = vi.spyOn(window, 'open').mockImplementation((url) => {
@@ -152,7 +117,7 @@ it('a real double-click on a link node opens its URL in a new tab', async () => 
 })
 
 it('the link context menu offers Open link and Edit URL rewrites the target', async () => {
-  const { Host, latest } = makeHost(withLink)
+  const { Host, latest } = makeEditorHost({ initial: withLink })
   const { container } = render(<Host />)
 
   rightClick(rootOf(container), 200, 130)
@@ -171,7 +136,7 @@ it('the link context menu offers Open link and Edit URL rewrites the target', as
   await vi.waitFor(() =>
     expect(nodeUrl(latest.canvas.nodes[0] as SpatialNode)).toBe('https://example.com/changed'),
   )
-  expect(latest.commands).toContain('set-node-url')
+  expect(latest.kinds).toContain('set-node-url')
 })
 
 // The model schema's z.url() accepts any parseable URL — including
@@ -185,7 +150,7 @@ it('a javascript: URL is neither followable nor accepted by the dialog', async (
     ],
     edges: [],
   }
-  const { Host } = makeHost(hostile)
+  const { Host } = makeEditorHost({ initial: hostile })
   const { container } = render(<Host />)
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
   try {

@@ -11,9 +11,9 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(() => {
   cleanup()
@@ -28,36 +28,13 @@ const initial: SpatialCanvas = {
 const symbolOf = (canvas: SpatialCanvas) =>
   canvas.nodes[0]?.facets?.['visual.symbol/v0'] as VisualSymbolFacet | undefined
 
-function makeHost(scrollable = false) {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div
-        style={{
-          width: 800,
-          height: 600,
-          // Room to scroll in BOTH directions, so a case can stand the
-          // trigger at a chosen height in the viewport instead of taking
-          // whatever the page's own scroll-into-view left it at.
-          ...(scrollable ? { marginTop: 2000, marginBottom: 2000 } : {}),
-        }}
-      >
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+// Room to scroll in BOTH directions, so a case can stand the trigger at a
+// chosen height in the viewport instead of taking whatever the page's own
+// scroll-into-view left it at.
+const SCROLLABLE = { marginTop: 2000, marginBottom: 2000 }
 
 function openNodeMenu(container: HTMLElement): HTMLElement {
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
   return container.querySelector('[data-testid="context-menu"]') as HTMLElement
@@ -97,7 +74,7 @@ function openInspector(container: HTMLElement): HTMLElement {
 }
 
 it('an icon pick stores the facet and draws nothing on the node', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
 
   const picker = await openSymbolPicker(openInspector(container))
@@ -118,7 +95,7 @@ it('an icon pick stores the facet and draws nothing on the node', async () => {
  * jsdom test of the declaration cannot see.
  */
 it('an emoji found by search is stored rather than drawn, and No symbol removes the facet', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
 
   const glyphText = () =>
@@ -162,7 +139,7 @@ it('an emoji found by search is stored rather than drawn, and No symbol removes 
  * a panel-wide font rule would have overridden it.
  */
 it('draws its emoji in a font named for colour, not whichever one claims the codepoint', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const picker = await openSymbolPicker(openInspector(container))
 
@@ -189,7 +166,7 @@ it('draws its emoji in a font named for colour, not whichever one claims the cod
  * control needs no rule of its own and cannot have a laxer one.
  */
 it('a symbol nobody listed is pasted into the one box, and a refused one is never offered', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
 
   const picker = await openSymbolPicker(openInspector(container))
@@ -244,7 +221,7 @@ it('a symbol nobody listed is pasted into the one box, and a refused one is neve
  * chooses, all of it is on screen.
  */
 it('opens a catalog entirely inside the viewport, from a row with no room under it', async () => {
-  const { Host } = makeHost(true)
+  const { Host } = makeEditorHost({ initial, frameStyle: SCROLLABLE })
   const { container } = render(<Host />)
 
   const picker = await openSymbolPicker(openInspector(container))

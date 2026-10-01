@@ -10,43 +10,27 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { tapElement } from '../../test-utils/tap.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-function makeHost(text: string) {
-  const start: SpatialCanvas = {
+function canvasWithText(text: string): SpatialCanvas {
+  return {
     nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 260, height: 120, text })],
     edges: [],
   }
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            const flat = command.kind === 'batch' ? command.commands : [command]
-            latest.commands.push(...flat.map((c) => c.kind))
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
 }
 
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+// Batches are flattened: what is asserted is which edits happened, not how
+// the editor grouped them into undo steps.
+function editKinds(commands: readonly EditorCommand[]): string[] {
+  return commands.flatMap((c) => (c.kind === 'batch' ? c.commands.map((x) => x.kind) : [c.kind]))
+}
 
 function openEditor(container: HTMLElement) {
   const root = rootOf(container)
@@ -59,7 +43,7 @@ function openEditor(container: HTMLElement) {
 }
 
 it('the node editor is CodeMirror with markdown highlighting — same grammar as the document editor', async () => {
-  const { Host } = makeHost('plain **bold** text')
+  const { Host } = makeEditorHost({ initial: canvasWithText('plain **bold** text') })
   const { container } = render(<Host />)
   openEditor(container)
 
@@ -75,7 +59,7 @@ it('the node editor is CodeMirror with markdown highlighting — same grammar as
 })
 
 it('⌘Enter COMMITS — it does not toggle a task checkbox inside a node', async () => {
-  const { Host, latest } = makeHost('- [ ] todo item')
+  const { Host, latest } = makeEditorHost({ initial: canvasWithText('- [ ] todo item') })
   const { container } = render(<Host />)
   openEditor(container)
   await vi.waitFor(() =>
@@ -92,7 +76,7 @@ it('⌘Enter COMMITS — it does not toggle a task checkbox inside a node', asyn
 })
 
 it('losing focus commits what was typed — nothing is ever lost to a stray click', async () => {
-  const { Host, latest } = makeHost('start')
+  const { Host, latest } = makeEditorHost({ initial: canvasWithText('start') })
   const { container } = render(<Host />)
   openEditor(container)
   await vi.waitFor(() =>
@@ -112,7 +96,7 @@ it('losing focus commits what was typed — nothing is ever lost to a stray clic
 })
 
 it('Enter continues a list item, and Enter on an empty item exits the list', async () => {
-  const { Host, latest } = makeHost('- alpha')
+  const { Host, latest } = makeEditorHost({ initial: canvasWithText('- alpha') })
   const { container } = render(<Host />)
   openEditor(container)
   await vi.waitFor(() =>
@@ -129,7 +113,7 @@ it('Enter continues a list item, and Enter on an empty item exits the list', asy
 })
 
 it('click-away commits EXACTLY once — unmount must not fire a second stale commit', async () => {
-  const { Host, latest } = makeHost('start')
+  const { Host, latest } = makeEditorHost({ initial: canvasWithText('start') })
   const { container } = render(<Host />)
   openEditor(container)
   await vi.waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())
@@ -152,11 +136,11 @@ it('click-away commits EXACTLY once — unmount must not fire a second stale com
   await vi.waitFor(() => expect(container.querySelector('.cm-content')).toBeNull())
   const node = latest.canvas.nodes[0]
   expect(node === undefined ? undefined : nodeText(node)).toBe('start typed')
-  expect(latest.commands.filter((k) => k === 'set-text')).toHaveLength(1)
+  expect(editKinds(latest.commands).filter((k) => k === 'set-text')).toHaveLength(1)
 })
 
 it('a blur after Escape does not resurrect the cancelled edit as a commit', async () => {
-  const { Host, latest } = makeHost('keep me')
+  const { Host, latest } = makeEditorHost({ initial: canvasWithText('keep me') })
   const { container } = render(<Host />)
   openEditor(container)
   await vi.waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())
@@ -170,7 +154,7 @@ it('a blur after Escape does not resurrect the cancelled edit as a commit', asyn
   await vi.waitFor(() => expect(container.querySelector('.cm-content')).toBeNull())
   const node = latest.canvas.nodes[0]
   expect(node === undefined ? undefined : nodeText(node)).toBe('keep me')
-  expect(latest.commands.filter((k) => k === 'set-text')).toHaveLength(0)
+  expect(editKinds(latest.commands).filter((k) => k === 'set-text')).toHaveLength(0)
 })
 
 // A node's editor installs the `:` shortcode source, so its popup is a real
@@ -180,7 +164,7 @@ it('a blur after Escape does not resurrect the cancelled edit as a commit', asyn
 // synthesizes no mouse events at all, so a tap that reaches nothing else is
 // exactly the ordering a phone was observed losing on the document editor.
 it('a touch tap on a shortcode option commits it inside a node editor', async () => {
-  const { Host } = makeHost('ship it')
+  const { Host } = makeEditorHost({ initial: canvasWithText('ship it') })
   const { container } = render(<Host />)
   openEditor(container)
   const content = await vi.waitFor(() => {

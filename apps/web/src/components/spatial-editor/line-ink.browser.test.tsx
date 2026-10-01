@@ -14,10 +14,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -25,31 +25,6 @@ const start: SpatialCanvas = {
   nodes: [textNode({ id: 'a', x: 200, y: 200, width: 120, height: 80, text: 'source' })],
   edges: [],
 }
-
-function makeHost() {
-  // The host keeps the LATEST canvas rather than the test reading React
-  // state: what is asserted is what the editor handed back through onChange,
-  // which is the value that would have been persisted.
-  const latest = { canvas: start }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
 /**
  * Drags off the source node's east connect handle and releases at `to`, in
@@ -91,7 +66,7 @@ async function drawLineTo(container: HTMLElement, to: [number, number]) {
 }
 
 it('draws a line to the release point, then deletes it once selected', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   const { root } = await drawLineTo(container, [600, 450])
@@ -124,7 +99,7 @@ it('cancels instead of drawing when the release lands back on the source node', 
   // The connect handle is drawn ON the node and overhangs it, so a press and
   // release that never left the box would otherwise mint zero-length ink —
   // invisible, and impossible to click in order to remove.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   await drawLineTo(container, [280, 240])

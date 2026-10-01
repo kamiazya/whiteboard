@@ -10,6 +10,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -28,26 +30,7 @@ const start: SpatialCanvas = {
   ],
 }
 
-function makeHost(initial: SpatialCanvas) {
-  const latest = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+const SIZE = { width: 900, height: 700 }
 
 const frame = () => new Promise((r) => requestAnimationFrame(r))
 
@@ -72,7 +55,7 @@ async function dragWithoutRelease(root: HTMLElement, from: [number, number], to:
 }
 
 it('re-routes the touched edge live while the drag is in flight', async () => {
-  const { Host } = makeHost(start)
+  const { Host } = makeEditorHost({ initial: start, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -97,7 +80,7 @@ it('re-routes the touched edge live while the drag is in flight', async () => {
 })
 
 it('drops the live layer and restores the committed scene on release', async () => {
-  const { Host, latest } = makeHost(start)
+  const { Host, latest } = makeEditorHost({ initial: start, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -137,7 +120,7 @@ it('re-routes a bystander edge live when the dragged node lands on its path', as
       },
     ],
   }
-  const { Host } = makeHost(blocked)
+  const { Host } = makeEditorHost({ initial: blocked, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -183,7 +166,7 @@ it('recomputes line jumps live while the drag is in flight', async () => {
     ],
     facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
   }
-  const { Host } = makeHost(crossing)
+  const { Host } = makeEditorHost({ initial: crossing, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -210,7 +193,7 @@ it('keeps a touched edge label visible and centered during the drag', async () =
       },
     ],
   }
-  const { Host } = makeHost(labelled)
+  const { Host } = makeEditorHost({ initial: labelled, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -229,7 +212,7 @@ it('a multi-selection ghost carries every member, not only the grabbed node', as
     ],
     edges: [],
   }
-  const { Host } = makeHost(trio)
+  const { Host } = makeEditorHost({ initial: trio, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -298,7 +281,7 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
-  const { Host } = makeHost(crossing)
+  const { Host } = makeEditorHost({ initial: crossing, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -464,7 +447,7 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
-  const { Host } = makeHost(shaped)
+  const { Host } = makeEditorHost({ initial: shaped, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -494,7 +477,7 @@ it('a themed board keeps its look while a node is carried: ghost and backdrop al
     ...start,
     facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
   }
-  const { Host } = makeHost(neon)
+  const { Host } = makeEditorHost({ initial: neon, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()

@@ -14,10 +14,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -36,28 +36,6 @@ const start: SpatialCanvas = {
   ],
 }
 
-function makeHost(canvas: SpatialCanvas = start) {
-  const latest = { canvas }
-  function Host() {
-    const [current, setCurrent] = useState<SpatialCanvas>(canvas)
-    latest.canvas = current
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={current}
-          onChange={(next) => setCurrent(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-
 /**
  * The stroke runs from 300,200 to 500,400 and the viewport is identity at
  * rest, so its midpoint really is under 400,300 on screen. Pressing a point
@@ -71,7 +49,7 @@ async function selectTheStroke(container: HTMLElement) {
 }
 
 it('moves a selected stroke, both ends together', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   await selectTheStroke(container)
@@ -92,15 +70,17 @@ it('moves a selected stroke, both ends together', async () => {
 })
 
 it('leaves an end that is on a node attached to it', async () => {
-  const { Host, latest } = makeHost({
-    ...start,
-    lines: [
-      {
-        id: 'l1',
-        from: { kind: 'node', node: 'a' },
-        to: { kind: 'point', point: { x: 500, y: 400 } },
-      },
-    ],
+  const { Host, latest } = makeEditorHost({
+    initial: {
+      ...start,
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'node', node: 'a' },
+          to: { kind: 'point', point: { x: 500, y: 400 } },
+        },
+      ],
+    },
   })
   const { container } = render(<Host />)
 

@@ -8,9 +8,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -23,26 +23,7 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(width: number) {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+const SIZE = { width: 900, height: 600 }
 
 function openInspector(container: HTMLElement) {
   const root = rootOf(container)
@@ -57,7 +38,7 @@ function openInspector(container: HTMLElement) {
 }
 
 it('gives the canvas back the width the dock takes, so nothing sits on it', () => {
-  const { Host } = makeHost(900)
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const before = rootOf(container).getBoundingClientRect().width
   openInspector(container)
@@ -73,7 +54,7 @@ it('gives the canvas back the width the dock takes, so nothing sits on it', () =
 })
 
 it('leaves no point inside the canvas covered by the inspector', () => {
-  const { Host } = makeHost(900)
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   openInspector(container)
 
@@ -101,7 +82,7 @@ it('leaves no point inside the canvas covered by the inspector', () => {
 // then sheet 900x253@0,347. Synchronously it looks right, which is why the
 // two tests above stayed green through it.
 it('keeps the dock docked after the canvas has shrunk under it', async () => {
-  const { Host } = makeHost(900)
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   openInspector(container)
 
