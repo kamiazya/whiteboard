@@ -369,7 +369,8 @@ describe('0019-workspace-canonical-id', () => {
     expect(newId).not.toBe('default')
 
     const { createWorkspacesRouter } = await import('../../../routes/document/workspaces.js')
-    const app = createWorkspacesRouter()
+    const { resolveTestServerDeps } = await import('../../../routes/_test-helpers.js')
+    const app = createWorkspacesRouter({ serverDeps: await resolveTestServerDeps(dataDir) })
     const bySegment = await app.request('/api/workspaces/default/documents')
     const byId = await app.request(`/api/workspaces/${newId}/documents`)
 
