@@ -57,6 +57,22 @@ describe('copyIntoMcpDist', () => {
     expect(existsSync(join(dest, 'assets', 'virtual_pwa-register-CaDreUOZ.js'))).toBe(false)
   })
 
+  it('replaces a previous copy instead of accumulating its content-hashed assets', () => {
+    workDir = mkdtempSync(join(tmpdir(), 'copy-into-mcp-dist-'))
+    const src = join(workDir, 'src')
+    const dest = join(workDir, 'dest')
+    mkdirSync(join(src, 'assets'), { recursive: true })
+    mkdirSync(join(dest, 'assets'), { recursive: true })
+    writeFileSync(join(src, 'index.html'), '<html></html>')
+    writeFileSync(join(src, 'assets', 'index-NEW.js'), '// new entry')
+    writeFileSync(join(dest, 'assets', 'index-OLD.js'), '// entry from an earlier build')
+
+    copyIntoMcpDist(src, dest)
+
+    expect(existsSync(join(dest, 'assets', 'index-NEW.js'))).toBe(true)
+    expect(existsSync(join(dest, 'assets', 'index-OLD.js'))).toBe(false)
+  })
+
   it('throws a clear error when the source build is missing', () => {
     workDir = mkdtempSync(join(tmpdir(), 'copy-into-mcp-dist-'))
     const src = join(workDir, 'never-built')
