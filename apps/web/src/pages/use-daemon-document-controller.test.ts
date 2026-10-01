@@ -3,15 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
-// Spreads importOriginal so `DaemonApiError` stays the REAL class — the
-// membership classifier's `instanceof DaemonApiError` throws on `undefined`
-// otherwise, and every rejection case below reads as an unrelated failure.
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof daemonApiClient>()),
-  listWorkspaces: vi.fn(),
-  listDocuments: vi.fn(),
-  createDocument: vi.fn(),
-}))
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
