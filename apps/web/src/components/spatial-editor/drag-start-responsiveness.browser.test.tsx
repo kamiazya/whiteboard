@@ -27,6 +27,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -66,7 +67,7 @@ it('measures the main-thread block at drag start on a heavy canvas', async () =>
     )
   }
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   // Let the mount settle (first scene is synchronous; the worker warms in the
   // background) so the measurement window contains only the gesture start.
   for (let i = 0; i < 5; i++) await frame()

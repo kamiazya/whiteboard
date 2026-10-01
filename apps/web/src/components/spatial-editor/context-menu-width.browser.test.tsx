@@ -8,6 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -45,7 +46,7 @@ function escaping(menu: HTMLElement, bounds: DOMRect) {
 
 it('the right-click menu fits the editor width on a phone', () => {
   const { container } = renderNarrow(390)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 120, clientY: r.top + 100 })
 
@@ -61,7 +62,7 @@ it('the right-click menu fits the editor width on a phone', () => {
 
 it('the ⋯ sheet keeps every option inside its own edges', () => {
   const { container } = renderNarrow(390)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.pointerDown(root, {
     pointerId: 1,

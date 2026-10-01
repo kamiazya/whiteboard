@@ -7,6 +7,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { press } from '../../test-utils/spatial-editor-pointer.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -19,19 +21,6 @@ const inner: SpatialCanvas = {
 const outer: SpatialCanvas = {
   nodes: [fileNode({ id: 'f1', x: 100, y: 100, width: 320, height: 300, file: 'child' })],
   edges: [],
-}
-
-function press(el: HTMLElement, type: string, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  return el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      pointerId: 7,
-      button: 0,
-    }),
-  )
 }
 
 it('drags an expanded embed with its miniature content in the ghost', async () => {
@@ -47,7 +36,7 @@ it('drags an expanded embed with its miniature content in the ghost', async () =
       />
     </div>,
   )
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   // The committed render expands the embed (large on-screen node).
   await vi.waitFor(() => {
     expect((container.textContent ?? '').includes('inner content')).toBe(true)

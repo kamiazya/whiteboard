@@ -16,6 +16,8 @@ import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { selectAt } from '../../test-utils/spatial-editor-pointer.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -66,26 +68,6 @@ function makeHost(start: SpatialCanvas = initial) {
   }
   return { Host, latest }
 }
-
-function selectAt(root: HTMLElement, x: number, y: number, shift = false) {
-  const r = root.getBoundingClientRect()
-  fireEvent.pointerDown(root, {
-    button: 0,
-    pointerId: 1,
-    shiftKey: shift,
-    clientX: r.left + x,
-    clientY: r.top + y,
-  })
-  fireEvent.pointerUp(root, {
-    pointerId: 1,
-    shiftKey: shift,
-    clientX: r.left + x,
-    clientY: r.top + y,
-  })
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
 /**
  * Cmd+C/X/V reach the editor as NATIVE clipboard events (see

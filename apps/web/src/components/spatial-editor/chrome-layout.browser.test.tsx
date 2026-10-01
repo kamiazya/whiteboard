@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { HistoryCluster } from '../../components/history-cluster/HistoryCluster.js'
 import { dockControlSizesPx } from '../../components/ui/dock-button.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -149,7 +150,7 @@ const cases = WIDTHS.flatMap((width) => HEIGHTS.map((height) => ({ width, height
 describe.each(cases)('editor chrome at $width x $height', ({ width, height }) => {
   it('keeps every overlay inside the editor', () => {
     const { container } = render(<Host width={width} height={height} />)
-    const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+    const root = rootOf(container)
     const bounds = root.getBoundingClientRect()
 
     for (const { name, rect } of collectChromeOrFail(root, `${width}x${height}`)) {
@@ -165,7 +166,7 @@ describe.each(cases)('editor chrome at $width x $height', ({ width, height }) =>
 
   it('leaves no two overlays on top of each other, touch sizing included', () => {
     const { container } = render(<Host width={width} height={height} />)
-    const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+    const root = rootOf(container)
     const controlCount = root.querySelectorAll('[data-testid="tool-palette"] button').length
 
     const chrome = collectChromeOrFail(root, `${width}x${height}`).map((entry) =>
@@ -192,7 +193,7 @@ describe('the assumptions this grid rests on', () => {
   // A grid that silently stopped finding any chrome would pass forever.
   it('finds the dock, and the overview once there is room for it', () => {
     const { container } = render(<Host width={1280} height={844} />)
-    const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+    const root = rootOf(container)
     const names = collectChrome(root).map((entry) => entry.name)
 
     expect(names).toContain('tool-palette')

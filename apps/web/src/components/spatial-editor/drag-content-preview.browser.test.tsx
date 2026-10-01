@@ -10,6 +10,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { press } from '../../test-utils/spatial-editor-pointer.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -33,22 +35,9 @@ function Host() {
   )
 }
 
-function press(el: HTMLElement, type: string, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  return el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      pointerId: 7,
-      button: 0,
-    }),
-  )
-}
-
 it('the drag preview shows the node content itself, translated with the pointer', async () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
 
   press(root, 'pointerdown', 200, 150)
   // Let React commit the 'moving' state before the move event: the move

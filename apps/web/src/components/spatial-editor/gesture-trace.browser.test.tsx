@@ -22,6 +22,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { gestureTrace, type TraceEntry } from './gesture-trace.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -74,7 +75,7 @@ function entriesFor(pointerId: number): TraceEntry[] {
 
 it('a hand drag records the machine answering: panning, then idle again', () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   const id = mintPointerId()
   touch(root, 'down', id, r.left + 300, r.top + 300)
@@ -116,7 +117,7 @@ it('a press the dock takes is recorded with the name of what took it', () => {
 
 it('a press a portal element takes never reaches the editor, and the trace says so', () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   const portal = document.createElement('div')
   portal.setAttribute('data-testid', 'trace-test-portal')
