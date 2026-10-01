@@ -99,11 +99,9 @@ jobs:
       contents: read
       id-token: write  # npm provenance (OIDC) for signed publish on npm v9.5+
     env:
-      # Packaged daemon cold-start exceeds the 10s default on CI runners
-      # (smoke:tarball "Daemon startup timeout" broke the v0.0.9 publish).
-      WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS: '60000'
-      # The smoke's first tools/call includes that same daemon spawn, so its
-      # RPC deadline needs headroom too ("RPC tools/call timed out", v0.0.10).
+      # The smoke's first tools/call opens the packaged store cold (native
+      # modules, WASM, first-run migrations), which exceeds the default RPC
+      # deadline on CI runners ("RPC tools/call timed out", v0.0.10).
       WHITEBOARD_SMOKE_RPC_TIMEOUT_MS: '90000'
     defaults:
       run:
@@ -198,11 +196,9 @@ jobs:
       id-token: write   # cosign keyless signing (OIDC)
       packages: write   # GHCR push
     env:
-      # Packaged daemon cold-start exceeds the 10s default on CI runners
-      # (smoke:tarball "Daemon startup timeout" broke the v0.0.9 publish).
-      WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS: '60000'
-      # The smoke's first tools/call includes that same daemon spawn, so its
-      # RPC deadline needs headroom too ("RPC tools/call timed out", v0.0.10).
+      # The smoke's first tools/call opens the packaged store cold (native
+      # modules, WASM, first-run migrations), which exceeds the default RPC
+      # deadline on CI runners ("RPC tools/call timed out", v0.0.10).
       WHITEBOARD_SMOKE_RPC_TIMEOUT_MS: '90000'
     steps:
       - name: Validate tag shape

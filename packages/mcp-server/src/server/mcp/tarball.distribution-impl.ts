@@ -63,12 +63,10 @@ export function assertTarballFileList(entries: readonly string[]): void {
 
 // The installed tarball ships only `dist/`, never `src/`. If the ambient
 // environment carries WHITEBOARD_DEV=1 (e.g. a CI job that runs this smoke
-// alongside a src-mode e2e check under the same env block), ensureDaemon
-// would try to spawn `node --watch --import tsx/esm <root>/src/server/index.ts`
-// against a source tree that was never packed — the daemon process exits
-// immediately, every readiness poll fails, and the only symptom is an opaque
-// "Daemon startup timeout" after the full wait window. Stripping the flag
-// keeps this smoke pinned to the same dist-mode spawn a real npm install uses.
+// alongside a src-mode e2e check under the same env block), the server would
+// resolve its source-tree paths against a tree that was never packed.
+// Stripping the flag keeps this smoke pinned to the same dist-mode run a real
+// npm install gets.
 export function buildTarballSmokeChildEnv(processEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const { WHITEBOARD_DEV: _unused, ...rest } = processEnv
   return rest
@@ -297,13 +295,9 @@ export async function runPackedTarballSmoke({
     })
     console.log('[tarball-smoke] semantic-search opt-in wiring OK')
 
-    // The tarball smoke runs as a standalone node script (no vitest
-    // testTimeout ceiling), so it can afford bounded retry across multiple
-    // daemon cold-start windows under CI contention.
     await runE2eCheckpointSmoke({
       entry: installedEntry,
       root: repoRoot,
-      retryDaemonStartup: true,
       env: buildTarballSmokeChildEnv(process.env),
     })
 

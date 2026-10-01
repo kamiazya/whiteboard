@@ -18,9 +18,9 @@ describe('packed tarball smoke', () => {
     await runPackedTarballSmoke({ packageRoot, repoRoot })
   }, 120_000)
 
-  // Regression for the release-blocking "Daemon startup timeout" failure: a
-  // CI job env block that sets WHITEBOARD_DEV=1 for its src-mode checks must
-  // not make this smoke spawn the installed (dist-only) daemon in watch mode.
+  // Regression for a release-blocking failure: a CI job env block that sets
+  // WHITEBOARD_DEV=1 for its src-mode checks must not make this smoke run the
+  // installed (dist-only) server against a source tree it does not ship.
   it('succeeds even when the ambient env carries WHITEBOARD_DEV=1', async () => {
     vi.stubEnv('WHITEBOARD_DEV', '1')
     try {

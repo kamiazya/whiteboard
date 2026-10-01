@@ -24,16 +24,6 @@ vi.mock('./config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
 
-vi.mock('../daemon/ensure-daemon.js', () => ({
-  ensureDaemon: vi.fn(async () => ({
-    pid: 1,
-    socketPath: '/run/user/1000/whiteboard/d.sock',
-    token: 'secret',
-    version: '0.1.0',
-    startedAt: '2026-04-24T00:00:00.000Z',
-  })),
-}))
-
 const { createApp } = await import('./app.js')
 const { clearCache } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./current-workspace.js')

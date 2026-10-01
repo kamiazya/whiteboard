@@ -49,9 +49,9 @@ describe('daemon-registry', () => {
   it.skipIf(!CAN_DENY_FILE_READ)(
     'throws for a daemon.json it cannot READ, rather than answering none is running',
     async () => {
-      // ensure-daemon answers null by deleting the record and spawning a new
-      // daemon with a new token. For a record that was merely unreadable,
-      // that orphans the daemon that is still running under it.
+      // A caller reads null as "none running" and starts a new daemon under a
+      // fresh record. For a record that was merely unreadable, that orphans
+      // the daemon that is still running under it.
       await saveDaemonRecord(
         {
           pid: 123,
@@ -122,8 +122,8 @@ describe('daemon-registry', () => {
   })
 
   it('throws for a record it cannot interpret whose process is still running', async () => {
-    // Likeliest from ANOTHER version's daemon. Read as none, ensure-daemon
-    // deleted it and started a second daemon beside the one still serving.
+    // Likeliest from ANOTHER version's daemon. Read as none, a caller would
+    // delete it and start a second daemon beside the one still serving.
     await writeFile(
       getDaemonRecordPath(dataDir),
       JSON.stringify({

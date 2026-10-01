@@ -57,11 +57,10 @@ export function assertNoLeak(label, text, extraLiterals = []) {
  * spawned child. Every distribution smoke here exercises the packaged
  * `dist/` build, never the `src/` tree, so an ambient WHITEBOARD_DEV=1 (the
  * publish-gate CI job sets it for its other src-mode e2e checks) must never
- * leak in — ensureDaemon and the mcp-http child spawner both branch on this
- * flag to run `node --watch --import tsx/esm <root>/src/...`, which fails
- * against an installed-only tree that ships no `src/` and no `tsx`
- * devDependency (see tarball.distribution-impl.ts buildTarballSmokeChildEnv
- * for the TypeScript-side twin of this same fix).
+ * leak in — the server branches on this flag to resolve its own tree under
+ * `src/` with `tsx`, which fails against an installed-only tree that ships
+ * no `src/` and no `tsx` devDependency (see tarball.distribution-impl.ts
+ * buildTarballSmokeChildEnv for the TypeScript-side twin of this same fix).
  *
  * @param {NodeJS.ProcessEnv} processEnv
  * @returns {NodeJS.ProcessEnv}
