@@ -17,8 +17,8 @@
  * door is built, and a captured canvas would write an edit onto a stale one.
  */
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { applyCommand, type EditorCommand } from '../lib/spatial/commands.js'
-import type { CommentsRailWrite } from './use-comments-rail.js'
+import type { CommentsRailWrite } from './comments-rail-write.js'
+import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 export function spatialThreadWrite(
   canvasNow: () => SpatialCanvas,

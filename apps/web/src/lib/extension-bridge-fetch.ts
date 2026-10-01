@@ -15,15 +15,8 @@ import {
 import { WHITEBOARD_EXTENSION_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { BRIDGE_ORIGIN } from './bridge-address.js'
+import type { BridgePort } from './extension-bridge-port.js'
 import { connectThroughWindow, windowHello } from './extension-window-port.js'
-
-/** The part of a `runtime.Port` the page uses. */
-export interface BridgePort {
-  readonly onMessage: { addListener(listener: (message: unknown) => void): void }
-  readonly onDisconnect: { addListener(listener: () => void): void }
-  postMessage(message: unknown): void
-  disconnect(): void
-}
 
 interface ExtensionRuntime {
   connect(extensionId: string): BridgePort

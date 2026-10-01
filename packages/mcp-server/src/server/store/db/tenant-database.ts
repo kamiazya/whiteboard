@@ -28,8 +28,7 @@ import {
   ValueNode,
   ValuesNode,
 } from 'kysely'
-import type { Database } from './index.js'
-import type { DatabaseSchema } from './schema.js'
+import type { Database, DatabaseSchema } from './schema.js'
 import { isTenantScoped } from './tenant-scope.js'
 
 declare const tenantBound: unique symbol

@@ -31,14 +31,10 @@
  */
 
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
+import type { Point } from './edges/edge-geometry.js'
 
 /** Gap (px) from the anchor point to the bubble's nearest corner. */
 export const COMMENT_BUBBLE_OFFSET_PX = 14
-
-export interface Point {
-  readonly x: number
-  readonly y: number
-}
 
 export interface Size {
   readonly w: number

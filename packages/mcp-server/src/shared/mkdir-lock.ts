@@ -11,7 +11,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { isPidAlive } from '../daemon/daemon-registry.js'
+import { isPidAlive } from './process-alive.js'
 
 const LOCK_OWNER_FILENAME = 'owner.json'
 

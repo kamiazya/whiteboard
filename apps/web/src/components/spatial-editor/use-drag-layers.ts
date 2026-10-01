@@ -24,12 +24,12 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef } from 'react'
+import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import { editorLayoutBase, renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
-import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import { computeDragPreview } from './drag-preview.js'
 import {
   type CarriedSideCache,

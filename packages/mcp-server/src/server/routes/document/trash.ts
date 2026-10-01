@@ -15,19 +15,18 @@ import type {
 import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
 export interface TrashRouterOptions {
-  serverDeps?: ServerDeps
+  serverDeps: ServerDeps
 }
 
-export function createTrashRouter(options: TrashRouterOptions = {}): Hono {
+export function createTrashRouter(options: TrashRouterOptions): Hono {
   const app = new Hono()
 
-  const depsOf = async () => options.serverDeps ?? (await getDefaultServerDeps())
+  const deps = options.serverDeps
 
   app.get('/api/workspaces/:workspaceId/trash', async (c) => {
     const handle = c.req.param('workspaceId')
@@ -42,7 +41,6 @@ export function createTrashRouter(options: TrashRouterOptions = {}): Hono {
     }
     const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
-      const deps = await depsOf()
       if (deps.trash === undefined) {
         return c.json({ title: 'This composition has no trash.' } satisfies ApiErrorBody, 501)
       }
@@ -79,7 +77,6 @@ export function createTrashRouter(options: TrashRouterOptions = {}): Hono {
     }
     const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
-      const deps = await depsOf()
       if (deps.trash === undefined) {
         return c.json({ title: 'This composition has no trash.' } satisfies ApiErrorBody, 501)
       }

@@ -10,12 +10,11 @@ import type { WorkspaceReplicaKeyStore } from './security/workspace-replica-key-
 
 interface LocalDaemonAppOptions {
   authMode: 'local-daemon'
-  /** Document store/sync ports. When present, server-core's /api/v1
-   *  HTTP surface (createServer(deps).app) is mounted behind the same
-   *  /api/* auth as every other API route; when absent, /api/v1 stays
-   *  unmounted (404). Optional so ad-hoc callers and legacy tests need no
-   *  container. */
-  serverDeps?: ServerDeps
+  /** The operations every route adapts onto (ADR-0018), composed by the
+   *  root and handed down — the one composition path. server-core's
+   *  /api/v1 surface is mounted over the same deps behind the same /api/*
+   *  auth as every other API route. */
+  serverDeps: ServerDeps
   token?: string
   /**
    * RFC 9728 metadata for `/mcp`'s protected-resource discovery. The strategy
@@ -61,12 +60,11 @@ export interface ServerModeAppOptions {
   authMode: 'server-mode'
   /** See LocalDaemonAppOptions.identity. */
   identity?: DaemonIdentity
-  /** Document store/sync ports. When present, server-core's /api/v1
-   *  HTTP surface (createServer(deps).app) is mounted behind the same
-   *  /api/* auth as every other API route; when absent, /api/v1 stays
-   *  unmounted (404). Optional so ad-hoc callers and legacy tests need no
-   *  container. */
-  serverDeps?: ServerDeps
+  /** The operations every route adapts onto (ADR-0018), composed by the
+   *  root and handed down — the one composition path. server-core's
+   *  /api/v1 surface is mounted over the same deps behind the same /api/*
+   *  auth as every other API route. */
+  serverDeps: ServerDeps
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy

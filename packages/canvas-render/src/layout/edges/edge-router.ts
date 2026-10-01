@@ -11,11 +11,11 @@
  * (`spatial-edges.ts`) calls it per trial and caches by `routeCacheKey`.
  */
 
-import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
-
+import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode, endSide, isSelfLoop } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
 import { bendRoute } from './bend-route.js'
+import type { Point, Rect } from './edge-geometry.js'
 import {
   boundingBoxOf,
   containsPoint,
@@ -34,12 +34,10 @@ import {
   bendCount,
   interiorInkThrough,
   oppositeSide,
-  type Point,
-  type Rect,
-  type Side,
+  type SidePair,
   SLIDE_CORNER_INSET_PX,
 } from './edge-rules.js'
-import type { EdgeAnchorPair, SidePair } from './edge-sides.js'
+import type { EdgeAnchorPair } from './edge-sides.js'
 import { deriveDefaultSides, ORTHOGONAL_STUB_PX, selfEdgeLoopControlPoints } from './edge-sides.js'
 import { routeOnGrid } from './grid-route.js'
 
@@ -156,7 +154,7 @@ function routeStraight(
  * running along the side rather than into it. */
 const SIDEWAYS_RATIO = 0.25
 
-function approachesSideways(anchor: Point, other: Point, side: Side): boolean {
+function approachesSideways(anchor: Point, other: Point, side: EdgeSide): boolean {
   const vx = other.x - anchor.x
   const vy = other.y - anchor.y
   // Coincident anchors have no direction to graze along — the degenerate
@@ -174,7 +172,12 @@ function approachesSideways(anchor: Point, other: Point, side: Side): boolean {
  * (keeping a corner inset). A side midpoint is a default, not authored
  * data — trading it for a rectilinear route is the better-looking edge.
  */
-function slideAlongSide(anchor: Point, rect: Rect, side: Side, target: Point): Point | undefined {
+function slideAlongSide(
+  anchor: Point,
+  rect: Rect,
+  side: EdgeSide,
+  target: Point,
+): Point | undefined {
   if (side === 'left' || side === 'right') {
     const lo = rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
     const hi = rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2)
@@ -197,8 +200,8 @@ function slideAlongSide(anchor: Point, rect: Rect, side: Side, target: Point): P
 function routeStraightWithApproach(
   start: Point,
   end: Point,
-  fromSide: Side,
-  toSide: Side,
+  fromSide: EdgeSide,
+  toSide: EdgeSide,
   fromRect: Rect,
   toRect: Rect,
   fromDepth: number,
@@ -227,7 +230,7 @@ function routeStraightWithApproach(
   const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
   return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw), end])
 }
-function stubFrom(point: Point, side: Side, depth: number = ORTHOGONAL_STUB_PX): Point {
+function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
   return {
     x: point.x + normal.x * depth,
@@ -260,8 +263,8 @@ function stubFrom(point: Point, side: Side, depth: number = ORTHOGONAL_STUB_PX):
 function tryZeroBendSlide(
   start: Point,
   end: Point,
-  fromSide: Side,
-  toSide: Side,
+  fromSide: EdgeSide,
+  toSide: EdgeSide,
   fromRect: Rect,
   toRect: Rect,
   inflated: readonly Rect[],
@@ -270,7 +273,7 @@ function tryZeroBendSlide(
   const fromNormal = outwardNormal(fromSide)
   const facing = fromNormal.x * (end.x - start.x) + fromNormal.y * (end.y - start.y) > 0
   if (!facing) return undefined
-  const span = (rect: Rect, side: Side): readonly [number, number] =>
+  const span = (rect: Rect, side: EdgeSide): readonly [number, number] =>
     side === 'left' || side === 'right'
       ? [
           rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
@@ -280,7 +283,7 @@ function tryZeroBendSlide(
           rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
           rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
         ]
-  const withTangent = (anchor: Point, side: Side, t: number): Point =>
+  const withTangent = (anchor: Point, side: EdgeSide, t: number): Point =>
     side === 'left' || side === 'right' ? { x: anchor.x, y: t } : { x: t, y: anchor.y }
   const [fromLo, fromHi] = span(fromRect, fromSide)
   const [toLo, toHi] = span(toRect, toSide)
@@ -344,8 +347,8 @@ const MIN_APPROACH_PX = 20
 function slidForApproach(
   start: Point,
   end: Point,
-  fromSide: Side,
-  toSide: Side,
+  fromSide: EdgeSide,
+  toSide: EdgeSide,
   fromRect: Rect,
   toNormal: Point,
 ): Point {
@@ -383,8 +386,8 @@ function slidForApproach(
 function deepenedCorridor(
   start: Point,
   end: Point,
-  fromSide: Side,
-  toSide: Side,
+  fromSide: EdgeSide,
+  toSide: EdgeSide,
   fromDepth: number,
   toNormal: Point,
 ): number {
@@ -398,8 +401,8 @@ function deepenedCorridor(
 function routeOrthogonal(
   startAnchor: Point,
   end: Point,
-  fromSide: Side,
-  toSide: Side,
+  fromSide: EdgeSide,
+  toSide: EdgeSide,
   fromRect: Rect,
   toRect: Rect,
   fromDepth: number,
@@ -593,8 +596,8 @@ function selfLoopRoute(
   fromEnd: 'none' | 'arrow',
   toEnd: 'none' | 'arrow',
 ): ResolvedEdgeNode {
-  const fromSide: Side = endSide(edge.from) ?? 'right'
-  const toSide: Side = endSide(edge.to) ?? 'right'
+  const fromSide: EdgeSide = endSide(edge.from) ?? 'right'
+  const toSide: EdgeSide = endSide(edge.to) ?? 'right'
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const [loopOut, loopBack] = selfEdgeLoopControlPoints(start, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)

@@ -16,7 +16,7 @@
 // DEBT and targets zero.
 import { describe, expect, it } from 'vitest'
 import { fc } from '../../test-utils/fast-check.js'
-import type { Point, Rect } from './edge-rules.js'
+import type { Point, Rect } from './edge-geometry.js'
 import { PENALTY_RULES, selfPenalty, zeroPenalty } from './edge-rules.js'
 
 const CORPUS_SEED = 8675309

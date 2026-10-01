@@ -253,9 +253,8 @@ the table alone.
    target degrades to the same placeholder mechanism. Layout is total: it
    never throws and never infinite-loops, on any graph including dense
    cyclic ones. It was first stated over a `ResolvedDocBundle` in a
-   bundle-walking module of its own, whose only caller was its own
-   property test and whose "consumed later by the View-resolution layer"
-   never came; that module (embed-recursion) is deleted, and the
+   module of its own whose only caller was its own property test; that
+   module (embed-recursion) is deleted, and the
    contract lives where the content is laid out: `compose-node.ts` for a
    file node's canvas and `mdast-blocks.ts` for a body's embeds, each
    pinning the cap and the path-local cycle rule:
@@ -1015,6 +1014,8 @@ the table alone.
     `apps/web`'s editor builds its seams from the wire it posts, so the two
     threads cannot disagree. Before it a text node's `![[note]]` drew a
     placeholder on both; `referenceTargets` scans text-node bodies now.
+    What a seam answers (`ResolvedReference` and kin) is
+    `references/resolved.ts`, so the producer never imports the layout.
     `referenceWireFor` cuts a wire to what a canvas's layout can read, so
     one widened for a drafted body (the overlay's preview) leaves that
     canvas's seams, worker request and content cache alone. Decision #11

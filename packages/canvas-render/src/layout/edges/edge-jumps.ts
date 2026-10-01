@@ -4,8 +4,7 @@
 // knowledge of styles; rounded corners re-use the same points because
 // 'curved' travels the orthogonal waypoints.
 import type { EdgeJumpPoint, ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
-
-type Point = { readonly x: number; readonly y: number }
+import type { Point } from './edge-geometry.js'
 
 /** Radius of the hop arc, in px. Kept below the editor's edge hit tolerance so the decoration never escapes the grabbable band around the raw path. */
 export const EDGE_JUMP_RADIUS_PX = 5

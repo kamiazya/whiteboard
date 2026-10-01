@@ -1,7 +1,7 @@
 import { type MigrationProvider, Migrator } from 'kysely/migration'
 import { IncompatibleDatabaseError } from './incompatible-database.js'
-import type { Database } from './index.js'
 import { migrations } from './migrations/index.js'
+import type { Database } from './schema.js'
 
 // kysely throws this phrase when the DB's migration log records a migration the
 // current provider does not ship (the "applied but missing from code" case).

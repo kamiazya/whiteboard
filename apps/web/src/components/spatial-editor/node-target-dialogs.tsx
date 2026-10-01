@@ -1,7 +1,7 @@
 import { nodeFile, nodeUrl } from '@kamiazya/whiteboard-model'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import type { Point } from '../../lib/spatial/viewport.js'
-import type { DocumentPickerState, LinkDialogState } from './CanvasContextMenu.js'
+import type { DocumentPickerState, LinkDialogState } from './canvas-commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import type { EditorGesture } from './editor-gesture.js'

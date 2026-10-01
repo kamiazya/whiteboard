@@ -29,7 +29,7 @@ export interface McpRouterDeps {
   /** The SDK handler  built; this router only routes to it. */
   readonly modernMcpHandler: ReturnType<typeof createMcpHandler>
   /** The deps the root composed, so a legacy-era server answers with them too. */
-  readonly serverDeps?: ServerDeps
+  readonly serverDeps: ServerDeps
 }
 
 /**

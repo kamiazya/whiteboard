@@ -104,7 +104,7 @@
         // Documented common entry point for every surface driving the
         // canvas programmatically (WebMCP tool executor, in-page assistant,
         // debug panel). Some re-exports (createSceneExportHandler,
-        // useWhiteboardCommands) are already consumed through this barrel;
+        // createWhiteboardCommands) are already consumed through this barrel;
         // the rest is the module's intentional forward-looking public
         // surface for those future consumers.
         "src/lib/commands/index.ts",

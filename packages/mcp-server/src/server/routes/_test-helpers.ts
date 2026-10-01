@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach } from 'vitest'
 
 /**
@@ -52,10 +53,27 @@ export function withTempDataDir(prefix = 'whiteboard-test-'): { get dir(): strin
  * assert on.
  */
 export async function seedWorkspaceRow(dataDir: string, workspaceId: string): Promise<void> {
+  const deps = await resolveTestServerDeps(dataDir)
+  await deps.documentIndex.createWorkspace({ workspaceId })
+}
+
+/**
+ * The production wiring over a test's data dir, for a test that drives a
+ * router or a store directly rather than through `createApp`. The same
+ * resolve the roots make — `prepareDataDir` first, as the daemon does at
+ * boot, so a test that reaches a route before anything migrated the dir
+ * does not meet a missing table. Dynamic imports, since the data-dir
+ * config is `vi.mock`ed per file and must be in place before the store
+ * module loads.
+ *
+ * This used to be `getDefaultServerDeps`, which every router fell back to
+ * when handed no deps — a second composition path in production. Routers
+ * require their deps now; what a TEST needs is this.
+ */
+export async function resolveTestServerDeps(dataDir: string): Promise<ServerDeps> {
   const { getDb } = await import('../store/db/index.js')
   const { prepareDataDir } = await import('../store/db/prepare.js')
   const { resolveSelfHostServerDeps } = await import('../../di/self-host-server-deps.js')
   await prepareDataDir(dataDir)
-  const deps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
-  await deps.documentIndex.createWorkspace({ workspaceId })
+  return resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
 }

@@ -1,3 +1,4 @@
+import { documentReferenceMarkup } from '@kamiazya/whiteboard-codec'
 import {
   type DocumentContainers,
   MARKDOWN_BODY_KEY,
@@ -6,7 +7,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
-  documentIdSchema,
   nodeText,
   spatialCanvasSchema,
   withNodeText,
@@ -22,18 +22,17 @@ export interface LinkifyTarget {
 }
 
 /**
- * How a mention of `target` is written as a link.
- *
- * The reader's rule decides the spelling: the PATH is the written form
- * (display names are retired from resolution; the prose word survives as the
- * label). The one path the reader would not resolve is one that reads as a
- * document id — ids resolve first — so that target links by its id, the
- * spelling nothing can shadow. The same trade the link picker makes.
+ * How a mention of `target` is written as a link: its name as the label of a
+ * reference the codec's writer spells, so a name the reader could not read
+ * inside the brackets (`Arrays [0]`) falls back to the bare reference — which
+ * the renderer labels with that same name — instead of being written raw and
+ * truncated by the scanner.
  */
 export function linkMarkupFor(target: LinkifyTarget): string {
-  return documentIdSchema.safeParse(target.path).success
-    ? `[[${target.documentId}|${target.name}]]`
-    : `[[${target.path}|${target.name}]]`
+  return documentReferenceMarkup(
+    { id: target.documentId, path: target.path, name: target.name },
+    target.name,
+  )
 }
 
 /**

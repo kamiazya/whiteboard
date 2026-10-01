@@ -32,6 +32,7 @@
 import type { BoundingBox, EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
 import type { ArrowPolygon } from '../../edge-arrows.js'
 import { flattenDrawnEdgePath } from '../edges/edge-flatten.js'
+import type { Point } from '../edges/edge-geometry.js'
 import type { NodeOutline } from '../nodes/node-outline.js'
 import { styleRandomFromSeed } from '../seed.js'
 
@@ -76,7 +77,6 @@ const HATCH_GAP_SPREAD = 0.25
 const HATCH_JITTER_PX = 0.5
 const HATCH_BOW_PX = 0.6
 
-type Point = { readonly x: number; readonly y: number }
 type Rng = () => number
 
 export interface SketchInk {

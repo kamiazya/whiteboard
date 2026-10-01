@@ -9,16 +9,15 @@
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { referenceReversalCount } from '../../test-utils/reversal-count.js'
+import type { Point, Rect } from './edge-geometry.js'
 import {
   bendCount,
   COST_QUANTUM,
   composeSidePairs,
   hasRepairableProblem,
   PENALTY_RULES,
-  type Point,
   type PreferenceRuleContext,
   pairPenalty,
-  type Rect,
   SIDE_PREFERENCE_RULES,
   type SidePair,
   selfPenalty,

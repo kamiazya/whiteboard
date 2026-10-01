@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { getAppLogger } from '../app-logger.js'
-import type { WhiteboardCommands } from '../commands/index.js'
-import { webMcpTools } from './tool-definitions.js'
+import { getAppLogger } from '../lib/app-logger.js'
+import type { WhiteboardCommands } from '../lib/commands/index.js'
+import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
 
 const log = getAppLogger('use-browser-tool-registry')
 

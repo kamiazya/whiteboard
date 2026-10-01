@@ -15,6 +15,7 @@ import {
   type ServerStatusResult,
   serverStatusResultSchema,
 } from '../shared/api-contracts/server-status.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STATUS_SCHEMA_VERSION = 1 as const
@@ -32,26 +33,12 @@ export interface RunServerStatusOutcome {
   exitCode: 0 | 1
 }
 
-function defaultIsPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
-// Exported for direct unit testing of the live-ping comparison (see
-// server-status.test.ts) — the option default is otherwise only ever
-// exercised indirectly through runServerStatus with an injected override.
-export const defaultVerifyIdentity = verifyDaemonIdentity
-
 export async function runServerStatus(
   options: RunServerStatusOptions,
 ): Promise<RunServerStatusOutcome> {
   const dataDir = options.dataDir ?? resolveDefaultDataDir(process.env)
   const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
-  const verifyIdentity = options.verifyIdentity ?? defaultVerifyIdentity
+  const verifyIdentity = options.verifyIdentity ?? verifyDaemonIdentity
 
   const readResult = readServerModeRecord(dataDir)
 

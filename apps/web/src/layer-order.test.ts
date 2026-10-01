@@ -27,6 +27,11 @@
  * is defined above it. They are tagged so the burn-down can read which are
  * a type move and which are a helper move.
  *
+ * `lib/` is also React-free. A hook is state over lib, so it files under
+ * `hooks/`; a `lib/` module importing `react` is a hook that was written next
+ * to the mechanic it wraps and never moved, and it drags React into every
+ * non-React importer of that directory.
+ *
  * Sources are read via `?raw` glob, not `node:fs` — apps/web is browser-only
  * (the same reason `entry-graph-loro-free.test.ts` reads them that way).
  */
@@ -137,8 +142,40 @@ const UPWARD_EDGES: readonly string[] = []
 
 const UPWARD_EDGES_CEILING = 0
 
+/** Production `lib/` modules that name React — an import, or a hook-named export. */
+function reactInLib(): string[] {
+  return Object.entries(RAW_SOURCES)
+    .filter(([key]) => layerOf(key) === 'lib')
+    .filter(([, source]) => {
+      const importsReact = staticImports(source).some(({ specifier }) =>
+        /^react(-dom)?(\/|$)/.test(specifier),
+      )
+      const exportsHook = /(?:^|\n)\s*export\s+(?:async\s+)?(?:function|const)\s+use[A-Z]/.test(
+        source,
+      )
+      return importsReact || exportsHook
+    })
+    .map(([key]) => key.slice(2))
+    .sort()
+}
+
 describe('apps/web layer order', () => {
   const actual = upwardEdges()
+
+  it('keeps React out of lib', () => {
+    // The probe: a scan whose pattern matches nothing would pass for the wrong
+    // reason, so assert it still recognises React in the layer above.
+    const hooksNamingReact = Object.entries(RAW_SOURCES).filter(
+      ([key, source]) =>
+        layerOf(key) === 'hooks' &&
+        staticImports(source).some(({ specifier }) => specifier === 'react'),
+    )
+    expect(hooksNamingReact.length).toBeGreaterThan(10)
+    expect(
+      reactInLib(),
+      'a hook belongs in hooks/ — lib/ is browser mechanics with no React',
+    ).toEqual([])
+  })
 
   it('scans every layer', () => {
     // A guard over a glob that matched nothing passes for the wrong reason.

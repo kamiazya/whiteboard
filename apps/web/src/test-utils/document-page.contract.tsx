@@ -17,10 +17,10 @@
  */
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { ModelContext, WebMcpToolDescriptor } from '../hooks/use-browser-tool-registry.js'
 import { THEME_STORAGE_KEY } from '../hooks/useThemeMode.js'
 import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
 import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
-import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import {
   capturedEditorProps,
   latestEditorProps,

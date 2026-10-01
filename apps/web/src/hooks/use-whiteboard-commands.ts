@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react'
-import { createWhiteboardCommands } from './create-commands.js'
-import type { WhiteboardCommandDeps, WhiteboardCommands } from './types.js'
+import { createWhiteboardCommands } from '../lib/commands/create-commands.js'
+import type { WhiteboardCommandDeps, WhiteboardCommands } from '../lib/commands/types.js'
 
 /**
  * React binding for `createWhiteboardCommands`. A page keeps a plain ref of

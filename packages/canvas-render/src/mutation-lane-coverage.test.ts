@@ -258,9 +258,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // 95 since the embed-recursion module was deleted: a bundle walk whose
     // only caller was its own property test, while the embed contract it
     // stated is pinned where the content is laid out (decision 4).
+    //
+    // 96 with `references/resolved.ts`: the three types a reference seam
+    // answers, moved out of the layout modules so the seams' producer does
+    // not import the layout. Outside the lane — interfaces only, nothing for
+    // a mutant to change.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 19,
-      production: 95,
+      production: 96,
     })
   })
 

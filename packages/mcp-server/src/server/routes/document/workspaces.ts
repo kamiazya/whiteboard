@@ -28,7 +28,6 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import type { z } from 'zod'
-import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
 import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate.js'
 import { membershipRefusal } from '../../security/workspace-access.js'
@@ -117,10 +116,8 @@ async function countDocuments(index: DocumentIndex, workspaceId: string): Promis
 }
 
 export interface WorkspacesRouterOptions {
-  /** The operations this router adapts onto. Omitted by callers that have
-   *  not been given a container — see `getDefaultServerDeps`, which is the
-   *  same wiring production passes in, not a stand-in for it. */
-  serverDeps?: ServerDeps
+  /** The operations this router adapts onto, handed down by the root. */
+  serverDeps: ServerDeps
   /** Resolves the read plane's effective tier per workspace (ADR-0042
    *  decisions 1/3/5). Absent means the listing omits `tier` — app.ts wires
    *  this from `options.replicaKeys?.effectiveTier` only when a replica-key
@@ -208,12 +205,12 @@ async function createWorkspaceRow(
   return { workspaceId, ...(segment === undefined ? {} : { segment }), displayName }
 }
 
-export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
+export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   const app = new Hono()
 
   app.get('/api/workspaces', async (c) => {
     try {
-      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      const deps = options.serverDeps
       // Straight to the PORT, for the same reason the rename is (ADR-0018):
       // listing workspaces is the port call and nothing else, so a use case
       // here would forward no arguments and add a name.
@@ -276,7 +273,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
     if (creator === 'refused') return c.json(membershipRefusal('requires_person_session'), 403)
 
     try {
-      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      const deps = options.serverDeps
       const summary = await createWorkspaceRow(deps, displayName)
       if (creator !== null) await options.firstMember?.add(summary.workspaceId, creator)
       return c.json(summary, 201)
@@ -305,7 +302,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
     }
 
     try {
-      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      const deps = options.serverDeps
       // Resolved through the handle, so this route accepts either layer in
       // the address exactly as every other addressed surface does.
       const workspaceId = await workspaceIdFromHandle(c, handle)
@@ -333,7 +330,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
     if (invalidWorkspaceId) return c.json(invalidWorkspaceId, 400)
     const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
-      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      const deps = options.serverDeps
       const { documents } = await wbDocumentList(deps, { workspaceId })
       // The port names a document by the id the index assigned and calls what
       // a human reads its `name`; this surface has always said `id` and
@@ -386,7 +383,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       return c.json({ title: invalidDocumentPath.message } satisfies ApiErrorBody, 400)
     }
     try {
-      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      const deps = options.serverDeps
       await wbDocumentCreate(deps, {
         workspaceId,
         path,
@@ -445,7 +442,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
     [],
     async (c, workspaceId, path) => {
       try {
-        const deps = options.serverDeps ?? (await getDefaultServerDeps())
+        const deps = options.serverDeps
         const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
         if (entry === null) {
           return c.json({ title: `Canvas "${path}" not found` }, 404)
@@ -496,7 +493,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         return c.json({ title: invalidDocumentPath.message } satisfies ApiErrorBody, 400)
       }
       try {
-        const deps = options.serverDeps ?? (await getDefaultServerDeps())
+        const deps = options.serverDeps
         const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
         if (entry === null) {
           return c.json({ title: `Canvas "${path}" not found` }, 404)

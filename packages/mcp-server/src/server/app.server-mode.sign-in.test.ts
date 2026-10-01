@@ -23,6 +23,7 @@ vi.mock('./config.js', () => ({
 }))
 
 const { createApp } = await import('./app.js')
+const { createContainer, resolveServerDeps } = await import('../di/container.js')
 
 beforeAll(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-server-mode-sign-in-'))
@@ -38,6 +39,8 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
     authMode: 'server-mode',
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
+    // The root's deps, over the memory store: nothing here reads a document.
+    serverDeps: resolveServerDeps(createContainer()),
     authStrategy: {
       authorize: async () => ({ ok: false, status: 401, code: 'auth.required' }),
     },

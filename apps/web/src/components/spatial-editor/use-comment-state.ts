@@ -10,7 +10,7 @@ import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
 import { type CanvasComment, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useEffect, useRef, useState } from 'react'
 import type { Point } from '../../lib/spatial/viewport.js'
-import type { CommentComposeState } from './CanvasContextMenu.js'
+import type { CommentComposeState } from './canvas-commands.js'
 
 export interface CommentStateInputs {
   readonly canvasRef: MutableRefObject<SpatialCanvas>

@@ -30,6 +30,7 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import { selectCanvasFragment } from '../../canvas-fragment.js'
 import { clampAdvance } from '../../measure.js'
+import type { EmbeddedDocument } from '../../references/resolved.js'
 import { referenceFor, withReferenceSeams } from '../../references/seams.js'
 import { escapeXmlText } from '../../svg/format.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
@@ -46,7 +47,6 @@ import {
   codeLineHeightPx,
   type EmbeddedCanvasBox,
   type EmbeddedCanvasMiniature,
-  type EmbeddedDocument,
   type MdastLayoutOptions,
   measureRunWidth,
   type PhrasingLayout,

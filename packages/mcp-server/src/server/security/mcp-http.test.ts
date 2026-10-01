@@ -3,16 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createCredentialResolver } from './credential-resolver.js'
 import { createLocalTokenMcpHttpAuthStrategy } from './mcp-auth.js'
-import { createMcpHttpAuthMiddleware, requiresMcpHttpAuth } from './mcp-http.js'
-
-describe('requiresMcpHttpAuth', () => {
-  it('requires auth for MCP HTTP requests except preflight', () => {
-    expect(requiresMcpHttpAuth('GET')).toBe(true)
-    expect(requiresMcpHttpAuth('POST')).toBe(true)
-    expect(requiresMcpHttpAuth('DELETE')).toBe(true)
-    expect(requiresMcpHttpAuth('OPTIONS')).toBe(false)
-  })
-})
+import { createMcpHttpAuthMiddleware } from './mcp-http.js'
 
 /**
  * The middleware's job is carrying the REQUEST into the strategy. The

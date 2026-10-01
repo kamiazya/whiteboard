@@ -14,13 +14,8 @@
  * way round would close a VALUE cycle between the two modules (arch-lint's
  * `repo-coverage` catches that one, and did). `edge-rules.ts` re-exports the
  * quantum, so no caller changed.
- *
- * `Point` and `Rect` still come FROM that module, which is the wrong
- * direction for a vocabulary and the same misplacement `edge-geometry.ts`
- * records: the types belong one layer down, and moving them is its own
- * increment. That import is TYPE-ONLY, so it closes nothing.
  */
-import type { Point, Rect } from './edge-rules.js'
+import type { Point, Rect } from './edge-geometry.js'
 
 /** Quarter-pixel quantization: every PENALTY_RULES term is integral, so
  * candidate comparison is exact integer arithmetic — no float tie can

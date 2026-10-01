@@ -14,7 +14,6 @@ export type {
   EdgeRouteAnchors,
   EdgeRouteRequest,
   EdgeRouter,
-  EdgeSide,
   NodeDecoration,
   NodeOutline,
   RenderContribution,

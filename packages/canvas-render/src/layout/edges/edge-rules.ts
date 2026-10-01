@@ -13,24 +13,18 @@
  * is the PENALTY half — `pairScore` (spatial-edges.ts) and `selfPenalty`
  * compose over it to build the cost tuple `optimizeSideChoices` compares.
  */
+import { type EdgeSide, edgeSideSchema } from '@kamiazya/whiteboard-model'
 import { diagonalInkThrough } from './diagonal-ink.js'
+import type { Point, Rect } from './edge-geometry.js'
 import { COST_QUANTUM, inkAlongRects, quantize, selfRetracedInk, tunnelledInk } from './edge-ink.js'
 
 // Re-exported because the cost SPACE is where ink is measured, and every
 // caller that needs the quantum reaches for this module's rules.
 export { COST_QUANTUM }
 
-export type Side = 'top' | 'right' | 'bottom' | 'left'
-export type Point = { readonly x: number; readonly y: number }
-export type Rect = {
-  readonly x: number
-  readonly y: number
-  readonly w: number
-  readonly h: number
-}
-export type SidePair = { readonly fromSide: Side; readonly toSide: Side }
+export type SidePair = { readonly fromSide: EdgeSide; readonly toSide: EdgeSide }
 
-export function oppositeSide(side: Side): Side {
+export function oppositeSide(side: EdgeSide): EdgeSide {
   switch (side) {
     case 'top':
       return 'bottom'
@@ -99,7 +93,7 @@ export interface PreferenceRuleContext {
   readonly dy: number
   readonly fromRect: Rect
   readonly toRect: Rect
-  readonly crowd: (end: 'from' | 'to', side: Side) => number
+  readonly crowd: (end: 'from' | 'to', side: EdgeSide) => number
 }
 
 /**
@@ -121,7 +115,7 @@ export function dominantAxisOrder<T>(
     : [verticalFirst, horizontalFirst]
 }
 
-function hvSides(dx: number, dy: number): { h: Side; v: Side } {
+function hvSides(dx: number, dy: number): { h: EdgeSide; v: EdgeSide } {
   return { h: dx >= 0 ? 'right' : 'left', v: dy >= 0 ? 'bottom' : 'top' }
 }
 
@@ -234,7 +228,7 @@ const uHookWhenDegenerate = {
     // one offset zero, `dy` is zero whenever the first test passes. Measured
     // before rewriting: over 11806 firings it ran 11793 times and saw `dy > 0`
     // exactly never.
-    const across: Side = ctx.dy === 0 ? 'top' : 'right'
+    const across: EdgeSide = ctx.dy === 0 ? 'top' : 'right'
     return [
       { fromSide: across, toSide: across },
       { fromSide: oppositeSide(across), toSide: oppositeSide(across) },
@@ -266,7 +260,7 @@ const dominantAxisFirst = { kind: 'tiebreak' as const, name: 'dominant-axis-firs
 const incumbentWinsTies = { kind: 'tiebreak' as const, name: 'incumbent-wins-ties' }
 
 /** `rect`'s border on `side`, as a 2-point segment `inkAlongRects` can walk. */
-function sideSegment(rect: Rect, side: Side): readonly [Point, Point] {
+function sideSegment(rect: Rect, side: EdgeSide): readonly [Point, Point] {
   switch (side) {
     case 'top':
       return [
@@ -300,7 +294,7 @@ function sideSegment(rect: Rect, side: Side): readonly [Point, Point] {
  * borders" predicate `endpoint-body-ink` prices) over one synthetic segment
  * rather than adding a second span-overlap implementation.
  */
-function sideSpanEntersRect(rect: Rect, side: Side, other: Rect): boolean {
+function sideSpanEntersRect(rect: Rect, side: EdgeSide, other: Rect): boolean {
   return (
     inkAlongRects(
       sideSegment(rect, side),
@@ -342,9 +336,10 @@ const uHookSpanExposedFirst = {
   kind: 'candidates' as const,
   name: 'u-hook-span-exposed-first',
   generate: (ctx: PreferenceRuleContext): readonly SidePair[] => {
-    const hooks: readonly SidePair[] = (['top', 'right', 'bottom', 'left'] as const).map(
-      (side) => ({ fromSide: side, toSide: side }),
-    )
+    const hooks: readonly SidePair[] = edgeSideSchema.options.map((side) => ({
+      fromSide: side,
+      toSide: side,
+    }))
     if (fullyContains(ctx.toRect, ctx.fromRect)) return hooks
     const taints = (p: SidePair) => sideSpanEntersRect(ctx.fromRect, p.fromSide, ctx.toRect)
     return [...hooks.filter((p) => !taints(p)), ...hooks.filter(taints)]

@@ -16,6 +16,8 @@
  * not from the original mdast (see the ticket's resolved a11y note).
  */
 
+import type { EdgeSide } from '@kamiazya/whiteboard-model'
+
 export interface BoundingBox {
   readonly x: number
   readonly y: number
@@ -524,8 +526,8 @@ export interface ResolvedEdgeNode {
    */
   readonly jumps?: readonly EdgeJumpPoint[]
   readonly path: readonly { readonly x: number; readonly y: number }[]
-  readonly fromSide: 'top' | 'right' | 'bottom' | 'left'
-  readonly toSide: 'top' | 'right' | 'bottom' | 'left'
+  readonly fromSide: EdgeSide
+  readonly toSide: EdgeSide
   // Always resolved by the producer (routeEdge applies the JSON Canvas
   // defaults: fromEnd 'none', toEnd 'arrow') — required here so no scene
   // constructor can forget which ends carry an arrowhead.

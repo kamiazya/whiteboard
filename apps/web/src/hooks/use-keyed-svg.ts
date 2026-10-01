@@ -10,7 +10,7 @@
 
 import type { KeyedSvgRender } from '@kamiazya/whiteboard-canvas-render'
 import { useCallback, useLayoutEffect, useRef } from 'react'
-import { type KeyedSvgPatcher, mountKeyedSvg } from './keyed-svg-patcher'
+import { type KeyedSvgPatcher, mountKeyedSvg } from '../lib/keyed-svg-patcher'
 
 export function useKeyedSvg(
   keyed: KeyedSvgRender,

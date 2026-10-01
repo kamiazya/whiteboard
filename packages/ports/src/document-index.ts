@@ -340,6 +340,18 @@ export class DocumentNotFoundError extends Error {
   }
 }
 
+/**
+ * Cross-realm-safe guard for `DocumentNotFoundError`, for the same reason as
+ * `isWorkspaceNotFoundError`: a class that reaches a consumer through two
+ * module graphs becomes two identities `instanceof` will not relate.
+ */
+export function isDocumentNotFoundError(error: unknown): error is DocumentNotFoundError {
+  return (
+    error instanceof DocumentNotFoundError ||
+    (error instanceof Error && error.name === 'DocumentNotFoundError')
+  )
+}
+
 /** Thrown when an operation would strand or swallow the documents below its target. */
 export class DocumentHasDescendantsError extends Error {
   constructor(

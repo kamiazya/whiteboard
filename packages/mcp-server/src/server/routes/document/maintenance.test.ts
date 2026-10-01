@@ -1,12 +1,20 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { compactWorkspaceResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-maintenance-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -76,7 +84,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt reco
     const { _clearWorkspaceDocCacheForTests } = await import('../../store/document-store.js')
     _clearWorkspaceDocCacheForTests()
 
-    const app = createDocumentRouter({ versionStore: createVersionStoreMock() })
+    const app = createDocumentRouter({ serverDeps, versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
@@ -118,7 +126,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
     await saveDocument('session1', 'canvas-b', new LoroDoc())
 
     const versionStore = createVersionStoreMock()
-    const app = createDocumentRouter({ versionStore })
+    const app = createDocumentRouter({ serverDeps, versionStore })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
@@ -134,7 +142,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
   })
 
   it('answers no-file for a workspace with nothing stored', async () => {
-    const app = createDocumentRouter({ versionStore: createVersionStoreMock() })
+    const app = createDocumentRouter({ serverDeps, versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
@@ -159,7 +167,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
         deletedIds: path === 'canvas-a' ? ['x', 'y'] : ['z'],
       }))
 
-    const app = createDocumentRouter({ versionStore })
+    const app = createDocumentRouter({ serverDeps, versionStore })
     const res = await app.request('/api/workspaces/session1/versions/prune-sandwiched', {
       method: 'POST',
     })

@@ -1,8 +1,8 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { nodeFile } from '@kamiazya/whiteboard-model'
-import type { ResolvedReference } from '../layout/spatial-canvas.js'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
+import type { ResolvedReference } from './resolved.js'
 import { type ReferenceSeams, referenceSeams } from './seams.js'
 import { referenceTargets } from './targets.js'
 

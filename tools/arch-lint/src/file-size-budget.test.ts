@@ -459,7 +459,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
   // reader loosens it again.
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1311,
+  // 1311 -> 1319: every router it builds is handed the test wiring now that routers
+  // compose nothing of their own.
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1319,
   // 881 -> 901 when compaction became workspace-keyed: one test pins that
   // saves to two documents of one workspace collapse into one compaction.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,

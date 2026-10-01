@@ -79,7 +79,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { editThreadMessageCommand } from '../../hooks/spatial-thread-write.js'
 import {
   useEditingFontFamily,
   useThemeFaceFor,
@@ -111,6 +110,7 @@ import {
   viewportTransformCss,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
+import { editThreadMessageCommand } from '../../lib/spatial-thread-write.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'

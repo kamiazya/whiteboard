@@ -17,7 +17,7 @@
 // Stryker would pay once per mutant. This one calls `routeOnGrid` directly.
 import { describe, expect, it } from 'vitest'
 import { fc } from '../../test-utils/fast-check.js'
-import type { Point, Rect } from './edge-rules.js'
+import type { Point, Rect } from './edge-geometry.js'
 import { routeOnGrid } from './grid-route.js'
 
 const CLEARANCE = 12

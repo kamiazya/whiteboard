@@ -19,7 +19,7 @@ vi.mock('../config.js', () => ({
 
 // Use dynamic import so it runs after the mock is resolved.
 const { saveDocument, listWorkspaces } = await import('./document-store.js')
-const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
+const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -81,7 +81,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   })
 
   it('echoes stored segment and displayName back through listWorkspaces', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({
       workspaceId: 'ws-echo',
       segment: 'team-notes',
@@ -98,7 +98,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   })
 
   it('a legacy workspace with no identity lists with the keys absent, not null', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-legacy' })
 
     const rows = await deps.documentIndex.listWorkspaces()
@@ -107,7 +107,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   })
 
   it('a bare re-create (the wbDocumentCreate createWorkspace:true path) does not clobber stored identity', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({
       workspaceId: 'ws-preserved',
       segment: 'kept',
@@ -124,7 +124,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   })
 
   it('re-creating with identical fields is idempotent', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     const input = { workspaceId: 'ws-idem', segment: 'idem', displayName: 'Idem' }
     await deps.documentIndex.createWorkspace(input)
     await expect(deps.documentIndex.createWorkspace(input)).resolves.toBeUndefined()
@@ -134,7 +134,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   })
 
   it('a second workspace claiming an already-taken segment is refused, and neither row is left partial', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-first', segment: 'contested' })
 
     const err = await deps.documentIndex
@@ -154,7 +154,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   // was validated on write, so the strict outbound workspaceSummarySchema
   // never meets a poisoned row.
   it('rejects a ULID-shaped segment at the boundary, before any row is written', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await expect(
       deps.documentIndex.createWorkspace({
         workspaceId: 'ws-rejected',
@@ -167,7 +167,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   })
 
   it('rejects an empty displayName at the boundary, before any row is written', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await expect(
       deps.documentIndex.createWorkspace({ workspaceId: 'ws-rejected-2', displayName: '' }),
     ).rejects.toThrow()
@@ -195,7 +195,7 @@ describe('renameWorkspace — the daemon registry', () => {
   })
 
   it('writes both layers and serves them back through listWorkspaces', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-rename', segment: 'before' })
 
     const renamed = await deps.documentIndex.renameWorkspace({
@@ -219,7 +219,7 @@ describe('renameWorkspace — the daemon registry', () => {
   // between a check and the write it authorises — and the row the refused
   // statement targeted is untouched, rather than half renamed.
   it('is refused by the unique index, leaving the row as it was', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-holder', segment: 'contested' })
     await deps.documentIndex.createWorkspace({
       workspaceId: 'ws-asking',
@@ -243,7 +243,7 @@ describe('renameWorkspace — the daemon registry', () => {
   })
 
   it('names a workspace that had none, leaving its address alone', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-unnamed', segment: 'keep-me' })
 
     const renamed = await deps.documentIndex.renameWorkspace({
@@ -261,14 +261,14 @@ describe('renameWorkspace — the daemon registry', () => {
   // Zero rows updated is the only signal a single UPDATE gives, and it has
   // to mean "no such workspace" rather than "done".
   it('fails WorkspaceNotFoundError for a workspace the registry does not hold', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await expect(
       deps.documentIndex.renameWorkspace({ workspaceId: 'ws-absent', displayName: 'nobody' }),
     ).rejects.toThrow(WorkspaceNotFoundError)
   })
 
   it('rejects a ULID-shaped segment at the boundary, before any row is written', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-guarded', segment: 'fine' })
 
     await expect(

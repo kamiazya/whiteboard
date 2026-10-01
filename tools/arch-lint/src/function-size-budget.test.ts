@@ -656,6 +656,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // one seam for a workspace's whole replica posture.
   'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 99,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 93,
+  // The update fan-out subscribes at construction from the deps the root hands
+  // down, where a per-process memoized fallback used to resolve its own.
+  'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 52,
   // 117 -> 59: the methods that start from a binding (`profileForBinding`,
   // `isDeactivated`, `ensureProfile`) moved to `bindingLookups`, the user
   // listing to `usersOf` and the role lookup to `roleIn`, in the same file,

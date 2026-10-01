@@ -5,6 +5,7 @@ import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-mo
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import type { ResolvedReference } from '../references/resolved.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { facetsArb } from '../test-utils/facet-arbitraries.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -14,7 +15,6 @@ import {
   layoutSpatialCanvas,
   layoutSpatialEdges,
   naturalNodeContentSize,
-  type ResolvedReference,
 } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()

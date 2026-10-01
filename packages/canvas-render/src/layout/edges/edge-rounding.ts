@@ -1,10 +1,10 @@
+import type { Point } from './edge-geometry.js'
+
 // The single definition of how a rounded edge's corners are shaped. The SVG
 // backend serializes these corners as quadratic Béziers; the editor flattens
 // the same corners for hit-testing and the selection highlight. Sharing the
 // decomposition is what keeps "where the ink is" and "where a tap lands" the
 // same curve.
-
-type Point = { readonly x: number; readonly y: number }
 
 export type RoundedEdgeCorner = {
   /** Midpoint of the incoming segment — where the curve departs the polyline. */

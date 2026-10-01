@@ -71,7 +71,7 @@ export function LinkPickerDialog({
     onPick(
       row.kind === 'url'
         ? externalLinkMarkup(wanted === '' ? linkText : wanted, row.url)
-        : linkMarkupFor(row.target, targets, wanted),
+        : linkMarkupFor(row.target, wanted),
     )
   }
 

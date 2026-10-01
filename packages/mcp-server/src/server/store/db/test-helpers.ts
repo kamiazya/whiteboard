@@ -18,17 +18,10 @@ import { Kysely, SqliteDialect, sql } from 'kysely'
 // open a fresh empty in-memory DB. The native Database keeps a single handle
 // for the lifetime of the instance, which is what `:memory:` needs.
 import LibsqlNativeDatabase from 'libsql'
-import {
-  type Database,
-  DB_FILENAME,
-  getDb,
-  injectCachedDb,
-  removeCachedDb,
-  runDbDisposeHooks,
-} from './index.js'
+import { DB_FILENAME, getDb, injectCachedDb, removeCachedDb, runDbDisposeHooks } from './index.js'
 import { runMigrations } from './migrator.js'
 import { clearPrepareCache } from './prepare.js'
-import type { DatabaseSchema } from './schema.js'
+import type { Database, DatabaseSchema } from './schema.js'
 import type { TenantDatabase } from './tenant-database.js'
 
 export interface CreateIsolatedDbOptions {

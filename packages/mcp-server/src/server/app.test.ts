@@ -25,6 +25,7 @@ vi.mock('./config.js', () => ({
 }))
 
 const { createApp } = await import('./app.js')
+const { createContainer, resolveServerDeps } = await import('../di/container.js')
 const { clearCache } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
@@ -37,6 +38,8 @@ function createRuntimeOptions(
     authMode: 'local-daemon' as const,
     token,
     mcpProtectedResourceMetadata: options?.protectedResourceMetadata,
+    // The root's deps, over the memory store: nothing here reads a document.
+    serverDeps: resolveServerDeps(createContainer()),
     touch: vi.fn(),
     getStatus: () => ({
       ok: true,

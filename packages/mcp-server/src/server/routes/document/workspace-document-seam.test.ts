@@ -1,8 +1,9 @@
 /**
  * The workspace-document routes operate through the ServerDeps they were
- * given — the same optional-serverDeps-threading bug class live-doc-seam
- * and handle-resolution-seam pin, proven twice now: a declared-but-unread
- * `serverDeps` field compiles clean and passes every fallback-path test.
+ * given — the same seam-threading bug class live-doc-seam and
+ * handle-resolution-seam pin, proven twice now: a route that reaches
+ * module-level state instead of the injected deps compiles clean and
+ * persists the same bytes.
  */
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
@@ -21,7 +22,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getDefaultServerDeps } = await import('../../../di/default-server-deps.js')
+const { resolveTestServerDeps } = await import('../_test-helpers.js')
 const { seedWorkspaceRow } = await import('../_test-helpers.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
@@ -41,7 +42,7 @@ function workspaceUpdateBytes(path: string): Uint8Array {
 describe('workspace-document routes and the deps they were handed', () => {
   it('POST /update reads and writes through the INJECTED workspaceDocuments', async () => {
     await seedWorkspaceRow(tmp.dir, WS)
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tmp.dir)
     const recorded: string[] = []
     const real = deps.workspaceDocuments
     deps.workspaceDocuments = {

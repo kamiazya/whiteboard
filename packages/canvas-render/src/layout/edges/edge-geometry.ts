@@ -18,8 +18,16 @@
  * share it without either one importing the other.
  */
 
-import type { EdgeEnd, LineEnd, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { Point, Rect, Side } from './edge-rules.js'
+import type { EdgeEnd, EdgeSide, LineEnd, SpatialNode } from '@kamiazya/whiteboard-model'
+
+/** The edge layer's one point and rectangle, in canvas coordinates. */
+export type Point = { readonly x: number; readonly y: number }
+export type Rect = {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+}
 
 export function rectOf(node: SpatialNode): Rect {
   return { x: node.x, y: node.y, w: node.width, h: node.height }
@@ -39,7 +47,7 @@ export function containsPoint(rect: Rect, point: Point): boolean {
   )
 }
 
-export function sidePoint(rect: Rect, side: Side): Point {
+export function sidePoint(rect: Rect, side: EdgeSide): Point {
   switch (side) {
     case 'top':
       return { x: rect.x + rect.w / 2, y: rect.y }
@@ -61,12 +69,12 @@ export function strictlyInside(rect: Rect, point: Point): boolean {
 }
 
 /** The coordinate that orders ends along a side: y on vertical sides, x on horizontal. */
-export function tangentCoordinate(side: Side, point: Point): number {
+export function tangentCoordinate(side: EdgeSide, point: Point): number {
   return side === 'left' || side === 'right' ? point.y : point.x
 }
 
 /** The point a fraction of the way along a side, 0 at its top/left end. */
-export function sidePointAt(rect: Rect, side: Side, fraction: number): Point {
+export function sidePointAt(rect: Rect, side: EdgeSide, fraction: number): Point {
   switch (side) {
     case 'top':
       return { x: rect.x + rect.w * fraction, y: rect.y }
@@ -179,7 +187,7 @@ export const pathLength = (path: readonly Point[]) =>
   )
 
 /** The direction a side faces, away from the node's interior. */
-export function outwardNormal(side: Side): Point {
+export function outwardNormal(side: EdgeSide): Point {
   switch (side) {
     case 'top':
       return { x: 0, y: -1 }

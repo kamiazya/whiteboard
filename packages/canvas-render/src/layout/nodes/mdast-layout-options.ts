@@ -4,7 +4,6 @@
 // position, so the code block, the table and the dispatcher reach for it
 // and never for each other.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type {
   Appearance,
   SceneNode,
@@ -13,6 +12,7 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
+import type { EmbeddedDocument } from '../../references/resolved.js'
 import type { ReferenceSeams } from '../../references/seams.js'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-theme.js'
 
@@ -236,15 +236,6 @@ export interface RenderedSvgFragment {
   readonly width?: number
   readonly height?: number
 }
-
-/**
- * What an embed target resolves to: a markdown document's parsed body, or a
- * spatial document's canvas. Discriminated by which field is present, the
- * way `ResolvedReference` is on the spatial side.
- */
-export type EmbeddedDocument =
-  | { readonly title?: string; readonly root: MdastRoot }
-  | { readonly title?: string; readonly canvas: SpatialCanvas }
 
 /** The box a canvas miniature may occupy, in the body's own coordinates. */
 export interface EmbeddedCanvasBox {

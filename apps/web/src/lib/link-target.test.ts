@@ -55,26 +55,24 @@ describe('linkMarkupFor', () => {
   // resolution, and a bare [[path]] is labeled with the target's current
   // display name at render time — so no label is frozen into the body.
   it('writes the bare path when no display text was chosen', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets)).toBe('[[reviews/weekly]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget)).toBe('[[reviews/weekly]]')
   })
 
   it('carries chosen display text as the alias', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'last week')).toBe(
+    expect(linkMarkupFor(targets[0] as LinkTarget, 'last week')).toBe(
       '[[reviews/weekly|last week]]',
     )
   })
 
   // The alias would be noise: it says exactly what the target already says.
   it('omits an alias that matches the path, and blank text', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'reviews/weekly')).toBe(
-      '[[reviews/weekly]]',
-    )
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, '  ')).toBe('[[reviews/weekly]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget, 'reviews/weekly')).toBe('[[reviews/weekly]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget, '  ')).toBe('[[reviews/weekly]]')
   })
 
   it('a shared display name changes nothing — paths are unique', () => {
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[untitled]]')
-    expect(linkMarkupFor(targets[4] as LinkTarget, targets)).toBe('[[untitled-2]]')
+    expect(linkMarkupFor(targets[3] as LinkTarget)).toBe('[[untitled]]')
+    expect(linkMarkupFor(targets[4] as LinkTarget)).toBe('[[untitled-2]]')
   })
 
   // The codec's scanner stops at the FIRST `]` and matches only if it is
@@ -87,12 +85,12 @@ describe('linkMarkupFor', () => {
     ['note]'],
     ['two\nlines'],
   ])('drops an alias the reference scanner cannot read: %s', (alias) => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, alias)).toBe('[[reviews/weekly]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget, alias)).toBe('[[reviews/weekly]]')
   })
 
   // `|` is fine there: the scanner is already past the target half.
   it('keeps an alias containing a pipe', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'a|b')).toBe('[[reviews/weekly|a|b]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget, 'a|b')).toBe('[[reviews/weekly|a|b]]')
   })
 
   // A path shaped exactly like a document id: the syntax has no scheme, so
@@ -106,8 +104,8 @@ describe('linkMarkupFor', () => {
       name: 'Shadowy',
       kind: 'markdown',
     }
-    expect(linkMarkupFor(odd, [odd])).toBe('[[01JODD|Shadowy]]')
-    expect(linkMarkupFor(odd, [odd], 'the odd one')).toBe('[[01JODD|the odd one]]')
+    expect(linkMarkupFor(odd)).toBe('[[01JODD|Shadowy]]')
+    expect(linkMarkupFor(odd, 'the odd one')).toBe('[[01JODD|the odd one]]')
   })
 })
 

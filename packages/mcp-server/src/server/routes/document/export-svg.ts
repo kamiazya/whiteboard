@@ -5,7 +5,6 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
-import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import type { ExportErrorBody, ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
@@ -89,16 +88,13 @@ async function resolveSvgOutputPath(
  * ad-hoc caller — falls back to the same production wiring.
  */
 export interface DocumentSvgExportRouterOptions {
-  liveDocuments?: Pick<LiveDocuments, 'exists'>
+  liveDocuments: Pick<LiveDocuments, 'exists'>
 }
 
-export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions = {}) {
+export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions) {
   const app = new Hono()
   const documentExists = async (workspaceId: string, path: string) =>
-    (options.liveDocuments ?? (await getDefaultServerDeps()).liveDocuments).exists(
-      workspaceId,
-      path,
-    )
+    options.liveDocuments.exists(workspaceId, path)
 
   onDocumentAction(
     app,

@@ -13,8 +13,8 @@ import { act, cleanup, type RenderOptions, render as rtlRender } from '@testing-
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ModelContext, WebMcpToolDescriptor } from '../hooks/use-browser-tool-registry.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 // This page schedules ADR-0023's replica pull and push in the background, on

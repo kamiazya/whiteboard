@@ -5,10 +5,9 @@
 // their segment; rounded paths truncate spans to the corner midpoints and
 // drop hops without arc clearance, exactly like `roundedPathData`.
 import type { EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
+import type { Point } from './edge-geometry.js'
 import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 import { flattenRoundedEdgePath, roundedEdgeCorners } from './edge-rounding.js'
-
-type Point = { readonly x: number; readonly y: number }
 
 /** Chord count per hop; matches the corner flattening's sub-pixel budget. */
 const HOP_SUBDIVISIONS = 8

@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { WhiteboardCommandDeps } from './types.js'
+import type { WhiteboardCommandDeps } from '../lib/commands/types.js'
 import { useWhiteboardCommands } from './use-whiteboard-commands.js'
 
 function deps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {

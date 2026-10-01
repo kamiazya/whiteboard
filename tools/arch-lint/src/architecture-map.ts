@@ -351,6 +351,25 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
 export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
 
 /**
+ * Strongly connected components of the import graph that exist ONLY through
+ * `import type` edges — the half cycle-check.ts's value scan cannot see, and
+ * the half a type-only edge hides precisely because it never fails at load.
+ * Same shape as {@link KNOWN_IMPORT_CYCLES}, with one addition: each group
+ * carries the reason it is still here, since there is no load-time failure to
+ * argue for removing it.
+ *
+ * It is EMPTY. `repo-coverage.test.ts` pins it by equality from both sides, so
+ * a new type cycle fails until it is fixed or listed with a reason, and a
+ * listed group that stops being a component fails until it is deleted. The
+ * key is the member set, so an entry cannot quietly absorb a knot that grew.
+ * The usual fix is a leaf module owning the type both sides name, not an entry.
+ */
+export const KNOWN_TYPE_CYCLES: readonly {
+  readonly members: readonly string[]
+  readonly reason: string
+}[] = []
+
+/**
  * Cross-PACKAGE dependency cycles found and not yet dissolved — the
  * manifest-level companion to {@link KNOWN_IMPORT_CYCLES}, over
  * `dependencies` AND `devDependencies` (package-cycle-check.ts). Same
@@ -476,12 +495,7 @@ export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
   'mcp/index.ts',
 ]
 
-export const MECHANICS_NOT_SCANNED: readonly string[] = [
-  'corrupt-stored-data',
-  // Same reasoning: DocumentNotFoundError is the 404 half of the taxonomy,
-  // and an adapter importing it to pick a status code is doing translation.
-  'document-not-found-error',
-]
+export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
 
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []

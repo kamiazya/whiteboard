@@ -1,9 +1,10 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -15,6 +16,13 @@ vi.mock('../../config.js', () => ({
 }))
 
 const tmp = withTempDataDir('whiteboard-restore-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 const { createRestoreRouter } = await import('./restore.js')
 const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
@@ -38,7 +46,7 @@ afterEach(() => {
 describe('restore router', () => {
   it('returns a Hono instance', () => {
     const versionStore = { listVersions: vi.fn(), saveVersion: vi.fn() }
-    const app = createRestoreRouter({ versionStore: versionStore as never })
+    const app = createRestoreRouter({ serverDeps, versionStore: versionStore as never })
     expect(app).toBeInstanceOf(Hono)
   })
 })
@@ -57,7 +65,7 @@ function nodesModelDocUpdate(nodeIds: string[]): Uint8Array {
 
 describe('restore router (real node counts)', () => {
   it("restore into a brand-new targetPath responds with the past state's real node count", async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
@@ -94,7 +102,7 @@ describe('restore router (real node counts)', () => {
   })
 
   it("restore-overwrite into an existing targetPath responds with the reconciled target's real node count", async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     // Source canvas with one node, saved as a version.
     await app.request('/api/w/session1/document/canvas-a/update', {
@@ -139,7 +147,7 @@ describe('restore router (real node counts)', () => {
 
 describe('restore router (kind propagation)', () => {
   it("stamps the source's kind on a brand-new target so it opens in the right editor", async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     // A markdown document: its OKF body is a text node, so the restored
     // content alone cannot say which editor should open it.
     await saveDocument('session1', 'note-a', new LoroDoc(), { kind: 'markdown' })
@@ -168,7 +176,7 @@ describe('restore router (kind propagation)', () => {
   })
 
   it("records 'spatial' for a lazy-created document, and restore copies that recorded kind", async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     // The /update path lazy-creates the row; every document now lands on
     // the workspace tree with a kind (pre-kind rows were this project's own
     // data defect and the startup fold deletes them), and the spatial
@@ -203,7 +211,7 @@ describe('restore router (kind propagation)', () => {
 
 describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore', () => {
   it('restores the past-state element set through POST /versions/:id/restore', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     // Step 1: Write the initial one-element state through /update.
     const initial = new LoroDoc()
@@ -252,7 +260,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('evicts the cached doc when saveDocument fails during in-place restore, so a subsequent read does not serve the un-persisted reconcile', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     // Step 1: seed with keep-me.
     const initial = new LoroDoc()
@@ -315,7 +323,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('evicts the cached doc when reconcile/commit itself fails during in-place restore, not only when saveDocument fails', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     const initial = new LoroDoc()
     const vv0 = initial.version()
@@ -374,7 +382,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 404 when restoring a missing version id', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/nonexistent/restore',
       { method: 'POST' },
@@ -383,7 +391,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 400 for an invalid version id', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/bad.id/restore',
       { method: 'POST' },
@@ -397,7 +405,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 // CRDT lineage and converge through the normal update broadcast.
 describe('overwrite restore reconciles instead of replacing', () => {
   it('targetPath === path with overwrite:true reconciles the live doc in place and broadcasts an update', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     // v1: one element.
     const initial = new LoroDoc()
@@ -464,7 +472,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   })
 
   it('targetPath === path WITHOUT overwrite still restores in place (same-path is never treated as a distinct target)', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     const initial = new LoroDoc()
     const vv0 = initial.version()
@@ -498,7 +506,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   })
 
   it('restoring into a different existing canvas reconciles that canvas and broadcasts to it, not the source', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     // Source canvas-a: v1 has only "keep-me".
     const sourceDoc = new LoroDoc()
@@ -562,7 +570,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   })
 
   it('restoring into a new (non-existent) target path still creates it', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
@@ -600,7 +608,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   })
 
   it('restoring a markdown-kind canvas into a new target path carries the source kind forward, not the spatial default', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
@@ -642,7 +650,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   })
 
   it('restoring a markdown-kind canvas onto an existing spatial-kind target syncs the target kind to match the restored content', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
@@ -689,7 +697,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   })
 
   it('restoring into an existing target path WITHOUT overwrite returns 409 output_exists', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
@@ -736,7 +744,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
   // green while the overlay silently stopped appearing and, worse, stopped
   // being dismissed.
   it('brackets a restore with restore_started and restore_complete for the open pages', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     const initial = new LoroDoc()
     const vv0 = initial.version()
     writeSpatialCanvas(initial, {

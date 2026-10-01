@@ -13,16 +13,37 @@ import {
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
-import * as documentStore from '../../store/document-store.js'
-import { withTempDataDir } from '../_test-helpers.js'
-import { createDocumentRouter } from '../document.js'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
-// `withTempDataDir` only registers beforeEach/afterEach hooks — it sets
-// nothing at module scope — so these imports never had to be deferred past
-// it.
 const tmp = withTempDataDir('whiteboard-follow-rename-test-')
+
+// The store and the router's deps must share ONE data dir, and it must be
+// this test's: without the mock the store wrote wherever the process's
+// config pointed while the deps were built over `tmp.dir`, and under
+// `--repeats` the fixed paths seeded below met their own previous run.
+vi.mock('../../config.js', () => ({
+  get DATA_DIR() {
+    return tmp.dir
+  },
+  getDataDir: () => tmp.dir,
+  WHITEBOARD_ROOT: '/tmp/whiteboard',
+  REPO_ROOT: '/tmp',
+}))
+
+const documentStore = await import('../../store/document-store.js')
+const { clearCache } = await import('../../store/doc-cache.js')
+const { createDocumentRouter } = await import('../document.js')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  clearCache()
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 const { getDoc } = documentStore
 
 async function seedMarkdown(workspaceId: string, path: string, body: string) {
@@ -45,7 +66,7 @@ describe('rename routes follow references', () => {
   it('PUT :path/path repoints references written as the old path', async () => {
     await seedMarkdown('session1', 'design/login', 'the target')
     await seedMarkdown('session1', 'notes/daily', 'see [[design/login]] and [[unrelated]]')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/design%2Flogin/path', {
       method: 'PUT',
@@ -62,7 +83,7 @@ describe('rename routes follow references', () => {
     await seedMarkdown('session3', 'folder', 'the parent')
     await seedMarkdown('session3', 'folder/child', 'the child')
     await seedMarkdown('session3', 'notes/daily', 'see [[folder/child]]')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session3/documents/folder/path', {
       method: 'PUT',

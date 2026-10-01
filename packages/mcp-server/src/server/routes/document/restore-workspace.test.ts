@@ -15,11 +15,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { seedWorkspaceRow } from '../_test-helpers.js'
+import { resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
+// The deps a router is handed by its root; here, the test wiring over the
+// isolated data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
     return tempDir
@@ -48,6 +52,7 @@ beforeEach(async () => {
   // files `session1` as its segment, leaving the direct store reads in these
   // cases naming nothing.
   await seedWorkspaceRow(tempDir, 'session1')
+  serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
   await handle.dispose()
@@ -82,7 +87,7 @@ async function saveVersion(app: ReturnType<typeof createDocumentRouter>): Promis
 }
 
 it('in-place restore makes the document equal the past state — a later-added node goes away', async () => {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const client = new LoroDoc()
   await push(app, client, ['n-a'])
   const versionId = await saveVersion(app)
@@ -99,7 +104,7 @@ it('in-place restore makes the document equal the past state — a later-added n
 })
 
 it('a version of a tree-served document restores correctly after a simulated restart', async () => {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const client = new LoroDoc()
   await push(app, client, ['n-a'])
   const versionId = await saveVersion(app)
@@ -129,7 +134,7 @@ async function createDoc(app: ReturnType<typeof createDocumentRouter>, path: str
 }
 
 it('subtree rollback reverts the document AND its descendants, and evacuates documents created after the version', async () => {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const parent = new LoroDoc()
   const child = new LoroDoc()
   // Created through the create route, so the rows carry a kind and the

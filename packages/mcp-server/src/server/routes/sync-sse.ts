@@ -22,6 +22,7 @@ import {
   syncClientMessageRequestSchema,
   syncSubscribeRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
@@ -237,29 +238,9 @@ export function resetSyncStreamsForTests(): void {
   streams.clear()
 }
 
-// This transport's own funnel subscription, installed by its own entry
-// point (stream-open). Subscribed through the WorkspaceDocuments seam
-// (ADR-0018) via the same wiring production resolves; memoized as a promise
-// so concurrent first opens install once, and a failed resolve retries on
-// the next open instead of poisoning the flag.
-let sseFanoutInstall: Promise<void> | null = null
-function ensureSseUpdateFanout(): Promise<void> {
-  sseFanoutInstall ??= (async () => {
-    // Dynamic: the di wiring's import chain reaches back into the routes
-    // through canvas-client-notifier, and a static edge closes a value cycle.
-    const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
-    const deps = await getDefaultServerDeps()
-    deps.workspaceDocuments.onUpdated((workspaceId, update) => {
-      sseBroadcastWorkspaceUpdate(workspaceId, update)
-    })
-  })().catch((err: unknown) => {
-    sseFanoutInstall = null
-    throw err
-  })
-  return sseFanoutInstall
-}
-
 export interface SyncSseRouterOptions {
+  /** The workspace-record seam whose updates this stream carries. */
+  workspaceDocuments: Pick<ServerDeps['workspaceDocuments'], 'onUpdated'>
   /** S8 slice 2: the membership gate. Absent means no gate at all
    *  (server-mode, and any composition that has not wired members). */
   admit?: WorkspaceAdmit
@@ -406,11 +387,16 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
   return c.json({ ok: true })
 }
 
-export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
+export function createSyncSseRouter(options: SyncSseRouterOptions) {
   const app = new Hono()
+  // Every workspace-record update the operations commit (ADR-0018) fans out
+  // to the SSE audience, from the deps the root handed down — the router no
+  // longer resolves a wiring of its own for it.
+  options.workspaceDocuments.onUpdated((workspaceId, update) => {
+    sseBroadcastWorkspaceUpdate(workspaceId, update)
+  })
 
   app.get('/api/sync/stream', async (c) => {
-    await ensureSseUpdateFanout()
     // The id is minted here and never accepted from the caller. A client-chosen
     // key into a server-side registry lets one client name another's stream —
     // displacing it on open, or adding and removing that client's

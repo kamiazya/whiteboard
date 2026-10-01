@@ -112,6 +112,25 @@ function resolveSpecifier(
   return null
 }
 
+function buildGraph(
+  files: readonly { path: string; text: string }[],
+  aliases: PathAliases,
+  keepTypeOnly: boolean,
+): Map<string, string[]> {
+  const fileSet = new Set(files.map((f) => f.path))
+  const graph = new Map<string, string[]>()
+  for (const file of files) {
+    const targets: string[] = []
+    for (const edge of collectResolvableImportEdges(file.path, file.text, aliases)) {
+      if (edge.typeOnly && !keepTypeOnly) continue
+      const resolved = resolveSpecifier(file.path, edge.specifier, fileSet, aliases)
+      if (resolved !== null) targets.push(resolved)
+    }
+    graph.set(file.path, targets)
+  }
+  return graph
+}
+
 /**
  * Value-only (type-only edges dropped) relative-import graph. Every file
  * passed in is a key; an unresolvable or bare-specifier edge is dropped
@@ -122,18 +141,20 @@ export function buildValueImportGraph(
   files: readonly { path: string; text: string }[],
   aliases: PathAliases = {},
 ): Map<string, string[]> {
-  const fileSet = new Set(files.map((f) => f.path))
-  const graph = new Map<string, string[]>()
-  for (const file of files) {
-    const targets: string[] = []
-    for (const edge of collectResolvableImportEdges(file.path, file.text, aliases)) {
-      if (edge.typeOnly) continue
-      const resolved = resolveSpecifier(file.path, edge.specifier, fileSet, aliases)
-      if (resolved !== null) targets.push(resolved)
-    }
-    graph.set(file.path, targets)
-  }
-  return graph
+  return buildGraph(files, aliases, false)
+}
+
+/**
+ * The same graph with `import type` edges kept. A type-only edge is erased
+ * at emit, so it can never fail at load time the way a value cycle does; what
+ * it still does is bind the two modules into one unit for a reader, a bundler's
+ * type pass and every refactor — see type-cycle-check.ts.
+ */
+export function buildTypeInclusiveImportGraph(
+  files: readonly { path: string; text: string }[],
+  aliases: PathAliases = {},
+): Map<string, string[]> {
+  return buildGraph(files, aliases, true)
 }
 
 /**

@@ -1,4 +1,5 @@
-import { type DocumentKind, documentIdSchema } from '@kamiazya/whiteboard-model'
+import { documentReferenceMarkup } from '@kamiazya/whiteboard-codec'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 
 /** A document this editor can link to, as the composition root knows it. */
 export interface LinkTarget {
@@ -41,70 +42,20 @@ export function rankLinkTargets(
 }
 
 /**
- * Names the codec's own reference scanner would read as something other than
- * a plain name.
- *
- * ANY `]` is fatal, not just `]]`: the scanner advances to the first `]` and
- * accepts the reference only if the very next character is another one, so a
- * single bracket either kills the whole reference or truncates it and leaves
- * the remainder as literal text. A line break cannot appear in an inline
- * reference, and `|` begins the alias half.
- */
-const UNWRITABLE_IN_BRACKETS = /[\]\r\n|]/
-
-/**
- * A name shaped exactly like a document id, which the scanner reads as one
- * rather than as a name — the references syntax carries no scheme, so the id
- * form IS a bare target. Vanishingly unlikely for a human-typed title (a
- * canonical ULID is 26 characters of Crockford base32), but the picker can
- * check it for free, and the alternative is a link pointing somewhere else
- * entirely.
- */
-function readsAsDocumentId(name: string): boolean {
-  return documentIdSchema.safeParse(name).success
-}
-
-/**
- * What an ALIAS cannot contain. Shorter than the target's list — `|` and a
- * document-id-shaped string are ordinary text once the target half is
- * closed — but the bracket rule is the same and for the same reason: the
- * scanner stops at
- * the first `]` and requires the next character to be one too.
- */
-const UNWRITABLE_AS_ALIAS = /[\]\r\n]/
-
-/**
  * What to write in the body for a chosen target, optionally displaying
  * `text` instead of the label the renderer would supply.
  *
- * The PATH is the written form: display names are retired from resolution
- * (path + id are the only forms the reader resolves), and a bare `[[path]]`
- * is labeled with the target's CURRENT display name at render time — so
- * the default insert freezes nothing. Chosen display text still travels as
- * the explicit alias, because the author asked for that exact prose.
- *
- * The opaque `[[<id>]]` form appears only when the path itself would
- * mislead the reader's id-first rule — a path shaped exactly like a
- * document id — or would not survive the bracket grammar. That form is
- * unambiguous and unreadable, so it carries the display text or the name
- * as its alias whenever one can be written.
+ * The grammar is the codec's: the PATH is the written form (display names are
+ * retired from resolution, and a bare `[[path]]` is labeled with the target's
+ * CURRENT display name at render time, so the default insert freezes
+ * nothing), the opaque id form is the fallback when the path cannot be
+ * written or would read as an id, and text the scanner cannot read inside the
+ * brackets is dropped rather than truncated. Chosen display text still
+ * travels as the explicit alias whenever it can, because the author asked for
+ * that exact prose.
  */
-export function linkMarkupFor(
-  target: LinkTarget,
-  _all: readonly LinkTarget[],
-  text?: string,
-): string {
-  const wanted = (text ?? '').trim()
-  const alias = wanted === '' || UNWRITABLE_AS_ALIAS.test(wanted) ? null : wanted
-  const pathIsWritable =
-    !UNWRITABLE_IN_BRACKETS.test(target.path) && !readsAsDocumentId(target.path)
-  if (pathIsWritable) {
-    return alias === null || alias === target.path
-      ? `[[${target.path}]]`
-      : `[[${target.path}|${alias}]]`
-  }
-  const fallbackAlias = alias ?? (UNWRITABLE_AS_ALIAS.test(target.name) ? null : target.name)
-  return fallbackAlias === null ? `[[${target.id}]]` : `[[${target.id}|${fallbackAlias}]]`
+export function linkMarkupFor(target: LinkTarget, text?: string): string {
+  return documentReferenceMarkup(target, (text ?? '').trim())
 }
 
 /**

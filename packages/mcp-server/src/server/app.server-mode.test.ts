@@ -22,6 +22,7 @@ vi.mock('./config.js', () => ({
 }))
 
 const { createApp } = await import('./app.js')
+const { createContainer, resolveServerDeps } = await import('../di/container.js')
 const { planServerModeAuth } = await import('./security/server-mode-auth-plan.js')
 
 beforeAll(async () => {
@@ -85,6 +86,8 @@ function makeServerModeOptions(
     authMode: 'server-mode',
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: ALLOWED_ORIGINS,
+    // The root's deps, over the memory store: nothing here reads a document.
+    serverDeps: resolveServerDeps(createContainer()),
     authStrategy: makeScopeStrategy(grantedScopes),
     touch: () => {},
     getStatus: makeInternalStatus,
@@ -101,6 +104,7 @@ describe('app — server-mode composition', () => {
     expect(() =>
       createApp({
         authMode: 'local-daemon',
+        serverDeps: resolveServerDeps(createContainer()),
         token: 'local-token',
         touch: () => {},
         getStatus: () => makeInternalStatus(),
@@ -115,6 +119,7 @@ describe('app — server-mode composition', () => {
     // credential at all. The client already sends the bearer on every read.
     const app = createApp({
       authMode: 'local-daemon',
+      serverDeps: resolveServerDeps(createContainer()),
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
@@ -197,6 +202,7 @@ describe('app — server-mode composition', () => {
       expect(() =>
         createApp({
           authMode: 'server-mode',
+          serverDeps: resolveServerDeps(createContainer()),
           publicBaseUrl: 'http://example.com',
           allowedOrigins: ['https://example.com'],
           authStrategy: makeScopeStrategy(['canvas:read']),
@@ -211,6 +217,7 @@ describe('app — server-mode composition', () => {
       expect(() =>
         createApp({
           authMode: 'server-mode',
+          serverDeps: resolveServerDeps(createContainer()),
           publicBaseUrl: 'https://example.com',
           allowedOrigins: ['*'],
           authStrategy: makeScopeStrategy(['canvas:read']),
@@ -637,6 +644,7 @@ describe('app — server-mode composition', () => {
     expect(() =>
       createApp({
         authMode: 'local-daemon',
+        serverDeps: resolveServerDeps(createContainer()),
         authStrategy: makeScopeStrategy(['canvas:read']),
       } as unknown as AppOptions),
     ).toThrow('local-daemon mode must not receive authStrategy')
@@ -655,6 +663,7 @@ describe('app — server-mode composition', () => {
     // per-scope enforcement — presenting the daemon token is sufficient.
     const localApp = createApp({
       authMode: 'local-daemon',
+      serverDeps: resolveServerDeps(createContainer()),
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
@@ -676,6 +685,7 @@ describe('app — server-mode composition', () => {
     }
     const app = createApp({
       authMode: 'server-mode',
+      serverDeps: resolveServerDeps(createContainer()),
       publicBaseUrl: 'https://example.com',
       allowedOrigins: ['https://example.com'],
       authStrategy: alwaysDeny,

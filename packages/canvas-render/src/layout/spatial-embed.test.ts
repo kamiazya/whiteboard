@@ -17,13 +17,10 @@ import type {
   ShapeSceneNode,
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import type { FacetCardData } from '../references/resolved.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import {
-  type FacetCardData,
-  layoutSpatialCanvas,
-  type SpatialLayoutOptions,
-} from './spatial-canvas.js'
+import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const APPEARANCE = {
   resolveNode: () => ({}),

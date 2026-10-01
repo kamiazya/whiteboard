@@ -15,7 +15,7 @@ vi.mock('../server/config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getDefaultServerDeps } = await import('./default-server-deps.js')
+const { resolveTestServerDeps } = await import('../server/routes/_test-helpers.js')
 const { getDoc, saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../server/store/document-store.js'
 )
@@ -30,14 +30,14 @@ const { createDaemonIdentity } = await import('../server/security/daemon-identit
  * a restart claimed different agents. ADR-0035 decision 2 says a stored row
  * names the DEVICE.
  */
-describe('the ServerDeps a route falls back to', () => {
+describe('the self-host ServerDeps', () => {
   it('stamps an unnamed agent save with this daemon’s did:key', async () => {
     clearCache()
     _clearWorkspaceDocCacheForTests()
     await mkdir(join(tmp.dir, 'ws1'), { recursive: true })
     await saveDocument('ws1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
 
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tmp.dir)
     const entry = await deps.versions.save('ws1', 'canvas-a', await getDoc('ws1', 'canvas-a'), {
       auto: false,
       label: 'by an agent',

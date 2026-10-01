@@ -12,13 +12,13 @@
  * of the cost model or of routing. The search (`spatial-edges.ts`) imports it.
  */
 
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
-
+import type { EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import type { Point, Rect } from './edge-geometry.js'
 import { centerOf, rectOf, sidePointAt, tangentCoordinate } from './edge-geometry.js'
-import { facingLaneWindow, oppositeSide, type Point, type Rect, type Side } from './edge-rules.js'
-import type { EdgeAnchorOverride, EdgeAnchorPair, SidePair } from './edge-sides.js'
+import { facingLaneWindow, oppositeSide, type SidePair } from './edge-rules.js'
+import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
 import { ORTHOGONAL_STUB_PX, STUB_LANE_STEP_PX } from './edge-sides.js'
 
 /**
@@ -73,7 +73,7 @@ interface AnchorEnd {
   readonly edgeIndex: number
   readonly role: 'from' | 'to'
   readonly rect: Rect
-  readonly side: Side
+  readonly side: EdgeSide
   readonly farCenter: Point
 }
 
@@ -84,8 +84,8 @@ interface AnchorEntry {
   to?: Point
   fromLaneDepth?: number
   toLaneDepth?: number
-  fromSide?: Side
-  toSide?: Side
+  fromSide?: EdgeSide
+  toSide?: EdgeSide
 }
 
 /**
@@ -107,7 +107,7 @@ export interface AnchorGroups {
   readonly entries: Map<string, AnchorEntry>
 }
 
-const groupKeyFor = (edge: RoutableElement, role: 'from' | 'to', side: Side): string =>
+const groupKeyFor = (edge: RoutableElement, role: 'from' | 'to', side: EdgeSide): string =>
   `${role === 'from' ? endNode(edge.from) : endNode(edge.to)} ${side}`
 
 function endsOfEdge(
@@ -306,7 +306,7 @@ function slidFacingPair(
  * direction. Interpenetrating boxes — authored sides can force them — have
  * no forward-facing lane to slide into.
  */
-function facesForward(fromSide: Side, axis: 'h' | 'v', fromRect: Rect, toRect: Rect): boolean {
+function facesForward(fromSide: EdgeSide, axis: 'h' | 'v', fromRect: Rect, toRect: Rect): boolean {
   if (axis === 'h') {
     return fromSide === 'right'
       ? fromRect.x + fromRect.w <= toRect.x

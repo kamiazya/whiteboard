@@ -4,9 +4,8 @@
 // derivations is the drift class that put exported labels on the sharp
 // corner a curved edge's ink never touches.
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Point } from './edge-geometry.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
-
-type Point = { readonly x: number; readonly y: number }
 
 /**
  * The point halfway along the drawn edge, by arc length. `rounded` applies

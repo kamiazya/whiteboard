@@ -3,7 +3,7 @@ import { continuesStroke } from '../../lib/spatial/stroke-group.js'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
 import { reduceGesture } from './gestures.js'
 import { withGroupMates } from './ink-hit.js'
-import type { EditorPointerInputs } from './use-editor-pointer.js'
+import type { EditorPointerInputs } from './pointer-inputs.js'
 
 type InkClaimInputs = Pick<
   EditorPointerInputs,

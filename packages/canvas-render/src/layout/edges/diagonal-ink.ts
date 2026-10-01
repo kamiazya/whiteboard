@@ -1,5 +1,4 @@
-type Point = { readonly x: number; readonly y: number }
-type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+import type { Point, Rect } from './edge-geometry.js'
 
 /**
  * The fraction of the segment `a` -> `a + (dx, dy)` lying STRICTLY inside

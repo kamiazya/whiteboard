@@ -3,12 +3,20 @@ import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-versions-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -67,7 +75,7 @@ describe('versions API', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
-    const app = createDocumentRouter({ autoVersionQuietMs: 0 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 0 })
     const resUpdate = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -89,7 +97,7 @@ describe('versions API', () => {
   })
 
   it('saves a manual version with a label through POST /versions', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,6 +111,7 @@ describe('versions API', () => {
 
   it('POST /versions persists an explicit operator', async () => {
     const app = createDocumentRouter({
+      serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
     })
@@ -139,7 +148,7 @@ describe('versions API', () => {
   })
 
   it('POST /versions defaults operator to human when omitted', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -167,6 +176,7 @@ describe('versions API', () => {
   // asserting only that the field was non-blank passed over it.
   it('POST /versions stamps the daemon actor, unchanged across a document reload', async () => {
     const app = createDocumentRouter({
+      serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
     })
@@ -198,6 +208,7 @@ describe('versions API', () => {
   // be this daemon, or any other device.
   it('refuses an operator that names a device, rather than believing the caller', async () => {
     const app = createDocumentRouter({
+      serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
     })
@@ -220,6 +231,7 @@ describe('versions API', () => {
   // they always were.
   it('keeps the caller\u2019s kind and display name, and stamps its own device', async () => {
     const app = createDocumentRouter({
+      serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
     })
@@ -249,7 +261,7 @@ describe('versions API', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
-    const app = createDocumentRouter({ autoVersionQuietMs: 0 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 0 })
     const resUpdate = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -271,7 +283,7 @@ describe('versions API', () => {
   })
 
   it('filters GET /versions by path and returns newest first', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       body: JSON.stringify({ label: 'a1' }),
@@ -309,7 +321,7 @@ describe('GET /versions/:id/document', () => {
   })
 
   it('answers the canvas as it stood, not as it stands', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
     const first = new LoroDoc()
     writeSpatialCanvas(first, {
@@ -350,7 +362,7 @@ describe('GET /versions/:id/document', () => {
   })
 
   it('refuses a version id that belongs to another document, as restore does', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
     const saved = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

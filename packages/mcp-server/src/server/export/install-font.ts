@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import {
   type FontCatalogueEntry,
@@ -8,6 +7,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { z } from 'zod'
 import { opentypeApi } from '../../shared/opentype.js'
+import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
 import { installedFontDir } from './installed-fonts.js'
 
@@ -103,19 +103,9 @@ export async function installFont(
   const dir = installedFontDir()
   await mkdir(dir, { recursive: true })
   const path = join(dir, `${entry.id}${extname(entry.path)}`)
-  // Written beside the target and renamed, because a render running
-  // concurrently would otherwise hand resvg a half-written file. The name is
-  // unique per call so two installs of the same font cannot interleave into
-  // one another's buffer; `installedFontFiles` ignores the extension either
-  // way.
-  const partial = `${path}.${randomUUID()}.partial`
-  try {
-    await writeFile(partial, bytes)
-    await rename(partial, path)
-  } catch (err) {
-    await rm(partial, { force: true })
-    throw err
-  }
+  // Atomic, because a render running concurrently would otherwise hand resvg
+  // a half-written file.
+  await writeFileAtomic(path, bytes)
 
   log.notice({ id: entry.id, family: entry.family, bytes: bytes.byteLength }, 'installed font')
   return { id: entry.id, family: entry.family, path, bytes: bytes.byteLength }

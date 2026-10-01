@@ -55,7 +55,7 @@ export function wikiLinkCompletionSource(getTargets: () => readonly LinkTarget[]
             // markup mid-word, corrupting the body.
             const bracketsFrom = from - 2
             if (view.state.sliceDoc(bracketsFrom, from) !== '[[') return
-            const insert = linkMarkupFor(target, targets)
+            const insert = linkMarkupFor(target)
             view.dispatch({
               changes: { from: bracketsFrom, to, insert },
               selection: { anchor: bracketsFrom + insert.length },

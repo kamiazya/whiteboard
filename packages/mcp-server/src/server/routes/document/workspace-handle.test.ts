@@ -10,10 +10,18 @@
  * `/api/workspaces/.../documents/*` hand parse, and the `/api/w/...` one are
  * three separate places to forget.
  */
-import { describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspace-handle-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -108,7 +116,7 @@ describe('daemon routes address a workspace by its segment', () => {
 
   it('resolves the handle inside the /api/w/... workspace-document surface', async () => {
     await seeded()
-    const app = createWorkspaceDocumentRouter({ triggerAutoVersion: async () => null })
+    const app = createWorkspaceDocumentRouter({ serverDeps, triggerAutoVersion: async () => null })
 
     const res = await app.request(`/api/w/${SEGMENT}/workspace-document/snapshot`)
 

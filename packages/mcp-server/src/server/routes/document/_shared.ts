@@ -3,13 +3,13 @@ import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentPathTakenError,
+  isDocumentNotFoundError,
   isWorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import { WorkspaceSegmentUnusableError } from '@kamiazya/whiteboard-server-core'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
-import { DocumentNotFoundError } from '../../store/document-not-found-error.js'
 import { validationErrorBody } from '../../validators.js'
 
 export function defaultHumanDisplayName(): string {
@@ -38,7 +38,7 @@ export function handleCorruptStoredData(
 export function handleDocumentNotFound(
   err: unknown,
 ): { status: 404; body: { error: 'not_found'; message: string } } | null {
-  if (err instanceof DocumentNotFoundError) {
+  if (isDocumentNotFoundError(err)) {
     return { status: 404, body: { error: 'not_found', message: err.message } }
   }
   return null
@@ -119,18 +119,11 @@ export const segmentUnusable: ErrorAnswer = (err) =>
  * Nothing at that address. The WORKSPACE being absent and the DOCUMENT being
  * absent are one answer to a caller who named a document — which is why the
  * title is the caller's to supply.
- *
- * Matched by NAME rather than by `instanceof`, because there are TWO
- * `DocumentNotFoundError` classes — `server/store/`'s and `ports`' — and a
- * route has no business knowing which layer raised the one it got. An
- * `instanceof` against either misses the other silently: the rename route
- * imported ports' and answered 500 for a store-raised absence until a test
- * caught it. `isWorkspaceNotFoundError` already reads its own this way.
  */
 export const notFoundAs =
   (title: string): ErrorAnswer =>
   (err) =>
-    (err instanceof Error && err.name === 'DocumentNotFoundError') || isWorkspaceNotFoundError(err)
+    isDocumentNotFoundError(err) || isWorkspaceNotFoundError(err)
       ? { status: 404, body: { title } }
       : null
 

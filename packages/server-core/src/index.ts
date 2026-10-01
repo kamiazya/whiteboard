@@ -21,7 +21,6 @@ export type {
 export { promoteWorkspace } from './operations/promote-workspace.js'
 export type {
   RestoreProgress,
-  RestoreProgressEvent,
   RestoreVersionInput,
   RestoreVersionResult,
 } from './operations/restore-version.js'
@@ -51,6 +50,7 @@ export type {
   DocumentTeardown,
   DocumentWritten,
   LiveDocuments,
+  RestoreProgressEvent,
   ServerDeps,
   VersionCreated,
   VersionHistory,

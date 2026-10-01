@@ -1,12 +1,9 @@
-import {
-  isPidAlive as defaultIsPidAlive,
-  deleteDaemonRecord,
-  loadDaemonRecord,
-} from '../daemon/daemon-registry.js'
+import { deleteDaemonRecord, loadDaemonRecord } from '../daemon/daemon-registry.js'
 import {
   type DaemonStopResult,
   daemonStopResultSchema,
 } from '../shared/api-contracts/daemon-stop.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 
 export interface DaemonStopOptions {
   dataDir: string

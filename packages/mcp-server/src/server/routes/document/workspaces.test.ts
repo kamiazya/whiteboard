@@ -7,12 +7,20 @@ import {
   workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { seedWorkspaceRow, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, seedWorkspaceRow, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspaces-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -80,7 +88,7 @@ afterEach(() => {
 
 describe('workspaces router', () => {
   it('returns a Hono instance', () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     expect(app).toBeInstanceOf(Hono)
   })
 })
@@ -88,7 +96,7 @@ describe('workspaces router', () => {
 describe('GET /api/workspaces', () => {
   it('returns the canonical workspace list with workspaceId entries', async () => {
     await saveDocument('workspace-a', 'a', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces')
 
     expect(res.status).toBe(200)
@@ -114,7 +122,7 @@ describe('GET /api/workspaces', () => {
     })
     await deps.documentIndex.createWorkspace({ workspaceId: 'workspace-bare' })
 
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces')
     expect(res.status).toBe(200)
     const json = await res.json()
@@ -219,7 +227,7 @@ describe('GET /api/workspaces', () => {
 
 describe('POST /api/workspaces/:workspaceId/documents', () => {
   it('returns { path } on success', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -231,7 +239,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('returns 409 with Problem Details title on duplicate path', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     // Create once to seed the conflict.
     await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
@@ -254,7 +262,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   // caller's to change; the mint boundary refuses it, and that refusal used
   // to fall through the catch-all to a 500 that named nothing.
   it('returns 400 with a Problem Details title when the handle cannot be a workspace segment', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/-/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -273,7 +281,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
       throw new Error('snapshot serialization failed')
     })
     try {
-      const app = createDocumentRouter()
+      const app = createDocumentRouter({ serverDeps })
       const res = await app.request('/api/workspaces/ws1/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -288,7 +296,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('returns 400 with Problem Details title on invalid path', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -306,7 +314,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   // deleting the not-JSON refusal outright leaves that assertion green,
   // because the shape check then refuses the `null` a failed parse yields.
   it('returns 400 saying the body must be JSON when it is not JSON at all', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
@@ -317,7 +325,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('returns 400 with Problem Details title when body has no path field', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -330,7 +338,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('creates a kind:markdown canvas, and the list carries it back', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const createRes = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -358,7 +366,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   // has taken a name in one call since it shipped; this is the HTTP surface
   // catching up.
   it('applies an optional name in the same request that creates the document', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const createRes = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -379,7 +387,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   // promise is the route's: a name never decides whether the document
   // exists, whichever layer keeps that true.
   it('creates the document anyway when the name is blank', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -393,7 +401,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('creates a canvas without kind — response and list stay byte-identical to spatial back-compat', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const createRes = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -413,7 +421,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     // boundary, and a mint would key the workspace by a ULID and file `ws1`
     // as its segment — leaving the store reads further down naming nothing.
     await seedWorkspaceRow(tmp.dir, 'ws1')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const markdownRes = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
@@ -440,7 +448,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     // boundary, and a mint would key the workspace by a ULID and file `ws1`
     // as its segment — leaving the store reads further down naming nothing.
     await seedWorkspaceRow(tmp.dir, 'ws1')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -452,7 +460,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('returns 400 with Problem Details title naming the actual failing field on an invalid kind', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -471,7 +479,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     // An array body parses as JSON but fails the object schema at the TOP level — path [] —
     // exercising createDocumentRequestErrorTitle's fallback branch rather than a field-specific
     // message that would name the wrong thing.
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws-a/documents', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -485,7 +493,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/bad.workspace/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -509,7 +517,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 
   it('returns 200 { ok: true }, parses with deleteDocumentResponseSchema, and the canvas is gone from list/exists/snapshot', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/canvas-a', {
       method: 'DELETE',
@@ -534,7 +542,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   it('returns 409 naming a descendant rather than stranding it', async () => {
     await saveDocument('session1', 'design', new LoroDoc())
     await saveDocument('session1', 'design/login', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/design', {
       method: 'DELETE',
@@ -546,7 +554,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   })
 
   it('returns 404 with Problem Details { title } for a missing canvas', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/session1/documents/never-created', {
       method: 'DELETE',
     })
@@ -558,7 +566,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   })
 
   it('returns 400 with Problem Details { title } for an invalid workspaceId or path', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const badWs = await app.request('/api/workspaces/bad.workspace/documents/canvas-a', {
       method: 'DELETE',
@@ -610,7 +618,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     // `session1` as its segment — leaving the store reads further down
     // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -664,7 +672,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'a/x', new LoroDoc())
     await saveDocument('session1', 'c/x', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -680,7 +688,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   it('refuses a move into the document’s own subtree with 400, not a generic 500', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'a/x', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -693,7 +701,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('returns 200 { path }, the list shows the new path and not the old one, the old snapshot URL 404s, and re-creating the old path afterward succeeds as a fresh canvas', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -722,7 +730,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   })
 
   it('returns 404 with Problem Details { title } for a missing source canvas', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/session1/documents/never-created/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -738,7 +746,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   it('returns 409 with Problem Details { title } when the target path is already taken', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'b', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -756,7 +764,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   })
 
   it('does not fork a phantom duplicate canvas when a rename races an in-flight /update that already resolved a doc reference through the old path', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const baseDoc = new LoroDoc()
     baseDoc.getText('content').insert(0, 'original')
     baseDoc.commit()
@@ -820,7 +828,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('returns 400 with Problem Details { title } for invalid input shapes', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const noBody = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -869,7 +877,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     // `session1` as its segment — leaving the store reads further down
     // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -978,7 +986,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     await saveDocument('session1', 'canvas-b', new LoroDoc())
 
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/session1/documents')
     expect(res.status).toBe(200)
     const json = (await res.json()) as { documents: { path: string }[] }
@@ -988,7 +996,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('returns 400 for an invalid workspaceId', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/bad.sid/documents')
     expect(res.status).toBe(400)
   })
@@ -1002,7 +1010,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     // in the browser's localStorage) then looks exactly like data loss.
     // The v1 document routes already 404 an unknown workspace; this brings
     // the legacy list route into agreement.
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/never-registered/documents')
     expect(res.status).toBe(404)
   })
@@ -1019,7 +1027,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   it('also returns the canvas list from the canonical workspace route', async () => {
     await saveDocument('workspace1', 'canvas-a', new LoroDoc())
 
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/workspace1/documents')
 
     expect(res.status).toBe(200)
@@ -1042,7 +1050,7 @@ describe('POST /api/workspaces', () => {
   }
 
   it('mints the canonical id and derives the address from the name it was given', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const res = await create(app, { displayName: 'Marketing Team' })
 
     expect(res.status).toBe(201)
@@ -1060,7 +1068,7 @@ describe('POST /api/workspaces', () => {
   })
 
   it('gives the second workspace of the same name an address of its own', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const first = workspaceSummarySchema.parse(
       await (await create(app, { displayName: 'Notes' })).json(),
     )
@@ -1078,7 +1086,7 @@ describe('POST /api/workspaces', () => {
   })
 
   it('creates a workspace with NO segment when the name yields none', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     // A name the segment charset cannot spell. ADR-0019 leaves the layer
     // absent rather than writing a mangled approximation — the workspace is
     // addressed by its canonical id until a rename gives it one.
@@ -1090,7 +1098,7 @@ describe('POST /api/workspaces', () => {
   })
 
   it('refuses a name that is empty once trimmed', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     expect((await create(app, { displayName: '   ' })).status).toBe(400)
     expect((await create(app, {})).status).toBe(400)
   })
@@ -1119,7 +1127,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
   }
 
   it('renames both layers and answers with the workspace as it now stands', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const before = await created(app, 'Before')
 
     const res = await patch(app, before.workspaceId, { segment: 'after', displayName: 'After' })
@@ -1132,7 +1140,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
   })
 
   it('leaves a layer the body omits alone, rather than clearing it', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const before = await created(app, 'Keeps its url')
     expect(before.segment).toBe('keeps-its-url')
 
@@ -1143,7 +1151,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
   })
 
   it('accepts the SEGMENT in the address, like every other addressed surface', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const before = await created(app, 'Addressed by segment')
 
     const res = await patch(app, 'addressed-by-segment', { displayName: 'Renamed through it' })
@@ -1152,13 +1160,13 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
   })
 
   it('answers 404 for a workspace that does not exist', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const res = await patch(app, '01ARZ3NDEKTSV4RRFFQ69G5FAV', { displayName: 'Nobody' })
     expect(res.status).toBe(404)
   })
 
   it('refuses a segment another workspace holds, and changes nothing', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const other = await created(app, 'Held by someone else')
     const mine = await created(app, 'Mine')
 
@@ -1179,7 +1187,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
   })
 
   it('accepts the workspace its OWN segment names, which is not a collision', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const before = await created(app, 'Unchanged')
 
     const res = await patch(app, before.workspaceId, {
@@ -1212,7 +1220,7 @@ describe('GET /api/workspaces document counts', () => {
   }
 
   it('counts each workspace its own documents', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const two = await created(app, 'Two docs')
     const none = await created(app, 'No docs')
 
@@ -1232,7 +1240,7 @@ describe('GET /api/workspaces document counts', () => {
   })
 
   it('counts documents in folders, not just at the root', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const ws = await created(app, 'Nested')
     for (const path of ['top', 'folder/one', 'folder/deeper/two']) {
       await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
@@ -1247,7 +1255,7 @@ describe('GET /api/workspaces document counts', () => {
   })
 
   it('stops counting a document once it is deleted', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const ws = await created(app, 'Deletes')
     await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
       method: 'POST',
@@ -1283,7 +1291,7 @@ describe('GET /api/workspaces with a registry row that has no tree', () => {
   }
 
   it('counts it as empty instead of failing the whole listing', async () => {
-    const app = createWorkspacesRouter()
+    const app = createWorkspacesRouter({ serverDeps })
     const withTree = workspaceSummarySchema.parse(
       await (
         await app.request('/api/workspaces', {

@@ -1,12 +1,20 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { updateDocumentResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-live-doc-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -34,7 +42,7 @@ afterEach(() => {
 describe('live-doc router', () => {
   it('returns a Hono instance', () => {
     const triggerAutoVersion = vi.fn()
-    const app = createLiveDocRouter({ triggerAutoVersion })
+    const app = createLiveDocRouter({ serverDeps, triggerAutoVersion })
     expect(app).toBeInstanceOf(Hono)
   })
 })
@@ -48,7 +56,7 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
     doc.commit()
     await saveDocument('session1', 'canvas-a', doc)
 
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/w/session1/document/canvas-a/snapshot')
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('application/octet-stream')
@@ -64,13 +72,13 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
   })
 
   it('returns 400 for an invalid path', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/w/session1/document/bad.path/snapshot')
     expect(res.status).toBe(400)
   })
 
   it('returns 404 with Problem Details { title } for a canvas that was never created', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/w/session1/document/never-created/snapshot')
     expect(res.status).toBe(404)
     const json = (await res.json()) as { title?: string }
@@ -83,7 +91,7 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
 
   it('returns 404 for a canvas that existed and was deleted', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     await app.request('/api/workspaces/session1/documents/canvas-a', { method: 'DELETE' })
 
     const res = await app.request('/api/w/session1/document/canvas-a/snapshot')
@@ -96,14 +104,14 @@ describe('GET /api/w/:workspaceId/document/:path/exists', () => {
     const doc = new LoroDoc()
     await saveDocument('session1', 'canvas-a', doc)
 
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/w/session1/document/canvas-a/exists')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ exists: true })
   })
 
   it('returns exists:false for an unregistered canvas without creating it', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/w/session1/document/never-created/exists')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ exists: false })
@@ -115,7 +123,7 @@ describe('GET /api/w/:workspaceId/document/:path/exists', () => {
   })
 
   it('returns 400 for an invalid path', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/w/session1/document/bad.path/exists')
     expect(res.status).toBe(400)
   })
@@ -133,7 +141,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -158,7 +166,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
   // decode error — the sibling workspace-document route already answers
   // this with 400, and a client sending garbage is not a server failure.
   it('refuses bytes Loro cannot decode with 400, and leaves the document as it was', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     for (const bytes of [new Uint8Array(), new Uint8Array([1, 2, 3])]) {
       const res = await app.request('/api/w/session1/document/canvas-a/update', {
         method: 'POST',
@@ -171,7 +179,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
   })
 
   it('rejects an oversized update body with 413 payload_too_large', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const oversized = new Uint8Array(16 * 1024 * 1024 + 1)
     const res = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
@@ -184,7 +192,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
   })
 
   it('evicts the cached doc when saveDocument fails, so a subsequent read does not serve the unpersisted update', async () => {
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     // Persist an initial one-element state directly.
     const initial = new LoroDoc()

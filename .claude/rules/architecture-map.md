@@ -60,9 +60,9 @@ It reads this table's data-driven mirror,
 Three things it enforces that a session outside `tools/arch-lint` still has to
 know, because the reader who trips them is elsewhere:
 
-- **The cycle check (`cycle-check.ts`) is static and value-aware, so a
-  CROSS-PACKAGE cycle is invisible to it.** The one that exists is guarded by
-  hand, below.
+- **`cycle-check.ts` is static and value-only: a CROSS-PACKAGE cycle is
+  invisible to it (`package-cycle-check.ts`), a type one is
+  `type-cycle-check.ts`'s.**
 - **A package that adds a path alias must declare it** in
   `repo-coverage.test.ts`'s `CYCLE_SCAN_ALIASES`, or that package's edges
   silently leave the cycle graph — 115 of `apps/web`'s 554 while its `@/` was

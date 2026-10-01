@@ -15,9 +15,10 @@
 // backup, and the backup must never delete on GC's behalf.
 
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, sep } from 'node:path'
 import { z } from 'zod'
+import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
 import { blobsRoot, listTenants } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
@@ -380,14 +381,7 @@ async function writeManifest(backupDir: string, references: BackupBlobReferences
  * event.
  */
 async function copyAtomically(from: string, to: string): Promise<void> {
-  const temp = `${to}.partial-${process.pid}-${Date.now()}`
-  try {
-    await writeFile(temp, await readFile(from))
-    await rename(temp, to)
-  } catch (err) {
-    await rm(temp, { force: true }).catch(() => {})
-    throw err
-  }
+  await writeFileAtomic(to, await readFile(from))
 }
 
 async function exists(path: string): Promise<boolean> {

@@ -1,4 +1,4 @@
-import type { Point, Rect } from './edge-rules.js'
+import type { Point, Rect } from './edge-geometry.js'
 import { MinHeap } from './min-heap.js'
 
 /**

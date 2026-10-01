@@ -1,6 +1,6 @@
 import { clientPointToRootLocal, type Point } from '../../lib/spatial/viewport.js'
 import { COMMENT_PRESS_SLOP_PX } from './pointer-comment-claim.js'
-import type { EditorPointerInputs } from './use-editor-pointer.js'
+import type { EditorPointerInputs } from './pointer-inputs.js'
 
 type ProposalClaimInputs = Pick<
   EditorPointerInputs,
