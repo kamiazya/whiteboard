@@ -1,3 +1,6 @@
+import { toJsonCanvas } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseViewerScene } from './scene.js'
 
@@ -415,6 +418,39 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       expect.any(HTMLElement),
       expect.objectContaining({ references: { notes: { name: 'W', body } } }),
     )
+  })
+
+  it('accepts a referenced CANVAS in the form canvas_view sends it, and hands the viewer the model', async () => {
+    // `canvas_view` puts a referenced spatial document on the wire as JSON
+    // Canvas (`toJsonCanvas`), the one projection the wire knows. The widget
+    // parsed that field against the strict model schema instead — `type`
+    // and `text` are unknown keys there — so every embedded board was
+    // dropped as "unparseable" while a referenced markdown note still drew.
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'f', type: 'file', file: 'board', x: 0, y: 0, width: 320, height: 220 }],
+    }
+    const board: SpatialCanvas = {
+      nodes: [textNode({ id: 'b1', x: 0, y: 0, width: 100, height: 40, text: 'inside' })],
+      edges: [],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: {
+        workspaceId: 'ws-1',
+        documentId: 'ws/path',
+        scene,
+        references: { board: { name: 'B', canvas: toJsonCanvas(board) } },
+      },
+    })
+
+    const { mountCanvasViewer } = await import('./mount.js')
+    const opts = vi.mocked(mountCanvasViewer).mock.calls.at(-1)?.[1]
+    expect(opts?.references).toEqual({ board: { name: 'B', canvas: board } })
   })
 
   it("forwards canvas_view's style so the widget can draw the document's theme", async () => {

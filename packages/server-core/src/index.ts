@@ -81,7 +81,6 @@ export type { CanvasViewInput, CanvasViewOutput } from './tools/canvas-view.js'
 export {
   canvasViewInputSchema,
   canvasViewOutputSchema,
-  canvasViewReferenceSchema,
   createCanvasViewTool,
 } from './tools/canvas-view.js'
 export {

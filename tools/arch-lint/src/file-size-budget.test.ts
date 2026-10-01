@@ -794,7 +794,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   'packages/canvas-render/src/tidy.test.ts': 1176,
-  'packages/canvas-viewer/src/widget-entry.test.tsx': 1266,
+  // 1266 -> 1301: a referenced canvas arriving in the form canvas_view
+  // sends it (JSON Canvas) reaches the viewer as the model.
+  'packages/canvas-viewer/src/widget-entry.test.tsx': 1301,
   // 1308 -> 1324: an unchanged canvas reconciling to no ops, which the
   // "writes only what changed" test above it could not see.
   // 1324 -> 1354: the delete cascade pinned over ink — anchored ink goes,
