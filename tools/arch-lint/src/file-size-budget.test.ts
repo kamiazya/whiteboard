@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { staleHeadroom } from './size-ledger-headroom.js'
 
 // docs/contributing/review-checklist.md says "Files stay under 800 lines",
 // and until this guard existed nothing enforced it — 17 files already over
@@ -108,6 +109,11 @@ function isScannedTestFile(absolutePath: string): boolean {
  * the comment said more about merging than about sizes.
  */
 const LEDGER_PATH = 'tools/arch-lint/src/file-size-budget.test.ts'
+
+/** A listed file's current count, or nothing for one that is gone (another assertion's finding). */
+function readingOf(path: string): number | undefined {
+  return existsSync(join(REPO_ROOT, path)) ? lineCount(join(REPO_ROOT, path)) : undefined
+}
 
 function scanTestFiles(): string[] {
   return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
@@ -218,7 +224,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // are the added lines.
   // Lowered 1626 -> 1516: the ink-id family (which collection an id is in,
   // per verb) left for `ink-commands.ts`.
-  'apps/web/src/lib/spatial/commands.ts': 1516,
+  'apps/web/src/lib/spatial/commands.ts': 1504,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -301,7 +307,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/loro-adapter/src/loro-bridge.ts': 1152,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
-  'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
+  'packages/canvas-render/src/layout/edges/edge-rules.ts': 845,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
@@ -364,14 +370,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // write after an undo wrote the pre-undo canvas back over a document the
   // screen had already left, publishing nothing and discarding the redo
   // stack.
-  'apps/web/src/lib/document-sync-session.ts': 1535,
+  'apps/web/src/lib/document-sync-session.ts': 1515,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
   // rows a document that has not been written since still has. A union rather
   // than a merge — a document is never in both — and the comment saying so is
   // most of the 14 lines.
-  'packages/mcp-server/src/server/store/document-store.ts': 1145,
+  'packages/mcp-server/src/server/store/document-store.ts': 1057,
   // +1 for a task list's checkbox, which is one import and one branch here:
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
@@ -634,6 +640,13 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
     )
     expect(missing).toEqual([])
   })
+
+  // The ratchet above is only as tight as the ceiling, and a ceiling that
+  // stopped being lowered as its file shrank is a guard that reads as
+  // holding it: see `size-ledger-headroom.ts`.
+  it('holds no grandfather entry whose ceiling stands far above its reading — lower it', () => {
+    expect(staleHeadroom(FILE_SIZE_GRANDFATHER, readingOf)).toEqual([])
+  })
 })
 
 /**
@@ -680,7 +693,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reason its own comment gives for the list being 400-odd entries rather
   // than 17 — so it is recorded rather than split, and splitting it would
   // put half the ledger where a reader does not look for it.
-  'tools/arch-lint/src/function-size-budget.test.ts': 878,
+  'tools/arch-lint/src/function-size-budget.test.ts': 853,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
@@ -700,7 +713,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // pinned here, not only in the hook's test).
   // 1956 -> 1997 for the /receive-transfer route case: the fragment carries
   // the whole handshake, so it is pinned here beside /pair's same guard.
-  'apps/web/src/App.test.tsx': 1998,
+  'apps/web/src/App.test.tsx': 1373,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
@@ -710,7 +723,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // passkey the precondition for moving, so all twenty renders arrange one.
   // Raised 1086 -> 1089: app-logger reaches the console in browser tests now,
   // so the deferred-demote case claims the warn it provokes (import + two lines).
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1089,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 887,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // Raised 2708 -> 2724, two lines for each of the eight ink entries the
   // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
@@ -739,7 +752,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2768 -> 2855 for the three cases pinning that undo: the document
   // agreeing with the screen after an undo and after a redo, and a taken-back
   // write settling as saved rather than reading as pending forever.
-  'apps/web/src/lib/document-sync-session.test.ts': 2855,
+  'apps/web/src/lib/document-sync-session.test.ts': 2850,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
   // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
@@ -760,19 +773,19 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // aimed at empty space.
   // 2042 -> 2075: two rules of `set-line-end` that nothing pinned (a stale
   // box id, and both ends on one box) now have tests.
-  'apps/web/src/lib/spatial/commands.test.ts': 2075,
+  'apps/web/src/lib/spatial/commands.test.ts': 2072,
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.
   // 1068 -> 1078: its SIBLING, the note-body embed, has failed the same way
   // twice more, so it takes the same instrument and the note says the two
   // are one subject.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1078,
-  'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1076,
+  'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
   // Raised 876 -> 914 for the cancel case: the page's effect cleanup has to
   // stop the replica refresh and the push it armed, and both schedulers'
   // mocks have to answer a spy cancel rather than undefined.
-  'apps/web/src/pages/DaemonDocumentPage.test.tsx': 914,
+  'apps/web/src/pages/DaemonDocumentPage.test.tsx': 890,
   // Raised 2139 -> 2173: a duplicated note's copy was filed as a canvas, and
   // the case needs this file's installFetchMock/selectCard harness. Moving
   // that harness to test-utils/ is what would shrink this entry properly.
@@ -781,8 +794,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // index-page tests stayed green, so the comment explaining why the dialog
   // must not read `Delete "2 documents"?` was pinning nothing.
   'apps/web/src/pages/DaemonIndexPage.test.tsx': 2221,
-  'apps/web/src/pages/SettingsPage.test.tsx': 905,
-  'apps/web/src/pages/use-browser-document-controller.test.ts': 1500,
+  'apps/web/src/pages/SettingsPage.test.tsx': 839,
+  'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
   'packages/canvas-render/src/layout/comments.test.ts': 823,
   'packages/canvas-render/src/layout/edges/edge-rules.properties.test.ts': 843,
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
@@ -807,12 +820,12 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // merged table now holds; only the numbers were re-measured. A scoreboard
   // whose rows are pinned exactly is one whose history is prose, so a merge
   // of two histories costs lines rather than losing one of them.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 976,
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 961,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
   // reader loosens it again.
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1317,
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1311,
   // 881 -> 901 when compaction became workspace-keyed: one test pins that
   // saves to two documents of one workspace collapse into one compaction.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
@@ -881,6 +894,10 @@ describe('file-size budget: test files, same 800-line budget, same shrink-only c
       (path) => !existsSync(join(REPO_ROOT, path)),
     )
     expect(missing).toEqual([])
+  })
+
+  it('holds no test-file entry whose ceiling stands far above its reading — lower it', () => {
+    expect(staleHeadroom(TEST_FILE_SIZE_GRANDFATHER, readingOf)).toEqual([])
   })
 
   // The two ledgers must not both claim a file: the source scan excludes test

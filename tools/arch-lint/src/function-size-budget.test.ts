@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { staleHeadroom } from './size-ledger-headroom.js'
 
 // docs/contributing/review-checklist.md says "functions stay under 50
 // lines". `file-size-budget.test.ts` made its companion clause — "files stay
@@ -14,9 +15,11 @@ import { describe, expect, it } from 'vitest'
 // sides, so an entry cannot outlive the debt it names. An over-budget
 // function not in the list fails naming it and its count; a listed function
 // that has shrunk to 50 or under fails telling the closer to delete the
-// entry. An entry is a CEILING, not a reading, so shrinking a listed
-// function from 400 lines to 200 needs no edit here — only crossing the
-// budget, or growing past the recorded number, does.
+// entry. An entry is a CEILING, not a reading, so an ordinary shrink needs
+// no edit here — only crossing the budget, growing past the recorded number,
+// or leaving the ceiling standing further above the reading than
+// `size-ledger-headroom.ts` allows does. That last one is what keeps the
+// growth guard a guard: a ceiling 584 lines above its function holds nothing.
 //
 // **Why a per-file budget could not catch this class, measured.** #1717
 // moved 834 lines of pointer handling out of `SpatialEditor.tsx` into
@@ -149,17 +152,17 @@ const BY_KEY = new Map(MEASURED.map((row) => [row.key, row.lines]))
  * ceiling it had then. Shrink-only: see the header.
  */
 const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/App.tsx#App': 763,
+  'apps/web/src/App.tsx#App': 179,
   // 299 -> 130, and under a new name: `AppShell` is the MODE choice now (8
   // lines), and this is the chrome row it picks. Still over budget because
   // it is a row of controls and their rationale; the four that could stand
   // alone (the mark's frame, the alpha badge, fullscreen, settings) did.
-  'apps/web/src/components/AppShell.tsx#ShellBar': 130,
+  'apps/web/src/components/AppShell.tsx#ShellBar': 105,
   'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
   'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
-  'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 441,
-  'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 332,
+  'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 308,
+  'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 278,
   'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 69,
@@ -176,7 +179,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 57,
   'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 92,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
-  'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 165,
+  'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
   'apps/web/src/components/document-editor/InspectorPanel.tsx#InspectorPanel': 139,
   'apps/web/src/components/document-editor/InspectorSegment.tsx#InspectorSegment': 56,
@@ -219,17 +222,17 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // when the registry read learned to degrade: a browser that refuses
   // IndexedDB has to leave the card listing what it CAN read rather than
   // rejecting, and that branch is where the explanation lives.
-  'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 147,
+  'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 125,
   // 522 -> 399: the passkey states became a component, and the cache-then-
   // maybe-demote step its own function (below) — which is where the reason
   // its read-back has a try/catch of its own now lives.
-  'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 399,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 352,
   'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#cacheAndMaybeDemote': 70,
   // 163 -> 81: the ladder is `journeySteps` and one function per rung, so
   // "which state is this environment in" is answered once rather than in
   // the middle of the list that draws it.
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 81,
-  'apps/web/src/components/shell/ShellMark.tsx#ShellMark': 123,
+  'apps/web/src/components/shell/ShellMark.tsx#ShellMark': 80,
   'apps/web/src/components/shell/WorkspaceMenu.tsx#WorkspaceMenu': 339,
   'apps/web/src/components/spatial-editor/BoxTargetOverlay.tsx#BoxTargetOverlay': 95,
   // 208 -> 218: the six-level nested ternary choosing a menu became two
@@ -287,21 +290,21 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
   'apps/web/src/components/spatial-editor/context-menu-items/ink-menu-items.tsx#inkMenuItems': 166,
-  'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#nodeMenuItems': 385,
+  'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#nodeMenuItems': 275,
   'apps/web/src/components/spatial-editor/drag-preview.ts#computeDragPreview': 102,
   'apps/web/src/components/spatial-editor/facet-widgets/FacetFormPanel.tsx#FacetFormPanel': 132,
   'apps/web/src/components/spatial-editor/gesture-trace.ts#createGestureTrace': 83,
-  'apps/web/src/components/spatial-editor/gestures.ts#reduceGesture': 238,
+  'apps/web/src/components/spatial-editor/gestures.ts#reduceGesture': 77,
   'apps/web/src/components/spatial-editor/gestures.ts#reducePointerUpResizing': 52,
   'apps/web/src/components/spatial-editor/label-editor-overlays.tsx#EdgeLabelEditorOverlay': 59,
   'apps/web/src/components/spatial-editor/markdown-body-editor-overlay.tsx#MarkdownBodyEditorOverlay': 109,
-  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 125,
+  'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 81,
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
   'apps/web/src/components/spatial-editor/use-canvas-replacement.ts#useCanvasReplacement': 86,
-  'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 237,
-  'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions.pasteFragment': 96,
+  'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 228,
+  'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions.pasteFragment': 65,
   'apps/web/src/components/spatial-editor/use-comment-state.ts#useCommentState': 124,
-  'apps/web/src/components/spatial-editor/use-drag-layers.ts#useDragLayers': 363,
+  'apps/web/src/components/spatial-editor/use-drag-layers.ts#useDragLayers': 357,
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 125,
   // 352 -> 421: handleKeyDown (60 -> under budget) became a claimant chain,
   // and each claimant carries the reason that used to sit beside its `return`.
@@ -319,11 +322,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 548,
   'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
-  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 103,
+  'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 95,
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
   'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 147,
-  'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 159,
+  'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 150,
   'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 217,
   'apps/web/src/components/tags/TagChipsEditor.tsx#TagChipsEditor': 96,
   'apps/web/src/components/use-preview-viewport.ts#usePreviewViewport': 97,
@@ -331,7 +334,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/DocumentPathField.tsx#DocumentPathField': 72,
   'apps/web/src/components/workspace-files/DocumentPreview.tsx#DocumentPreview': 167,
   'apps/web/src/components/workspace-files/DocumentThumbnail.tsx#DocumentThumbnail': 83,
-  'apps/web/src/components/workspace-files/EmptyWorkspaceState.tsx#EmptyWorkspaceState': 146,
+  'apps/web/src/components/workspace-files/EmptyWorkspaceState.tsx#EmptyWorkspaceState': 75,
   // 205 -> 79: a document's card, and the picture with the two things drawn
   // ON it, are their own components. The two below are those.
   'apps/web/src/components/workspace-files/FolderContentsList.tsx#FolderContentsList': 79,
@@ -373,59 +376,59 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-top-bar/useDocumentNames.ts#useDocumentNames': 55,
   'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 187,
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
-  'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 131,
+  'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
-  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 69,
+  'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 63,
   'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
   // The receiving half of a cross-origin transfer, as one sequence: announce,
   // listen, accept, report. The workspace list is already split out
   // (`useKeeperWorkspaceTargets`) because it is a different question; what
   // remains reads top to bottom as the handshake, and splitting it further
   // would scatter one protocol across hooks.
-  'apps/web/src/hooks/use-transfer-handshake.ts#useTransferHandshake': 92,
+  'apps/web/src/hooks/use-transfer-handshake.ts#useTransferHandshake': 86,
   // 196 -> 199 (ADR-0042 S10): the awaitingDaemonRenewal guard — a daemon
   // deep link is undecided, not foreign, while its silent renewal is outstanding.
-  'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 199,
+  'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 365,
-  'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 103,
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 361,
+  'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
   'apps/web/src/lib/clipboard-fragment.ts#remintClipboardFragment': 55,
   'apps/web/src/lib/daemon-file-adapter.ts#createDaemonFileAdapter': 70,
-  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 128,
+  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 93,
   'apps/web/src/lib/document-sync-session.ts#commandTargetKey': 56,
   // Raised 842 -> 884: the undo path takes back a write still inside the
   // debounce window, which has to reach the timer and the queue this factory
   // closes over — so it lives here rather than beside them. Shrinking it is
   // the same job as [[unify-document-pages-behind-backend-port]], not a
   // separate one.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 884,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 220,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 101,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 856,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
   'apps/web/src/lib/document-sync-session.ts#writeCommandTarget': 139,
   'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
-  'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 101,
+  'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 363,
+  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 338,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
   // 86 -> 87: the credential now negotiates the `prf` extension at CREATE
   // (ADR-0042 d6), which several authenticators decide there rather than at
   // assertion time. One property on the options object; its reasoning is a
   // named constant beside the function rather than a comment inside it.
-  'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 95,
-  'apps/web/src/lib/spatial/commands.ts#applyCommand': 146,
+  'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 79,
+  'apps/web/src/lib/spatial/commands.ts#applyCommand': 132,
   'apps/web/src/lib/spatial/commands.ts#buildFragmentInsertCommand': 84,
   'apps/web/src/lib/spatial/freehand.ts#freehandLine': 58,
   'apps/web/src/lib/spatial/geometry.ts#findFreeSpot': 64,
   'apps/web/src/lib/spatial/minimap.ts#fitMinimap': 52,
-  'apps/web/src/lib/sse-shared-stream-source.ts#createSharedSseStreamSource': 153,
-  'apps/web/src/lib/user-settings-store.ts#createUserSettingsStore': 67,
+  'apps/web/src/lib/sse-shared-stream-source.ts#createSharedSseStreamSource': 139,
+  'apps/web/src/lib/user-settings-store.ts#createUserSettingsStore': 53,
   'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract': 95,
-  'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 879,
-  'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 331,
+  'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 491,
+  'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 153,
   // Raised 697 -> 702 for Duplicate: the hook call, the ref the async
   // handler reads the current document from, and the menu row it contributes.
   // Raised 702 -> 727 for Delete: the hook call, two menu rows and the
@@ -437,8 +440,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 727 -> 583: the backend seam left for `use-daemon-document-backend.ts`
   // (audit item 6 slice 4). Recorded at the measurement rather than left at
   // the old ceiling, so the next change spends headroom deliberately.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 583,
-  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 449,
+  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // 562 -> 334: the inspector column, the merged header row and the markdown
   // pane's props each became a named piece, which is what took the page's
   // cognitive complexity under the threshold. Recorded at the measurement
@@ -466,7 +469,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // That is what took the page from a cognitive complexity of 42 to under
   // the threshold; the three entries below are the pieces still over the
   // line budget, and each is one concern rather than several.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 148,
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 145,
   // One load: attempt, unlock, the remembered blob, and what each outcome
   // leaves on screen. The states are ADR-0042 decision 6's and they share
   // the same `setState`, so splitting them would split one transition.
@@ -478,20 +481,20 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Presentation only — the logic is `useTransferHandshake`. Six stages, each
   // a short branch, and the offer and the report already live in their own
   // components; the page is the switch between them.
-  'apps/web/src/pages/ReceiveTransferPage.tsx#ReceiveTransferPage': 70,
+  'apps/web/src/pages/ReceiveTransferPage.tsx#ReceiveTransferPage': 68,
   // The offer's JSX: the sender's CLAIM, the sentence saying images do not
   // travel, the target choice and the accept control. Each is a line a person
   // needs before pressing, so none can move after the press.
-  'apps/web/src/pages/ReceiveTransferPage.tsx#OfferPanel': 66,
+  'apps/web/src/pages/ReceiveTransferPage.tsx#OfferPanel': 59,
   // 89 -> 94: the Copies-on-this-device card mounts in BOTH branches, and
   // the disconnected one is where it matters most — with no daemon every
   // copy is browser-kept, so a card hidden there would hide the whole list.
-  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 94,
+  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 75,
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
   'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
-  'apps/web/src/pages/SettingsPage.tsx#sectionContent': 66,
+  'apps/web/src/pages/SettingsPage.tsx#sectionContent': 60,
   'apps/web/src/pages/use-auto-checkpoint.ts#useAutoCheckpoint': 60,
-  'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 458,
+  'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 400,
   // Raised 157 -> 182 for `duplicateDocument`: the copy itself is one call
   // into lib/duplicate-daemon-document.ts, shared with the index page; what
   // is here is the list refresh and the path move, the same two steps
@@ -503,8 +506,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // records is that it is now NAMED: one memo deciding which connection this
   // page syncs through, the transport rule in front of it, and the auth
   // refusal that belongs to a connection rather than to a page.
-  'apps/web/src/pages/use-daemon-document-backend.ts#useDaemonDocumentBackend': 118,
-  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 194,
+  'apps/web/src/pages/use-daemon-document-backend.ts#useDaemonDocumentBackend': 91,
+  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 179,
   // The document-menu bundle: two hooks, two rows, the dialog and the alert
   // row. It is over the budget because it RETURNS JSX — the rows and the
   // dialog are 40 of its lines and splitting them out would be a component
@@ -516,13 +519,13 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration.register': 58,
-  'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 101,
-  'packages/canvas-render/src/layout/comments.ts#composeComments': 159,
+  'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
+  'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
   'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 94,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 69,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 52,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#computeAnchorsFor': 89,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#computeAnchorsFor': 56,
   // Raised 250 -> 308: the trial evaluator's three steps are now named
   // closures (applySelfCosts / applyPairCosts / rescorePairsOf /
   // rescorePairInto), each carrying the invariant that was a comment inside
@@ -531,15 +534,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // into a module of its own, which needs its eight captured caches passed
   // as a bundle.
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 308,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeAcrossRegions': 111,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeAcrossRegions': 94,
   // Raised 94 -> 102 for the same reason: `improveEdge` replaced the
   // candidate loop's body and brought its incumbent-wins-ties rationale
   // with it.
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 102,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#patchAnchorGroups': 54,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeEdge': 164,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeOrthogonal': 180,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 323,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeEdge': 75,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeOrthogonal': 139,
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 189,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
   // Raised 406 -> 460: the inline-run walker's inner steps are now NAMED
@@ -550,7 +553,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // into sibling modules, which needs `ResolvedMdastOptions` / `Cursor`
   // extracted first or it closes a package-internal cycle.
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing': 460,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.walk': 126,
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.walk': 73,
   // Raised 80 -> 87 for the same reason: `clusterCameDown` and
   // `placeSegment` replaced two inline blocks and brought their doc
   // comments with them.
@@ -559,7 +562,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 68,
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
-  'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 121,
+  'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 67,
   'packages/canvas-render/src/references/seams.ts#referenceSeams': 73,
   'packages/canvas-render/src/svg/backend.ts#buildSvgDocumentParts': 61,
   'packages/canvas-render/src/svg/backend.ts#renderNode': 97,
@@ -576,52 +579,52 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/CanvasViewer.tsx#CanvasViewer': 136,
   'packages/canvas-viewer/src/font-loading.ts#loadViewerFont': 61,
   'packages/canvas-viewer/src/widget-entry.ts#applyToolResult': 58,
-  'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 224,
+  'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 200,
   'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 118,
-  'packages/codec/src/markdown/from-remark.ts#toFlow': 59,
+  'packages/codec/src/markdown/from-remark.ts#toFlow': 55,
   'packages/codec/src/markdown/from-remark.ts#toPhrasing': 55,
   'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable': 52,
   'packages/codec/src/spatial/projection.ts#liftNode': 55,
   'packages/codec/src/test-utils/fully-populated-canvas.ts#fullyPopulatedCanvas': 92,
-  'packages/daemon-client/src/replica-session-key.ts#sessionKey': 57,
-  'packages/daemon-client/src/test-utils/document-backend-contract.ts#documentBackendContract': 102,
+  'packages/daemon-client/src/replica-session-key.ts#sessionKey': 52,
+  'packages/daemon-client/src/test-utils/document-backend-contract.ts#documentBackendContract': 92,
   'packages/daemon-client/src/test-utils/sse-stream-source-contract.ts#sseStreamSourceContract': 185,
   'packages/facet-engine/src/form.ts#normalizePicker': 53,
-  'packages/facet-engine/src/registry.ts#createFacetRegistry': 290,
-  'packages/facet-ui/src/catalog-picker.tsx#CatalogPicker': 228,
+  'packages/facet-engine/src/registry.ts#createFacetRegistry': 211,
+  'packages/facet-ui/src/catalog-picker.tsx#CatalogPicker': 213,
   'packages/facet-ui/src/catalog-popover.tsx#CatalogPopover': 144,
-  'packages/facet-ui/src/derived-form.tsx#DerivedFacetForm': 264,
-  'packages/facet-ui/src/derived-form.tsx#FieldInput': 131,
+  'packages/facet-ui/src/derived-form.tsx#DerivedFacetForm': 171,
+  'packages/facet-ui/src/derived-form.tsx#FieldInput': 90,
   'packages/facet-ui/src/facet-catalog-picker.tsx#FacetCatalogPicker': 79,
-  'packages/facet-ui/src/option-group.tsx#FacetOption': 77,
+  'packages/facet-ui/src/option-group.tsx#FacetOption': 57,
   'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 99,
   'packages/mcp-server/src/cli/daemon-doctor.ts#runDaemonDoctor': 73,
-  'packages/mcp-server/src/cli/daemon-logs.ts#buildInputs': 65,
-  'packages/mcp-server/src/cli/daemon-run.ts#runDaemonRun': 176,
-  'packages/mcp-server/src/cli/daemon-status.ts#runDaemonStatus': 85,
+  'packages/mcp-server/src/cli/daemon-logs.ts#buildInputs': 63,
+  'packages/mcp-server/src/cli/daemon-run.ts#runDaemonRun': 86,
+  'packages/mcp-server/src/cli/daemon-status.ts#runDaemonStatus': 84,
   'packages/mcp-server/src/cli/daemon-stop.ts#runDaemonStop': 84,
-  'packages/mcp-server/src/cli/daemon-support-bundle.ts#runDaemonSupportBundle': 121,
-  'packages/mcp-server/src/cli/dispatcher.ts#dispatchRun': 67,
+  'packages/mcp-server/src/cli/daemon-support-bundle.ts#runDaemonSupportBundle': 104,
+  'packages/mcp-server/src/cli/dispatcher.ts#dispatchRun': 62,
   'packages/mcp-server/src/cli/search-fetch-model.ts#runSearchFetchModel': 63,
   'packages/mcp-server/src/cli/server-doctor.ts#runServerDoctor': 59,
   'packages/mcp-server/src/cli/server-restore.ts#runServerRestore': 98,
-  'packages/mcp-server/src/cli/server-run.ts#runServerRun': 139,
+  'packages/mcp-server/src/cli/server-run.ts#runServerRun': 137,
   'packages/mcp-server/src/cli/server-status.ts#runServerStatus': 78,
   'packages/mcp-server/src/cli/server-support-bundle.ts#runServerSupportBundle': 105,
   'packages/mcp-server/src/di/container.ts#resolveServerDeps': 94,
   // 424 -> 433 (ADR-0041 S8 slice 2): the membership gate argument and the admit wiring threaded from membershipWiring().
-  'packages/mcp-server/src/server/app.ts#createApp': 433,
-  'packages/mcp-server/src/server/canvas-client-notifier.ts#createCanvasClientNotifier': 88,
+  'packages/mcp-server/src/server/app.ts#createApp': 138,
+  'packages/mcp-server/src/server/canvas-client-notifier.ts#createCanvasClientNotifier': 81,
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
   // 435 -> 182: the four workers both HTTP roots run are built and declared
   // in shared-background-work.ts; what is left here is the daemon's own.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 182,
-  'packages/mcp-server/src/server/index.ts#main': 182,
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 178,
+  'packages/mcp-server/src/server/index.ts#main': 81,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
-  'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 305,
-  'packages/mcp-server/src/server/mcp/index.ts#createMcpServer': 88,
+  'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
+  'packages/mcp-server/src/server/mcp/index.ts#createMcpServer': 76,
   'packages/mcp-server/src/server/mcp/index.ts#main': 61,
-  'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts#runE2eCheckpointSmoke': 230,
+  'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts#runE2eCheckpointSmoke': 101,
   'packages/mcp-server/src/server/mcp/startup.smoke-impl.ts#runStartupSmoke': 67,
   'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 115,
   'packages/mcp-server/src/server/mcp/stdio-lifecycle.ts#installStdioLifecycle': 68,
@@ -631,20 +634,20 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/observability/http-tracing.ts#tracingMiddleware': 51,
   'packages/mcp-server/src/server/observability/tracing.ts#initTracing': 85,
   // 80 -> 81 (ADR-0041 S8 slice 2): threads the membership admit to the workspaces router.
-  'packages/mcp-server/src/server/routes/document.ts#createDocumentRouter': 81,
-  'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 112,
+  'packages/mcp-server/src/server/routes/document.ts#createDocumentRouter': 69,
+  'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 86,
   'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
   // 101 -> 66: the per-document compact route went, and optimize-all is one
   // fold of the workspace record rather than a loop over documents.
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 66,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 88,
   'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 82,
-  'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 132,
-  'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 178,
+  'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 101,
+  'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 127,
   // 406 -> 412 (ADR-0041 S8 slice 2): the workspace list filters rows the caller is not admitted to.
-  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 412,
-  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 117,
-  'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 142,
+  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 323,
+  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 67,
+  'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 127,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
   // same router as POST .../replica-key — one seam for a workspace's whole
@@ -652,31 +655,31 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 94 -> 116 (ADR-0042 decision 1, 2026-09-21 rotation addendum): POST
   // .../replica-key/rotate joins the same router for the same reason —
   // one seam for a workspace's whole replica posture.
-  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 116,
-  'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 146,
+  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 99,
+  'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 93,
   // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
   'packages/mcp-server/src/server/routes/viewport.ts#createViewportRouter': 71,
   // 117 -> 59: the methods that start from a binding (`profileForBinding`,
   // `isDeactivated`, `ensureProfile`) moved to `bindingLookups`, the user
   // listing to `usersOf` and the role lookup to `roleIn`, in the same file,
   // so the membership insert and its clear still sit together here.
-  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 59,
+  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 57,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   // New (ADR-0042 decision 1 addendum): the setter's write-side validation
   // and the boolean answer to the lazy-row hazard both belong beside
   // tierFor/effectiveTier rather than in a second file over the same table.
   // 62 -> 82 (ADR-0042 decision 1, 2026-09-21 rotation addendum): rotateKey
   // belongs beside keyFor/setTier for the same reason.
-  'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 82,
+  'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 78,
   // 202 -> 132: the same move; server mode declares nothing of its own.
-  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 132,
+  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 128,
   // The shared set: four declarations, each carrying the rationale that
   // used to be copied in both roots, and the construction of the workers
   // they wrap. Long because a declaration list is long, not because it
   // branches — a reader shrinking it would be deleting the reasons.
   'packages/mcp-server/src/server/shared-background-work.ts#createSharedWorkers': 61,
   'packages/mcp-server/src/server/shared-background-work.ts#sharedBackgroundWork': 63,
-  'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
+  'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 52,
   // 53 -> 58: the refresh interval's in-flight write is now held and awaited
   // before the marker is removed. `clearInterval` cancels the next tick and
   // not the one already running, so a straggler used to recreate the marker
@@ -684,24 +687,24 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // raced a test's own `rm -rf` into ENOTEMPTY on CI three times. The five
   // lines are a promise handle, its assignment, the await, and three of
   // comment saying why the await is there.
-  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 58,
-  'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 214,
+  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 56,
+  'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 210,
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,
   'packages/mcp-server/src/server/store/db/index.ts#buildDb': 62,
   // 93 -> 87, renamed from compactDocument: the per-document address went.
   'packages/mcp-server/src/server/store/document-store.ts#compactWorkspace': 87,
-  'packages/mcp-server/src/server/store/document-store.ts#saveDocument': 66,
-  'packages/mcp-server/src/server/store/file-gc-sweeper.ts#createFileGcSweeper': 124,
-  'packages/mcp-server/src/server/store/file-gc.ts#purgeDanglingFiles': 110,
+  'packages/mcp-server/src/server/store/document-store.ts#saveDocument': 54,
+  'packages/mcp-server/src/server/store/file-gc-sweeper.ts#createFileGcSweeper': 113,
+  'packages/mcp-server/src/server/store/file-gc.ts#purgeDanglingFiles': 80,
   'packages/mcp-server/src/server/store/libsql/libsql-document-store.ts#saveCompactedSnapshot': 75,
-  'packages/mcp-server/src/server/store/version-store.ts#save': 100,
-  'packages/mcp-server/src/server/store/workspace-tail.ts#createWorkspaceTail': 90,
+  'packages/mcp-server/src/server/store/version-store.ts#save': 84,
+  'packages/mcp-server/src/server/store/workspace-tail.ts#createWorkspaceTail': 75,
   'packages/mcp-server/src/shared/diagnostics/support-bundle-writer.ts#writeSupportBundle': 53,
   'packages/mcp-server/src/shared/test-utils/tool-surface-metrics.ts#parameterCoverage': 63,
   'packages/model/src/test-utils/zod-arbitrary.ts#walkShape': 132,
   'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,
-  'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 94,
+  'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 73,
   'packages/ports/src/test-utils/blob-store-conformance.ts#describeBlobStoreConformance': 127,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 673,
   'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 662,
@@ -714,9 +717,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/body-edit.ts#editBody': 61,
   'packages/server-core/src/tools/canvas-edit.ts#editCanvas': 72,
   'packages/server-core/src/tools/document-crud.ts#wbDocumentCreate': 130,
-  'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 181,
-  'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 169,
-  'packages/server-core/src/tools/document-set.ts#createDocumentSetTool': 110,
+  'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 147,
+  'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 135,
+  'packages/server-core/src/tools/document-set.ts#createDocumentSetTool': 75,
   'packages/server-core/src/tools/facet-list.ts#createFacetListTool': 87,
   'packages/server-core/src/tools/version-restore.ts#createVersionRestoreTool': 64,
   // 93 -> 99: no new logic. The one exported chunk-size constant is 18
@@ -736,7 +739,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
  * budget would be a second rule nobody agreed.
  */
 const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx#daemonStub': 81,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx#daemonStub': 64,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#checkInvariants': 80,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#run~23': 127,
   'apps/web/src/components/spatial-editor/navigation.property.test.ts#drive': 137,
@@ -744,16 +747,16 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV18Fixture': 61,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV19Fixture': 93,
   'apps/web/src/lib/promote-workspace.browser.test.tsx#daemonStub': 52,
-  'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 74,
+  'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 72,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
   'apps/web/src/pages/DaemonIndexPage.test.tsx#installFetchMock': 93,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
   'packages/canvas-render/src/layout/edges/grid-route.optimality.properties.test.ts#referenceCost': 106,
   'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,
   'packages/daemon-client/src/sse-stream-hub.contract.test.ts#createHarness': 83,
-  'packages/mcp-server/src/cli/argv.differential.test.ts#oldParseDaemonRunArgs': 87,
+  'packages/mcp-server/src/cli/argv.differential.test.ts#oldParseDaemonRunArgs': 57,
   'packages/mcp-server/src/cli/argv.differential.test.ts#oldParseDaemonSupportBundleArgs': 54,
-  'packages/mcp-server/src/cli/daemon-run-auto-open-launch.test.ts#launchDaemonInPty': 70,
+  'packages/mcp-server/src/cli/daemon-run-auto-open-launch.test.ts#launchDaemonInPty': 67,
   'packages/mcp-server/src/cli/server-args.differential.test.ts#oldBackup': 64,
   'packages/mcp-server/src/server/app.routes.fuzz.property.test.ts#fillPattern': 65,
   // 77 -> 79: the hand-built deps gain the daemon's lock seam, which every
@@ -824,6 +827,18 @@ describe('functions stay under the line budget, or are recorded shrinking', () =
     ].filter((key) => !BY_KEY.has(key))
 
     expect(missing).toEqual([])
+  })
+
+  // The growth assertion above is only as tight as the ceiling, and a
+  // ceiling that stopped being lowered as its function shrank is a guard
+  // that reads as holding it: see `size-ledger-headroom.ts`.
+  it('holds no entry whose ceiling stands far above its reading — lower it', () => {
+    const stale = [
+      ...staleHeadroom(FUNCTION_SIZE_GRANDFATHER, (key) => BY_KEY.get(key)),
+      ...staleHeadroom(TEST_FUNCTION_SIZE_GRANDFATHER, (key) => BY_KEY.get(key)),
+    ]
+
+    expect(stale).toEqual([])
   })
 
   // The source scan excludes test files and the test ledger requires them, so
