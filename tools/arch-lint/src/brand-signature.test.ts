@@ -20,7 +20,16 @@
  * fourteenth one to keep in step — and the first to drift, since nothing
  * would be checking it.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -99,11 +108,21 @@ const SURFACES: Readonly<Record<string, string>> = {
     'composes: nothing — it QUOTES the path in a comment to say where the favicon geometry came from, and draws no SVG of its own.',
 }
 
-function walk(dir: string, found: string[] = []): string[] {
+/**
+ * `.claude/worktrees/` holds whole checkouts of other branches, gitignored and
+ * per-machine. Walking into one reports that branch's copy of every surface
+ * as unclassified, so a developer's parallel work blocks a push of code that
+ * is itself fine. Matched by path from the walk's root, because `worktrees`
+ * alone is a name other directories may legitimately carry.
+ */
+const SKIP_PATHS: ReadonlySet<string> = new Set(['.claude/worktrees'])
+
+function walk(root: string, dir: string = root, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue
     const full = join(dir, entry)
-    if (statSync(full).isDirectory()) walk(full, found)
+    if (SKIP_PATHS.has(relative(root, full).split(sep).join('/'))) continue
+    if (statSync(full).isDirectory()) walk(root, full, found)
     else found.push(full)
   }
   return found
@@ -163,6 +182,26 @@ function findCopies(): { readonly copies: readonly Copy[]; readonly files: numbe
   }
   return { copies, files }
 }
+
+describe('the brand signature walk', () => {
+  it('does not descend into a nested git worktree', () => {
+    const root = mkdtempSync(join(tmpdir(), 'brand-walk-'))
+    try {
+      mkdirSync(join(root, 'apps', 'web'), { recursive: true })
+      mkdirSync(join(root, '.claude', 'worktrees', 'feature', 'apps', 'web'), { recursive: true })
+      mkdirSync(join(root, '.claude', 'rules'), { recursive: true })
+      writeFileSync(join(root, 'apps', 'web', 'mark.svg'), '')
+      writeFileSync(join(root, '.claude', 'rules', 'note.md'), '')
+      writeFileSync(join(root, '.claude', 'worktrees', 'feature', 'apps', 'web', 'mark.svg'), '')
+      const found = walk(root).map((path) => relative(root, path).split(sep).join('/'))
+      // The sibling under `.claude/rules` proves the skip is the worktrees
+      // path and not all of `.claude`.
+      expect(found.sort()).toEqual(['.claude/rules/note.md', 'apps/web/mark.svg'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
 
 describe('the brand signature is one path', () => {
   const canonical = canonicalPath()
