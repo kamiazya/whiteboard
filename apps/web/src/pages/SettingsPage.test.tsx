@@ -152,7 +152,7 @@ describe('SettingsPage — General', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 4,
+        version: 5,
         storage: {},
         migration: {},
         capabilities: {},

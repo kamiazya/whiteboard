@@ -8,7 +8,7 @@ import { z } from 'zod'
 // field, changing a type, or making a field required), AND ship a migration
 // in the same increment: bumping alone is the discard this comment warns
 // about, just spelled differently.
-export const STORAGE_KEY = 'whiteboard:user-settings:v4'
+export const STORAGE_KEY = 'whiteboard:user-settings:v5'
 
 /**
  * The keys older versions wrote, each read once and then removed.
@@ -19,6 +19,7 @@ export const STORAGE_KEY = 'whiteboard:user-settings:v4'
  * the current one exists, instead of safeParse-failing on the bumped
  * `version` and overwriting the current payload with its defaults.
  */
+export const LEGACY_V4_STORAGE_KEY = 'whiteboard:user-settings:v4'
 export const LEGACY_V3_STORAGE_KEY = 'whiteboard:user-settings:v3'
 export const LEGACY_V2_STORAGE_KEY = 'whiteboard:user-settings:v2'
 export const LEGACY_V1_STORAGE_KEY = 'whiteboard:user-settings:v1'
@@ -75,8 +76,6 @@ const storageSettingsSchema = z
     // it never named this axis: a daemon runs on this machine too, so the
     // word said nothing that distinguished it from the browser keeper.
     daemonBaseUrl: httpUrl.optional(),
-    dismissedPersistenceWarningAt: z.string().optional(),
-    dismissedBetaBannerAt: z.string().optional(),
     /**
      * Daemon workspaces this browser holds a replica of (ADR-0023), keyed by
      * the daemon workspace id the replica record is stored under. UI-hint
@@ -227,7 +226,7 @@ const appearanceSettingsSchema = z
 
 export const userSettingsSchema = z
   .object({
-    version: z.literal(4),
+    version: z.literal(5),
     storage: storageSettingsSchema,
     migration: migrationSettingsSchema,
     capabilities: capabilitySettingsSchema,
@@ -434,6 +433,42 @@ export const legacyV3SettingsSchema = z
   })
   .strict()
 
+/**
+ * The shape v5 migrates FROM, kept parse-only and spelled out for the reason
+ * the others are. It still names the two dismissal stamps — the persistence
+ * warning's and the beta banner's — that nothing has read or written since
+ * the banners they belonged to went; v5 is the bump that lets them go.
+ */
+export const legacyV4SettingsSchema = z
+  .object({
+    version: z.literal(4),
+    storage: z
+      .object({
+        daemonBaseUrl: httpUrl.optional(),
+        dismissedPersistenceWarningAt: z.string().optional(),
+        dismissedBetaBannerAt: z.string().optional(),
+        replicas: z
+          .record(
+            z.string(),
+            z
+              .object({
+                daemonBaseUrl: httpUrl,
+                syncedAt: z.string(),
+                segment: z.string().optional(),
+                displayName: z.string().optional(),
+                syncedFrontier: z.string().optional(),
+              })
+              .strict(),
+          )
+          .optional(),
+      })
+      .strict(),
+    migration: migrationSettingsSchema,
+    capabilities: capabilitySettingsSchema,
+    appearance: appearanceSettingsSchema.optional(),
+  })
+  .strict()
+
 export type UserSettings = z.infer<typeof userSettingsSchema>
 
 export function migrateV1(
@@ -507,7 +542,9 @@ export function migrateV2(
  * The six pairing-era storage fields and the promotion's `attested` flag go
  * IN this migration, not through it: nothing reads or writes them.
  */
-export function migrateV3(legacy: z.infer<typeof legacyV3SettingsSchema>): UserSettings {
+export function migrateV3(
+  legacy: z.infer<typeof legacyV3SettingsSchema>,
+): z.infer<typeof legacyV4SettingsSchema> {
   const {
     lastConnectedWorkspaceId: _lastConnectedWorkspaceId,
     lastConnectedPath: _lastConnectedPath,
@@ -535,9 +572,29 @@ function withoutAttested<T extends { attested?: boolean }>(record: T): Omit<T, '
   return rest
 }
 
+/**
+ * The two dismissal stamps go IN this migration, not through it: nothing
+ * reads or writes them, and a field nobody reads does not need to survive
+ * the bump.
+ */
+export function migrateV4(legacy: z.infer<typeof legacyV4SettingsSchema>): UserSettings {
+  const {
+    dismissedPersistenceWarningAt: _dismissedPersistenceWarningAt,
+    dismissedBetaBannerAt: _dismissedBetaBannerAt,
+    ...storage
+  } = legacy.storage
+  return {
+    version: 5,
+    storage,
+    migration: legacy.migration,
+    capabilities: legacy.capabilities,
+    ...(legacy.appearance === undefined ? {} : { appearance: legacy.appearance }),
+  }
+}
+
 export function defaultUserSettings(): UserSettings {
   return {
-    version: 4,
+    version: 5,
     storage: {},
     migration: {},
     capabilities: {},
@@ -563,14 +620,20 @@ function migrated<T>(
  */
 const LEGACY_VERSIONS: readonly { key: string; migrate: (raw: unknown) => UserSettings | null }[] =
   [
-    { key: LEGACY_V3_STORAGE_KEY, migrate: migrated(legacyV3SettingsSchema, migrateV3) },
+    { key: LEGACY_V4_STORAGE_KEY, migrate: migrated(legacyV4SettingsSchema, migrateV4) },
+    {
+      key: LEGACY_V3_STORAGE_KEY,
+      migrate: migrated(legacyV3SettingsSchema, (v3) => migrateV4(migrateV3(v3))),
+    },
     {
       key: LEGACY_V2_STORAGE_KEY,
-      migrate: migrated(legacyV2SettingsSchema, (v2) => migrateV3(migrateV2(v2))),
+      migrate: migrated(legacyV2SettingsSchema, (v2) => migrateV4(migrateV3(migrateV2(v2)))),
     },
     {
       key: LEGACY_V1_STORAGE_KEY,
-      migrate: migrated(legacyV1SettingsSchema, (v1) => migrateV3(migrateV2(migrateV1(v1)))),
+      migrate: migrated(legacyV1SettingsSchema, (v1) =>
+        migrateV4(migrateV3(migrateV2(migrateV1(v1)))),
+      ),
     },
   ]
 
