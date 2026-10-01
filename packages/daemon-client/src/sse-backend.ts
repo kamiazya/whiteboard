@@ -127,6 +127,12 @@ export class SseBackend implements DocumentBackend {
         if (landed) handlers.onWritesLanded?.()
         else handlers.onError?.('storage-failure')
       },
+      // A refused credential is the caller's to surface, not this backend's
+      // to retry: the source has already stopped reconnecting.
+      onAuthRefused: () => {
+        if (this.cancelled) return
+        handlers.onAuthError?.()
+      },
     }
   }
 

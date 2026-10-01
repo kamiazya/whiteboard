@@ -580,8 +580,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/codec/src/spatial/projection.ts#liftNode': 55,
   'packages/codec/src/test-utils/fully-populated-canvas.ts#fullyPopulatedCanvas': 92,
   'packages/daemon-client/src/replica-session-key.ts#sessionKey': 52,
-  'packages/daemon-client/src/test-utils/document-backend-contract.ts#documentBackendContract': 92,
-  'packages/daemon-client/src/test-utils/sse-stream-source-contract.ts#sseStreamSourceContract': 185,
+  // 92 -> 118 and 185 -> 212: one case each for a refused credential. A contract suite is
+  // one function by design — every `it` runs against every implementation — so it grows
+  // by a case, never splits.
+  'packages/daemon-client/src/test-utils/document-backend-contract.ts#documentBackendContract': 118,
+  'packages/daemon-client/src/test-utils/sse-stream-source-contract.ts#sseStreamSourceContract': 212,
   'packages/facet-engine/src/form.ts#normalizePicker': 53,
   'packages/facet-engine/src/registry.ts#createFacetRegistry': 211,
   'packages/facet-ui/src/catalog-picker.tsx#CatalogPicker': 213,
@@ -653,8 +656,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // one seam for a workspace's whole replica posture.
   'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 99,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 93,
-  // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
-  'packages/mcp-server/src/server/routes/viewport.ts#createViewportRouter': 71,
   // 117 -> 59: the methods that start from a binding (`profileForBinding`,
   // `isDeactivated`, `ensureProfile`) moved to `bindingLookups`, the user
   // listing to `usersOf` and the role lookup to `roleIn`, in the same file,
@@ -751,7 +752,10 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
   'packages/canvas-render/src/layout/edges/grid-route.optimality.properties.test.ts#referenceCost': 106,
   'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,
-  'packages/daemon-client/src/sse-stream-hub.contract.test.ts#createHarness': 83,
+  // 83 -> 90: the fake daemon learned to refuse a credential, and the harness hands that on.
+  'packages/daemon-client/src/sse-stream-hub.contract.test.ts#createHarness': 90,
+  // A fake daemon whose stream, update and refusal routes are one closure over one call log.
+  'packages/daemon-client/src/sse-stream-hub.test.ts#createFake': 54,
   'packages/mcp-server/src/cli/argv.differential.test.ts#oldParseDaemonRunArgs': 57,
   'packages/mcp-server/src/cli/argv.differential.test.ts#oldParseDaemonSupportBundleArgs': 54,
   'packages/mcp-server/src/cli/daemon-run-auto-open-launch.test.ts#launchDaemonInPty': 67,

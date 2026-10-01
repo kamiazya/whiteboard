@@ -8,7 +8,6 @@
 import { randomUUID } from 'node:crypto'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
-import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import { resolveSelfHostServerDeps } from '../di/self-host-server-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
@@ -51,14 +50,6 @@ export interface StartServerModeHttpOptions {
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy
-  /**
-   * The plugin set this deployment registers, matching `startHttpServer`'s.
-   * This is the MULTI-INSTANCE root, where a per-tenant set is the case
-   * ADR-0013 decision 3 names ("SaaS deployments swap plugin configuration
-   * per tenant") — so it must be reachable here and not only on the local
-   * daemon.
-   */
-  facetPlugins?: readonly FacetPlugin[]
   /** Test-only seam, matching `startHttpServer`'s: overrides the real
    *  factory so a wiring test can assert the sweeper is armed and stopped
    *  without running a full pass. */
@@ -137,9 +128,7 @@ export async function startServerModeHttp(
   // data dir must not answer an empty workspace list.
   const dataDir = getDataDir()
   await ensureWorkspaceId(dataDir)
-  const serverDeps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir, {
-    ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
-  })
+  const serverDeps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
 
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.

@@ -32,7 +32,6 @@ export {
   serverTextMessageSchema,
   versionCreatedMessageSchema,
   viewportRequestMessageSchema,
-  viewportResponseMessageSchema,
 } from './ws-messages.js'
 
 // ── Inbound callback surface (hook receives from backend) ─────────────────────
@@ -88,9 +87,10 @@ export interface DocumentBackendHandlers {
    */
   onWritesLanded?: () => void
   /**
-   * Optional: called when the server closes the WebSocket with code 1008
-   * (Policy Violation / auth failure). The backend will NOT retry — the caller
-   * should surface an error state so the user can re-authenticate.
+   * The keeper refused this backend's credential (a 401 or 403 on the sync
+   * stream or on a push). The backend does NOT retry — the caller surfaces
+   * the state so the person can pair again; a new connection is how it
+   * clears.
    */
   onAuthError?: () => void
   /**

@@ -17,7 +17,11 @@ This project is split into three main runtime layers:
 - **stdio MCP server**
   - Entry point: `dist/server/mcp/index.js`
   - Registers tools, prompts, and resources
-  - Talks to the daemon over HTTP on its local socket
+  - Opens the data directory's store directly, in its own process. It does
+    not reach the daemon, so it has no live audience: a browser on the
+    daemon sees a stdio edit when the daemon's workspace tail reads it, and
+    `wb_viewport_set` answers `delivered: false`. A client that wants the
+    live path connects to the daemon's `/mcp` on its socket instead
 - **daemon**
   - Entry point: `dist/server/index.js`
   - Serves `/api/*` (including the live-sync SSE stream) and `/mcp` on its
@@ -42,10 +46,13 @@ This project is split into three main runtime layers:
 
 ### MCP tool call path
 
-1. Claude Code or Codex sends a tool call to the `stdio` MCP server.
-2. The MCP server resolves the current workspace and calls daemon HTTP routes.
-3. The daemon updates persistent state or forwards browser-dependent work.
-4. The MCP server returns structured JSON back to the MCP client.
+1. Claude Code or Codex sends a tool call to the `stdio` MCP server, or to
+   the daemon's `/mcp`.
+2. The server resolves the current workspace and runs the operation against
+   the store — its own handle under stdio, the daemon's under `/mcp`.
+3. Under `/mcp` the daemon also announces the change to the browsers on its
+   SSE stream; under stdio nobody is listening in that process.
+4. The server returns structured JSON back to the MCP client.
 
 ### Browser collaboration path
 

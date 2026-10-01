@@ -50,7 +50,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // (the global daemon-mutation middleware skips /api/runtime/*), so it
     // must accept the same credential set as the global layer for READ
     // routes: the daemon token, or a scope-checked narrower credential. The
-    // admin routes (touch, logs prune) accept the daemon token only. Stopping the daemon is not an HTTP route at
+    // admin routes (logs prune) accept the daemon token only. Stopping the daemon is not an HTTP route at
     // all: `whiteboard daemon stop` signals the process and the idle timer
     // calls close() directly, so no credential ends it.
     const scope = resolveApiRouteScope(c.req.method, c.req.path)

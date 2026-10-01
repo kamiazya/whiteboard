@@ -85,16 +85,14 @@ export const clientReadyMessageSchema = z.object({
   type: z.literal('client_ready'),
 })
 
-export const viewportResponseMessageSchema = z.object({
-  type: z.literal('viewport_response'),
-  requestId: z.string(),
-})
-
-export const clientTextMessageSchema = z.discriminatedUnion('type', [
-  clientReadyMessageSchema,
-  viewportResponseMessageSchema,
-])
+/**
+ * Every message a client sends upstream. One member today: the
+ * `viewport_response` that acknowledged a `viewport_request` never had a
+ * sender, so the route that awaited it answered 504 to every real caller;
+ * both went together. Still a discriminated union so the next client message
+ * is one more member rather than a new shape.
+ */
+export const clientTextMessageSchema = z.discriminatedUnion('type', [clientReadyMessageSchema])
 
 export type ClientReadyMessage = z.infer<typeof clientReadyMessageSchema>
-export type ViewportResponseMessage = z.infer<typeof viewportResponseMessageSchema>
 export type ClientTextMessage = z.infer<typeof clientTextMessageSchema>

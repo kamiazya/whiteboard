@@ -175,7 +175,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: wHandle,
   },
   // Remaining /api/w/:workspaceId/document/* routes: honor the write/read
-  // split so a mutating POST (e.g. /viewport) isn't authorized by
+  // split so a mutating POST isn't authorized by
   // canvas:read alone. The specific write routes above still take
   // precedence via ordering.
   {
@@ -210,20 +210,6 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: workspacesHandle,
   },
 
-  // Branch and checkpoint routes — version-control operations at the
-  // workspace level.
-  {
-    name: 'document branches',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/branches/),
-    decide: byAccess('versions:write', 'versions:read'),
-    workspace: workspacesHandle,
-  },
-  {
-    name: 'workspace checkpoints',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/checkpoints$/),
-    decide: always('versions:write'),
-    workspace: workspacesHandle,
-  },
   {
     name: 'versions/prune-sandwiched',
     claims: matching(/^\/api\/workspaces\/[^/]+\/versions\/prune-sandwiched$/),

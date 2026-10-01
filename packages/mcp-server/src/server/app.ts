@@ -22,10 +22,8 @@ import { createReplicaKeyRouter } from './routes/replica-key.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
-import { setResolveViewportFn } from './routes/sync-audience.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createTenantPeopleRouter } from './routes/tenant-people.js'
-import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
 import { createWorkspacePeopleRouter } from './routes/workspace-people.js'
 import {
   type CredentialResolver,
@@ -73,8 +71,6 @@ if (shouldLogMcpHttpDebug()) {
     setLogLevel('info')
   }
 }
-
-setResolveViewportFn(resolveViewportRequest)
 
 /**
  * Server mode's membership wiring (ADR-0046 decision 10): its own middleware
@@ -381,7 +377,6 @@ export function createApp(options: AppOptions) {
     ),
   )
   app.route('/', createFontsRouter())
-  app.route('/', createViewportRouter())
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ credentialResolver }))
   app.route('/', createStatusRouter())

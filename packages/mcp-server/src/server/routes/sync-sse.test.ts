@@ -18,7 +18,6 @@ import {
   getReadyClientCount,
   sendRestoreEvent,
   sendViewportRequest,
-  setResolveViewportFn,
 } from './sync-audience.js'
 import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-sse.js'
 
@@ -32,7 +31,6 @@ afterAll(() => resetDataDirForTests())
 // and receive the next test's broadcasts.
 afterEach(() => {
   resetSyncStreamsForTests()
-  setResolveViewportFn(() => {})
 })
 
 const TOKEN = 'sse-sync-test-token'
@@ -278,26 +276,6 @@ describe('SSE sync transport', () => {
 
     const frames = await readEvents(res, 1, 300)
     expect(frames.filter((f) => f.includes('viewport_request'))).toEqual([])
-  })
-
-  it('resolves a pending viewport request from a viewport_response', async () => {
-    const app = createApp(createRuntimeOptions())
-    const { streamId } = await openStream(app)
-    const resolved: string[] = []
-    setResolveViewportFn((requestId) => resolved.push(requestId))
-
-    const res = await app.request('/api/sync/message', {
-      method: 'POST',
-      headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        streamId,
-        doc: 'ws-1/vp-canvas',
-        message: { type: 'viewport_response', requestId: 'req-3' },
-      }),
-    })
-
-    expect(res.status).toBe(200)
-    expect(resolved).toContain('req-3')
   })
 
   // A WebSocket is per-canvas so its text frames need no addressing. One SSE

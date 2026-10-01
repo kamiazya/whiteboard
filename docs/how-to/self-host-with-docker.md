@@ -631,7 +631,7 @@ reach the shared database skips the pass rather than assuming it is alone.
   | excluded | what it holds | what a restore does instead |
   |---|---|---|
   | `daemon.json` | the Bearer token the daemon authenticates HTTP and WS with | writes a fresh record on first start; nothing is lost |
-  | `macaroon-root-key.json` | the secret every scoped token chains from | generates a fresh key; **any token issued before the backup stops working** and has to be reissued |
+  | `macaroon-root-key.json` | the secret a scoped token would chain from | generates a fresh key; nothing mints scoped tokens today ([ADR-0043](../contributing/adr/0043-authority-as-keys.md)), so nothing is lost |
   | `daemon-identity.json` | the daemon's Ed25519 private key and the source of its `did:key` | generates a fresh identity — see the warning below |
 
   **A restored deployment is a new identity.** Because the identity key is

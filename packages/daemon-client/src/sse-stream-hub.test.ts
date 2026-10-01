@@ -13,9 +13,17 @@ function createFake() {
   let push: ((frame: string) => void) | null = null
   let endStream: (() => void) | null = null
   let streamSeq = 0
+  /** What the daemon answers instead of a stream or an update, once told to refuse. */
+  let refusal: { stream?: number; update?: number } = {}
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     calls.push({ url, body: init?.body ? String(init.body) : undefined })
+    if (url.includes('/api/sync/stream') && refusal.stream !== undefined) {
+      return new Response('{"title":"unauthorized"}', { status: refusal.stream })
+    }
+    if (url.endsWith('/update') && refusal.update !== undefined) {
+      return new Response('{"title":"forbidden"}', { status: refusal.update })
+    }
     if (url.includes('/api/sync/stream')) {
       streamSeq += 1
       const id = `server-${streamSeq}`
@@ -43,6 +51,10 @@ function createFake() {
     push: (f: string) => push?.(f),
     /** Ends the stream the way a daemon restart or a dropped connection does. */
     endStream: () => endStream?.(),
+    /** From now on the daemon answers this status instead of what was asked. */
+    refuse: (next: { stream?: number; update?: number }) => {
+      refusal = next
+    },
     streamOpens: () => calls.filter((c) => c.url.includes('/api/sync/stream')).length,
     subscribeBodies: () =>
       calls.filter((c) => c.url.includes('/api/sync/subscribe')).map((c) => c.body ?? ''),
@@ -309,6 +321,81 @@ describe('SseStreamHub', () => {
     await flush()
 
     expect(fake.streamOpens()).toBe(1)
+  })
+
+  it('tells every subscriber the daemon refused the session, and stops reconnecting', async () => {
+    // A refused credential is not a dropped connection: retrying it is a
+    // 401 every backoff step for as long as the tab stays open, while the
+    // UI reads the silence as "reconnecting". The listener is told once per
+    // refusal and the loop halts, so the page can say the session is off.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+    const refused = vi.fn()
+    const states: boolean[] = []
+    hub.subscribe('w/a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onConnectionChange: (c) => states.push(c),
+      onAuthRefused: refused,
+    })
+    await vi.waitFor(() => expect(states).toContain(true))
+
+    fake.refuse({ stream: 401 })
+    fake.endStream()
+    await vi.waitFor(() => expect(refused).toHaveBeenCalledTimes(1))
+    await flush()
+
+    // One reconnect attempt met the refusal; nothing after it.
+    expect(fake.streamOpens()).toBe(2)
+    expect(states.at(-1)).toBe(false)
+    hub.close()
+  })
+
+  it('tells a document’s subscribers when a push for it is refused, and still rejects', async () => {
+    // The stream can stay open under a credential the daemon no longer
+    // accepts for WRITES (a membership revoked mid-session answers 403 on
+    // the update route alone), so the push is the only place the refusal
+    // can be seen. The rejection is kept: the caller still owns the bytes.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+    const refused = vi.fn()
+    const other = vi.fn()
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: refused })
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: other })
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
+
+    fake.refuse({ update: 403 })
+    await expect(hub.push('w/a', new Uint8Array([1]))).rejects.toThrow('403')
+
+    expect(refused).toHaveBeenCalledTimes(1)
+    expect(other).not.toHaveBeenCalled()
+    hub.close()
+  })
+
+  it('reopens the stream when resumed with a credential the daemon accepts again', async () => {
+    // A rotated pairing token arrives at the worker as a re-init; the hub it
+    // keeps per origin has to try again, or the tab stays "Sync off" after
+    // the person has done the one thing that fixes it.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+    const states: boolean[] = []
+    hub.subscribe('w/a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onConnectionChange: (c) => states.push(c),
+    })
+    await vi.waitFor(() => expect(states).toContain(true))
+    fake.refuse({ stream: 403 })
+    fake.endStream()
+    await vi.waitFor(() => expect(fake.streamOpens()).toBe(2))
+    await flush()
+
+    fake.refuse({})
+    hub.resume()
+
+    await vi.waitFor(() => expect(states.at(-1)).toBe(true))
+    expect(fake.streamOpens()).toBe(3)
+    hub.close()
   })
 
   it('stays closed even if something subscribes afterwards', async () => {

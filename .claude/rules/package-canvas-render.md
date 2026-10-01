@@ -131,10 +131,9 @@ the table alone.
   pointing one way and `boundingBoxOf` / `rectAtEnd` joining the geometry
   vocabulary since both halves read them.
 - Pure layout functions: spatial-canvas edge routing (`layout/edges/edge-router.ts`
-  under `layout/edges/spatial-edges.ts`'s side-choice search),
-  embed recursion over a resolved doc bundle (`layout/embed-recursion.ts`),
-  and mdast block layout (`layout/nodes/mdast-blocks.ts`) — the single mdast ->
-  scene-graph render path shared by preview / spatial text node / export.
+  under `layout/edges/spatial-edges.ts`'s side-choice search) and mdast block
+  layout (`layout/nodes/mdast-blocks.ts`) — the single mdast -> scene-graph
+  render path shared by preview / spatial text node / export.
 - `layoutSpatialCanvas` (`layout/spatial-canvas.ts`): the single
   `SpatialCanvas` -> `Scene` builder shared by every consumer (Node export,
   the browser viewer) — see the resolved decision below.
@@ -247,16 +246,19 @@ the table alone.
    is worse than the estimate. A real measurer therefore falls back to the
    estimator PER CODE POINT for anything the face does not carry, detected
    by glyph index rather than by comparing advances.
-4. **`ResolvedDocBundle` contract** (`layout/embed-recursion.ts`): minimal,
-   internal/versioned shape consumed later by loro-adapter's View-
-   resolution layer. Root depth is `0`; a 4th nesting level is the cap
+4. **The embed contract.** Root depth is `0`; a 4th nesting level is the cap
    hit (depth cap `3`). Cycle detection is PATH-LOCAL — a re-visit on the
    *current* recursion path is a placeholder, but the same doc reached
-   again via a disjoint path renders normally. A missing bundle key or an
-   explicit `{ unresolved: true }` entry both degrade to the same
-   placeholder mechanism. The function is total: it never throws and never
-   infinite-loops, on any bundle including dense cyclic ones.
-   The mdast layout carries the CONTENT-bearing sibling of this contract:
+   again via a disjoint path renders normally. A missing or unresolvable
+   target degrades to the same placeholder mechanism. Layout is total: it
+   never throws and never infinite-loops, on any graph including dense
+   cyclic ones. It was first stated over a `ResolvedDocBundle` in a
+   bundle-walking module of its own, whose only caller was its own
+   property test and whose "consumed later by the View-resolution layer"
+   never came; that module (embed-recursion) is deleted, and the
+   contract lives where the content is laid out: `compose-node.ts` for a
+   file node's canvas and `mdast-blocks.ts` for a body's embeds, each
+   pinning the cap and the path-local cycle rule:
    `MdastLayoutOptions.resolveEmbed?: (canvasId) => { title?, root:
    MdastRoot } | undefined` (same injected-resolver class as `renderMath` /
    `resolveReference`). A paragraph whose SOLE child is an `embed` node lays

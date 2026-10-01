@@ -87,6 +87,23 @@ describe("the worker's word on a document's writes", () => {
   })
 })
 
+describe("the worker's word that the daemon refused the session", () => {
+  it('reaches the listener for that document, and no other', () => {
+    const source = createSharedSseStreamSource('http://auth-refused.test', 't')
+    const mine = vi.fn()
+    const other = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: mine })
+    source?.subscribe('w/other', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: other })
+
+    FakeSharedWorker.instances[0]?.port.onmessage?.({
+      data: { type: 'auth-refused', doc: 'w/doc' },
+    } as MessageEvent)
+
+    expect(mine).toHaveBeenCalledTimes(1)
+    expect(other).not.toHaveBeenCalled()
+  })
+})
+
 // ADR-0050: a SharedWorker has no `chrome.runtime`, so it cannot reach a
 // daemon through the extension — the page holds that stream itself.
 describe('a daemon reached through the extension', () => {

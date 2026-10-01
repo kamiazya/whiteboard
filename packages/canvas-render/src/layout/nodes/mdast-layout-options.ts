@@ -183,8 +183,8 @@ export interface MdastLayoutOptions {
    * side (a throw or `undefined` degrades to an `embedPlaceholder`, never
    * an aborted layout). A paragraph whose sole child is an embed lays the
    * resolved body out inline under an `embedResolved` node, capped at
-   * `EMBED_DEPTH_CAP` with path-local cycle detection (the embed-recursion
-   * contract); an embed mixed into prose stays a link run, labeled with
+   * `EMBED_DEPTH_CAP` with path-local cycle detection (decision 4); an
+   * embed mixed into prose stays a link run, labeled with
    * `title` when known.
    */
   readonly resolveEmbed?: (documentId: string) => EmbeddedDocument | undefined

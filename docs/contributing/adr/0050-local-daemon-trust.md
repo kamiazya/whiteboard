@@ -121,6 +121,10 @@ Unix socket, compared with today's loopback WebSocket.
      the kernel.
    - The native host, the CLI and the stdio MCP entry point all reach it
      there.
+     *(Correction, 2026-10-01: the packaged stdio entry does not. It opens
+     the store in its own process and attaches no live-audience notifier;
+     see `docs/explanation/architecture.md`. The native host and the CLI
+     do reach the socket.)*
    - The socket path is short by construction, which avoids the 108-byte
      limit.
 

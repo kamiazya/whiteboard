@@ -15,13 +15,11 @@ credential.
 
 This applies to the storage and durability settings
 (`WHITEBOARD_FILE_GC_INTERVAL_MS`, `WHITEBOARD_FILE_GC_GRACE_MS`,
-`WHITEBOARD_WORKSPACE_TAIL_MS`, `WHITEBOARD_DATABASE_URL`), to
-and to `WHITEBOARD_LOG_LEVEL`.
+`WHITEBOARD_WORKSPACE_TAIL_MS`, `WHITEBOARD_DATABASE_URL`) and to
+`WHITEBOARD_LOG_LEVEL`.
 
 `0` is not a blanket "off": it disables the two GC sweeps, because that is how
-you stop one without removing the variable, but it is an error for
-`WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS`, where it would mean "give up before
-looking".
+you stop one without removing the variable.
 
 The `1`-or-off flags (`WHITEBOARD_DEBUG`, `WHITEBOARD_DEV`,
 `WHITEBOARD_NO_WATCH`) are deliberately outside the rule: they are on only for

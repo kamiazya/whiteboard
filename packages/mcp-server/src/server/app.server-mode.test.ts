@@ -624,34 +624,6 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    // Branch write operations require versions:write
-    it('POST /api/workspaces/:wid/documents/:path/branches → 403 with workspace:write only (requires versions:write)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:write']))
-      const res = await app.request('/api/workspaces/w1/documents/canvas-a/branches', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({ name: 'feature' }),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/workspaces/:wid/documents/:path/branches → 403 with workspace:read only (requires versions:read)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/documents/canvas-a/branches', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/workspaces/:wid/documents/:path/branches → auth passes with versions:read', async () => {
-      const app = createApp(makeServerModeOptions(['versions:read']))
-      const res = await app.request('/api/workspaces/w1/documents/canvas-a/branches', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).not.toBe(401)
-      expect(res.status).not.toBe(403)
-    })
-
     // /api/runtime/ping is public in server-mode (liveness probe)
     it('GET /api/runtime/ping → 200 without auth in server-mode', async () => {
       const app = createApp(makeServerModeOptions([]))

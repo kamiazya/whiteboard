@@ -24,30 +24,6 @@ vi.mock('../lib/app-logger.js', () => ({
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
 
-function mkBranchesResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      head: 'main',
-      branches: [
-        {
-          name: 'main',
-          tipFrontiers: '',
-          color: '#1971c2',
-          createdAt: '2026-04-23T00:00:00Z',
-        },
-        {
-          name: 'feature',
-          tipFrontiers: 'AA==',
-          color: '#9333ea',
-          baseVersionId: 'v-mid',
-          createdAt: '2026-04-23T01:00:00Z',
-        },
-      ],
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
-}
-
 // The preview read. Registered before any generic `/versions` branch in each
 // mock below: a list payload answered here would fail the document schema and
 // the row would report "could not be read" instead of opening.
@@ -117,7 +93,6 @@ beforeEach(() => {
   const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
     if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(new Response('{}', { status: 200 }))
@@ -242,7 +217,6 @@ describe('VersionTimeline', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
@@ -305,7 +279,6 @@ describe('VersionTimeline', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
@@ -345,30 +318,6 @@ describe('VersionTimeline', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              head: 'feature',
-              branches: [
-                {
-                  name: 'main',
-                  tipFrontiers: '',
-                  color: '#1971c2',
-                  createdAt: '2026-04-23T00:00:00Z',
-                },
-                {
-                  name: 'feature',
-                  tipFrontiers: '',
-                  color: '#9333ea',
-                  createdAt: '2026-04-23T01:00:00Z',
-                },
-              ],
-            }),
-            { status: 200 },
-          ),
-        )
-      }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(new Response(JSON.stringify({ versions: [] }), { status: 200 }))
@@ -419,7 +368,6 @@ describe('VersionTimeline', () => {
         restoreCalls.push(url)
         return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       }
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -466,7 +414,6 @@ describe('VersionTimeline', () => {
           new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }),
         )
       }
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -505,7 +452,6 @@ describe('VersionTimeline', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/restore')) return Promise.reject(new TypeError('Failed to fetch'))
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -553,7 +499,6 @@ describe('VersionTimeline', () => {
             resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
         })
       }
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -609,7 +554,6 @@ describe('VersionTimeline', () => {
             resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
         })
       }
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -685,7 +629,6 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.includes('/versions')) return Promise.resolve(mkSingleVersionResponse(createdAt))
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -769,7 +712,6 @@ describe('VersionTimeline via DaemonApiContext', () => {
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -810,7 +752,6 @@ describe('VersionTimeline via DaemonApiContext', () => {
         restoreCalls.push(url)
         return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       }
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -841,7 +782,6 @@ describe('VersionTimeline via DaemonApiContext', () => {
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
@@ -895,7 +835,6 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.includes('/versions')) return Promise.reject(new TypeError('network down'))
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -919,7 +858,6 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.includes('/versions')) return Promise.resolve(new Response('{}', { status: 500 }))
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -946,7 +884,6 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         versionsCallCount += 1
@@ -1031,7 +968,6 @@ describe('VersionTimeline draws where a restored state came from', () => {
       vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-        if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
         if (url.includes('/versions')) return Promise.resolve(restoredHistory())
         return Promise.resolve(new Response('{}', { status: 200 }))
       }),

@@ -51,6 +51,10 @@ function deliverToListeners(
     for (const l of set) l.onWriteState?.(evt.landed)
     return
   }
+  if (evt.type === 'auth-refused') {
+    for (const l of set) l.onAuthRefused?.()
+    return
+  }
   for (const l of set) l.onMessage(evt.raw)
 }
 

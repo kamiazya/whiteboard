@@ -11,10 +11,14 @@ const BASE = 'http://127.0.0.1:3099'
 
 /** Records what a backend POSTs upstream and serves the routes it reads. */
 let endStream: (() => void) | null = null
+let refuseStreams = false
 
 function createFetch(sent: Uint8Array[]) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
+    if (url.includes('/api/sync/stream') && refuseStreams) {
+      return new Response('{"title":"unauthorized"}', { status: 401 })
+    }
     if (url.includes('/snapshot')) return new Response(new Uint8Array([1, 1, 1]), { status: 200 })
     if (url.includes('/update')) {
       const body = init?.body
@@ -45,11 +49,15 @@ function createFetch(sent: Uint8Array[]) {
 describe('DocumentBackend contract: SseBackend', () => {
   documentBackendContract((): DocumentBackendHarness => {
     const sent: Uint8Array[] = []
+    refuseStreams = false
     const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: createFetch(sent) })
     return {
       backend,
       sentUpdates: () => sent,
       dropTransport: () => endStream?.(),
+      refuseAuth: () => {
+        refuseStreams = true
+      },
       cleanup: () => backend.disconnect(),
     }
   })

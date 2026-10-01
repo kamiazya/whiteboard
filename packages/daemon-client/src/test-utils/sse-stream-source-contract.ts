@@ -67,6 +67,14 @@ export interface SseStreamSourceHarness {
   ready(): Promise<void>
   /** End the current stream the way a dropped connection does. */
   dropStream(): void
+  /**
+   * Make the daemon refuse the credential from now on: the next stream it is
+   * asked for answers 401, and `dropStream` is what sends the source back to
+   * ask. Omitted by a harness whose stream outlives the case (the shared
+   * worker's), where a refusal would poison every case after it; that
+   * implementation owes its own suite the relay.
+   */
+  refuseAuth?(): void
   cleanup(): void
 }
 
@@ -263,6 +271,33 @@ export function sseStreamSourceContract(
     h.dropStream()
 
     await until(() => states.slice(before).includes(false))
+    h.cleanup()
+  })
+
+  it('tells its subscribers the daemon refused the session', async () => {
+    // A refused credential is not a dropped stream. Told only that the
+    // connection is down, the page reports "reconnecting" for as long as
+    // the tab is open while the source retries a 401 on every backoff step.
+    const h = await create()
+    if (!h.refuseAuth) {
+      h.cleanup()
+      return
+    }
+    const doc = nextDoc()
+    const refused: number[] = []
+    const states: boolean[] = []
+    h.source.subscribe(doc, {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onConnectionChange: (connected) => states.push(connected),
+      onAuthRefused: () => refused.push(1),
+    })
+    await until(() => states.includes(true))
+
+    h.refuseAuth()
+    h.dropStream()
+
+    await until(() => refused.length === 1)
     h.cleanup()
   })
 

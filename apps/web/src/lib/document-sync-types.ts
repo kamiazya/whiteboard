@@ -48,8 +48,8 @@ export interface UseDocumentSyncOptions {
   // page can show a presence chip and outline what moved.
   onAgentActivity?: (payload: Omit<AgentActivityPayload, 'type'>) => void
   // Fired in addition to (not instead of) the hook's own syncStatus:'error'
-  // transition on a WS auth failure (close 1008), so a daemon-backed page
-  // can surface a dedicated banner instead of the generic error state.
+  // transition when the keeper refuses the credential, so a daemon-backed
+  // page can report "Sync off" instead of the generic error state.
   onAuthError?: () => void
   // When set, drives the window-event contract the outline listens for:
   // 'whiteboard:doc_changed' on local/remote doc edits. Read via

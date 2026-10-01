@@ -23,9 +23,13 @@ function createHarness(): SseStreamSourceHarness {
   const daemonState = new Map<string, Uint8Array>()
   let push: ((frame: string) => void) | null = null
   let endStream: (() => void) | null = null
+  let refuseStreams = false
 
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
+    if (url.includes('/api/sync/stream') && refuseStreams) {
+      return new Response('{"title":"unauthorized"}', { status: 401 })
+    }
     if (url.includes('/api/sync/stream')) {
       streamSeq += 1
       const id = `hub-stream-${streamSeq}`
@@ -94,6 +98,9 @@ function createHarness(): SseStreamSourceHarness {
       })
     },
     dropStream: () => endStream?.(),
+    refuseAuth: () => {
+      refuseStreams = true
+    },
     cleanup: () => hub.close(),
   }
 }
