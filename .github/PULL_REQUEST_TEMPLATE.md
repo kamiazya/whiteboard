@@ -8,7 +8,7 @@
 
 <!-- How was this tested? Check all that apply. -->
 
-- [ ] New or updated `mcp-node` / `mcp-jsdom` / `mcp-browser` / `web-browser` tests added
+- [ ] New or updated tests added at the nearest layer (`mcp-node`, `web-jsdom`, `web-browser`, `canvas-viewer-browser`, …)
 - [ ] `pnpm test` passes locally
 - [ ] Manual verification completed (describe below)
 - [ ] E2E coverage added or extended where applicable

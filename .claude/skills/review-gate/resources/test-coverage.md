@@ -11,7 +11,7 @@ this change were reverted," not raw line count.
 Check:
 - Does every new exported function/route/tool handler in this diff have a
   corresponding test at the nearest appropriate layer (`mcp-node` /
-  `mcp-jsdom` / `mcp-browser` / `web-browser` / E2E per
+  `web-jsdom` / `web-browser` / `canvas-viewer-browser` / E2E per
   `test-layer-selection`)?
 
 ### 2. Mutation-check evidence where AGENTS.md requires it
@@ -49,7 +49,7 @@ Check:
 
 Check:
 - If AGENTS.md's manual-verification step applies (UI/browser behavior),
-  was the verified scenario locked into `mcp-browser` or E2E coverage, not
+  was the verified scenario locked into `web-browser`, `canvas-viewer-browser` or E2E coverage, not
   left as manual-only?
 
 ### 5. Regression test for the actual root cause
