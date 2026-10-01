@@ -84,6 +84,20 @@ export const restoreVersionRequestSchema = z.object({
   subtree: z.boolean().optional(),
 })
 
+/**
+ * What a restore answers, one arm per mode: a restore INTO a target names
+ * the document it wrote and how many elements it holds; a subtree rollback
+ * counts the documents it reverted; an in-place restore has nothing to add.
+ */
+export const restoreVersionResponseSchema = z.union([
+  z
+    .object({ documentId: z.string().min(1), elementCount: z.number().int().nonnegative() })
+    .strict(),
+  z.object({ ok: z.literal(true), restoredCount: z.number().int().nonnegative() }).strict(),
+  z.object({ ok: z.literal(true) }).strict(),
+])
+export type RestoreVersionResponse = z.infer<typeof restoreVersionResponseSchema>
+
 export const exportDocumentJsonRequestSchema = z.object({
   includeCustomFields: z.boolean().optional(),
   outputPath: z.string().optional(),
