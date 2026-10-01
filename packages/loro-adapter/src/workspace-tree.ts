@@ -67,10 +67,10 @@ export const workspaceNodeMetaSchema = z.object({
   /**
    * Row-relocated meta (dual-plane collapse): state that used to live only
    * in the daemon's `documents` table and is shared CRDT state by decision —
-   * every client sees the same branch HEAD and timestamps. All optional so
-   * every workspace document written before this schema keeps parsing.
+   * every client sees the same timestamps. All optional so every workspace
+   * document written before this schema keeps parsing, including one whose
+   * node still carries the retired `currentBranch` (ADR-0029): not strict.
    */
-  currentBranch: z.string().min(1).optional(),
   createdAt: z.number().int().optional(),
   updatedAt: z.number().int().optional(),
 })
@@ -212,15 +212,15 @@ function nodeById(doc: LoroDoc, documentId: string): LoroTreeNode | null {
 }
 
 const workspaceDocumentMetaPatchSchema = workspaceNodeMetaSchema
-  .pick({ kind: true, currentBranch: true, createdAt: true, updatedAt: true })
+  .pick({ kind: true, createdAt: true, updatedAt: true })
   .partial()
   .strict()
 export type WorkspaceDocumentMetaPatch = z.infer<typeof workspaceDocumentMetaPatchSchema>
 
 /**
  * Write the row-relocated meta fields onto a document's node. Only the keys
- * present in `patch` are touched, so a branch switch cannot clobber a
- * concurrent timestamp update. Returns false when no document carries the id
+ * present in `patch` are touched, so a write of one field cannot clobber a
+ * concurrent write of another. Returns false when no document carries the id
  * — the caller decides whether that is an error.
  */
 export function updateWorkspaceDocumentMeta(

@@ -31,6 +31,7 @@ import {
   setWorkspaceLastCompactedAt,
   setWorkspacePinned,
   updateWorkspaceDocumentMeta,
+  WORKSPACE_TREE_KEY,
   writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
 
@@ -511,20 +512,34 @@ describe('row-relocated meta (dual-plane collapse S4a)', () => {
   const ULID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
   const ULID_B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
-  it('round-trips currentBranch / createdAt / updatedAt through node meta', () => {
+  it('round-trips createdAt / updatedAt through node meta', () => {
     const doc = new LoroDoc()
     createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ULID_A, kind: 'spatial' })
     updateWorkspaceDocumentMeta(doc, ULID_A, {
-      currentBranch: 'feature',
       createdAt: 111,
       updatedAt: 222,
     })
     doc.commit()
 
     const entry = resolveWorkspaceDocumentById(doc, ULID_A)
-    expect(entry?.currentBranch).toBe('feature')
     expect(entry?.createdAt).toBe(111)
     expect(entry?.updatedAt).toBe(222)
+  })
+
+  // The branch plane is retired (ADR-0029) and nothing writes a head any
+  // more, but a workspace written while it existed still carries the key on
+  // its nodes. It must not stop the document listing, and it must not leak
+  // into the entry a caller reads.
+  it('a node that still carries the retired currentBranch key lists without it', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ID_A, kind: 'spatial' })
+    const [root] = doc.getTree(WORKSPACE_TREE_KEY).roots()
+    root?.data.set('currentBranch', 'feature')
+    doc.commit()
+
+    const entries = readWorkspaceDocuments(doc)
+    expect(entries.map((e) => e.documentId)).toEqual([ID_A])
+    expect(entries[0]).not.toHaveProperty('currentBranch')
   })
 
   it('a replica that merges the meta write converges on it', () => {
@@ -547,7 +562,7 @@ describe('row-relocated meta (dual-plane collapse S4a)', () => {
   it('a folder node still reads as a folder alongside the extended document meta', () => {
     const doc = new LoroDoc()
     createWorkspaceDocumentAtPath(doc, { path: 'dir/leaf', documentId: ULID_A, kind: 'spatial' })
-    updateWorkspaceDocumentMeta(doc, ULID_A, { currentBranch: 'main', updatedAt: 1 })
+    updateWorkspaceDocumentMeta(doc, ULID_A, { updatedAt: 1 })
     doc.commit()
 
     const entries = readWorkspaceDocuments(doc)
