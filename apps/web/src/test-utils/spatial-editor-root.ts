@@ -1,7 +1,10 @@
 /**
  * The editor surface inside a rendered test container. One definition for
- * every spatial-editor browser test; a local copy or an inline
- * `querySelector` of the testid is the duplication this replaces.
+ * the spatial-editor browser tests, which mount the editor through
+ * `spatial-editor-host.tsx` and find it again through this — a local copy is
+ * refused by `tools/arch-lint`'s `spatial-editor-host-one-place.test.ts`. A
+ * query for something INSIDE the surface (a polyline, a text) still names the
+ * testid in its own selector.
  */
 export function rootOf(container: HTMLElement): HTMLElement {
   return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
