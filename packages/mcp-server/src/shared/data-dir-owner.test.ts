@@ -6,12 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
 import { parseDaemonRecord } from '../daemon/daemon-record.js'
 import { loadDaemonRecord } from '../daemon/daemon-registry.js'
-import { assertDataDirOwnedByUser } from './data-dir-secure.js'
-
-// Probed rather than assumed: `/` belongs to another user only when this
-// process is not root, and Windows has no uid to compare.
-const uid = process.getuid?.()
-const ROOT_IS_SOMEONE_ELSES = uid !== undefined && statSync('/').uid !== uid
+import { assertDataDirOwnedByUser, refuseForeignRecordFile } from './data-dir-secure.js'
+import { ROOT_IS_SOMEONE_ELSES } from './test-utils/root-is-someone-elses.js'
 
 describe('assertDataDirOwnedByUser', () => {
   let dir: string
@@ -66,13 +62,17 @@ describe('the record file itself', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  // Checked on the OPENED file, so a record that appears after the directory
-  // check — in a directory that was missing then — is judged too.
-  it.skipIf(!ROOT_IS_SOMEONE_ELSES)('is refused when another user owns it', async () => {
-    await symlink('/etc/hostname', join(dir, 'daemon.json'))
-    await expect(loadDaemonRecord(dir)).rejects.toThrow(/not this user|symlink/)
-    expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'malformed' })
-  })
+  // `O_NOFOLLOW` refuses the link before any owner is read, so this proves
+  // the symlink refusal and not the owner check — that one is the pure
+  // verdict below, since a file another user owns cannot be made here.
+  it.skipIf(!ROOT_IS_SOMEONE_ELSES)(
+    'is refused when it links to a file another user owns',
+    async () => {
+      await symlink('/etc/hostname', join(dir, 'daemon.json'))
+      await expect(loadDaemonRecord(dir)).rejects.toThrow(/symlink/)
+      expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'malformed' })
+    },
+  )
 
   // A planted symlink to a file this user DOES own would pass an owner
   // check on the handle, so the record is never read through one.
@@ -105,5 +105,31 @@ describe('the record file itself', () => {
     expect(() => assertDataDirOwnedByUser(dir, statSync(dir).uid)).toThrow(
       /writable by other users/,
     )
+  })
+})
+
+describe('refuseForeignRecordFile', () => {
+  const path = '/data/daemon.json'
+
+  it('refuses a record file another user owns', () => {
+    expect(refuseForeignRecordFile({ uid: 1000, nlink: 1 }, path, 1001)).toEqual({
+      kind: 'not-owned',
+      message: expect.stringMatching(/is owned by uid 1000, not this user \(uid 1001\)/),
+    })
+  })
+
+  it('refuses a record file with a second name, even one this user owns', () => {
+    expect(refuseForeignRecordFile({ uid: 1000, nlink: 2 }, path, 1000)).toEqual({
+      kind: 'not-owned',
+      message: expect.stringMatching(/another hard link/),
+    })
+  })
+
+  it('accepts a record file this user owns under one name', () => {
+    expect(refuseForeignRecordFile({ uid: 1000, nlink: 1 }, path, 1000)).toBeUndefined()
+  })
+
+  it('has nothing to compare where there is no uid', () => {
+    expect(refuseForeignRecordFile({ uid: 1000, nlink: 3 }, path, undefined)).toBeUndefined()
   })
 })
