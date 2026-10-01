@@ -217,6 +217,20 @@ files, under the standing "fix what you touch" rule.
 > History panel never listed one while it lived. Two histories was not a
 > duplication but a defect, which is the strongest form of this ADR's case.
 
+> **2026-10-01 — two more edges, paid by moving a decision out of an
+> adapter.** 16 → 15: the maintenance route evicted the doc cache after a
+> compaction, a mechanic it reached for directly — and did not need, since
+> compaction folds the live workspace document and writes its own frontier
+> back; the eviction went with the per-document address of a workspace-level
+> fold. 15 → 14: the MCP adapter took the write lock around every mutating
+> tool, keyed per document. That was the decision §4 says an adapter must
+> not make, and it showed: the same operations reached over HTTP
+> (`linkify-mentions`) ran with no lock at all, and an agent write and a
+> browser update to one document were serialised on two different keys.
+> Each tool now holds `liveDocuments.withWriteLock` around its own
+> load-modify-save, which every surface goes through, and the per-document
+> lock mechanic is deleted rather than relocated.
+
 **What would make raising the ceiling right.** It is a decision, not a
 failure: an operation that genuinely belongs to this deployment, or a fix
 that cannot wait for the move. The requirement is only that the PR says which

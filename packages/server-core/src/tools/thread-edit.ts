@@ -210,29 +210,37 @@ export function createThreadEditTool(deps: ServerDeps) {
       "Comment on any document — a spatial canvas or a markdown note — through its annotation layer: open a thread anchored to a node, an edge, a point, a set of nodes (a spatial anchor with nodeIds and the rect they occupy), a region (a spatial anchor with width and height), a quoted passage of a note's body, a quoted passage of a text node's text (a text anchor naming the node), or the document as a whole (kind: document); reply to one; resolve or reopen one. Threads are never deleted, by an agent or by a person: resolving is the only way to close one. Returns every thread the document holds, so a newly opened thread's id needs no second read.",
     inputSchema: threadEditInputSchema,
     outputSchema: threadEditOutputSchema,
-    async execute(input: ThreadEditInput): Promise<ThreadEditOutput> {
-      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
-
-      // Unlike `wb_canvas_edit`, nothing here is validated against a document
-      // KIND: the whole point of decision 6 is that the layer is the same
-      // plane on every format. What varies is the anchor, and its union
-      // already carries that.
-      const held = new Set(readAnnotations(doc).map((thread) => thread.id))
-      const now = new Date().toISOString()
-      for (const [index, op] of input.ops.entries()) {
-        applyThreadOp({ doc, held, now, index }, op)
-      }
-
-      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-
-      return {
-        threads: readAnnotations(doc).map((thread) => ({
-          id: thread.id,
-          status: thread.status,
-          messageCount: thread.messages.length,
-        })),
-      }
+    execute(input: ThreadEditInput): Promise<ThreadEditOutput> {
+      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
+      // mutating tool is a load-modify-save against a store whose save writes
+      // unconditionally, and the one place that holds the bracket is the one
+      // every surface — MCP, HTTP, the next one — goes through.
+      return deps.liveDocuments.withWriteLock(input.workspaceId, () => editThreads(deps, input))
     },
+  }
+}
+
+async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<ThreadEditOutput> {
+  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
+
+  // Unlike `wb_canvas_edit`, nothing here is validated against a document
+  // KIND: the whole point of decision 6 is that the layer is the same
+  // plane on every format. What varies is the anchor, and its union
+  // already carries that.
+  const held = new Set(readAnnotations(doc).map((thread) => thread.id))
+  const now = new Date().toISOString()
+  for (const [index, op] of input.ops.entries()) {
+    applyThreadOp({ doc, held, now, index }, op)
+  }
+
+  await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+
+  return {
+    threads: readAnnotations(doc).map((thread) => ({
+      id: thread.id,
+      status: thread.status,
+      messageCount: thread.messages.length,
+    })),
   }
 }

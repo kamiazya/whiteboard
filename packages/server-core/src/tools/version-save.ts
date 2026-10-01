@@ -71,29 +71,40 @@ export function createVersionSaveTool(deps: ServerDeps) {
       'Save a labelled version of one or more documents into their history — the same history the History panel shows. One label covers the whole batch, so several documents become one checkpoint. Restore any of them later with wb_version_restore. A document the workspace does not own refuses the whole call before anything is recorded.',
     inputSchema: versionSaveInputSchema,
     outputSchema: versionSaveOutputSchema,
-    async execute(input: VersionSaveInput): Promise<VersionSaveOutput> {
+    execute(input: VersionSaveInput): Promise<VersionSaveOutput> {
       // Parsed again here: the MCP boundary may rebuild validation without
       // `.strict()`, so the schema is the only guard on what reaches the seam.
-      const { workspaceId, documentIds, label } = versionSaveInputSchema.parse(input)
-
-      // Resolve every document before saving any. See the note above.
-      const placements: { documentId: string; path: string }[] = []
-      for (const documentId of documentIds) {
-        const entry = await resolveDocumentInWorkspace(deps.documentIndex, workspaceId, documentId)
-        placements.push({ documentId, path: entry.path })
-      }
-
-      const saved: VersionSaveOutput['saved'] = []
-      for (const { documentId, path } of placements) {
-        // The doc is read only for the row's advisory element count; the
-        // checkpoint itself is the stored record's frontier, which the history
-        // reads for itself.
-        const doc = await loadOrCreateDocument(deps, workspaceId, documentId)
-        const version = await deps.versions.save(workspaceId, path, doc, { auto: false, label })
-        deps.clientNotifier?.versionCreated({ workspaceId, documentId, version })
-        saved.push({ documentId, version: versionEntryForAgent(version) })
-      }
-      return { saved }
+      const parsed = versionSaveInputSchema.parse(input)
+      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
+      // mutating tool is a load-modify-save against a store whose save writes
+      // unconditionally, and the one place that holds the bracket is the one
+      // every surface — MCP, HTTP, the next one — goes through.
+      // One hold for the whole batch: a checkpoint of several documents is one
+      // point in time, which an interleaved write would make two.
+      return deps.liveDocuments.withWriteLock(parsed.workspaceId, () => saveVersions(deps, parsed))
     },
   }
+}
+
+async function saveVersions(deps: ServerDeps, input: VersionSaveInput): Promise<VersionSaveOutput> {
+  const { workspaceId, documentIds, label } = input
+
+  // Resolve every document before saving any. See the note above.
+  const placements: { documentId: string; path: string }[] = []
+  for (const documentId of documentIds) {
+    const entry = await resolveDocumentInWorkspace(deps.documentIndex, workspaceId, documentId)
+    placements.push({ documentId, path: entry.path })
+  }
+
+  const saved: VersionSaveOutput['saved'] = []
+  for (const { documentId, path } of placements) {
+    // The doc is read only for the row's advisory element count; the
+    // checkpoint itself is the stored record's frontier, which the history
+    // reads for itself.
+    const doc = await loadOrCreateDocument(deps, workspaceId, documentId)
+    const version = await deps.versions.save(workspaceId, path, doc, { auto: false, label })
+    deps.clientNotifier?.versionCreated({ workspaceId, documentId, version })
+    saved.push({ documentId, version: versionEntryForAgent(version) })
+  }
+  return { saved }
 }

@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest'
 import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import type { ListedTool } from '../../shared/test-utils/tool-surface-metrics.js'
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
+import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
 
 async function listTools(): Promise<readonly ListedTool[]> {
@@ -25,6 +26,8 @@ async function listTools(): Promise<readonly ListedTool[]> {
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
     versions: new InMemoryVersionHistory(),
+    // The daemon's own seam: every mutating tool takes its write lock.
+    liveDocuments: liveDocuments(),
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

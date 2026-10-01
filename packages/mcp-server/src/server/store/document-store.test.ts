@@ -103,9 +103,11 @@ describe('route saves and tool writes serialize on the workspace document', () =
     marker: string,
   ): Promise<void> {
     const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
-    const { withDocumentWriteLock } = await import('./workspace-lock.js')
+    const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
     const docRef = { kind: 'document' as const, workspaceId: 'session1', documentId }
-    await withDocumentWriteLock(documentId, async () => {
+    // The tools hold the WORKSPACE lock around their load-modify-save (the
+    // seam's `withWriteLock`), the same lock the route flow below holds.
+    await withWorkspaceWriteLock('session1', async () => {
       const existing = await routed.loadSnapshot({ docRef })
       const doc = new LoroDoc()
       if (existing !== null) doc.import(reassembleSnapshot(existing.manifest, existing.chunks))

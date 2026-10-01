@@ -6,7 +6,6 @@ import {
 import type { McpServer } from '@modelcontextprotocol/server'
 import { getLogger } from '../log.js'
 import { gatedByMembership } from '../security/mcp-caller.js'
-import { withDocumentWriteLock, withDocumentWriteLocks } from '../store/workspace-lock.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
 
@@ -31,17 +30,13 @@ setServerCoreLogSink((record) => {
 export function registerDocumentTools(server: McpServer, deps: ServerDeps): void {
   const tools = gatedByMembership(createServer(deps).tools, deps.documentIndex)
 
-  // Every MUTATING tool below runs inside withDocumentWriteLock, keyed on
-  // the canvas it targets. Each is a load-modify-save against
-  // documentStore, whose saveSnapshot writes unconditionally, so two calls
-  // that load the same base before either saves silently drop one of the
-  // changes (see canvas-doc-write-lock.test.ts, which demonstrates the loss
-  // on the real tools). Read-only tools are deliberately NOT wrapped:
-  // serializing reads behind writes would make a render or digest wait on
-  // an unrelated patch for no correctness gain.
-  //
-  // The lock wraps the execute() call rather than the registration, so the
-  // concrete outputSchema/O binding described below is untouched.
+  // No lock is taken here. Every mutating tool holds the workspace write
+  // lock itself, around its load-modify-save, through the LiveDocuments
+  // seam (ADR-0018 §4: an adapter translates, it does not decide). It was
+  // taken HERE for a while, keyed per document — so the same operations
+  // reached over HTTP ran with no lock, and an agent write and a browser
+  // update to one document were serialised on two different keys.
+  // `write-lock.test.ts` in server-core pins that each tool takes it.
 
   // Each call below is a direct registerToolWithAnnotations invocation (not
   // routed through a shared generic wrapper) so outputSchema and O are
@@ -76,9 +71,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.facetSet.inputSchema.parse(args)
-      const result = await withDocumentWriteLocks(parsed.documentIds, () =>
-        tools.facetSet.execute(parsed),
-      )
+      const result = await tools.facetSet.execute(parsed)
       return structuredJsonResult(result)
     },
   )
@@ -195,9 +188,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
       // the whole canvas, decides ids and placements against what it read,
       // and writes it back. Two concurrent batches without the lock can
       // mint the same id and the later save wins silently.
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.canvasEdit.execute(parsed),
-      )
+      const result = await tools.canvasEdit.execute(parsed)
       return structuredJsonResult(result)
     },
   )
@@ -216,9 +207,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
       // reads the threads the document holds, mints ids against what it read,
       // and saves the whole snapshot back. Two concurrent batches without it
       // mint the same thread id and the later save wins silently.
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.threadEdit.execute(parsed),
-      )
+      const result = await tools.threadEdit.execute(parsed)
       return structuredJsonResult(result)
     },
   )
@@ -236,9 +225,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
       // Every document in the batch, held for the batch's whole duration:
       // a caller asked for these as one checkpoint, so another writer must
       // not land between two of them.
-      const result = await withDocumentWriteLocks(parsed.documentIds, () =>
-        tools.versionSave.execute(parsed),
-      )
+      const result = await tools.versionSave.execute(parsed)
       return structuredJsonResult(result)
     },
   )
@@ -268,9 +255,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.versionRestore.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.versionRestore.execute(parsed),
-      )
+      const result = await tools.versionRestore.execute(parsed)
       return structuredJsonResult(result)
     },
   )
@@ -285,9 +270,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.bodyEdit.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.bodyEdit.execute(parsed),
-      )
+      const result = await tools.bodyEdit.execute(parsed)
       return structuredJsonResult(result)
     },
   )

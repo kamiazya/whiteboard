@@ -400,7 +400,6 @@ export const KNOWN_PACKAGE_CYCLES: readonly {
  * comment said it could only shrink.
  */
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
-  'mcp/document-tools.ts -> workspace-lock',
   'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
   'routes/document.ts -> auto-compact',
@@ -443,7 +442,7 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * gone with the feature. Debt paid by deletion rather than by relocation,
  * which is the cheapest way this number ever comes down.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 15
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 14
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

@@ -700,9 +700,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/create-server.ts#createServer': 219,
   'packages/server-core/src/operations/restore-version.ts#restoreToTarget': 61,
   'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
-  'packages/server-core/src/tools/body-edit.ts#createBodyEditTool': 70,
-  'packages/server-core/src/tools/canvas-edit.ts#createCanvasEditTool': 222,
-  'packages/server-core/src/tools/canvas-edit.ts#createCanvasEditTool.execute': 213,
+  // The tool bodies left `execute` for module functions when the write
+  // lock became the operation's own: `execute` takes the lock and calls
+  // them. Moved, not grown — recorded at the measurement.
+  'packages/server-core/src/tools/body-edit.ts#editBody': 61,
+  'packages/server-core/src/tools/canvas-edit.ts#editCanvas': 72,
   'packages/server-core/src/tools/document-crud.ts#wbDocumentCreate': 130,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 181,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 169,

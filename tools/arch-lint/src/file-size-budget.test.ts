@@ -816,7 +816,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 881 -> 901 when compaction became workspace-keyed: one test pins that
   // saves to two documents of one workspace collapse into one compaction.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
-  'packages/mcp-server/src/server/store/document-store.test.ts': 861,
+  // 861 -> 863: the tool-write half of the race says which lock it holds.
+  'packages/mcp-server/src/server/store/document-store.test.ts': 863,
   // +17 for the tenant layout: this file's subject IS filesystem paths, so
   // every seed now names a tenant's workspaces root, and three symlink seeds
   // gained the parent mkdir that root needs. Splitting it instead would have

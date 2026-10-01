@@ -1,19 +1,22 @@
-// The lost update this lock exists to prevent, demonstrated on the real
-// tools rather than argued from the code: every mutating tool is a
-// load-modify-save and `saveSnapshot` writes unconditionally, so two calls
-// that load the same base before either saves drop one of the changes.
+// The lost update the write lock exists to prevent, demonstrated through
+// the REGISTERED handlers over the daemon's real lock: every mutating tool
+// is a load-modify-save and `saveSnapshot` writes unconditionally, so two
+// calls that load the same base before either saves drop one of the
+// changes. The lock is the tool's own (server-core's `write-lock.test.ts`
+// pins that each takes it); what this file pins is that the daemon's
+// `LiveDocuments` seam hands the tools a lock that really queues.
 
 import { writeSpatialCanvas as _w, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
-import { createCanvasEditTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerDocumentTools } from '../mcp/document-tools.js'
 import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
-import { _resetWorkspaceLocksForTests, withDocumentWriteLock } from './workspace-lock.js'
+import { liveDocuments } from './live-documents.js'
+import { _resetWorkspaceLocksForTests } from './workspace-lock.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -24,31 +27,6 @@ const CANVAS: SpatialCanvas = {
     textNode({ id: 'n2', x: 200, y: 0, width: 100, height: 50, text: 'b' }),
   ],
   edges: [],
-}
-
-/**
- * Holds the first `participants` canvas loads until all of them have
- * arrived, so "both calls loaded the same base" is constructed rather than
- * left to the scheduler. Without this the race the test means to create
- * might simply not happen, and the test would pass for the wrong reason.
- */
-function barrierOnCanvasLoads(store: InMemoryDocumentStore, participants: number): void {
-  let arrived = 0
-  let open!: () => void
-  const gate = new Promise<void>((resolve) => {
-    open = resolve
-  })
-  const load = store.loadSnapshot.bind(store)
-  store.loadSnapshot = async (input) => {
-    const result = await load(input)
-    if (input.docRef.kind !== 'document') return result
-    arrived += 1
-    if (arrived === participants) open()
-    // Loads beyond the barrier's population must not block, or a follow-up
-    // read would hang forever.
-    if (arrived <= participants) await gate
-    return result
-  }
 }
 
 async function makeDeps() {
@@ -77,6 +55,8 @@ async function makeDeps() {
     documentStore,
     blobStore: {} as never,
     documentIndex,
+    // The daemon's own seam, so the tools take the daemon's own lock.
+    liveDocuments: liveDocuments(),
   }
 }
 
@@ -101,93 +81,6 @@ beforeEach(() => {
   _resetWorkspaceLocksForTests()
 })
 
-describe('withDocumentWriteLock', () => {
-  it('THE RED CASE: two unserialized patches to one canvas lose an update', async () => {
-    const deps = await makeDeps()
-    barrierOnCanvasLoads(deps.documentStore, 2)
-    const tool = createCanvasEditTool(deps)
-
-    // Both are held at the barrier until each has loaded, so they provably
-    // share a base — the shape of an agent and a user editing the same
-    // canvas at the same moment.
-    await Promise.all([
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
-      }),
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
-      }),
-    ])
-
-    const positions = await storedPositions(deps)
-    // Exactly one of the two survives: this test documents the hazard, so
-    // if a future change makes the unserialized path safe by itself, this
-    // failing is the signal the lock can go.
-    const survived = [positions.n1 === 11, positions.n2 === 22].filter(Boolean).length
-    expect(survived).toBe(1)
-  })
-
-  it('serializes them so both survive', async () => {
-    const deps = await makeDeps()
-    const tool = createCanvasEditTool(deps)
-
-    await Promise.all([
-      withDocumentWriteLock(DOCUMENT_ID, () =>
-        tool.execute({
-          workspaceId: WORKSPACE_ID,
-          documentId: DOCUMENT_ID,
-          mode: 'apply',
-          ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
-        }),
-      ),
-      withDocumentWriteLock(DOCUMENT_ID, () =>
-        tool.execute({
-          workspaceId: WORKSPACE_ID,
-          documentId: DOCUMENT_ID,
-          mode: 'apply',
-          ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
-        }),
-      ),
-    ])
-
-    expect(await storedPositions(deps)).toEqual({ n1: 11, n2: 22 })
-  })
-
-  it('does not serialize DIFFERENT documents against each other', async () => {
-    // A single global queue would turn every agent write into a
-    // whole-server bottleneck; the key has to be the document.
-    const order: string[] = []
-    const slow = withDocumentWriteLock('canvas-a', async () => {
-      await new Promise((settle) => setTimeout(settle, 50))
-      order.push('a')
-    })
-    const quick = withDocumentWriteLock('canvas-b', async () => {
-      order.push('b')
-    })
-    await Promise.all([slow, quick])
-    expect(order).toEqual(['b', 'a'])
-  })
-
-  it('keeps draining after a holder throws', async () => {
-    const failed = withDocumentWriteLock(DOCUMENT_ID, async () => {
-      throw new Error('boom')
-    })
-    await expect(failed).rejects.toThrow('boom')
-    // A poisoned queue would strand every later write to this canvas.
-    await expect(withDocumentWriteLock(DOCUMENT_ID, async () => 'ok')).resolves.toBe('ok')
-  })
-})
-
-// Wiring, verified by RUNNING the registered handlers rather than by
-// reading the source: a string check would pass on a wrapping that had
-// been syntactically kept but semantically bypassed, and would break on
-// reformatting.
 describe('registered MCP handlers', () => {
   function registeredHandlers(deps: Awaited<ReturnType<typeof makeDeps>>) {
     const registerTool = vi.fn()

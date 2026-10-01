@@ -256,19 +256,28 @@ export function createFacetSetTool(deps: ServerDeps) {
       "Tag documents, boards, nodes and edges, or set facets on them. `tags` adds and removes tags by name — on one or more markdown documents (OKF core tags), on a spatial document's board, or with nodeId / edgeId on one node or one edge — leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme and visual.edges/v0 routes every edge), or — with nodeId or edgeId — on one node or one edge of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. A workspace's tag library (the document at `tags`; wb_facet_list shows it) may restrict a key's values or make it one value at a time, and a tag outside it is refused before anything is written. One payload covers every document named, so tagging five notes is one call.",
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
-    execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
-      refuseIncoherentRequest(input)
-      const registry = await resolveWriteRegistry(deps, input)
-      const { sets, deletions } = partitionFacetWrites(registry, input, requiredTargetOf(input))
-      await refuseBeforeAnyWrite(deps, input)
-
-      const updated: FacetSetOutput['updated'] = []
-      for (const documentId of input.documentIds) {
-        updated.push(await setOne(deps, input, documentId, sets, deletions))
-      }
-      return { updated }
-    },
+    execute: (input: FacetSetInput): Promise<FacetSetOutput> =>
+      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
+      // mutating tool is a load-modify-save against a store whose save writes
+      // unconditionally, and the one place that holds the bracket is the one
+      // every surface — MCP, HTTP, the next one — goes through.
+      // One hold for the whole batch, so another writer cannot interleave
+      // between two documents a caller asked for as a unit.
+      deps.liveDocuments.withWriteLock(input.workspaceId, () => setFacets(deps, input)),
   }
+}
+
+async function setFacets(deps: ServerDeps, input: FacetSetInput): Promise<FacetSetOutput> {
+  refuseIncoherentRequest(input)
+  const registry = await resolveWriteRegistry(deps, input)
+  const { sets, deletions } = partitionFacetWrites(registry, input, requiredTargetOf(input))
+  await refuseBeforeAnyWrite(deps, input)
+
+  const updated: FacetSetOutput['updated'] = []
+  for (const documentId of input.documentIds) {
+    updated.push(await setOne(deps, input, documentId, sets, deletions))
+  }
+  return { updated }
 }
 
 /**
