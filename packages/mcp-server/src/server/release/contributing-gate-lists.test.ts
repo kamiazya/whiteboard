@@ -21,6 +21,9 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { codeText } from '../../shared/test-utils/markdown-code.js'
+import { bareScriptReferences, scriptsOf } from '../../shared/test-utils/pnpm-scripts.js'
+import { jobSection } from './job-section.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -108,5 +111,77 @@ describe('CONTRIBUTING describes the gates that actually exist', () => {
     const stated = [...contributing().matchAll(/(\d+) vitest projects/g)].map((m) => Number(m[1]))
     expect(stated.length).toBeGreaterThanOrEqual(2)
     expect(stated).toEqual(stated.map(() => count))
+  })
+})
+
+// The release section is the other part of CONTRIBUTING that described a
+// workflow which no longer existed: it said the release run does `pnpm test`
+// then `build` and `npm publish`, after `publish-mcp` had moved to the
+// matrix-driven `pnpm publish-gate` precisely so it would NOT re-run the suite
+// verify CI already ran at that SHA. Each document below is held to the
+// workflow itself and to the root scripts it names.
+describe('the release documentation describes the workflow that ships', () => {
+  const releaseSection = (): string => {
+    const text = contributing()
+    const start = text.indexOf('## Release / Publish')
+    const end = text.indexOf('\n## ', start + 1)
+    return start === -1 ? '' : text.slice(start, end === -1 ? undefined : end)
+  }
+
+  const RELEASE_DOCS = [
+    'docs/contributing/releasing.md',
+    'packages/mcp-server/src/server/release/release-signing-provenance-sbom.md',
+  ]
+  const rootScripts = scriptsOf(ROOT)
+
+  it("CONTRIBUTING's release section names the publish gate and not a re-run of the suite", () => {
+    const section = releaseSection()
+    expect(section).toContain('pnpm publish-gate')
+    expect(
+      section,
+      'publish-mcp runs the publish tier, so no step bullet is `pnpm test`',
+    ).not.toMatch(/^\s+- `pnpm (test|typecheck|smoke:e2e)`/m)
+  })
+
+  it('CONTRIBUTING points the local pre-release check at a script that exists', () => {
+    expect(releaseSection()).toContain('pnpm check:release-candidate')
+  })
+
+  it('every bare `pnpm <script>` a release document types is a root script', () => {
+    const documents = [
+      ['CONTRIBUTING.md', releaseSection()],
+      ...RELEASE_DOCS.map((path) => [path, readFileSync(join(ROOT, path), 'utf-8')] as const),
+    ] as const
+    // Reached, not assumed: an empty extraction passes every name check.
+    expect(
+      documents.reduce((n, [, text]) => n + bareScriptReferences(codeText(text)).length, 0),
+    ).toBeGreaterThan(15)
+    const dangling = documents.flatMap(([path, text]) =>
+      bareScriptReferences(codeText(text))
+        .filter(({ name }) => !(name in rootScripts))
+        .map(({ name }) => `${path}: pnpm ${name}`),
+    )
+    expect(dangling).toEqual([])
+  })
+
+  it('the SBOM document lists the root scripts each publish job runs, and no aggregate they skip', () => {
+    const workflow = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf-8')
+    const doc = readFileSync(join(ROOT, RELEASE_DOCS[1] ?? ''), 'utf-8')
+    const start = doc.indexOf('## What the production publish workflow v0 implements')
+    const section = doc.slice(start, doc.indexOf('\n## ', start + 1))
+    expect(start).toBeGreaterThan(-1)
+    const jobs = [
+      jobSection(workflow, 'publish-mcp', 'docker-publish-sign'),
+      jobSection(workflow, 'docker-publish-sign'),
+    ]
+    const run = jobs.flatMap((job) => bareScriptReferences(job).map(({ name }) => name))
+    const gates = run.filter(
+      (name) => name in rootScripts && /^(publish-gate|smoke:docker)/.test(name),
+    )
+    expect(gates.length).toBeGreaterThanOrEqual(3)
+    for (const name of gates) expect(section, `${name} runs in a publish job`).toContain(name)
+    expect(section, 'neither publish job runs the release-candidate aggregate').not.toContain(
+      'check:release-candidate',
+    )
   })
 })

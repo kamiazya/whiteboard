@@ -102,20 +102,23 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 1. Push to `main` using Conventional Commits.
 2. The `release` GitHub Actions workflow opens or updates a `chore(main): release X.Y.Z` PR that bumps `package.json` and updates the changelog.
 3. A maintainer reviews and merges that PR.
-4. The workflow runs again from the merge with `release_created=true` and performs:
+4. The workflow runs again from the merge with `release_created=true`. `publish-mcp` performs:
    - `pnpm install --frozen-lockfile`
-   - `pnpm test` / `pnpm typecheck` / `pnpm smoke:e2e`
-   - `pnpm build` → `npm publish`
+   - `pnpm audit --prod`
+   - `pnpm publish-gate` — the publishability tier (typecheck, build, artifact checks, SBOM, tarball/packaged smokes). It deliberately does not re-run `pnpm test`: verify CI already ran the full matrix on this exact commit.
+   - `verify-pack-contents`, then `pnpm pack` → `npm publish`
    - GitHub Release + tag creation
+
+   The `docker-publish-sign` job runs the same gate, then the container smokes, before it pushes and signs the image. [docs/contributing/releasing.md](docs/contributing/releasing.md) has the step-by-step.
 
 ### Local checks before merging a release PR
 
 ```bash
-pnpm test
-pnpm typecheck
-pnpm smoke:e2e
-npm pack --dry-run   # verify the tarball includes dist/, skills/, package README, and LICENSE
+pnpm check:release-candidate   # typecheck, build, distribution + artifact checks, SBOM, tests, smokes
+npm pack --dry-run             # verify the tarball includes dist/, skills/, package README, and LICENSE
 ```
+
+`pnpm check:release-candidate:local` adds the mutation lane; `pnpm check:release-candidate:docker` adds the container smokes.
 
 ### Config files
 

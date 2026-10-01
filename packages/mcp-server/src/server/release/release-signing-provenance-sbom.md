@@ -122,9 +122,10 @@ publish or signing gate:
 - `release.yml` — the consolidated production path for release-please output and
   guarded manual `force_publish_tag` reruns. Both paths validate
   `mcp-server-v<semver>` before checkout and require protected environments.
-- `publish-mcp` job — runs `pnpm check:release-candidate`, then
+- `publish-mcp` job — runs `pnpm publish-gate` (the publishability tier), then
   `npm publish --access public --provenance` under `production-npm`.
-- `docker-publish-sign` job — runs `pnpm check:release-candidate:docker`, then buildx
+- `docker-publish-sign` job — runs `pnpm publish-gate`, `pnpm smoke:docker` and
+  `pnpm smoke:docker-backup-restore`, then buildx
   `push: true` with `sbom: true` / `provenance: true`, followed by cosign
   keyless signing under `production-docker`.
 - Static drift tests: `publish-production-policy.test.ts` — verifies
@@ -138,7 +139,8 @@ publish or signing gate:
 - `packages/mcp-server/scripts/release/generate-npm-sbom.mjs` generates a CycloneDX JSON SBOM
   from a `pnpm deploy --legacy --prod` output, so dependency versions are resolved from
   `pnpm-lock.yaml` rather than re-resolved from semver ranges.
-- `pnpm check:release-candidate` runs `pnpm generate:sbom:npm` before `pnpm test`, so
+- `pnpm check:release-candidate` runs the package script `generate:sbom:npm`
+  (`pnpm --filter @kamiazya/whiteboard-mcp generate:sbom:npm`) before `pnpm test`, so
   generated-SBOM regression tests execute in the release-candidate path.
 - `sbom-policy.test.ts` checks that generated SBOM content excludes known dev-only
   packages and includes expected production packages.
