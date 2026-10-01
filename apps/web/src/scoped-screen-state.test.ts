@@ -224,6 +224,8 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
   duplicateError: 'no subject: a refused duplicate; the path it was about is `duplicatingPath`',
   creating: 'no subject: an in-flight flag for this screen’s own submit',
   deleting: 'no subject: an in-flight flag; the path it is about is `pendingDelete`',
+  generation:
+    'no subject: a monotonic stamp the delete hook bumps ON a switch so an attempt begun before it drops its outcome — resetting it would revive the stale re-offer it exists to close',
   selectedWorkspaceRef:
     'no subject: mirrors the selection, written during render so it is current within the very render that changes it',
   addressedWorkspaceRef: 'no subject: mirrors the addressed workspace, written during render',

@@ -191,6 +191,41 @@ describe('useDeleteDocuments', () => {
     expect(refresh).not.toHaveBeenCalled()
   })
 
+  it('drops an outcome that settles after reset, so a departed scope is never re-offered', async () => {
+    // The page resets on a workspace switch while a bulk delete is in
+    // flight. Without a guard the partial failure re-opened the dialog with
+    // the OLD workspace's paths, and the next confirm sent them to the new
+    // one — the mismatched identity the reset exists to prevent.
+    const gate = deferred<{ failed: string[]; lastError: unknown }>()
+    const { result } = renderHook(() =>
+      useDeleteDocuments({
+        keeper: 'daemon',
+        deleteEach: () => gate.promise,
+        lookup,
+        refresh: vi.fn(),
+      }),
+    )
+    act(() => {
+      result.current.requestDelete({ paths: ['alpha', 'beta'], displayName: '2 documents' })
+    })
+    let settled: Promise<void> | undefined
+    act(() => {
+      settled = result.current.dialog.onConfirm()
+    })
+    act(() => {
+      result.current.reset()
+    })
+
+    await act(async () => {
+      gate.resolve({ failed: ['beta'], lastError: new Error('nope') })
+      await settled
+    })
+
+    expect(result.current.dialog.pending).toBeNull()
+    expect(result.current.dialog.error).toBeNull()
+    expect(result.current.dialog.busy).toBe(false)
+  })
+
   it('dismiss clears the request and the error, and tells the page', () => {
     const onDismiss = vi.fn()
     const { result } = renderHook(() =>

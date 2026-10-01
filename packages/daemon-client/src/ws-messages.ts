@@ -1,7 +1,4 @@
-import {
-  type ViewportRequestParams,
-  viewportRequestParamsSchema,
-} from '@kamiazya/whiteboard-server-core/viewport-request'
+import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-server-core/viewport-request'
 import { z } from 'zod'
 import { operatorInfoSchema, versionEntrySchema } from './api-contracts/document.js'
 
@@ -66,7 +63,10 @@ export const viewportRequestMessageSchema = z.object({
   ...viewportRequestParamsSchema.shape,
 })
 
-export { type ViewportRequestParams, viewportRequestParamsSchema }
+export {
+  type ViewportRequestParams,
+  viewportRequestParamsSchema,
+} from '@kamiazya/whiteboard-server-core/viewport-request'
 
 export const serverTextMessageSchema = z.discriminatedUnion('type', [
   versionCreatedMessageSchema,

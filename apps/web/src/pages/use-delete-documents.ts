@@ -11,8 +11,9 @@
  * switches workspaces calls `reset` so a standing dialog cannot carry the
  * departed workspace's path to the one now on screen.
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { DeleteDocumentDialogProps } from '../components/document-list/DeleteDocumentDialog.js'
+import type { DestructiveActionId } from '../lib/destructive-copy.js'
 import {
   type DeleteRowLookup,
   type PendingDelete,
@@ -97,37 +98,48 @@ async function attempt(
   }
 }
 
+/** Which keeper's sentence the dialog shows, singular or bulk. */
+function actionFor(keeper: DeleteKeeper, pending: PendingDelete | null): DestructiveActionId {
+  const bulk = pending !== null && pending.paths.length > 1
+  return bulk ? `delete-documents-${keeper}` : `delete-document-${keeper}`
+}
+
 export function useDeleteDocuments(options: UseDeleteDocumentsOptions): DeleteDocumentsState {
-  const { keeper, onDismiss } = options
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const generation = useRef(0)
 
   // SCOPE RESET — both name the paths the dialog was opened for, and a page
   // that switches workspaces calls this from its own scope-reset effect, so
   // neither may outlive the workspace it is about. scoped-screen-state.test.ts
-  // reads this block by that marker.
+  // reads this block by that marker. The generation bump makes an attempt
+  // still in flight drop its outcome: a partial failure settling after the
+  // switch would otherwise re-open the dialog with the DEPARTED workspace's
+  // paths, and the next confirm would send them to the one now on screen.
   const reset = useCallback(() => {
+    generation.current += 1
     setPendingDelete(null)
     setDeleteError(null)
   }, [])
 
   const onCancel = useCallback(() => {
     reset()
-    onDismiss?.()
-  }, [reset, onDismiss])
+    options.onDismiss?.()
+  }, [reset, options.onDismiss])
 
   const onConfirm = useCallback(async (): Promise<void> => {
     if (!pendingDelete) return
+    const started = generation.current
     setDeleting(true)
     setDeleteError(null)
     const outcome = await attempt(options, pendingDelete)
+    setDeleting(false)
+    if (started !== generation.current) return
     setPendingDelete(outcome.pending)
     setDeleteError(outcome.error)
-    setDeleting(false)
   }, [options, pendingDelete])
 
-  const bulk = pendingDelete !== null && pendingDelete.paths.length > 1
   return {
     requestDelete: setPendingDelete,
     reset,
@@ -135,7 +147,7 @@ export function useDeleteDocuments(options: UseDeleteDocumentsOptions): DeleteDo
       pending: dialogSubject(pendingDelete),
       busy: deleting,
       error: deleteError,
-      action: bulk ? `delete-documents-${keeper}` : `delete-document-${keeper}`,
+      action: actionFor(options.keeper, pendingDelete),
       onCancel,
       onConfirm,
     },
