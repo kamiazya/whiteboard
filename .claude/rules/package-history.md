@@ -34,8 +34,8 @@ Three modules, and `src/index.ts` is the whole published surface:
 - `checkpoints/retention.ts`: which automatic checkpoints may go —
   `autoVersionsOverCap` over `MAX_AUTO_PER_DOCUMENT` sparing lineage, and
   `sandwichedAutoVersionIds` for the run between two manual saves.
-- `frontiers-base64.ts`: frontiers as text, over `atob`/`btoa` so no keeper
-  reaches for `Buffer`.
+- `frontiers-base64.ts`: frontiers as text, through `model`'s base64 codec so
+  no keeper reaches for `Buffer`.
 
 ## What does NOT belong here
 
@@ -64,11 +64,11 @@ eleven pointers at once.
 
 ## Dependency rules
 
-- Runtime: `loro-crdt`, and nothing else. Not `model`, not `zod` — the three
-  modules take plain rows and `Frontiers`, so there is no schema to own.
+- Runtime: `loro-crdt` and `model`, and nothing else. `model` is here for its
+  base64 codec alone; there is no schema to own, so not `zod`.
 - Forbidden: `node:*`, DOM globals, `inversify` — it runs in both roots and a
-  worker. `Buffer` is the one that was here before the move; the base64 codec
-  is what replaced it.
+  worker. `Buffer` is the one that was here before the move; `model`'s base64
+  codec is what replaced it.
 - Enforced by `tools/arch-lint`; listed in `repo-coverage.test.ts`'s
   `SHARED_LAYER_PACKAGES` so the scan reaches it (registration alone does not
   scan, see `package-workspace-index.md`).
@@ -85,7 +85,7 @@ eleven pointers at once.
 
 - Vitest project: `history-node`. `scheduler.test.ts` runs the cadence under
   fake timers; `retention.test.ts` pins the cap and the sandwich;
-  `frontiers-base64.test.ts` carries the round-trip property
-  (`src/test-utils/fast-check.ts` holds its arbitrary).
+  `frontiers-base64.test.ts` round-trips a real frontier (the codec's own
+  properties are `model`'s).
 - The keeper-facing behaviour — that a checkpoint actually lands, that
   retention deletes the right rows — stays where each keeper's store is.

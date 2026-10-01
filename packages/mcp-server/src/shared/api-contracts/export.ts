@@ -3,31 +3,35 @@ import { z } from 'zod'
 
 // Request / response schemas for POST /api/w/:workspaceId/document/<path>/export.
 // Imported by the route handler, which validates incoming bodies against
-// exportRequestSchema and types its `c.json(...)` responses via the
-// ExportResponse/ExportErrorBody types derived below.
+// exportRequestSchema and types its success response via ExportResponse.
+// Refusals are not declared here: they are server-core's `apiErrorBodySchema`
+// (the one error contract), so a second, looser shape cannot sit beside it.
 
-export const exportRequestSchema = z.object({
-  // Bounds a caller can get wrong in either direction: a negative padding
-  // or a scale of zero sizes the render to nothing, which the renderer
-  // refuses after the work; a huge one asks for a target no process can
-  // allocate (scale is resvg's zoom factor, padding widens the bounds on
-  // every side). 8x is four times a retina export; 1024px of padding is
-  // a poster's margin.
-  padding: z.number().nonnegative().max(1024).optional(),
-  scale: z.number().positive().max(8).optional(),
-  minFontPx: z.number().nonnegative().optional(),
-  frameId: z.string().optional(),
-  outputPath: z.string().optional(),
-  overwrite: z.boolean().optional(),
-  // theme: forces the rendered scene into 'light' or 'dark'. Lets callers
-  // export the same canvas under both themes for dark-mode QA / before-after
-  // comparison without mutating the persisted appState.
-  theme: z.enum(['light', 'dark']).optional(),
-  // style: which look to draw (ADR-0030 decision 6). Absent is 'clean', so
-  // an export never picks up the document's theme unasked; 'document' draws
-  // the theme the canvas names; a theme id previews one.
-  style: spatialRenderStyleSchema.optional(),
-})
+// Strict so a field this contract does not define is refused by name instead
+// of being dropped: a caller sending one would otherwise read the 200 as
+// "honoured".
+export const exportRequestSchema = z
+  .object({
+    // Bounds a caller can get wrong in either direction: a negative padding
+    // or a scale of zero sizes the render to nothing, which the renderer
+    // refuses after the work; a huge one asks for a target no process can
+    // allocate (scale is resvg's zoom factor, padding widens the bounds on
+    // every side). 8x is four times a retina export; 1024px of padding is
+    // a poster's margin.
+    padding: z.number().nonnegative().max(1024).optional(),
+    scale: z.number().positive().max(8).optional(),
+    outputPath: z.string().optional(),
+    overwrite: z.boolean().optional(),
+    // theme: forces the rendered scene into 'light' or 'dark'. Lets callers
+    // export the same canvas under both themes for dark-mode QA / before-after
+    // comparison without mutating the persisted appState.
+    theme: z.enum(['light', 'dark']).optional(),
+    // style: which look to draw (ADR-0030 decision 6). Absent is 'clean', so
+    // an export never picks up the document's theme unasked; 'document' draws
+    // the theme the canvas names; a theme id previews one.
+    style: spatialRenderStyleSchema.optional(),
+  })
+  .strict()
 
 export const exportResponseSchema = z.object({
   filePath: z.string(),
@@ -65,16 +69,4 @@ export const exportResponseSchema = z.object({
   unresolvedFamilies: z.array(z.string()),
 })
 
-// Shared error body. The route emits this for invalid_request /
-// invalid_output_path (400), not_found (404), output_exists (409),
-// payload_too_large (413), and headless_export_failed (500).
-// All fields are optional since some 5xx bodies come from proxies that
-// strip `error` without crashing the parser.
-export const exportErrorBodySchema = z.object({
-  error: z.string().optional(),
-  message: z.string().optional(),
-  hint: z.string().optional(),
-})
-
 export type ExportResponse = z.infer<typeof exportResponseSchema>
-export type ExportErrorBody = z.infer<typeof exportErrorBodySchema>

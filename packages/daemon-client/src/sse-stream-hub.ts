@@ -12,6 +12,7 @@
  * rather than just the documents within one tab.
  */
 
+import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import { documentApiUrl } from './api-contracts/document-url.js'
 import {
@@ -163,23 +164,6 @@ export interface DocListener {
 /** The two answers that mean the credential, not the connection, is the problem. */
 function isAuthRefusal(status: number): boolean {
   return status === 401 || status === 403
-}
-
-/** Exported so the SharedWorker-backed source decodes with this one
- *  implementation rather than a copy that can drift from it. */
-export function fromBase64(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
-
-/** The mirror of `fromBase64`, exported for the same reason: the worker and the
- *  tab-side source both encode update bytes, and two copies drift. */
-export function toBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
 }
 
 /**
@@ -559,7 +543,10 @@ export class SseStreamHub implements SseStreamSource {
       if (!payload) return
       const entry = this.docs.get(payload.doc)
       if (!entry) return
-      const bytes = fromBase64(payload.update)
+      // Dropped like any other frame that does not parse: one corrupt update
+      // must not take the whole stream down with it.
+      const bytes = base64ToBytes(payload.update)
+      if (bytes === null) return
       for (const l of entry.listeners) l.onUpdate(bytes)
       return
     }

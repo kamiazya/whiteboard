@@ -15,7 +15,7 @@ import {
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { newImageRef } from '@kamiazya/whiteboard-model'
+import { base64UrlToBytes, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -57,12 +57,6 @@ interface StubOptions {
   workspaces?: { workspaceId: string; segment?: string; displayName?: string }[]
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
-  const padded = value.replaceAll('-', '+').replaceAll('_', '/')
-  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-}
-
 /**
  * The daemon routes the flow touches, answering from `target` — and, as a
  * side effect of building it, connects the S4b replica-key holder to THIS
@@ -100,7 +94,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
         attestation?: { credentialId: string }
       }
       opts.promotes?.push(body)
-      target.import(base64UrlToBytes(body.snapshot))
+      target.import(base64UrlToBytes(body.snapshot) as Uint8Array)
       return Response.json({
         ok: true,
         attested: body.attestation !== undefined,

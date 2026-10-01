@@ -10,11 +10,8 @@
  * This file must be a real same-origin module: the app's CSP declares
  * `worker-src 'self'`, which rejects a blob: worker.
  */
-import {
-  fromBase64,
-  SseStreamHub,
-  toBase64,
-} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
@@ -403,7 +400,7 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
     // the round trip from looping back out as authority state.
     const merged = replica.export({ mode: 'update', from: before })
     if (merged.byteLength === 0) return
-    fanOutUpdate(baseUrl, doc, toBase64(merged), from)
+    fanOutUpdate(baseUrl, doc, bytesToBase64(merged), from)
   })
 }
 
@@ -474,7 +471,7 @@ function handleSnapshotRequest(
     // is the same path a first-ever open already takes.
     const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
     if (snapshot === undefined) return
-    postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
+    postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: bytesToBase64(snapshot) })
   })
 }
 
@@ -544,12 +541,15 @@ function handle(port: MessagePort, raw: unknown): void {
     case 'snapshot-request':
       handleSnapshotRequest(port, msg, state)
       return
-    case 'push':
-      // Excluded from its own fan-out: echoing an edit back to the tab that
-      // made it would turn every stroke into a round trip through the tab
-      // that drew it, which is the cost the fork model exists to avoid.
-      ingest(state.baseUrl, msg.doc, fromBase64(msg.update), port)
+    case 'push': {
+      const update = base64ToBytes(msg.update)
+      // A push that does not decode carries no edit to ingest. Excluded from
+      // its own fan-out: echoing an edit back to the tab that made it would
+      // turn every stroke into a round trip through the tab that drew it,
+      // which is the cost the fork model exists to avoid.
+      if (update !== null) ingest(state.baseUrl, msg.doc, update, port)
       return
+    }
     case 'subscribe':
       handleSubscribe(port, msg, state, hub)
       return

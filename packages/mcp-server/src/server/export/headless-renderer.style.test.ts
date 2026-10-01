@@ -87,13 +87,4 @@ describe('export paper', () => {
     const light = await renderSpatialCanvasToSvg(themed('visual.neon'))
     expect(backgroundRect(light.svg)).toBe(SPATIAL_LIGHT_PALETTE.surface)
   })
-
-  it('an explicit background still wins over the theme', async () => {
-    const asked = await renderSpatialCanvasToSvg(themed('visual.neon'), {
-      style: 'document',
-      theme: 'dark',
-      background: '#123456',
-    })
-    expect(backgroundRect(asked.svg)).toBe('#123456')
-  })
 })

@@ -1,21 +1,8 @@
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import {
-  base64ToBytes,
-  bytesToBase64,
-  frontiersFromBase64,
-  frontiersToBase64,
-} from './frontiers-base64.js'
-import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+import { frontiersFromBase64, frontiersToBase64 } from './frontiers-base64.js'
 
 describe('frontiers as base64', () => {
-  fcTest.prop([fc.uint8Array({ maxLength: 70_000 })], withDefaults())(
-    'bytes round-trip, including past the argument-list chunk boundary',
-    (bytes) => {
-      expect(base64ToBytes(bytesToBase64(bytes))).toEqual(bytes)
-    },
-  )
-
   it('a real frontier round-trips and checks out to the same state', () => {
     const doc = new LoroDoc()
     doc.getMap('nodes').set('a', 1)
@@ -30,9 +17,18 @@ describe('frontiers as base64', () => {
     expect(clone.getMap('nodes').toJSON()).toEqual({ a: 1 })
   })
 
-  it('answers the same text Node would for the same bytes', () => {
+  it('reads the text a Buffer-writing keeper stored', () => {
     // The daemon's rows were written with Buffer; the codec must read them.
-    const bytes = new Uint8Array([0, 1, 2, 250, 251, 252, 253, 254, 255])
-    expect(bytesToBase64(bytes)).toBe(Buffer.from(bytes).toString('base64'))
+    const doc = new LoroDoc()
+    doc.getMap('nodes').set('a', 1)
+    doc.commit()
+    const frontiers = doc.oplogFrontiers()
+    const stored = frontiersToBase64(frontiers)
+    expect(frontiersFromBase64(stored)).toEqual(frontiers)
+    expect(Buffer.from(stored, 'base64').toString('base64')).toBe(stored)
+  })
+
+  it('throws on text that is not base64, naming what it was reading', () => {
+    expect(() => frontiersFromBase64('not base64!')).toThrow('frontiers are not base64')
   })
 })

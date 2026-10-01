@@ -69,7 +69,7 @@ describe('exportCanvasHeadless', () => {
     await exportCanvasHeadless({
       workspaceId: 'ws_a',
       path: 'design',
-      options: { padding: 20, scale: 2, theme: 'dark', frameId: 'ignored', minFontPx: 99 },
+      options: { padding: 20, scale: 2, theme: 'dark' },
     })
 
     expect(renderSpy).toHaveBeenCalledTimes(1)
@@ -79,23 +79,6 @@ describe('exportCanvasHeadless', () => {
     ]
     expect(canvas.nodes.map((n) => n.id)).toEqual(['n1'])
     expect(options).toEqual({ padding: 20, scale: 2, theme: 'dark' })
-  })
-
-  it('accepts frameId and minFontPx without changing renderer output (both are ignored)', async () => {
-    const doc = spatialTextDoc('n1', 'hello')
-    await saveDocument('ws_ignored', 'design', doc)
-
-    await exportCanvasHeadless({ workspaceId: 'ws_ignored', path: 'design' })
-    const withoutIgnored = renderSpy.mock.calls[0][1]
-
-    await exportCanvasHeadless({
-      workspaceId: 'ws_ignored',
-      path: 'design',
-      options: { frameId: 'frame-1', minFontPx: 42 },
-    })
-    const withIgnored = renderSpy.mock.calls[1][1]
-
-    expect(withIgnored).toEqual(withoutIgnored)
   })
 
   it('logs a warning and returns a valid empty export for a doc with legacy Excalidraw elements but no spatial nodes', async () => {

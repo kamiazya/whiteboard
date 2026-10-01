@@ -8,18 +8,21 @@ import { z } from 'zod'
 // browser round-trip, so no `scale` field: vector output is
 // resolution-independent and scale is a raster-only concern.
 
-export const exportSvgRequestSchema = z.object({
-  // Same bounds as the PNG export's padding: it widens the bounds on every
-  // side, so a huge one is a document no reader can open.
-  padding: z.number().nonnegative().max(1024).optional(),
-  frameId: z.string().optional(),
-  outputPath: z.string().optional(),
-  overwrite: z.boolean().optional(),
-  theme: z.enum(['light', 'dark']).optional(),
-  // style: which look to draw (ADR-0030 decision 6). Absent is 'clean', so
-  // an export never picks up the document's theme unasked; 'document' draws
-  // the theme the canvas names; a theme id previews one.
-  style: spatialRenderStyleSchema.optional(),
-})
+// Strict for the reason `exportRequestSchema` is — and `scale` is the field a
+// caller most plausibly carries over from the PNG request.
+export const exportSvgRequestSchema = z
+  .object({
+    // Same bounds as the PNG export's padding: it widens the bounds on every
+    // side, so a huge one is a document no reader can open.
+    padding: z.number().nonnegative().max(1024).optional(),
+    outputPath: z.string().optional(),
+    overwrite: z.boolean().optional(),
+    theme: z.enum(['light', 'dark']).optional(),
+    // style: which look to draw (ADR-0030 decision 6). Absent is 'clean', so
+    // an export never picks up the document's theme unasked; 'document' draws
+    // the theme the canvas names; a theme id previews one.
+    style: spatialRenderStyleSchema.optional(),
+  })
+  .strict()
 
 export type ExportSvgRequest = z.infer<typeof exportSvgRequestSchema>

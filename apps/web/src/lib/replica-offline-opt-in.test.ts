@@ -11,8 +11,13 @@
  */
 
 import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadOfflinePasskey, type OfflinePasskeyCredentials } from './replica-offline-passkey.js'
+import {
+  assertOfflinePasskey,
+  loadOfflinePasskey,
+  type OfflinePasskeyCredentials,
+} from './replica-offline-passkey.js'
 import {
   isReplicaReadableOffline,
   makeReplicaReadableOffline,
@@ -24,16 +29,9 @@ import { loadWrappedKey } from './replica-wrapped-key-store.js'
 const DAEMON = 'https://daemon.whiteboard.invalid'
 const WORKSPACE = 'ws-1'
 
-function base64Url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
 const RESPONSE = {
-  workspaceKey: base64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-  workspaceKeySalt: base64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
+  workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
+  workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
   tier: 'offline' as const,
 }
 
@@ -153,10 +151,22 @@ describe('makeReplicaReadableOffline', () => {
     expect(credentials.get).toHaveBeenCalledTimes(1)
     const asked = vi.mocked(credentials.get).mock.calls[0]?.[0]?.publicKey
     expect(asked?.userVerification).toBe('required')
-    expect(base64Url(new Uint8Array(asked?.allowCredentials?.[0]?.id as ArrayBuffer))).toBe(
+    expect(bytesToBase64Url(new Uint8Array(asked?.allowCredentials?.[0]?.id as ArrayBuffer))).toBe(
       stored?.credentialId,
     )
-    expect(base64Url(extensionSalt({ publicKey: asked }) as Uint8Array)).toBe(stored?.prfSalt)
+    expect(bytesToBase64Url(extensionSalt({ publicKey: asked }) as Uint8Array)).toBe(
+      stored?.prfSalt,
+    )
+  })
+
+  it('treats a stored record that is not base64url as no usable credential, and asks nothing', async () => {
+    const credentials = authenticator()
+
+    // One character is not a whole byte, so it names nothing to ask for.
+    const outcome = await assertOfflinePasskey({ credentialId: 'A', prfSalt: 'AAAA' }, credentials)
+
+    expect(outcome).toEqual({ ok: false, reason: 'cancelled' })
+    expect(credentials.get).not.toHaveBeenCalled()
   })
 
   it('evaluates prf on an assertion when the authenticator does not at creation', async () => {

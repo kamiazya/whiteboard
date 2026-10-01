@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportResponseSchema } from '../../../shared/api-contracts/export.js'
@@ -35,7 +36,7 @@ const mockExportCanvasHeadlessSvg =
     (args: {
       workspaceId: string
       path: string
-      options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
+      options?: { padding?: number; theme?: 'light' | 'dark' }
     }) => Promise<{
       svg: string
       undrawable: readonly string[]
@@ -46,7 +47,7 @@ vi.mock('../../export/headless-export.js', () => ({
   exportCanvasHeadlessSvg: (args: {
     workspaceId: string
     path: string
-    options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
+    options?: { padding?: number; theme?: 'light' | 'dark' }
   }) => mockExportCanvasHeadlessSvg(args),
 }))
 
@@ -144,13 +145,13 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     }
   })
 
-  it('forwards padding, frameId, and theme to exportCanvasHeadlessSvg', async () => {
+  it('forwards padding and theme to exportCanvasHeadlessSvg', async () => {
     const app = makeApp()
 
     const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
+      body: JSON.stringify({ padding: 24, theme: 'dark' }),
     })
 
     expect(res.status).toBe(200)
@@ -158,9 +159,29 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
       expect.objectContaining({
         workspaceId: 's1',
         path: 'canvas-a',
-        options: expect.objectContaining({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
+        options: expect.objectContaining({ padding: 24, theme: 'dark' }),
       }),
     )
+  })
+
+  // `scale` is PNG-only: vector output is resolution-independent, and a
+  // caller sending one used to read a 200 as "honoured".
+  it.each([
+    ['frameId', 'frame-1'],
+    ['scale', 2],
+    ['background', '#fff'],
+  ])('refuses the undefined field %s by name with 400 invalid_request', async (field, value) => {
+    const app = makeApp()
+    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 24, [field]: value }),
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('invalid_request')
+    expect(body.message).toContain(field)
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
   it('rejects invalid workspaceId or path with 400', async () => {
@@ -273,5 +294,65 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('headless_export_failed')
     expect(body.message).toBe('boom')
+  })
+
+  // One contract for every refusal: a body that `apiErrorBodySchema` refuses
+  // is one `apiErrorReason` cannot read, so the caller sees a bare status.
+  describe.each<[string, number, () => Promise<{ body?: string }>]>([
+    [
+      'a missing document',
+      404,
+      async () => {
+        mockDocumentExists.mockResolvedValueOnce(false)
+        return {}
+      },
+    ],
+    ['malformed JSON', 400, async () => ({ body: '{' })],
+    ['a field the contract does not define', 400, async () => ({ body: '{"frameId":"f"}' })],
+    [
+      'an outputPath outside the exports directory',
+      400,
+      async () => ({ body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }) }),
+    ],
+    [
+      'an existing output file',
+      409,
+      async () => {
+        const outputPath = join(tempDir, 's1', 'exports', 'taken.svg')
+        await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
+        await writeFile(outputPath, 'OLD')
+        return { body: JSON.stringify({ outputPath }) }
+      },
+    ],
+    ['an oversized body', 413, async () => ({ body: 'x'.repeat(1024 * 1024 + 1) })],
+    [
+      'a renderer that throws',
+      500,
+      async () => {
+        mockExportCanvasHeadlessSvg.mockRejectedValue(new Error('boom'))
+        return {}
+      },
+    ],
+    [
+      'a renderer that throws with no message',
+      500,
+      async () => {
+        mockExportCanvasHeadlessSvg.mockRejectedValue(new Error(''))
+        return {}
+      },
+    ],
+  ])('the refusal for %s', (_name, status, arrange) => {
+    it(`answers ${status} with a body inside apiErrorBodySchema and a readable reason`, async () => {
+      const request = await arrange()
+      const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        ...request,
+      })
+      expect(res.status).toBe(status)
+      const body: unknown = await res.json()
+      expect(apiErrorBodySchema.safeParse(body).success, JSON.stringify(body)).toBe(true)
+      expect(apiErrorReason(body)).toBeTruthy()
+    })
   })
 })

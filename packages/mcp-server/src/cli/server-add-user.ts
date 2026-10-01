@@ -3,9 +3,21 @@ import { providerAuthenticator } from '../server/security/sign-in-config.js'
 import { readSignInProviders, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
 import { scanFlags } from './flag-table.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
+import {
+  addUserOutputSchema,
+  OPERATOR_JSON_SCHEMA_VERSION,
+  operatorJsonLine,
+} from './operator-json.js'
 
 const USAGE =
   'Re-run with: whiteboard server add-user --json --provider=<id> --subject=<sub> [--name=<display name>] [--data-dir=<path>]'
+
+const unknownProviderLine = (providers: string[]) =>
+  operatorJsonLine(addUserOutputSchema, {
+    schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+    kind: 'unknown-provider',
+    providers,
+  })
 
 /**
  * `whiteboard server add-user`: the operator makes a person a user of this
@@ -47,9 +59,7 @@ export async function runServerAddUser(
   const providers = readSignInProviders(configPath)
   const provider = providers.find((p) => p.id === providerId)
   if (provider === undefined) {
-    io.stdout(
-      `${JSON.stringify({ kind: 'unknown-provider', providers: providers.map((p) => p.id) })}\n`,
-    )
+    io.stdout(unknownProviderLine(providers.map((p) => p.id)))
     io.stderr('add-user refused: no provider by that id; those declared are listed on stdout.\n')
     return 1
   }
@@ -58,11 +68,13 @@ export async function runServerAddUser(
   const binding = { authenticator: providerAuthenticator(provider), subject }
   const existing = await members.profileForBinding(binding)
   const user = existing ?? (await members.ensureProfile({ binding, displayName: name ?? subject }))
-  const outcome = {
-    kind: 'ok',
-    created: existing === null,
-    user: { id: user.id, displayName: user.displayName },
-  }
-  io.stdout(`${JSON.stringify(outcome)}\n`)
+  io.stdout(
+    operatorJsonLine(addUserOutputSchema, {
+      schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+      kind: 'ok',
+      created: existing === null,
+      user: { id: user.id, displayName: user.displayName },
+    }),
+  )
   return 0
 }

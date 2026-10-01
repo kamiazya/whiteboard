@@ -16,11 +16,8 @@
  * A record that does not parse reads as absent, the same posture that store
  * takes.
  */
-import {
-  BASE64URL,
-  fromBase64Url,
-  toBase64Url,
-} from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
+import { BASE64URL } from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
+import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { prfOutputOf } from './passkey-prf.js'
 import { readStoredRecord } from './stored-record.js'
@@ -103,6 +100,10 @@ export async function assertOfflinePasskey(
   credentials: OfflinePasskeyCredentials | undefined = browserCredentials(),
 ): Promise<AssertOutcome> {
   if (credentials === undefined) return { ok: false, reason: 'no-passkey' }
+  const credentialId = base64UrlToBytes(record.credentialId)
+  const prfSalt = base64UrlToBytes(record.prfSalt)
+  // A stored record that does not decode cannot name a credential to ask.
+  if (credentialId === null || prfSalt === null) return { ok: false, reason: 'cancelled' }
   let credential: Credential | null
   try {
     credential = await credentials.get({
@@ -110,11 +111,9 @@ export async function assertOfflinePasskey(
         // Local and random: nothing verifies this signature. What protects
         // the copy is the AES-GCM open, which a wrong person fails.
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        allowCredentials: [
-          { type: 'public-key', id: fromBase64Url(record.credentialId) as BufferSource },
-        ],
+        allowCredentials: [{ type: 'public-key', id: credentialId }],
         userVerification: 'required',
-        extensions: prfAsking(fromBase64Url(record.prfSalt)),
+        extensions: prfAsking(prfSalt),
       },
     })
   } catch {
@@ -199,8 +198,8 @@ export async function createOfflinePasskey({
   if (credential === null) return { ok: false, reason: 'cancelled' }
   const created = credential as PublicKeyCredential
   const record = {
-    credentialId: toBase64Url(new Uint8Array(created.rawId)),
-    prfSalt: toBase64Url(salt),
+    credentialId: bytesToBase64Url(new Uint8Array(created.rawId)),
+    prfSalt: bytesToBase64Url(salt),
   }
   const atCreate = prfOutputOf(created)
   if (atCreate !== null) return { ok: true, record, prfOutput: atCreate }

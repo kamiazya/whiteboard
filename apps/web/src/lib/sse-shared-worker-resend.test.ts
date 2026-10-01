@@ -12,6 +12,7 @@
  * therefore shares ONE port and separates itself by document key, the way the
  * sibling worker suite already separates itself from leftover workers.
  */
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import '@vitest/web-worker'
 import { LoroDoc } from 'loro-crdt'
 import { HttpResponse, http } from 'msw'
@@ -79,12 +80,6 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 
-const b64 = (bytes: Uint8Array) => {
-  let out = ''
-  for (const byte of bytes) out += String.fromCharCode(byte)
-  return btoa(out)
-}
-
 const until = (predicate: () => boolean) =>
   vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 15_000, interval: 25 })
 /** A real window in which a wrong write could arrive, for asserting none does. */
@@ -124,7 +119,7 @@ function pushEdit(doc: string, key: string, value: string): void {
   const tab = new LoroDoc()
   tab.getMap('m').set(key, value)
   tab.commit()
-  port.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+  port.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 }
 
 describe('a write the daemon refused', { timeout: 25_000 }, () => {

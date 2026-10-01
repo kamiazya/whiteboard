@@ -10,6 +10,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { syncSubscribeResponseSchema } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
@@ -381,6 +382,21 @@ describe('SSE sync transport', () => {
     const frames = (await readEvents(res, 3)).filter((f) => f.includes('event: update'))
     expect(frames.filter((f) => f.includes(`"doc":"workspace:${segment}"`))).toHaveLength(1)
     expect(frames.filter((f) => f.includes(`"doc":"workspace:${workspaceId}"`))).toHaveLength(2)
+  })
+
+  it('answers a subscribe with the documents the stream now follows, in the declared shape', async () => {
+    const app = createApp(createRuntimeOptions())
+    const { streamId } = await openStream(app)
+
+    const res = await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, subscribe: ['workspace:ws-1'] }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = syncSubscribeResponseSchema.parse(await res.json())
+    expect(body.docs).toEqual(['workspace:ws-1'])
   })
 
   it('rejects a subscribe for an unknown stream instead of silently succeeding', async () => {

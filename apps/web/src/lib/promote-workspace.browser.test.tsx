@@ -14,7 +14,7 @@ import {
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { newImageRef } from '@kamiazya/whiteboard-model'
+import { base64UrlToBytes, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -51,12 +51,6 @@ function targetDaemonRecord(): LoroDoc {
  * target with the collision's loser marked shadowed — the same projection
  * the real route serves.
  */
-function base64UrlToBytes(value: string): Uint8Array {
-  const padded = value.replaceAll('-', '+').replaceAll('_', '/')
-  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-}
-
 function daemonStub(
   target: LoroDoc,
   putFiles?: Array<{ url: string; contentType: string; bytes: Uint8Array }>,
@@ -70,7 +64,7 @@ function daemonStub(
         attestation?: { credentialId: string }
       }
       promotes?.push(body)
-      target.import(base64UrlToBytes(body.snapshot))
+      target.import(base64UrlToBytes(body.snapshot) as Uint8Array)
       const recorded = readWorkspaceDocuments(target).map((entry) => entry.documentId)
       return Response.json({
         ok: true,
@@ -207,7 +201,7 @@ describe('promoteWorkspace', () => {
     expect(result.kind).toBe('ok')
     expect(promotes).toHaveLength(1)
     expect(promotes[0]).not.toHaveProperty('attestation')
-    expect(base64UrlToBytes(promotes[0]?.snapshot ?? '').length).toBeGreaterThan(0)
+    expect(base64UrlToBytes(promotes[0]?.snapshot ?? '')?.length).toBeGreaterThan(0)
   })
 
   it('a referenced image whose bytes are gone is reported missing, never a failed promotion', async () => {

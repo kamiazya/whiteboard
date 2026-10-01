@@ -26,6 +26,7 @@ import {
   promoteWorkspaceResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { listDocuments } from './daemon-api-client.js'
 import { imagesTheRecordReferences } from './receive-transfer.js'
@@ -133,10 +134,4 @@ async function failureReason(res: Response): Promise<string> {
     // fall through to the generic message
   }
   return `This keeper refused the merge (${res.status}).`
-}
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
 }

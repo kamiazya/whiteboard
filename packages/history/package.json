@@ -19,11 +19,10 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
+    "@kamiazya/whiteboard-model": "workspace:*",
     "loro-crdt": "catalog:"
   },
   "devDependencies": {
-    "@fast-check/vitest": "^0.4.1",
-    "fast-check": "^4.10.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

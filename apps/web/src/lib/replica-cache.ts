@@ -18,21 +18,11 @@
  */
 
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { markReplica } from './replica-store.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
-
-/** VersionVector bytes as a registry-storable string. */
-export function encodeVersionForRegistry(bytes: Uint8Array): string {
-  let out = ''
-  for (const b of bytes) out += String.fromCharCode(b)
-  return btoa(out)
-}
-
-export function decodeVersionFromRegistry(encoded: string): Uint8Array {
-  return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
-}
 
 export interface CacheDaemonWorkspaceOptions {
   fetch: typeof globalThis.fetch
@@ -92,7 +82,7 @@ export async function cacheDaemonWorkspace(
       kind: 'ok',
       syncedAt: new Date().toISOString(),
       documentCount: readWorkspaceDocuments(doc).length,
-      syncedFrontier: encodeVersionForRegistry(daemonOnly.oplogVersion().encode()),
+      syncedFrontier: bytesToBase64(daemonOnly.oplogVersion().encode()),
     }
   } catch (err) {
     if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }

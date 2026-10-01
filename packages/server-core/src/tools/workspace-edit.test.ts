@@ -169,6 +169,71 @@ describe('wb_workspace_edit', () => {
     expect(docs.documents[0]?.content).toContain('see [[archive/login]] and [[unrelated]]')
   })
 
+  it('leaves `follow` off the row of a move nothing referenced, so the common answer stays small', async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    const seeded = await tool.execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.create', path: 'design/login', kind: 'markdown' }],
+    })
+    const documentId = seeded.results[0]?.documentId ?? ''
+
+    const out = await tool.execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.move', documentId, path: 'archive/login' }],
+    })
+
+    expect(out.results).toEqual([{ op: 'document.move', documentId, path: 'archive/login' }])
+  })
+
+  it('names the referrers whose rewrite failed, with the move standing', async () => {
+    const deps = await makeDeps()
+    const seeded = await createWorkspaceEditTool(deps).execute({
+      workspaceId: WS,
+      ops: [
+        { op: 'document.create', path: 'design/login', kind: 'markdown', markdown: body('target') },
+        {
+          op: 'document.create',
+          path: 'notes/daily',
+          kind: 'markdown',
+          markdown: body('see [[design/login]]'),
+        },
+      ],
+    })
+    const [target, referrer] = seeded.results
+    const store = deps.documentStore
+    const refusingReferrer: ServerDeps = {
+      ...deps,
+      documentStore: new Proxy(store, {
+        get(inner, prop, receiver) {
+          if (prop === 'saveSnapshot') {
+            return async (input: Parameters<typeof store.saveSnapshot>[0]) => {
+              if (
+                input.docRef.kind === 'document' &&
+                input.docRef.documentId === referrer?.documentId
+              ) {
+                throw new Error('disk full')
+              }
+              return store.saveSnapshot(input)
+            }
+          }
+          const value = Reflect.get(inner, prop, receiver)
+          return typeof value === 'function' ? value.bind(inner) : value
+        },
+      }),
+    }
+
+    const out = await createWorkspaceEditTool(refusingReferrer).execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.move', documentId: target?.documentId ?? '', path: 'archive/login' }],
+    })
+
+    expect(out.results[0]).toMatchObject({
+      path: 'archive/login',
+      follow: { updatedDocumentIds: [], failedDocumentIds: [referrer?.documentId] },
+    })
+  })
+
   it('says so when the follow pass could not run, rather than reporting a clean move', async () => {
     const deps = await makeDeps()
     const tool = createWorkspaceEditTool(deps)

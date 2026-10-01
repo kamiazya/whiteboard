@@ -17,6 +17,7 @@
  * observe it deterministically. A test that cannot be made deterministic is
  * worse than none.
  */
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import '@vitest/web-worker'
 import { LoroDoc } from 'loro-crdt'
 import { HttpResponse, http } from 'msw'
@@ -127,12 +128,7 @@ afterEach(() => server.resetHandlers())
 let docSeq = 0
 const nextDoc = () => `w/doc-${++docSeq}`
 
-const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
-const b64 = (bytes: Uint8Array) => {
-  let out = ''
-  for (const byte of bytes) out += String.fromCharCode(byte)
-  return btoa(out)
-}
+const decode = (encoded: string) => base64ToBytes(encoded) as Uint8Array
 
 /** A one-key Loro update whose state a test can recognise on arrival. */
 const loroUpdate = (key: string, value: string): Uint8Array => {
@@ -299,14 +295,14 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     // would make the negative half pass with the addressing broken.
     pushTo(
       doc,
-      `event: update\ndata: ${JSON.stringify({ doc: 'w/other', update: b64(loroUpdate('leak', 'wrong-doc')) })}\n\n`,
+      `event: update\ndata: ${JSON.stringify({ doc: 'w/other', update: bytesToBase64(loroUpdate('leak', 'wrong-doc')) })}\n\n`,
     )
     await settle()
     expect(seen).toEqual([])
 
     pushTo(
       doc,
-      `event: update\ndata: ${JSON.stringify({ doc, update: b64(loroUpdate('mine', 'delivered')) })}\n\n`,
+      `event: update\ndata: ${JSON.stringify({ doc, update: bytesToBase64(loroUpdate('mine', 'delivered')) })}\n\n`,
     )
     await until(() => seen.length >= 1)
 
@@ -420,7 +416,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
 
     pushTo(
       doc,
-      `event: update\ndata: ${JSON.stringify({ doc, update: b64(loroUpdate('routed', 'to-own-stream')) })}\n\n`,
+      `event: update\ndata: ${JSON.stringify({ doc, update: bytesToBase64(loroUpdate('routed', 'to-own-stream')) })}\n\n`,
     )
     await until(() => seen.length >= 1)
     expect(reconstruct(seen, 'routed')).toBe('to-own-stream')
@@ -482,7 +478,7 @@ describe('authority replica', () => {
     daemon.commit()
     pushTo(
       doc,
-      `event: update\ndata: ${JSON.stringify({ doc, update: b64(daemon.export({ mode: 'update' })) })}\n\n`,
+      `event: update\ndata: ${JSON.stringify({ doc, update: bytesToBase64(daemon.export({ mode: 'update' })) })}\n\n`,
     )
 
     // Reconstructed rather than compared byte-for-byte: what travels is the
@@ -499,7 +495,7 @@ describe('authority replica', () => {
     const tab = new LoroDoc()
     tab.getMap('m').set('from-tab', 'written-through')
     tab.commit()
-    port.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+    port.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
     await until(() => updateWrites.length >= 1)
     const write = updateWrites[0]
@@ -530,7 +526,11 @@ describe('authority replica', () => {
     const second = new LoroDoc()
     second.getMap('m').set('second-edit', 'delta-only')
     second.commit()
-    port.postMessage({ type: 'push', doc, update: b64(second.export({ mode: 'update' })) })
+    port.postMessage({
+      type: 'push',
+      doc,
+      update: bytesToBase64(second.export({ mode: 'update' })),
+    })
 
     await until(() => updateWrites.length >= 2)
     const delta = new LoroDoc()

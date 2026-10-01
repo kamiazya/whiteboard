@@ -13,7 +13,7 @@ import {
   extensionToPageSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { WHITEBOARD_EXTENSION_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
-import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { BRIDGE_ORIGIN } from './bridge-address.js'
 import type { BridgePort } from './extension-bridge-port.js'
 import { connectThroughWindow, windowHello } from './extension-window-port.js'
@@ -164,7 +164,7 @@ function sendRequest(
 async function requestBody(request: Request): Promise<string | undefined> {
   if (request.method === 'GET' || request.method === 'HEAD') return undefined
   const bytes = new Uint8Array(await request.arrayBuffer())
-  return bytes.length === 0 ? undefined : toBase64(bytes)
+  return bytes.length === 0 ? undefined : bytesToBase64(bytes)
 }
 
 /** Lands one host message on the request it belongs to. */
@@ -189,9 +189,18 @@ function settle(
       request.resolve(new Response(body, { status: message.status, headers: message.headers }))
       return
     }
-    case 'chunk':
-      request.body?.enqueue(fromBase64(message.data))
+    case 'chunk': {
+      const chunk = base64ToBytes(message.data)
+      if (chunk !== null) {
+        request.body?.enqueue(chunk)
+        return
+      }
+      // A body with a hole in it must not read as a complete one, and the
+      // host is told so, or it keeps streaming into a request nothing reads.
+      request.cancel?.()
+      request.body?.error(new TypeError('the extension bridge sent a chunk that is not base64'))
       return
+    }
     case 'end':
       pending.delete(message.id)
       request.body?.close()

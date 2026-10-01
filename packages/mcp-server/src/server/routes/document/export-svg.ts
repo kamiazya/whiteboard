@@ -1,22 +1,27 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { LiveDocuments } from '@kamiazya/whiteboard-server-core'
+import {
+  type ApiErrorBody,
+  invalidRequestBody,
+  type LiveDocuments,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
-import type { ExportErrorBody, ExportResponse } from '../../../shared/api-contracts/export.js'
+import type { ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
 } from '../../../shared/api-contracts/export-svg.js'
+import { errorMessage } from '../../../shared/error-message.js'
 import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
 
-// The body is a small JSON options object (padding/frameId/theme/outputPath),
+// The body is a small JSON options object (padding/theme/style/outputPath/overwrite),
 // never canvas content — the export itself is rendered server-side from the
 // persisted doc. 1 MiB is a generous ceiling for that shape while still
 // bounding an adversarial request.
@@ -26,9 +31,7 @@ const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
  * An empty body is a valid export request — every option has a default — so
  * only a body that is PRESENT and unreadable refuses.
  */
-function parseExportSvgBody(
-  rawText: string,
-): { body: ExportSvgRequest } | { error: ExportErrorBody } {
+function parseExportSvgBody(rawText: string): { body: ExportSvgRequest } | { error: ApiErrorBody } {
   if (rawText.length === 0) return { body: {} }
   let json: unknown
   try {
@@ -38,7 +41,7 @@ function parseExportSvgBody(
   }
   const parsed = exportSvgRequestSchema.safeParse(json)
   if (!parsed.success) {
-    return { error: { error: 'invalid_request', message: 'invalid export options' } }
+    return { error: invalidRequestBody(parsed.error) }
   }
   return { body: parsed.data }
 }
@@ -53,7 +56,7 @@ async function resolveSvgOutputPath(
   body: ExportSvgRequest,
   workspaceId: string,
 ): Promise<
-  { outputPath: string | undefined } | { error: ExportErrorBody; status: ContentfulStatusCode }
+  { outputPath: string | undefined } | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
   if (typeof body.outputPath !== 'string' || body.outputPath.length === 0) {
     return { outputPath: undefined }
@@ -67,7 +70,7 @@ async function resolveSvgOutputPath(
   } catch (err) {
     if (err instanceof OutputPathError) {
       const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
-      return { error: errBody as ExportErrorBody, status }
+      return { error: errBody, status }
     }
     throw err
   }
@@ -106,7 +109,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       // typoed path would otherwise return 200 and a valid-looking SVG of
       // nothing. Its absence here was the asymmetry, not a decision.
       if (!(await documentExists(workspaceId, path))) {
-        const errBody: ExportErrorBody = {
+        const errBody: ApiErrorBody = {
           error: 'not_found',
           message: `Canvas not found: ${workspaceId}/${path}`,
         }
@@ -118,7 +121,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       const body = parsedBody.body
 
       const resolved = await resolveSvgOutputPath(body, workspaceId)
-      if ('error' in resolved) return c.json(resolved.error as ExportErrorBody, resolved.status)
+      if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
 
       let svg: string
@@ -130,7 +133,6 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
           path,
           options: {
             padding: body.padding,
-            frameId: body.frameId,
             theme: body.theme,
             style: body.style,
           },
@@ -139,9 +141,9 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         undrawable = result.undrawable
         unresolvedFamilies = result.unresolvedFamilies
       } catch (err) {
-        const errBody: ExportErrorBody = {
+        const errBody: ApiErrorBody = {
           error: 'headless_export_failed',
-          message: err instanceof Error ? err.message : String(err),
+          message: errorMessage(err),
         }
         return c.json(errBody, 500)
       }

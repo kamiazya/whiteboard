@@ -16,9 +16,9 @@
  * imports loro-crdt, so nothing on the entry path may import this file
  * statically (entry-graph-loro-free.test.ts guards the closure).
  */
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
-import { decodeVersionFromRegistry, encodeVersionForRegistry } from './replica-cache.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 
 export interface PushReplicaEditsOptions {
@@ -48,11 +48,14 @@ export async function pushReplicaEdits(
     if (doc === null) return { kind: 'clean' }
     const current = doc.oplogVersion()
 
+    // A marker that does not decode is as good as none: the whole record is
+    // sent, which the daemon's CRDT import absorbs idempotently.
+    const syncedBytes = syncedFrontier === undefined ? null : base64ToBytes(syncedFrontier)
     let payload: Uint8Array
-    if (syncedFrontier === undefined) {
+    if (syncedBytes === null) {
       payload = doc.export({ mode: 'snapshot' })
     } else {
-      const synced = VersionVector.decode(decodeVersionFromRegistry(syncedFrontier))
+      const synced = VersionVector.decode(syncedBytes)
       const cmp = current.compare(synced)
       // current ⊆ synced: the daemon already holds everything local.
       if (cmp === 0 || cmp === -1) return { kind: 'clean' }
@@ -71,7 +74,7 @@ export async function pushReplicaEdits(
     return {
       kind: 'ok',
       syncedAt: new Date().toISOString(),
-      syncedFrontier: encodeVersionForRegistry(current.encode()),
+      syncedFrontier: bytesToBase64(current.encode()),
     }
   } catch (err) {
     if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }

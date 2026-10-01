@@ -7,6 +7,7 @@
  * on both sides is the point: a defect reached a merged branch because every
  * test drove the hub, and the gap was invisible from inside that suite.
  */
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import '@vitest/web-worker'
 import type { SseStreamSourceHarness } from '@kamiazya/whiteboard-daemon-client/test-utils/sse-stream-source-contract'
 import { sseStreamSourceContract } from '@kamiazya/whiteboard-daemon-client/test-utils/sse-stream-source-contract'
@@ -84,12 +85,6 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 
-function toBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
-}
-
 function createHarness(): SseStreamSourceHarness {
   const source = createSharedSseStreamSource(BASE, 'contract-token')
   if (!source) throw new Error('SharedWorker unavailable')
@@ -97,7 +92,9 @@ function createHarness(): SseStreamSourceHarness {
   return {
     source,
     pushUpdate: (doc, bytes) => {
-      pushFrame?.(`event: update\ndata: ${JSON.stringify({ doc, update: toBase64(bytes) })}\n\n`)
+      pushFrame?.(
+        `event: update\ndata: ${JSON.stringify({ doc, update: bytesToBase64(bytes) })}\n\n`,
+      )
     },
     pushText: (doc, raw) => {
       pushFrame?.(`event: message\ndata: ${JSON.stringify({ doc, raw })}\n\n`)

@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
+import { deactivateUserOutputSchema } from './operator-json.js'
 import { deactivateUser, runServerDeactivateUser } from './server-deactivate-user.js'
 
 let root: string
@@ -73,7 +74,11 @@ describe('runServerDeactivateUser', () => {
     await members().ensureProfile({ binding, displayName: 'Ada' })
     const res = await run(['--json', '--user=Ada'])
     expect(res.code).toBe(0)
-    expect(JSON.parse(res.stdout)).toMatchObject({ kind: 'ok', deactivated: true })
+    expect(deactivateUserOutputSchema.parse(JSON.parse(res.stdout))).toMatchObject({
+      schemaVersion: 1,
+      kind: 'ok',
+      deactivated: true,
+    })
   })
 
   it('exits 1 when nobody matches', async () => {

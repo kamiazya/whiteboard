@@ -3,7 +3,9 @@
  * guard (no key or plaintext bytes ever land in storage), withholding, and
  * the first-pull ordering `markReplica` exists to protect.
  */
+
 import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -36,20 +38,14 @@ function freshWorkspaceId(): string {
 const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
 const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
 
-function b64u(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
-}
-
 /** A daemon fetch double answering /replica-key with a fixed offline key. */
 function offlineKeyFetch(): typeof fetch {
   return (async (input: Request | string | URL) => {
     const url = input instanceof Request ? input.url : String(input)
     if (url.endsWith('/replica-key')) {
       return jsonResponse({
-        workspaceKey: b64u(WORKSPACE_KEY),
-        workspaceKeySalt: b64u(WORKSPACE_SALT),
+        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
+        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
         tier: 'offline',
       })
     }
@@ -146,7 +142,7 @@ describe('replica-store', () => {
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
     await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array(4) })
 
-    const rawKeyText = b64u(WORKSPACE_KEY)
+    const rawKeyText = bytesToBase64Url(WORKSPACE_KEY)
     const dump = await getAllRaw(DB_NAME)
     const idbStrings = dump.flatMap((s) => collectStrings(s.records))
     for (const s of idbStrings) {
@@ -237,8 +233,8 @@ describe('replica-store', () => {
         keyCalls += 1
         const seed = keyCalls === 1 ? 1 : 200
         return jsonResponse({
-          workspaceKey: b64u(Uint8Array.from({ length: 32 }, (_, i) => seed + i)),
-          workspaceKeySalt: b64u(WORKSPACE_SALT),
+          workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => seed + i)),
+          workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
           tier: 'offline',
         })
       }

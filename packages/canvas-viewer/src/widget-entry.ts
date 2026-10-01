@@ -28,6 +28,7 @@ import { createCommentControl } from './widget/comment-control.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
 import { loadThemeFont } from './widget/theme-font.js'
+import { canvasViewCall, commentAddCall } from './widget/widget-tool-calls.js'
 
 declare global {
   interface Window {
@@ -416,10 +417,7 @@ async function mountFromHost(
     const runRefreshOnce = async (): Promise<void> => {
       if (committed === undefined) return
       try {
-        const result = await app.callServerTool({
-          name: 'canvas_view',
-          arguments: { workspaceId: committed.workspaceId, documentId: committed.documentId },
-        })
+        const result = await app.callServerTool(canvasViewCall(committed))
         applyToolResult(result, container, remount, commitResult)
       } catch (err) {
         // Network/host failure: the current view stays mounted (no remount
@@ -468,26 +466,7 @@ async function mountFromHost(
       const anchor = pendingAnchor
       commentControl?.setBusy(true)
       try {
-        const result = await app.callServerTool({
-          name: 'wb_canvas_edit',
-          arguments: {
-            workspaceId: committed.workspaceId,
-            documentId: committed.documentId,
-            ops: [
-              {
-                op: 'comment.add',
-                comment: {
-                  x: anchor.x,
-                  y: anchor.y,
-                  ...(anchor.targetNodeId === undefined
-                    ? {}
-                    : { targetNodeId: anchor.targetNodeId }),
-                  text,
-                },
-              },
-            ],
-          },
-        })
+        const result = await app.callServerTool(commentAddCall(committed, anchor, text))
         if (isErrorResult(result)) {
           console.error('[whiteboard-widget] comment refused:', result)
           return

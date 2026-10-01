@@ -12,6 +12,7 @@
  * The multicodec constant is likewise sourced rather than recalled:
  * multiformats/multicodec table.csv gives `ed25519-pub, key, 0xed`.
  */
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { didKeyToEd25519PublicKey, ed25519PublicKeyToDidKey } from './did-key.js'
@@ -89,12 +90,6 @@ describe('didKeyToEd25519PublicKey', () => {
     expect(didKeyToEd25519PublicKey(did)).toBeNull()
   })
 })
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-}
 
 // A deliberately separate, naive base58 encoder for the ONE fixture that has
 // to be built rather than quoted. Sharing the implementation under test would

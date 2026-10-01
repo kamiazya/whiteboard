@@ -120,6 +120,21 @@ describe('SseStreamHub', () => {
     hub.close()
   })
 
+  it('drops an update frame whose payload is not base64 and keeps reading the stream', async () => {
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
+    const seen: Uint8Array[] = []
+    hub.subscribe('w/a', { onUpdate: (u) => seen.push(u), onMessage: () => {} })
+    await flush()
+
+    fake.push(`event: update\ndata: ${JSON.stringify({ doc: 'w/a', update: 'not base64!' })}\n\n`)
+    fake.push(`event: update\ndata: ${JSON.stringify({ doc: 'w/a', update: btoa('\x07') })}\n\n`)
+    await vi.waitFor(() => expect(seen.length).toBe(1))
+
+    expect(seen[0]).toEqual(new Uint8Array([7]))
+    hub.close()
+  })
+
   it('routes a text message only to the listeners of that document', async () => {
     const fake = createFake()
     const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })

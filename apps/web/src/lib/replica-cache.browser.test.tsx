@@ -7,11 +7,13 @@
  * half — the pulled bytes landing in the store, and a re-pull merging
  * rather than forking.
  */
+
 import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { base64ToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc, VersionVector } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -32,12 +34,6 @@ const DOC_B = '01ARZ3NDEKTSV4RRFFQ69G5FA2'
 const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
 const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
 
-function b64u(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
-}
-
 /**
  * The daemon standing in as its snapshot route AND its `/replica-key`
  * route — production runs `cacheDaemonWorkspace` only once a keeper is
@@ -50,8 +46,8 @@ function snapshotStub(record: LoroDoc, status = 200): typeof globalThis.fetch {
     if (url.endsWith('/replica-key')) {
       return new Response(
         JSON.stringify({
-          workspaceKey: b64u(WORKSPACE_KEY),
-          workspaceKeySalt: b64u(WORKSPACE_SALT),
+          workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
+          workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
           tier: 'offline',
         }),
         { status: 200 },
@@ -153,9 +149,7 @@ describe('cacheDaemonWorkspace', () => {
     ).toEqual([DOC_A, DOC_B].sort())
     // ...and the reported frontier covers the daemon's ops but NOT the
     // local edit: an update exported from it still carries something.
-    const synced = VersionVector.decode(
-      Uint8Array.from(atob(result.syncedFrontier), (c) => c.charCodeAt(0)),
-    )
+    const synced = VersionVector.decode(base64ToBytes(result.syncedFrontier) as Uint8Array)
     const pending = merged!.export({ mode: 'update', from: synced })
     const probe = new LoroDoc()
     probe.import(record.export({ mode: 'snapshot' }))

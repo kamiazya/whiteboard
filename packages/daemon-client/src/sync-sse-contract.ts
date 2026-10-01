@@ -78,11 +78,18 @@ export const syncSubscribeRequestSchema = z
 
 export type SyncSubscribeRequest = z.infer<typeof syncSubscribeRequestSchema>
 
-/** What a subscribe answers: the documents the stream now follows. */
-export const syncSubscribeResponseSchema = z.object({
-  ok: z.literal(true),
-  docs: z.array(z.string().min(1)),
-})
+/**
+ * What a subscribe answers: the documents the stream now follows. The browser
+ * hub deliberately ignores the body (a dropped subscribe is re-sent on
+ * reconnect), so the reader that keeps this honest is the route's own test,
+ * which parses the real answer through it.
+ */
+export const syncSubscribeResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    docs: z.array(z.string().min(1)),
+  })
+  .strict()
 
 export type SyncSubscribeResponse = z.infer<typeof syncSubscribeResponseSchema>
 

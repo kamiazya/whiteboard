@@ -2,12 +2,17 @@ import { createMemberProfileStore } from '../server/security/member-profile-stor
 import { createTenantAdministratorStore } from '../server/security/tenant-administrator-store.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser, type NamedUser } from './named-user.js'
+import { findNamedUser } from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
+import {
+  type GrantAdminOutput,
+  grantAdminOutputSchema,
+  OPERATOR_JSON_SCHEMA_VERSION,
+  operatorJsonLine,
+  type WithoutSchemaVersion,
+} from './operator-json.js'
 
-export type GrantAdminOutcome =
-  | { kind: 'ok'; user: NamedUser; administrator: boolean }
-  | { kind: 'unknown-user' | 'ambiguous-user'; users: NamedUser[] }
+export type GrantAdminOutcome = WithoutSchemaVersion<GrantAdminOutput>
 
 /**
  * ADR-0049 decision 2: the operator appoints a tenant's first administrator
@@ -57,7 +62,12 @@ export async function runServerGrantAdmin(
     user,
     remove: scan.seen.has('--remove'),
   })
-  io.stdout(`${JSON.stringify(outcome)}\n`)
+  io.stdout(
+    operatorJsonLine(grantAdminOutputSchema, {
+      schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+      ...outcome,
+    }),
+  )
   if (outcome.kind === 'ok') return 0
   io.stderr(`${REFUSAL[outcome.kind]}\n`)
   return 1

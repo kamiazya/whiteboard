@@ -1,4 +1,5 @@
 // Vite's `?url` asset suffix, resolved at build/dev-server time.
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import robotoFontUrl from '../assets/fonts/Roboto/Roboto-Regular.ttf?url'
 import { VIEWER_FONT_FAMILY } from './font.js'
 
@@ -36,15 +37,7 @@ async function readFontAsDataUri(): Promise<string | null> {
 
 /** A font's bytes as a `data:` URI a rasteriser can read without a resource load. */
 export function fontBytesToDataUri(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  // Chunked because `String.fromCharCode(...bytes)` on a 349 KB array blows
-  // the argument limit rather than being slow.
-  let binary = ''
-  const CHUNK = 0x8000
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
-  }
-  return `data:font/ttf;base64,${btoa(binary)}`
+  return `data:font/ttf;base64,${bytesToBase64(new Uint8Array(buffer))}`
 }
 
 /** A face the host holds as bytes — a theme's family fetched from the daemon. */

@@ -14,7 +14,9 @@
  * ready message fire before the sender is listening — a race a real browser
  * cannot produce, and one the handshake is not meant to survive.
  */
+
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import { base64UrlToBytes } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -32,12 +34,6 @@ claimIsolatedWhiteboardDb('transfer-to-keeper')
 
 const KEEPER = 'https://keeper.example'
 
-function base64UrlToBytes(value: string): Uint8Array {
-  const padded = value.replaceAll('-', '+').replaceAll('_', '/')
-  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-}
-
 function keeperStub(target: LoroDoc): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -46,7 +42,7 @@ function keeperStub(target: LoroDoc): typeof globalThis.fetch {
     }
     if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
       const body = JSON.parse(init.body as string) as { snapshot: string }
-      target.import(base64UrlToBytes(body.snapshot))
+      target.import(base64UrlToBytes(body.snapshot) as Uint8Array)
       return Response.json({
         ok: true,
         attested: false,

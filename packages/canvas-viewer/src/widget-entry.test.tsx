@@ -1285,14 +1285,14 @@ describe('widget-entry append-only invariant', () => {
 
     // The widget's whole outbound surface: re-reading the canvas it shows
     // (canvas_view) and writing one comment (wb_canvas_edit, reached only
-    // from the comment submit path). Anything else a widget
-    // source calls is a widening someone must do here deliberately, not by
-    // accident — the old `annotate` call outlived its tool exactly that way.
+    // from the comment submit path). Anything else a widget source calls is a
+    // widening someone must do here deliberately, not by accident — the old
+    // `annotate` call outlived its tool exactly that way. Calls are built in
+    // widget-tool-calls.ts, which mcp-server checks against the server's
+    // schemas, so an inline literal at a call site is refused.
     const allowlist = new Set(['canvas_view', 'wb_canvas_edit'])
-    const callSiteNames = [...sources.matchAll(/callServerTool\(\s*\{\s*name:\s*'([^']+)'/g)].map(
-      (m) => m[1],
-    )
-
+    expect(sources).not.toMatch(/callServerTool\(\s*\{/)
+    const callSiteNames = [...sources.matchAll(/name:\s*'([^']+)'\s+as const/g)].map((m) => m[1])
     expect(callSiteNames.length).toBeGreaterThan(0)
     for (const name of callSiteNames) {
       expect(allowlist.has(name as string), `unexpected callServerTool name: ${name}`).toBe(true)

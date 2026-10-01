@@ -40,7 +40,10 @@ paths:
 - `widget/`: the self-contained single-file MCP Apps widget build —
   build-time font embedding (`build-fonts-module.ts`), the widget entry
   bootstrap, the refresh/comment controls, the click-to-canvas-point
-  mapping (`canvas-point.ts`), and `theme-font.ts`: the widget's ONE
+  mapping (`canvas-point.ts`), `widget-tool-calls.ts` (the builders of the
+  widget's `canvas_view` / `wb_canvas_edit` requests — import-free so
+  mcp-server's contract test and e2e smoke parse the very bytes the widget
+  sends), and `theme-font.ts`: the widget's ONE
   outbound request (ADR-0011's 2026-09-10 note), gated on a pinned
   catalogue origin the widget holds itself.
 

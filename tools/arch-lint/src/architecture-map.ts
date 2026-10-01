@@ -174,9 +174,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // checkpoint scheduler, version retention, and frontier encoding. Both
     // keepers run them; what differs between the keepers is where the rows
     // live, which stays in each composition root. loro-crdt because a
-    // checkpoint's identity is a frontier of the record. Branch operations
+    // checkpoint's identity is a frontier of the record. model for the one
+    // base64 codec a frontier is stored through. Branch operations
     // and merge planning were here too until ADR-0029 retired the branch.
-    allowedInternalDeps: [],
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['loro-crdt'],
   },
   '@kamiazya/whiteboard-server-core': {

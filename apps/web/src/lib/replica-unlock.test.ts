@@ -10,6 +10,7 @@
  */
 
 import { adoptSessionKey, forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type OfflinePasskeyCredentials, saveOfflinePasskey } from './replica-offline-passkey.js'
 import { rememberReplicaKey, unlockReplicaKey } from './replica-unlock.js'
@@ -20,16 +21,9 @@ const WORKSPACE = 'ws-1'
 const PRF = new Uint8Array(32).fill(7)
 const OTHER_PRF = new Uint8Array(32).fill(9)
 
-function base64Url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
 const RESPONSE = {
-  workspaceKey: base64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-  workspaceKeySalt: base64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
+  workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
+  workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
   tier: 'offline' as const,
 }
 

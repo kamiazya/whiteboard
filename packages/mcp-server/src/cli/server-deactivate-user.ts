@@ -2,12 +2,17 @@ import { createMemberProfileStore } from '../server/security/member-profile-stor
 import { createUserDeactivation } from '../server/security/user-deactivation.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser, type NamedUser } from './named-user.js'
+import { findNamedUser } from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
+import {
+  type DeactivateUserOutput,
+  deactivateUserOutputSchema,
+  OPERATOR_JSON_SCHEMA_VERSION,
+  operatorJsonLine,
+  type WithoutSchemaVersion,
+} from './operator-json.js'
 
-export type DeactivateUserOutcome =
-  | { kind: 'ok'; user: NamedUser; deactivated: boolean; changed: boolean }
-  | { kind: 'unknown-user' | 'ambiguous-user'; users: NamedUser[] }
+export type DeactivateUserOutcome = WithoutSchemaVersion<DeactivateUserOutput>
 
 /**
  * ADR-0049 decision 4: the operator deactivates a user, or with `reactivate`
@@ -56,7 +61,12 @@ export async function runServerDeactivateUser(
     reactivate: scan.seen.has('--reactivate'),
     now: Date.now(),
   })
-  io.stdout(`${JSON.stringify(outcome)}\n`)
+  io.stdout(
+    operatorJsonLine(deactivateUserOutputSchema, {
+      schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+      ...outcome,
+    }),
+  )
   if (outcome.kind === 'ok') return 0
   io.stderr(`${REFUSAL[outcome.kind]}\n`)
   return 1
