@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { pathExists } from '../../shared/test-utils/path-exists.js'
 import { restoreDataDir } from '../backup-restore.js'
 import { blobsRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
@@ -41,15 +42,6 @@ async function putThumbnail(version: string, contents: string): Promise<void> {
   )
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, `${version}.png`), contents)
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
 }
 
 async function restoreInto(backupDir: string): Promise<string> {

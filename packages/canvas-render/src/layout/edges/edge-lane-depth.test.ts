@@ -5,21 +5,11 @@
 // stub (base + i * step, in the group's existing sort order), so shared
 // sides produce parallel DISTINCT corridors.
 
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import { node } from '../../test-utils/spatial-node.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
-
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
-  textNode({
-    id,
-    x,
-    y,
-    width,
-    height,
-    text: id,
-  })
 
 /** Collinear vertical overlap between any segment pair of the two paths. */
 function verticalOverlapLength(

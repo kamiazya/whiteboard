@@ -4,20 +4,10 @@
 // are renderer-chosen defaults, so trading their position for a bend-free
 // line is the better-looking edge. Blocked lanes fall back to the elbows.
 
-import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { CanvasEdge, EdgeSide } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import { node } from '../../test-utils/spatial-node.js'
 import { routeEdge } from './edge-router.js'
-
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
-  textNode({
-    id,
-    x,
-    y,
-    width,
-    height,
-    text: id,
-  })
 
 const edge = (
   fromNode: string,

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 
 // Pin the runtime contract for `whiteboard server run` at the dispatcher boundary.
 // Mocks server-run.js so tests don't need real env vars.
@@ -19,31 +20,6 @@ vi.mock('./server-run.js', () => ({
 
 const serverRunModule = await import('./server-run.js')
 const { main, USAGE } = await import('./dispatcher.js')
-
-function captureStdio<T>(
-  body: () => Promise<T>,
-): Promise<{ result: T; stdout: string; stderr: string }> {
-  const stdoutChunks: string[] = []
-  const stderrChunks: string[] = []
-  const writeStdout = vi
-    .spyOn(process.stdout, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  const writeStderr = vi
-    .spyOn(process.stderr, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  return body()
-    .then((result) => ({ result, stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') }))
-    .finally(() => {
-      writeStdout.mockRestore()
-      writeStderr.mockRestore()
-    })
-}
 
 const VALID_FLAGS = [
   '--json',

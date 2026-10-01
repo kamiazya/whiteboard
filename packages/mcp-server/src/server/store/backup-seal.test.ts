@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { pathExists } from '../../shared/test-utils/path-exists.js'
 import { performBackup } from './backup-pass.js'
 import { closeDb, getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -23,15 +24,6 @@ afterEach(async () => {
   await closeDb(dataDir)
   await rm(root, { recursive: true, force: true })
 })
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
-}
 
 const NIGHT = '2026-03-04T00-00-00.000Z'
 

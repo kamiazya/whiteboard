@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { jobSection } from './job-section.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -21,22 +22,6 @@ const RELEASE_WORKFLOW = '.github/workflows/release.yml'
 
 function readWorkflow(relPath: string): string {
   return readFileSync(join(ROOT, relPath), 'utf-8')
-}
-
-// Extracts the YAML section for a specific job by slicing between adjacent job
-// markers (2-space-indented identifiers under `jobs:`). Scoping checks to a
-// job section prevents false-positives where a field in one job satisfies a
-// test that should fail for another job.
-function jobSection(text: string, jobId: string, nextJobId?: string): string {
-  const marker = `  ${jobId}:`
-  const start = text.indexOf(marker)
-  if (start === -1) return ''
-  if (nextJobId) {
-    const nextMarker = `  ${nextJobId}:`
-    const end = text.indexOf(nextMarker, start)
-    return end === -1 ? text.slice(start) : text.slice(start, end)
-  }
-  return text.slice(start)
 }
 
 type ValidationResult = { ok: true } | { ok: false; reason: string }

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 
 // Pin the runtime contract for `whiteboard mcp` at the dispatcher
 // boundary. We can't run the real stdio server in a unit test —
@@ -56,31 +57,6 @@ async function runMcpAndCapture(
     writeStdout.mockRestore()
     writeStderr.mockRestore()
   }
-}
-
-function captureStdio<T>(
-  body: () => Promise<T>,
-): Promise<{ result: T; stdout: string; stderr: string }> {
-  const stdoutChunks: string[] = []
-  const stderrChunks: string[] = []
-  const writeStdout = vi
-    .spyOn(process.stdout, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  const writeStderr = vi
-    .spyOn(process.stderr, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  return body()
-    .then((result) => ({ result, stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') }))
-    .finally(() => {
-      writeStdout.mockRestore()
-      writeStderr.mockRestore()
-    })
 }
 
 describe('CLI dispatcher: whiteboard mcp', () => {

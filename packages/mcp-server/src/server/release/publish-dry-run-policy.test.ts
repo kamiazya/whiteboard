@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { jobSection } from './job-section.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -23,18 +24,6 @@ function readJson(relPath: string): unknown {
 
 function readWorkflow(relPath: string): string {
   return readFileSync(join(ROOT, relPath), 'utf-8')
-}
-
-function jobSection(text: string, jobId: string, nextJobId?: string): string {
-  const marker = `  ${jobId}:`
-  const start = text.indexOf(marker)
-  if (start === -1) return ''
-  if (nextJobId) {
-    const nextMarker = `  ${nextJobId}:`
-    const end = text.indexOf(nextMarker, start)
-    return end === -1 ? text.slice(start) : text.slice(start, end)
-  }
-  return text.slice(start)
 }
 
 interface ArtifactPolicy {

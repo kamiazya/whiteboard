@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { DaemonRecordParseResult } from '../daemon/daemon-record.js'
 import { daemonLogEntrySchema } from '../shared/diagnostics/log-jsonl.js'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 import { runDaemonLogs } from './daemon-logs.js'
 import { main } from './dispatcher.js'
 
@@ -228,35 +229,6 @@ describe('CLI dispatcher: whiteboard daemon logs --json', () => {
   // from the allowed subcommand list, swaps stdout.write for
   // writeJsonObject, or otherwise rewires the dispatch will fail
   // here.
-
-  function captureStdio<T>(
-    body: () => Promise<T>,
-  ): Promise<{ result: T; stdout: string; stderr: string }> {
-    const stdoutChunks: string[] = []
-    const stderrChunks: string[] = []
-    const writeStdout = vi
-      .spyOn(process.stdout, 'write')
-      .mockImplementation((chunk: string | Uint8Array) => {
-        stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-        return true
-      })
-    const writeStderr = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation((chunk: string | Uint8Array) => {
-        stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-        return true
-      })
-    return body()
-      .then((result) => ({
-        result,
-        stdout: stdoutChunks.join(''),
-        stderr: stderrChunks.join(''),
-      }))
-      .finally(() => {
-        writeStdout.mockRestore()
-        writeStderr.mockRestore()
-      })
-  }
 
   it('drives the real main(): `daemon logs --json --data-dir=<empty>` writes JSONL to stdout exactly once with no array wrapper, no stderr', async () => {
     const dataDir = '/this/path/does/not/exist-cli-logs-test'

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 
 // Routing-only coverage for dispatcher.ts.
 // Each mock returns the minimal shape needed to exercise the routing
@@ -136,31 +137,6 @@ const serverAddUserModule = await import('./server-add-user.js')
 const serverGrantAdminModule = await import('./server-grant-admin.js')
 const serverDeactivateUserModule = await import('./server-deactivate-user.js')
 const { main, USAGE } = await import('./dispatcher.js')
-
-function captureStdio<T>(
-  body: () => Promise<T>,
-): Promise<{ result: T; stdout: string; stderr: string }> {
-  const stdoutChunks: string[] = []
-  const stderrChunks: string[] = []
-  const writeStdout = vi
-    .spyOn(process.stdout, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  const writeStderr = vi
-    .spyOn(process.stderr, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  return body()
-    .then((result) => ({ result, stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') }))
-    .finally(() => {
-      writeStdout.mockRestore()
-      writeStderr.mockRestore()
-    })
-}
 
 // MCP dispatch never resolves on the happy path (StdioServerTransport keeps the
 // process alive), so MCP-path tests fire-and-forget `main` and yield one timer

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 
 vi.mock('./server-support-bundle.js', () => ({
   runServerSupportBundle: vi.fn(async () => ({
@@ -11,31 +12,6 @@ vi.mock('./server-support-bundle.js', () => ({
 
 const bundleModule = await import('./server-support-bundle.js')
 const { main, USAGE } = await import('./dispatcher.js')
-
-function captureStdio<T>(
-  body: () => Promise<T>,
-): Promise<{ result: T; stdout: string; stderr: string }> {
-  const stdoutChunks: string[] = []
-  const stderrChunks: string[] = []
-  const writeStdout = vi
-    .spyOn(process.stdout, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  const writeStderr = vi
-    .spyOn(process.stderr, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  return body()
-    .then((result) => ({ result, stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') }))
-    .finally(() => {
-      writeStdout.mockRestore()
-      writeStderr.mockRestore()
-    })
-}
 
 describe('CLI dispatcher: whiteboard server support-bundle', () => {
   it('success: stdout single JSON object, stderr empty, exit 0', async () => {
