@@ -14,7 +14,7 @@ import { sceneDigest } from '../../scene-digest.js'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
 import { SPATIAL_THEME_GEOMETRY } from '../../theme/spatial-geometry.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
-import { BODY_LINE_HEIGHT_PX } from './mdast-blocks.js'
+import { BODY_LINE_HEIGHT_PX } from './mdast-layout-options.js'
 
 const APPEARANCE = {
   resolveNode: () => ({}),

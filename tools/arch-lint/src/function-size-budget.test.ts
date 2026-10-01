@@ -533,7 +533,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#patchAnchorGroups': 54,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeEdge': 75,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeOrthogonal': 139,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 189,
+  // +1: the table rows take the inline typesetter by argument, since the
+  // table module may not import the typesetter back.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 190,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
   // Raised 406 -> 460: the inline-run walker's inner steps are now NAMED

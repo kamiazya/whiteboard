@@ -4,7 +4,7 @@ import {
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import type { EmbeddedDocument, MdastLayoutOptions } from '../layout/nodes/mdast-blocks.js'
+import type { EmbeddedDocument, MdastLayoutOptions } from '../layout/nodes/mdast-layout-options.js'
 import type { ResolvedReference } from '../layout/spatial-canvas.js'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 

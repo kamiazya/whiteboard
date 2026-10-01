@@ -239,9 +239,17 @@ describe('the mutation lane covers what it says it covers', () => {
     // lane: a schema and a two-line projection either way have no heuristic
     // in them for a mutant to weaken, and the example tests beside them say
     // exactly what they admit.
+    //
+    // 93 and 19 since `layout/nodes/mdast-blocks.ts` gave up its code block
+    // (`mdast-code-block.ts`), its table (`mdast-table.ts`) and the
+    // vocabulary both share with it (`mdast-layout-options.ts`). Outside the
+    // lane, because the file they left was: `mdast-blocks.ts` is pinned by
+    // the text-wrapping scoreboard and its example suites, which are the
+    // reason it was never in the lane, and a split moves none of that. The
+    // options module is types and three font constants besides.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 19,
-      production: 90,
+      production: 93,
     })
   })
 

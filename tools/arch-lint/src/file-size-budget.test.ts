@@ -379,11 +379,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1752 -> 1932. The file grew by RATIONALE, not by logic: eleven
   // inner steps that were inline blocks are now named functions, each
   // carrying the comment that was buried in the middle of the block it came
-  // from. The next real shrink moves the code-block trio (layoutCodeBlock /
-  // codeLineRuns / codeTokenRun) and the table half into sibling modules —
-  // which needs `ResolvedMdastOptions` and `Cursor` extracted first, or the
-  // new module imports them back and closes a package-internal cycle.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1932,
+  // from.
+  // Lowered 1932 -> 1341: the code-block trio (`mdast-code-block.ts`), the
+  // table half (`mdast-table.ts`) and the vocabulary they share with the
+  // typesetter — the options, the cursor, the fonts, the embed contracts
+  // (`mdast-layout-options.ts`) — are sibling modules now. The vocabulary
+  // went first, so neither sibling imports the typesetter back; the table
+  // takes the inline typesetter by argument instead.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1341,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
