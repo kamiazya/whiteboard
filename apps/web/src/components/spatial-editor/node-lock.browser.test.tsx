@@ -9,6 +9,8 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -21,32 +23,19 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(lockedIds: readonly string[] = ['locked']) {
-  const latest: { canvas: SpatialCanvas; toggles: Array<[string, boolean]> } = {
-    canvas: initial,
-    toggles: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          lockedNodeIds={new Set(lockedIds)}
-          onToggleNodeLock={(nodeId, locked) => latest.toggles.push([nodeId, locked])}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const LOCKED = ['locked']
 
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+// What the editor reports through onToggleNodeLock, which is how the host
+// would learn a lock was asked for.
+function toggleLog() {
+  const toggles: Array<[string, boolean]> = []
+  const editorProps = {
+    onToggleNodeLock: (nodeId: string, locked: boolean) => {
+      toggles.push([nodeId, locked])
+    },
+  }
+  return { toggles, editorProps }
+}
 
 function pressAt(root: HTMLElement, x: number, y: number) {
   const r = root.getBoundingClientRect()
@@ -55,7 +44,7 @@ function pressAt(root: HTMLElement, x: number, y: number) {
 }
 
 it('a locked node cannot be selected by pointer; an unlocked sibling still can', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, lockedNodes: LOCKED })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -67,7 +56,7 @@ it('a locked node cannot be selected by pointer; an unlocked sibling still can',
 })
 
 it('a locked node never moves: dragging over it pans nothing and marquee-select skips it', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, lockedNodes: LOCKED })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -91,7 +80,8 @@ it('a locked node never moves: dragging over it pans nothing and marquee-select 
 })
 
 it('the context menu offers Unlock on a locked node, and Lock on a free one', () => {
-  const { Host, latest } = makeHost()
+  const { toggles, editorProps } = toggleLog()
+  const { Host } = makeEditorHost({ initial, lockedNodes: LOCKED, editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -102,7 +92,7 @@ it('the context menu offers Unlock on a locked node, and Lock on a free one', ()
   ) as HTMLElement
   expect(unlock).toBeDefined()
   fireEvent.click(unlock)
-  expect(latest.toggles).toEqual([['locked', false]])
+  expect(toggles).toEqual([['locked', false]])
 
   fireEvent.contextMenu(root, { clientX: r.left + 400, clientY: r.top + 80 })
   const lock = [...container.querySelectorAll('[data-testid="context-menu"] button')].find(
@@ -110,14 +100,14 @@ it('the context menu offers Unlock on a locked node, and Lock on a free one', ()
   ) as HTMLElement
   expect(lock).toBeDefined()
   fireEvent.click(lock)
-  expect(latest.toggles.at(-1)).toEqual(['free', true])
+  expect(toggles.at(-1)).toEqual(['free', true])
 })
 
 it('a right-click on a locked node opens its menu and leaves the selection alone', () => {
   // The menu picks a locked node on purpose, so Unlock has somewhere to live.
   // Taking it as the new selection would drop the node already selected —
   // for a lock that then removes the locked one too, leaving nothing.
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, lockedNodes: LOCKED })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -130,7 +120,7 @@ it('a right-click on a locked node opens its menu and leaves the selection alone
 })
 
 it('a locked node shows no destructive or edit actions in its menu', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, lockedNodes: LOCKED })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -146,13 +136,14 @@ it('a locked node shows no destructive or edit actions in its menu', () => {
 })
 
 it('Cmd+Shift+L toggles the lock on the current selection', () => {
-  const { Host, latest } = makeHost([])
+  const { toggles, editorProps } = toggleLog()
+  const { Host } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
   pressAt(root, 120, 80)
   fireEvent.keyDown(root, { code: 'KeyL', key: 'l', metaKey: true, shiftKey: true })
-  expect(latest.toggles).toEqual([['locked', true]])
+  expect(toggles).toEqual([['locked', true]])
 })
 
 it('without the host seam the lock is inert — no menu entry, nothing blocked', () => {
@@ -184,14 +175,15 @@ it('without the host seam the lock is inert — no menu entry, nothing blocked',
 })
 
 it('reports the toggle without mutating the canvas itself (lock is not canvas content)', () => {
-  const { Host, latest } = makeHost([])
+  const { toggles, editorProps } = toggleLog()
+  const { Host, latest } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const before = latest.canvas
   pressAt(root, 120, 80)
   fireEvent.keyDown(root, { code: 'KeyL', key: 'l', metaKey: true, shiftKey: true })
   expect(latest.canvas).toBe(before)
-  expect(latest.toggles).toHaveLength(1)
+  expect(toggles).toHaveLength(1)
 })
 
 it('a lock arriving AFTER selection drops it, so keyboard edits cannot reach the node', () => {
@@ -283,7 +275,7 @@ it('dragging a group leaves a locked member behind', () => {
 })
 
 it('the keyboard connect overlay offers no target on a locked node', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, lockedNodes: LOCKED })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -299,7 +291,7 @@ it('the keyboard connect overlay offers no target on a locked node', () => {
 })
 
 it('a locked node is not offered to a marquee drag either', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, lockedNodes: LOCKED })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()

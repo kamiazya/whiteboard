@@ -9,6 +9,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -30,34 +32,18 @@ const initial: SpatialCanvas = {
 // The edge runs between the two boxes, so its line crosses this point.
 const ON_EDGE: readonly [number, number] = [280, 80]
 
-function makeHost(lockedEdges: readonly string[] = ['e1'], lockedNodes: readonly string[] = []) {
-  const latest: { canvas: SpatialCanvas; toggles: Array<[string, boolean]> } = {
-    canvas: initial,
-    toggles: [],
+// The edge-lock props the editor takes, plus the log of what it asked to
+// toggle — how the host would learn a lock was requested.
+function edgeLocks(lockedEdges: readonly string[] = ['e1']) {
+  const toggles: Array<[string, boolean]> = []
+  const editorProps = {
+    lockedEdgeIds: new Set(lockedEdges),
+    onToggleEdgeLock: (edgeId: string, locked: boolean) => {
+      toggles.push([edgeId, locked])
+    },
   }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          lockedNodeIds={new Set(lockedNodes)}
-          onToggleNodeLock={() => {}}
-          lockedEdgeIds={new Set(lockedEdges)}
-          onToggleEdgeLock={(edgeId, locked) => latest.toggles.push([edgeId, locked])}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
+  return { toggles, editorProps }
 }
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
 function pressAt(root: HTMLElement, x: number, y: number) {
   const r = root.getBoundingClientRect()
@@ -72,7 +58,8 @@ function menuLabels(container: HTMLElement): (string | null)[] {
 }
 
 it('a locked edge cannot be selected by pointer, so Delete cannot reach it', () => {
-  const { Host, latest } = makeHost()
+  const { editorProps } = edgeLocks()
+  const { Host, latest } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -82,7 +69,8 @@ it('a locked edge cannot be selected by pointer, so Delete cannot reach it', () 
 })
 
 it('an unlocked edge is still selectable and deletable', () => {
-  const { Host, latest } = makeHost([])
+  const { editorProps } = edgeLocks([])
+  const { Host, latest } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -94,7 +82,8 @@ it('an unlocked edge is still selectable and deletable', () => {
 it('a locked endpoint does NOT freeze the edge — edge locks are their own set', () => {
   // 'a' is locked, the edge is not: the line stays editable, which is the
   // whole reason edge locks are stored rather than derived.
-  const { Host, latest } = makeHost([], ['a'])
+  const { editorProps } = edgeLocks([])
+  const { Host, latest } = makeEditorHost({ initial, lockedNodes: ['a'], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -104,7 +93,8 @@ it('a locked endpoint does NOT freeze the edge — edge locks are their own set'
 })
 
 it('the context menu offers Unlock on a locked edge, and Lock on a free one', () => {
-  const { Host, latest } = makeHost()
+  const { toggles, editorProps } = edgeLocks()
+  const { Host } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -115,11 +105,12 @@ it('the context menu offers Unlock on a locked edge, and Lock on a free one', ()
   ) as HTMLElement
   expect(unlock).toBeDefined()
   fireEvent.click(unlock)
-  expect(latest.toggles).toEqual([['e1', false]])
+  expect(toggles).toEqual([['e1', false]])
 })
 
 it('a locked edge shows no destructive or restyling actions in its menu', () => {
-  const { Host } = makeHost()
+  const { editorProps } = edgeLocks()
+  const { Host } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -133,7 +124,8 @@ it('a locked edge shows no destructive or restyling actions in its menu', () => 
 })
 
 it('a free edge gains a Lock entry', () => {
-  const { Host, latest } = makeHost([])
+  const { toggles, editorProps } = edgeLocks([])
+  const { Host } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -144,17 +136,18 @@ it('a free edge gains a Lock entry', () => {
   ) as HTMLElement
   expect(lock).toBeDefined()
   fireEvent.click(lock)
-  expect(latest.toggles).toEqual([['e1', true]])
+  expect(toggles).toEqual([['e1', true]])
 })
 
 it('Cmd+Shift+L toggles the lock on a selected edge', () => {
-  const { Host, latest } = makeHost([])
+  const { toggles, editorProps } = edgeLocks([])
+  const { Host } = makeEditorHost({ initial, lockedNodes: [], editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
   pressAt(root, ...ON_EDGE)
   fireEvent.keyDown(root, { code: 'KeyL', key: 'l', metaKey: true, shiftKey: true })
-  expect(latest.toggles).toEqual([['e1', true]])
+  expect(toggles).toEqual([['e1', true]])
 })
 
 it('a lock arriving AFTER selection drops it, so Delete cannot reach the edge', () => {
