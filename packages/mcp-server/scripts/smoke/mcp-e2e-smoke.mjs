@@ -585,6 +585,11 @@ async function placementNamingAndDeletionRoundTrip(ctx) {
   if (move.results?.[0]?.path !== 'archive/named') {
     throw new Error(`document.move returned unexpected shape: ${JSON.stringify(move)}`)
   }
+  // The row says which referrers the follow pass rewrote; a surface that
+  // swallowed it would report a clean move whatever the pass did.
+  if (!move.results[0].follow?.updatedDocumentIds?.includes(referrer.documentId)) {
+    throw new Error(`document.move did not report its follow pass: ${JSON.stringify(move)}`)
+  }
   const afterMove = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
   if (
     !afterMove.documents.some(
