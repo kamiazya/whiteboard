@@ -125,6 +125,7 @@ import { isFollowableUrl } from './followable-url.js'
 import { GestureOverlays } from './gesture-overlays.js'
 import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import { ImageFileInput } from './image-file-input.js'
 import { InPlaceEditors } from './in-place-editors.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
@@ -1577,36 +1578,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           }}
         />
         {onAddImage !== undefined && (
-          <input
-            ref={imageInputRef}
-            data-editor-overlay
-            data-testid="image-file-input"
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              e.target.value = ''
-              if (file === undefined) return
-              const backgroundGroupId = pendingBackgroundGroupIdRef.current
-              pendingBackgroundGroupIdRef.current = null
-              if (backgroundGroupId !== null) {
-                if (onAddImage === undefined || !file.type.startsWith('image/')) return
-                void onAddImage(file).then((ref) => {
-                  if (ref !== undefined) {
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        { kind: 'set-group-background', id: backgroundGroupId, background: ref },
-                      ],
-                    })
-                  }
-                })
-                return
-              }
-              addImageFile(file, pendingImagePointRef.current ?? undefined)
-              pendingImagePointRef.current = null
-            }}
+          <ImageFileInput
+            inputRef={imageInputRef}
+            onAddImage={onAddImage}
+            pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
+            pendingImagePointRef={pendingImagePointRef}
+            addImageFile={addImageFile}
+            apply={applyResult}
           />
         )}
         {canvasDialogs()}

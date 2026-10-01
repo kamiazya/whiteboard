@@ -275,7 +275,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 139 -> 88: its gesture and reach overlays became `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasSpaceLayers': 88,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,
+  // 100 -> 77: the image file input became `image-file-input.tsx`.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 77,
   // 119 -> 62: the document picker and the URL dialog became
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 62,
