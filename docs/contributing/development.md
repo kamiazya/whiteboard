@@ -14,10 +14,13 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
   that is what a CONSUMER may run the daemon on, not what this checkout builds
   on.)
 - A Chromium that Playwright can drive (installed automatically below)
-- ImageMagick (`convert`, `identify`) — needed by `pnpm test:scripts`, and so
-  by `pnpm check:local`, which runs `.claude/scripts/compose-figure.test.mjs`.
-  Without it that suite fails rather than skipping. `apt install imagemagick`
-  or `brew install imagemagick`.
+- ImageMagick (`convert`, `identify`) — optional locally, needed by
+  `.claude/scripts/compose-figure.test.mjs` (part of `pnpm test:scripts`, and so
+  of `pnpm check:local`). Without it that file's ImageMagick-dependent tests
+  skip with a message naming what to install, and the rest of `pnpm check:local`
+  still runs; **on CI (`CI` set) its absence fails the run**, since `ci.yml`
+  installs it for exactly this file. `apt install imagemagick` or
+  `brew install imagemagick` to run them locally.
 
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
@@ -219,8 +222,8 @@ pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 Default regression triple after a change:
 
 ```bash
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
-pnpm typecheck   # tsc --noEmit (~21s across all 17 packages)
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower)
+pnpm typecheck   # tsc --noEmit in every workspace package that defines a typecheck script
 pnpm smoke:e2e   # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
 ```
 

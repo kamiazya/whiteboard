@@ -13,7 +13,7 @@ Contributor and maintainer guides:
 - **[observability](observability.md)** — OpenTelemetry tracing for the daemon and MCP entrypoint.
 - **[review-checklist](review-checklist.md)** — checklist for PR authors and reviewers.
 - **[deployment/cloudflare-pages](deployment/cloudflare-pages.md)** — deploying the hosted browser app.
-- **architecture/** — internal architecture (overview, C4) and the wire-protocol reference.
+- **[architecture/wire-protocol](architecture/wire-protocol.md)** — the live-sync wire-protocol reference (the only page under `architecture/`; the architecture overview is [explanation/architecture](../explanation/architecture.md)).
 - **[adr/](adr/)** — Architecture Decision Records (MADR-lite; numbered, lifecycle-tracked).
 
 See also the repo-root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [AGENTS.md](../../AGENTS.md).
