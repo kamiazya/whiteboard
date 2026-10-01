@@ -29,7 +29,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
+import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import { cn } from '../../lib/utils.js'
 
 /**

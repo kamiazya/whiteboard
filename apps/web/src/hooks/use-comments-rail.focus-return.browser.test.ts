@@ -18,7 +18,8 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type CommentsRailWrite, useCommentsRail } from './use-comments-rail.js'
+import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
+import { useCommentsRail } from './use-comments-rail.js'
 
 const WRITE: CommentsRailWrite = {
   createThread: vi.fn(),

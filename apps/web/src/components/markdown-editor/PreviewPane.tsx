@@ -4,11 +4,11 @@ import type {
   ReferenceSeams,
 } from '@kamiazya/whiteboard-canvas-render'
 import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
+import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import { type PreviewBlockAnchor, renderMarkdownPreview } from '../../lib/render-preview.js'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
-import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 
 export interface PreviewPaneProps {
   value: string

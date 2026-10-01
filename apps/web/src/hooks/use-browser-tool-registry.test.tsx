@@ -1,9 +1,9 @@
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { expectLoggedFailure } from '../../test-utils/logged-failures.js'
-import { createWhiteboardCommands } from '../commands/create-commands.js'
-import type { WhiteboardCommands } from '../commands/index.js'
-import { webMcpTools } from './tool-definitions.js'
+import { createWhiteboardCommands } from '../lib/commands/create-commands.js'
+import type { WhiteboardCommands } from '../lib/commands/index.js'
+import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import type { ModelContext, WebMcpToolDescriptor } from './use-browser-tool-registry.js'
 import { useBrowserToolRegistry } from './use-browser-tool-registry.js'
 

@@ -14,8 +14,8 @@ const rawModules = import.meta.glob('/src/**/*.{ts,tsx}', {
 const BANNED_PATTERNS = [/\bdocument\.modelContext\b/, /\bnavigator\.modelContext\b/]
 
 const ALLOWED_FILES = new Set([
-  'lib/webmcp/use-browser-tool-registry.ts',
-  'lib/webmcp/use-browser-tool-registry.test.tsx',
+  'hooks/use-browser-tool-registry.ts',
+  'hooks/use-browser-tool-registry.test.tsx',
   // The document-page contract injects a fake `document.modelContext` to
   // prove the registry is mounted, for BOTH keepers — the same proof the
   // per-page `.webmcp.test.tsx` files below give, run from one place.
@@ -32,7 +32,7 @@ const ALLOWED_FILES = new Set([
 const ALLOWED_SUFFIX = /\.webmcp\.test\.tsx$/
 
 function relPathOf(moduleKey: string): string {
-  // moduleKey looks like "/src/lib/webmcp/use-browser-tool-registry.ts".
+  // moduleKey looks like "/src/hooks/use-browser-tool-registry.ts".
   return moduleKey.replace(/^\/src\//, '')
 }
 
@@ -65,6 +65,6 @@ describe('WebMCP ambient API confinement', () => {
     // "document.modelContext", so the guard must report it as an offender.
     const offendersWithNoAllowList = findOffenders(new Set())
 
-    expect(offendersWithNoAllowList).toContain('lib/webmcp/use-browser-tool-registry.ts')
+    expect(offendersWithNoAllowList).toContain('hooks/use-browser-tool-registry.ts')
   })
 })

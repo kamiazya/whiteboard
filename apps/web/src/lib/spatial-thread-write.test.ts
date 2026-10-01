@@ -16,7 +16,7 @@
  */
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../lib/spatial/commands.js'
+import type { EditorCommand } from './spatial/commands.js'
 import { spatialThreadWrite } from './spatial-thread-write.js'
 
 const THREAD: CommentThread = {

@@ -16,24 +16,14 @@
 import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   AnnotationAnchor,
-  CommentMessage,
   CommentThread,
-  CommentThreadStatus,
   DocumentKind,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { anchorResolverFor } from '../lib/anchor-resolver.js'
+import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
 import { markdownAnchorResolver } from '../lib/text-anchor.js'
-
-/** The keeper-specific write door — the only injected half. */
-export interface CommentsRailWrite {
-  readonly createThread: (thread: CommentThread) => void
-  readonly replyToThread: (threadId: string, message: CommentMessage) => void
-  readonly setThreadStatus: (threadId: string, status: CommentThreadStatus) => void
-  /** Rewrites one message; `opening` says whether it is the conversation's first. */
-  readonly editMessage: (threadId: string, message: CommentMessage, opening: boolean) => void
-}
 
 export interface CommentsRail {
   /** Whether the rail is open — the page's inspector slot showing it. */
