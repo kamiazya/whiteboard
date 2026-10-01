@@ -12,7 +12,7 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import type { Point } from '../../lib/spatial/viewport.js'
-import type { CommentComposeState } from './CanvasContextMenu.js'
+import type { CommentComposeState } from './canvas-commands.js'
 import type { reduceGesture } from './gestures.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 

@@ -7,7 +7,8 @@
  * database around the tenant-bound handle, and it only ever removes the
  * keeper-wide rows of an account that no tenant's user still names.
  */
-import { type Database, getRawDb } from './index.js'
+import { getRawDb } from './index.js'
+import type { Database } from './schema.js'
 
 /** True when the account was retired; false when some tenant still names it. */
 export async function retireAccountIfUnheld(db: Database, accountId: string): Promise<boolean> {

@@ -1,7 +1,6 @@
 import { hasRequiredScopes } from './auth-strategy.js'
 import { parseBearerAuthorizationHeader } from './bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from './credential-resolver.js'
-import { requiresMcpHttpAuth } from './mcp-http.js'
 
 export interface McpProtectedResourceMetadataConfig {
   authorizationServers: string[]
@@ -27,6 +26,11 @@ type McpAuthDecision =
 export interface McpHttpAuthStrategy {
   readonly protectedResourceMetadata?: McpProtectedResourceMetadataConfig
   authorize(context: McpAuthRequestContext): Promise<McpAuthDecision>
+}
+
+/** A CORS preflight carries no credentials, so it is the one method the strategy never asks for them. */
+export function requiresMcpHttpAuth(method: string): boolean {
+  return method.toUpperCase() !== 'OPTIONS'
 }
 
 function normalizeCsv(value: string | undefined): string[] | undefined {

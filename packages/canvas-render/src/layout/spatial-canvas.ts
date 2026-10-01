@@ -708,8 +708,6 @@ export {
   type EdgePathLookup,
 } from './comments.js'
 export type {
-  FacetCardData,
-  ResolvedReference,
   SpatialContentCache,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,

@@ -4,9 +4,8 @@ import {
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import type { EmbeddedDocument, MdastLayoutOptions } from '../layout/nodes/mdast-layout-options.js'
-import type { ResolvedReference } from '../layout/spatial-canvas.js'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
+import type { EmbeddedDocument, ResolvedReference } from './resolved.js'
 
 /**
  * Every synchronous seam a layout reads to draw what a document points at,
@@ -22,8 +21,8 @@ import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
  */
 export interface ReferenceSeams {
   readonly resolveAlias: AliasResolver
-  readonly resolveTitle: NonNullable<MdastLayoutOptions['resolveTitle']>
-  readonly resolveEmbed: NonNullable<MdastLayoutOptions['resolveEmbed']>
+  readonly resolveTitle: (documentId: string) => string | undefined
+  readonly resolveEmbed: (documentId: string) => EmbeddedDocument | undefined
   readonly resolveReference: (ref: string) => ResolvedReference | undefined
 }
 
@@ -180,8 +179,8 @@ export function overlayReferences(parts: {
 export function withReferenceSeams<
   T extends {
     readonly references?: ReferenceSeams
-    readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
-    readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
+    readonly resolveEmbed?: ReferenceSeams['resolveEmbed']
+    readonly resolveTitle?: ReferenceSeams['resolveTitle']
   },
 >(options: T): T {
   const seams = options.references

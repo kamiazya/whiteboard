@@ -17,7 +17,7 @@
 // needs the fencing token ADR-0020 describes.
 
 import { getLogger } from '../log.js'
-import type { Database } from './db/index.js'
+import type { Database } from './db/schema.js'
 
 const log = getLogger('lease')
 

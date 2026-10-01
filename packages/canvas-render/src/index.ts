@@ -73,7 +73,6 @@ export {
   type CodeTokenRole,
   type EmbeddedCanvasBox,
   type EmbeddedCanvasMiniature,
-  type EmbeddedDocument,
   type MdastLayoutOptions,
   type RenderedSvgFragment,
 } from './layout/nodes/mdast-layout-options.js'
@@ -96,10 +95,8 @@ export { scaleScene } from './layout/scale-scene.js'
 export { createStyleRandom, seedFromId, styleRandomFromSeed } from './layout/seed.js'
 export type {
   DecorationContext,
-  FacetCardData,
   NodeDecoration,
   RenderContribution,
-  ResolvedReference,
   SpatialContentCache,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
@@ -137,6 +134,11 @@ export {
 export type { FacetScore, MultiKey } from './quality/facet-score.js'
 export { scoreFacets } from './quality/facet-score.js'
 export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
+export type {
+  EmbeddedDocument,
+  FacetCardData,
+  ResolvedReference,
+} from './references/resolved.js'
 export {
   overlayReferences,
   type ReferenceSeams,

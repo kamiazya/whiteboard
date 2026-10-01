@@ -14,14 +14,10 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import type { FacetCardData, ResolvedReference } from '../references/resolved.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
-import {
-  type FacetCardData,
-  layoutSpatialCanvas,
-  type ResolvedReference,
-  type SpatialLayoutOptions,
-} from './spatial-canvas.js'
+import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const APPEARANCE = {
   resolveNode: () => ({}),

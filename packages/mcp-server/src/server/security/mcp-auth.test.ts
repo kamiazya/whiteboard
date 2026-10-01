@@ -5,8 +5,18 @@ import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
   type McpHttpAuthStrategy,
+  requiresMcpHttpAuth,
   resolveMcpProtectedResourceMetadataFromEnv,
 } from './mcp-auth.js'
+
+describe('requiresMcpHttpAuth', () => {
+  it('requires auth for MCP HTTP requests except preflight', () => {
+    expect(requiresMcpHttpAuth('GET')).toBe(true)
+    expect(requiresMcpHttpAuth('POST')).toBe(true)
+    expect(requiresMcpHttpAuth('DELETE')).toBe(true)
+    expect(requiresMcpHttpAuth('OPTIONS')).toBe(false)
+  })
+})
 
 describe('MCP auth strategy', () => {
   it('parses protected resource metadata config from env', () => {

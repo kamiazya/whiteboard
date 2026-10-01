@@ -2,7 +2,7 @@ import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/sp
 import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { pickContentAt, pressProbes } from './element-pick.js'
 import { openCommentMenuAt } from './pointer-comment-claim.js'
-import type { EditorPointerInputs } from './use-editor-pointer.js'
+import type { EditorPointerInputs } from './pointer-inputs.js'
 
 type MenuClaimInputs = Parameters<typeof openCommentMenuAt>[0] &
   Pick<

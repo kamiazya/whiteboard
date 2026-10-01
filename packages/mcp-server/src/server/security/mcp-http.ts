@@ -12,10 +12,6 @@ function mcpHttpError(status: number, message: string, headers?: Headers): Respo
   )
 }
 
-export function requiresMcpHttpAuth(method: string): boolean {
-  return method.toUpperCase() !== 'OPTIONS'
-}
-
 export function createMcpHttpAuthMiddleware(strategy: McpHttpAuthStrategy): MiddlewareHandler {
   return async (c, next) => {
     const decision = await strategy.authorize({

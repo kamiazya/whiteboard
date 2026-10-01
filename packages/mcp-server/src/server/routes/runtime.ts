@@ -1,8 +1,10 @@
-import { daemonPingResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import {
+  daemonPingResponseSchema,
+  type RuntimeStatusResponse,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import { getDataDir } from '../config.js'
-import type { RuntimeStatus } from '../http-server.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
@@ -15,7 +17,7 @@ export interface RuntimeRouterOptions {
   instanceId: string
   identity: DaemonIdentity
   touch: () => void
-  getStatus: () => RuntimeStatus
+  getStatus: () => RuntimeStatusResponse
   /**
    * Every credential this router honours, resolved in one place. REQUIRED:
    * the previous shape took the daemon token, the grant store and the pairing

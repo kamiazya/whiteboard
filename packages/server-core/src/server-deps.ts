@@ -3,7 +3,6 @@ import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
-import type { RestoreProgressEvent } from './operations/restore-version.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
 import type { Attestation, OperatorInfo, VersionEntry } from './versions/version-entry.js'
@@ -73,6 +72,14 @@ export interface CanvasClientNotifier {
    * forward both or neither.
    */
   restoreProgress(event: RestoreProgressEvent): void
+}
+
+export interface RestoreProgressEvent {
+  readonly workspaceId: string
+  /** The document being written — the target for a targetPath restore. */
+  readonly path: string
+  readonly phase: 'started' | 'complete'
+  readonly label?: string
 }
 
 export interface VersionCreated {

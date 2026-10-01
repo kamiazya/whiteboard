@@ -21,7 +21,7 @@ import { carriedByGesture } from './gesture-view.js'
 import type { GestureResult } from './gestures.js'
 import { reduceGesture } from './gestures.js'
 import { withGroupMates } from './ink-hit.js'
-import type { EditorPointerInputs } from './use-editor-pointer.js'
+import type { EditorPointerInputs } from './pointer-inputs.js'
 
 /**
  * Everything the arms read, built once per release by the caller.

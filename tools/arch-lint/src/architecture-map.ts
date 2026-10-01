@@ -354,135 +354,20 @@ export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
  * Strongly connected components of the import graph that exist ONLY through
  * `import type` edges — the half cycle-check.ts's value scan cannot see, and
  * the half a type-only edge hides precisely because it never fails at load.
- * Same shape as {@link KNOWN_IMPORT_CYCLES}: sorted member paths, one group per
- * component, repo-relative.
+ * Same shape as {@link KNOWN_IMPORT_CYCLES}, with one addition: each group
+ * carries the reason it is still here, since there is no load-time failure to
+ * argue for removing it.
  *
- * Unlike that list this one is not empty by intent, and each group carries the
- * reason it is still here. `repo-coverage.test.ts` pins it by equality from
- * both sides, so a new type cycle fails until it is fixed or listed with a
- * reason, and a listed group that stops being a component fails until it is
- * deleted. A group whose members change (a file joined or left) fails too —
- * the key is the member set, so a ledger entry cannot quietly absorb a knot
- * that grew.
+ * It is EMPTY. `repo-coverage.test.ts` pins it by equality from both sides, so
+ * a new type cycle fails until it is fixed or listed with a reason, and a
+ * listed group that stops being a component fails until it is deleted. The
+ * key is the member set, so an entry cannot quietly absorb a knot that grew.
+ * The usual fix is a leaf module owning the type both sides name, not an entry.
  */
 export const KNOWN_TYPE_CYCLES: readonly {
   readonly members: readonly string[]
   readonly reason: string
-}[] = [
-  {
-    members: [
-      'apps/web/src/components/annotations/CommentsPanel.tsx',
-      'apps/web/src/components/annotations/thread-row.tsx',
-    ],
-    reason: 'thread-row reads CommentsPanelProps and ThreadFilter from the panel that imports it',
-  },
-  {
-    members: [
-      'apps/web/src/components/spatial-editor/CanvasContextMenu.tsx',
-      'apps/web/src/components/spatial-editor/context-menu-items/annotation-verbs.tsx',
-      'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx',
-      'apps/web/src/components/spatial-editor/context-menu-items/comment-menu-items.tsx',
-      'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx',
-      'apps/web/src/components/spatial-editor/context-menu-items/ink-menu-items.tsx',
-      'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx',
-    ],
-    reason:
-      'the six menu-item modules read CanvasCommands and the dialog-state types from the menu that imports them',
-  },
-  {
-    members: [
-      'apps/web/src/components/spatial-editor/SpatialEditor.tsx',
-      'apps/web/src/components/spatial-editor/pointer-comment-claim.ts',
-      'apps/web/src/components/spatial-editor/pointer-ink-claim.ts',
-      'apps/web/src/components/spatial-editor/pointer-menu-claim.ts',
-      'apps/web/src/components/spatial-editor/pointer-proposal-claim.ts',
-      'apps/web/src/components/spatial-editor/pointer-release.ts',
-      'apps/web/src/components/spatial-editor/use-editor-pointer.ts',
-    ],
-    reason:
-      'the pointer claim modules read EditorPointerInputs from the hook that imports them, and the hook reads five SpatialEditorProps fields from the editor that mounts it',
-  },
-  {
-    members: [
-      'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx',
-      'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx',
-    ],
-    reason: "the panel's parts read WorkspaceFilesPanelProps from the panel that imports them",
-  },
-  {
-    members: [
-      'apps/web/src/lib/extension-bridge-fetch.ts',
-      'apps/web/src/lib/extension-window-port.ts',
-    ],
-    reason:
-      'the window port implements BridgePort, which is declared in the module that imports the port',
-  },
-  {
-    members: ['apps/web/src/pages/DaemonIndexPage.tsx', 'apps/web/src/pages/daemon-index-body.tsx'],
-    reason: 'daemon-index-body reads DaemonIndexPageProps from the page that imports it',
-  },
-  {
-    members: [
-      'packages/canvas-render/src/highlight/lowlight.ts',
-      'packages/canvas-render/src/layout/canvas-theme.ts',
-      'packages/canvas-render/src/layout/comment-body.ts',
-      'packages/canvas-render/src/layout/comments.ts',
-      'packages/canvas-render/src/layout/compose-node.ts',
-      'packages/canvas-render/src/layout/layout-options.ts',
-      'packages/canvas-render/src/layout/nodes/mdast-blocks.ts',
-      'packages/canvas-render/src/layout/nodes/mdast-code-block.ts',
-      'packages/canvas-render/src/layout/nodes/mdast-layout-options.ts',
-      'packages/canvas-render/src/layout/nodes/mdast-table.ts',
-      'packages/canvas-render/src/layout/passage-highlight.ts',
-      'packages/canvas-render/src/layout/proposals.ts',
-      'packages/canvas-render/src/layout/scale-scene.ts',
-      'packages/canvas-render/src/layout/spatial-canvas.ts',
-      'packages/canvas-render/src/references/seams.ts',
-    ],
-    reason:
-      'references/seams.ts reads ResolvedReference and MdastLayoutOptions from the layout modules that import the seams; every other member is a layout module on the way round',
-  },
-  {
-    members: [
-      'packages/canvas-render/src/layout/edges/edge-ink.ts',
-      'packages/canvas-render/src/layout/edges/edge-rules.ts',
-    ],
-    reason: 'edge-ink reads Point and Rect from edge-rules, which imports edge-ink by value',
-  },
-  {
-    members: [
-      'packages/mcp-server/src/server/app.ts',
-      'packages/mcp-server/src/server/http-server.ts',
-      'packages/mcp-server/src/server/routes/runtime.ts',
-    ],
-    reason:
-      "routes/runtime.ts reads RuntimeStatus, an alias of daemon-client's RuntimeStatusResponse, from http-server.ts, which reaches the router through app.ts",
-  },
-  {
-    members: [
-      'packages/mcp-server/src/server/security/mcp-auth.ts',
-      'packages/mcp-server/src/server/security/mcp-http.ts',
-    ],
-    reason:
-      'mcp-http reads the McpHttpAuthStrategy type from mcp-auth, which imports requiresMcpHttpAuth back',
-  },
-  {
-    members: [
-      'packages/mcp-server/src/server/store/db/index.ts',
-      'packages/mcp-server/src/server/store/db/tenant-database.ts',
-    ],
-    reason:
-      'tenant-database reads the Database alias from db/index.ts, which imports tenantDatabase back',
-  },
-  {
-    members: [
-      'packages/server-core/src/operations/restore-version.ts',
-      'packages/server-core/src/server-deps.ts',
-    ],
-    reason:
-      'server-deps names RestoreProgressEvent from restore-version, which names ServerDeps back',
-  },
-]
+}[] = []
 
 /**
  * Cross-PACKAGE dependency cycles found and not yet dissolved — the

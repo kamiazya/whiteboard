@@ -25,8 +25,8 @@ import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
 import type { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
-import type { WorkspaceFilesPanelProps } from './WorkspaceFilesPanel.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
+import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 
 /**
  * How a write that landed is named once its list refresh failed. The verb is

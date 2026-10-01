@@ -10,13 +10,9 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LiveDocuments, VersionHistory } from '../server-deps.js'
+import type { LiveDocuments, RestoreProgressEvent, VersionHistory } from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
-import {
-  type RestoreProgressEvent,
-  type RestoreVersionResult,
-  restoreVersion,
-} from './restore-version.js'
+import { type RestoreVersionResult, restoreVersion } from './restore-version.js'
 
 const WS = 'ws-1'
 // Joins a workspace id and a path into one map key. NUL cannot occur in

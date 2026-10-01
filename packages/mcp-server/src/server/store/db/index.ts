@@ -22,10 +22,8 @@ import { getDataDir } from '../../config.js'
 import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { databaseIsInsideDataDir, resolveDatabaseLocation } from './location.js'
 import { writeDatabaseLocationRecord } from './location-record.js'
-import type { DatabaseSchema } from './schema.js'
+import type { Database, DatabaseSchema } from './schema.js'
 import { type TenantDatabase, tenantDatabase } from './tenant-database.js'
-
-export type Database = Kysely<DatabaseSchema>
 
 // Re-exported so the many callers that only want the filename do not have to
 // know a resolver exists.

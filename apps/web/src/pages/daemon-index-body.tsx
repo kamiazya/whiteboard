@@ -11,8 +11,8 @@ import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspac
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import type { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import type { createDaemonFilesSource } from '../lib/daemon-files-source.js'
-import type { DaemonIndexPageProps } from './DaemonIndexPage.js'
 import type { DocumentRow } from './daemon-index-actions.js'
+import type { DaemonIndexPageProps } from './daemon-index-page-props.js'
 import { deleteRequestsFor, type PendingDelete } from './pending-delete.js'
 
 /**

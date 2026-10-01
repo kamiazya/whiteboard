@@ -38,9 +38,10 @@ import type {
   ShapeSceneNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
+import type { ResolvedReference } from '../references/resolved.js'
 import { referenceFor as resolveOneReference } from '../references/seams.js'
 import { markdownTheme } from '../theme/theme-asset.js'
-import type { ResolvedLayoutOptions, ResolvedReference } from './layout-options.js'
+import type { ResolvedLayoutOptions } from './layout-options.js'
 import {
   type FittedBlocks,
   firstLineOfBlocks,

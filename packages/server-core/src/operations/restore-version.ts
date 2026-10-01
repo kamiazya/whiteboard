@@ -8,7 +8,7 @@ import { documentPathSchema } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import { countAliveNodes } from '../document-counts.js'
-import type { LiveDocuments, ServerDeps } from '../server-deps.js'
+import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
 
 export interface RestoreVersionInput {
   readonly workspaceId: string
@@ -20,14 +20,6 @@ export interface RestoreVersionInput {
   readonly overwrite?: boolean
   /** Roll the document AND every descendant back; needs a workspace-scoped version. */
   readonly subtree?: boolean
-}
-
-export interface RestoreProgressEvent {
-  readonly workspaceId: string
-  /** The document being written — the target for a targetPath restore. */
-  readonly path: string
-  readonly phase: 'started' | 'complete'
-  readonly label?: string
 }
 
 /**

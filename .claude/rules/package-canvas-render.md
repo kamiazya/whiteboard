@@ -1015,6 +1015,9 @@ the table alone.
     `apps/web`'s editor builds its seams from the wire it posts, so the two
     threads cannot disagree. Before it a text node's `![[note]]` drew a
     placeholder on both; `referenceTargets` scans text-node bodies now.
+    What a seam ANSWERS (`ResolvedReference`, `FacetCardData`,
+    `EmbeddedDocument`) lives in `references/resolved.ts`, so the producer
+    never imports the layout (`type-cycle-check.ts`).
     `referenceWireFor` cuts a wire to what a canvas's layout can read, so
     one widened for a drafted body (the overlay's preview) leaves that
     canvas's seams, worker request and content cache alone. Decision #11

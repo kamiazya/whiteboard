@@ -3,8 +3,12 @@ import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import type { RestoreProgressEvent } from '../operations/restore-version.js'
-import type { CanvasClientNotifier, ServerDeps, VersionCreated } from '../server-deps.js'
+import type {
+  CanvasClientNotifier,
+  RestoreProgressEvent,
+  ServerDeps,
+  VersionCreated,
+} from '../server-deps.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,

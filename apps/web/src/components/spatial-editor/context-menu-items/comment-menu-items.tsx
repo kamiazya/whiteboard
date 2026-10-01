@@ -6,8 +6,8 @@
  */
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { CircleCheck, RotateCcw } from 'lucide-react'
-import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
+import type { CanvasCommands } from '../canvas-commands.js'
 
 export interface CommentMenuItemsInput {
   readonly comment: CanvasComment

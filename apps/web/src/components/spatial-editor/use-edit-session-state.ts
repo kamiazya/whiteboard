@@ -8,7 +8,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useState } from 'react'
-import type { DocumentPickerState, LinkDialogState } from './CanvasContextMenu.js'
+import type { DocumentPickerState, LinkDialogState } from './canvas-commands.js'
 
 export interface EditSessionStateInputs {
   readonly canvas: SpatialCanvas

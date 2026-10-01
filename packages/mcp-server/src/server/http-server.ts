@@ -30,8 +30,6 @@ import { prepareDataDir } from './store/db/prepare.js'
 import type { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import type { createWorkspaceTail } from './store/workspace-tail.js'
 
-export type RuntimeStatus = RuntimeStatusResponse
-
 /**
  * The local daemon. It listens on ONE owner-only socket — a Unix socket, or a
  * named pipe on Windows — and on no TCP port (ADR-0050 decisions 2-4): the
@@ -75,7 +73,7 @@ export interface RunningServer {
   socketPath: string
   close: () => Promise<void>
   touch: () => void
-  getRuntimeStatus: () => RuntimeStatus
+  getRuntimeStatus: () => RuntimeStatusResponse
 }
 
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {

@@ -1,4 +1,4 @@
-import type { ColumnType } from 'kysely'
+import type { ColumnType, Kysely } from 'kysely'
 
 // Unix milliseconds.
 type Timestamp = ColumnType<number, number, number>
@@ -255,3 +255,6 @@ export interface DatabaseSchema {
   workspaceMembersOnly: WorkspaceMembersOnlyTable
   tenants: TenantsTable
 }
+
+/** The Kysely handle over {@link DatabaseSchema}. */
+export type Database = Kysely<DatabaseSchema>

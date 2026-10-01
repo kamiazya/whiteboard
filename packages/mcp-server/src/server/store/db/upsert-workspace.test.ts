@@ -1,6 +1,6 @@
 import { WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
-import type { Database } from './index.js'
+import type { Database } from './schema.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './upsert-workspace.js'
 
 /**

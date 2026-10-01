@@ -1,5 +1,5 @@
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
-import type { EditorPointerInputs } from './use-editor-pointer.js'
+import type { EditorPointerInputs } from './pointer-inputs.js'
 
 /**
  * How far a press on a comment may travel and still be a press: past it, the
