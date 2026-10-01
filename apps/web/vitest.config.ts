@@ -58,7 +58,7 @@ export default defineConfig({
       }
     },
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    // *.docs-snapshot.test.tsx files run only via `pnpm docs:snapshots`
+    // *.docs-snapshot.test.tsx files run only via `pnpm --filter @kamiazya/whiteboard-web docs:snapshots`
     // (vitest.docs-snapshots.config.ts) — they write PNGs into the repo
     // and need real browser mode, not jsdom.
     exclude: [

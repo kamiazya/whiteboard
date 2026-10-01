@@ -7,7 +7,7 @@ import { ARCHITECTURE_SCENE } from './_scenes.js'
 // Generates docs/assets/architecture.png by rendering the canonical
 // architecture.canvas JSON Canvas source. The .canvas file is the source of
 // truth — re-running this test re-renders it deterministically so a scene
-// edit plus `pnpm docs:snapshots` is enough to publish the updated diagram.
+// edit plus `pnpm --filter @kamiazya/whiteboard-web docs:snapshots` is enough to publish the updated diagram.
 
 afterEach(() => {
   cleanup()
