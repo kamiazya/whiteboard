@@ -70,7 +70,6 @@ function sortRows(rows: DocumentRow[]): DocumentRow[] {
   })
 }
 
-import { useDeleteDocuments } from '../hooks/use-delete-documents.js'
 import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-actions.js'
 /**
  * What the list shows: a failed load with the recovery that is actually
@@ -79,6 +78,7 @@ import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-a
  * about deciding WHICH, not about drawing them.
  */
 import { DaemonIndexBody } from './daemon-index-body.js'
+import { useDeleteDocuments } from './use-delete-documents.js'
 
 const WORKSPACE_GONE = 'This workspace is not on the daemon any more.'
 

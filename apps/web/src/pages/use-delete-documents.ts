@@ -18,7 +18,7 @@ import {
   type PendingDelete,
   partialDeleteMessage,
   reofferFailures,
-} from '../pages/pending-delete.js'
+} from './pending-delete.js'
 
 /** Which keeper's sentence the confirmation shows, and which fallback it reports. */
 export type DeleteKeeper = 'browser' | 'daemon'

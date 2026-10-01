@@ -6,7 +6,6 @@ import { ExtensionConnectEntry } from '../components/connection/ExtensionConnect
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
-import { useDeleteDocuments } from '../hooks/use-delete-documents.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import { browserKeeperCapacity, type KeeperCapacity } from '../lib/browser-keeper-capacity.js'
 import {
@@ -32,6 +31,7 @@ import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import type { PendingDelete } from './pending-delete.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
+import { useDeleteDocuments } from './use-delete-documents.js'
 
 export interface BrowserIndexPageProps {
   /** Defaults to the shared production index; injected by tests. */
