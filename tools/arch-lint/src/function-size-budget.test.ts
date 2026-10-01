@@ -725,7 +725,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV13Fixture': 79,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV18Fixture': 61,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV19Fixture': 93,
-  'apps/web/src/lib/promote-workspace.browser.test.tsx#daemonStub': 52,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 72,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
