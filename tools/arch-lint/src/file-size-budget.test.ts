@@ -296,7 +296,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // that `reconcileSpatialCanvas` and the resync each spelled out became five
   // named helpers, each carrying the measured reason its behaviour has (op
   // order is part of the bytes; a delete only when present spares the log).
-  'packages/loro-adapter/src/loro-bridge.ts': 1141,
+  // 1141 -> 1152: the node delete cascades to anchored ink too, through the
+  // model's one definition of the sweep, and says why it did not before.
+  'packages/loro-adapter/src/loro-bridge.ts': 1152,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
@@ -795,7 +797,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/widget-entry.test.tsx': 1266,
   // 1308 -> 1324: an unchanged canvas reconciling to no ops, which the
   // "writes only what changed" test above it could not see.
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1324,
+  // 1324 -> 1354: the delete cascade pinned over ink — anchored ink goes,
+  // free ink stays, the line's lock goes with it.
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1354,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

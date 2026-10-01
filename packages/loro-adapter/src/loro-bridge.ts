@@ -1,5 +1,6 @@
 import {
   type AnnotationAnchor,
+  anchoredOnAny,
   type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
@@ -8,7 +9,6 @@ import {
   type DocumentKind,
   documentKindSchema,
   type ExtensionFacets,
-  endNode,
   extensionFacetsSchema,
   nodeKind,
   nodeText,
@@ -406,25 +406,39 @@ function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
   doc.getMap(EDGES_KEY).set(edge.id, edgeToFields(edge))
 }
 
-/** Returns false (writing nothing) when the node id is absent. */
+/**
+ * Returns false (writing nothing) when the node id is absent.
+ *
+ * The sweep is the model's `anchoredOnAny` — the same definition the
+ * editor's command, the proposal adopt and the agent's `node.remove` apply —
+ * over BOTH collections an end can name a node from. It followed edges
+ * alone for a while, so a box deleted in the editor left its ink anchored to
+ * nothing in the persisted document while the canvas on screen showed the
+ * ink gone, and the next agent read of the document was refused. Lines
+ * share the edge lock plane (see `writeSpatialCanvas`), so a cascaded line's
+ * lock goes the way a cascaded edge's does.
+ */
 function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean {
   const nodesMap = doc.getMap(NODES_KEY)
-  const edgesMap = doc.getMap(EDGES_KEY)
   if (!nodesMap.keys().includes(nodeId)) return false
 
   nodesMap.delete(nodeId)
   dropLockInto(doc, NODE_LOCKS_KEY, nodeId)
+  const ids = new Set([nodeId])
+  const edgesMap = doc.getMap(EDGES_KEY)
   for (const edgeId of edgesMap.keys()) {
-    const raw = liftLegacyExtension(edgesMap.get(edgeId))
-    const parsed = canvasEdgeSchema.safeParse(raw)
-    // A cascade follows NODE ends only: an edge with a free end names nothing
-    // that can be deleted, so deleting a node never takes it with it.
-    const touches =
-      parsed.success && (endNode(parsed.data.from) === nodeId || endNode(parsed.data.to) === nodeId)
-    if (touches) {
+    const parsed = canvasEdgeSchema.safeParse(liftLegacyExtension(edgesMap.get(edgeId)))
+    if (parsed.success && anchoredOnAny(parsed.data, ids)) {
       edgesMap.delete(edgeId)
-      // The cascaded edges are removals too, so their own locks go with them.
       dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)
+    }
+  }
+  const linesMap = doc.getMap(LINES_KEY)
+  for (const lineId of linesMap.keys()) {
+    const parsed = canvasLineSchema.safeParse(linesMap.get(lineId))
+    if (parsed.success && anchoredOnAny(parsed.data, ids)) {
+      linesMap.delete(lineId)
+      dropLockInto(doc, EDGE_LOCKS_KEY, lineId)
     }
   }
   return true
