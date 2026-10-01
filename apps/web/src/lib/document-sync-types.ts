@@ -1,6 +1,5 @@
 import type {
   AgentActivityPayload,
-  HeadChangedPayload,
   VersionCreatedPayload,
   ViewportRequestPayload,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
@@ -41,7 +40,6 @@ export const DOCUMENT_SYNC_VERSION_SAVED_EVENT = 'whiteboard:wb_version_saved'
 // as before this seam was added.
 export interface UseDocumentSyncOptions {
   onVersionCreated?: (payload: VersionCreatedPayload) => void
-  onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
   // Daemon-driven viewport control (e.g. an MCP tool call asking the
   // connected browser to fit/move its view). The page holds a
   // SpatialEditorHandle ref and maps this payload onto it — see

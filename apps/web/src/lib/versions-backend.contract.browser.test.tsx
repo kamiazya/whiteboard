@@ -78,7 +78,6 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
       onRestoreStarted: () => {},
       onRestoreComplete: () => {},
       onVersionCreated: () => {},
-      onHeadChanged: () => {},
       onViewportRequest: () => {},
     })
     await new Promise((r) => setTimeout(r, 50))

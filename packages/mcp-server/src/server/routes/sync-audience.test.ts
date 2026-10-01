@@ -12,7 +12,6 @@
 import { versionEntrySchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   agentActivityMessageSchema,
-  headChangedMessageSchema,
   serverTextMessageSchema,
   viewportRequestParamsSchema,
 } from '@kamiazya/whiteboard-daemon-client/ws-messages'
@@ -35,13 +34,8 @@ vi.mock('./sync-sse.js', () => ({
   sseSubscribedWorkspaceIds: () => [],
 }))
 
-const {
-  sendAgentActivity,
-  sendHeadChanged,
-  sendRestoreEvent,
-  sendVersionCreated,
-  sendViewportRequest,
-} = await import('./sync-audience.js')
+const { sendAgentActivity, sendRestoreEvent, sendVersionCreated, sendViewportRequest } =
+  await import('./sync-audience.js')
 
 const WORKSPACE = 'session1'
 const CANVAS = 'emitter-property-canvas'
@@ -49,13 +43,11 @@ const CANVAS = 'emitter-property-canvas'
 const versionArb = arbitraryForSchema(versionEntrySchema)
 const activityArb = arbitraryForSchema(agentActivityMessageSchema.omit({ type: true }))
 const viewportArb = arbitraryForSchema(viewportRequestParamsSchema)
-const headArb = arbitraryForSchema(headChangedMessageSchema.shape.head)
 
 type Emission =
   | { readonly kind: 'version_created'; readonly version: fc.TypeOf<typeof versionArb> }
   | { readonly kind: 'restore'; readonly phase: 'started' | 'complete'; readonly label?: string }
   | { readonly kind: 'agent_activity'; readonly payload: fc.TypeOf<typeof activityArb> }
-  | { readonly kind: 'head_changed'; readonly head: string }
   | {
       readonly kind: 'viewport_request'
       readonly requestId: string
@@ -71,7 +63,6 @@ const emissionArb: fc.Arbitrary<Emission> = fc.oneof(
         ({ kind: 'restore', phase, ...(label === undefined ? {} : { label }) }) as const,
     ),
   activityArb.map((payload) => ({ kind: 'agent_activity', payload }) as const),
-  headArb.map((head) => ({ kind: 'head_changed', head }) as const),
   fc
     .tuple(fc.string({ minLength: 1 }), viewportArb)
     .map(([requestId, params]) => ({ kind: 'viewport_request', requestId, params }) as const),
@@ -91,8 +82,6 @@ function expectedFrame(emission: Emission): unknown {
         : { type: 'restore_complete' }
     case 'agent_activity':
       return { type: 'agent_activity', ...emission.payload }
-    case 'head_changed':
-      return { type: 'head_changed', head: emission.head }
     case 'viewport_request':
       return { type: 'viewport_request', requestId: emission.requestId, ...emission.params }
   }
@@ -109,9 +98,6 @@ function emit(emission: Emission): void {
     case 'agent_activity':
       sendAgentActivity(WORKSPACE, CANVAS, emission.payload)
       break
-    case 'head_changed':
-      sendHeadChanged(WORKSPACE, CANVAS, emission.head)
-      break
     case 'viewport_request':
       sendViewportRequest(WORKSPACE, CANVAS, emission.requestId, emission.params)
       break
@@ -123,13 +109,9 @@ const kinds = new Map<string, number>()
 
 describe('every text event the daemon emits is one the browser reads', () => {
   afterAll(() => {
-    const unreached = [
-      'version_created',
-      'restore',
-      'agent_activity',
-      'head_changed',
-      'viewport_request',
-    ].filter((kind) => (kinds.get(kind) ?? 0) === 0)
+    const unreached = ['version_created', 'restore', 'agent_activity', 'viewport_request'].filter(
+      (kind) => (kinds.get(kind) ?? 0) === 0,
+    )
     expect(unreached, `emitters the run never drove: ${JSON.stringify([...kinds])}`).toEqual([])
   })
 

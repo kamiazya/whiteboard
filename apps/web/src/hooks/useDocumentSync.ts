@@ -189,7 +189,7 @@ function isEditingText(target: EventTarget | null): boolean {
  * DocumentBackend prop is the whole contract.
  *
  * `options` wires the daemon-only capability receptors (onVersionCreated,
- * onHeadChanged) plus the restore-overlay state and
+ * onAgentActivity) plus the restore-overlay state and
  * onViewportRequest/onAuthError handling that a daemon
  * backend can drive. A browser backend never fires any of these
  * events, so passing no `options` behaves exactly as before this seam was

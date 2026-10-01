@@ -71,7 +71,7 @@ ends passes (measured: dropping a union arm and turning `scrollX` into an
 integer both stayed green). The drift guard is mcp-server's
 `routes/sync-audience.test.ts`: it drives the daemon's hand-written
 emitters (`sendVersionCreated`, `sendRestoreEvent`, `sendAgentActivity`,
-`sendHeadChanged`, `sendViewportRequest`) with what their parameters
+`sendViewportRequest`) with what their parameters
 admit, reads the frame each hands the SSE broadcaster, and requires it to
 parse under this package's schema AND equal, raw, the message composed
 from the arguments — the second because the parser strips a key it does

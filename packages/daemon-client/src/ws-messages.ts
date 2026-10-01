@@ -15,11 +15,6 @@ export const versionCreatedMessageSchema = z.object({
   version: versionCreatedPayloadSchema,
 })
 
-export const headChangedMessageSchema = z.object({
-  type: z.literal('head_changed'),
-  head: z.string().min(1),
-})
-
 export const restoreStartedMessageSchema = z.object({
   type: z.literal('restore_started'),
   label: z.string().optional(),
@@ -70,7 +65,6 @@ export {
 
 export const serverTextMessageSchema = z.discriminatedUnion('type', [
   versionCreatedMessageSchema,
-  headChangedMessageSchema,
   restoreStartedMessageSchema,
   restoreCompleteMessageSchema,
   viewportRequestMessageSchema,
@@ -79,7 +73,6 @@ export const serverTextMessageSchema = z.discriminatedUnion('type', [
 
 export type VersionCreatedPayload = z.infer<typeof versionCreatedPayloadSchema>
 export type VersionCreatedMessage = z.infer<typeof versionCreatedMessageSchema>
-export type HeadChangedMessage = z.infer<typeof headChangedMessageSchema>
 export type RestoreStartedMessage = z.infer<typeof restoreStartedMessageSchema>
 export type RestoreCompleteMessage = z.infer<typeof restoreCompleteMessageSchema>
 export type ViewportRequestMessage = z.infer<typeof viewportRequestMessageSchema>
@@ -97,26 +90,11 @@ export const viewportResponseMessageSchema = z.object({
   requestId: z.string(),
 })
 
-// W3C `traceparent` carrier sent ahead of a binary Loro update so the
-// server can parent its `ws.message.binary` span on the client's active
-// span. Validated as `00-<32hex>-<16hex>-<2hex>` to match the W3C
-// trace-context spec; invalid values are dropped silently with a warning.
-export const wsTraceMessageSchema = z.object({
-  type: z.literal('ws_trace'),
-  traceparent: z.string().regex(/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
-  // Optional W3C tracestate string. Pass-through for vendor-specific
-  // sampling decisions; the server forwards it to the propagator without
-  // interpretation.
-  tracestate: z.string().optional(),
-})
-
 export const clientTextMessageSchema = z.discriminatedUnion('type', [
   clientReadyMessageSchema,
   viewportResponseMessageSchema,
-  wsTraceMessageSchema,
 ])
 
 export type ClientReadyMessage = z.infer<typeof clientReadyMessageSchema>
 export type ViewportResponseMessage = z.infer<typeof viewportResponseMessageSchema>
-export type WsTraceMessage = z.infer<typeof wsTraceMessageSchema>
 export type ClientTextMessage = z.infer<typeof clientTextMessageSchema>

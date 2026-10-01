@@ -1224,15 +1224,6 @@ export function createDocumentSyncSession(
         clearUndo()
       },
 
-      onHeadChanged(payload) {
-        if (isStale()) return
-        try {
-          deps.getOptions().onHeadChanged?.(payload)
-        } catch (err) {
-          log.error('onHeadChanged callback threw', err)
-        }
-      },
-
       onViewportRequest(payload) {
         if (isStale()) return
         try {

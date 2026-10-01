@@ -16,7 +16,7 @@ import { createApp } from '../app.js'
 import {
   getClientCount,
   getReadyClientCount,
-  sendHeadChanged,
+  sendRestoreEvent,
   sendViewportRequest,
   setResolveViewportFn,
 } from './sync-audience.js'
@@ -312,10 +312,10 @@ describe('SSE sync transport', () => {
       body: JSON.stringify({ streamId, subscribe: ['ws-1/a', 'ws-1/b'] }),
     })
 
-    sendHeadChanged('ws-1', 'b', 'head-xyz')
+    sendRestoreEvent('ws-1', 'b', 'started', 'head-xyz')
 
     const frames = await readEvents(res, 1)
-    const frame = frames.find((f) => f.includes('head_changed'))
+    const frame = frames.find((f) => f.includes('restore_started'))
     expect(frame).toBeDefined()
     const data = JSON.parse(
       frame
@@ -324,7 +324,7 @@ describe('SSE sync transport', () => {
         ?.slice(5) ?? '{}',
     )
     expect(data.doc).toBe('ws-1/b')
-    expect(JSON.parse(data.raw).head).toBe('head-xyz')
+    expect(JSON.parse(data.raw).label).toBe('head-xyz')
   })
 
   // ADR-0019: an address carries a HANDLE — a segment or the id — and the
@@ -352,13 +352,13 @@ describe('SSE sync transport', () => {
     })
 
     sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([7]))
-    sendHeadChanged(workspaceId, 'a', 'head-seg')
+    sendRestoreEvent(workspaceId, 'a', 'started', 'head-seg')
 
     const frames = await readEvents(res, 2)
     expect(frames.find((f) => f.includes('event: update'))).toContain(
       `"doc":"workspace:${segment}"`,
     )
-    expect(frames.find((f) => f.includes('head_changed'))).toContain(`"doc":"${segment}/a"`)
+    expect(frames.find((f) => f.includes('restore_started'))).toContain(`"doc":"${segment}/a"`)
   })
 
   // Two tabs on one stream may address one workspace by its segment and by

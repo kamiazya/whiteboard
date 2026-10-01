@@ -149,7 +149,6 @@ export class SseBackend implements DocumentBackend {
     if (message.type === 'version_created') handlers.onVersionCreated(message.version)
     else if (message.type === 'restore_started') handlers.onRestoreStarted(message)
     else if (message.type === 'restore_complete') handlers.onRestoreComplete()
-    else if (message.type === 'head_changed') handlers.onHeadChanged(message)
     else if (message.type === 'viewport_request') handlers.onViewportRequest(message)
     else if (message.type === 'agent_activity') handlers.onAgentActivity?.(message)
   }

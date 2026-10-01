@@ -152,11 +152,11 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
 }
 
 /**
- * Fan a server text message (version_created, head_changed, …) out to SSE
- * subscribers, wrapped with the document it belongs to. One stream serves
- * many documents, so an unaddressed frame would be applied to whichever
- * canvas happened to be listening — a head_changed for one canvas landing on
- * another.
+ * Fan a server text message (version_created, restore_started, …) out to
+ * SSE subscribers, wrapped with the document it belongs to. One stream
+ * serves many documents, so an unaddressed frame would be applied to
+ * whichever canvas happened to be listening — a restore for one canvas
+ * landing on another.
  */
 export function sseBroadcastText(workspaceId: string, path: string, raw: string): void {
   sendText(docKey(workspaceId, path), raw, () => true)
@@ -415,13 +415,7 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
     markReady(stream, doc)
     return c.json({ ok: true })
   }
-  if (message.type === 'viewport_response') {
-    resolveViewportRequest(message.requestId)
-    return c.json({ ok: true })
-  }
-  // `ws_trace` carries a trace context that only the WebSocket's binary-frame
-  // pairing can consume. Accepted and ignored, so a client need not
-  // special-case it.
+  resolveViewportRequest(message.requestId)
   return c.json({ ok: true })
 }
 

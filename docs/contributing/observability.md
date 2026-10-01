@@ -56,21 +56,6 @@ Outbound calls from the MCP daemon-client (`client.request(...)` inside
 each tool) inject `traceparent` automatically, so an `mcp.tool.call` span
 parents the HTTP request span on the daemon side.
 
-## WS instrumentation
-
-Each binary Loro update opens an `ws.message.binary` span on the server
-with `whiteboard.workspace_id` / `whiteboard.path` / `whiteboard.update_bytes`
-attributes.
-
-If a client sends a `ws_trace` text frame (shape:
-`{type: 'ws_trace', traceparent, tracestate?}`) immediately before a
-binary update, the server adopts that traceparent as the parent of the
-next `ws.message.binary` span — letting an edit stitch end-to-end. No
-first-party client currently sends one (the bundled web app ships no
-OTel SDK), so today every span runs parentless and still gives a
-per-update timeline; the frame stays in the protocol for external
-clients that do trace.
-
 ## Browser side
 
 The web app ships `@opentelemetry/api`'s no-op propagation surface only:

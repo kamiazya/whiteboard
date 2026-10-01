@@ -95,10 +95,6 @@ export function sendAgentActivity(
   broadcastTextMessage(workspaceId, path, { type: 'agent_activity', ...payload })
 }
 
-export function sendHeadChanged(workspaceId: string, path: string, head: string): void {
-  broadcastTextMessage(workspaceId, path, { type: 'head_changed', head })
-}
-
 let resolveViewportFn: ((requestId: string) => void) | null = null
 export function setResolveViewportFn(fn: (requestId: string) => void): void {
   resolveViewportFn = fn

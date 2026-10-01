@@ -167,11 +167,11 @@ export function sseStreamSourceContract(
     const other = nextDoc()
     const { messages } = await subscribed(h, doc)
 
-    h.pushText(other, '{"type":"head_changed","head":"nope"}')
+    h.pushText(other, '{"type":"restore_started","label":"nope"}')
     await settle()
     expect(messages).toEqual([])
 
-    h.pushText(doc, '{"type":"head_changed","head":"yes"}')
+    h.pushText(doc, '{"type":"restore_started","label":"yes"}')
     await until(() => messages.length === 1)
     expect(messages[0]).toContain('yes')
     h.cleanup()

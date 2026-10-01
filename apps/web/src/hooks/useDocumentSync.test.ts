@@ -478,19 +478,6 @@ describe('useDocumentSync', () => {
       expect(onVersionCreated).not.toHaveBeenCalled()
     })
 
-    it('passes onHeadChanged payload through to options.onHeadChanged', () => {
-      const backend = makeFakeBackend()
-      const onHeadChanged = vi.fn()
-      renderHook(() => useDocumentSync(backend, { onHeadChanged }))
-
-      const payload = { head: 'branch-1' }
-      act(() => {
-        backend._ctrl.handlers!.onHeadChanged(payload as never)
-      })
-
-      expect(onHeadChanged).toHaveBeenCalledWith(payload)
-    })
-
     it('sets restoreInProgress/restoreLabel on onRestoreStarted and clears them on onRestoreComplete', () => {
       const backend = makeFakeBackend()
       const { result } = renderHook(() => useDocumentSync(backend))
