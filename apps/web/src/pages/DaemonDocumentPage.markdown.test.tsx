@@ -5,10 +5,6 @@
  * as an empty spatial canvas — and drawing on it corrupted the document.
  */
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   writeCoreFacets,
   writeDocumentKind,
@@ -18,7 +14,7 @@ import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/replica-refresh.js', async () =>
   (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
@@ -57,19 +53,6 @@ function markdownSnapshot(): Uint8Array {
   writeCoreFacets(doc, { type: 'markdown' })
   writeDocumentKind(doc, 'markdown')
   return doc.export({ mode: 'snapshot' })
-}
-
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  constructor(private readonly snapshot: () => Uint8Array = markdownSnapshot) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(this.snapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
@@ -116,7 +99,7 @@ describe('DaemonDocumentPage markdown documents', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -135,7 +118,7 @@ describe('DaemonDocumentPage markdown documents', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -155,7 +138,7 @@ describe('DaemonDocumentPage markdown documents', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -178,7 +161,7 @@ describe('DaemonDocumentPage markdown documents', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -197,7 +180,7 @@ describe('DaemonDocumentPage markdown documents', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="board"
-          createBackend={() => new FakeBackend(spatialSnapshot)}
+          createBackend={() => new FakeDocumentBackend(spatialSnapshot)}
         />,
         { container: document.body },
       )
@@ -214,7 +197,7 @@ describe('DaemonDocumentPage markdown documents', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )

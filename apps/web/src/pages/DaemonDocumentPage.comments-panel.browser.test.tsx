@@ -11,10 +11,6 @@
  * the canvas.
  */
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, screen, waitFor } from '@testing-library/react'
@@ -22,7 +18,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
-import { renderPage } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: (_props: { canvas: SpatialCanvas }) => (
@@ -63,18 +59,6 @@ function seededSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(seededSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 afterEach(() => {
@@ -93,7 +77,7 @@ it('opens the rail from the document actions row, without the opener overlaying 
       daemonBaseUrl={DAEMON_BASE_URL}
       workspaceId="w1"
       path="board"
-      createBackend={() => new FakeBackend()}
+      createBackend={() => new FakeDocumentBackend(seededSnapshot)}
     />,
   )
 

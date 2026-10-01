@@ -1,12 +1,7 @@
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, cleanup, waitFor } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 vi.mock('../lib/replica-refresh.js', async () =>
@@ -24,32 +19,14 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-/**
- * Captures the handler bundle the page installs, so a test can push a
- * server message in as the daemon would. This is the join the unit tests
- * cannot reach: `useAgentActivity` is proven on its own, and this proves the
- * page actually subscribed it to `onAgentActivity`.
- */
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  constructor(
-    public workspaceId: string,
-    public path: string,
-  ) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
+// The page's backend is captured so a test can push a server message in
+// through the handlers it installed, as the daemon would. This is the join the
+// unit tests cannot reach: `useAgentActivity` is proven on its own, and this
+// proves the page actually subscribed it to `onAgentActivity`.
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonDocumentPage agent-activity wiring', () => {
-  let backend: FakeBackend | null = null
+  let backend: FakeDocumentBackend | null = null
 
   beforeEach(() => {
     backend = null
@@ -71,8 +48,8 @@ describe('DaemonDocumentPage agent-activity wiring', () => {
       renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
-          createBackend={(workspaceId, path) => {
-            backend = new FakeBackend(workspaceId, path)
+          createBackend={() => {
+            backend = new FakeDocumentBackend()
             return backend
           }}
         />,

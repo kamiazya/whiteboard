@@ -1,29 +1,14 @@
-/**
- * Copy as JSON Canvas, on the DOCUMENT page of a daemon-kept board.
- *
- * The last row of `issues/daemon-document-page-offers-no-document-actions`,
- * and the one whose absence was recorded as DELIBERATE on a reason that
- * turned out to be false — that the daemon keeper would have to decode a
- * snapshot for this row alone. It holds `canvasValue`, a decoded
- * SpatialCanvas, at the very place it builds its slots.
- *
- * Both directions are here, because a row that is always present and a row
- * that is never present both pass a one-sided test: a board offers it, a note
- * does not. The note case is the one with teeth — `canvasValue` falls back to
- * an empty document on a markdown note, so an ungated row would hand back a
- * well-formed JSON Canvas file whose content is not the note's.
- */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import {
+  FakeDocumentBackend,
+  openDocumentOpsMenu,
+  renderInRouter,
+} from '../test-utils/daemon-page-harness.js'
 
 const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
@@ -69,17 +54,6 @@ function noteSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  constructor(private readonly snapshot: () => Uint8Array) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    handlers.onSnapshot(this.snapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 const writeText = vi.fn(async (_text: string) => {})
 
 async function mountPage(path: string, snapshot: () => Uint8Array): Promise<void> {
@@ -89,7 +63,7 @@ async function mountPage(path: string, snapshot: () => Uint8Array): Promise<void
         daemonBaseUrl="http://127.0.0.1:3099"
         workspaceId="w1"
         path={path}
-        createBackend={() => new FakeBackend(snapshot)}
+        createBackend={() => new FakeDocumentBackend(snapshot)}
       />,
     )
   })

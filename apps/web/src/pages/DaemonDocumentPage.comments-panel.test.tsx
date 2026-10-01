@@ -10,10 +10,6 @@
  */
 
 import { EditorView } from '@codemirror/view'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   readCommentThreads,
   writeCommentThread,
@@ -28,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
-import { renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
   (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
@@ -132,23 +128,9 @@ function markdownSnapshotWithThread(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  readonly pushLocalUpdateCalls: Uint8Array[] = []
-  constructor(private readonly snapshot: () => Uint8Array) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(this.snapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(bytes: Uint8Array): void {
-    this.pushLocalUpdateCalls.push(bytes)
-  }
-  sendClientReady(): void {}
-}
-
-async function renderSpatial(backend: FakeBackend = new FakeBackend(seededSpatialSnapshot)) {
+async function renderSpatial(
+  backend: FakeDocumentBackend = new FakeDocumentBackend(seededSpatialSnapshot),
+) {
   await act(async () => {
     renderInRouter(
       <DaemonDocumentPage
@@ -254,7 +236,7 @@ describe('DaemonDocumentPage comments panel', () => {
     // creations under the same key to ONE of them — silently discarding the
     // reply this test exists to observe.
     const seed = seededSpatialSnapshot()
-    const backend = await renderSpatial(new FakeBackend(() => seed))
+    const backend = await renderSpatial(new FakeDocumentBackend(() => seed))
     fireEvent.click(await screen.findByRole('button', { name: /comments/i }))
     fireEvent.click(panel().getByText('still needs a decision'))
 
@@ -269,11 +251,11 @@ describe('DaemonDocumentPage comments panel', () => {
     await waitFor(() => expect(repliesText()).toContain(squashed('decided: ship it')))
 
     // The write travelled the session's own path — replaying every update
-    // the FakeBackend recorded onto a copy of the seed reproduces the same
+    // the FakeDocumentBackend recorded onto a copy of the seed reproduces the same
     // reply, under an id distinct from every seeded message.
     const replay = new LoroDoc()
     replay.import(seed)
-    for (const bytes of backend.pushLocalUpdateCalls) replay.import(bytes)
+    for (const bytes of backend.pushed) replay.import(bytes)
     const thread = readCommentThreads(replay).find((t) => t.id === 't-open')
     const reply = thread?.messages.find((m) => m.body === 'decided: ship it')
     expect(reply?.id).toBeDefined()
@@ -290,7 +272,7 @@ describe('DaemonDocumentPage comments panel', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="note"
-          createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshotWithThread)}
         />,
         { container: document.body },
       )
@@ -327,7 +309,7 @@ describe('DaemonDocumentPage comments panel', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             workspaceId="w1"
             path="board"
-            createBackend={() => new FakeBackend(seededSpatialSnapshot)}
+            createBackend={() => new FakeDocumentBackend(seededSpatialSnapshot)}
           />
         </VersionsBackendContext.Provider>,
         { container: document.body },
@@ -406,7 +388,7 @@ describe('DaemonDocumentPage comments panel', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             workspaceId="w1"
             path="note"
-            createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
+            createBackend={() => new FakeDocumentBackend(markdownSnapshotWithThread)}
           />
         </VersionsBackendContext.Provider>,
         { container: document.body },
@@ -473,7 +455,7 @@ describe('DaemonDocumentPage comments opener with zero open threads', () => {
   })
 
   it("reads plain 'Comments' and carries no count badge", async () => {
-    await renderSpatial(new FakeBackend(allResolvedSnapshot))
+    await renderSpatial(new FakeDocumentBackend(allResolvedSnapshot))
     const opener = await screen.findByRole('button', { name: 'Comments' })
     // The badge is the only digit the opener ever renders; zero open = none.
     expect(opener.textContent ?? '').not.toMatch(/\d/)

@@ -5,10 +5,6 @@
 // double (never a daemon-api-client mock), so the real DaemonApiError seam
 // is what the classifier reads.
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, screen } from '@testing-library/react'
@@ -17,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { jsonResponse } from '../test-utils/json-response.js'
 import '../index.css'
-import { renderPage } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/replica-refresh.js', async () =>
   (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
@@ -36,18 +32,6 @@ function seededSnapshot(): Uint8Array {
     edges: [],
   })
   return doc.export({ mode: 'snapshot' })
-}
-
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(seededSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 function pathOf(input: Request | string | URL): string {
@@ -107,7 +91,7 @@ describe('the daemon page answers a requires_person_session refusal', () => {
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId={WORKSPACE_ID}
         path="board"
-        createBackend={() => new FakeBackend()}
+        createBackend={() => new FakeDocumentBackend(seededSnapshot)}
       />,
     )
 
@@ -128,7 +112,7 @@ describe('the daemon page answers a not_a_member refusal', () => {
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId={WORKSPACE_ID}
         path="board"
-        createBackend={() => new FakeBackend()}
+        createBackend={() => new FakeDocumentBackend(seededSnapshot)}
       />,
     )
 

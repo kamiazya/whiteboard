@@ -16,10 +16,6 @@
  * `onOpenFileRef` is how following a file-node reference switches document.
  */
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
@@ -27,7 +23,7 @@ import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 const render = (ui: ReactElement, search = '') =>
   renderInRouter(ui, { route: `/${search}`, container: document.body })
@@ -67,16 +63,6 @@ function spatialSnapshot(): Uint8Array {
   const doc = new LoroDoc()
   writeDocumentKind(doc, 'spatial')
   return doc.export({ mode: 'snapshot' })
-}
-
-class FakeBackend implements DocumentBackend {
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    handlers.onSnapshot(spatialSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
@@ -139,7 +125,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="doc-a"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(spatialSnapshot)}
         />,
       )
     })
@@ -180,7 +166,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="doc-a"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(spatialSnapshot)}
         />,
       )
     })

@@ -5,10 +5,6 @@
 // threads the card is built from, and the chrome the page stacks over the
 // canvas.
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   writeCommentThread,
   writeDocumentKind,
@@ -20,7 +16,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
-import { renderPage } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const { daemonApiClientMock, daemonWithOneDocument } = await import(
@@ -55,18 +51,6 @@ function seededSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(seededSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -96,7 +80,7 @@ it('a press on a bubble opens the card, Close shuts it, and a reply joins the co
       daemonBaseUrl="http://127.0.0.1:3099"
       workspaceId="w1"
       path="board"
-      createBackend={() => new FakeBackend()}
+      createBackend={() => new FakeDocumentBackend(seededSnapshot)}
     />,
   )
   const root = (await screen.findByTestId('spatial-editor', undefined, {

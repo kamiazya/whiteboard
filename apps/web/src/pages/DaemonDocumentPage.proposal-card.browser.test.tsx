@@ -13,10 +13,6 @@
 // the proposal to the canvas and what carries the decision back into the
 // document, and neither is visible from a component mount.
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   writeDocumentKind,
   writeProposal,
@@ -28,7 +24,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
-import { renderPage } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const { daemonApiClientMock, daemonWithOneDocument } = await import(
@@ -71,18 +67,6 @@ function seededSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(seededSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -121,7 +105,7 @@ it('an agent’s proposal is drawn in place, and Adopt moves the node and closes
       daemonBaseUrl="http://127.0.0.1:3099"
       workspaceId="w1"
       path="board"
-      createBackend={() => new FakeBackend()}
+      createBackend={() => new FakeDocumentBackend(seededSnapshot)}
     />,
   )
   const root = (await screen.findByTestId('spatial-editor', undefined, {
@@ -163,7 +147,7 @@ it('the Proposals opener counts what is waiting, and a row opens the card in pla
       daemonBaseUrl="http://127.0.0.1:3099"
       workspaceId="w1"
       path="board"
-      createBackend={() => new FakeBackend()}
+      createBackend={() => new FakeDocumentBackend(seededSnapshot)}
     />,
   )
   await screen.findByTestId('spatial-editor', undefined, { timeout: 15_000 })

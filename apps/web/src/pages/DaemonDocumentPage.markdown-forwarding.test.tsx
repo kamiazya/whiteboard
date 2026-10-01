@@ -9,10 +9,6 @@
  * `lib/markdown-write-path.instrument.test.ts`.
  */
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   MARKDOWN_BODY_KEY,
   MARKDOWN_BODY_NODE_ID,
@@ -26,7 +22,7 @@ import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
   (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
@@ -112,25 +108,6 @@ function preUnificationSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  readonly pushed: Uint8Array[] = []
-  // The exact bytes the page hydrated from: the replay assertion must
-  // import updates into the SAME doc lineage, not a structurally-equal
-  // rebuild with different Loro op ids.
-  snapshot: Uint8Array = new Uint8Array()
-  constructor(private readonly seed: () => Uint8Array = markdownSnapshot) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    this.snapshot = this.seed()
-    handlers.onSnapshot(this.snapshot)
-  }
-  disconnect(): void {}
-  pushLocalUpdate(update: Uint8Array): void {
-    this.pushed.push(update)
-  }
-  sendClientReady(): void {}
-}
-
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonDocumentPage markdown sync forwarding', () => {
@@ -147,7 +124,7 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
 
   it('a body edit pushes the update to the backend on the hydrated doc lineage', async () => {
     mounted.views.length = 0
-    const backend = new FakeBackend()
+    const backend = new FakeDocumentBackend(markdownSnapshot)
     renderInRouter(
       <DaemonDocumentPage
         daemonBaseUrl={DAEMON_BASE_URL}
@@ -191,7 +168,7 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
     // a conversion the prose left the editor and the first keystroke wrote a
     // one-character container that hid it (the container wins on read).
     mounted.views.length = 0
-    const backend = new FakeBackend(preUnificationSnapshot)
+    const backend = new FakeDocumentBackend(preUnificationSnapshot)
     renderInRouter(
       <DaemonDocumentPage
         daemonBaseUrl={DAEMON_BASE_URL}

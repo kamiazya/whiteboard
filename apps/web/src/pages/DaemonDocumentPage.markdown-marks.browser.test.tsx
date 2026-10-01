@@ -18,10 +18,6 @@
  */
 
 import { EditorView } from '@codemirror/view'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   writeCommentThread,
   writeCoreFacets,
@@ -33,7 +29,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
-import { renderPage } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const { daemonApiClientMock, daemonWithOneDocument } = await import(
@@ -70,19 +66,6 @@ function noteSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  pushes = 0
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    handlers.onSnapshot(noteSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {
-    this.pushes++
-  }
-  sendClientReady(): void {}
-}
-
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -93,7 +76,7 @@ it('keeps a passage attached through one burst that also edits inside it', async
     'fetch',
     vi.fn(async () => new Response('{}', { status: 404 })),
   )
-  const backend = new FakeBackend()
+  const backend = new FakeDocumentBackend(noteSnapshot)
   renderPage(
     <DaemonDocumentPage
       daemonBaseUrl="http://127.0.0.1:3099"
@@ -126,8 +109,10 @@ it('keeps a passage attached through one burst that also edits inside it', async
   view.dispatch({ changes: { from: after, insert: '!' } })
   // The burst's commit is what pushes; waiting for the push is waiting for
   // the burst to be in the document the rail reads.
-  const pushedBefore = backend.pushes
-  await waitFor(() => expect(backend.pushes).toBeGreaterThan(pushedBefore), { timeout: 5_000 })
+  const pushedBefore = backend.pushed.length
+  await waitFor(() => expect(backend.pushed.length).toBeGreaterThan(pushedBefore), {
+    timeout: 5_000,
+  })
 
   await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
   await waitFor(() => expect(screen.getByText('is Friday realistic?')).toBeInTheDocument(), {

@@ -1,12 +1,8 @@
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { getShellConnection } from '../lib/shell-status-store.js'
-import { renderWithRouterWrapper } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderWithRouterWrapper } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 vi.mock('../lib/replica-refresh.js', async () =>
@@ -31,28 +27,14 @@ const mockGetDocumentBacklinks = vi.mocked(daemonApiClient.getDocumentBacklinks)
 // exactly-once disconnect and ordering (old disconnects before new connects).
 const createdBackends: FakeBackend[] = []
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  connectCount = 0
-  disconnectCount = 0
+class FakeBackend extends FakeDocumentBackend {
   constructor(
     public workspaceId: string,
     public path: string,
   ) {
+    super()
     createdBackends.push(this)
   }
-  connect(handlers: DocumentBackendHandlers): void {
-    this.connectCount += 1
-    this.handlers = handlers
-    handlers.onConnected()
-    const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-    handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-  }
-  disconnect(): void {
-    this.disconnectCount += 1
-  }
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 function makeCreateBackend() {

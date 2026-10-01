@@ -1,16 +1,7 @@
-/**
- * The document-page contract against the DAEMON keeper: the daemon's list
- * routes mocked, the sync backend faked and recorded, so "opened another
- * document" is a new backend built for that path.
- */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { MemoryRouterWrapper } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, MemoryRouterWrapper } from '../test-utils/daemon-page-harness.js'
 import {
   type ContractDocument,
   type DocumentPageFixture,
@@ -48,21 +39,14 @@ const mockDeleteDocument = vi.mocked(daemonApiClient.deleteDocument)
 // a backend for its path, so the most recent one says what is open.
 const createdBackends: FakeBackend[] = []
 
-class FakeBackend implements DocumentBackend {
+class FakeBackend extends FakeDocumentBackend {
   constructor(
     public workspaceId: string,
     public path: string,
   ) {
+    super()
     createdBackends.push(this)
   }
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-    handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'

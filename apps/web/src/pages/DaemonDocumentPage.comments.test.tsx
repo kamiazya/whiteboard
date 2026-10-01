@@ -19,17 +19,13 @@
  * `components/annotations/CommentsPanel.browser.test.tsx`.
  */
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
@@ -69,16 +65,6 @@ function snapshotWithThreads(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    handlers.onSnapshot(snapshotWithThreads())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 async function mountPage(): Promise<void> {
@@ -88,7 +74,7 @@ async function mountPage(): Promise<void> {
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId="w1"
         path="board"
-        createBackend={() => new FakeBackend()}
+        createBackend={() => new FakeDocumentBackend(snapshotWithThreads)}
       />,
     )
   })

@@ -16,7 +16,10 @@
  * that would hand the harness the very modules the factories replace.
  */
 
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -241,4 +244,44 @@ export async function openDocumentOpsMenu(): Promise<HTMLElement> {
   const trigger = await screen.findByRole('button', { name: 'More actions' })
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
   return screen.findByRole('menu')
+}
+
+const emptySnapshot = (): Uint8Array => new LoroDoc().export({ mode: 'snapshot' })
+
+/**
+ * The document stream a page is handed through `createBackend`: connects at
+ * once, delivers `seed()`, and records what the page did to it. A test that
+ * needs to know which arguments the page built it from subclasses it.
+ */
+export class FakeDocumentBackend implements DocumentBackend {
+  handlers: DocumentBackendHandlers | null = null
+  readonly pushed: Uint8Array[] = []
+  /**
+   * The exact bytes the page hydrated from: a replay of `pushed` must import
+   * into the SAME doc lineage, not a structurally-equal rebuild with different
+   * Loro op ids.
+   */
+  snapshot: Uint8Array = new Uint8Array()
+  connectCount = 0
+  disconnectCount = 0
+
+  constructor(private readonly seed: () => Uint8Array = emptySnapshot) {}
+
+  connect(handlers: DocumentBackendHandlers): void {
+    this.connectCount += 1
+    this.handlers = handlers
+    handlers.onConnected()
+    this.snapshot = this.seed()
+    handlers.onSnapshot(this.snapshot)
+  }
+
+  disconnect(): void {
+    this.disconnectCount += 1
+  }
+
+  pushLocalUpdate(update: Uint8Array): void {
+    this.pushed.push(update)
+  }
+
+  sendClientReady(): void {}
 }
