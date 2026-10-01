@@ -36,6 +36,11 @@ function seeded(peer: bigint, canvas: Parameters<typeof writeSpatialCanvas>[1], 
   return ws
 }
 
+// The cross-merge property takes about 6s alone, past the default 5s, and a
+// slower machine cannot make a property pass — it only decides whether the
+// property gets to finish.
+const PROPERTY_TIMEOUT_MS = 60_000
+
 describe('contentDigest property', () => {
   fcTest.prop(
     [spatialCanvasArbitrary, fc.integer({ min: 1, max: 1e12 }), fc.integer({ min: 1, max: 1e12 })],
@@ -45,6 +50,7 @@ describe('contentDigest property', () => {
     (canvas, stampA, stampB) => {
       expect(digestOf(seeded(1n, canvas, stampA))).toBe(digestOf(seeded(2n, canvas, stampB)))
     },
+    PROPERTY_TIMEOUT_MS,
   )
 
   fcTest.prop([spatialCanvasArbitrary, spatialCanvasArbitrary], withDefaults())(
@@ -66,5 +72,6 @@ describe('contentDigest property', () => {
       b.import(fromA)
       expect(digestOf(a)).toBe(digestOf(b))
     },
+    PROPERTY_TIMEOUT_MS,
   )
 })
