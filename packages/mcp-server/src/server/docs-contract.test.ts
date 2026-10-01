@@ -2,6 +2,9 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { codeText } from '../shared/test-utils/markdown-code.js'
+import { bareScriptNames, declaresScript, scriptsOf } from '../shared/test-utils/pnpm-scripts.js'
+import { trackedFiles } from '../shared/test-utils/tracked-files.js'
 
 // The user-facing docs/ tree is the contract surface for anything a real
 // operator needs to discover (env vars, escape hatches). R5 of the MCP-UI
@@ -342,5 +345,40 @@ describe('docs/ contract', () => {
     const content = readFileSync(developmentDocPath, 'utf8')
     expect(content).not.toMatch(/skips the Playwright browser project/i)
     expect(content).toMatch(/mcp-node.*only.*project|only the.*mcp-node.*project/i)
+  })
+
+  // `pnpm <name>` runs a script of the package the shell is IN, so a bare
+  // command in a document is root-runnable only when the root declares it.
+  // `pnpm docs:snapshots` and `pnpm build:widget` were written exactly so, and
+  // answer ERR_PNPM_NO_SCRIPT from the root — the reader who copies the line
+  // learns nothing about where to run it. A package's own README may say a
+  // bare command if it also says it runs from the package directory.
+  it('every bare `pnpm <script>` in tracked Markdown is a root script, or says where it runs', () => {
+    const rootScripts = scriptsOf(REPO_ROOT)
+    const files = trackedFiles(REPO_ROOT, '*.md').filter((path) => !path.includes('/adr/'))
+    expect(files.length).toBeGreaterThan(200)
+
+    let reached = 0
+    const stray: string[] = []
+    for (const path of files) {
+      const text = readFileSync(join(REPO_ROOT, path), 'utf8')
+      const lines = text.split('\n')
+      const owner = /^((?:packages|apps)\/[^/]+)\//.exec(path)?.[1]
+      const ownScripts = owner ? scriptsOf(REPO_ROOT, owner) : {}
+      for (const name of bareScriptNames(codeText(text))) {
+        reached++
+        if (declaresScript(rootScripts, name)) continue
+        // `codeText` drops the prose, so the line is found again in the source.
+        const written = lines.filter((l) => l.includes(`pnpm ${name}`))
+        const saysWhere = written.some((l) => /package dir|from the package|--filter|-C /i.test(l))
+        if (declaresScript(ownScripts, name) && saysWhere) continue
+        stray.push(`${path}: pnpm ${name}`)
+      }
+    }
+    expect(reached).toBeGreaterThan(300)
+    expect(
+      stray,
+      'spell it `pnpm --filter <pkg> <script>`, or say it runs from the package dir',
+    ).toEqual([])
   })
 })

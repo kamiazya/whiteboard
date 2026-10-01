@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { codeText } from '../../shared/test-utils/markdown-code.js'
-import { bareScriptReferences, scriptsOf } from '../../shared/test-utils/pnpm-scripts.js'
+import { bareScriptNames, declaresScript, scriptsOf } from '../../shared/test-utils/pnpm-scripts.js'
 import { jobSection } from './job-section.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -154,12 +154,12 @@ describe('the release documentation describes the workflow that ships', () => {
     ] as const
     // Reached, not assumed: an empty extraction passes every name check.
     expect(
-      documents.reduce((n, [, text]) => n + bareScriptReferences(codeText(text)).length, 0),
+      documents.reduce((n, [, text]) => n + bareScriptNames(codeText(text)).length, 0),
     ).toBeGreaterThan(15)
     const dangling = documents.flatMap(([path, text]) =>
-      bareScriptReferences(codeText(text))
-        .filter(({ name }) => !(name in rootScripts))
-        .map(({ name }) => `${path}: pnpm ${name}`),
+      bareScriptNames(codeText(text))
+        .filter((name) => !declaresScript(rootScripts, name))
+        .map((name) => `${path}: pnpm ${name}`),
     )
     expect(dangling).toEqual([])
   })
@@ -174,7 +174,7 @@ describe('the release documentation describes the workflow that ships', () => {
       jobSection(workflow, 'publish-mcp', 'docker-publish-sign'),
       jobSection(workflow, 'docker-publish-sign'),
     ]
-    const run = jobs.flatMap((job) => bareScriptReferences(job).map(({ name }) => name))
+    const run = jobs.flatMap(bareScriptNames)
     const gates = run.filter(
       (name) => name in rootScripts && /^(publish-gate|smoke:docker)/.test(name),
     )

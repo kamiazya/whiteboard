@@ -188,7 +188,7 @@ All commands run from `apps/web/`.
 | dynamic favicon | `src/lib/favicon.ts` (+ `src/hooks/useFavicon.ts`) | code; style user-selectable in Settings → Appearance |
 | `public/icon-192.png` / `icon-512.png` | `scripts/generate-pwa-icons.mjs` | `node scripts/generate-pwa-icons.mjs` |
 | `public/og-image.png` | `scripts/generate-og-image.mjs` | `node scripts/generate-og-image.mjs` |
-| README / docs screenshots | `src/docs-snapshots/**/*.docs-snapshot.test.tsx` + hand-authored `docs/assets/*.canvas` | `pnpm docs:snapshots` (run twice; commit the second run) |
+| README / docs screenshots | `src/docs-snapshots/**/*.docs-snapshot.test.tsx` + hand-authored `docs/assets/*.canvas` | `pnpm --filter @kamiazya/whiteboard-web docs:snapshots` (run twice; commit the second run) |
 
 ## Contract tests (the grammar, pinned)
 

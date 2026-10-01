@@ -22,15 +22,17 @@ function partition(markdown: string): { prose: string[]; fenced: string[] } {
 }
 
 /**
- * The text of a Markdown document a reader would TYPE: fenced-block bodies and
- * inline code spans, with the surrounding prose dropped. A sentence like "via
+ * The text of a Markdown document a reader would TYPE: fenced-block bodies (minus
+ * their shell comments) and inline code spans, with the surrounding prose dropped. A sentence like "via
  * pnpm lockfile" names no command, so scanning the whole document for
  * `pnpm <word>` would report it as one.
  */
 export function codeText(markdown: string): string {
   const { prose, fenced } = partition(markdown)
   const spans = prose.flatMap((line) => [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? ''))
-  return [...spans, ...fenced].join('\n')
+  // A comment inside a fence is prose ("# pnpm is pinned by ...").
+  const commands = fenced.map((line) => line.replace(/(^|\s)#(\s.*)?$/, ''))
+  return [...spans, ...commands].join('\n')
 }
 
 /** What a reader reads as prose: no fenced blocks and no inline code spans, where an example link is not a link. */
