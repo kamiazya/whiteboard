@@ -30,6 +30,7 @@ import {
   listVersionsResponseSchema,
   listWorkspacesResponseSchema,
   pruneSandwichedVersionsResponseSchema,
+  purgeResultSchema,
   renameDocumentPathRequestSchema,
   renameDocumentPathResponseSchema,
   renameWorkspaceRequestSchema,
@@ -39,6 +40,7 @@ import {
   saveVersionResponseSchema,
   setNameRequestSchema,
   setPinnedRequestSchema,
+  storageReportPayloadSchema,
   updateDocumentResponseSchema,
   versionDocumentResponseSchema,
   workspaceNamesSchema,
@@ -235,7 +237,11 @@ const RULES: Record<string, Rule> = {
     response: createDocumentResponseSchema,
   },
   'GET /api/workspaces/:workspaceId/names': { answers: 'json', response: workspaceNamesSchema },
-  'PUT /api/workspaces/:workspaceId/name': { answers: 'json', body: setNameRequestSchema },
+  'PUT /api/workspaces/:workspaceId/name': {
+    answers: 'json',
+    body: setNameRequestSchema,
+    response: workspaceNamesSchema,
+  },
   'GET /api/workspaces/:workspaceId/trash': { answers: 'json', response: listTrashResponseSchema },
   'POST /api/workspaces/:workspaceId/trash/:documentId/restore': {
     answers: 'json',
@@ -249,7 +255,10 @@ const RULES: Record<string, Rule> = {
     answers: 'json',
     response: compactWorkspaceResultSchema,
   },
-  'POST /api/workspaces/:workspaceId/files/purge-dangling': { answers: 'json' },
+  'POST /api/workspaces/:workspaceId/files/purge-dangling': {
+    answers: 'json',
+    response: purgeResultSchema,
+  },
   'GET /api/workspaces/:workspaceId/documents/*/versions': {
     answers: 'json',
     response: listVersionsResponseSchema,
@@ -270,10 +279,12 @@ const RULES: Record<string, Rule> = {
   'PUT /api/workspaces/:workspaceId/documents/*/name': {
     answers: 'json',
     body: setNameRequestSchema,
+    response: workspaceNamesSchema,
   },
   'PUT /api/workspaces/:workspaceId/documents/*/pin': {
     answers: 'json',
     body: setPinnedRequestSchema,
+    response: workspaceNamesSchema,
   },
   'PUT /api/workspaces/:workspaceId/documents/*/path': {
     answers: 'json',
@@ -343,8 +354,8 @@ const RULES: Record<string, Rule> = {
   },
   'GET /api/runtime/ping': { answers: 'json', response: daemonPingResponseSchema },
   'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
-  'GET /api/runtime/storage': { answers: 'json' },
-  'POST /api/runtime/logs/prune': { answers: 'json' },
+  'GET /api/runtime/storage': { answers: 'json', response: storageReportPayloadSchema },
+  'POST /api/runtime/logs/prune': { answers: 'json', response: purgeResultSchema },
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },
   'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },
