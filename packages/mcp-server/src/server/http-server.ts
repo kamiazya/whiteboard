@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { listenOnSocket } from '../daemon/daemon-socket.js'
 import { IdleTimer } from '../daemon/idle-timer.js'
 import { resolveSelfHostServerDeps } from '../di/self-host-server-deps.js'
@@ -10,7 +9,7 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
-import { createCanvasClientNotifier } from './canvas-client-notifier.js'
+import { attachLiveAudience } from './canvas-client-notifier.js'
 import { getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
@@ -182,13 +181,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {
     defaultTier: options.replicaTier ?? DEFAULT_REPLICA_TIER,
   })
-  // The live-audience bridge is attached HERE, not in resolveServerDeps: the
-  // di graph must not import the routes layer (value cycle), and this root is
-  // one of the two places a live audience exists.
-  const serverDeps: ServerDeps = {
-    ...resolvedDeps,
-    clientNotifier: createCanvasClientNotifier(resolvedDeps.documentIndex),
-  }
+  const serverDeps = attachLiveAudience(resolvedDeps)
 
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.

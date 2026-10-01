@@ -3,6 +3,7 @@ import type {
   AgentActivity,
   CanvasClientNotifier,
   RestoreProgressEvent,
+  ServerDeps,
   VersionCreated,
   ViewportRequest,
   ViewportRequestParams,
@@ -32,12 +33,12 @@ function viewportPayload(request: ViewportRequest): ViewportRequestParams {
 }
 
 /**
- * Bridges server-core's `CanvasClientNotifier` port onto the daemon's
- * WebSocket routes.
+ * Bridges server-core's `CanvasClientNotifier` port onto the SSE sync
+ * streams a page holds open.
  *
  * Two things it owns that server-core cannot:
  *
- * - **documentId -> path.** The WS routes are keyed by workspace and document
+ * - **documentId -> path.** The audience is keyed by workspace and document
  *   PATH, which is placement, and placement lives in the index rather than
  *   in a tool's arguments.
  * - **Operator identity.** `kind: 'ai'` plus `DAEMON_AGENT_ACTOR`.
@@ -127,4 +128,27 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
       }
     },
   }
+}
+
+/**
+ * `deps` with the live audience attached: what an agent does through a tool
+ * (agent activity, a saved version, restore progress, a viewport request)
+ * reaches the pages streaming from this process.
+ *
+ * Both HTTP roots call it, so a root cannot serve the audience routes
+ * (`createApp` mounts the sync SSE router in every mode) and leave the tools
+ * announcing to nobody. It is attached here rather than inside
+ * `resolveServerDeps` because the di graph must not import the routes layer.
+ *
+ * The audience is the streams held by THIS instance, in memory. Behind
+ * several instances (ADR-0020 adds no cross-instance channel, and none is
+ * needed for correctness) an agent whose `/mcp` request lands elsewhere than
+ * the browser's stream gets `delivered: false` and no highlight — advisory
+ * feedback missing, never a lost write: the workspace tail carries the
+ * record itself between instances. A stream is pinned to its instance for
+ * the same reason (`sync-sse.ts` warns on a load balancer without sticky
+ * sessions).
+ */
+export function attachLiveAudience(deps: ServerDeps): ServerDeps {
+  return { ...deps, clientNotifier: createCanvasClientNotifier(deps.documentIndex) }
 }

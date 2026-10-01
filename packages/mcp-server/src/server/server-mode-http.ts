@@ -1,7 +1,7 @@
 // HTTP server startup for server-mode (OAuth/JWT, no local-daemon lifecycle).
 //
-// Server-mode does not use WebSocket, idle timeout, or per-connection
-// tracking in this initial slice — those are local-daemon concerns.
+// Server mode never idles out, which is a local-daemon concern. It serves the
+// same SSE sync audience the daemon does, and reports it the same way.
 // The close() returned by startServerModeHttp tears down the HTTP server
 // cleanly so the dispatcher's SIGTERM handler can await it.
 
@@ -12,10 +12,12 @@ import { resolveSelfHostServerDeps } from '../di/self-host-server-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
+import { attachLiveAudience } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
+import { syncStreamStats } from './routes/sync-sse.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AuthenticatorBinding } from './security/member-profile-store.js'
@@ -118,17 +120,17 @@ export async function startServerModeHttp(
   }
 
   // The same explicit production wiring the local daemon builds
-  // (http-server.ts), minus its WS-only clientNotifier — server mode
-  // installs no upgrade handler, so there is no live-socket audience to
-  // notify. Without this, createApp mounted no /api/v1 surface at all and
-  // a self-hosted deployment 404'd on search/backlinks/tags/okf and the v1
+  // (http-server.ts), live audience included: `createApp` mounts the sync SSE
+  // router in this mode too, so the tools announce to the streams held here.
+  // Without serverDeps, createApp mounted no /api/v1 surface at all and a
+  // self-hosted deployment 404'd on search/backlinks/tags/okf and the v1
   // document CRUD while /api/workspaces/* worked
   // (server-mode-route-parity.test.ts pins both the option and the route
   // set now). ensureWorkspaceId first, as the sibling root does: a fresh
   // data dir must not answer an empty workspace list.
   const dataDir = getDataDir()
   await ensureWorkspaceId(dataDir)
-  const serverDeps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
+  const serverDeps = attachLiveAudience(resolveSelfHostServerDeps(await getDb(dataDir), dataDir))
 
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.
@@ -164,7 +166,7 @@ export async function startServerModeHttp(
       // build (ADR-0047), the inline placeholder when it does not.
       app: { served: true, ...serverModeUiStatus(DIST_WEB_APP_DIR) },
       mcp: { httpEnabled: true, endpoint: `${baseUrl}/mcp` },
-      clients: { connected: 0, ready: 0 },
+      clients: syncStreamStats(),
       publicBaseUrl: options.publicBaseUrl,
     }),
   })
