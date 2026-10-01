@@ -31,7 +31,8 @@ function uint8ArraySchema(exactLength?: number) {
 
 export const epochSchema = z.number().int().nonnegative()
 
-const AES_GCM_IV_BYTES = 12
+/** The envelope's IV width; the browser's binary layout of the same envelope reads it from here. */
+export const AES_GCM_IV_BYTES = 12
 
 /** Persisted read-plane ciphertext envelope. `v` guards future shape changes. */
 export const sealedEnvelopeSchema = z

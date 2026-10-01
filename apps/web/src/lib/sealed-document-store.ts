@@ -27,6 +27,7 @@
 
 import type { SealedEnvelope } from '@kamiazya/whiteboard-daemon-client/read-plane'
 import {
+  AES_GCM_IV_BYTES,
   openBytes,
   sealBytes,
   sealedEnvelopeSchema,
@@ -78,7 +79,6 @@ export class ReplicaKeyWithheldError extends Error {
 }
 
 const ENVELOPE_VERSION = 0x01
-const AES_GCM_IV_BYTES = 12
 const ENVELOPE_HEADER_BYTES = 1 + 4 + AES_GCM_IV_BYTES // version + epoch + iv
 const GCM_TAG_BYTES = 16
 
