@@ -516,7 +516,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 69,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 52,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#computeAnchorsFor': 56,
+  'packages/canvas-render/src/layout/edges/edge-anchors.ts#computeAnchorsFor': 56,
   // Raised 250 -> 308: the trial evaluator's three steps are now named
   // closures (applySelfCosts / applyPairCosts / rescorePairsOf /
   // rescorePairInto), each carrying the invariant that was a comment inside
@@ -530,9 +530,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // candidate loop's body and brought its incumbent-wins-ties rationale
   // with it.
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 102,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#patchAnchorGroups': 54,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeEdge': 75,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeOrthogonal': 139,
+  'packages/canvas-render/src/layout/edges/edge-anchors.ts#patchAnchorGroups': 54,
+  'packages/canvas-render/src/layout/edges/edge-router.ts#routeEdge': 75,
+  'packages/canvas-render/src/layout/edges/edge-router.ts#routeOrthogonal': 139,
   // +1: the table rows take the inline typesetter by argument, since the
   // table module may not import the typesetter back.
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 190,

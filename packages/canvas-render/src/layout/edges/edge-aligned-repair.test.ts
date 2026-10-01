@@ -12,7 +12,8 @@ import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { pathLength } from '../../test-utils/routing-metrics.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const nodes: SpatialNode[] = [
   textNode({ id: 'A', x: 100, y: 570, width: 200, height: 100, text: 'A' }),

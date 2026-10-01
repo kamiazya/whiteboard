@@ -9,7 +9,8 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const node = (
   id: string,

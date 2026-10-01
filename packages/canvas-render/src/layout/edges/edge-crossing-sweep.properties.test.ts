@@ -10,7 +10,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 type Point = { readonly x: number; readonly y: number }
 

@@ -52,13 +52,9 @@ export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
 export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
-export {
-  assignEdgeAnchors,
-  type EdgeAnchorOverride,
-  type EdgeAnchorPair,
-  type EdgeSides,
-  routeEdge,
-} from './layout/edges/spatial-edges.js'
+export { routeEdge } from './layout/edges/edge-router.js'
+export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
+export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
 export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
 export {

@@ -116,13 +116,22 @@ the table alone.
   where the words lived. Judgement stays out: which side to prefer and what
   makes one route better are `edge-rules.ts` and `spatial-edges.ts`. Keeping
   this layer opinion-free is what lets both share it without either
-  importing the other — and it is the piece a later router/search split
-  would need first. That split is NOT proposed: the dependency is
-  one-directional (the router calls nothing search-side), but the seam is
-  eight entry points rather than the one `routeEdge` a reading suggests,
-  so it is a three-module decomposition with no measurable payoff, on the
-  file most likely to change next.
-- Pure layout functions: spatial-canvas edge routing (`layout/edges/spatial-edges.ts`),
+  importing the other — and it was the piece the router/search split
+  needed first. That split was declined once (a three-module decomposition
+  across an eight-entry-point seam, on the file most likely to change next)
+  and then made when the file reached 2483 lines, three times the budget,
+  and the seam was MEASURED rather than read: the search reads the side
+  vocabulary, the anchor pass and the router, and none of the three reads
+  the search or each other except for two stub constants, which moved to
+  the vocabulary. So `layout/edges/` is now `edge-sides.ts` (which side an
+  edge leaves from and arrives at, and the first guess), `edge-anchors.ts`
+  (where on that side, given every edge sharing it), `edge-router.ts`
+  (`routeEdge`: the path between two placed anchors) and `spatial-edges.ts`
+  (the side-choice search, `assignEdgeAnchors`), with the dependency
+  pointing one way and `boundingBoxOf` / `rectAtEnd` joining the geometry
+  vocabulary since both halves read them.
+- Pure layout functions: spatial-canvas edge routing (`layout/edges/edge-router.ts`
+  under `layout/edges/spatial-edges.ts`'s side-choice search),
   embed recursion over a resolved doc bundle (`layout/embed-recursion.ts`),
   and mdast block layout (`layout/nodes/mdast-blocks.ts`) — the single mdast ->
   scene-graph render path shared by preview / spatial text node / export.
@@ -472,7 +481,7 @@ the table alone.
       dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
       gap-valid-opposing-before-invalid, u-hook-span-exposed-first, and
       incumbent-wins-ties; `composeSidePairs` is the composition
-      `rankedSidePairs` (`layout/edges/spatial-edges.ts`) wraps, and
+      `rankedSidePairs` (`layout/edges/edge-sides.ts`) wraps, and
       `shouldAdoptCandidate` is the incumbent-wins-ties predicate
       `optimizeSideChoices` consults. `u-hook-span-exposed-first` demotes a
       same-side U-hook candidate whose DEPARTURE side border runs through

@@ -15,7 +15,7 @@
 import type { CanvasLine, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
 
 const box = (id: string, x: number, y: number): SpatialNode =>
   textNode({

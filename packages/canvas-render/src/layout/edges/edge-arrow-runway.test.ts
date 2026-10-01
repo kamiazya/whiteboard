@@ -15,7 +15,8 @@ import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { finalSegmentLength } from '../../test-utils/routing-metrics.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const ARROW_LENGTH_PX = 10
 

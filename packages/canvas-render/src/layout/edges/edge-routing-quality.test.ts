@@ -30,7 +30,8 @@ import {
   type MetricRect,
   pathLength,
 } from '../../test-utils/routing-metrics.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 type Violation = { edge: string; node: string; ink: number; kind: ViolationKind }
 

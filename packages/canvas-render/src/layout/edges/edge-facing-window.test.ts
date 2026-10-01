@@ -8,7 +8,8 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 // The reported triangle: A above B (fully aligned), C to the right and
 // vertically between them, overlapping both in x by only 20px.

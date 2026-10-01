@@ -13,7 +13,8 @@ import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 // timeout, which is ample on an idle machine and the first thing to blow
 // once every project runs in parallel. Collection phase has no such budget.
 import { layoutSpatialEdges } from '../spatial-canvas.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
   textNode({

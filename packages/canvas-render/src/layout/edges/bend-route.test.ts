@@ -2,7 +2,7 @@ import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { type BendRouteEnds, bendRoute } from './bend-route.js'
-import { routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
 
 const FROM = { x: 0, y: 0, w: 100, h: 50 }
 const TO = { x: 400, y: 300, w: 100, h: 50 }

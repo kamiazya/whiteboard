@@ -14,7 +14,7 @@ import {
   anchorContext,
   buildAnchorGroups,
   patchAnchorGroups,
-} from './spatial-edges.js'
+} from './edge-anchors.js'
 
 const SIDES = ['top', 'right', 'bottom', 'left'] as const
 type Side = (typeof SIDES)[number]

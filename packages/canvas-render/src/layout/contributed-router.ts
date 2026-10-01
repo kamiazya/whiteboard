@@ -15,7 +15,7 @@ import type {
   ResolvedEdgeNode,
   RoutableElement,
 } from '@kamiazya/whiteboard-scene'
-import type { EdgeAnchorPair } from './edges/spatial-edges.js'
+import type { EdgeAnchorPair } from './edges/edge-sides.js'
 
 /** What selecting a router takes: who may answer, and what they registered. */
 interface RouterResolution {

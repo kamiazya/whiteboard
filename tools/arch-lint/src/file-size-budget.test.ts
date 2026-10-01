@@ -409,12 +409,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reason it did not before.
   // Raised 2177 -> 2483. The file grew by RATIONALE, not by logic: sixteen
   // inline blocks became named functions, each carrying the comment that was
-  // buried in the middle of it. The next real shrink splits the three
-  // concerns this file holds — anchor placement, the side-choice search, and
-  // the router — into sibling modules; they share `AnchorContext`,
-  // `SidePair` and the cost vocabulary, so the types move first or each new
-  // module imports them back.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2483,
+  // buried in the middle of it.
+  // Lowered 2483 -> 1045: the side vocabulary (`edge-sides.ts`), the anchor
+  // pass (`edge-anchors.ts`) and the router (`edge-router.ts`) are sibling
+  // modules, and what is left is the search. Measured before cutting: the
+  // search reads all three and none reads the search, so the vocabulary
+  // went first and no module imports the file it left. What remains over
+  // budget is `createConfigScore`'s trial machinery, which the search owns.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 1045,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.

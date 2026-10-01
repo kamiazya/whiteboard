@@ -2,7 +2,7 @@ import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-mod
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
-import { routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
 
 /**
  * An edge drawn straight through whatever happens to lie between its

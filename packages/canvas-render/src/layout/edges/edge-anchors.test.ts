@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const node = (id: string, x: number, y: number): SpatialNode =>
   textNode({

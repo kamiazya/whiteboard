@@ -247,9 +247,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // the text-wrapping scoreboard and its example suites, which are the
     // reason it was never in the lane, and a split moves none of that. The
     // options module is types and three font constants besides.
+    //
+    // 96 and 19 since `layout/edges/spatial-edges.ts` gave up its side
+    // vocabulary (`edge-sides.ts`), its anchor pass (`edge-anchors.ts`) and
+    // its router (`edge-router.ts`), keeping the search. Outside the lane for
+    // the reason the file they left was: what pins the router and the side
+    // choice is the routing scoreboard, which re-runs per mutant at ~22s and
+    // is excluded from the lane on price, and the example suites beside it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 19,
-      production: 93,
+      production: 96,
     })
   })
 

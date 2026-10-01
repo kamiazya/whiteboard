@@ -7,7 +7,9 @@
  * side-choice SEARCH, the ROUTER, and these primitives in one 2100-line file,
  * and the search reached into the router's half for `rectOf`, `centerOf`,
  * `pathLength` and `tangentCoordinate` — not because it wanted to route, but
- * because that is where the words happened to live.
+ * because that is where the words happened to live. The search and the
+ * router are sibling modules now (`spatial-edges.ts`, `edge-router.ts`), and
+ * this is still the one place both reach for a word.
  *
  * Nothing here knows what an obstacle is, what a lane is, or what makes one
  * route better than another. That judgement is `edge-rules.ts` (the named
@@ -16,7 +18,7 @@
  * share it without either one importing the other.
  */
 
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import type { EdgeEnd, LineEnd, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Point, Rect, Side } from './edge-rules.js'
 
 export function rectOf(node: SpatialNode): Rect {
@@ -196,4 +198,42 @@ export function withoutRepeats(path: readonly Point[]): Point[] {
     const prev = path[i - 1]
     return i === 0 || prev === undefined || point.x !== prev.x || point.y !== prev.y
   })
+}
+
+/** Axis-aligned bounds of a point set — the broad-phase box the search and
+ * the router both prune with. One definition; the two call sites used to
+ * carry byte-identical copies (`boundsOf`, `boxOf`). */
+export function boundingBoxOf(points: readonly Point[]): Rect {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const point of points) {
+    if (point.x < minX) minX = point.x
+    if (point.x > maxX) maxX = point.x
+    if (point.y < minY) minY = point.y
+    if (point.y > maxY) maxY = point.y
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
+/**
+ * The box an end is anchored to — a node's, or the DEGENERATE box at a free
+ * point ([ADR-0037](../../../../../docs/contributing/adr/0037-model-and-format.md)
+ * slice 3b). `undefined` only for a reference to a node that is not here,
+ * which is a different thing and still degrades.
+ *
+ * A point as a zero-size rect is what lets the router stay
+ * unchanged: side choice reads centres and a degenerate box's centre IS the
+ * point, `sidePoint` answers that point for all four sides, and a point
+ * appears in no node list so it can never be its own obstacle or anyone
+ * else's. The alternative — a second routing path for "this end has no box" —
+ * would be a second producer of the geometry this package keeps to one.
+ */
+export function rectAtEnd(nodes: readonly SpatialNode[], end: LineEnd | EdgeEnd): Rect | undefined {
+  // A LINE's end can be a bare point; an EDGE's names a node. One function for
+  // both, so a caller walking either collection never has to ask which it has.
+  if ('kind' in end && end.kind === 'point') return { x: end.point.x, y: end.point.y, w: 0, h: 0 }
+  const node = nodes.find((n) => n.id === end.node)
+  return node === undefined ? undefined : rectOf(node)
 }

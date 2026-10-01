@@ -15,7 +15,8 @@ import { endNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { test } from 'vitest'
 import { clusteredLayout } from '../../test-utils/routing-corpus.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 /**
  * A regular grid of boxes wired by a stride that guarantees long, crossing
