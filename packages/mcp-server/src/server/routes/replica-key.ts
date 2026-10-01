@@ -43,6 +43,7 @@ import {
   setReplicaTierRequestSchema,
   setReplicaTierResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
@@ -50,10 +51,6 @@ import type { WorkspaceReplicaKeyStore } from '../security/workspace-replica-key
 import { validateWorkspaceId, validationErrorBody } from '../validators.js'
 
 const log = getLogger('replica-key')
-
-function toBase64Url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64url')
-}
 
 /** A malformed workspaceId (path-traversal-shaped, non-ASCII, etc.) is a 400,
  *  not the uncaught ValidationError `workspaceExists` throws underneath. */
@@ -111,8 +108,8 @@ export function createReplicaKeyRouter({
 
     const { key, salt, keyId } = await keys.keyFor(workspaceId)
     const response: ReplicaKeyResponse = replicaKeyResponseSchema.parse({
-      workspaceKey: toBase64Url(key),
-      workspaceKeySalt: toBase64Url(salt),
+      workspaceKey: bytesToBase64Url(key),
+      workspaceKeySalt: bytesToBase64Url(salt),
       tier,
       keyId,
       ...(tier === 'bounded'

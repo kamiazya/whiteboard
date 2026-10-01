@@ -24,6 +24,7 @@
  * between two workspaces on one device opens nothing, even though the same
  * key wrapped both.
  */
+import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { replicaKeyResponseSchema } from './api-contracts/replica-key.js'
 
@@ -54,20 +55,6 @@ export type WrappedWorkspaceKey = z.infer<typeof wrappedWorkspaceKeySchema>
 export interface WrapBinding {
   daemonBaseUrl: string
   workspaceId: string
-}
-
-export function toBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-export function fromBase64Url(text: string): Uint8Array<ArrayBuffer> {
-  const padded = text.replace(/-/g, '+').replace(/_/g, '/')
-  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
-  const out = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i)
-  return out
 }
 
 /** The bytes AES-GCM checks but does not encrypt — see the header. */
@@ -125,7 +112,7 @@ export async function wrapWorkspaceKey(
     wrappingKey,
     textEncoder.encode(JSON.stringify(response)) as BufferSource,
   )
-  return { v: 1, iv: toBase64Url(iv), ct: toBase64Url(new Uint8Array(ct)) }
+  return { v: 1, iv: bytesToBase64Url(iv), ct: bytesToBase64Url(new Uint8Array(ct)) }
 }
 
 /**
@@ -141,15 +128,14 @@ export async function unwrapWorkspaceKey(
   blob: WrappedWorkspaceKey,
   binding: WrapBinding,
 ): Promise<z.infer<typeof replicaKeyResponseSchema> | null> {
+  const iv = base64UrlToBytes(blob.iv)
+  const ct = base64UrlToBytes(blob.ct)
+  if (iv === null || ct === null) return null
   try {
     const plaintext = await crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: fromBase64Url(blob.iv) as BufferSource,
-        additionalData: bindingBytes(binding),
-      },
+      { name: 'AES-GCM', iv, additionalData: bindingBytes(binding) },
       wrappingKey,
-      fromBase64Url(blob.ct) as BufferSource,
+      ct,
     )
     const parsed = replicaKeyResponseSchema.safeParse(
       JSON.parse(new TextDecoder().decode(plaintext)),

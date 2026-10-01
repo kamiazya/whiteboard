@@ -601,16 +601,13 @@ importers:
 
   packages/history:
     dependencies:
+      '@kamiazya/whiteboard-model':
+        specifier: workspace:*
+        version: link:../model
       loro-crdt:
         specifier: 'catalog:'
         version: 1.13.6
     devDependencies:
-      '@fast-check/vitest':
-        specifier: ^0.4.1
-        version: 0.4.1(vitest@5.0.0)
-      fast-check:
-        specifier: ^4.10.0
-        version: 4.10.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

@@ -31,8 +31,6 @@ const CANONICAL = 'packages/model/src/test-utils/fast-check.ts'
  */
 const LOCAL_PRELUDES: Record<string, string> = {
   [CANONICAL]: 'the one this rule points every other copy at',
-  'packages/history/src/test-utils/fast-check.ts':
-    'this package depends on loro-crdt and nothing else, which is the claim package-history.md makes about it; a devDependency on model for three lines would be its first exception',
 }
 
 function preludeFiles(): string[] {

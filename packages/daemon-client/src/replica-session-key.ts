@@ -1,10 +1,10 @@
+import { base64UrlToBytes } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import type { MembershipRefusalCode } from './api-contracts/membership.js'
 import { membershipRefusalSchema } from './api-contracts/membership.js'
 import type { ReplicaTier } from './api-contracts/replica-key.js'
 import { replicaKeyResponseSchema } from './api-contracts/replica-key.js'
 import { deriveDocumentKey } from './read-plane.js'
-import { fromBase64 } from './sse-stream-hub.js'
 
 /**
  * The read plane's in-memory session-key holder (ADR-0042 decisions 2/3/5,
@@ -86,9 +86,12 @@ function staleUnreachable(entry: SessionKeyResult, key: string): boolean {
   return recordedAt === undefined || Date.now() - recordedAt >= UNREACHABLE_TTL_MS
 }
 
-// Unpadded, which `atob` accepts; the schema pins both lengths to 43/22 chars.
-function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
-  return fromBase64(value.replace(/-/g, '+').replace(/_/g, '/'))
+// The schema pins the alphabet and both lengths (43/22 chars), so the decoder's
+// null is unreachable for a parsed response; the throw names that invariant.
+function keyBytes(value: string): Uint8Array<ArrayBuffer> {
+  const bytes = base64UrlToBytes(value)
+  if (bytes === null) throw new Error('replica key response is not base64url')
+  return bytes
 }
 
 /** What `/replica-key` answers, parsed — the shape a cold start wraps and adopts. */
@@ -102,8 +105,8 @@ export type ReplicaKeyResponse = z.infer<typeof replicaKeyResponseSchema>
 function heldFrom(response: ReplicaKeyResponse): Extract<SessionKeyResult, { kind: 'key' }> {
   return {
     kind: 'key',
-    workspaceKey: base64UrlToBytes(response.workspaceKey),
-    workspaceKeySalt: base64UrlToBytes(response.workspaceKeySalt),
+    workspaceKey: keyBytes(response.workspaceKey),
+    workspaceKeySalt: keyBytes(response.workspaceKeySalt),
     tier: response.tier,
     leaseExpiresAt:
       response.leaseExpiresAt === undefined ? undefined : Date.parse(response.leaseExpiresAt),

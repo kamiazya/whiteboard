@@ -14,6 +14,7 @@
  * realm and loro-crdt's WASM initialises once per realm: the file gets ONE
  * replica-capable worker, shared across cases, separated by document key.
  */
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import '@vitest/web-worker'
 import { LoroDoc } from 'loro-crdt'
 import { HttpResponse, http } from 'msw'
@@ -80,7 +81,7 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 
-const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+const decode = (encoded: string) => base64ToBytes(encoded) as Uint8Array
 
 let docSeq = 0
 const nextDoc = () => `seed-ws/doc-${++docSeq}`
@@ -190,12 +191,7 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     const tab = new LoroDoc()
     tab.getMap('m').set('edit', 'after-seed')
     tab.commit()
-    const b64 = (bytes: Uint8Array) => {
-      let out = ''
-      for (const byte of bytes) out += String.fromCharCode(byte)
-      return btoa(out)
-    }
-    port.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+    port.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
     await new Promise<void>((resolve, reject) => {
       const t = setInterval(() => {

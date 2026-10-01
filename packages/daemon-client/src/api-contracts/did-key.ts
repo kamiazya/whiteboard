@@ -21,6 +21,7 @@
  * base58's leading-zero branches are unreachable from this call site, so no
  * test here can ever exercise them.
  */
+import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { varint } from 'multiformats'
 import { base58btc } from 'multiformats/bases/base58'
 
@@ -29,24 +30,6 @@ const ED25519_PUB_CODE = 0xed
 const ED25519_PUBLIC_KEY_BYTES = 32
 
 const DID_KEY_PREFIX = 'did:key:'
-
-// btoa/atob rather than Buffer: this package runs in the browser too.
-function base64UrlToBytes(value: string): Uint8Array | null {
-  const normalized = value.replaceAll('-', '+').replaceAll('_', '/')
-  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
-  try {
-    const binary = atob(padded)
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0))
-  } catch {
-    return null
-  }
-}
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-}
 
 /**
  * The raw Ed25519 public key `daemonIdentitySchema` carries, as a `did:key`.

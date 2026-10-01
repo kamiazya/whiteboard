@@ -10,13 +10,14 @@
  * a server-mode keeper, so the credential is the signed-in person's session
  * cookie, which a same-origin fetch carries without this page touching it.
  */
+
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readWorkspaceDocuments,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { newImageRef } from '@kamiazya/whiteboard-model'
+import { base64UrlToBytes, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
@@ -30,12 +31,6 @@ const NONCE = 'n'.repeat(32)
 const MARKDOWN_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const SPATIAL_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
 const IMAGE_ID = 'arrived-image-1'
-
-function base64UrlToBytes(value: string): Uint8Array {
-  const padded = value.replaceAll('-', '+').replaceAll('_', '/')
-  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-}
 
 /** The record a sender would post: one note, one board showing an image. */
 function senderSnapshot(): Uint8Array {
@@ -73,7 +68,7 @@ function keeperStub(
     if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
       const body = JSON.parse(init.body as string) as { snapshot: string; attestation?: unknown }
       promotes.push(body)
-      target.import(base64UrlToBytes(body.snapshot))
+      target.import(base64UrlToBytes(body.snapshot) as Uint8Array)
       return Response.json({
         ok: true,
         attested: body.attestation !== undefined,

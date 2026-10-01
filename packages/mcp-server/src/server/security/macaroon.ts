@@ -67,6 +67,7 @@
  * would be swapped goldens, agreeing with it forever. Verified: the swapped
  * variant produces `ff36e6e1…` where the reference is `e3d9e029…`.
  */
+import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { ALL_AUTH_SCOPES, AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
 import { timingSafeEqualStrings } from './timing-safe.js'
@@ -105,24 +106,6 @@ export type MacaroonVerdict =
   | { ok: false; reason: 'malformed' }
   | { ok: false; reason: 'bad-signature' }
   | { ok: false; reason: 'caveat-unsatisfied'; caveat: MacaroonCaveat['kind'] }
-
-// btoa/atob rather than Buffer, for the portability reason in the docblock —
-// `did-key.ts` takes the same route for the same reason.
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-}
-
-function base64UrlToBytes(value: string): Uint8Array | null {
-  const normalized = value.replaceAll('-', '+').replaceAll('_', '/')
-  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
-  try {
-    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0))
-  } catch {
-    return null
-  }
-}
 
 /**
  * JSON-array encoding, so part boundaries are unambiguous: `["ab","c"]` and

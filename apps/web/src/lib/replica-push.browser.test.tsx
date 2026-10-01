@@ -157,6 +157,22 @@ describe('pushReplicaEdits', () => {
     expect(readWorkspaceDocuments(target).map((e) => e.documentId)).toEqual([DOC_A])
   })
 
+  it('a recorded frontier that does not decode is as good as none: the whole snapshot goes', async () => {
+    const target = daemonRecord()
+    const daemon = daemonStub(target)
+    const { docs } = await pulledReplica(daemon)
+    const result = await pushReplicaEdits({
+      fetch: daemon.fetch,
+      daemonBaseUrl: BASE,
+      workspaceId: DAEMON_WS,
+      workspaceDocs: docs,
+      syncedFrontier: 'not base64!',
+    })
+    if (result.kind !== 'ok') throw new Error('expected ok')
+    expect(daemon.posts()).toBe(1)
+    expect(readWorkspaceDocuments(target).map((e) => e.documentId)).toEqual([DOC_A])
+  })
+
   it('a refused POST is a structured failure, and the replica is untouched', async () => {
     const daemon = daemonStub(daemonRecord())
     const { docs, syncedFrontier } = await pulledReplica(daemon)

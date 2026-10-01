@@ -17,6 +17,7 @@
 // page, which already imports daemon-api-client itself — while a dynamic
 // import here charges the whole schema graph's first load to whatever
 // timeout happens to be waiting (the in-body-await-import flake shape).
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { listWorkspaces } from './daemon-api-client.js'
 import { findReplicaForHandle, withReplicaEntry } from './replicas.js'
@@ -268,10 +269,7 @@ async function readStoredFrontierFromIdb(workspaceId: string): Promise<string | 
     docRef: { kind: 'workspace-tree', workspaceId },
   })
   if (stored === null) return null
-  const { frontier } = stored
-  let out = ''
-  for (const b of frontier) out += String.fromCharCode(b)
-  return btoa(out)
+  return bytesToBase64(stored.frontier)
 }
 
 /** Test seam: forget which workspaces this session already refreshed. */

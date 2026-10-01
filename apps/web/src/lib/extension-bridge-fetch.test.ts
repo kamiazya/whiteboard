@@ -4,7 +4,7 @@
  * app's calls — plain requests and the SSE stream alike — keep their shape
  * and only the function they are handed changes.
  */
-import { toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL, isBridgeDaemon } from './bridge-address.js'
 import { createBridgeFetch } from './extension-bridge-fetch.js'
@@ -47,7 +47,7 @@ class FakePort implements BridgePort {
   }
 }
 
-const bytes = (text: string) => toBase64(new TextEncoder().encode(text))
+const bytes = (text: string) => bytesToBase64(new TextEncoder().encode(text))
 const at = (path: string) => `${BRIDGE_DAEMON_BASE_URL}${path}`
 
 describe('createBridgeFetch', () => {
@@ -94,7 +94,7 @@ describe('createBridgeFetch', () => {
     await sentFrom(ext)
     expect(ext.port.sent[0]).toMatchObject({
       method: 'POST',
-      body: toBase64(new Uint8Array([0, 1, 255])),
+      body: bytesToBase64(new Uint8Array([0, 1, 255])),
     })
   })
 
@@ -152,6 +152,17 @@ describe('createBridgeFetch', () => {
     ext.port.reply({ type: 'head', id, status: 200, headers: {} })
     const body = (await pending).text()
     ext.port.reply({ type: 'error', id, reason: 'stream-failed', message: 'closed' })
+    await expect(body).rejects.toThrow(TypeError)
+  })
+
+  it('errors a body whose chunk is not base64 rather than passing it off as complete', async () => {
+    const ext = new FakeExtension()
+    const pending = createBridgeFetch(ext.connect)(at('/api/sync/stream'))
+    await sentFrom(ext)
+    const id = ext.port.lastId
+    ext.port.reply({ type: 'head', id, status: 200, headers: {} })
+    const body = (await pending).text()
+    ext.port.reply({ type: 'chunk', id, data: 'not base64!' })
     await expect(body).rejects.toThrow(TypeError)
   })
 

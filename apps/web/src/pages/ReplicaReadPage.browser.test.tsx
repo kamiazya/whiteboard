@@ -15,7 +15,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { bytesToBase64Url, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
@@ -51,20 +51,14 @@ const DAEMON = 'http://127.0.0.1:3099'
 const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
 const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
 
-function b64u(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
-}
-
 /** A daemon fetch double answering /replica-key with a fixed offline key. */
 function offlineKeyFetch(): typeof fetch {
   return (async (input: Request | string | URL) => {
     const url = input instanceof Request ? input.url : String(input)
     if (url.endsWith('/replica-key')) {
       return jsonResponse({
-        workspaceKey: b64u(WORKSPACE_KEY),
-        workspaceKeySalt: b64u(WORKSPACE_SALT),
+        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
+        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
         tier: 'offline',
       })
     }
@@ -144,13 +138,13 @@ async function forgetEverythingButTheBlob(): Promise<void> {
     daemonBaseUrl: DAEMON,
     workspaceId: DAEMON_WS,
     response: {
-      workspaceKey: b64u(WORKSPACE_KEY),
-      workspaceKeySalt: b64u(WORKSPACE_SALT),
+      workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
+      workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
       tier: 'offline',
     },
     prfOutput: PRF,
   })
-  saveOfflinePasskey(DAEMON, DAEMON_WS, { credentialId: b64u(RAW_ID), prfSalt: 'AAAA' })
+  saveOfflinePasskey(DAEMON, DAEMON_WS, { credentialId: bytesToBase64Url(RAW_ID), prfSalt: 'AAAA' })
   connectReplicaKeeper(null)
   forgetAll()
 }
@@ -420,8 +414,8 @@ describe('ReplicaReadPage states', () => {
           const url = input instanceof Request ? input.url : String(input)
           if (url.endsWith('/replica-key')) {
             return jsonResponse({
-              workspaceKey: b64u(WORKSPACE_KEY),
-              workspaceKeySalt: b64u(WORKSPACE_SALT),
+              workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
+              workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
               tier: 'bounded',
               leaseExpiresAt,
             })

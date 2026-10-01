@@ -7,6 +7,12 @@ export { compareCodeUnit } from './compare.js'
 // the stable public surface.
 export { deriveWorkspaceSegment } from './derive-workspace-segment.js'
 export * from './document-kind.js'
+export {
+  base64ToBytes,
+  base64UrlToBytes,
+  bytesToBase64,
+  bytesToBase64Url,
+} from './encoding/base64.js'
 export * from './facets.js'
 export { generateDocumentId } from './generate-document-id.js'
 export * from './ids.js'

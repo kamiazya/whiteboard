@@ -20,6 +20,7 @@
  * observable that separates the two — a push through one port reaching
  * another — so the gap that sibling documents closes at this layer.
  */
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it, vi } from 'vitest'
 import { sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
@@ -61,12 +62,7 @@ it('loads as a module shared worker and answers a subscribe', async () => {
   expect(parsed.data.type).toBe('status')
 }, 30_000)
 
-const b64 = (bytes: Uint8Array) => {
-  let out = ''
-  for (const byte of bytes) out += String.fromCharCode(byte)
-  return btoa(out)
-}
-const decode = (encoded: string) => Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+const decode = (encoded: string) => base64ToBytes(encoded) as Uint8Array
 
 const openPort = (name: string) => {
   const worker = new SharedWorker(new URL('./sse-shared-worker.js', import.meta.url), {
@@ -105,7 +101,7 @@ it('carries one port push to another port of the same worker', async () => {
   const tab = new LoroDoc()
   tab.getMap('m').set('k', 'from-port-a')
   tab.commit()
-  a.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+  a.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
   const forked = new LoroDoc()
   forked.import(decode(await arrived))
@@ -139,7 +135,7 @@ it('keeps two daemon origins that share a document id apart', async () => {
   const tab = new LoroDoc()
   tab.getMap('m').set('k', 'origin-a-only')
   tab.commit()
-  a.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+  a.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
   const snapshot = await new Promise<string>((resolve, reject) => {
     b.addEventListener('message', (e: MessageEvent) => {
@@ -198,7 +194,7 @@ it('hands a later tab a snapshot that already contains an earlier push', async (
   const tab = new LoroDoc()
   tab.getMap('m').set('k', 'already-there')
   tab.commit()
-  port.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+  port.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
   const snapshot = await new Promise<string>((resolve, reject) => {
     port.addEventListener('message', (e: MessageEvent) => {
@@ -241,7 +237,7 @@ it('leaves a port that subscribed to a different document alone', async () => {
   const tab = new LoroDoc()
   tab.getMap('m').set('k', 'scoped')
   tab.commit()
-  pushing.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+  pushing.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
   // Ordered rather than raced, the same way the origin case above is: replica
   // work runs on one queue, so this answer is strictly after the push.
@@ -285,7 +281,7 @@ it('keeps a port subscribed across a re-init that only rotates the token', async
   const tab = new LoroDoc()
   tab.getMap('m').set('k', 'after-rotation')
   tab.commit()
-  pushing.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+  pushing.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
   const forked = new LoroDoc()
   forked.import(decode(await arrived))

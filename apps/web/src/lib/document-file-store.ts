@@ -1,3 +1,4 @@
+import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { blobRefSchema } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
@@ -66,17 +67,8 @@ export function dataUrlToBlob(dataURL: string, fallbackMimeType: string): Blob {
   const prefixMatch = /^data:([^;,]+)/.exec(header)
   const mimeType = prefixMatch?.[1] ?? fallbackMimeType
 
-  let binary: string
-  try {
-    binary = atob(base64)
-  } catch {
-    throw new Error('dataUrlToBlob: invalid base64 payload')
-  }
-
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
+  const bytes = base64ToBytes(base64)
+  if (bytes === null) throw new Error('dataUrlToBlob: invalid base64 payload')
   return new Blob([bytes], { type: mimeType })
 }
 

@@ -14,7 +14,11 @@ paths:
 ## What does NOT belong here
 
 - File parsing/serialization (goes to `codec`, planned), Loro containers, storage, rendering, HTTP/MCP surfaces.
-- Any runtime behavior beyond schema validation.
+- Any runtime behavior beyond schema validation — with the one deliberate exception below.
+
+## The base64 codec
+
+`src/encoding/base64.ts` is the repo's only base64 / base64url codec: encoders, and decoders that answer `null` for text that is not base64 rather than throwing. It lives here because `model` is the one package every runtime-sharing layer already depends on, and it runs on `btoa`/`atob` (globals on Node, in browsers and in workers) — no `Buffer`. Never hand-roll another; a caller that must throw names its own error at the call site.
 
 ## Dependency rules
 

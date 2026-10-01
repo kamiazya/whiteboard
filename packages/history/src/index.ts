@@ -12,9 +12,4 @@ export {
   type CheckpointSchedulerOptions,
   createCheckpointScheduler,
 } from './checkpoints/scheduler.js'
-export {
-  base64ToBytes,
-  bytesToBase64,
-  frontiersFromBase64,
-  frontiersToBase64,
-} from './frontiers-base64.js'
+export { frontiersFromBase64, frontiersToBase64 } from './frontiers-base64.js'

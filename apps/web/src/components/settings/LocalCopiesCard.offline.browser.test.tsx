@@ -11,6 +11,7 @@
  */
 
 import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
@@ -27,17 +28,11 @@ const DAEMON = 'https://daemon.whiteboard.invalid'
 const WORKSPACE = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
 const RAW_ID = Uint8Array.from([9, 8, 7, 6])
 
-function b64u(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
-}
-
 const daemonFetch = (async () =>
   new Response(
     JSON.stringify({
-      workspaceKey: b64u(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-      workspaceKeySalt: b64u(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
+      workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
+      workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
       tier: 'offline',
     }),
     { status: 200 },

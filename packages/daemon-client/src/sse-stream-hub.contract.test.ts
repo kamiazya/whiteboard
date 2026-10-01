@@ -2,16 +2,13 @@
 // The hub half of the SseStreamSource contract. Its sibling runs the same
 // cases against the SharedWorker-backed source in apps/web, which is the
 // implementation the app actually ships.
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { describe, vi } from 'vitest'
 import { SseStreamHub } from './sse-stream-hub.js'
 import type { SseStreamSourceHarness } from './test-utils/sse-stream-source-contract.js'
 import { sseStreamSourceContract } from './test-utils/sse-stream-source-contract.js'
 
 const BASE = 'http://d'
-
-function toBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64')
-}
 
 /** A daemon stand-in: mints a stream id, records the POSTs, pushes frames. */
 function createHarness(): SseStreamSourceHarness {
@@ -81,7 +78,7 @@ function createHarness(): SseStreamSourceHarness {
   return {
     source: hub,
     pushUpdate: (doc, bytes) => {
-      push?.(`event: update\ndata: ${JSON.stringify({ doc, update: toBase64(bytes) })}\n\n`)
+      push?.(`event: update\ndata: ${JSON.stringify({ doc, update: bytesToBase64(bytes) })}\n\n`)
     },
     pushText: (doc, raw) => {
       push?.(`event: message\ndata: ${JSON.stringify({ doc, raw })}\n\n`)

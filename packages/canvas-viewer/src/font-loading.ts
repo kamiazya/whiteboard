@@ -6,6 +6,7 @@
 // layout diverges from what a user exports (see font.ts's doc comment).
 
 // Vite's `?url` asset suffix, resolved at build/dev-server time.
+import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import robotoFontUrl from '../assets/fonts/Roboto/Roboto-Regular.ttf?url'
 import { VIEWER_FONT_FAMILY } from './font.js'
 
@@ -126,12 +127,9 @@ export function dataUriToBytes(dataUri: string): Uint8Array<ArrayBuffer> {
   if (!dataUri.slice(0, comma).endsWith(';base64')) {
     throw new Error(`expected a base64 data: URI: ${dataUri.slice(0, 32)}`)
   }
-  const binary = atob(dataUri.slice(comma + 1))
-  // Over an explicit ArrayBuffer: a bare `new Uint8Array(n)` is typed
-  // `Uint8Array<ArrayBufferLike>`, which `BufferSource` refuses because it
-  // could be shared.
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length))
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  const bytes = base64ToBytes(dataUri.slice(comma + 1))
+  if (bytes === null)
+    throw new Error(`invalid base64 payload in data: URI: ${dataUri.slice(0, 32)}`)
   return bytes
 }
 

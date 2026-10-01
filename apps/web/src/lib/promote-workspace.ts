@@ -46,6 +46,7 @@ import {
   documentContainers,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
@@ -229,10 +230,4 @@ async function promoteWorkspaceUnsafe(
     shadowedPaths,
     blobs,
   }
-}
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
 }

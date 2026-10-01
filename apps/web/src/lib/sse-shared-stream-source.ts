@@ -10,7 +10,7 @@ import type {
   DocListener,
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
-import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { isBridgeDaemon } from './bridge-address.js'
 import { postWorkerRequest, sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
 
@@ -24,8 +24,11 @@ function resolveSnapshot(
 ): void {
   const waiters = snapshotWaiters.get(doc)
   if (!waiters) return
+  const bytes = base64ToBytes(snapshot)
+  // Left waiting rather than resolved with nothing: the worker's next
+  // snapshot for this document can still answer them.
+  if (bytes === null) return
   snapshotWaiters.delete(doc)
-  const bytes = fromBase64(snapshot)
   for (const resolve of waiters) resolve(bytes)
 }
 
@@ -39,7 +42,8 @@ function deliverToListeners(
   evt: Exclude<ReturnType<typeof sseWorkerEventSchema.parse>, { type: 'snapshot' }>,
 ): void {
   if (evt.type === 'authority-update') {
-    const bytes = fromBase64(evt.update)
+    const bytes = base64ToBytes(evt.update)
+    if (bytes === null) return
     for (const l of set) l.onUpdate(bytes)
     return
   }
@@ -167,7 +171,7 @@ export function createSharedSseStreamSource(
       // daemon's — and is what carries the result onward in both directions,
       // so a tab posting to the daemon itself would be writing around the very
       // thing meant to order these writes.
-      postWorkerRequest(port, { type: 'push', doc, update: toBase64(update) })
+      postWorkerRequest(port, { type: 'push', doc, update: bytesToBase64(update) })
     },
     snapshot(doc) {
       // From the worker's replica, not the daemon: the worker seeds itself
