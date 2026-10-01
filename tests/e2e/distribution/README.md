@@ -55,6 +55,7 @@ They are run individually or via the CI release workflow:
 | `packaged-server-mode-app-smoke.mjs` | Server-mode app surface |
 | `packaged-daemon-backup-restore-smoke.mjs` | Daemon backup/restore |
 | `packaged-daemon-logs-smoke.mjs` | Daemon log endpoint |
+| `packaged-daemon-replica-key-smoke.mjs` | `daemon rotate-replica-key` / `set-replica-tier` against a running daemon: the key pair changes, the tier override takes and clears |
 | `packaged-daemon-support-bundle-smoke.mjs` | Daemon support bundle |
 | `packaged-daemon-token-smoke.mjs` | Daemon token auth |
 

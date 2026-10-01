@@ -20,12 +20,15 @@ import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from '../server/confi
 import { getLogger } from '../server/log.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
+  parseDaemonReplicaKeyArgs,
+  parseDaemonReplicaTierArgs,
   parseDaemonRunArgs,
   parseDaemonSubcommandArgs,
   parseDaemonSupportBundleArgs,
 } from './argv.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 import { runDaemonLogs } from './daemon-logs.js'
+import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-replica-posture.js'
 import { runDaemonStatus } from './daemon-status.js'
 import { runDaemonStop } from './daemon-stop.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
@@ -42,6 +45,8 @@ whiteboard daemon doctor         --json [--data-dir=<path>]
 whiteboard daemon stop           --json [--data-dir=<path>]
 whiteboard daemon logs           --json [--data-dir=<path>]
 whiteboard daemon support-bundle --json --output-dir=<path> [--data-dir=<path>]
+whiteboard daemon rotate-replica-key --json --workspace=<id> [--data-dir=<path>]
+whiteboard daemon set-replica-tier   --json --workspace=<id> --tier=<no-offline|offline|bounded|default> [--data-dir=<path>]
 whiteboard daemon run            --json [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
 whiteboard server status         --json [--data-dir=<path>]
 whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [options...]
@@ -66,7 +71,16 @@ function writeJsonObject(value: unknown): void {
  * What `daemon` accepts. A set rather than a chain of `!==` comparisons, and
  * the type is read OFF it, so a subcommand added to one is added to both.
  */
-const DAEMON_SUBCOMMANDS = ['status', 'doctor', 'stop', 'logs', 'support-bundle', 'run'] as const
+const DAEMON_SUBCOMMANDS = [
+  'status',
+  'doctor',
+  'stop',
+  'logs',
+  'support-bundle',
+  'rotate-replica-key',
+  'set-replica-tier',
+  'run',
+] as const
 type DaemonSubcommand = (typeof DAEMON_SUBCOMMANDS)[number]
 const isDaemonSubcommand = (value: string | undefined): value is DaemonSubcommand =>
   DAEMON_SUBCOMMANDS.includes(value as DaemonSubcommand)
@@ -81,7 +95,10 @@ const JSON_DAEMON_COMMANDS = {
   doctor: runDaemonDoctor,
   stop: runDaemonStop,
 } satisfies Record<
-  Exclude<DaemonSubcommand, 'logs' | 'run' | 'support-bundle'>,
+  Exclude<
+    DaemonSubcommand,
+    'logs' | 'run' | 'support-bundle' | 'rotate-replica-key' | 'set-replica-tier'
+  >,
   (options: { dataDir: string }) => Promise<{ result: unknown; exitCode: number }>
 >
 
@@ -163,6 +180,10 @@ async function dispatchDaemon(subcommand: DaemonSubcommand, rest: readonly strin
     return await dispatchSupportBundle(rest)
   }
 
+  if (subcommand === 'rotate-replica-key' || subcommand === 'set-replica-tier') {
+    return await dispatchReplicaPosture(subcommand, rest)
+  }
+
   const parsed = parseDaemonSubcommandArgs(rest, `daemon ${subcommand}`)
   if (parsed.kind === 'usage-error') {
     // stdout stays empty on usage errors so consumers that pipe
@@ -229,6 +250,39 @@ async function dispatchMcp(): Promise<number> {
   // process.exit() directly on stdin EOF/close/error or SIGTERM/SIGINT,
   // so control never actually returns here — it exits the process instead.
   return await new Promise<never>(() => undefined)
+}
+
+/**
+ * The two posture commands ask the RUNNING daemon over its socket; the data
+ * directory only locates its record. Both answer one JSON object.
+ */
+async function dispatchReplicaPosture(
+  subcommand: 'rotate-replica-key' | 'set-replica-tier',
+  rest: readonly string[],
+): Promise<number> {
+  const usageError = (message: string): number => {
+    process.stderr.write(`${message}\n`)
+    return 64
+  }
+  if (subcommand === 'rotate-replica-key') {
+    const parsed = parseDaemonReplicaKeyArgs(rest)
+    if (parsed.kind === 'usage-error') return usageError(parsed.message)
+    const { result, exitCode } = await runDaemonRotateReplicaKey({
+      dataDir: parsed.dataDir ?? resolveDefaultDataDir(process.env),
+      workspaceId: parsed.workspaceId,
+    })
+    writeJsonObject(result)
+    return exitCode
+  }
+  const parsed = parseDaemonReplicaTierArgs(rest)
+  if (parsed.kind === 'usage-error') return usageError(parsed.message)
+  const { result, exitCode } = await runDaemonSetReplicaTier({
+    dataDir: parsed.dataDir ?? resolveDefaultDataDir(process.env),
+    workspaceId: parsed.workspaceId,
+    tier: parsed.tier,
+  })
+  writeJsonObject(result)
+  return exitCode
 }
 
 async function dispatchSupportBundle(rest: readonly string[]): Promise<number> {

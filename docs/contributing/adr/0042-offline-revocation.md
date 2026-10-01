@@ -325,6 +325,13 @@ the epoch's own module comment named as its reason for existing — turns out
 not to use it either. Filed as a whiteboard issue rather than closed, so the
 next reader does not have to re-derive this.
 
+*Entry point (later addendum):* both routes are reached by the CLI —
+`whiteboard daemon rotate-replica-key` and `whiteboard daemon
+set-replica-tier` — which asks the running daemon over its socket under the
+daemon token, since the key store is the daemon's and a rotation it did not
+perform is one its live sessions never hear about. Before that the only
+caller was `curl --unix-socket`.
+
 The bar is `runtime:admin`, the same as decision 1's tier route above and
 for the same reason: rotation is a security-posture change at least as
 consequential as a tier change, and `route-scope-registry.ts`'s `workspace

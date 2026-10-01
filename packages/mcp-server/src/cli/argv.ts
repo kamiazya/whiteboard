@@ -71,6 +71,90 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
   }
 }
 
+export type DaemonReplicaKeyArgs =
+  | { kind: 'ok'; json: true; workspaceId: string; dataDir: string | undefined }
+  | { kind: 'usage-error'; message: string }
+
+const REPLICA_KEY_FLAGS: FlagTable<'workspaceId' | 'dataDir'> = {
+  booleans: ['--json'],
+  values: { '--workspace': 'workspaceId', '--data-dir': 'dataDir' },
+}
+
+export function parseDaemonReplicaKeyArgs(args: readonly string[]): DaemonReplicaKeyArgs {
+  const scan = scanFlags(args, REPLICA_KEY_FLAGS)
+  if (scan.kind === 'usage-error') return scan
+  if (!scan.seen.has('--json')) {
+    return {
+      kind: 'usage-error',
+      message:
+        'Only --json is supported. Re-run with: whiteboard daemon rotate-replica-key --json --workspace=<id>',
+    }
+  }
+  if (scan.values.workspaceId === undefined) {
+    return { kind: 'usage-error', message: '--workspace=<id> is required' }
+  }
+  return {
+    kind: 'ok',
+    json: true,
+    workspaceId: scan.values.workspaceId,
+    dataDir: scan.values.dataDir,
+  }
+}
+
+const REPLICA_TIERS = ['no-offline', 'offline', 'bounded'] as const
+type ReplicaTierFlag = (typeof REPLICA_TIERS)[number]
+
+export type DaemonReplicaTierArgs =
+  | {
+      kind: 'ok'
+      json: true
+      workspaceId: string
+      /** `null` is the explicit clear (`--tier=default`). */
+      tier: ReplicaTierFlag | null
+      dataDir: string | undefined
+    }
+  | { kind: 'usage-error'; message: string }
+
+const REPLICA_TIER_FLAGS: FlagTable<'workspaceId' | 'tier' | 'dataDir'> = {
+  booleans: ['--json'],
+  values: { '--workspace': 'workspaceId', '--tier': 'tier', '--data-dir': 'dataDir' },
+}
+
+export function parseDaemonReplicaTierArgs(args: readonly string[]): DaemonReplicaTierArgs {
+  const scan = scanFlags(args, REPLICA_TIER_FLAGS)
+  if (scan.kind === 'usage-error') return scan
+  if (!scan.seen.has('--json')) {
+    return {
+      kind: 'usage-error',
+      message:
+        'Only --json is supported. Re-run with: whiteboard daemon set-replica-tier --json --workspace=<id> --tier=<no-offline|offline|bounded|default>',
+    }
+  }
+  if (scan.values.workspaceId === undefined) {
+    return { kind: 'usage-error', message: '--workspace=<id> is required' }
+  }
+  const tier = scan.values.tier
+  if (tier === undefined) {
+    return {
+      kind: 'usage-error',
+      message: '--tier=<no-offline|offline|bounded|default> is required',
+    }
+  }
+  if (tier !== 'default' && !REPLICA_TIERS.includes(tier as ReplicaTierFlag)) {
+    return {
+      kind: 'usage-error',
+      message: `--tier must be one of ${REPLICA_TIERS.join(', ')}, or default (clears the override)`,
+    }
+  }
+  return {
+    kind: 'ok',
+    json: true,
+    workspaceId: scan.values.workspaceId,
+    tier: tier === 'default' ? null : (tier as ReplicaTierFlag),
+    dataDir: scan.values.dataDir,
+  }
+}
+
 export type DaemonSupportBundleArgs =
   | { kind: 'ok'; json: true; outputDir: string; dataDir?: string }
   | { kind: 'usage-error'; message: string }

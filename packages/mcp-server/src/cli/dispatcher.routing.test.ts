@@ -28,6 +28,23 @@ vi.mock('./daemon-support-bundle.js', () => ({
   runDaemonSupportBundle: vi.fn(async () => ({ stdout: '{"ok":true}\n', stderr: '', exitCode: 0 })),
 }))
 
+vi.mock('./daemon-replica-posture.js', () => ({
+  runDaemonRotateReplicaKey: vi.fn(async () => ({
+    result: { schemaVersion: 1, ok: true, workspaceId: 'ws-1', keyId: 'k' },
+    exitCode: 0,
+  })),
+  runDaemonSetReplicaTier: vi.fn(async () => ({
+    result: {
+      schemaVersion: 1,
+      ok: true,
+      workspaceId: 'ws-1',
+      tier: null,
+      effectiveTier: 'offline',
+    },
+    exitCode: 0,
+  })),
+}))
+
 vi.mock('./daemon-run.js', () => ({
   runDaemonRun: vi.fn(async () => ({
     kind: 'refused',
@@ -106,6 +123,7 @@ const daemonStopModule = await import('./daemon-stop.js')
 const daemonLogsModule = await import('./daemon-logs.js')
 const daemonSupportBundleModule = await import('./daemon-support-bundle.js')
 const daemonRunModule = await import('./daemon-run.js')
+const daemonReplicaPostureModule = await import('./daemon-replica-posture.js')
 const serverStatusModule = await import('./server-status.js')
 const serverStopModule = await import('./server-stop.js')
 const serverDoctorModule = await import('./server-doctor.js')
@@ -248,6 +266,50 @@ describe('dispatcher routing: whiteboard daemon stop', () => {
 
   it('USAGE includes `whiteboard daemon stop`', () => {
     expect(USAGE).toMatch(/whiteboard daemon stop/)
+  })
+})
+
+describe('dispatcher routing: whiteboard daemon rotate-replica-key', () => {
+  it('routes to runDaemonRotateReplicaKey with the workspace and prints its JSON', async () => {
+    const run = vi.mocked(daemonReplicaPostureModule.runDaemonRotateReplicaKey)
+    run.mockClear()
+    const { result: exitCode, stdout } = await captureStdio(() =>
+      main(['daemon', 'rotate-replica-key', '--json', '--workspace=ws-1']),
+    )
+    expect(exitCode).toBe(0)
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: 'ws-1' }))
+    expect(JSON.parse(stdout)).toMatchObject({ ok: true, keyId: 'k' })
+  })
+
+  it('is a usage error without --workspace, and asks the daemon nothing', async () => {
+    const run = vi.mocked(daemonReplicaPostureModule.runDaemonRotateReplicaKey)
+    run.mockClear()
+    const { result: exitCode, stderr } = await captureStdio(() =>
+      main(['daemon', 'rotate-replica-key', '--json']),
+    )
+    expect(exitCode).toBe(64)
+    expect(stderr).toBe('--workspace=<id> is required\n')
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('USAGE includes `whiteboard daemon rotate-replica-key`', () => {
+    expect(USAGE).toMatch(/whiteboard daemon rotate-replica-key/)
+  })
+})
+
+describe('dispatcher routing: whiteboard daemon set-replica-tier', () => {
+  it('routes to runDaemonSetReplicaTier with the workspace and the tier', async () => {
+    const run = vi.mocked(daemonReplicaPostureModule.runDaemonSetReplicaTier)
+    run.mockClear()
+    const { result: exitCode } = await captureStdio(() =>
+      main(['daemon', 'set-replica-tier', '--json', '--workspace=ws-1', '--tier=default']),
+    )
+    expect(exitCode).toBe(0)
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: 'ws-1', tier: null }))
+  })
+
+  it('USAGE includes `whiteboard daemon set-replica-tier`', () => {
+    expect(USAGE).toMatch(/whiteboard daemon set-replica-tier/)
   })
 })
 
