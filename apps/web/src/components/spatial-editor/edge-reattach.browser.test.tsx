@@ -10,10 +10,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -34,24 +33,7 @@ const inked: SpatialCanvas = {
   lines: [{ id: 'l1', from: { kind: 'node', node: 'a' }, to: { kind: 'node', node: 'b' } }],
 }
 
-function makeHost(start: SpatialCanvas) {
-  const latest: { canvas: SpatialCanvas } = { canvas: start }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const SIZE = { width: 900, height: 700 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -117,7 +99,7 @@ async function dragEnd(
 }
 
 it('drags a relation end onto another box', async () => {
-  const { Host, latest } = makeHost(related)
+  const { Host, latest } = makeEditorHost({ initial: related, size: SIZE })
   const { container } = render(<Host />)
   await selectThePath(container)
 
@@ -130,7 +112,7 @@ it('drags a relation end onto another box', async () => {
 it('leaves a relation end where it was when the drop lands on no box', async () => {
   // A relation cannot end nowhere, so the drag reverts. The stroke case
   // below is the same pixels and the opposite answer.
-  const { Host, latest } = makeHost(related)
+  const { Host, latest } = makeEditorHost({ initial: related, size: SIZE })
   const { container } = render(<Host />)
   await selectThePath(container)
 
@@ -141,7 +123,7 @@ it('leaves a relation end where it was when the drop lands on no box', async () 
 })
 
 it('frees a stroke end into empty space, where a relation would have reverted', async () => {
-  const { Host, latest } = makeHost(inked)
+  const { Host, latest } = makeEditorHost({ initial: inked, size: SIZE })
   const { container } = render(<Host />)
   await selectThePath(container)
 
@@ -154,7 +136,7 @@ it('outlines the box the pointer is over while the drag runs', async () => {
   // The only feedback the drag gives, and deliberately only the outline:
   // where an end meets a box is the router's, so a preview that drew an
   // attachment point would imply a geometry the commit then contradicts.
-  const { Host } = makeHost(related)
+  const { Host } = makeEditorHost({ initial: related, size: SIZE })
   const { container } = render(<Host />)
   await selectThePath(container)
 

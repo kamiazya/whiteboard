@@ -7,12 +7,11 @@
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { touch } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -27,28 +26,6 @@ const start: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE],
-}
-
-function makeHost() {
-  const latest: { commands: EditorCommand[] } = { commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="hand"
-          canvas={canvas}
-          threads={[THREAD]}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
 }
 
 const transformOf = (container: HTMLElement) =>
@@ -68,7 +45,11 @@ async function ready(container: HTMLElement) {
 const BUBBLE = { x: 625, y: 470 }
 
 it('a press on a bubble that does not travel opens the card under the hand tool', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    tool: 'hand',
+    editorProps: { threads: [THREAD] },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await ready(container)
@@ -84,7 +65,11 @@ it('a press on a bubble that does not travel opens the card under the hand tool'
 })
 
 it('a press on a bubble that travels is the pan it always was: no card, no move-comment', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    tool: 'hand',
+    editorProps: { threads: [THREAD] },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await ready(container)
@@ -116,7 +101,11 @@ it('a press on a bubble that travels is the pan it always was: no card, no move-
 })
 
 it('a press on the canvas shuts the card and stays shut, even though it also pans', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    tool: 'hand',
+    editorProps: { threads: [THREAD] },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await ready(container)
@@ -137,30 +126,17 @@ it('a press on the canvas shuts the card and stays shut, even though it also pan
 const menuLabels = (container: HTMLElement) =>
   [...container.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim())
 
-function touch(el: HTMLElement, type: string, x: number, y: number, pointerId = 7) {
-  const r = el.getBoundingClientRect()
-  el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      pointerId,
-      pointerType: 'touch',
-      isPrimary: true,
-      button: type === 'pointerdown' ? 0 : -1,
-      buttons: type === 'pointerup' ? 0 : 1,
-    }),
-  )
-}
-
 // Panning is not a reason to be unable to talk about what is on the canvas.
 // The hand tool keeps CONTENT out of reach — a press pans, nothing selects,
 // nothing edits — while the annotation layer stays reachable the way it is
 // under Select: a right-click, or a stationary touch long-press, opens the
 // menu with the comment verbs alone.
 it('a right-click under the hand tool offers the annotation verbs alone, and selects nothing', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    tool: 'hand',
+    editorProps: { threads: [THREAD] },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await ready(container)
@@ -179,7 +155,11 @@ it('a right-click under the hand tool offers the annotation verbs alone, and sel
 })
 
 it('Comment here from the hand-tool menu composes and commits a point-anchored comment', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    tool: 'hand',
+    editorProps: { threads: [THREAD] },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await ready(container)
@@ -200,7 +180,11 @@ it('Comment here from the hand-tool menu composes and commits a point-anchored c
 })
 
 it('a stationary touch long-press under the hand tool opens the comment verbs, and lifting opens no card', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    tool: 'hand',
+    editorProps: { threads: [THREAD] },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await ready(container)

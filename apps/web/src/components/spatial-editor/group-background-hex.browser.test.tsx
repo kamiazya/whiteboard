@@ -5,10 +5,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -18,39 +18,6 @@ const start: SpatialCanvas = {
     groupNode({ id: 'g1', x: 400, y: 300, width: 300, height: 200, label: 'frame' }),
   ],
   edges: [],
-}
-
-function makeHost(onAddImage?: (file: File) => Promise<string | undefined>) {
-  const latest: { canvas: SpatialCanvas } = { canvas: start }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          onAddImage={onAddImage}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-function rightClick(el: HTMLElement, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  el.dispatchEvent(
-    new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      button: 2,
-    }),
-  )
 }
 
 async function waitMenu(container: HTMLElement) {
@@ -66,7 +33,7 @@ function menuItem(container: HTMLElement, name: string): HTMLElement | undefined
 }
 
 it('the Color row opens a custom color panel and applies a typed hex', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
   await waitMenu(container)
@@ -96,7 +63,10 @@ it('the Color row opens a custom color panel and applies a typed hex', async () 
 })
 
 it('a group gains Set background image, style options, and Remove background', async () => {
-  const { Host, latest } = makeHost(async () => 'stored-bg')
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    editorProps: { onAddImage: async () => 'stored-bg' },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

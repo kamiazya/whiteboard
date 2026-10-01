@@ -7,11 +7,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -38,28 +37,6 @@ function makeStart(label?: string): SpatialCanvas {
   }
 }
 
-function makeHost(start: SpatialCanvas) {
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 /** Element-relative position ON the edge polyline (see edge-select-delete). */
 function edgeMidpointPosition(container: HTMLElement): { x: number; y: number } {
   const root = rootOf(container)
@@ -79,7 +56,7 @@ function labelEditor(container: HTMLElement): HTMLTextAreaElement | null {
 }
 
 it('double-clicking an edge opens the label editor; committing sets the label', async () => {
-  const { Host, latest } = makeHost(makeStart())
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -91,7 +68,7 @@ it('double-clicking an edge opens the label editor; committing sets the label', 
   await userEvent.click(rootOf(container), { position: { x: 650, y: 300 } })
   await vi.waitFor(() => expect(labelEditor(container)).toBeNull())
 
-  expect(latest.commands).toContain('set-edge-label')
+  expect(latest.kinds).toContain('set-edge-label')
   expect(latest.canvas.edges[0]).toMatchObject({ id: 'e1', label: 'yes' })
   // The committed label is rendered into the scene.
   await vi.waitFor(() =>
@@ -102,7 +79,7 @@ it('double-clicking an edge opens the label editor; committing sets the label', 
 })
 
 it('the editor opens pre-filled with the existing label and Escape cancels without a command', async () => {
-  const { Host, latest } = makeHost(makeStart('before'))
+  const { Host, latest } = makeEditorHost({ initial: makeStart('before') })
   const { container } = render(<Host />)
 
   await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -111,12 +88,12 @@ it('the editor opens pre-filled with the existing label and Escape cancels witho
 
   await userEvent.keyboard('{Escape}')
   await vi.waitFor(() => expect(labelEditor(container)).toBeNull())
-  expect(latest.commands).not.toContain('set-edge-label')
+  expect(latest.kinds).not.toContain('set-edge-label')
   expect(latest.canvas.edges[0]).toMatchObject({ label: 'before' })
 })
 
 it('committing an empty value removes the label', async () => {
-  const { Host, latest } = makeHost(makeStart('old'))
+  const { Host, latest } = makeEditorHost({ initial: makeStart('old') })
   const { container } = render(<Host />)
 
   await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -135,7 +112,7 @@ it('typed spaces reach the label editor instead of arming the Space-pan', async 
   // label editing keeps the gesture idle (unlike node text editing), so a
   // typed space never reached the textarea. Type through real keydowns,
   // not fill(), to exercise the bubbling path.
-  const { Host, latest } = makeHost(makeStart())
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -149,11 +126,11 @@ it('typed spaces reach the label editor instead of arming the Space-pan', async 
 })
 
 it('double-clicking empty space still creates a node (S6-2 unaffected)', async () => {
-  const { Host, latest } = makeHost(makeStart())
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 300 } })
-  await vi.waitFor(() => expect(latest.commands).toContain('create-node'))
+  await vi.waitFor(() => expect(latest.kinds).toContain('create-node'))
   expect(latest.canvas.nodes).toHaveLength(3)
   expect(labelEditor(container)).toBeNull()
 })

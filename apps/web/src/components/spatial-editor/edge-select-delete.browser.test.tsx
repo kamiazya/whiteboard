@@ -5,11 +5,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -27,29 +26,6 @@ function makeStart(): SpatialCanvas {
       },
     ],
   }
-}
-
-function makeHost() {
-  const start = makeStart()
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
 }
 
 /**
@@ -74,7 +50,7 @@ function edgeMidpointPosition(container: HTMLElement): { x: number; y: number } 
 }
 
 it('clicking an edge selects it and Delete removes it', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -84,7 +60,7 @@ it('clicking an edge selects it and Delete removes it', async () => {
 
   rootOf(container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
   await vi.waitFor(() => expect(latest.canvas.edges).toHaveLength(0))
-  expect(latest.commands).toContain('delete-edge')
+  expect(latest.kinds).toContain('delete-edge')
   // Nodes are untouched.
   expect(latest.canvas.nodes).toHaveLength(2)
 })
@@ -97,7 +73,7 @@ it('a real keyboard Delete works after a cold edge click (focus lands in the edi
   // editor takes focus on edge selection, the real Delete lands on <body>
   // and nothing happens. userEvent.keyboard routes through activeElement,
   // pinning the real path.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -110,7 +86,7 @@ it('a real keyboard Delete works after a cold edge click (focus lands in the edi
 })
 
 it('a click NEAR but not on the edge selects nothing', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   const mid = edgeMidpointPosition(container)
@@ -122,7 +98,7 @@ it('a click NEAR but not on the edge selects nothing', async () => {
 })
 
 it('Escape and empty-space clicks clear the edge selection without deleting', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -155,7 +131,7 @@ it('Shift-clicking a node ADDS it to a held edge selection, and Delete takes bot
   // thing got the verb. Both take the whole selection now, so the reason is
   // gone. Rewritten rather than deleted, because a reader finding the old
   // title in `git log` should land on what replaced it.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
@@ -176,7 +152,7 @@ it('Shift-clicking a node ADDS it to a held edge selection, and Delete takes bot
 })
 
 it('Shift-clicking a second edge adds it, and one Delete takes the pair', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -210,7 +186,7 @@ it('a band over both ends of a relation takes the relation with them', async () 
   // BOTH the nodes it connects, never by where the drawn line happens to
   // run. Both boxes of the fixture sit in the band here, so the edge comes
   // along and one Delete clears the board.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -254,7 +230,7 @@ it('a band over both ends of a relation takes the relation with them', async () 
 })
 
 it('a marquee drag that starts on an edge line ends with no edge selected', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
   const mid = edgeMidpointPosition(container)
@@ -269,5 +245,5 @@ it('a marquee drag that starts on an edge line ends with no edge selected', asyn
   )
   rootOf(container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
   expect(latest.canvas.edges).toHaveLength(1)
-  expect(latest.commands).not.toContain('delete-edge')
+  expect(latest.kinds).not.toContain('delete-edge')
 })
