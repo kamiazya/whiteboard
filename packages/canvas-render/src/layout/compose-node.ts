@@ -42,14 +42,16 @@ import { referenceFor as resolveOneReference } from '../references/seams.js'
 import { markdownTheme } from '../theme/theme-asset.js'
 import type { ResolvedLayoutOptions, ResolvedReference } from './layout-options.js'
 import {
-  type EmbeddedCanvasBox,
-  type EmbeddedCanvasMiniature,
   type FittedBlocks,
   firstLineOfBlocks,
   fitBlocksToHeight,
   layoutMdastBlocks,
-  type MdastLayoutOptions,
 } from './nodes/mdast-blocks.js'
+import type {
+  EmbeddedCanvasBox,
+  EmbeddedCanvasMiniature,
+  MdastLayoutOptions,
+} from './nodes/mdast-layout-options.js'
 import { outlineContentBox } from './nodes/node-outline.js'
 import { fitToWidth } from './nodes/truncate.js'
 import { collectTextRuns, composePassageHighlights, type NodePassage } from './passage-highlight.js'
@@ -191,12 +193,7 @@ function labelRun(text: string, options: ResolvedLayoutOptions, maxWidth: number
   // ascent while rendering identically.
   return {
     kind: 'textRun',
-    bbox: {
-      x: 0,
-      y: 0,
-      w: metrics.advanceWidth,
-      h: metrics.ascent + metrics.descent,
-    },
+    bbox: { x: 0, y: 0, w: metrics.advanceWidth, h: metrics.ascent + metrics.descent },
     baseline: metrics.ascent,
     text: fitted.text,
     ...(fitted.truncated ? { truncated: true as const } : {}),
@@ -205,7 +202,6 @@ function labelRun(text: string, options: ResolvedLayoutOptions, maxWidth: number
   }
 }
 
-/** Moves a node's content from its own origin to the node's padded top-left. */
 /**
  * The node's chrome, carrying whether its content fits the box and whether
  * anything had to be cut for it.

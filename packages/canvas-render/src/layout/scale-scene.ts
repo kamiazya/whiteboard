@@ -29,7 +29,7 @@ import type {
   TableRowSceneNode,
 } from '@kamiazya/whiteboard-scene'
 import { sceneBounds } from '../scene-bounds.js'
-import type { EmbeddedCanvasBox, EmbeddedCanvasMiniature } from './nodes/mdast-blocks.js'
+import type { EmbeddedCanvasBox, EmbeddedCanvasMiniature } from './nodes/mdast-layout-options.js'
 import { translateScene } from './translate-scene.js'
 
 type ScalableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode

@@ -6,7 +6,7 @@ artifacts — npm tarball and Docker image — against real process boundaries.
 ## test:e2e:distribution
 
 The `test:e2e:distribution` root script runs the full distribution verification chain.
-The chain has fifteen steps after the initial build prerequisite:
+The chain has sixteen steps after the initial build prerequisite:
 
 1. `pnpm smoke:e2e` — full stdio MCP round-trip against the source entry point (canvas create → checkpoint → restore → export)
 2. `pnpm smoke:tarball` — validates the packed `.tgz` is installable and functional
@@ -18,11 +18,12 @@ The chain has fifteen steps after the initial build prerequisite:
 8. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
 9. packaged daemon backup/restore smoke
 10. packaged daemon logs smoke
-11. packaged daemon support-bundle smoke
-12. packaged daemon token smoke
-13. packaged server-mode app smoke
-14. packaged server-mode CLI smoke
-15. packaged server-mode entrypoint smoke
+11. packaged daemon replica-key smoke — `daemon rotate-replica-key` / `set-replica-tier` against a running daemon
+12. packaged daemon support-bundle smoke
+13. packaged daemon token smoke
+14. packaged server-mode app smoke
+15. packaged server-mode CLI smoke
+16. packaged server-mode entrypoint smoke
 
 ## Vitest-backed vs Node-script smokes
 
@@ -55,6 +56,7 @@ They are run individually or via the CI release workflow:
 | `packaged-server-mode-app-smoke.mjs` | Server-mode app surface |
 | `packaged-daemon-backup-restore-smoke.mjs` | Daemon backup/restore |
 | `packaged-daemon-logs-smoke.mjs` | Daemon log endpoint |
+| `packaged-daemon-replica-key-smoke.mjs` | `daemon rotate-replica-key` / `set-replica-tier` against a running daemon: the key pair changes, the tier override takes and clears |
 | `packaged-daemon-support-bundle-smoke.mjs` | Daemon support bundle |
 | `packaged-daemon-token-smoke.mjs` | Daemon token auth |
 

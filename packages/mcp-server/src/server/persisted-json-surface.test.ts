@@ -106,6 +106,13 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'sbom-fingerprint.test.ts already asserts that every sidecar that writer can produce parses ' +
       'through the shared schema — the same round trip, from the writer end',
   ),
+  'cli/daemon-replica-posture.ts': notModelled(
+    "the running daemon's HTTP answer to a rotate or a tier change, parsed through the same " +
+      'daemon-client contract the routes emit with (replica-key.ts calls .parse on the way out). ' +
+      'daemon-replica-posture.test.ts drives the command over an injected transport, and ' +
+      'packaged-daemon-replica-key-smoke.mjs reads the real answer from a real daemon — the ' +
+      'round trip, from both ends',
+  ),
   'cli/daemon-support-bundle.ts': notModelled(
     'it re-reads the JSONL that runDaemonLogs just printed, and that shape is round-tripped by ' +
       'shared/diagnostics/log-jsonl.property.test.ts, redaction included',

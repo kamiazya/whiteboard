@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parseDaemonReplicaKeyArgs,
+  parseDaemonReplicaTierArgs,
   parseDaemonRunArgs,
   parseDaemonSubcommandArgs,
   parseDaemonSupportBundleArgs,
@@ -206,6 +208,64 @@ describe('parseDaemonRunArgs', () => {
     }
     expect(result.kind).toBe('usage-error')
     expect(result.message).not.toContain('hunter2')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// parseDaemonReplicaKeyArgs / parseDaemonReplicaTierArgs
+// ---------------------------------------------------------------------------
+
+describe('parseDaemonReplicaKeyArgs', () => {
+  it('requires --json and --workspace', () => {
+    expect(parseDaemonReplicaKeyArgs(['--json', '--workspace=ws-1'])).toEqual({
+      kind: 'ok',
+      json: true,
+      workspaceId: 'ws-1',
+      dataDir: undefined,
+    })
+    expect(parseDaemonReplicaKeyArgs(['--workspace=ws-1'])).toMatchObject({
+      kind: 'usage-error',
+      message: expect.stringContaining('--json'),
+    })
+    expect(parseDaemonReplicaKeyArgs(['--json'])).toEqual({
+      kind: 'usage-error',
+      message: '--workspace=<id> is required',
+    })
+  })
+
+  it('carries --data-dir through', () => {
+    expect(
+      parseDaemonReplicaKeyArgs(['--json', '--workspace=ws-1', '--data-dir=/data']),
+    ).toMatchObject({ kind: 'ok', dataDir: '/data' })
+  })
+})
+
+describe('parseDaemonReplicaTierArgs', () => {
+  it('accepts each tier, and `default` as the explicit clear', () => {
+    for (const tier of ['no-offline', 'offline', 'bounded'] as const) {
+      expect(parseDaemonReplicaTierArgs(['--json', '--workspace=ws-1', `--tier=${tier}`])).toEqual({
+        kind: 'ok',
+        json: true,
+        workspaceId: 'ws-1',
+        tier,
+        dataDir: undefined,
+      })
+    }
+    expect(
+      parseDaemonReplicaTierArgs(['--json', '--workspace=ws-1', '--tier=default']),
+    ).toMatchObject({ kind: 'ok', tier: null })
+  })
+
+  it('refuses a tier the daemon does not know, naming the ones it does', () => {
+    expect(parseDaemonReplicaTierArgs(['--json', '--workspace=ws-1', '--tier=sometimes'])).toEqual({
+      kind: 'usage-error',
+      message:
+        '--tier must be one of no-offline, offline, bounded, or default (clears the override)',
+    })
+    expect(parseDaemonReplicaTierArgs(['--json', '--workspace=ws-1'])).toEqual({
+      kind: 'usage-error',
+      message: '--tier=<no-offline|offline|bounded|default> is required',
+    })
   })
 })
 

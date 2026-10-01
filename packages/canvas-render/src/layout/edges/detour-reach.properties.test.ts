@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
-import { DETOUR_REACH_PX, detourCandidates } from './spatial-edges.js'
+import { DETOUR_REACH_PX, detourCandidates } from './edge-router.js'
 
 /**
  * `routeOrthogonal` prunes its obstacle set to the box a candidate path can

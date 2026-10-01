@@ -314,7 +314,7 @@ Follow the README's recipe when adding one, and keep the table alphabetical.
 
 ## The edge router seam, and the facet that is no longer here
 
-`visual.path/v0` and `edge-router.ts` are GONE
+`visual.path/v0` and this package's own edge-router module are GONE
 ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4).
 An edge's bends are `edge.bends`, a field of the model, and the route through
 them is `canvas-render`'s `layout/edges/bend-route.ts`. Do not re-add a bend

@@ -127,6 +127,93 @@ describe('wb_workspace_edit', () => {
     expect(after.map((d) => d.path)).not.toContain('doomed')
   })
 
+  it('moves a document, and the references other documents wrote to its old path follow', async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    const seeded = await tool.execute({
+      workspaceId: WS,
+      ops: [
+        { op: 'document.create', path: 'design/login', kind: 'markdown', markdown: body('target') },
+        {
+          op: 'document.create',
+          path: 'notes/daily',
+          kind: 'markdown',
+          markdown: body('see [[design/login]] and [[unrelated]]'),
+        },
+      ],
+    })
+    const [target, source] = seeded.results
+
+    const out = await tool.execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.move', documentId: target?.documentId ?? '', path: 'archive/login' }],
+    })
+    expect(out.results).toEqual([
+      {
+        op: 'document.move',
+        documentId: target?.documentId,
+        path: 'archive/login',
+        follow: { updatedDocumentIds: [source?.documentId], failedDocumentIds: [] },
+      },
+    ])
+
+    const placed = await deps.documentIndex.resolveDocumentById({
+      workspaceId: WS,
+      documentId: target?.documentId ?? '',
+    })
+    expect(placed?.path).toBe('archive/login')
+    const docs = await createDocumentGetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [source?.documentId ?? ''],
+    })
+    expect(docs.documents[0]?.content).toContain('see [[archive/login]] and [[unrelated]]')
+  })
+
+  it('says so when the follow pass could not run, rather than reporting a clean move', async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    const seeded = await tool.execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.create', path: 'design/login', kind: 'markdown' }],
+    })
+    // The follow pass lists the workspace again after the move; a listing
+    // that fails THERE is a pass that could not run while the move stands.
+    const index = deps.documentIndex
+    let listings = 0
+    const listDocuments = async (input: Parameters<typeof index.listDocuments>[0]) => {
+      listings += 1
+      if (listings === 2) throw new Error('index unavailable')
+      return index.listDocuments(input)
+    }
+    const failingSecondListing: ServerDeps = {
+      ...deps,
+      // A Proxy rather than a spread copy: the in-memory index keeps private
+      // fields, which only the original receiver can read.
+      documentIndex: new Proxy(index, {
+        get(target, prop, receiver) {
+          if (prop === 'listDocuments') return listDocuments
+          const value = Reflect.get(target, prop, receiver)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      }),
+    }
+    const out = await createWorkspaceEditTool(failingSecondListing).execute({
+      workspaceId: WS,
+      ops: [
+        { op: 'document.move', documentId: seeded.results[0]?.documentId ?? '', path: 'archive' },
+      ],
+    })
+    expect(out.results[0]).toMatchObject({
+      path: 'archive',
+      follow: { error: 'index unavailable' },
+    })
+    const placed = await index.resolveDocumentById({
+      workspaceId: WS,
+      documentId: seeded.results[0]?.documentId ?? '',
+    })
+    expect(placed?.path).toBe('archive')
+  })
+
   it('bootstraps the workspace on op 0 and applies the REST of the batch inside it', async () => {
     // The threading guard. Creating is ADR-0019's mint boundary, so op 0
     // decides an id the caller never sent — and ops 1..n reach the port

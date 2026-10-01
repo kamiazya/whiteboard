@@ -85,7 +85,7 @@ const readmeText = readText('tests/e2e/distribution/README.md')
 
 // Authoritative step count for the distribution chain. Update this constant
 // when a node smoke is added to or removed from test:e2e:distribution.
-const EXPECTED_DISTRIBUTION_STEPS = 15
+const EXPECTED_DISTRIBUTION_STEPS = 16
 
 describe('release-gate-matrix.json structure', () => {
   it('has schemaVersion 1', () => {
@@ -280,8 +280,13 @@ describe('test:e2e:distribution step-count drift', () => {
     expect(countDistributionSteps(script)).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
-  it('README says "fifteen steps" matching the current chain', () => {
-    expect(readmeText).toMatch(/The chain has fifteen steps/)
+  it('README says "sixteen steps" matching the current chain, and lists that many', () => {
+    expect(readmeText).toMatch(/The chain has sixteen steps/)
+    // The sentence alone was pinned while the list beneath it ended at
+    // fifteen: a count and a list drift apart unless one is read off the
+    // other.
+    const listed = readmeText.match(/^\d+\. /gm) ?? []
+    expect(listed.length).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
   it('every `pnpm <script>` step in the chain resolves to a script that exists', () => {

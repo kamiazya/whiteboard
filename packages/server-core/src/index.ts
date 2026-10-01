@@ -108,6 +108,12 @@ export {
   wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
 export { SnapshotNotFoundError } from './tools/document-io.js'
+export {
+  type WbDocumentMoveInput,
+  type WbDocumentMoveResult,
+  wbDocumentMove,
+  wbDocumentMoveInputSchema,
+} from './tools/document-move.js'
 export type { DocumentSearchInput, DocumentSearchOutput } from './tools/document-search.js'
 export {
   createDocumentSearchTool,

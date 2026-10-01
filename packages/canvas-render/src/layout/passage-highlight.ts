@@ -22,7 +22,7 @@ import type { Appearance, SceneNode, ShapeSceneNode, TextRunNode } from '@kamiaz
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
 import { type SceneWalkNode, sceneChildrenOf } from '../scene-bounds.js'
-import { runFontOf } from './nodes/mdast-blocks.js'
+import { runFontOf } from './nodes/mdast-layout-options.js'
 
 /** A thread about a passage of a node's text, as the layout needs it. */
 export interface NodePassage {

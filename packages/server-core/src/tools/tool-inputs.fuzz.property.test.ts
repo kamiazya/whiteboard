@@ -353,6 +353,7 @@ const OP_REACH: Record<string, OpReach> = {
   'wb_workspace_edit/document.create(markdown)': 'answers',
   'wb_workspace_edit/document.create(spatial)': 'answers',
   'wb_workspace_edit/document.set': 'answers',
+  'wb_workspace_edit/document.move': 'answers',
   'wb_workspace_edit/document.delete': 'answers',
   'wb_body_edit/body.replace': 'answers',
   'wb_canvas_edit/node.add': 'answers',

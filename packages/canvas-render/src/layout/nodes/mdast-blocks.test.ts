@@ -4,11 +4,8 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
-import {
-  type EmbeddedCanvasBox,
-  type EmbeddedCanvasMiniature,
-  layoutMdastBlocks,
-} from './mdast-blocks.js'
+import { layoutMdastBlocks } from './mdast-blocks.js'
+import type { EmbeddedCanvasBox, EmbeddedCanvasMiniature } from './mdast-layout-options.js'
 
 const measure = createFakeMeasure()
 const options = { measure, maxWidth: 600, fontFamily: 'sans-serif' }

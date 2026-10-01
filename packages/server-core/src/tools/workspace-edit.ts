@@ -7,6 +7,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
+import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetTool } from './document-set.js'
 
 /**
@@ -92,6 +93,15 @@ const workspaceOpSchema = z.discriminatedUnion('op', [
   z
     .object({ op: z.literal('document.set'), documentId: documentIdSchema, markdown: z.string() })
     .strict(),
+  z
+    .object({
+      op: z.literal('document.move'),
+      documentId: documentIdSchema,
+      path: documentPathSchema.describe(
+        'The new path. Documents below the old path move with it, and `[[old/path]]` references in other documents are rewritten to follow.',
+      ),
+    })
+    .strict(),
   z.object({ op: z.literal('document.delete'), documentId: documentIdSchema }).strict(),
 ])
 
@@ -151,19 +161,38 @@ export const workspaceEditOutputSchema = z
             op: z.string(),
             documentId: documentIdSchema.optional(),
             path: documentPathSchema.optional(),
+            /**
+             * What a `document.move`'s follow pass did, present only when it
+             * has something to say: the documents whose references were
+             * rewritten and the candidates it could not, or the error that
+             * stopped the pass before it could report. The op's description
+             * promises the references follow; a surface that swallowed the
+             * cases where they did not would be promising more than it knew.
+             */
+            follow: z
+              .union([
+                z
+                  .object({
+                    updatedDocumentIds: z.array(documentIdSchema),
+                    failedDocumentIds: z.array(documentIdSchema),
+                  })
+                  .strict(),
+                z.object({ error: z.string() }).strict(),
+              ])
+              .optional(),
           })
           .strict(),
       )
       .describe(
-        'One entry per applied op, in order. A `document.create` carries the id it minted — without that a caller spends a round trip fetching ids, which is the cost this tool exists to remove.',
+        'One entry per applied op, in order. A `document.create` carries the id it minted — without that a caller spends a round trip fetching ids, which is the cost this tool exists to remove. A `document.move` carries `follow` when references were rewritten, or when some could not be: the move stands either way.',
       ),
   })
   .strict()
 export type WorkspaceEditOutput = z.infer<typeof workspaceEditOutputSchema>
 
 /**
- * One tool for workspace-level mutation: create, set and delete documents in
- * a single call.
+ * One tool for workspace-level mutation: create, set, move and delete
+ * documents in a single call.
  *
  * The shape follows `wb_canvas_edit` (ADR-0010) because the problem rhymes —
  * filing five findings cost ten calls — but the guarantee cannot. See
@@ -253,6 +282,17 @@ const WORKSPACE_EDIT_HANDLERS: {
     return { result: { op: op.op, documentId: op.documentId } }
   },
 
+  'document.move': async (ctx, op) => {
+    const moved = await wbDocumentMove(ctx.deps, {
+      workspaceId: ctx.workspaceId,
+      documentId: op.documentId,
+      path: op.path,
+    })
+    return {
+      result: { op: op.op, documentId: op.documentId, path: moved.path, ...followOf(moved) },
+    }
+  },
+
   'document.delete': async (ctx, op) => {
     await wbDocumentDelete(ctx.deps, {
       workspaceId: ctx.workspaceId,
@@ -260,6 +300,22 @@ const WORKSPACE_EDIT_HANDLERS: {
     })
     return { result: { op: op.op, documentId: op.documentId } }
   },
+}
+
+/** The follow report a move's result row carries — absent when there is nothing to say. */
+function followOf(moved: WbDocumentMoveResult): Pick<ResultRow, 'follow'> {
+  if ('error' in moved.follow) {
+    const { error } = moved.follow
+    return { follow: { error: error instanceof Error ? error.message : String(error) } }
+  }
+  const { updatedDocumentIds, failedDocumentIds } = moved.follow
+  if (updatedDocumentIds.length === 0 && failedDocumentIds.length === 0) return {}
+  return {
+    follow: {
+      updatedDocumentIds: [...updatedDocumentIds],
+      failedDocumentIds: [...failedDocumentIds],
+    },
+  }
 }
 
 function applyOp(ctx: WorkspaceEditContext, op: WorkspaceEditOp): Promise<OpOutcome> {
@@ -274,7 +330,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
   return {
     name: 'wb_workspace_edit' as const,
     description:
-      'Create, replace and delete several documents in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
+      'Create, replace, move and delete several documents in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
     inputSchema: workspaceEditInputSchema,
     outputSchema: workspaceEditOutputSchema,
     execute: async (rawInput: WorkspaceEditInput): Promise<WorkspaceEditOutput> => {

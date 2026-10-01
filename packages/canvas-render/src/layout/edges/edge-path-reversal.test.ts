@@ -11,8 +11,9 @@ import {
   assertQuantumSeparated,
   referenceReversalCount as reversalCount,
 } from '../../test-utils/reversal-count.js'
+import { routeEdge } from './edge-router.js'
 import { COST_QUANTUM } from './edge-rules.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
   textNode({

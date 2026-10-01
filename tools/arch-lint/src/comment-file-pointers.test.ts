@@ -99,8 +99,6 @@ const DELIBERATE: Record<string, string> = {
   '.claude/rules/package-canvas-render.md#viewer-appearance.ts': 'same list, canvas-viewer half',
   '.claude/rules/package-canvas-viewer.md#viewer-appearance.ts':
     'the paragraph exists to record that this package stopped owning its own resolver',
-  '.claude/rules/package-plugin-visual.md#edge-router.ts':
-    'the heading is "the facet that is no longer here" — ADR-0037 slice 4 deleted it and bends became a model field',
   '.claude/rules/tool-arch-lint.md#mcp/session-resolver.ts':
     'moved rather than exempted; the sentence names both the old path and `server/current-workspace.ts` it became',
   '.claude/rules/vocabulary.md#meta.ts':

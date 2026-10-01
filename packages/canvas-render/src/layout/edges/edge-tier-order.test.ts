@@ -8,8 +8,9 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
+import { routeEdge } from './edge-router.js'
 import { PENALTY_RULES } from './edge-rules.js'
-import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
   textNode({

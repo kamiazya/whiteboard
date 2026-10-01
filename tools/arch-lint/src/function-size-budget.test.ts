@@ -397,7 +397,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/clipboard-fragment.ts#remintClipboardFragment': 55,
   'apps/web/src/lib/daemon-file-adapter.ts#createDaemonFileAdapter': 70,
   'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 93,
-  'apps/web/src/lib/document-sync-session.ts#commandTargetKey': 56,
+  'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
   // The undo path takes back a write still inside the debounce window, which
   // has to reach the timer and the queue this factory closes over — so it
   // lives here rather than beside them. Shrinking it is the same job as
@@ -405,7 +405,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 856,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
-  'apps/web/src/lib/document-sync-session.ts#writeCommandTarget': 139,
+  'apps/web/src/lib/command-writes.ts#writeCommandTarget': 139,
   'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
@@ -516,7 +516,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 69,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 52,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#computeAnchorsFor': 56,
+  'packages/canvas-render/src/layout/edges/edge-anchors.ts#computeAnchorsFor': 56,
   // Raised 250 -> 308: the trial evaluator's three steps are now named
   // closures (applySelfCosts / applyPairCosts / rescorePairsOf /
   // rescorePairInto), each carrying the invariant that was a comment inside
@@ -530,10 +530,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // candidate loop's body and brought its incumbent-wins-ties rationale
   // with it.
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 102,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#patchAnchorGroups': 54,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeEdge': 75,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeOrthogonal': 139,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 189,
+  'packages/canvas-render/src/layout/edges/edge-anchors.ts#patchAnchorGroups': 54,
+  'packages/canvas-render/src/layout/edges/edge-router.ts#routeEdge': 75,
+  'packages/canvas-render/src/layout/edges/edge-router.ts#routeOrthogonal': 139,
+  // +1: the table rows take the inline typesetter by argument, since the
+  // table module may not import the typesetter back.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 190,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
   // Raised 406 -> 460: the inline-run walker's inner steps are now NAMED
@@ -636,7 +638,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 101,
   'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 127,
   // 406 -> 412 (ADR-0041 S8 slice 2): the workspace list filters rows the caller is not admitted to.
-  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 323,
+  // +3: the rename route is an adapter over `wbDocumentMove` now, and the
+  // address translation it owes — path to id, absent to 404 — is three lines
+  // the port call did not need.
+  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 326,
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 67,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 127,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
@@ -740,7 +745,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/promote-workspace.browser.test.tsx#daemonStub': 52,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 72,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
-  'apps/web/src/pages/DaemonIndexPage.test.tsx#installFetchMock': 93,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
   'packages/canvas-render/src/layout/edges/grid-route.optimality.properties.test.ts#referenceCost': 106,
   'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,

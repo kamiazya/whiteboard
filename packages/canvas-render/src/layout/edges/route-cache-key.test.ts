@@ -1,6 +1,7 @@
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { type EdgeAnchorPair, routeCacheKey } from './spatial-edges.js'
+import type { EdgeAnchorPair } from './edge-sides.js'
+import { routeCacheKey } from './spatial-edges.js'
 
 /**
  * The route cache is scoped to one `assignEdgeAnchors` call, spanning every

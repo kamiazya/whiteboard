@@ -13,6 +13,7 @@ import {
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { type FakeDaemonRoutes, installFakeDaemonFetch } from '../test-utils/fake-daemon-fetch.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
@@ -30,44 +31,40 @@ const OKF_DOC = '---\ntype: note\ntitle: Design\n---\n\n# Palette decisions'
 
 // The tree reads the same rich list the grid does — the /api/v1 one carries
 // no display name and no kind, and the tree needs both.
-function installFetchMock(
-  listResponse: { status: number; body: unknown } = {
-    status: 200,
-    body: {
-      documents: [
-        {
-          id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-          path: 'notes',
-          updatedAt: '2026-05-01T12:00:00.000Z',
-          kind: 'markdown',
-        },
-        {
-          id: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
-          path: 'notes/design',
-          updatedAt: '2026-05-01T12:00:00.000Z',
-          kind: 'markdown',
-        },
-      ],
-    },
+const NOTES_ROWS = [
+  {
+    id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    path: 'notes',
+    updatedAt: '2026-05-01T12:00:00.000Z',
+    kind: 'markdown',
   },
+  {
+    id: '01ARZ3NDEKTSV4RRFFQ69G5FA0',
+    path: 'notes/design',
+    updatedAt: '2026-05-01T12:00:00.000Z',
+    kind: 'markdown',
+  },
+]
+
+/** The shared daemon fake, seeded with one folder; `listResponse` overrides the list wholesale. */
+function installFetchMock(
+  listResponse?: { status: number; body: unknown },
+  overrides: Partial<FakeDaemonRoutes> = {},
 ) {
-  const fetchMock = vi.fn((input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    if (url.endsWith('/api/workspaces')) {
-      return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-    }
-    if (url.endsWith('/api/v1/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FA0/okf')) {
-      return Promise.resolve(
-        jsonResponse({ markdown: OKF_DOC, frontmatter: { type: 'note', title: 'Design' } }),
-      )
-    }
-    if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
-      return Promise.resolve(jsonResponse(listResponse.body, listResponse.status))
-    }
-    return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+  return installFakeDaemonFetch({
+    workspaces: [{ workspaceId: 'default' }],
+    documentsByWorkspace: { default: NOTES_ROWS },
+    okfByDocumentId: {
+      '01ARZ3NDEKTSV4RRFFQ69G5FA0': {
+        markdown: OKF_DOC,
+        frontmatter: { type: 'note', title: 'Design' },
+      },
+    },
+    ...(listResponse
+      ? { onListDocuments: () => jsonResponse(listResponse.body, listResponse.status) }
+      : {}),
+    ...overrides,
   })
-  vi.stubGlobal('fetch', fetchMock)
-  return fetchMock
 }
 
 afterEach(() => {
@@ -223,27 +220,16 @@ describe('DaemonIndexPage tree view', () => {
       { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
       { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
     ]
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.endsWith('/api/workspaces')) {
-        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-      }
-      if (url.endsWith('/path') && init?.method === 'PUT') {
-        const to = JSON.parse(String(init.body)).path as string
-        const from = 'notes/design'
+    installFetchMock(undefined, {
+      documentsByWorkspace: { default: () => docs },
+      onRenameDocumentPath: (_workspaceId, from, to) => {
         docs = docs.map((d) =>
           d.path === from || d.path.startsWith(`${from}/`)
             ? { ...d, path: `${to}${d.path.slice(from.length)}` }
             : d,
         )
-        return Promise.resolve(jsonResponse({ path: to }))
-      }
-      if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
-        return Promise.resolve(jsonResponse({ documents: docs }))
-      }
-      return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+      },
     })
-    vi.stubGlobal('fetch', fetchMock)
 
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -276,16 +262,10 @@ describe('DaemonIndexPage tree view', () => {
   })
 
   it('shows the server’s refusal when the new path collides', async () => {
-    const base = installFetchMock()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        return url.endsWith('/path') && init?.method === 'PUT'
-          ? Promise.resolve(jsonResponse({ title: 'Path "archive/design/x" already exists' }, 409))
-          : base(input)
-      }),
-    )
+    installFetchMock(undefined, {
+      onRenameDocumentPath: () =>
+        jsonResponse({ title: 'Path "archive/design/x" already exists' }, 409),
+    })
 
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -323,38 +303,16 @@ describe('DaemonIndexPage tree view', () => {
       { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
       { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
     ]
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.endsWith('/api/workspaces')) {
-          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
-          const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
-          created.push(body.path)
-          docs = [
-            ...docs,
-            {
-              id: `id-${body.path}`,
-              path: body.path,
-              updatedAt: '2026-05-01T12:00:00.000Z',
-              kind: 'markdown',
-            },
-          ]
-          return Promise.resolve(
-            jsonResponse(
-              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
-              201,
-            ),
-          )
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
-          return Promise.resolve(jsonResponse({ documents: docs }))
-        }
-        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
-      }),
-    )
+    installFetchMock(undefined, {
+      documentsByWorkspace: { default: () => docs },
+      onCreateDocument: (_workspaceId, path) => {
+        created.push(path)
+        docs = [
+          ...docs,
+          { id: `id-${path}`, path, updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+        ]
+      },
+    })
 
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -385,23 +343,12 @@ describe('DaemonIndexPage tree view', () => {
       { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
       { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
     ]
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.endsWith('/api/workspaces')) {
-          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-        }
-        if (init?.method === 'DELETE') {
-          docs = docs.filter((d) => !url.endsWith(encodeURI(d.path)) || d.path !== 'notes/design')
-          return Promise.resolve(jsonResponse({ ok: true }))
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
-          return Promise.resolve(jsonResponse({ documents: docs }))
-        }
-        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
-      }),
-    )
+    installFetchMock(undefined, {
+      documentsByWorkspace: { default: () => docs },
+      onDeleteDocument: (_workspaceId, path) => {
+        docs = docs.filter((d) => d.path !== path)
+      },
+    })
 
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -435,44 +382,20 @@ describe('DaemonIndexPage tree view', () => {
   // says it is broken forever.
   it('clears the create alert once a create succeeds', async () => {
     let failNext = true
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.endsWith('/api/workspaces')) {
-          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
-          if (failNext) {
-            failNext = false
-            return Promise.resolve(jsonResponse({ title: 'nope' }, 500))
-          }
-          return Promise.resolve(
-            jsonResponse(
-              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
-              201,
-            ),
-          )
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
-          // One seeded row: an empty workspace shows the onboarding state
-          // instead of the panel, and this test needs the panel's buttons.
-          return Promise.resolve(
-            jsonResponse({
-              documents: [
-                {
-                  id: 'id-seed',
-                  path: 'seed',
-                  updatedAt: '2026-08-01T00:00:00Z',
-                  kind: 'markdown',
-                },
-              ],
-            }),
-          )
-        }
-        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
-      }),
-    )
+    // One seeded row: an empty workspace shows the onboarding state instead
+    // of the panel, and this test needs the panel's buttons.
+    installFetchMock(undefined, {
+      documentsByWorkspace: {
+        default: [
+          { id: 'id-seed', path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' },
+        ],
+      },
+      onCreateDocument: () => {
+        if (!failNext) return undefined
+        failNext = false
+        return jsonResponse({ title: 'nope' }, 500)
+      },
+    })
 
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -493,40 +416,16 @@ describe('DaemonIndexPage tree view', () => {
   // both wired to the same one.
   it('creates a canvas from the canvas button, not another markdown note', async () => {
     const kinds: (string | undefined)[] = []
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.endsWith('/api/workspaces')) {
-          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
-          const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
-          kinds.push(body.kind)
-          return Promise.resolve(
-            jsonResponse(
-              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
-              201,
-            ),
-          )
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
-          return Promise.resolve(
-            jsonResponse({
-              documents: [
-                {
-                  id: 'id-seed',
-                  path: 'seed',
-                  updatedAt: '2026-08-01T00:00:00Z',
-                  kind: 'markdown',
-                },
-              ],
-            }),
-          )
-        }
-        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
-      }),
-    )
+    installFetchMock(undefined, {
+      documentsByWorkspace: {
+        default: [
+          { id: 'id-seed', path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' },
+        ],
+      },
+      onCreateDocument: (_workspaceId, _path, kind) => {
+        kinds.push(kind)
+      },
+    })
 
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
@@ -549,57 +448,23 @@ describe('DaemonIndexPage tree view', () => {
       { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
       { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
     ]
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.endsWith('/api/workspaces')) {
-          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
-          const body = JSON.parse(String(init.body)) as { path: string }
-          posted.push(body.path)
-          docs = [
-            ...docs,
-            {
-              id: `id-${body.path}`,
-              path: body.path,
-              updatedAt: '2026-05-01T12:00:00.000Z',
-              kind: 'markdown',
-            },
-          ]
-          return Promise.resolve(
-            jsonResponse(
-              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
-              201,
-            ),
-          )
-        }
-        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
-          return Promise.resolve(jsonResponse({ documents: docs }))
-        }
-        // Duplicate reads the source's bytes before it creates anything, so
-        // a 404 here throws before the POST and the test would report a
-        // wiring failure that is really a fixture gap.
-        if (url.endsWith('/snapshot')) {
-          return Promise.resolve(
-            new Response(new Uint8Array([1, 2, 3]), {
-              headers: { 'Content-Type': 'application/octet-stream' },
-            }),
-          )
-        }
-        if (url.endsWith('/update')) {
-          return Promise.resolve(jsonResponse({ ok: true }))
-        }
-        // Schema-valid, not merely 200: the client parses this one, and an
-        // `{ok:true}` here throws inside the duplicate before it ever
-        // reaches the list reload — which reads exactly like broken wiring.
-        if (url.endsWith('/name')) {
-          return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
-        }
-        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
-      }),
-    )
+    installFetchMock(undefined, {
+      documentsByWorkspace: { default: () => docs },
+      onCreateDocument: (_workspaceId, path) => {
+        posted.push(path)
+        docs = [
+          ...docs,
+          { id: `id-${path}`, path, updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+        ]
+      },
+      // Duplicate reads the source's bytes before it creates anything, so a
+      // 404 here throws before the POST and the test would report a wiring
+      // failure that is really a fixture gap. The name PUT the fake answers
+      // is schema-valid for the same reason: the client parses it, and an
+      // `{ok:true}` there throws inside the duplicate before the list
+      // reload — which reads exactly like broken wiring.
+      snapshotByDocument: { 'notes/design': new Uint8Array([1, 2, 3]) },
+    })
 
     render(
       <DaemonIndexPage

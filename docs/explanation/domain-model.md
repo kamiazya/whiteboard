@@ -142,7 +142,8 @@ That split is **gone**, in four steps recorded in the migration log:
 - Because placement is CRDT state, two replicas can merge into **one path
   holding two documents**. Nothing is auto-renamed: the earlier document
   keeps the path, later ones are listed as *shadowed* (the gallery badges
-  them), and resolution is an explicit rename. An agent asking for a
+  them), and resolution is an explicit rename — the file browser's Rename,
+  or a `wb_workspace_edit` `document.move` op. An agent asking for a
   contested path gets an error pointing at resolution by `documentId` or a
   rename, never a silent suffix.
 - The workspace record accumulates every edit's history, and the daemon

@@ -58,6 +58,26 @@ function createFirstDocument(
 }
 
 /**
+ * A `document.move` through the same tool, answering the path it reports.
+ * The SDK validates `structuredContent` against `outputSchema`, so this is
+ * where a result row the schema cannot describe would surface.
+ */
+async function moveFirstDocument(
+  callTool: (name: string, args: unknown) => Promise<Record<string, unknown>>,
+  documentId: string,
+): Promise<string> {
+  const moved = await callTool('wb_workspace_edit', {
+    workspaceId: WORKSPACE_ID,
+    ops: [{ op: 'document.move', documentId, path: 'e2e/src' }],
+  })
+  const row = (moved.results as { documentId?: unknown; path?: unknown }[] | undefined)?.[0]
+  if (row?.documentId !== documentId || row.path !== 'e2e/src') {
+    throw new Error(`document.move returned unexpected shape: ${JSON.stringify(moved)}`)
+  }
+  return row.path
+}
+
+/**
  * A JSON-RPC client over the child's stdio pipes: newline-framed requests
  * out, newline-framed responses correlated back by id.
  *
@@ -289,6 +309,8 @@ export async function runE2eCheckpointSmoke({
     }
     const documentId = created.documentId
     console.log(`[e2e] document.create → ${documentId}`)
+
+    console.log(`[e2e] document.move → ${await moveFirstDocument(callTool, documentId)}`)
 
     // wb_facet_set seeds extension-facet state on the created document so the
     // version saved below has content to round-trip through restore.

@@ -164,183 +164,54 @@ function relativeToRepo(absolutePath: string): string {
  * it is not.
  */
 const FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  // +34 for `decide-proposal` (ADR-0029 decision 4): the union arm with the
-  // reason its changes travel with the command, and a two-line fold over
-  // `applyCanvasChange` — what adopting MEANS lives in model, not here.
-  // +35 for `set-canvas-facet`: the union arm, and `withCanvasFacet` — the
-  // one place the canonical-emptiness rule for a canvas envelope lives, so
-  // a canvas that chose a setting and reverted serializes like one that
-  // never touched it. `withEdgeStyle` now delegates to it rather than
-  // repeating that rule, which is why the arm costs less than it reads.
-  // +34 for the edge target: `set-edge-facet` writes a plugin-owned payload
-  // to ONE edge, the twin of `set-node-facet`.
-  // +17: `set-edge-bends`, the bend drag's write. Not a facet write since
-  // ADR-0037 slice 4 — bends are a field of the edge, so the command carries
-  // a value rather than an opaque plugin payload.
-  // +18 when an edge END became a discriminated union (ADR-0037 slice 3):
-  // `set-edge-ends` and `set-edge-side` write INSIDE the endpoint now, and
-  // `set-edge-side` grew a real branch — only a node end has a side to pin,
-  // so the write is a no-op on a free one. The width is the branch, not
-  // ceremony: the flat version could not have had it.
-  // +64 for INK: `create-line` and `delete-line`, `deleteInkCommand`, and the
-  // `delete-node` cascade learning that a line whose end names the deleted
-  // node goes with it. A line is a different collection from an edge, not a
-  // variant of one (ADR-0038 decision 2), so the arms cannot share an edge's
-  // — and `deleteInkCommand` exists precisely so the two collections are
-  // reconciled HERE rather than at each of the call sites that hold one
-  // selected-ink id. Roughly half the width is the comment saying why the
-  // editor needs no second selection state: the scene already hands an edge
-  // and a line out identically, which is the non-obvious fact that kept the
-  // rest of this change small.
-  // +35 for ADR-0040's tag writes: three union arms (`set-node-tags`,
-  // `set-edge-tags`, `set-canvas-tags`) and their cases, each a whole-list
-  // write through `lib/spatial/tags.ts`'s `withTagList`, where the set and
-  // canonical-emptiness rules live rather than here.
-  // 1099 + 66 when the two branches met: ADR-0040's three tag arms and
-  // ADR-0038's two ink arms are independent additions to the same union,
-  // and neither shrank on the merge.
-  // Raised 1165 -> 1197 for `ungroup-ink`: breaking a handwritten mark
-  // apart, which is the escape the automatic grouping owes its user.
-  // Raised 1197 -> 1297 for `move-line` and `set-line-color`, the two
-  // cheapest of the seven gaps `element-verb-parity.test.ts` reported on its
-  // first reading: a `CanvasLine` stored seven things a person could want
-  // changed and the editor wrote none of them. Two union arms, `updateLine`
-  // (the `updateNode` sibling both need), the two writes, and
-  // `moveInkCommand` — `deleteInkCommand`'s twin, and the one place that
-  // looks at which collection a selected ink id came from.
-  // Raised 1297 -> 1338 for the clipboard carrying ink: `ownedLinePoints`
-  // (what a stroke occupies, with three readers now), `shiftLine` (the one
-  // producer both the move and the paste offset go through), and the
-  // fragment insert reading both collections for its bounds.
-  // Raised 1338 -> 1498 as ink gained the rest of its verbs: `set-line-bends`,
-  // `set-line-label`, the generic `set-line-facet`, `set-line-ends` and
-  // `set-line-side`, plus `bendInkCommand` and `labelInkCommand` joining the
-  // id-picking family. Every one of them is a cell
-  // `element-verb-parity.test.ts` reported on its first reading, and with
-  // them its `lines` column is empty.
-  // Raised 1498 -> 1629 for the `attach` verb: `set-edge-end`,
-  // `set-line-end`, the `EndTarget` both take, the `otherEndNode` self-loop
-  // guard they share, and `endInkCommand` joining the id-picking family. It
-  // is the first verb the matrix reported missing from BOTH collections
-  // rather than from one, which is why one increment adds two writes.
-  // 1597 -> 1626: `setLineEnd` and `reorderNodes` each became a named
-  // decision plus its helper, which is what took both under the complexity
-  // threshold. The bodies did not grow; the signatures and their doc comments
-  // are the added lines.
-  // Lowered 1626 -> 1516: the ink-id family (which collection an id is in,
-  // per verb) left for `ink-commands.ts`.
+  // The editor's command union — one arm per thing a person can change, with
+  // the write each arm makes — and the canonical-emptiness rules those writes
+  // share (`withCanvasFacet`). It is wide because the matrix in
+  // `element-verb-parity.test.ts` holds every verb to every collection, and a
+  // stroke stores as much as a relation does. What has already left: which
+  // collection a selected ink id came from (`ink-commands.ts`) and the tag
+  // list rules (`lib/spatial/tags.ts`). The next shrink is the line arms
+  // leaving as a sibling the way the ink-id family did.
   'apps/web/src/lib/spatial/commands.ts': 1504,
-  // The annotation entry's scope resolver lives in `annotation-scope.ts`
-  // rather than here, so what this file spends on it is the hook call — now
-  // five lines because the entry also has to know the document's threads,
-  // to open the one a paragraph already has. The two document pages paid
-  // more than that back in the same change (942 -> 934, 926 -> 925), their
-  // hand-built thread writes replaced by one shared door.
-  // +1: the annotation entry also has to be handed the LIVE passage marks,
-  // so the toolbar resolves a thread the way the gutter beside it does.
-  // +25: the preview marker now says how many messages its conversation
-  // holds — a count in the marker's state, a lookup beside the placement
-  // that produces it, and a corner badge with the reasoning for why it
-  // appears only past one. Read mode never shows the source, so this marker
-  // is the whole of what a reader there has to judge a conversation by.
-  // +20: the preview marker's origin is asked for through one
-  // `previewDocumentSvg` instead of four bare `querySelector('svg')` calls,
-  // and the definition carries why — inside the preview column that query
-  // answers with a comment MARKER's own icon, so the placement was reading
-  // its own previous output.
-  // +7: the preview marker carries the conversation's STATUS. It said
-  // nothing about resolved before, so a closed conversation's marker was
-  // drawn exactly like an open one — and with the state present the marker
-  // crosses to it rather than staying put.
-  // +64: the proposal layer's in-place surface (ADR-0029 decision 1, for
-  // prose) — two props with the doc comments that say what they are for,
-  // and the card render. The cohesive half is already out: everything with
-  // a seam (the open passage, its extension, the projection effect, where
-  // the passage currently sits) is `use-passage-proposals.ts`, and what is
-  // left is the component's own prop surface and one conditional render.
-  // +3 for `completionOnDelete`: an import, the call, and one line saying
-  // why. Raised rather than paid for by trimming prose — this file funded
-  // an earlier increment that way, and a budget met by deleting rationale
-  // buys lines at the price of the thing the lines were for.
-  // +3 for nothing anyone wrote: renaming `emojiCompletionSource` to
-  // `shortcodeCompletionSource` (it serves both vocabularies now) made the
-  // `override` array one character too long for the line, and the formatter
-  // broke it across three. Recorded rather than fought, and NOT paid for by
-  // trimming prose, for the reason the entry above already gives.
-  // +3 for `addToOptions`, which draws an icon row's glyph where an emoji
-  // row shows its character. It has to be passed at each host's own
-  // `autocompletion()` call — `completionConfig` is not exported, so it
-  // cannot ride the shared theme, and a second `autocompletion()` beside
-  // this one would replace its `override`.
-  // Lowered 1130 -> 879: the pane scroll sync and the preview geometry it
-  // shares with the rail now live in their own modules.
+  // The markdown host: CodeMirror's extensions, the preview column and the
+  // conversation and proposal markers drawn beside it. What has a seam has
+  // already left — the pane scroll sync and the preview geometry it shares
+  // with the rail, the passage proposals (`use-passage-proposals.ts`), the
+  // annotation scope (`annotation-scope.ts`), the shared editing baseline
+  // (`markdown-editing-base.ts`). What stays is the component's own prop
+  // surface and the wiring, which this file is for. A budget met by trimming
+  // the rationale beside that wiring buys lines at the price of what the
+  // lines were for, so it is not met that way.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 879,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 845,
-  // Raised 1196 -> 1245, +49, for naming the column area's four views. The
-  // file GREW and says more for it: a four-arm ternary chain over three
-  // unrelated tests became a discriminated union built once and a switch
-  // that draws it, so the narrowing every later arm depended on — `documents`
-  // is non-null — is stated in the type instead of implied by position.
-  // Raised 1245 -> 1258, +13, for `refreshAndSelect`. The five call sites
-  // that each re-read the list and re-selected a row lost three lines apiece
-  // (-15), and the one definition plus the paragraph saying which five flows
-  // it serves cost more than that. A net +13 to delete a rule that had to be
-  // remembered in five places is the trade, said plainly rather than hidden
-  // behind a smaller number.
-  // 1258 -> 889: the panel's pieces — its toolbar, what it says about the
-  // last write, the object pane, the card menu's items and each column view
-  // — moved to `workspace-files-panel-parts.tsx` beside it.
+  // The file browser's host: the column area's four views as a discriminated
+  // union built once and drawn by one switch, and `refreshAndSelect`, the one
+  // rule five flows used to repeat. Its pieces — the toolbar, the last-write
+  // line, the object pane, the card menu's items and each column view — are
+  // `workspace-files-panel-parts.tsx` beside it.
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 889,
-  // Raised from 1032 by the document PLANE primitives — a mergeable child
-  // map on a document's node, and the read that never opens one. They sit
-  // here rather than in a new file because `nodeById` is this module's, and
-  // because a plane is a tree-node concept: splitting it out would export
-  // the node lookup for one caller. The prose is most of the 44 lines and is
-  // the point of them — a plane opened the regular way loses one replica's
-  // whole plane with both sides agreeing on the survivor.
-  // Raised again from 1076 by PLANE NAMESPACING — the `plane:` prefix, and
-  // the two readers that now skip it. Nearly all of it is the reason: a
-  // plane in the node's flat namespace is carried into
-  // `projectWorkspaceDocument` and written back by the next content save,
-  // from whatever the projection held when it was taken. Measured through
-  // the daemon's merge before the fix, a branch tip read back as "" with
-  // nothing red, which is precisely the comment's job to prevent a second
-  // time.
-  // 1144: `syncMapEntries`, so a fold or projection carries a nested
-  // container (a thread, a proposal) instead of flattening it to a value.
-  // 1165: the fold recreates a nested text or list container instead of
-  // handing it to `LoroMap.set`.
-  // 1165 -> 998: the content-sync rule the tree write, the standalone restore
-  // and the projection all apply left for `content-sync.ts`.
+  // The workspace tree over a Loro doc: node lookup, the document PLANES (a
+  // mergeable child map on a document's node, namespaced `plane:` so a plane
+  // is never carried into the projection and written back by the next
+  // content save — measured through the daemon's merge before that, a branch
+  // tip read back as "" with nothing red) and the fold that carries a nested
+  // container instead of flattening it. The content-sync rule the tree write,
+  // the standalone restore and the projection all apply is `content-sync.ts`.
+  // Planes stay here rather than in a sibling because `nodeById` is this
+  // module's, and splitting them would export the lookup for one caller.
   'packages/loro-adapter/src/workspace-tree.ts': 998,
-  // Raised from 1366 by the automatic-checkpoint trigger: a narrow
-  // `{signal, flush}` pair on SessionDeps, signalled from
-  // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
-  // beside the edit flush. Most of the 25 lines is the reason the FLUSH lives
-  // here rather than as the page's own listener — its order against the edit
-  // flush is load-bearing, and two independent listeners would leave that to
-  // registration timing.
-  // +70 for the proposal plane: the publish channel beside annotations, and
-  // the two-plane write a decision is — statuses where the proposal lives,
-  // plus the canvas when it was adopted.
-  // +10: adopting a proposed passage writes the BODY, not only the status
-  // (ADR-0029 decision 6). The write itself is `apply-adopted-passages.ts`;
-  // these ten lines are its import, its call, and the comment saying why a
-  // decision has to reach two planes here.
-  // +4: the decide-proposal arm moved inside `withDocumentBatch`, so its
-  // three subjects land as one delta and one undo step instead of four.
-  // +18 for `getFacets`: a markdown document's own mark is a facet, which is
-  // no canvas value, so a page reading only the canvas cannot see one. One
-  // session serves both document pages, which is what keeps the two keepers
-  // from drifting on it — and most of the eighteen lines say that.
-  // Raised 1493 -> 1535: an undo now takes back a write still inside its
-  // debounce window, and what costs the lines is the WHY — committing that
-  // write after an undo wrote the pre-undo canvas back over a document the
-  // screen had already left, publishing nothing and discarding the redo
-  // stack.
-  'apps/web/src/lib/document-sync-session.ts': 1515,
+  // The document session: one object serving both document pages over either
+  // keeper, with the publish channels (content, annotations, proposals,
+  // history, locks, body) and the ordering rules between them — the edit flush
+  // before the checkpoint flush, an undo taking back a write still inside its
+  // debounce window, a decision reaching two planes. What has already left:
+  // the command writes (`command-writes.ts`), the adopted-passage write
+  // (`apply-adopted-passages.ts`) and the listener sets (`subscribers.ts`).
+  // The next shrink is the locks and the history/undo group as sub-modules
+  // taking `contentOf` and `doc`.
+  'apps/web/src/lib/document-sync-session.ts': 1159,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -348,204 +219,41 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // than a merge — a document is never in both — and the comment saying so is
   // most of the 14 lines.
   'packages/mcp-server/src/server/store/document-store.ts': 1057,
-  // +1 for a task list's checkbox, which is one import and one branch here:
-  // the geometry and the measurement behind it (the vendored export face
-  // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
-  // entered this file.
-  //
-  // +3 for the `:name:` shortcode projection, and the shape is the same: one
-  // import and one call, with the vocabulary and every word of its rationale
-  // in `plugin-visual`'s `emoji/shortcode.ts`. It lands HERE because the
-  // `case 'text'` below is the one place a text node's string reaches
-  // layout, so every body-drawing surface gets it and none can be the one
-  // that forgot — the alternative was a seam per surface, which is the
-  // reference-seams defect. The two comment lines that survived say what
-  // only this site can: that `inlineCode` deliberately does not expand.
-  // +21 for `case 'image'`: an inline `![](...)` marks its run to paint
-  // the picture rather than emitting the alt words, and an alt-less one
-  // takes an atomic placeholder because the wrappable path trims a
-  // whitespace-only run out of existence.
-  // +46 for `emitWithIcons`, the icon half of the same idea and the one
-  // place it could go. An emoji shortcode is a CHARACTER, substituted into
-  // the string before the run is built; an icon is geometry, so a text node
-  // has to be SPLIT into prose runs and icon runs — and the offsets that
-  // split it are taken off the raw string, which only the site holding both
-  // vocabularies can do. Its comment is most of the 46 and says exactly
-  // that, because applying the two in the other order silently moves every
-  // offset after the first emoji.
-  // +7: that image asks the caller WHERE its picture is, through the
-  // `resolveReference` seam a body already carries — so a written path can
-  // be a workspace attachment instead of only an absolute URL.
-  // Raised 1752 -> 1932. The file grew by RATIONALE, not by logic: eleven
-  // inner steps that were inline blocks are now named functions, each
-  // carrying the comment that was buried in the middle of the block it came
-  // from. The next real shrink moves the code-block trio (layoutCodeBlock /
-  // codeLineRuns / codeTokenRun) and the table half into sibling modules —
-  // which needs `ResolvedMdastOptions` and `Cursor` extracted first, or the
-  // new module imports them back and closes a package-internal cycle.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1932,
-  // +21: a named side pair whose route runs through the edge's own box is
-  // overruled — the search takes the edge as free (`selfThrough`, the
-  // candidate list without its named sides), the render follows the anchor
-  // pass's side over the edge's own, and a lone edge reaches the search.
-  // +24 for the per-edge style resolver threaded through the anchor pass:
-  // side choice reads the whole edge set, so one edge overriding the board's
-  // routing has to be visible to it rather than applied afterwards.
-  // +26: the stored-bend branch, taken before the self-edge shape and before
-  // any computed routing (ADR-0037 slice 4). The route itself is
-  // `bend-route.ts`; what lives here is choosing it.
-  // +11 net, and the shape is worth reading: the reshape HOISTED three
-  // `endNode` reads out of O(nodes) filters on the routing path (760k
-  // calls per clustered layout, per the profile this rule records) and moved
-  // the map lookup to model's own `nodeAtEnd`, deleting the local copy. What
-  // is left is those hoists and the comments on them.
-  // +16 for `rectAtEnd`: a free end is a DEGENERATE box at its point, which
-  // is the whole of what lets this file draw one without a second routing
-  // path beside the one it has.
-  // Raised 2170 -> 2177: the bent branch carries `rounded` now, with the
-  // reason it did not before.
-  // Raised 2177 -> 2483. The file grew by RATIONALE, not by logic: sixteen
-  // inline blocks became named functions, each carrying the comment that was
-  // buried in the middle of it. The next real shrink splits the three
-  // concerns this file holds — anchor placement, the side-choice search, and
-  // the router — into sibling modules; they share `AnchorContext`,
-  // `SidePair` and the cost vocabulary, so the types move first or each new
-  // module imports them back.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2483,
-  // +131 for the proposal card's press discipline and its render: the
-  // bubble hit-test, the press remembered for the release, and the card
-  // itself — which is its own file, so what lands here is the wiring.
-  // +2 more: the card now says WHICH changes it decided, so this handler
-  // forwards them instead of re-deriving the open set.
-  // +2: the surface takes a class so it can draw past its own viewport, and
-  // tells `useDragLayers` that a comment is in flight — both so the
-  // annotation ramp is neither clipped by a re-fitted envelope nor mistaken
-  // for an edit when a gesture takes the pin over.
-  // +1: it also tells `useDragLayers` whether the committed scene is CURRENT,
-  // which is what lets those layers hold their last frame until a drop's own
-  // layout lands. Only the answer is passed; the holding is that hook's.
-  //
-  // -5, NET, over a seam that added 38: `openProposal` and the proposal
-  // hit-test are geometry over the scene's chrome boxes, so they moved to
-  // `lib/spatial/viewport.ts` (`viewportRevealingProposal`, `proposalAt`)
-  // where the earlier splits put this file's pure core. This guard is what
-  // asked the question — the growth read as the feature's cost until it
-  // turned out two thirds of it was misfiled.
-  // +30 for the session's look (ADR-0030 decision 6): the `style` prop, the
-  // theme-fonts generation, the ask for the theme's family and the family
-  // the in-place editors type in are inputs the editor threads to its
-  // scene, its drag layers and its overlays, and the paper it paints is the
-  // palette's surface. Threading is this file's job; there is nothing here
-  // to move.
-  // +32 NET for the bend affordance and the edge inspector, over blocks that
-  // started at 53 and more. What came out: the handles are
-  // `EdgeBendHandles.tsx`, their wiring to the gesture machine is
-  // `EdgeBendLayer.tsx`, and `clientPointToRootLocal` moved to
-  // `lib/spatial/viewport.ts` — an overlay taking its own press needs the
-  // same client-to-root mapping, and two of them is how the pointer and the
-  // geometry come to disagree about where a press landed.
-  // 2785 -> 2791 for ADR-0038 decision 3's seam. Six lines: the accessor
-  // import, and the double-press dispatch becoming a block that resolves the
-  // node once instead of four `node?.type` tests that each narrowed their own
-  // arm. The block is what costs, and it is not optional — an early return
-  // would skip the `applyResult(result)` this handler ends with.
-  // 2791 -> 2855 for the pen. Three branches, one per pointer phase, each a
-  // few lines of dispatch plus the reason it is where it is: the press has
-  // to sit after the annotation layer's chrome and take capture eagerly,
-  // neither the samples nor the release may be snapped, and the samples are
-  // reduced from the gesture MIRROR rather than the render's closure —
-  // `pointermove` outruns React's commit, and a stroke accumulates where
-  // every other gesture recomputes, so reading the closure drops all but the
-  // first sample. The stroke's own arithmetic is `lib/spatial/freehand.ts`,
-  // its state machine is the gesture reducer's `drawing` arm, and what the
-  // hand watches is a new `InkDraftLayer.tsx` — so what stayed here is the
-  // wiring only, which is what this file is for.
-  // +31 for the Facets panel's tag row (ADR-0040 decision 6): the write
-  // that fans a tag edit out over the selection as a CHANGE to each box's
-  // own list (`retag`), beside the facet write that already fans out.
-  // +8: the tag fan-out reads each object's CURRENT tags off the eager
-  // chain's ref rather than the prop, so a second commit under a slow
-  // parent cannot erase the first.
-  // +5: the legend overlay (ADR-0040 decision 6), mounted from the scene
-  // the worker answered — one line of wiring and its comment.
-  // +14: two props for ADR-0040 decision 5 — the workspace's tag library
-  // and its in-use vocabulary — each threaded to the layout, the drag
-  // overlay and the Facets panel's tag row; the reading of both lives in
-  // the pages' hook, not here.
-  // 2843 + 83 on the merge: the pen's three pointer branches and the
-  // gesture-mirror read (ADR-0038) beside ADR-0040's tag fan-out, legend
-  // and library props. Two features, no overlap, nothing to reconcile.
-  // Raised 2926 -> 2951 across the two ink-selection fixes: ink drawn over a
-  // node was unselectable (the node hit-test settled the press before the
-  // line one ran), and the marquee looked at boxes only. Both decisions live
-  // OUT of this file, in `ink-hit.ts`; what is left here is the call sites
-  // and their reasons.
-  // Raised 2951 -> 2988: the press decides which MARK a stroke joins (the
-  // rule itself is `stroke-group.ts`) and the release remembers what the
-  // next one is judged against.
-  // Raised 2988 -> 3011: shift on INK, which the multi-select branch above
-  // it cannot see — ink wins a press by leaving `hitId` undefined, so
-  // without its own arm holding shift destroyed the selection it was meant
-  // to grow.
-  // 3011 -> 3025 -> 3015, which is the ratchet working in both directions
-  // in one change. The +14 was the REASON rather than the rule: one line
-  // drops a held edge on a shift-press while ink survives, and what
-  // separates the two kinds had nowhere to be written but beside it. The
-  // -10 is what moving the per-kind decisions to `element-pick.ts` gave
-  // back — three hit-tests two hundred lines apart became one call, and the
-  // context menu's two duplicate edge probes went with them.
-  // 3015 -> 3016: the node lock became a predicate beside the path lock
-  // instead of a swapped box list, so the menu's "locked included" is one
-  // statement per kind rather than two different mechanisms.
-  // Raised 3016 -> 3097 for the ink drag: the press arm that decides what
-  // travels, the offset the selection highlight is drawn at while it does,
-  // and the release branch that keeps what the marquee used to do for a
-  // press ON ink — the double-press label and the root focus, both found by
-  // the full browser run rather than by reading.
-  // Raised 3097 -> 3126 for the `attach` verb's wiring: the end handles
-  // beside the bend layer, the box the pointer is over threaded into the
-  // target overlay, and the two release branches that now answer for a
-  // re-attachment as well as a connect — the hit-test for `targetNodeId`,
-  // and the source box the overlay marks instead of offering.
-  // Raised 3126 -> 3194, +68, for naming `handlePointerMove`'s seven steps.
-  // The file GREW and is more readable for it: 121 lines of guard chain
-  // became seven named steps plus a handler that reads as the order they run
-  // in, and each step's reason now sits on the step rather than in a run of
-  // comments a reader has to attach to the right `if`. The cost is a doc
-  // comment per step; the alternative — module functions — would have moved
-  // 32 closed-over values into parameters and grown the file further.
-  // Raised 3194 -> 3195, +1, for one IMPORT: `defaultCreateId` moved to
-  // `lib/spatial/element-id.ts`, so one import line became two.
-  // -886 when the pointer surface left for the entry below, the second of
-  // this component's two event surfaces to go.
-  // 2309 -> 2341: `applySelectionFrom`, `growToFitText` and `writeReachesIds`,
-  // the last two at module scope.
-  // gestures.ts crossed 800 when `reduceGesture` (53) gave its five biggest
-  // arms and its nested pointerup switch their own reducers, each carrying
-  // the reason that used to sit inside the arm. The file's own eight
-  // `reduce*` siblings were the precedent; this finishes that shape.
+  // The markdown typesetter: one block per mdast kind, the inline run walker
+  // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
+  // the fit that decides what is cut when a body does not fit. Each inner step
+  // is a named function carrying its reason, which is where the lines go. The
+  // code block (`mdast-code-block.ts`), the table (`mdast-table.ts`) and the
+  // vocabulary they share with the typesetter (`mdast-layout-options.ts`) are
+  // sibling modules; the vocabulary went first, so neither imports the
+  // typesetter back. The next shrink is the inline writer out of
+  // `layoutPhrasing`, benched before and after.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1341,
+  // The side-choice SEARCH: the cost model's application to a whole canvas,
+  // the trial machinery of `createConfigScore`, the repair pass and the
+  // regions. The side vocabulary (`edge-sides.ts`), the anchor pass
+  // (`edge-anchors.ts`) and the router (`edge-router.ts`) are sibling modules
+  // — measured before cutting, the search reads all three and none reads the
+  // search, so the vocabulary went first and no module imports the file it
+  // left. What remains over budget is the search's own, and the next shrink
+  // is the trial scorer as a module of its own.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 1045,
+  // The gesture REDUCER: every pointer phase's decision for every tool and
+  // every kind of element, each arm carrying the reason it is where it is.
+  // What has already left: the per-kind hit-tests (`element-pick.ts`,
+  // `ink-hit.ts`), the stroke arithmetic (`lib/spatial/freehand.ts`), the
+  // mark grouping (`stroke-group.ts`) and the overlays each gesture renders.
+  // `reduceGesture`'s biggest arms and its pointerup switch are their own
+  // reducers already, so the next shrink is a tool's whole family of arms
+  // leaving as one module, not another arm.
   'apps/web/src/components/spatial-editor/gestures.ts': 845,
-  // Raised 2341 -> 2437. The file grew by the doc comments its eight JSX
-  // layers now carry, and by the fragments wrapping them; nothing was added
-  // and nothing duplicated. The next real shrink moves a layer into a
-  // sibling module, which needs its share of the editor's gesture state
-  // named as a bundle first.
-  // Lowered 2437 -> 2325: the facet panel's layer became
-  // `selection-inspector.tsx`, the first layer to leave for a sibling
-  // module. It could, where the others cannot yet, because it reads nine of
-  // the editor's values rather than forty.
-  // Lowered 2325 -> 2270: the routable handles became `routable-handles.tsx`,
-  // the first layer to move through `EditorGesture` — the bundle the note
-  // above said a gesture-dispatching layer would need before it could leave.
-  // Lowered 2270 -> 2222: the selection handles became
-  // `selection-handles.tsx` through the same bundle; the menu the ⋯ opens
-  // stays the host's.
-  // Lowered 2222 -> 2166: the canvas-space overlays about the gesture in
-  // progress and what it reached became `gesture-overlays.tsx`.
-  // Lowered 2166 -> 2119: the in-place editors (edge and group labels, a new
-  // comment, a node's body) became `in-place-editors.tsx`.
-  // Lowered 2119 -> 2060: the dialogs that choose what a node points at
-  // became `node-target-dialogs.tsx`.
+  // The editor HOST: the gesture state and the layers it draws, each layer
+  // carrying the doc comment that says what it is for. Six layers have left
+  // through the `EditorGesture` bundle — `selection-inspector.tsx`,
+  // `routable-handles.tsx`, `selection-handles.tsx`, `gesture-overlays.tsx`,
+  // `in-place-editors.tsx`, `node-target-dialogs.tsx` — and the next one
+  // leaves the same way: through the bundle, once its share of the editor's
+  // values is named.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2060,
 }
 
@@ -656,25 +364,11 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
 // record. `gestures.test` and this file itself are new entries rather than
 // raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
-  // (ADR-0041 S0-5's Members card): the browser-mode case that pins
-  // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
-  // case that pins it to daemonView.workspace and drops it again on
-  // disconnect.
-  // Raised 1643 -> 1733 for S4b's replica-key-holder wiring: a
-  // `connectReplicaKeeper` spy mock, the `navigator.credentials` sentinel
-  // helpers the gate needed to be provable rather than vacuous, and the two
-  // new tests (supported/unsupported credentials, and the disconnect-forgets
-  // case).
-  // Raised 1733 -> 1819 for S5's read-plane states (ADR-0042 decisions
-  // 3-5): renewal/reconnect prop assertions plus the removed-state test.
-  // Raised 1819 -> 1859 for S9's document-route/canonical-id replica case
-  // (the read-plane smoke's exact registry shape — no segment).
-  // Raised 1859 -> 1956 for S10's awaitingDaemonRenewal derivation cases (the
-  // renewal-outstanding gate is App's own, so its success and failure paths are
-  // pinned here, not only in the hook's test).
-  // 1956 -> 1997 for the /receive-transfer route case: the fragment carries
-  // the whole handshake, so it is pinned here beside /pair's same guard.
+  // The app shell's wiring cases: every route, the daemon address, the
+  // workspace id's two sources, the replica-key holder and the read-plane
+  // states (ADR-0041/0042), the pairing and transfer handshakes. Each is a
+  // case about App's OWN derivation, pinned here rather than only in the
+  // hook's test because the gate is App's.
   'apps/web/src/App.test.tsx': 1373,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
@@ -687,22 +381,12 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // so the deferred-demote case claims the warn it provokes (import + two lines).
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 887,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
-  // Raised 2708 -> 2724, two lines for each of the eight ink entries the
-  // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
-  // ends/side/facet/label/bends/color) and `pointerdown-ink`. Each one is a
-  // command kind this model does not drive — it reduces POINTER gestures
-  // over generated NODES — and the ledger's fourth direction fails on a
-  // `not modelled` the run DOES produce, so each entry is a sentence
-  // somebody had to be able to defend rather than a line of boilerplate.
-  // 2724 -> 2730 for the `attach` entries: two command kinds and the
-  // `pointerdown-end` that arms them, all unreachable from this model for
-  // the reason every other overlay gesture is — it generates node
-  // interactions and never renders the handle the press starts on.
-  // Raised 2730 -> 2743: the census prints on a green run now, and the lines
-  // are the reason — a floor is a claim about a distribution, and a number
-  // printed only on failure is one draw from its left tail.
-  // Raised 2806 -> 2815: a `cutDelete` arm of its own, the one mode that
-  // reconnects anything — `reconnections` went min 4 -> 28 over 30 runs each.
+  // The editor-state model and its coverage ledger: a `not modelled` entry
+  // per command kind the model cannot drive, each a sentence somebody has to
+  // be able to defend (the ledger's fourth direction fails on a `not
+  // modelled` the run DOES produce), plus the census that prints on a green
+  // run — a floor is a claim about a distribution, and a number printed only
+  // on failure is one draw from its left tail.
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2815,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // Raised 1666 -> 1863 for the v19 -> v20 upgrade block (S4b's plaintext
@@ -715,26 +399,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // agreeing with the screen after an undo and after a redo, and a taken-back
   // write settling as saved rather than reading as pending forever.
   'apps/web/src/lib/document-sync-session.test.ts': 2850,
-  // Raised 1550 -> 1615 with the two ink writes above: five examples for the
-  // move (both ends, a node end held, the two no-ops) and the colour.
-  // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
-  // ink, the offset on every point a stroke owns, and the anchor bounds that
-  // used to read Infinity over nodes alone.
-  // Raised 1675 -> 1808 with the rest of the verbs a stroke stores and the
-  // editor could not write — bends, label, arrowheads, the side a pinned end
-  // leaves from and the free end that has none, a facet, and the colour
-  // write against a line the canvas does not hold — plus the two
-  // collection-picking siblings (`labelInkCommand`, `bendInkCommand`), whose
-  // whole content is that a relation and a stroke of the same id go to
-  // different writes. A table of ink verbs where every row is one example is
-  // what stops the next one being added without one.
-  // Raised 1808 -> 1936 with the five re-attachment cases: a relation moved
-  // onto another box, the two it refuses (a self-loop, a box the canvas does
-  // not hold), a stroke end dropped in empty space and one dropped on a box,
-  // and the collection-picking sibling that answers nothing for a relation
-  // aimed at empty space.
-  // 2042 -> 2075: two rules of `set-line-end` that nothing pinned (a stale
-  // box id, and both ends on one box) now have tests.
+  // One example per rule of every command arm, ink included: a table of ink
+  // verbs where every row is one example is what stops the next one being
+  // added without one. It grows one row per verb the parity matrix reports,
+  // which is the growth it is for.
   'apps/web/src/lib/spatial/commands.test.ts': 2072,
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
@@ -748,14 +416,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stop the replica refresh and the push it armed, and both schedulers'
   // mocks have to answer a spy cancel rather than undefined.
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 890,
-  // Raised 2139 -> 2173: a duplicated note's copy was filed as a canvas, and
-  // the case needs this file's installFetchMock/selectCard harness. Moving
-  // that harness to test-utils/ is what would shrink this entry properly.
-  // 2173 -> 2221: the lone-survivor naming gained a test. A mutation showed
-  // the re-offer's row lookup could be replaced with `undefined` and all 108
-  // index-page tests stayed green, so the comment explaining why the dialog
-  // must not read `Delete "2 documents"?` was pinning nothing.
-  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2221,
+  // The index page's whole surface — switching, creating, deleting, trash,
+  // names, the duplicate flow — in one file. Its daemon fake is
+  // `test-utils/fake-daemon-fetch.ts` now (2221 -> 2073), answering through
+  // the api-contract schemas; what is left over budget is the cases.
+  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2073,
   'apps/web/src/pages/SettingsPage.test.tsx': 839,
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
   'packages/canvas-render/src/layout/comments.test.ts': 823,
@@ -786,7 +451,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // of two histories costs lines rather than losing one of them.
   // 961 -> 964: the harness hands the tools the bundled registry, now that
   // the seam is required and the tools fall back to nothing.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 964,
+  // 964 -> 977: the `document.move` arm's row, re-pinned with why it moved
+  // and why its follow report costs wire bytes and no visible ones — the
+  // prose a pinned scoreboard carries instead of a changelog.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 977,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next

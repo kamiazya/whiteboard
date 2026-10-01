@@ -52,13 +52,9 @@ export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
 export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
-export {
-  assignEdgeAnchors,
-  type EdgeAnchorOverride,
-  type EdgeAnchorPair,
-  type EdgeSides,
-  routeEdge,
-} from './layout/edges/spatial-edges.js'
+export { routeEdge } from './layout/edges/edge-router.js'
+export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
+export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
 export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
 export {
@@ -69,18 +65,19 @@ export {
   sketchShape,
 } from './layout/ink/sketch.js'
 export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
-export type {
-  CodeToken,
-  CodeTokenLines,
-  CodeTokenRole,
-  EmbeddedCanvasBox,
-  EmbeddedCanvasMiniature,
-  EmbeddedDocument,
-  FittedBlocks,
-  MdastLayoutOptions,
-  RenderedSvgFragment,
-} from './layout/nodes/mdast-blocks.js'
-export { BODY_FONT_SIZE_PX, BODY_LINE_HEIGHT_PX } from './layout/nodes/mdast-blocks.js'
+export type { FittedBlocks } from './layout/nodes/mdast-blocks.js'
+export {
+  BODY_FONT_SIZE_PX,
+  BODY_LINE_HEIGHT_PX,
+  type CodeToken,
+  type CodeTokenLines,
+  type CodeTokenRole,
+  type EmbeddedCanvasBox,
+  type EmbeddedCanvasMiniature,
+  type EmbeddedDocument,
+  type MdastLayoutOptions,
+  type RenderedSvgFragment,
+} from './layout/nodes/mdast-layout-options.js'
 export { selectMarkdownSection } from './layout/nodes/mdast-section.js'
 export type { ShapeContribution, ShapeTable } from './layout/nodes/node-outline.js'
 export {

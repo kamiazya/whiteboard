@@ -120,8 +120,16 @@ carrying `runtime:admin`.
   keeps no lease table server-side; honouring the lapse (discarding the key
   once it passes) is the browser's own responsibility.
 
-**Rotation.** `POST /api/workspaces/:workspaceId/replica-key/rotate`
-replaces the workspace's key and salt outright with a fresh random pair —
+An operator sets or clears one workspace's override with
+`whiteboard daemon set-replica-tier --json --workspace=<id> --tier=<no-offline|offline|bounded|default>`;
+`default` clears it, back to `WHITEBOARD_REPLICA_TIER`, and the answer
+echoes both the override and what the workspace resolves to.
+
+**Rotation.** `whiteboard daemon rotate-replica-key --json --workspace=<id>`
+(the operator's entry point; it asks the running daemon's
+`POST /api/workspaces/:workspaceId/replica-key/rotate` over the daemon's
+socket under its token) replaces the workspace's key and salt outright with
+a fresh random pair —
 not an epoch bump on any document, which would leave the old workspace key
 able to derive every old-epoch document key and deny nobody anything. This
 is the response to a workspace key suspected compromised: every document
