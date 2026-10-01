@@ -98,6 +98,18 @@ export function renderInRouter(
   return rtlRender(inRouter(ui, { route, height, probe }), options)
 }
 
+/** `inRouter` inside a parent as high as the viewport, which is what the app shell gives a page. */
+export function inPage(ui: ReactElement, options: InRouterOptions = {}): ReactElement {
+  return inRouter(ui, { height: '100vh', ...options })
+}
+
+export function renderPage(
+  ui: ReactElement,
+  { route, height = '100vh', probe, ...options }: InRouterOptions & RenderOptions = {},
+): RenderResult {
+  return renderInRouter(ui, { route, height, probe, ...options })
+}
+
 /**
  * RTL's `wrapper` form of the same Router. RTL re-applies a wrapper on every
  * `rerender`, so a test that rerenders the BARE page keeps its Router.

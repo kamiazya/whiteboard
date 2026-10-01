@@ -6,7 +6,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
@@ -15,6 +15,7 @@ import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 import '../index.css'
+import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-cross-tab')
 
@@ -25,13 +26,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 const { App } = await import('../App.js')
 
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '50vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
+const render = (ui: ReactElement) => renderInRouter(ui, { height: '50vh' })
 
 /** The source editor inside the page mounted in `container`. */
 function editorIn(container: HTMLElement): HTMLElement | null {

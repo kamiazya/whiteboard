@@ -20,11 +20,10 @@ import {
   writeCommentThread,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 
 // jsdom has no IndexedDB, so the startup fold cannot run here: it throws, the
@@ -67,10 +66,6 @@ vi.mock('../lib/browser-backend.js', async () => {
 const seed = vi.hoisted(() => ({ note: (_containers: DocumentContainers): void => {} }))
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
-
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
-}
 
 const note: DocumentSnapshot = {
   documentId: '0W16BGNTZ49EKRX27CHPV05AFN',
@@ -116,7 +111,7 @@ it('marks the conversation whose passage is gone, and only that one', async () =
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
 
-  render(
+  renderInRouter(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}

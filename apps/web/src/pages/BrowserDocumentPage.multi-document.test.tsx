@@ -22,17 +22,8 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import {
-  act,
-  cleanup,
-  configure,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
+import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { useEffect } from 'react'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
@@ -58,37 +49,13 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 // findBy* on its controls never pays the load (integrator-flow.md's
 // lazy()-vs-findBy* family; see BrowserDocumentPage.test.tsx).
 import '../components/WorkspaceTopBar.js'
+import { navigateTo, renderPage } from '../test-utils/daemon-page-harness.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-multi-document')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
-// Stands in for the document browser: the only thing it does to this page is
-// change the URL, which is exactly what picking a document there does.
-let navigateTo: ((to: string) => void) | null = null
-function NavigationProbe() {
-  const navigate = useNavigate()
-  useEffect(() => {
-    navigateTo = navigate
-    return () => {
-      navigateTo = null
-    }
-  }, [navigate])
-  return null
-}
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    // Pages fill their allotted height (h-full) — the app shell owns the
-    // viewport in production, so tests supply the equivalent sized parent.
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>
-        <NavigationProbe />
-        {ui}
-      </MemoryRouter>
-    </div>,
-  )
-}
+const render = (ui: ReactElement) => renderPage(ui, { probe: true })
 
 /**
  * Seeds the two documents this suite switches between, exactly as the
@@ -113,7 +80,7 @@ async function seedTwoDocuments(store: IdbDocumentIndex): Promise<[string, strin
 
 async function openDocument(path: string): Promise<void> {
   await act(async () => {
-    navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, path))
+    navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, path))
   })
 }
 

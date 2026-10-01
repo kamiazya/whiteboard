@@ -13,16 +13,15 @@
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../components/spatial-editor/index.js', () => ({
   // Fills its host the way the real editor does. A zero-height stand-in makes
@@ -100,14 +99,6 @@ const seededNotes = vi.hoisted(() => new Map<string, Uint8Array>())
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
-
 const snap: DocumentSnapshot = {
   documentId: '0W16BGNTZ49EKRX27CHPV05AFM',
   workspaceId: 'local',
@@ -126,7 +117,9 @@ it('opens a rail listing this document conversations, open ones first and by def
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
   await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
 
   // Closed by default: the panel answers a question the reader asks, rather
@@ -147,7 +140,9 @@ it('counts the OPEN conversations on the opener, so the rail need not be open to
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
   await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
 
   // One of the three threads is resolved; a badge counting all of them would
@@ -162,7 +157,9 @@ it('marks a thread whose node is gone, instead of leaving it indistinguishable',
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
   await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
   await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
 
@@ -183,7 +180,9 @@ it('keeps the opener out of the editor surface, so it cannot swallow the editor 
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
   const surface = await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
   const opener = await screen.findByRole('button', { name: /comments/i })
 
@@ -232,7 +231,7 @@ it('lists a markdown document conversations, which no session is there to delive
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingOneThread())
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}
@@ -262,7 +261,7 @@ it('replies on a markdown document, where a reply has no session to travel throu
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingOneThread())
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}
@@ -299,7 +298,7 @@ it('opens a conversation from the markdown body, end to end', async () => {
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingABody())
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}
@@ -366,7 +365,7 @@ it('moves the reader into the conversation it opens, and Escape puts them back i
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingABody())
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}
@@ -428,7 +427,7 @@ it('keeps the body highlight through an edit inside its own passage', async () =
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingAMarkedPassage())
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}
@@ -465,7 +464,9 @@ it('offers the same opener on a markdown document, which has no canvas chrome to
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
 
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
 
   // The claim ADR-0026 decision 5 rests on: a document with no canvas still
   // reaches its conversations. Nothing else in this file would notice if the
@@ -504,7 +505,9 @@ it('shows the opener as pressed while the rail is open, not only to a screen rea
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
   const editor = await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
   const opener = await screen.findByRole('button', { name: /comments/i })
 
@@ -540,7 +543,9 @@ it('replies from the rail, and the reply joins the conversation it was typed int
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  renderPage(
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+  )
   await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
   await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
   await userEvent.click(await screen.findByText('still needs a decision'))
@@ -580,7 +585,7 @@ it('reaches a note thread from the body: its gutter marker opens the rail on tha
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingAPlacedThread())
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}
@@ -622,7 +627,7 @@ it('starts a conversation about the whole document from the rail, on a note', as
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingOneThread())
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}

@@ -1,12 +1,11 @@
-import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -15,18 +14,8 @@ claimIsolatedWhiteboardDb('browserdocumentpage-rename')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
-function render(ui: ReactElement) {
-  return rtlRender(
-    // Pages fill their allotted height (h-full) — the app shell owns the
-    // viewport in production, so tests supply the equivalent sized parent.
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
-
 async function renderLoaded(): Promise<void> {
-  render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+  renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
@@ -102,7 +91,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     await waitForWriteLanded()
 
     cleanup()
-    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitForTitle('Reloaded title')
   })
 
@@ -159,7 +148,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
 
     cleanup()
-    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitForTitle('untitled')
   })
 
@@ -183,7 +172,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     await waitForWriteLanded()
 
     cleanup()
-    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitForTitle('untitled')
   })
 

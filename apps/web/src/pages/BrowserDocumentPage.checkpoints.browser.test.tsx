@@ -5,10 +5,8 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
@@ -21,16 +19,9 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpagecheckpoints')
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 async function seedDocument(): Promise<{ index: FoldingBrowserIndex; documentId: string }> {
   const index = new FoldingBrowserIndex()
@@ -124,7 +115,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
   it('leaves a checkpoint behind when the page goes away after an edit', async () => {
     exercised.add('spatial/page-exit-flush')
     const { index } = await seedDocument()
-    render(<BrowserDocumentPage initialPath="canvas-a" />)
+    renderPage(<BrowserDocumentPage initialPath="canvas-a" />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
@@ -173,7 +164,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
     // IndexedDB work either side of the edit still settles.
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
-      render(<BrowserDocumentPage initialPath="canvas-a" />)
+      renderPage(<BrowserDocumentPage initialPath="canvas-a" />)
       await waitFor(
         () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
         {
@@ -214,7 +205,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
     await seedIdbDocument(index, { path: 'note', kind: 'markdown', makeDefault: true })
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
-      render(<BrowserDocumentPage store={index} />)
+      renderPage(<BrowserDocumentPage store={index} />)
       const editable = await waitFor(() => {
         const el = document.querySelector('[contenteditable="true"]')
         expect(el).not.toBeNull()

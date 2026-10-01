@@ -11,35 +11,22 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render as rtlRender, screen } from '@testing-library/react'
+import { cleanup, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { jsonResponse } from '../test-utils/json-response.js'
 import '../index.css'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 
-// Each answers a CANCEL, which the page calls on unmount: a schedule that
-// outlives its page fires against a fetch and a workspace that have moved on,
-// and in a test run the warning lands on whichever case is executing by then.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 const WORKSPACE_ID = 'w1'
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 function seededSnapshot(): Uint8Array {
   const doc = new LoroDoc()
@@ -115,7 +102,7 @@ describe('the daemon page answers a requires_person_session refusal', () => {
     const { fetchDouble, sentPaths } = daemonFetchDouble('requires_person_session')
     vi.stubGlobal('fetch', fetchDouble)
 
-    render(
+    renderPage(
       <DaemonDocumentPage
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId={WORKSPACE_ID}
@@ -136,7 +123,7 @@ describe('the daemon page answers a not_a_member refusal', () => {
     const { fetchDouble, sentPaths } = daemonFetchDouble('not_a_member')
     vi.stubGlobal('fetch', fetchDouble)
 
-    render(
+    renderPage(
       <DaemonDocumentPage
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId={WORKSPACE_ID}

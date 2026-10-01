@@ -1,13 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render as rtlRender,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { listLocalDocuments } from '../lib/local-document-summary.js'
@@ -15,6 +6,7 @@ import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
@@ -24,16 +16,6 @@ claimIsolatedWhiteboardDb('browserdocumentpage-delete-confirm')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
-function render(ui: ReactElement) {
-  return rtlRender(
-    // Pages fill their allotted height (h-full) — the app shell owns the
-    // viewport in production, so tests supply the equivalent sized parent.
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
-
 /**
  * The deleted rows are gone and the page is on the one left in their place:
  * with nothing else in the store, that is a fresh canvas.
@@ -55,7 +37,7 @@ async function expectReplacedBy(store: IdbDocumentIndex, beforeIds: string[]): P
 async function renderLoaded(
   store: IdbDocumentIndex = new IdbDocumentIndex(),
 ): Promise<IdbDocumentIndex> {
-  render(<BrowserDocumentPage store={store} />)
+  renderPage(<BrowserDocumentPage store={store} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
@@ -93,7 +75,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
       kind: 'markdown',
       makeDefault: true,
     })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await screen.findByRole('button', { name: 'More actions' }, { timeout: 5000 })
 
     const dialog = await openDeleteDialog()
