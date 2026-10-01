@@ -5,16 +5,14 @@
 // text GROWS the node to fit its laid-out content (grow-only — a roomy box
 // stays at its authored size, and manual enlargement is never fought).
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { fillNodeEditor, nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -28,25 +26,6 @@ const TALL_BODY = [
   'A closing paragraph line.',
 ].join('\n')
 
-function makeHost(initial: SpatialCanvas) {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 async function editNodeText(container: HTMLElement, text: string) {
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 130 } })
@@ -58,9 +37,11 @@ async function editNodeText(container: HTMLElement, text: string) {
 }
 
 it('committing a tall body grows the node height to contain it', async () => {
-  const { Host, latest } = makeHost({
-    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 60, text: 'hi' })],
-    edges: [],
+  const { Host, latest } = makeEditorHost({
+    initial: {
+      nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 60, text: 'hi' })],
+      edges: [],
+    },
   })
   const { container } = render(<Host />)
 
@@ -77,9 +58,11 @@ it('committing a tall body grows the node height to contain it', async () => {
 })
 
 it('committing a short body into a roomy box leaves its height alone (grow-only)', async () => {
-  const { Host, latest } = makeHost({
-    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 180, text: 'hello' })],
-    edges: [],
+  const { Host, latest } = makeEditorHost({
+    initial: {
+      nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 180, text: 'hello' })],
+      edges: [],
+    },
   })
   const { container } = render(<Host />)
 

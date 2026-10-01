@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import VersionTimeline, { type VersionPreviewSession } from './VersionTimeline.js'
 
 const mockLog = vi.hoisted(() => ({
@@ -28,61 +29,55 @@ type FetchArgs = [RequestInfo | URL, RequestInit?]
 // mock below: a list payload answered here would fail the document schema and
 // the row would report "could not be read" instead of opening.
 function mkVersionDocumentResponse(): Response {
-  return new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return jsonResponse({ kind: 'spatial', canvas: { nodes: [], edges: [] } })
 }
 
 function mkVersionsResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      versions: [
-        {
-          id: 'v-new',
-          path: 'canvas-a',
-          createdAt: '2026-04-23T02:00:00Z',
-          elementCount: 5,
-          auto: true,
-          branchName: 'main',
-          operator: {
-            kind: 'ai',
-            peerId: 'peer-ai',
-            displayName: 'Assistant',
-          },
+  return jsonResponse({
+    versions: [
+      {
+        id: 'v-new',
+        path: 'canvas-a',
+        createdAt: '2026-04-23T02:00:00Z',
+        elementCount: 5,
+        auto: true,
+        branchName: 'main',
+        operator: {
+          kind: 'ai',
+          peerId: 'peer-ai',
+          displayName: 'Assistant',
         },
-        {
-          id: 'v-mid',
-          path: 'canvas-a',
-          createdAt: '2026-04-23T01:00:00Z',
-          elementCount: 3,
-          auto: true,
-          branchName: 'main',
-          operator: {
-            kind: 'human',
-            peerId: 'peer-human',
-            displayName: 'Alice',
-          },
-          attestation: {
-            kind: 'webauthn',
-            credentialId: 'Y3JlZA',
-            authenticatorData: 'YXV0aA',
-            clientDataJSON: 'Y2xpZW50',
-            signature: 'c2ln',
-          },
+      },
+      {
+        id: 'v-mid',
+        path: 'canvas-a',
+        createdAt: '2026-04-23T01:00:00Z',
+        elementCount: 3,
+        auto: true,
+        branchName: 'main',
+        operator: {
+          kind: 'human',
+          peerId: 'peer-human',
+          displayName: 'Alice',
         },
-        {
-          id: 'v-feat',
-          path: 'canvas-a',
-          createdAt: '2026-04-23T01:30:00Z',
-          elementCount: 4,
-          auto: true,
-          branchName: 'feature', // hidden from the main branch view
+        attestation: {
+          kind: 'webauthn',
+          credentialId: 'Y3JlZA',
+          authenticatorData: 'YXV0aA',
+          clientDataJSON: 'Y2xpZW50',
+          signature: 'c2ln',
         },
-      ],
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+      },
+      {
+        id: 'v-feat',
+        path: 'canvas-a',
+        createdAt: '2026-04-23T01:30:00Z',
+        elementCount: 4,
+        auto: true,
+        branchName: 'feature', // hidden from the main branch view
+      },
+    ],
+  })
 }
 
 beforeEach(() => {
@@ -220,21 +215,18 @@ describe('VersionTimeline', () => {
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              versions: [
-                {
-                  id: 'v-skew',
-                  path: 'canvas-a',
-                  createdAt: future,
-                  elementCount: 1,
-                  auto: true,
-                  branchName: 'main',
-                },
-              ],
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
+          jsonResponse({
+            versions: [
+              {
+                id: 'v-skew',
+                path: 'canvas-a',
+                createdAt: future,
+                elementCount: 1,
+                auto: true,
+                branchName: 'main',
+              },
+            ],
+          }),
         )
       }
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -282,21 +274,18 @@ describe('VersionTimeline', () => {
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              versions: [
-                {
-                  id: 'v-legacy',
-                  path: 'canvas-a',
-                  createdAt: '2026-04-23T02:00:00Z',
-                  elementCount: 2,
-                  auto: true,
-                  branchName: 'main',
-                },
-              ],
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
+          jsonResponse({
+            versions: [
+              {
+                id: 'v-legacy',
+                path: 'canvas-a',
+                createdAt: '2026-04-23T02:00:00Z',
+                elementCount: 2,
+                auto: true,
+                branchName: 'main',
+              },
+            ],
+          }),
         )
       }
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -320,7 +309,7 @@ describe('VersionTimeline', () => {
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
-        return Promise.resolve(new Response(JSON.stringify({ versions: [] }), { status: 200 }))
+        return Promise.resolve(jsonResponse({ versions: [] }))
       }
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -366,7 +355,7 @@ describe('VersionTimeline', () => {
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/restore')) {
         restoreCalls.push(url)
-        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+        return Promise.resolve(jsonResponse({ ok: true }))
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
@@ -410,9 +399,7 @@ describe('VersionTimeline', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/restore')) {
-        return Promise.resolve(
-          new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }),
-        )
+        return Promise.resolve(jsonResponse({ error: 'not_found' }, 404))
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
@@ -495,8 +482,7 @@ describe('VersionTimeline', () => {
       if (url.includes('/restore')) {
         restoreCalls.push(url)
         return new Promise<Response>((resolve) => {
-          resolveRestore = () =>
-            resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+          resolveRestore = () => resolve(jsonResponse({ ok: true }))
         })
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
@@ -550,8 +536,7 @@ describe('VersionTimeline', () => {
       if (url.includes('/restore')) {
         restoreCalls.push(url)
         return new Promise<Response>((resolve) => {
-          resolveRestore = () =>
-            resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+          resolveRestore = () => resolve(jsonResponse({ ok: true }))
         })
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
@@ -608,21 +593,18 @@ describe('formatRelative display branches (via rendered version rows)', () => {
   })
 
   function mkSingleVersionResponse(createdAt: string): Response {
-    return new Response(
-      JSON.stringify({
-        versions: [
-          {
-            id: 'v-1',
-            path: 'canvas-a',
-            createdAt,
-            elementCount: 1,
-            auto: true,
-            branchName: 'main',
-          },
-        ],
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
+    return jsonResponse({
+      versions: [
+        {
+          id: 'v-1',
+          path: 'canvas-a',
+          createdAt,
+          elementCount: 1,
+          auto: true,
+          branchName: 'main',
+        },
+      ],
+    })
   }
 
   function stubFetchWithVersionAt(createdAt: string) {
@@ -750,7 +732,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/restore')) {
         restoreCalls.push(url)
-        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+        return Promise.resolve(jsonResponse({ ok: true }))
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
@@ -785,23 +767,20 @@ describe('VersionTimeline via DaemonApiContext', () => {
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              versions: [
-                {
-                  id: 'v-manual',
-                  path: 'canvas-a',
-                  label: 'release candidate',
-                  createdAt: '2026-04-23T02:00:00Z',
-                  elementCount: 5,
-                  auto: false,
-                  branchName: 'main',
-                  operator: { kind: 'human', peerId: 'peer-human', displayName: 'Alice' },
-                },
-              ],
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
+          jsonResponse({
+            versions: [
+              {
+                id: 'v-manual',
+                path: 'canvas-a',
+                label: 'release candidate',
+                createdAt: '2026-04-23T02:00:00Z',
+                elementCount: 5,
+                auto: false,
+                branchName: 'main',
+                operator: { kind: 'human', peerId: 'peer-human', displayName: 'Alice' },
+              },
+            ],
+          }),
         )
       }
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -927,39 +906,36 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
  */
 describe('VersionTimeline draws where a restored state came from', () => {
   const restoredHistory = () =>
-    new Response(
-      JSON.stringify({
-        versions: [
-          {
-            id: 'v-merge',
-            path: 'canvas-a',
-            createdAt: '2026-04-23T03:00:00Z',
-            elementCount: 5,
-            auto: true,
-            branchName: 'main',
-            restoredFrom: 'v-old',
-          },
-          {
-            id: 'v-between',
-            path: 'canvas-a',
-            createdAt: '2026-04-23T02:00:00Z',
-            elementCount: 4,
-            auto: true,
-            branchName: 'main',
-          },
-          {
-            id: 'v-old',
-            path: 'canvas-a',
-            createdAt: '2026-04-23T01:00:00Z',
-            elementCount: 3,
-            auto: false,
-            label: 'first draft',
-            branchName: 'main',
-          },
-        ],
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
+    jsonResponse({
+      versions: [
+        {
+          id: 'v-merge',
+          path: 'canvas-a',
+          createdAt: '2026-04-23T03:00:00Z',
+          elementCount: 5,
+          auto: true,
+          branchName: 'main',
+          restoredFrom: 'v-old',
+        },
+        {
+          id: 'v-between',
+          path: 'canvas-a',
+          createdAt: '2026-04-23T02:00:00Z',
+          elementCount: 4,
+          auto: true,
+          branchName: 'main',
+        },
+        {
+          id: 'v-old',
+          path: 'canvas-a',
+          createdAt: '2026-04-23T01:00:00Z',
+          elementCount: 3,
+          auto: false,
+          label: 'first draft',
+          branchName: 'main',
+        },
+      ],
+    })
 
   it('names the point a restore came from', async () => {
     vi.unstubAllGlobals()

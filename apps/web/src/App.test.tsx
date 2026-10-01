@@ -29,6 +29,7 @@ import { resetShellStatusForTests, setShellConnection } from './lib/shell-status
 import './components/status/NotFoundPage.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import { STORAGE_KEY } from './lib/user-settings-store.js'
+import { jsonResponse } from './test-utils/json-response.js'
 import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
 afterEach(() => {
@@ -797,15 +798,12 @@ describe('App daemon provider state', () => {
       'fetch',
       vi.fn(() =>
         Promise.resolve(
-          new Response(
-            JSON.stringify({
-              workspaces: [
-                { workspaceId: 'w1', segment: 'design' },
-                { workspaceId: 'w2', segment: 'sandbox' },
-              ],
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
+          jsonResponse({
+            workspaces: [
+              { workspaceId: 'w1', segment: 'design' },
+              { workspaceId: 'w2', segment: 'sandbox' },
+            ],
+          }),
         ),
       ),
     )

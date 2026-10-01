@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../index.css'
+import { jsonResponse } from '../../test-utils/json-response.js'
 import { setViewport } from '../../test-utils/viewport.js'
 import { VersionPanel } from './VersionPanel.js'
 
@@ -16,10 +17,7 @@ function mkVersionsResponse(): Response {
     auto: true,
     branchName: 'main',
   }))
-  return new Response(JSON.stringify({ versions }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return jsonResponse({ versions })
 }
 
 beforeEach(() => {
@@ -28,20 +26,17 @@ beforeEach(() => {
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes('/branches')) {
       return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            head: 'main',
-            branches: [
-              {
-                name: 'main',
-                tipFrontiers: '',
-                color: '#1971c2',
-                createdAt: '2026-04-23T00:00:00Z',
-              },
-            ],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
+        jsonResponse({
+          head: 'main',
+          branches: [
+            {
+              name: 'main',
+              tipFrontiers: '',
+              color: '#1971c2',
+              createdAt: '2026-04-23T00:00:00Z',
+            },
+          ],
+        }),
       )
     }
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())

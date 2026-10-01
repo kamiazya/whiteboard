@@ -8,9 +8,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -19,27 +19,8 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 function selectNode(container: HTMLElement) {
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   // Node occupies root-local (200,150)-(400,250) at identity viewport.
   fireEvent.pointerDown(root, {
@@ -80,7 +61,7 @@ function dragFromScreenPoint(root: HTMLElement, from: [number, number], to: [num
 }
 
 it('a press 10px OUTSIDE the corner marker still resizes from that corner', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const { root } = selectNode(container)
 
@@ -95,7 +76,7 @@ it('a press 10px OUTSIDE the corner marker still resizes from that corner', () =
 })
 
 it('the whole edge is a grab: a press mid-edge, away from any marker, resizes that side', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const { root } = selectNode(container)
 
@@ -112,7 +93,7 @@ it('the whole edge is a grab: a press mid-edge, away from any marker, resizes th
 })
 
 it('only the four corner markers are painted — mid-edge chrome is gone', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   selectNode(container)
 
@@ -128,7 +109,7 @@ it('only the four corner markers are painted — mid-edge chrome is gone', () =>
 })
 
 it('the exact edge midpoint belongs to the connect port, by design', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const { root } = selectNode(container)
   const r = root.getBoundingClientRect()
@@ -137,7 +118,7 @@ it('the exact edge midpoint belongs to the connect port, by design', () => {
 })
 
 it('the connect port catches a press outside its 10px dot', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const { root, r } = selectNode(container)
 

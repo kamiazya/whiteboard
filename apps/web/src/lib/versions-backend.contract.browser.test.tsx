@@ -11,6 +11,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { BrowserBackend } from './browser-backend.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { createBrowserVersionsBackend } from './browser-versions-backend.js'
@@ -144,12 +145,6 @@ function daemonHarness(): VersionsBackendHarness {
   const routes = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    const json = (body: unknown): Response =>
-      new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-
     const restore = url.match(/\/versions\/([^/]+)\/restore$/)
     if (restore && init?.method === 'POST') {
       const id = restore[1] as string
@@ -159,7 +154,7 @@ function daemonHarness(): VersionsBackendHarness {
       // The merge point the operation records; see restore-version.ts.
       versions.unshift(entry(`v-restore-${++seq}`, undefined, id))
       content.set(`v-restore-${seq}`, current)
-      return json({ ok: true })
+      return jsonResponse({ ok: true })
     }
 
     const document = url.match(/\/versions\/([^/]+)\/document$/)
@@ -167,7 +162,7 @@ function daemonHarness(): VersionsBackendHarness {
       const id = document[1] as string
       // The refusal: an id alone must not read another document's history.
       if (id === OTHER || !content.has(id)) return new Response('{}', { status: 404 })
-      return json({
+      return jsonResponse({
         kind: 'spatial',
         canvas: {
           nodes: [
@@ -183,11 +178,11 @@ function daemonHarness(): VersionsBackendHarness {
       const created = entry(`v-${++seq}`, label)
       versions.unshift(created)
       content.set(created.id, current)
-      return json({ version: created })
+      return jsonResponse({ version: created })
     }
 
-    if (url.endsWith('/versions')) return json({ versions })
-    return json({})
+    if (url.endsWith('/versions')) return jsonResponse({ versions })
+    return jsonResponse({})
   }
 
   const entry = (id: string, label?: string, restoredFrom?: string): VersionEntry => ({

@@ -6,10 +6,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endIn, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { selectAt } from '../../test-utils/spatial-editor-pointer.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -29,53 +29,11 @@ const initial: SpatialCanvas = {
   ],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: initial,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-function selectNode(root: HTMLElement, x: number, y: number, shift = false) {
-  const r = root.getBoundingClientRect()
-  fireEvent.pointerDown(root, {
-    button: 0,
-    pointerId: 1,
-    shiftKey: shift,
-    clientX: r.left + x,
-    clientY: r.top + y,
-  })
-  fireEvent.pointerUp(root, {
-    pointerId: 1,
-    shiftKey: shift,
-    clientX: r.left + x,
-    clientY: r.top + y,
-  })
-}
-
 it('Cmd+D duplicates the selected node as ONE batch command, offset and selected', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-  selectNode(root, 120, 80)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
 
   fireEvent.keyDown(root, { code: 'KeyD', key: 'd', metaKey: true })
 
@@ -95,11 +53,11 @@ it('Cmd+D duplicates the selected node as ONE batch command, offset and selected
 })
 
 it('duplicating a multi-selection keeps the connecting edge WITH its properties, endpoints remapped', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-  selectNode(root, 120, 80)
-  selectNode(root, 400, 80, true)
+  const root = rootOf(container)
+  selectAt(root, 120, 80)
+  selectAt(root, 400, 80, true)
 
   fireEvent.keyDown(root, { code: 'KeyD', key: 'd', metaKey: true })
 
@@ -118,9 +76,9 @@ it('duplicating a multi-selection keeps the connecting edge WITH its properties,
 })
 
 it('the context menu offers Duplicate as the touch path', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
 
   fireEvent.contextMenu(root, { clientX: r.left + 120, clientY: r.top + 80 })
@@ -133,9 +91,9 @@ it('the context menu offers Duplicate as the touch path', () => {
 })
 
 it('Cmd+D without a selection does nothing (and typing d in the editor never duplicates)', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   fireEvent.keyDown(root, { code: 'KeyD', key: 'd', metaKey: true })
   expect(latest.canvas.nodes).toHaveLength(2)
   expect(latest.commands).toHaveLength(0)

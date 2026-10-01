@@ -8,46 +8,17 @@
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
-}
-
-function makeHost(options: { lockedIds?: readonly string[] } = {}) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-          {...(options.lockedIds
-            ? { lockedNodeIds: new Set(options.lockedIds), onToggleNodeLock: () => {} }
-            : {})}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
 }
 
 function rightClick(el: HTMLElement, x: number, y: number) {
@@ -60,7 +31,7 @@ function createdComments(commands: readonly EditorCommand[]): CanvasComment[] {
 }
 
 it('Comment on this: composes at the node and commits a node-anchored comment', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
@@ -84,7 +55,7 @@ it('Comment on this: composes at the node and commits a node-anchored comment', 
 })
 
 it('Comment here: composes at the click point and commits a point-anchored comment', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   rightClick(rootOf(container), 600, 450)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
@@ -101,7 +72,7 @@ it('Comment here: composes at the click point and commits a point-anchored comme
 })
 
 it('Escape abandons the draft; an empty commit creates nothing', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   rightClick(rootOf(container), 200, 150)
@@ -127,7 +98,7 @@ it('Escape abandons the draft; an empty commit creates nothing', async () => {
 })
 
 it('a locked node still offers Comment on this beside Unlock — a comment does not edit the node', async () => {
-  const { Host } = makeHost({ lockedIds: ['n1'] })
+  const { Host } = makeEditorHost({ initial: start, lockedNodes: ['n1'] })
   const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()

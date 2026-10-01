@@ -6,12 +6,10 @@
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -29,48 +27,12 @@ const start: SpatialCanvas = {
   ],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          createId={() => 'c-edge'}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 /** Root-relative position on the edge's drawn line (see edge-label-edit). */
-function edgeMidpoint(container: HTMLElement): { x: number; y: number } {
-  const root = rootOf(container)
-  const polyline = container.querySelector(
-    '[data-testid="spatial-editor"] svg polyline',
-  ) as SVGPolylineElement
-  const edgeRect = polyline.getBoundingClientRect()
-  const rootRect = root.getBoundingClientRect()
-  return {
-    x: edgeRect.x + edgeRect.width / 2 - rootRect.x,
-    y: edgeRect.y + edgeRect.height / 2 - rootRect.y,
-  }
-}
-
 it('an edge’s menu opens a comment about the edge, pinned on its line', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    editorProps: { createId: () => 'c-edge' },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await vi.waitFor(() => expect(container.querySelector('svg polyline')).not.toBeNull())

@@ -5,10 +5,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -20,25 +20,6 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 const panelOf = (c: HTMLElement) =>
   c.querySelector('[data-testid="facet-form-panel"]') as HTMLElement | null
 
@@ -46,7 +27,7 @@ const shapeOf = (canvas: SpatialCanvas, id: string) =>
   canvas.nodes.find((n) => n.id === id)?.facets?.['visual.shape/v0']
 
 async function openInspector(container: HTMLElement, x: number, y: number) {
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + x, clientY: r.top + y })
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
@@ -59,7 +40,7 @@ async function openInspector(container: HTMLElement, x: number, y: number) {
 }
 
 it('stays open across a selection change and edits the newly selected node', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = await openInspector(container, 120, 85)
   expect(panelOf(container)).not.toBeNull()
@@ -76,7 +57,7 @@ it('stays open across a selection change and edits the newly selected node', asy
 })
 
 it('leaves focus on the canvas, so typing and shortcuts still reach it', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   await openInspector(container, 120, 85)
   const panel = panelOf(container) as HTMLElement
@@ -84,7 +65,7 @@ it('leaves focus on the canvas, so typing and shortcuts still reach it', async (
 })
 
 it('closes when the selection empties — deselecting is what puts it away', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = await openInspector(container, 120, 85)
 

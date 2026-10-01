@@ -11,10 +11,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -30,33 +30,11 @@ const board: SpatialCanvas = {
   ],
 }
 
-function makeHost() {
-  const latest = { canvas: board }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(board)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-
 /** The stroke runs along y=300; the viewport is identity at rest. */
 const ON_THE_STROKE = { x: 350, y: 300 }
 
 it('a double press on a stroke opens its label editor', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: board })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -79,7 +57,7 @@ it('a double press on a stroke opens its label editor', async () => {
 })
 
 it('the ink menu offers the same verb, for a device with no double press', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: board })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const rect = root.getBoundingClientRect()

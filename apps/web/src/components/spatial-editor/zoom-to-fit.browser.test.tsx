@@ -6,9 +6,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -20,26 +20,6 @@ const initial: SpatialCanvas = {
   ],
   edges: [],
 }
-
-function makeHost() {
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
 const zoomOf = (container: HTMLElement) => {
   const vt = container.querySelector('[data-testid="viewport-transform"]') as HTMLElement
@@ -62,7 +42,7 @@ function nodeBoxes(container: HTMLElement) {
 }
 
 it('Shift+1 frames ALL content inside the viewport (zooming out when it does not fit)', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   expect(zoomOf(container)).toBe(1)
@@ -80,7 +60,7 @@ it('Shift+1 frames ALL content inside the viewport (zooming out when it does not
 })
 
 it('Shift+2 frames only the SELECTION, filling more of the viewport than fit-all', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -102,7 +82,7 @@ it('Shift+2 frames only the SELECTION, filling more of the viewport than fit-all
 })
 
 it('Shift+2 without a selection falls back to framing everything', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   fireEvent.keyDown(root, { code: 'Digit2', key: '@', shiftKey: true })
@@ -110,7 +90,7 @@ it('Shift+2 without a selection falls back to framing everything', () => {
 })
 
 it("hand mode's dock button frames the content as the touch path", () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   fireEvent.click(container.querySelector('[data-testid="hand-tool-button"]') as HTMLElement)
   const button = container.querySelector('[data-testid="zoom-fit-button"]') as HTMLElement

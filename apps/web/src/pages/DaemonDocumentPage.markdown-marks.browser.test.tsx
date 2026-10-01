@@ -18,51 +18,35 @@
  */
 
 import { EditorView } from '@codemirror/view'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   writeCommentThread,
   writeCoreFacets,
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
+import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(async () => ({ workspaces: [{ workspaceId: 'w1' }] })),
-    listDocuments: vi.fn(async () => ({
-      documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
-    })),
-    createDocument: vi.fn(),
-    getDocumentBacklinks: vi.fn(async () => ({ backlinks: [], unlinkedMentions: [] })),
-  }
+  const { daemonApiClientMock, daemonWithOneDocument } = await import(
+    '../test-utils/daemon-page-harness.js'
+  )
+  return daemonApiClientMock(
+    importOriginal,
+    ['listWorkspaces', 'listDocuments', 'createDocument', 'getDocumentBacklinks'],
+    daemonWithOneDocument({ path: 'note', id: 'id-note', kind: 'markdown' }),
+  )
 })
 
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 const PASSAGE = 'report on Friday'
 const BODY = `Opening line. Ship the ${PASSAGE}, the draft is not written. Closing line.`
@@ -82,19 +66,6 @@ function noteSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  pushes = 0
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    handlers.onSnapshot(noteSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {
-    this.pushes++
-  }
-  sendClientReady(): void {}
-}
-
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -105,8 +76,8 @@ it('keeps a passage attached through one burst that also edits inside it', async
     'fetch',
     vi.fn(async () => new Response('{}', { status: 404 })),
   )
-  const backend = new FakeBackend()
-  render(
+  const backend = new FakeDocumentBackend(noteSnapshot)
+  renderPage(
     <DaemonDocumentPage
       daemonBaseUrl="http://127.0.0.1:3099"
       workspaceId="w1"
@@ -138,8 +109,10 @@ it('keeps a passage attached through one burst that also edits inside it', async
   view.dispatch({ changes: { from: after, insert: '!' } })
   // The burst's commit is what pushes; waiting for the push is waiting for
   // the burst to be in the document the rail reads.
-  const pushedBefore = backend.pushes
-  await waitFor(() => expect(backend.pushes).toBeGreaterThan(pushedBefore), { timeout: 5_000 })
+  const pushedBefore = backend.pushed.length
+  await waitFor(() => expect(backend.pushed.length).toBeGreaterThan(pushedBefore), {
+    timeout: 5_000,
+  })
 
   await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
   await waitFor(() => expect(screen.getByText('is Friday realistic?')).toBeInTheDocument(), {

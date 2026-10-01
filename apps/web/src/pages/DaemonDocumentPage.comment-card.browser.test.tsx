@@ -5,54 +5,35 @@
 // threads the card is built from, and the chrome the page stacks over the
 // canvas.
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   writeCommentThread,
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
+import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(async () => ({ workspaces: [{ workspaceId: 'w1' }] })),
-    listDocuments: vi.fn(async () => ({
-      documents: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
-    })),
-    createDocument: vi.fn(),
-    getDocumentBacklinks: vi.fn(async () => ({ backlinks: [], unlinkedMentions: [] })),
-  }
+  const { daemonApiClientMock, daemonWithOneDocument } = await import(
+    '../test-utils/daemon-page-harness.js'
+  )
+  return daemonApiClientMock(
+    importOriginal,
+    ['listWorkspaces', 'listDocuments', 'createDocument', 'getDocumentBacklinks'],
+    daemonWithOneDocument({ path: 'board', id: 'id-board', kind: 'spatial' }),
+  )
 })
 
-// Each answers a CANCEL, which the page calls on unmount: a schedule that
-// outlives its page fires against a fetch and a workspace that have moved on,
-// and in a test run the warning lands on whichever case is executing by then.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 function seededSnapshot(): Uint8Array {
   const doc = new LoroDoc()
@@ -68,18 +49,6 @@ function seededSnapshot(): Uint8Array {
     messages: [{ id: 'm1', body: 'still needs a decision' }],
   })
   return doc.export({ mode: 'snapshot' })
-}
-
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(seededSnapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 afterEach(() => {
@@ -106,12 +75,12 @@ it('a press on a bubble opens the card, Close shuts it, and a reply joins the co
     'fetch',
     vi.fn(async () => new Response('{}', { status: 404 })),
   )
-  render(
+  renderPage(
     <DaemonDocumentPage
       daemonBaseUrl="http://127.0.0.1:3099"
       workspaceId="w1"
       path="board"
-      createBackend={() => new FakeBackend()}
+      createBackend={() => new FakeDocumentBackend(seededSnapshot)}
     />,
   )
   const root = (await screen.findByTestId('spatial-editor', undefined, {

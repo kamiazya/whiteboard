@@ -8,9 +8,7 @@
 // an unreadable document instead of silently drawing an editor over it, so a
 // suite about fullscreen chrome would otherwise be testing the error screen.
 import 'fake-indexeddb/auto'
-import { act, cleanup, render as rtlRender, screen } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -20,6 +18,7 @@ import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // keeps its chunk cost out of findBy*'s 1000ms retry budget (the lazy-race
 // flake shape integrator-flow.md documents).
 import '../components/WorkspaceTopBar.js'
+import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-fullscreen')
 
@@ -40,10 +39,6 @@ afterEach(() => {
   delete (Element.prototype as { requestFullscreen?: unknown }).requestFullscreen
   vi.restoreAllMocks()
 })
-
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
-}
 
 const snap: DocumentSnapshot = {
   documentId: '0PV05AFMSY38DJQW16BGNTZ49E',
@@ -68,7 +63,9 @@ async function renderLoaded() {
   await store.setDefaultDocumentId('0PV05AFMSY38DJQW16BGNTZ49E')
   await store.save(snap)
   await act(async () => {
-    render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+    renderInRouter(
+      <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+    )
   })
   // The first mount in the file pays every lazy chunk's load; the default
   // 1s retry budget loses that race under a parallel suite (the documented

@@ -10,6 +10,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -96,7 +97,7 @@ it('inside the spatial editor, tapping Cancel drops the draft and closes the edi
     edges: [],
   }
   const { container } = render(<Host start={start} />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
   await userEvent.keyboard(' draft')

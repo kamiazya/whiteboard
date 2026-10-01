@@ -11,12 +11,11 @@
  * A real browser, and the viewport rather than a narrow container: the sheet
  * shape and its close control are `md:` rules, which read the viewport.
  */
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { inPage, renderPage } from '../test-utils/daemon-page-harness.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 import { setViewport } from '../test-utils/viewport.js'
@@ -31,18 +30,6 @@ vi.mock('../lib/browser-backend.js', async () => {
 })
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
-
-function wrap(ui: ReactElement) {
-  return (
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>
-  )
-}
-
-function render(ui: ReactElement) {
-  return rtlRender(wrap(ui))
-}
 
 const snap: DocumentSnapshot = {
   documentId: '0W16BGNTZ49EKRX27CHPV05AFM',
@@ -67,7 +54,7 @@ async function mountLoaded() {
   const page = () => (
     <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />
   )
-  const { rerender } = render(page())
+  const { rerender } = renderPage(page())
   await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
   /**
    * Re-renders the page around whatever is open, without touching it.
@@ -79,7 +66,7 @@ async function mountLoaded() {
    * left this test passing against a deliberately broken page, the only
    * evidence being that its mutation check could not fail it.
    */
-  return () => rerender(wrap(page()))
+  return () => rerender(inPage(page()))
 }
 
 it('opens display settings beside the editor, closable from inside', async () => {

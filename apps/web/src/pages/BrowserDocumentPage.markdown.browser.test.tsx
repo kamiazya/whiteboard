@@ -17,15 +17,15 @@ import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
 import { MARKDOWN_BODY_NODE_ID, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
@@ -46,16 +46,6 @@ class SlowNameWriteIndex extends IdbDocumentIndex {
     await new Promise((resolve) => setTimeout(resolve, this.delayMs))
     return super.setDocumentName(input)
   }
-}
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    // Pages fill their allotted height (h-full) — the app shell owns the
-    // viewport in production, so tests supply the equivalent sized parent.
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
 }
 
 let spatialMounts = 0
@@ -170,7 +160,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('a markdown document opens the markdown editor; the typed body survives a remount', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    const first = render(<BrowserDocumentPage store={store} />)
+    const first = renderPage(<BrowserDocumentPage store={store} />)
 
     // The markdown editor (real CodeMirror) is what mounts for this kind.
     const editable = await waitFor(() => {
@@ -215,7 +205,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
 
     // A fresh page against the same store reopens the markdown note with
     // its body restored from the Loro 'body' container.
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
       const content = document.querySelector('.cm-content')
       expect(content?.textContent).toContain('# Persisted note')
@@ -232,7 +222,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('the OKF summary and describes fields survive a remount', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    const first = render(<BrowserDocumentPage store={store} />)
+    const first = renderPage(<BrowserDocumentPage store={store} />)
     await findMarkdownTitleInput()
 
     await userEvent.click(screen.getByRole('button', { name: /properties/i }))
@@ -250,7 +240,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     await waitForSaved()
     first.unmount()
 
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await findMarkdownTitleInput()
     await userEvent.click(screen.getByRole('button', { name: /properties/i }))
     await waitFor(
@@ -266,7 +256,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
 
   it('a markdown canvas has no Display row — edge routing is spatial-only', async () => {
     const spatialStore = new IdbDocumentIndex()
-    const spatial = render(<BrowserDocumentPage store={spatialStore} />)
+    const spatial = renderPage(<BrowserDocumentPage store={spatialStore} />)
 
     // A spatial canvas is where it is offered — as the leading member of
     // the inspect segment, in the place a markdown document's Properties
@@ -279,7 +269,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
 
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
@@ -299,7 +289,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('a markdown note offers no Copy as JSON Canvas - it holds no canvas', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
@@ -321,7 +311,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('a markdown note reaches its own history, and can bookmark a point', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
@@ -341,7 +331,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it("the title survives a remount and is the document's one name", async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    const first = render(<BrowserDocumentPage store={store} />)
+    const first = renderPage(<BrowserDocumentPage store={store} />)
 
     const title = await findMarkdownTitleInput()
     // The markdown arm of the merged row: the title lives INSIDE the
@@ -364,7 +354,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     await waitForSaved()
     first.unmount()
 
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
       const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
       expect(restored.value).toBe('リリース計画')
@@ -389,7 +379,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('keeps the body when core facets are written, and vice versa', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    const first = render(<BrowserDocumentPage store={store} />)
+    const first = renderPage(<BrowserDocumentPage store={store} />)
 
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
@@ -425,7 +415,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     await waitForSaved()
     first.unmount()
 
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
       expect(document.querySelector('.cm-content')?.textContent).toContain('body first')
     })
@@ -446,7 +436,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // from the write before it.
     const store = new SlowNameWriteIndex(60)
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    const first = render(<BrowserDocumentPage store={store} />)
+    const first = renderPage(<BrowserDocumentPage store={store} />)
 
     const title = await findMarkdownTitleInput()
     await userEvent.click(title)
@@ -459,7 +449,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // the rename landed would lose the title with it.
     first.unmount()
 
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     // The only assertion in this file gated on a save that had NOT landed
     // before the unmount — every other reload here calls waitForSaved()
     // first. That makes this reload wait for the flush to finish rather than
@@ -483,7 +473,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // reopened document was already correct.
     const store = new SlowNameWriteIndex(60)
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    const first = render(<BrowserDocumentPage store={store} />)
+    const first = renderPage(<BrowserDocumentPage store={store} />)
 
     const title = await findMarkdownTitleInput()
     await userEvent.click(title)
@@ -506,7 +496,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       kind: 'spatial',
       makeDefault: true,
     })
-    const first = render(<BrowserDocumentPage store={store} />)
+    const first = renderPage(<BrowserDocumentPage store={store} />)
     await screen.findByTestId('mock-spatial-editor')
 
     // Naming is format-agnostic (ADR-0009 decision 2), so a spatial canvas
@@ -534,7 +524,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     await waitForSaved()
     first.unmount()
 
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(
       () => {
         const restored = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
@@ -555,7 +545,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       makeDefault: true,
     })
     await seedIdbDocument(store, { path: 'a-note', kind: 'markdown', makeDefault: true })
-    const note = render(<BrowserDocumentPage store={store} />)
+    const note = renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
@@ -565,7 +555,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // browser does — must still mount the spatial editor, not carry the
     // markdown one over.
     const before = spatialMounts
-    render(<BrowserDocumentPage store={store} initialPath="diagram-a-2" />)
+    renderPage(<BrowserDocumentPage store={store} initialPath="diagram-a-2" />)
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-spatial-editor')).toBeInTheDocument()
@@ -590,7 +580,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       kind: 'markdown',
       makeDefault: true,
     })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     // focusEditable rather than focus() on the node resolved a moment ago:
     // under load the contentDOM can arrive late or be swapped, and focus()
@@ -627,7 +617,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       const location = useLocation()
       return <div data-testid="location-probe">{location.pathname}</div>
     }
-    render(
+    renderPage(
       <>
         <BrowserDocumentPage store={store} />
         <LocationProbe />
@@ -687,7 +677,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     const targetDoc = new Loro()
     targetDoc.getText('body').insert(0, 'unmistakable embedded body text')
     await new LoroStore().save(TARGET_ID, targetDoc.export({ mode: 'snapshot' }))
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     // focusEditable rather than focus() on the node resolved a moment ago:
     // under load the contentDOM can arrive late or be swapped, and focus()
@@ -748,7 +738,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       edges: [],
     })
     await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     await userEvent.keyboard(`![[[[${BOARD_ID}]]{Enter}{Enter}and more typing`)
@@ -790,7 +780,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       edges: [],
     })
     await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     // The completion closes at `#`, so the Enter after the fragment ends the
@@ -866,7 +856,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       // on screen unless it really was converted and persisted.
       const store = new IdbDocumentIndex()
       await seedLegacyNote(store, 'Legacy note')
-      const first = render(<BrowserDocumentPage store={store} />)
+      const first = renderPage(<BrowserDocumentPage store={store} />)
 
       // focusEditable rather than focus() on the node resolved a moment ago:
       // under load the contentDOM can arrive late or be swapped, and focus()
@@ -903,7 +893,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       await waitForSaved()
       first.unmount()
 
-      render(<BrowserDocumentPage store={store} />)
+      renderPage(<BrowserDocumentPage store={store} />)
       await waitFor(
         () => {
           const text = document.querySelector('.cm-content')?.textContent
@@ -923,7 +913,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
         kind: 'markdown',
         makeDefault: true,
       })
-      render(<BrowserDocumentPage store={store} />)
+      renderPage(<BrowserDocumentPage store={store} />)
 
       // focusEditable rather than focus() on the node resolved a moment ago:
       // under load the contentDOM can arrive late or be swapped, and focus()
@@ -957,7 +947,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('names an unnamed note after the title its body announces', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'untitled', kind: 'markdown', makeDefault: true })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     const resolveEditable = () => document.querySelector('[contenteditable="true"]')
     await waitFor(() => expect(resolveEditable()).not.toBeNull())
@@ -990,7 +980,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('keeps up with a heading that outlasts the save debounce', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'untitled', kind: 'markdown', makeDefault: true })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
       (await listLocalDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
@@ -1021,7 +1011,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       kind: 'markdown',
       makeDefault: true,
     })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
       (await listLocalDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
@@ -1043,7 +1033,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('leaves a note with no title unnamed rather than inventing one', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'untitled', kind: 'markdown', makeDefault: true })
-    render(<BrowserDocumentPage store={store} />)
+    renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
       (await listLocalDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')

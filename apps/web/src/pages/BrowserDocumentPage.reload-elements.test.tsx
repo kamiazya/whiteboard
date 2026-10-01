@@ -21,16 +21,7 @@
 // browser-mode keeper suites (see loro-store.browser.test.tsx).
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import {
-  act,
-  cleanup,
-  configure,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
@@ -43,22 +34,13 @@ import {
   textNodeCanvas,
 } from '../test-utils/browser-document.js'
 import '../index.css'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-reload-elements')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
-function render(ui: ReactElement) {
-  return rtlRender(
-    // Pages fill their allotted height (h-full) — the app shell owns the
-    // viewport in production, so tests supply the equivalent sized parent.
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
-
 type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
 
 let latestOnChange: OnChange | null = null
@@ -100,7 +82,7 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
   })
 
   it('persists a node across remount and never writes a __placeholder__ row', async () => {
-    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(() => expect(latestOnChange).not.toBeNull())
 
@@ -133,7 +115,7 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
 
     cleanup()
     latestMountedCanvases = []
-    render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     // The restored scene must include the node written before remount.

@@ -7,6 +7,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -37,8 +38,7 @@ const minimapOf = (c: HTMLElement) =>
   c.querySelector('[data-testid="minimap"]') as HTMLElement | null
 const transformOf = (c: HTMLElement) =>
   c.querySelector<HTMLDivElement>('[data-testid="viewport-transform"]')?.style.transform
-const editorOf = (c: HTMLElement) =>
-  c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+const editorOf = (c: HTMLElement) => rootOf(c)
 
 it('shows an overview once the canvas has content', () => {
   const { container } = render(<Host canvas0={spread} />)

@@ -11,7 +11,8 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { rootOf } from '../../test-utils/spatial-editor-root.js'
+import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
+import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -37,19 +38,6 @@ function Host({ onCommand }: { onCommand?: (kind: string) => void }) {
         theme="light"
       />
     </div>
-  )
-}
-
-function rightClick(el: HTMLElement, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  el.dispatchEvent(
-    new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      button: 2,
-    }),
   )
 }
 
@@ -188,19 +176,6 @@ function makeEdgeHost() {
     )
   }
   return { EdgeHost, latest }
-}
-
-function edgeMidpoint(container: HTMLElement): { x: number; y: number } {
-  const root = rootOf(container)
-  const polyline = container.querySelector(
-    '[data-testid="spatial-editor"] svg polyline',
-  ) as SVGPolylineElement
-  const edgeRect = polyline.getBoundingClientRect()
-  const rootRect = root.getBoundingClientRect()
-  return {
-    x: edgeRect.x + edgeRect.width / 2 - rootRect.x,
-    y: edgeRect.y + edgeRect.height / 2 - rootRect.y,
-  }
 }
 
 it('right-clicking an edge offers Edit label and Delete, not node creation', async () => {

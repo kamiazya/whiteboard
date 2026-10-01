@@ -26,6 +26,7 @@ import {
   latestEditorProps,
   resetCapturedEditorProps,
 } from './capturing-spatial-editor.js'
+import { openDocumentOpsMenu } from './daemon-page-harness.js'
 
 export interface ContractDocument {
   readonly id: string
@@ -63,7 +64,7 @@ export const TARGET: ContractDocument = {
   kind: 'spatial',
 }
 
-function createFakeModelContext(): ModelContext & { liveNames(): string[] } {
+export function createFakeModelContext(): ModelContext & { liveNames(): string[] } {
   const live = new Map<string, AbortSignal>()
   return {
     liveNames: () => [...live.keys()],
@@ -74,13 +75,6 @@ function createFakeModelContext(): ModelContext & { liveNames(): string[] } {
       options.signal.addEventListener('abort', () => live.delete(descriptor.name))
     },
   }
-}
-
-/** Opens the document's kebab; Radix opens its menu on pointer DOWN. */
-async function openDocumentMenu(): Promise<HTMLElement> {
-  const trigger = await screen.findByRole('button', { name: 'More actions' })
-  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
-  return screen.findByRole('menu')
 }
 
 /** Two microtask turns: the registry's own `await` before it records a tool. */
@@ -119,7 +113,7 @@ function describeDocumentMenu(fixture: DocumentPageFixture): void {
   describe('document menu', () => {
     it('offers a canvas Copy as JSON Canvas, Duplicate and Delete', async () => {
       await fixture.mount([HERE, TARGET])
-      const menu = await openDocumentMenu()
+      const menu = await openDocumentOpsMenu()
       const rows = within(menu)
         .getAllByRole('menuitem')
         .map((row) => row.textContent?.trim())
@@ -129,7 +123,7 @@ function describeDocumentMenu(fixture: DocumentPageFixture): void {
     it('a refused delete says so in the row and keeps the document open', async () => {
       await fixture.mount([HERE, TARGET])
       fixture.failNextDelete()
-      const menu = await openDocumentMenu()
+      const menu = await openDocumentOpsMenu()
       await act(async () => {
         fireEvent.pointerUp(within(menu).getByRole('menuitem', { name: /^delete$/i }))
       })
@@ -151,7 +145,7 @@ function describeDocumentMenu(fixture: DocumentPageFixture): void {
 
     it('a confirmed delete opens what is left', async () => {
       await fixture.mount([HERE, TARGET])
-      const menu = await openDocumentMenu()
+      const menu = await openDocumentOpsMenu()
       await act(async () => {
         fireEvent.pointerUp(within(menu).getByRole('menuitem', { name: /^delete$/i }))
       })

@@ -20,6 +20,7 @@ import { withReplicaEntry } from '../../lib/replicas.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
+import { jsonResponse } from '../../test-utils/json-response.js'
 import { LocalCopiesCard } from './LocalCopiesCard.js'
 
 claimIsolatedWhiteboardDb('localcopiescard-offline')
@@ -29,14 +30,11 @@ const WORKSPACE = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
 const RAW_ID = Uint8Array.from([9, 8, 7, 6])
 
 const daemonFetch = (async () =>
-  new Response(
-    JSON.stringify({
-      workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-      workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
-      tier: 'offline',
-    }),
-    { status: 200 },
-  )) as typeof fetch
+  jsonResponse({
+    workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
+    workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
+    tier: 'offline',
+  })) as typeof fetch
 
 function saltOf(options: CredentialCreationOptions | CredentialRequestOptions | undefined) {
   const first = (options?.publicKey?.extensions as { prf?: { eval?: { first?: BufferSource } } })

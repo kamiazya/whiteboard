@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { forgetAll, sessionKey } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { disconnectFromDaemon } from './disconnect-daemon.js'
 import { markReplica } from './replica-store.js'
 import { withReplicaEntry } from './replicas.js'
@@ -10,14 +11,11 @@ const A = 'http://127.0.0.1:3099'
 const B = 'http://127.0.0.1:4000'
 
 function keyResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
-      workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
-      tier: 'offline',
-    }),
-    { status: 200 },
-  )
+  return jsonResponse({
+    workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
+    workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
+    tier: 'offline',
+  })
 }
 
 beforeEach(() => {

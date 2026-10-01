@@ -5,15 +5,14 @@
 // files source to the rows; the row's own behaviour is pinned in
 // TagChipsEditor.test.tsx.
 import { writeCoreFacets, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { setViewport } from '../test-utils/viewport.js'
 
 vi.mock('../components/spatial-editor/index.js', () => ({
@@ -26,14 +25,6 @@ vi.mock('../lib/browser-backend.js', async () => {
 })
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 const board: DocumentSnapshot = {
   documentId: '0W16BGNTZ49EKRX27CHPV05AFM',
@@ -83,7 +74,7 @@ it('the board tag row offers a note’s tag and the library’s values, and refu
   } as never)
   await store.loro.save(library.documentId, libraryDoc.export({ mode: 'snapshot' }))
 
-  render(
+  renderPage(
     <BrowserDocumentPage
       store={store.index}
       loro={store.loro}

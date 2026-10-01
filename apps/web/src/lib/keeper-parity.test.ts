@@ -173,6 +173,58 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_PAGE,
     note: 'both pages decide which backend to sync through; the browser half is one inline memo over `BrowserBackend` keyed on the document id, because a browser-kept document has no transport to choose, no token to carry and no session to be refused — which is most of what this module is',
   },
+  'src/lib/extension-connection.ts': {
+    reach: 'daemon-itself',
+    why: 'asks whether the whiteboard extension can reach a daemon at all — the answer is a daemon connection, so a browser-kept workspace, which is not connected to anything, has no counterpart',
+  },
+  'src/lib/promote-workspace.ts': {
+    reach: 'daemon-itself',
+    why: "posts a browser-kept workspace's record to the keeper that is to hold it, and the files it references — the destination is the daemon, and the browser keeper is the source, so the move has no mirror",
+  },
+  'src/lib/replica-cache.ts': {
+    reach: 'daemon-itself',
+    why: "pulls a daemon workspace's record into this browser as a cached copy — only a daemon-kept workspace has a replica, since a browser-kept one is already held here and is the authority itself",
+  },
+  'src/lib/replica-push.ts': {
+    reach: 'daemon-itself',
+    why: 'ships the edits a cached copy took offline back to the daemon that holds the workspace — a browser-kept workspace has no other keeper to ship them to',
+  },
+  'src/lib/replica-refresh.ts': {
+    reach: 'daemon-itself',
+    why: "keeps this browser's cached copy of a daemon workspace fresh while that workspace is open — a browser-kept workspace has no cached copy to refresh",
+  },
+  'src/lib/replica-unlock.ts': {
+    reach: 'daemon-itself',
+    why: "fetches a cached copy's key from the daemon and opens one remembered on disk — only a daemon-kept copy is sealed, so a browser-kept workspace has no key to fetch or open",
+  },
+  'src/hooks/use-transfer-handshake.ts': {
+    reach: 'daemon-itself',
+    why: 'the receiving side of a cross-origin transfer into a workspace this daemon holds, through `accept-transferred-record.ts` — a browser keeper serves no address a transfer could arrive at, so there is no receiving side to mirror',
+  },
+  'src/hooks/use-shell-workspaces.ts': {
+    reach: 'both-keepers',
+    browser: 'src/lib/browser-workspaces.ts',
+    note: "builds both keepers' halves of the workspace switcher side by side; the browser half is the registry in browser-workspaces.ts, answering the same WorkspaceSwitcherSource",
+  },
+  'src/lib/duplicate-daemon-document.ts': {
+    reach: 'both-keepers',
+    browser: 'src/lib/duplicate-browser-document.ts',
+    note: 'the daemon copy runs through endpoints, the browser copy through its own store; both keep the create-then-write-then-name order',
+  },
+  'src/lib/theme-fonts.ts': {
+    reach: 'both-keepers',
+    browser: 'src/hooks/useThemeFonts.ts',
+    note: "the daemon pass lists and downloads the daemon's installed families; a browser-kept workspace fetches the same families from the catalogue's pinned source through loadThemeFontFromSource, which this hook calls",
+  },
+  'src/hooks/useDaemonThemeFonts.ts': {
+    reach: 'both-keepers',
+    browser: 'src/hooks/useThemeFonts.ts',
+    note: "loads the families a theme names from the connected daemon; the browser keeper's realm loads them from the catalogue source instead",
+  },
+  'src/components/FontsCard.tsx': {
+    reach: 'daemon-itself',
+    why: "installs a font onto the daemon's disk so ITS export draws the face — a browser keeper exports in this page, which already draws any family it holds, so there is no server-side font set to manage",
+  },
   'src/lib/replica-store.ts': {
     reach: 'both-keepers',
     browser: 'src/lib/idb-document-store.ts',
@@ -190,22 +242,52 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
 
 /**
  * How a module is recognised as reaching the daemon: it builds one of the
- * daemon's URLs from the shared helpers, it holds one of the two fetches
- * that reach it, or it writes an `/api/` path by hand.
+ * daemon's URLs from the shared helpers (`documentsApiUrl`,
+ * `documentFileApiUrl`, `trashApiUrl`, … — any `*ApiUrl(` call), it holds one
+ * of the two fetches that reach it, it writes an `/api/` path by hand, or it
+ * calls the daemon client's request functions.
  *
- * All four, because the narrow version of this scan MISSED the largest
+ * The `/api/` arm takes no quote in front of it, because a path built as a
+ * template (`${base}/api/…`) starts with an interpolation, not a quote.
+ *
+ * All of them, because the narrow version of this scan MISSED the largest
  * difference in the app. The whole branch surface, which the browser keeper
  * cannot answer at all, built `/api/workspaces/${'${id}'}/documents/…` as a
  * template string and called `apiFetch`, so a pattern over the URL helpers
  * and `daemonFetch` alone did not see it. A module that reaches the daemon
  * the least conventional way is exactly the one nobody thought about the
  * browser for.
- *
- * That surface now goes through `branches-backend.ts`, which is the ordinary
- * shape — but the pattern stays wide, because what it caught was a habit
- * rather than one module.
  */
-const DAEMON_REACH_PATTERN = /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|['"`]\/api\//
+const DAEMON_REACH_PATTERN =
+  /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|\/api\/|\w+ApiUrl\(/
+
+const CLIENT_MODULE = String.raw`['"][^'"]*\/daemon-api-client(?:\.js)?['"]`
+const CLIENT_DYNAMIC_IMPORT = new RegExp(String.raw`import\(\s*${CLIENT_MODULE}`)
+const CLIENT_NAMED_IMPORT = new RegExp(
+  String.raw`import\s+(type\s+)?\{([^}]*)\}\s*from\s*${CLIENT_MODULE}`,
+  'g',
+)
+
+/**
+ * A module reaches the daemon through the client without writing a URL, so
+ * the URL arms above never see it. Importing only `DaemonApiError` or types
+ * from the client is not a reach — reading a refusal is not asking for one.
+ */
+function callsDaemonClient(text: string): boolean {
+  if (CLIENT_DYNAMIC_IMPORT.test(text)) return true
+  return [...text.matchAll(CLIENT_NAMED_IMPORT)].some(([, typeOnly, names]) => {
+    if (typeOnly) return false
+    return (names ?? '')
+      .split(',')
+      .map((name) => name.trim())
+      .some((name) => name !== '' && name !== 'DaemonApiError' && !name.startsWith('type '))
+  })
+}
+
+function reachesDaemon(text: string): boolean {
+  const source = code(text)
+  return DAEMON_REACH_PATTERN.test(source) || callsDaemonClient(source)
+}
 
 /**
  * Comments are stripped first: `WorkspaceFilesPanel` and
@@ -224,7 +306,7 @@ function daemonReachingModules(): string[] {
       // Never imported at runtime: it re-exports types and one fetch to prove
       // they resolve, and says so in its own header. Nothing about a keeper.
       .filter(([path]) => !path.endsWith('/_type-probe.ts'))
-      .filter(([, text]) => DAEMON_REACH_PATTERN.test(code(text)))
+      .filter(([, text]) => reachesDaemon(text))
       .map(([path]) => path.replace(/^\//, ''))
       .sort()
   )

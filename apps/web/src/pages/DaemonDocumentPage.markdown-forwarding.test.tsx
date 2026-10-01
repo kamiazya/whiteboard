@@ -9,10 +9,6 @@
  * `lib/markdown-write-path.instrument.test.ts`.
  */
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   MARKDOWN_BODY_KEY,
   MARKDOWN_BODY_NODE_ID,
@@ -22,26 +18,19 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
-}
-
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
 // The stub keeps MarkdownEditor's controlled contract (`value`/`onChange`)
 // and nothing else — one textarea, no CodeMirror.
@@ -81,17 +70,9 @@ vi.mock('../components/markdown-editor/MarkdownEditor.js', async () => {
   }
 })
 
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
@@ -127,25 +108,6 @@ function preUnificationSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  readonly pushed: Uint8Array[] = []
-  // The exact bytes the page hydrated from: the replay assertion must
-  // import updates into the SAME doc lineage, not a structurally-equal
-  // rebuild with different Loro op ids.
-  snapshot: Uint8Array = new Uint8Array()
-  constructor(private readonly seed: () => Uint8Array = markdownSnapshot) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    this.snapshot = this.seed()
-    handlers.onSnapshot(this.snapshot)
-  }
-  disconnect(): void {}
-  pushLocalUpdate(update: Uint8Array): void {
-    this.pushed.push(update)
-  }
-  sendClientReady(): void {}
-}
-
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonDocumentPage markdown sync forwarding', () => {
@@ -162,8 +124,8 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
 
   it('a body edit pushes the update to the backend on the hydrated doc lineage', async () => {
     mounted.views.length = 0
-    const backend = new FakeBackend()
-    render(
+    const backend = new FakeDocumentBackend(markdownSnapshot)
+    renderInRouter(
       <DaemonDocumentPage
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId="w1"
@@ -206,8 +168,8 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
     // a conversion the prose left the editor and the first keystroke wrote a
     // one-character container that hid it (the container wins on read).
     mounted.views.length = 0
-    const backend = new FakeBackend(preUnificationSnapshot)
-    render(
+    const backend = new FakeDocumentBackend(preUnificationSnapshot)
+    renderInRouter(
       <DaemonDocumentPage
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId="w1"

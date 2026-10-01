@@ -25,6 +25,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -68,7 +69,7 @@ function touch(target: Element, type: 'down' | 'move' | 'up', x: number, y: numb
 
 it('a pan pressed on a node survives the capture transfer its own first move performs', () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const content = container.querySelector('[data-testid="canvas-content"]') as HTMLElement
   const child = content.querySelector('svg') ?? content
   const r = root.getBoundingClientRect()
@@ -92,7 +93,7 @@ it('a pan pressed on a node survives the capture transfer its own first move per
 
 it('the ROOT losing capture mid-pan still cancels: that one is a real loss', () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
 
   const before = translateOf(container)

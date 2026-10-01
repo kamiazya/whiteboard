@@ -11,11 +11,10 @@
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -50,31 +49,7 @@ const proposal: Proposal = {
   ],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          proposals={[proposal]}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const SIZE = { width: 900, height: 700 }
 
 /** A press on the bubble, found by the words it draws rather than by a guessed viewport. */
 function pressBubble(root: HTMLElement) {
@@ -89,9 +64,13 @@ function pressBubble(root: HTMLElement) {
 }
 
 it('expands to one verb pair per change, and adopting one decides only it', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    size: SIZE,
+    editorProps: { proposals: [proposal] },
+  })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await vi.waitFor(() =>
     expect(root.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
       '2 proposed changes',

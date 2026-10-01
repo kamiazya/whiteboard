@@ -11,11 +11,10 @@
  * version was enough to be offered the delete.
  */
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 
 vi.mock('../components/spatial-editor/index.js', () => ({
@@ -40,10 +39,6 @@ vi.mock('../lib/browser-backend.js', async () => {
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
-}
-
 const snap: DocumentSnapshot = {
   documentId: '0W16BGNTZ49EKRX27CHPV05AFM',
   workspaceId: 'local',
@@ -60,7 +55,7 @@ it('offers a retry and never the delete when the read simply did not complete', 
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
-  render(
+  renderInRouter(
     <BrowserDocumentPage
       store={store.index}
       pointer={store.pointer}

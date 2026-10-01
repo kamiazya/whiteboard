@@ -8,27 +8,13 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isFrame } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
 const empty: SpatialCanvas = { nodes: [], edges: [] }
-
-function makeHost() {
-  const latest: { canvas: SpatialCanvas } = { canvas: empty }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(empty)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor canvas={canvas} onChange={(next) => setCanvas(next)} theme="light" />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
 
 function openAddMenu(container: HTMLElement) {
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
@@ -42,7 +28,7 @@ function soleNodeCentre(canvas: SpatialCanvas) {
 }
 
 it('Group creates a frame and leaves no editor open', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
 
   openAddMenu(container)
@@ -56,7 +42,7 @@ it('Group creates a frame and leaves no editor open', () => {
 })
 
 it('Note opens its editor immediately', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
 
   openAddMenu(container)
@@ -66,9 +52,9 @@ it('Note opens its editor immediately', () => {
 })
 
 it('dragging a menu entry onto the canvas creates it AT THE DROP POINT, not the centre', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
 
   openAddMenu(container)
@@ -113,7 +99,7 @@ it('dragging a menu entry onto the canvas creates it AT THE DROP POINT, not the 
 })
 
 it('two creations from the menu do not stack on the same spot', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
 
   for (let i = 0; i < 2; i++) {
@@ -130,7 +116,7 @@ it('two creations from the menu do not stack on the same spot', () => {
 })
 
 it('tapping a menu entry keeps placing it at the viewport centre', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
 
   openAddMenu(container)
@@ -142,7 +128,7 @@ it('tapping a menu entry keeps placing it at the viewport centre', () => {
 })
 
 it('creating repeatedly does not move the viewport while the screen has room', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
   const transform = () =>
     (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
@@ -162,9 +148,9 @@ it('creating repeatedly does not move the viewport while the screen has room', (
 })
 
 it('nothing is ever parked under the dock', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: null })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const dock = container.querySelector('[data-testid="tool-palette"]') as HTMLElement
 
   for (let i = 0; i < 5; i++) {

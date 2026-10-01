@@ -8,7 +8,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -24,35 +25,7 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(lockedNodes: readonly string[] = []) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: initial,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-          lockedNodeIds={new Set(lockedNodes)}
-          onToggleNodeLock={() => {}}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+const SIZE = { width: 900, height: 700 }
 
 /** Marquee from empty space across every node. */
 function selectAll(root: HTMLElement) {
@@ -75,7 +48,7 @@ function clickOption(container: HTMLElement, ariaLabel: string) {
 const byId = (canvas: SpatialCanvas, id: string) => canvas.nodes.find((node) => node.id === id)!
 
 it('aligns the whole selection to its left edge in one undo step', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -93,7 +66,7 @@ it('aligns the whole selection to its left edge in one undo step', () => {
 })
 
 it('aligns to the bottom edge, accounting for differing heights', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -109,7 +82,7 @@ it('aligns to the bottom edge, accounting for differing heights', () => {
 })
 
 it('distributes the middle node so the gaps are equal', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -124,7 +97,7 @@ it('distributes the middle node so the gaps are equal', () => {
 })
 
 it('offers neither row for a single-node selection', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -174,7 +147,7 @@ it('hides only Distribute when the selection has exactly two nodes', () => {
 it('never moves a locked node, and never counts it toward the bounds', () => {
   // 'c' is locked, so select-all skips it — the alignment must be computed
   // from a and b alone, leaving c exactly where it was.
-  const { Host, latest } = makeHost(['c'])
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE, lockedNodes: ['c'] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -188,7 +161,7 @@ it('never moves a locked node, and never counts it toward the bounds', () => {
 })
 
 it('emits nothing when the selection is already aligned', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

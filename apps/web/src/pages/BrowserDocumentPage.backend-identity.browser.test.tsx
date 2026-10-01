@@ -9,13 +9,12 @@
  */
 
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
+import { inPage, renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-backend-identity')
@@ -42,14 +41,6 @@ vi.mock('../lib/browser-backend.js', async () => {
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
-
 beforeEach(async () => {
   await clearWhiteboardDb()
   constructedFor.length = 0
@@ -59,7 +50,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 it('opens exactly one connection per canvas, and keeps it across a re-render', async () => {
-  const { rerender } = render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+  const { rerender } = renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
@@ -68,13 +59,7 @@ it('opens exactly one connection per canvas, and keeps it across a re-render', a
   // A parent re-render handing over a fresh store instance — the injected
   // seam a future change would be tempted to key the backend on.
   await act(async () => {
-    rerender(
-      <div style={{ height: '100vh' }}>
-        <MemoryRouter initialEntries={['/']}>
-          <BrowserDocumentPage store={new IdbDocumentIndex()} />
-        </MemoryRouter>
-      </div>,
-    )
+    rerender(inPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />))
   })
 
   expect(constructedFor).toHaveLength(1)

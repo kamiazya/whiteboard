@@ -6,13 +6,18 @@
  */
 import {
   type WindowFromExtension,
+  type WindowFromPage,
+  type WindowFromPageBody,
   windowFromExtensionSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { WINDOW_BRIDGE_CHANNEL } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import type { BridgePort } from './extension-bridge-port.js'
 
-function post(message: object): void {
-  window.postMessage({ channel: WINDOW_BRIDGE_CHANNEL, from: 'page', ...message }, location.origin)
+function post(message: WindowFromPageBody): void {
+  window.postMessage(
+    { channel: WINDOW_BRIDGE_CHANNEL, from: 'page', ...message } satisfies WindowFromPage,
+    location.origin,
+  )
 }
 
 /** Listens for what the content script posts on this window; answers the stop. */

@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 function fakeMeasure() {
@@ -189,7 +190,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
         measure={fakeMeasure}
       />,
     )
-    const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+    const root = rootOf(container)
     dragNodeA(root)
 
     // Same node contents (the undo/redo shape) but externalVersion advanced.
@@ -220,7 +221,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
         measure={fakeMeasure}
       />,
     )
-    const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+    const root = rootOf(container)
     dragNodeA(root)
 
     // Same node contents, externalVersion NOT advanced -> this component's

@@ -8,12 +8,11 @@
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -38,31 +37,6 @@ const start: SpatialCanvas = {
   comments: [OPEN, DONE],
 }
 
-function makeHost(initial: SpatialCanvas = start) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: initial,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 function pinOf(container: HTMLElement, id: string): SVGGElement | null {
   return container.querySelector(`[data-testid="canvas-content"] [data-wb-key="${id}/pin"]`)
 }
@@ -82,7 +56,7 @@ async function waitForPin(container: HTMLElement, id: string, present: boolean, 
 }
 
 it('"Resolve" on a comment writes set-comment-resolved and the comment leaves the canvas', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForPin(container, 'c-open', true)
@@ -108,7 +82,7 @@ it('"Resolve" on a comment writes set-comment-resolved and the comment leaves th
 })
 
 it('"Show resolved comments" draws resolved ones muted, and "Reopen" brings one back', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForPin(container, 'c-open', true)
@@ -160,7 +134,7 @@ const FILLER = Array.from({ length: 12 }, (_, i) =>
 )
 
 it('the toggle reaches the layout worker on a large canvas', async () => {
-  const { Host } = makeHost({ ...start, nodes: [...start.nodes, ...FILLER] })
+  const { Host } = makeEditorHost({ initial: { ...start, nodes: [...start.nodes, ...FILLER] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForPin(container, 'c-open', true, 10_000)

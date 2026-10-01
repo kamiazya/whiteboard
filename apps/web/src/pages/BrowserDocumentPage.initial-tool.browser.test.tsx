@@ -1,12 +1,11 @@
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -16,16 +15,8 @@ claimIsolatedWhiteboardDb('browserdocumentpage-initial-tool')
 // Real browser + real IndexedDB: the canvas's node count comes from the Loro
 // document the backend actually loads, which is exactly the input the initial
 // tool is derived from — a jsdom mock would have to fake that input away.
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
-
 async function mountLoaded(): Promise<void> {
-  render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+  renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })

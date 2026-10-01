@@ -8,7 +8,6 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
-import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // Statically imported so the chunk's transform-and-load happens in the
@@ -23,19 +22,12 @@ import '../components/WorkspaceTopBar.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
-
-// The page now reads useLocation/useNavigate for URL<->canvas-id sync, so
-// every render needs a Router ancestor — wrapping once here keeps the
-// existing single-arg `render(<BrowserDocumentPage .../>)` call sites
-// throughout this file unchanged.
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
-}
 
 // createDocument seeds an empty Loro doc; the real LoroStore touches IndexedDB,
 // which jsdom does not implement. A fake keeps these page-level tests scoped
@@ -76,15 +68,6 @@ const snap: DocumentSnapshot = {
   kind: 'spatial' as const,
 }
 
-// Radix DropdownMenuTrigger opens on pointerDown (not click); the menu
-// mounts asynchronously, and items select on pointerUp.
-async function openDocumentOpsMenu() {
-  // The kebab now lives in the (lazy) WorkspaceTopBar's merged row.
-  const trigger = await screen.findByRole('button', { name: 'More actions' })
-  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
-  return screen.findByRole('menu')
-}
-
 function documentOpsItem(name: RegExp) {
   return screen.findByRole('menuitem', { name })
 }
@@ -107,7 +90,7 @@ describe('BrowserDocumentPage', () => {
 
   it('renders loading state before canvas is loaded', () => {
     const store = new LocalStoreDouble()
-    render(
+    renderInRouter(
       <BrowserDocumentPage
         loro={store.loro}
         store={store.index}
@@ -123,7 +106,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -145,7 +128,7 @@ describe('BrowserDocumentPage', () => {
       new Error('store read failed'),
     )
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -171,7 +154,7 @@ describe('BrowserDocumentPage', () => {
       new Error('store read failed'),
     )
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -204,7 +187,7 @@ describe('BrowserDocumentPage', () => {
       throw new Error('idb write failed')
     }
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -230,7 +213,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -260,7 +243,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -290,7 +273,7 @@ describe('BrowserDocumentPage', () => {
     seed.getList('elements').push({ id: 'rect-1' })
     await loro.save('069CFJNRVY147ADGKPSWZ258BE', seed.export({ mode: 'snapshot' }))
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           store={store.index}
           pointer={store.pointer}
@@ -326,7 +309,7 @@ describe('BrowserDocumentPage', () => {
       return realLoad(id)
     }
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           store={store.index}
           pointer={store.pointer}
@@ -365,7 +348,7 @@ describe('BrowserDocumentPage', () => {
     const loro = new FakeLoroStore()
     await loro.save('069CFJNRVY147ADGKPSWZ258BE', new Loro().export({ mode: 'snapshot' }))
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           store={store.index}
           pointer={store.pointer}
@@ -403,7 +386,7 @@ describe('BrowserDocumentPage', () => {
       },
     })
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -426,7 +409,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -457,7 +440,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -480,7 +463,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -531,7 +514,7 @@ describe('BrowserDocumentPage', () => {
       throw new Error('idb write failed')
     }
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={base.loro}
           store={base.index}
@@ -558,7 +541,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -585,7 +568,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -606,7 +589,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -635,7 +618,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -668,7 +651,7 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           loro={store.loro}
           store={store.index}
@@ -728,7 +711,7 @@ describe('BrowserDocumentPage', () => {
     store.index.listDocuments = () => new Promise((resolve) => resolvers.push(resolve))
 
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           store={store.index}
           pointer={store.pointer}
@@ -780,7 +763,7 @@ describe('BrowserDocumentPage', () => {
         kind: 'spatial' as const,
       })
       await act(async () => {
-        render(
+        renderInRouter(
           <BrowserDocumentPage
             store={store.index}
             pointer={store.pointer}
@@ -803,7 +786,7 @@ describe('BrowserDocumentPage', () => {
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await act(async () => {
-        render(
+        renderInRouter(
           <BrowserDocumentPage
             loro={store.loro}
             store={store.index}
@@ -835,7 +818,7 @@ describe('BrowserDocumentPage', () => {
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await act(async () => {
-        render(
+        renderInRouter(
           <BrowserDocumentPage
             loro={store.loro}
             store={store.index}
@@ -856,7 +839,7 @@ describe('BrowserDocumentPage', () => {
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await act(async () => {
-        render(
+        renderInRouter(
           <BrowserDocumentPage
             loro={store.loro}
             store={store.index}
@@ -884,7 +867,7 @@ describe('BrowserDocumentPage', () => {
         kind: 'spatial' as const,
       })
       await act(async () => {
-        render(
+        renderInRouter(
           <BrowserDocumentPage
             store={store.index}
             pointer={store.pointer}
@@ -927,7 +910,7 @@ describe('?new=canvas launch shortcut', () => {
 
   it('does not create extras on a plain load', async () => {
     const store = new LocalStoreDouble()
-    render(
+    renderInRouter(
       <BrowserDocumentPage
         store={store.index}
         pointer={store.pointer}
@@ -982,7 +965,7 @@ describe('BrowserDocumentPage — initial tool follows the canvas shape', () => 
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           store={store.index}
           pointer={store.pointer}
@@ -1002,7 +985,7 @@ describe('BrowserDocumentPage — initial tool follows the canvas shape', () => 
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
-      render(
+      renderInRouter(
         <BrowserDocumentPage
           store={store.index}
           pointer={store.pointer}

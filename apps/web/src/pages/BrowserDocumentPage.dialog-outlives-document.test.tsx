@@ -23,19 +23,8 @@
 // switch, not browser layout — the spatial editor is mocked out entirely.
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import {
-  act,
-  cleanup,
-  configure,
-  fireEvent,
-  render as rtlRender,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { act, cleanup, configure, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { useEffect } from 'react'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
@@ -48,6 +37,7 @@ import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 // findBy* on its kebab never pays the load (integrator-flow.md's
 // lazy()-vs-findBy* family).
 import '../components/WorkspaceTopBar.js'
+import { navigateTo, renderPage } from '../test-utils/daemon-page-harness.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-dialog-outlives-document')
 
@@ -74,30 +64,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
-// Stands in for the document browser: the only thing it does to this page is
-// change the URL, which is exactly what picking a document there does.
-let navigateTo: ((to: string) => void) | null = null
-function NavigationProbe() {
-  const navigate = useNavigate()
-  useEffect(() => {
-    navigateTo = navigate
-    return () => {
-      navigateTo = null
-    }
-  }, [navigate])
-  return null
-}
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>
-        <NavigationProbe />
-        {ui}
-      </MemoryRouter>
-    </div>,
-  )
-}
+const render = (ui: ReactElement) => renderPage(ui, { probe: true })
 
 async function openDeleteDialog(): Promise<HTMLElement> {
   const kebab = await screen.findByRole('button', { name: 'More actions' })
@@ -198,7 +165,7 @@ describe('a destructive dialog does not outlive its document', () => {
 
     // The switch. Browser Back does this with the dialog still open.
     await act(async () => {
-      navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+      navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
     })
     // Polled OUTSIDE React's act scope, and read from the document text
     // rather than by role. Both are measured rather than stylistic:
@@ -280,7 +247,7 @@ describe('a destructive dialog does not outlive its document', () => {
     await store.attempted
 
     await act(async () => {
-      navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+      navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
     })
     for (let i = 0; i < 100 && !document.body.textContent?.includes(ARRIVED_AFTER); i++) {
       await new Promise((r) => setTimeout(r, 50))
@@ -337,7 +304,7 @@ describe('a destructive dialog does not outlive its document', () => {
     ).not.toBeNull()
 
     await act(async () => {
-      navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+      navigateTo(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
     })
     // Longer than the other two cases here, and measured rather than guessed:
     // with the surface open this page also holds a CodeMirror instance, and

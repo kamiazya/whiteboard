@@ -8,9 +8,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { withNodeUrl } from '@kamiazya/whiteboard-model'
 import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 
 afterEach(cleanup)
 
@@ -24,22 +23,7 @@ const bigLink = (id: string, x: number) =>
     url: `https://example.com/${id}`,
   })
 
-function makeHost(initial: SpatialCanvas) {
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    return (
-      <div style={{ width: 1600, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return Host
-}
+const SIZE = { width: 1600, height: 600 }
 
 it('offers the facade only above the LOD threshold, and activation swaps in a sandboxed iframe', async () => {
   const canvas: SpatialCanvas = {
@@ -56,7 +40,7 @@ it('offers the facade only above the LOD threshold, and activation swaps in a sa
     ],
     edges: [],
   }
-  const Host = makeHost(canvas)
+  const { Host } = makeEditorHost({ initial: canvas, size: SIZE })
   const { container } = render(<Host />)
 
   const facades = container.querySelectorAll('[data-testid="link-embed-facade"]')
@@ -81,7 +65,7 @@ it('caps live iframes at three — activating a fourth collapses the oldest', as
     nodes: [bigLink('a', 0), bigLink('b', 340), bigLink('c', 680), bigLink('d', 1020)],
     edges: [],
   }
-  const Host = makeHost(canvas)
+  const { Host } = makeEditorHost({ initial: canvas, size: SIZE })
   const { container } = render(<Host />)
 
   for (const label of ['a', 'b', 'c', 'd']) {
@@ -108,7 +92,7 @@ it('never offers a facade for a non-followable URL scheme', async () => {
     nodes: [withNodeUrl(bigLink('js', 60), 'javascript:alert(1)')],
     edges: [],
   }
-  const Host = makeHost(canvas)
+  const { Host } = makeEditorHost({ initial: canvas, size: SIZE })
   const { container } = render(<Host />)
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="spatial-editor"]')).not.toBeNull(),

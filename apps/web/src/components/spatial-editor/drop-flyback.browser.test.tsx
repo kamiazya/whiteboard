@@ -17,6 +17,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -47,7 +48,6 @@ function Host() {
   )
 }
 
-const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 const frame = () => new Promise((r) => requestAnimationFrame(r))
 
 it('lands a dropped node where it was released, never back at the grab point', async () => {

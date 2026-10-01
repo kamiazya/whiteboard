@@ -10,6 +10,8 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -25,45 +27,11 @@ const withFileNode: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(initial: SpatialCanvas, onOpen?: (file: string, subpath?: string) => void) {
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: initial, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-          fileRefOptions={OPTIONS}
-          onOpenFileRef={onOpen}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-function rightClick(el: HTMLElement, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  el.dispatchEvent(
-    new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      button: 2,
-    }),
-  )
-}
-
 it('Add canvas opens the picker and picking creates a file node with that reference', async () => {
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { Host, latest } = makeEditorHost({
+    initial: { nodes: [], edges: [] },
+    editorProps: { fileRefOptions: OPTIONS },
+  })
   const { container } = render(<Host />)
 
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
@@ -81,7 +49,7 @@ it('Add canvas opens the picker and picking creates a file node with that refere
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(nodeFile(latest.canvas.nodes[0] as SpatialNode)).toBe('canvas-b')
-  expect(latest.commands).toContain('create-node')
+  expect(latest.kinds).toContain('create-node')
   expect(container.querySelector('[data-testid="document-picker-dialog"]')).toBeNull()
   // The card shows the RESOLVED label, not the opaque reference — the
   // stored value stays the reference, display goes through the resolver.
@@ -91,7 +59,10 @@ it('Add canvas opens the picker and picking creates a file node with that refere
 
 it('a real double-click on a file node follows the reference', async () => {
   const opened: string[] = []
-  const { Host } = makeHost(withFileNode, (file) => opened.push(file))
+  const { Host } = makeEditorHost({
+    initial: withFileNode,
+    editorProps: { fileRefOptions: OPTIONS, onOpenFileRef: (file) => opened.push(file) },
+  })
   const { container } = render(<Host />)
 
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 130 } })
@@ -100,7 +71,10 @@ it('a real double-click on a file node follows the reference', async () => {
 
 it('the file context menu offers Open canvas and Change target retargets via the picker', async () => {
   const opened: string[] = []
-  const { Host, latest } = makeHost(withFileNode, (file) => opened.push(file))
+  const { Host, latest } = makeEditorHost({
+    initial: withFileNode,
+    editorProps: { fileRefOptions: OPTIONS, onOpenFileRef: (file) => opened.push(file) },
+  })
   const { container } = render(<Host />)
 
   rightClick(rootOf(container), 200, 130)
@@ -122,7 +96,7 @@ it('the file context menu offers Open canvas and Change target retargets via the
   fireEvent.click(target)
 
   await vi.waitFor(() => expect(nodeFile(latest.canvas.nodes[0] as SpatialNode)).toBe('canvas-b'))
-  expect(latest.commands).toContain('set-node-file')
+  expect(latest.kinds).toContain('set-node-file')
 })
 
 it('a missing reference renders a quiet missing label and hides the follow affordances', async () => {

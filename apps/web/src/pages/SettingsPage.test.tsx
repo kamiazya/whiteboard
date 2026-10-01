@@ -571,22 +571,19 @@ describe('SettingsPage — storage evidence wiring', () => {
           // The contract requires ALL seven buckets — a partial byCategory is
           // rejected by storageReportPayloadSchema (deliberately, see its doc).
           const bucket = { bytes: 0, files: 0 }
-          return new Response(
-            JSON.stringify({
-              totalBytes: 108_003_328,
-              fileCount: 3,
-              byCategory: {
-                blobs: bucket,
-                versions: bucket,
-                files: bucket,
-                exports: bucket,
-                logs: bucket,
-                db: bucket,
-                other: bucket,
-              },
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          )
+          return jsonResponse({
+            totalBytes: 108_003_328,
+            fileCount: 3,
+            byCategory: {
+              blobs: bucket,
+              versions: bucket,
+              files: bucket,
+              exports: bucket,
+              logs: bucket,
+              db: bucket,
+              other: bucket,
+            },
+          })
         }
         return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } })
       }),

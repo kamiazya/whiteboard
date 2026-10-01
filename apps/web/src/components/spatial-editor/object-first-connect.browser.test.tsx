@@ -6,15 +6,14 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { SpatialEditor } from './SpatialEditor.js'
 // Without the stylesheet every Tailwind `absolute` in the dock degrades to
 // `static`, so the dock lands in document flow and any absolutely-positioned
 // sibling shifts it into the scene — where it becomes unclickable. This file
 // asserts on real click targets, so it needs real styles.
 import '../../index.css'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -27,34 +26,12 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 function connectToolButton(container: HTMLElement): HTMLButtonElement {
   return container.querySelector('[data-testid="connect-tool-button"]') as HTMLButtonElement
 }
 
 it('Connect tool: click A then click B creates the edge', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   await userEvent.click(connectToolButton(container))
@@ -69,11 +46,11 @@ it('Connect tool: click A then click B creates the edge', async () => {
     from: { node: 'a' },
     to: { node: 'b' },
   })
-  expect(latest.commands).toContain('connect-nodes')
+  expect(latest.kinds).toContain('connect-nodes')
 })
 
 it('the Select tool stays the default and node presses do not start a connect', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   const selectButton = container.querySelector(
@@ -88,18 +65,18 @@ it('the Select tool stays the default and node presses do not start a connect', 
 })
 
 it('double-click creation survives while the Connect tool is armed (S6-2)', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   await userEvent.click(connectToolButton(container))
   await userEvent.dblClick(rootOf(container), { position: { x: 650, y: 300 } })
 
-  await vi.waitFor(() => expect(latest.commands).toContain('create-node'))
+  await vi.waitFor(() => expect(latest.kinds).toContain('create-node'))
   expect(latest.canvas.nodes.length).toBe(3)
 })
 
 it('arming a connect shows the source indicator immediately, before any pointer move', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
 
   await userEvent.click(connectToolButton(container))

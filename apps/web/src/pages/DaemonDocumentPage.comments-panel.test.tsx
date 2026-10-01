@@ -10,10 +10,6 @@
  */
 
 import { EditorView } from '@codemirror/view'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   readCommentThreads,
   writeCommentThread,
@@ -22,46 +18,27 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  type RenderOptions,
-  render as rtlRender,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
-function render(ui: ReactElement, options?: RenderOptions) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
-}
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+    'getDocumentBacklinks',
+  ]),
+)
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-    getDocumentBacklinks: vi.fn(),
-  }
-})
-
-// Each answers a CANCEL, which the page calls on unmount: a schedule that
-// outlives its page fires against a fetch and a workspace that have moved on,
-// and in a test run the warning lands on whichever case is executing by then.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
@@ -83,23 +60,20 @@ function stubDaemonFetch(): void {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/names')) {
-        return new Response(JSON.stringify({ documents: {}, pinned: [] }), { status: 200 })
+        return jsonResponse({ documents: {}, pinned: [] })
       }
       if (url.includes('/branches')) {
-        return new Response(
-          JSON.stringify({
-            branches: [
-              {
-                name: 'main',
-                tipFrontiers: '',
-                color: '#3b82f6',
-                createdAt: '2026-01-01T00:00:00.000Z',
-              },
-            ],
-            head: 'main',
-          }),
-          { status: 200 },
-        )
+        return jsonResponse({
+          branches: [
+            {
+              name: 'main',
+              tipFrontiers: '',
+              color: '#3b82f6',
+              createdAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          head: 'main',
+        })
       }
       return new Response('{}', { status: 404 })
     }),
@@ -152,25 +126,11 @@ function markdownSnapshotWithThread(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  readonly pushLocalUpdateCalls: Uint8Array[] = []
-  constructor(private readonly snapshot: () => Uint8Array) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(this.snapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(bytes: Uint8Array): void {
-    this.pushLocalUpdateCalls.push(bytes)
-  }
-  sendClientReady(): void {}
-}
-
-async function renderSpatial(backend: FakeBackend = new FakeBackend(seededSpatialSnapshot)) {
+async function renderSpatial(
+  backend: FakeDocumentBackend = new FakeDocumentBackend(seededSpatialSnapshot),
+) {
   await act(async () => {
-    render(
+    renderInRouter(
       <DaemonDocumentPage
         daemonBaseUrl={DAEMON_BASE_URL}
         workspaceId="w1"
@@ -274,7 +234,7 @@ describe('DaemonDocumentPage comments panel', () => {
     // creations under the same key to ONE of them — silently discarding the
     // reply this test exists to observe.
     const seed = seededSpatialSnapshot()
-    const backend = await renderSpatial(new FakeBackend(() => seed))
+    const backend = await renderSpatial(new FakeDocumentBackend(() => seed))
     fireEvent.click(await screen.findByRole('button', { name: /comments/i }))
     fireEvent.click(panel().getByText('still needs a decision'))
 
@@ -289,11 +249,11 @@ describe('DaemonDocumentPage comments panel', () => {
     await waitFor(() => expect(repliesText()).toContain(squashed('decided: ship it')))
 
     // The write travelled the session's own path — replaying every update
-    // the FakeBackend recorded onto a copy of the seed reproduces the same
+    // the FakeDocumentBackend recorded onto a copy of the seed reproduces the same
     // reply, under an id distinct from every seeded message.
     const replay = new LoroDoc()
     replay.import(seed)
-    for (const bytes of backend.pushLocalUpdateCalls) replay.import(bytes)
+    for (const bytes of backend.pushed) replay.import(bytes)
     const thread = readCommentThreads(replay).find((t) => t.id === 't-open')
     const reply = thread?.messages.find((m) => m.body === 'decided: ship it')
     expect(reply?.id).toBeDefined()
@@ -305,12 +265,12 @@ describe('DaemonDocumentPage comments panel', () => {
       documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
     })
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="note"
-          createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshotWithThread)}
         />,
         { container: document.body },
       )
@@ -341,13 +301,13 @@ describe('DaemonDocumentPage comments panel', () => {
       restore: async () => {},
     }
     await act(async () => {
-      render(
+      renderInRouter(
         <VersionsBackendContext.Provider value={fakeVersionsBackend}>
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             workspaceId="w1"
             path="board"
-            createBackend={() => new FakeBackend(seededSpatialSnapshot)}
+            createBackend={() => new FakeDocumentBackend(seededSpatialSnapshot)}
           />
         </VersionsBackendContext.Provider>,
         { container: document.body },
@@ -420,13 +380,13 @@ describe('DaemonDocumentPage comments panel', () => {
       restore: async () => {},
     }
     await act(async () => {
-      render(
+      renderInRouter(
         <VersionsBackendContext.Provider value={fakeVersionsBackend}>
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             workspaceId="w1"
             path="note"
-            createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
+            createBackend={() => new FakeDocumentBackend(markdownSnapshotWithThread)}
           />
         </VersionsBackendContext.Provider>,
         { container: document.body },
@@ -493,7 +453,7 @@ describe('DaemonDocumentPage comments opener with zero open threads', () => {
   })
 
   it("reads plain 'Comments' and carries no count badge", async () => {
-    await renderSpatial(new FakeBackend(allResolvedSnapshot))
+    await renderSpatial(new FakeDocumentBackend(allResolvedSnapshot))
     const opener = await screen.findByRole('button', { name: 'Comments' })
     // The badge is the only digit the opener ever renders; zero open = none.
     expect(opener.textContent ?? '').not.toMatch(/\d/)

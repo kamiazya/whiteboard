@@ -1,85 +1,27 @@
-/**
- * The daemon keeper's own WebMCP case. The shared scenarios (every tool
- * registers once a document is on screen, none when the setting is off) run
- * against both keepers in `document-page.contract.tsx`; this one has no
- * browser twin, because the browser keeper always has a document to open
- * and the daemon can resolve a workspace to none.
- */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { act, cleanup, type RenderOptions, render as rtlRender } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ModelContext, WebMcpToolDescriptor } from '../hooks/use-browser-tool-registry.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { createFakeModelContext } from '../test-utils/document-page.contract.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-// The page reads useNavigate (Settings navigation), so every render needs a
-// Router ancestor.
-function render(ui: ReactElement, options?: RenderOptions) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
-}
-
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  constructor(
-    public workspaceId: string,
-    public path: string,
-  ) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-    handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 function makeCreateBackend() {
-  return (workspaceId: string, path: string) => new FakeBackend(workspaceId, path)
-}
-
-function createFakeModelContext(): ModelContext & { liveNames(): string[] } {
-  const live = new Map<string, AbortSignal>()
-  return {
-    liveNames: () => [...live.keys()],
-    registerTool: async (descriptor: WebMcpToolDescriptor, options: { signal: AbortSignal }) => {
-      await Promise.resolve()
-      if (options.signal.aborted) return
-      live.set(descriptor.name, options.signal)
-      options.signal.addEventListener('abort', () => live.delete(descriptor.name))
-    },
-  }
+  return () => new FakeDocumentBackend()
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
@@ -102,7 +44,7 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
     document.modelContext = fake
 
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )

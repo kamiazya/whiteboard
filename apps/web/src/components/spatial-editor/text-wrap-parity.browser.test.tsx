@@ -14,6 +14,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -65,7 +66,7 @@ it('pins the CSS-vs-injected-measure wrap-line-count relationship for a canonica
   // trivially on an unwrapped single line.
   expect(svgLineCount).toBeGreaterThanOrEqual(4)
 
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 110 } })
   const cmContent = await vi.waitFor(() => {
     const el = nodeEditorContent(container)

@@ -202,9 +202,20 @@ function lintWith(
         '--max-diagnostics=none',
         ...paths,
       ],
-      { cwd: REPO_ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+      // The report lists every function over the threshold across the scan
+      // roots and passed 1 MiB, the default buffer, at which point the child
+      // is killed and `stdout` holds a torn prefix of the JSON. The overflow
+      // is rethrown rather than parsed, so the test fails naming the cause
+      // and never reports a shorter list than biome produced.
+      {
+        cwd: REPO_ROOT,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        maxBuffer: 256 * 1024 * 1024,
+      },
     )
   } catch (error) {
+    if ((error as { code?: string }).code === 'ENOBUFS') throw error
     // biome exits non-zero whenever it reports anything, which is the expected
     // case here: every listed file should still be over.
     out = (error as { stdout?: string }).stdout ?? ''

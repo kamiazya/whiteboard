@@ -11,6 +11,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -64,7 +65,7 @@ function parseTransform(css: string): { zoom: number; x: number; y: number } {
 
 it('two-finger drag pans the viewport', async () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const before = parseTransform(getTransform(container))
 
   touch(root, 'pointerdown', 1, 300, 300)
@@ -84,7 +85,7 @@ it('two-finger drag pans the viewport', async () => {
 
 it('spreading two fingers zooms the viewport in', async () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const before = parseTransform(getTransform(container))
 
   touch(root, 'pointerdown', 1, 350, 300)
@@ -100,7 +101,7 @@ it('spreading two fingers zooms the viewport in', async () => {
 
 it('a second finger cancels an in-flight one-finger marquee instead of leaving it armed', async () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
 
   // One finger down on empty space arms a marquee; the second finger must
   // convert the gesture to pan/zoom, and releasing must leave no marquee.
@@ -119,7 +120,7 @@ it('activating a pinch captures BOTH fingers, not just the second', async () => 
   // its move/up events, leaving a stale touch entry that would misread a
   // later one-finger press as a pinch participant.
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const captured: number[] = []
   root.setPointerCapture = (id: number) => {
     captured.push(id)
@@ -136,7 +137,7 @@ it('activating a pinch captures BOTH fingers, not just the second', async () => 
 
 it('after a pinch ends, the remaining finger does not keep panning the viewport', async () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
 
   touch(root, 'pointerdown', 1, 300, 300)
   touch(root, 'pointerdown', 2, 400, 300)

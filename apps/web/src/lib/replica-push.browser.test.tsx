@@ -14,6 +14,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { pushReplicaEdits } from './replica-push.js'
@@ -215,7 +216,7 @@ describe('pushReplicaEdits', () => {
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.endsWith('/replica-key') && init?.method === 'POST') {
-          return new Response(JSON.stringify({ error: 'not_a_member' }), { status: 403 })
+          return jsonResponse({ error: 'not_a_member' }, 403)
         }
         throw new Error(`unexpected fetch: ${url}`)
       }) as typeof globalThis.fetch,
@@ -254,7 +255,7 @@ describe('pushReplicaEdits', () => {
         fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
           const url = typeof input === 'string' ? input : input.toString()
           if (url.endsWith('/replica-key') && init?.method === 'POST') {
-            return new Response(JSON.stringify({ error: 'not_a_member' }), { status: 403 })
+            return jsonResponse({ error: 'not_a_member' }, 403)
           }
           throw new Error(`unexpected fetch: ${url}`)
         }) as typeof globalThis.fetch,

@@ -8,6 +8,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -39,7 +40,7 @@ function Host({ onCommand }: { onCommand: (kind: string) => void }) {
 
 it('renders a connect handle on every side of the selection', async () => {
   const { container } = render(<Host onCommand={() => {}} />)
-  await userEvent.click(container.querySelector('[data-testid="spatial-editor"]') as Element, {
+  await userEvent.click(rootOf(container), {
     position: { x: 380, y: 290 },
   })
   await expect.element(page.getByTestId('connect-handle')).toBeInTheDocument()
@@ -51,7 +52,7 @@ it('renders a connect handle on every side of the selection', async () => {
 it('dragging from the LEFT handle onto another node creates an edge', async () => {
   const commands: string[] = []
   const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
 
   // Select node "a", then drag from its west handle to node "b".
   await userEvent.click(root, { position: { x: 380, y: 290 } })

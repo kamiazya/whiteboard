@@ -21,16 +21,8 @@ import {
   resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import {
-  act,
-  cleanup,
-  configure,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
-import type { ReactElement, ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
@@ -44,17 +36,10 @@ import {
   textNodeCanvas,
 } from '../test-utils/browser-document.js'
 import '../index.css'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-node-lock')
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
 type ToggleLock = (nodeId: string, locked: boolean) => void
@@ -81,7 +66,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 async function mountPage(): Promise<void> {
-  render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+  renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
   await waitFor(() => expect(latestOnChange).not.toBeNull())
 }

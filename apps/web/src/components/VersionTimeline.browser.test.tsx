@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../index.css'
+import { jsonResponse } from '../test-utils/json-response.js'
 import VersionTimeline, { type VersionPreviewSession } from './VersionTimeline.js'
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
@@ -26,13 +27,10 @@ function mkBranchesResponse(): Response {
     createdAt: '2026-04-24T00:00:00Z',
     baseBranch: 'main',
   }
-  return new Response(
-    JSON.stringify({
-      head: 'main',
-      branches: scenario === 'two-lanes' ? [main, feature] : [main],
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  return jsonResponse({
+    head: 'main',
+    branches: scenario === 'two-lanes' ? [main, feature] : [main],
+  })
 }
 
 function mkVersionsResponse(count = 24): Response {
@@ -48,16 +46,13 @@ function mkVersionsResponse(count = 24): Response {
       branchName,
       operator: { kind: 'system' as const, peerId: 'peer-system', displayName: 'auto-save' },
     })
-    return new Response(
-      JSON.stringify({
-        versions: [
-          row('v-a', 'Version 1', 'main'),
-          row('v-b', 'Version 2', 'main'),
-          row('v-c', 'Version 3', 'feature'),
-        ],
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
+    return jsonResponse({
+      versions: [
+        row('v-a', 'Version 1', 'main'),
+        row('v-b', 'Version 2', 'main'),
+        row('v-c', 'Version 3', 'feature'),
+      ],
+    })
   }
   const versions = Array.from({ length: count }, (_, index) => ({
     id: `v-${index}`,
@@ -74,10 +69,7 @@ function mkVersionsResponse(count = 24): Response {
     },
   }))
 
-  return new Response(JSON.stringify({ versions }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return jsonResponse({ versions })
 }
 
 beforeEach(() => {
@@ -87,12 +79,7 @@ beforeEach(() => {
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
     if (url.endsWith('/document')) {
-      return Promise.resolve(
-        new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
+      return Promise.resolve(jsonResponse({ kind: 'spatial', canvas: { nodes: [], edges: [] } }))
     }
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(new Response('{}', { status: 200 }))

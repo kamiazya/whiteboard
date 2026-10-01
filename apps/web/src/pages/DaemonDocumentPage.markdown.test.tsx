@@ -5,55 +5,29 @@
  * as an empty spatial canvas — and drawing on it corrupted the document.
  */
 
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   writeCoreFacets,
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  act,
-  cleanup,
-  type RenderOptions,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
+import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
-function render(ui: ReactElement, options?: RenderOptions) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
-}
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-// This file's global `fetch` stub deliberately 404s every route but
-// `/names` (see stubNames' comment below), and the background replica
-// refresh is not what any test here exercises — mocked the same way every
-// sibling DaemonDocumentPage test file already does, so it never fires a
-// real (404-doomed) snapshot request nobody asked for.
-// Each answers a CANCEL, which the page calls on unmount: a schedule that
-// outlives its page fires against a fetch and a workspace that have moved on,
-// and in a test run the warning lands on whichever case is executing by then.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
-
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
@@ -82,19 +56,6 @@ function markdownSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  constructor(private readonly snapshot: () => Uint8Array = markdownSnapshot) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(this.snapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 /**
@@ -109,7 +70,7 @@ function stubNames(names: { documents: Record<string, string>; pinned: string[] 
     vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/names')) {
-        return new Response(JSON.stringify(names), { status: 200 })
+        return jsonResponse(names)
       }
       return new Response('{}', { status: 404 })
     }),
@@ -134,12 +95,12 @@ describe('DaemonDocumentPage markdown documents', () => {
 
   it('opens a markdown-kind document in the markdown editor, never the spatial editor', async () => {
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -153,12 +114,12 @@ describe('DaemonDocumentPage markdown documents', () => {
 
   it('shows the daemon-held body text', async () => {
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -173,12 +134,12 @@ describe('DaemonDocumentPage markdown documents', () => {
   // dropdown renames through.
   it("shows the workspace's display name for the open document", async () => {
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -196,12 +157,12 @@ describe('DaemonDocumentPage markdown documents', () => {
   // needing a flag.
   it('offers the facets disclosure for a markdown document', async () => {
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )
@@ -215,12 +176,12 @@ describe('DaemonDocumentPage markdown documents', () => {
     })
     stubNames({ documents: { board: 'A board' }, pinned: [] })
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="board"
-          createBackend={() => new FakeBackend(spatialSnapshot)}
+          createBackend={() => new FakeDocumentBackend(spatialSnapshot)}
         />,
         { container: document.body },
       )
@@ -232,12 +193,12 @@ describe('DaemonDocumentPage markdown documents', () => {
   it('falls back to the path when the workspace has stored no name', async () => {
     stubNames({ documents: {}, pinned: [] })
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
           path="agent-note"
-          createBackend={() => new FakeBackend()}
+          createBackend={() => new FakeDocumentBackend(markdownSnapshot)}
         />,
         { container: document.body },
       )

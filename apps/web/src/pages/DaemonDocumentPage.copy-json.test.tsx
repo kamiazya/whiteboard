@@ -1,53 +1,29 @@
-/**
- * Copy as JSON Canvas, on the DOCUMENT page of a daemon-kept board.
- *
- * The last row of `issues/daemon-document-page-offers-no-document-actions`,
- * and the one whose absence was recorded as DELIBERATE on a reason that
- * turned out to be false — that the daemon keeper would have to decode a
- * snapshot for this row alone. It holds `canvasValue`, a decoded
- * SpatialCanvas, at the very place it builds its slots.
- *
- * Both directions are here, because a row that is always present and a row
- * that is never present both pass a one-sided test: a board offers it, a note
- * does not. The note case is the one with teeth — `canvasValue` falls back to
- * an empty document on a markdown note, so an ungated row would hand back a
- * well-formed JSON Canvas file whose content is not the note's.
- */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import {
+  FakeDocumentBackend,
+  openDocumentOpsMenu,
+  renderInRouter,
+} from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, {
-    container: document.body,
-  })
-}
+const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return { ...actual, listWorkspaces: vi.fn(), listDocuments: vi.fn(), createDocument: vi.fn() }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
-// Background replica work, stubbed for the reason every sibling file stubs it.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
@@ -79,24 +55,7 @@ function noteSnapshot(): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-class FakeBackend implements DocumentBackend {
-  constructor(private readonly snapshot: () => Uint8Array) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    handlers.onSnapshot(this.snapshot())
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
 const writeText = vi.fn(async (_text: string) => {})
-
-async function openDocumentOpsMenu() {
-  const trigger = await screen.findByRole('button', { name: 'More actions' })
-  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
-  return screen.findByRole('menu')
-}
 
 async function mountPage(path: string, snapshot: () => Uint8Array): Promise<void> {
   await act(async () => {
@@ -105,7 +64,7 @@ async function mountPage(path: string, snapshot: () => Uint8Array): Promise<void
         daemonBaseUrl="http://127.0.0.1:3099"
         workspaceId="w1"
         path={path}
-        createBackend={() => new FakeBackend(snapshot)}
+        createBackend={() => new FakeDocumentBackend(snapshot)}
       />,
     )
   })
@@ -121,7 +80,7 @@ describe('copying a daemon-kept board as JSON Canvas', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/names')) {
-          return new Response(JSON.stringify({ documents: {}, pinned: [] }), { status: 200 })
+          return jsonResponse({ documents: {}, pinned: [] })
         }
         return new Response('{}', { status: 404 })
       }),

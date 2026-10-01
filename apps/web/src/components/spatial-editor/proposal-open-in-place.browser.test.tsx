@@ -9,11 +9,9 @@
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useRef } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 
 afterEach(cleanup)
 
@@ -41,29 +39,7 @@ const proposal: Proposal = {
   ],
 }
 
-function makeHost() {
-  const handle: { current: SpatialEditorHandle | null } = { current: null }
-  function Host() {
-    const ref = useRef<SpatialEditorHandle | null>(null)
-    handle.current = ref.current
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          ref={(node) => {
-            ref.current = node
-            handle.current = node
-          }}
-          defaultTool="select"
-          canvas={start}
-          proposals={[proposal]}
-          onChange={() => {}}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, handle }
-}
+const SIZE = { width: 900, height: 700 }
 
 /**
  * Where the far node is drawn RIGHT NOW. Re-queried every time: the pan
@@ -76,13 +52,17 @@ function farNodeLeft(root: HTMLElement): number {
 }
 
 it('opens a proposal where it sits, and answers whether it could', async () => {
-  const { Host, handle } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    size: SIZE,
+    editorProps: { proposals: [proposal] },
+  })
   const { container } = render(<Host />)
   await expect.element(page.getByTestId('canvas-content')).toBeInTheDocument()
   expect(container.querySelector('[data-testid="proposal-card"]')).toBeNull()
   const framedOnLoad = farNodeLeft(container)
 
-  expect(handle.current?.openProposal('p-far')).toBe(true)
+  expect(latest.handle?.openProposal('p-far')).toBe(true)
 
   // Both halves of decision 1, and neither alone is the behaviour: the
   // board moved onto the chrome, AND the card drawn there is now open.
@@ -116,12 +96,16 @@ it('opens a proposal where it sits, and answers whether it could', async () => {
 // catches up. So the caller's job is to do nothing, and this pins that
 // nothing is what happens.
 it('answers false for a proposal the canvas draws no chrome for', async () => {
-  const { Host, handle } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    size: SIZE,
+    editorProps: { proposals: [proposal] },
+  })
   const { container } = render(<Host />)
   await expect.element(page.getByTestId('canvas-content')).toBeInTheDocument()
   const framedOnLoad = farNodeLeft(container)
 
-  expect(handle.current?.openProposal('p-nowhere')).toBe(false)
+  expect(latest.handle?.openProposal('p-nowhere')).toBe(false)
 
   expect(container.querySelector('[data-testid="proposal-card"]')).toBeNull()
   expect(farNodeLeft(container)).toBe(framedOnLoad)

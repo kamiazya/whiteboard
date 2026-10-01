@@ -9,15 +9,14 @@
  * gone.
  */
 import 'fake-indexeddb/auto'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { ensureLocalWorkspace, IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
@@ -32,14 +31,6 @@ vi.mock('../components/spatial-editor/index.js', () => ({
   // and a null mock makes that unassertable.
   SpatialEditor: () => <div data-testid="mock-spatial-editor" />,
 }))
-
-function render(ui: ReactElement): ReturnType<typeof rtlRender> {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 async function seedDocumentWithContent(
   content: { raw: unknown } | { snapshot: Uint8Array },
@@ -63,7 +54,7 @@ describe('a document this build cannot read', () => {
   it('says the storage version is unsupported rather than showing an empty canvas', async () => {
     await seedDocumentWithContent({ raw: { v: 99, writtenByANewerBuild: true } })
 
-    render(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toMatch(/saved by a newer version/i)
@@ -80,7 +71,7 @@ describe('a document this build cannot read', () => {
     // no snapshot yet.
     await seedDocumentWithContent({ snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]) })
 
-    render(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toMatch(/could not be read/i)
@@ -110,13 +101,13 @@ describe('a document this build cannot read', () => {
     })
     await new IdbDefaultDocumentPointer(DB).set(broken.documentId)
 
-    const view = render(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    const view = renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
 
     // Reopen at the sound document's path, the way the switcher does.
     view.unmount()
     await new IdbDefaultDocumentPointer(DB).set(sound.documentId)
-    render(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
 
     await waitFor(() => expect(screen.getByTestId('mock-spatial-editor')).toBeTruthy())
     expect(screen.queryByRole('alert')).toBeNull()

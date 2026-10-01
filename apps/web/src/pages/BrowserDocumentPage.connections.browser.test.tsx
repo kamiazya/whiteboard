@@ -5,9 +5,9 @@
  */
 import { writeDocumentKind, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
@@ -15,6 +15,7 @@ import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { seedWorkspaceDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-connections')
@@ -55,13 +56,11 @@ it('shows the Connections chip with the backlink count and opens the source', as
   await note(index, 'beta', 'Beta', 'The target.')
   await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')
 
-  render(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>
-        <BrowserDocumentPage store={index} initialPath="beta" />
-        <LocationProbe />
-      </MemoryRouter>
-    </div>,
+  renderPage(
+    <>
+      <BrowserDocumentPage store={index} initialPath="beta" />
+      <LocationProbe />
+    </>,
   )
 
   const chip = await screen.findByRole(
@@ -83,13 +82,11 @@ it('links a mention from the panel, and the source moves to the backlinks', asyn
   await note(index, 'beta', 'Beta', 'The target.')
   await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
 
-  render(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>
-        <BrowserDocumentPage store={index} initialPath="beta" />
-        <LocationProbe />
-      </MemoryRouter>
-    </div>,
+  renderPage(
+    <>
+      <BrowserDocumentPage store={index} initialPath="beta" />
+      <LocationProbe />
+    </>,
   )
 
   await userEvent.click(

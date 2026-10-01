@@ -1,76 +1,32 @@
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import {
-  act,
-  cleanup,
-  type RenderOptions,
-  render as rtlRender,
-  waitFor,
-} from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-function render(ui: ReactElement, options?: RenderOptions) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
-}
-
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-/**
- * Captures the handler bundle the page installs, so a test can push a
- * server message in as the daemon would. This is the join the unit tests
- * cannot reach: `useAgentActivity` is proven on its own, and this proves the
- * page actually subscribed it to `onAgentActivity`.
- */
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  constructor(
-    public workspaceId: string,
-    public path: string,
-  ) {}
-  connect(handlers: DocumentBackendHandlers): void {
-    this.handlers = handlers
-    handlers.onConnected()
-    handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
-}
-
+// The page's backend is captured so a test can push a server message in
+// through the handlers it installed, as the daemon would. This is the join the
+// unit tests cannot reach: `useAgentActivity` is proven on its own, and this
+// proves the page actually subscribed it to `onAgentActivity`.
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonDocumentPage agent-activity wiring', () => {
-  let backend: FakeBackend | null = null
+  let backend: FakeDocumentBackend | null = null
 
   beforeEach(() => {
     backend = null
@@ -89,11 +45,11 @@ describe('DaemonDocumentPage agent-activity wiring', () => {
 
   async function mountPage(): Promise<void> {
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
-          createBackend={(workspaceId, path) => {
-            backend = new FakeBackend(workspaceId, path)
+          createBackend={() => {
+            backend = new FakeDocumentBackend()
             return backend
           }}
         />,

@@ -13,9 +13,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -34,28 +34,8 @@ const B = { x: 360, y: 70 }
 const C = { x: 620, y: 70 }
 const EMPTY = { x: 400, y: 400 }
 
-function makeHost() {
-  const latest = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => {
-            latest.canvas = next
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const SIZE = { width: 900, height: 700 }
 
-const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 const memberOutlines = (c: HTMLElement) =>
   c.querySelectorAll('[data-testid="member-outlines"] rect').length
 const nodeAt = (canvas: SpatialCanvas, id: string) => canvas.nodes.find((n) => n.id === id)
@@ -74,7 +54,7 @@ const up = (root: HTMLElement, p: Pt, pointerId: number, pointerType = 'touch') 
   fireEvent.pointerUp(root, { pointerId, pointerType, ...at(root, p) })
 
 it('gathers a node tapped by a second finger while the first holds one', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -90,7 +70,7 @@ it('gathers a node tapped by a second finger while the first holds one', () => {
 })
 
 it('keeps gathering after the first tap, while the anchor finger stays down', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -105,7 +85,7 @@ it('keeps gathering after the first tap, while the anchor finger stays down', ()
 })
 
 it('drops a gathered node when it is tapped again', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -125,7 +105,7 @@ it('drops a gathered node when it is tapped again', () => {
 // half-finished move into the new multi-selection, where every gathered node
 // would jump by a delta the user never applied to it.
 it('leaves the anchor where it started, even if it had begun to move', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -143,7 +123,7 @@ it('leaves the anchor where it started, even if it had begun to move', () => {
 
 // A second finger on EMPTY space is the pinch the editor has always had.
 it('still pinches when the second finger lands on empty space', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const transform = () =>
@@ -163,7 +143,7 @@ it('still pinches when the second finger lands on empty space', () => {
 
 // The mouse has shift-click; a second mouse pointer is not a thing.
 it('does not gather for a mouse pointer', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

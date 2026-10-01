@@ -1,47 +1,23 @@
-/**
- * The daemon keeper's own file-reference case. The shared scenarios (other
- * documents offered as id refs under their label, an id ref opening its
- * current path, the missing-ref rule) run against both keepers in
- * `document-page.contract.tsx`. What is left here is where the keepers
- * deliberately differ: a ref the daemon's list does not know as an id is
- * taken as a LEGACY PATH reference and opened as one — the browser page
- * instead leaves the address bar alone (its own file has that case).
- */
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import {
   latestEditorProps,
   resetCapturedEditorProps,
 } from '../test-utils/capturing-spatial-editor.js'
+import { FakeDocumentBackend, MemoryRouterWrapper } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+  ]),
+)
 
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()
@@ -52,28 +28,17 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
-class FakeBackend implements DocumentBackend {
+class FakeBackend extends FakeDocumentBackend {
   constructor(
     public workspaceId: string,
     public path: string,
   ) {
+    super()
     createdBackends.push(this)
   }
-  connect(handlers: DocumentBackendHandlers): void {
-    handlers.onConnected()
-    const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-    handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-  }
-  disconnect(): void {}
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 const createdBackends: FakeBackend[] = []
-
-function MemoryRouterWrapper({ children }: { children: ReactNode }) {
-  return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
-}
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 

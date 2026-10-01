@@ -7,6 +7,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { selectionHighlightPoints } from '../../test-utils/selection-highlight.js'
+import { press } from '../../test-utils/spatial-editor-pointer.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -34,26 +36,13 @@ const doc: SpatialCanvas = {
   facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
 }
 
-function press(el: HTMLElement, type: string, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  return el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      pointerId: 7,
-      button: 0,
-    }),
-  )
-}
-
 it('the selection highlight arcs over jump hops instead of cutting through them', async () => {
   const { container } = render(
     <div style={{ width: 800, height: 600 }}>
       <SpatialEditor defaultTool="select" canvas={doc} onChange={() => {}} theme="light" />
     </div>,
   )
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await vi.waitFor(() => {
     expect(root.querySelectorAll('path[d*="A 5 5"], polyline').length).toBeGreaterThan(0)
   })

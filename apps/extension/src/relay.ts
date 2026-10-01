@@ -5,6 +5,11 @@
  * credential — so its own job is to admit only the hosted app.
  * https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging
  */
+import type {
+  ExtensionHello,
+  ExtensionHelloReply,
+  ExtensionToPage,
+} from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { type AdmittingManifest, admitsOrigin } from './manifest.js'
 
@@ -50,6 +55,17 @@ function originOf(sender: Port['sender']): string | undefined {
   }
 }
 
+/**
+ * By hand, not `extensionHelloSchema.safeParse`: zod in the background
+ * script is 140 KB for one two-field check. `relay.test.ts` holds this to
+ * the schema.
+ */
+function isHello(message: unknown): message is ExtensionHello {
+  return (
+    typeof message === 'object' && message !== null && 'type' in message && message.type === 'hello'
+  )
+}
+
 export function installRelay(api: ExtensionApi, matches: readonly string[]): void {
   const relay = (page: Port) => {
     if (!admitsOrigin(matches, originOf(page.sender))) {
@@ -62,7 +78,7 @@ export function installRelay(api: ExtensionApi, matches: readonly string[]): voi
     native.onDisconnect.addListener(() => {
       const message =
         native.error?.message ?? api.runtime.lastError?.message ?? 'the native host closed'
-      page.postMessage({ type: 'disconnected', message })
+      page.postMessage({ type: 'disconnected', message } satisfies ExtensionToPage)
       page.disconnect()
     })
     page.onDisconnect.addListener(() => native.disconnect())
@@ -72,13 +88,11 @@ export function installRelay(api: ExtensionApi, matches: readonly string[]): voi
 
   api.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
     if (!admitsOrigin(matches, sender.origin)) return
-    if (
-      typeof message === 'object' &&
-      message !== null &&
-      'type' in message &&
-      message.type === 'hello'
-    ) {
-      sendResponse({ type: 'hello', version: api.runtime.getManifest().version })
+    if (isHello(message)) {
+      sendResponse({
+        type: 'hello',
+        version: api.runtime.getManifest().version,
+      } satisfies ExtensionHelloReply)
     }
   })
 }

@@ -8,11 +8,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -28,41 +28,6 @@ const grouped: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(initial: SpatialCanvas) {
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: initial, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-function rightClick(el: HTMLElement, x: number, y: number) {
-  const r = el.getBoundingClientRect()
-  el.dispatchEvent(
-    new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      button: 2,
-    }),
-  )
-}
-
 function nodeById(latest: { canvas: SpatialCanvas }, id: string) {
   const node = latest.canvas.nodes.find((n) => n.id === id)
   if (node === undefined) throw new Error(`node ${id} missing`)
@@ -70,18 +35,18 @@ function nodeById(latest: { canvas: SpatialCanvas }, id: string) {
 }
 
 it('the palette Add group button creates an empty frame at the bottom of the z-order', async () => {
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
   await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(isFrame(latest.canvas.nodes[0] as SpatialNode)).toBe(true)
-  expect(latest.commands).toContain('create-group')
+  expect(latest.kinds).toContain('create-group')
 })
 
 it('dragging the frame moves its contained members and leaves outsiders alone', async () => {
-  const { Host, latest } = makeHost(grouped)
+  const { Host, latest } = makeEditorHost({ initial: grouped })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -100,7 +65,7 @@ it('dragging the frame moves its contained members and leaves outsiders alone', 
 })
 
 it('dragging a member inside the frame moves only that member', async () => {
-  const { Host, latest } = makeHost(grouped)
+  const { Host, latest } = makeEditorHost({ initial: grouped })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -114,7 +79,7 @@ it('dragging a member inside the frame moves only that member', async () => {
 })
 
 it('a real double-click on the frame edits its label; empty commit removes it', async () => {
-  const { Host, latest } = makeHost(grouped)
+  const { Host, latest } = makeEditorHost({ initial: grouped })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -130,7 +95,7 @@ it('a real double-click on the frame edits its label; empty commit removes it', 
   await userEvent.fill(editor, 'phase 1')
   await userEvent.click(root, { position: { x: 700, y: 300 } })
   await vi.waitFor(() => expect(nodeById(latest, 'g1')).toMatchObject({ label: 'phase 1' }))
-  expect(latest.commands).toContain('set-group-label')
+  expect(latest.kinds).toContain('set-group-label')
 
   // Clearing the label through the SAME UI path (fill empty + blur-commit)
   // removes the field — the reducer's empty-removes rule reached from the
@@ -155,7 +120,7 @@ it('Group selection from a multi-selected node frames the selection with padding
     ],
     edges: [],
   }
-  const { Host, latest } = makeHost(twoLoose)
+  const { Host, latest } = makeEditorHost({ initial: twoLoose })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -191,7 +156,7 @@ it('a member painted below the frame is still selectable and draggable', async (
     ],
     edges: [],
   }
-  const { Host, latest } = makeHost(memberBelowFrame)
+  const { Host, latest } = makeEditorHost({ initial: memberBelowFrame })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -206,7 +171,7 @@ it('a member painted below the frame is still selectable and draggable', async (
 })
 
 it('deleting the frame keeps its members', async () => {
-  const { Host, latest } = makeHost(grouped)
+  const { Host, latest } = makeEditorHost({ initial: grouped })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -226,7 +191,7 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
     nodes: [textNode({ id: 'wall', x: -400, y: -300, width: 1600, height: 1200, text: 'wall' })],
     edges: [],
   }
-  const { Host, latest } = makeHost(crowded)
+  const { Host, latest } = makeEditorHost({ initial: crowded })
   const { container } = render(<Host />)
 
   // The wall node covers the palette in the unstyled test env (no app CSS =
@@ -266,7 +231,7 @@ it('Group selection can frame a selection that includes a group frame', async ()
     ],
     edges: [],
   }
-  const { Host, latest } = makeHost(mixed)
+  const { Host, latest } = makeEditorHost({ initial: mixed })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

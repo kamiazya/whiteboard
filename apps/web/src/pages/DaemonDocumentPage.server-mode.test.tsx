@@ -11,33 +11,24 @@ import * as daemonApiClient from '../lib/daemon-api-client.js'
 import * as replicaRefresh from '../lib/replica-refresh.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return { ...actual, listWorkspaces: vi.fn(), listDocuments: vi.fn() }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+  ]),
+)
 
 const built: string[] = []
 
-function stubBackend(name: string) {
-  return class {
-    constructor() {
-      built.push(name)
-    }
-    connect(): void {}
-    disconnect(): void {}
-    pushLocalUpdate(): void {}
-    sendClientReady(): void {}
-  }
-}
-
-vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', () => ({
-  SseBackend: stubBackend('sse'),
-}))
+vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).fakeSseBackendModule({
+    onConstruct: () => built.push('sse'),
+  }),
+)
 
 function Wrapper({ children }: { children: ReactNode }) {
   return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>

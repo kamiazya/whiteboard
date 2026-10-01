@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -32,7 +33,7 @@ function Host() {
 }
 
 async function beginConnectFromWest(container: HTMLElement) {
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.click(root, { position: { x: 380, y: 290 } })
   const west = page.getByTestId('connect-handle-w')
   await expect.element(west).toBeInTheDocument()

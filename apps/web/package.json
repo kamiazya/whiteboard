@@ -21,6 +21,7 @@
     "measure:workspace-record-memory": "node scripts/measure-workspace-record-memory.mjs",
     "smoke:lcp-floor": "LCP_FLOOR_MS=1000 MEASURE_RUNS=5 node scripts/measure-critical-path.mjs",
     "smoke:preview-origin": "node scripts/smoke-preview-origin.mjs",
+    "smoke:pwa-lifecycle": "node scripts/smoke-pwa-lifecycle.mjs",
     "smoke:pwa-precache": "node scripts/check-pwa-precache.mjs"
   },
   "dependencies": {

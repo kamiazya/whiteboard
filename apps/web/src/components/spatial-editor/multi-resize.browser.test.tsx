@@ -5,8 +5,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -22,28 +23,8 @@ const initial: SpatialCanvas = {
 const A = { x: 50, y: 50 }
 const B = { x: 250, y: 50 }
 
-function makeHost() {
-  const latest = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => {
-            latest.canvas = next
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const SIZE = { width: 900, height: 700 }
 
-const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 const outlineOf = (c: HTMLElement) =>
   c.querySelector('[data-testid="selection-overlay"] rect') as SVGRectElement
 const nodeAt = (canvas: SpatialCanvas, id: string) => canvas.nodes.find((n) => n.id === id)
@@ -70,7 +51,7 @@ function selectBoth(root: HTMLElement) {
 }
 
 it('surrounds the whole selection, not just the primary node', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -85,7 +66,7 @@ it('surrounds the whole selection, not just the primary node', () => {
 })
 
 it('resizes every selected node when a handle is dragged', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectBoth(root)
@@ -110,7 +91,7 @@ it('resizes every selected node when a handle is dragged', () => {
 // Connect and Edit act on ONE node. Offering them from handles that surround
 // several says the action applies to all of them, which it does not.
 it('offers no per-node connect or edit affordance while several are selected', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -126,7 +107,7 @@ it('offers no per-node connect or edit affordance while several are selected', (
 // thing. Resizing only the primary from handles that surround the group is
 // the bug the pointer path just stopped having.
 it('scales every selected node from an arrow key on a focused handle', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectBoth(root)
@@ -184,7 +165,7 @@ it('accumulates repeated keypresses even when the parent has not re-rendered', (
 // primary — one of the selected nodes — looked untouched, and Select All on
 // three nodes appeared to skip one.
 it('outlines every selected node, the primary included', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial, size: SIZE })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectBoth(root)

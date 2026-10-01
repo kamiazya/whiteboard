@@ -8,15 +8,13 @@
 import { tenantPeopleRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
 import { workspacePeopleRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import { describe, expect, it } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { tenantPeople, workspacePeople } from './server-people.js'
 
 const refusing =
   (body: unknown, status = 403): typeof globalThis.fetch =>
   async () =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'content-type': 'application/json' },
-    })
+    jsonResponse(body, status)
 
 describe('server-people refusals', () => {
   it.each(

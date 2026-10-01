@@ -1,53 +1,23 @@
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  type RenderOptions,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
-import type { ReactElement, ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { FakeDocumentBackend, renderWithRouterWrapper } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-function MemoryRouterWrapper({ children }: { children: ReactNode }) {
-  return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
-}
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-// The page now reads useNavigate (Settings navigation), so every render
-// needs a Router ancestor. Using RTL's `wrapper` option (rather than hand-
-// wrapping the element) keeps this file's `rerender(...)` calls under the
-// same Router too — RTL re-applies `wrapper` on every rerender.
-function render(ui: ReactElement, options?: RenderOptions) {
-  return rtlRender(ui, { wrapper: MemoryRouterWrapper, ...options })
-}
-
-// Each answers a CANCEL, which the page calls on unmount: a schedule that
-// outlives its page fires against a fetch and a workspace that have moved on,
-// and in a test run the warning lands on whichever case is executing by then.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
-
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-    getDocumentBacklinks: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+    'getDocumentBacklinks',
+  ]),
+)
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
@@ -57,28 +27,14 @@ const mockGetDocumentBacklinks = vi.mocked(daemonApiClient.getDocumentBacklinks)
 // exactly-once disconnect and ordering (old disconnects before new connects).
 const createdBackends: FakeBackend[] = []
 
-class FakeBackend implements DocumentBackend {
-  handlers: DocumentBackendHandlers | null = null
-  connectCount = 0
-  disconnectCount = 0
+class FakeBackend extends FakeDocumentBackend {
   constructor(
     public workspaceId: string,
     public path: string,
   ) {
+    super()
     createdBackends.push(this)
   }
-  connect(handlers: DocumentBackendHandlers): void {
-    this.connectCount += 1
-    this.handlers = handlers
-    handlers.onConnected()
-    const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-    handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-  }
-  disconnect(): void {
-    this.disconnectCount += 1
-  }
-  pushLocalUpdate(): void {}
-  sendClientReady(): void {}
 }
 
 function makeCreateBackend() {
@@ -153,12 +109,7 @@ describe('DaemonDocumentPage versions', () => {
         (input, init) => {
           const url = String(input)
           if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
@@ -168,28 +119,20 @@ describe('DaemonDocumentPage versions', () => {
             url.includes('/workspaces/w1/documents/main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ versions: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ versions: [] }))
           }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  version: {
-                    id: 'v-manual',
-                    path: 'main',
-                    createdAt: '2026-01-01T00:00:00Z',
-                    elementCount: 3,
-                    auto: false,
-                    branchName: 'main',
-                  },
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json' } },
-              ),
+              jsonResponse({
+                version: {
+                  id: 'v-manual',
+                  path: 'main',
+                  createdAt: '2026-01-01T00:00:00Z',
+                  elementCount: 3,
+                  auto: false,
+                  branchName: 'main',
+                },
+              }),
             )
           }
           return Promise.resolve(new Response('{}', { status: 200 }))
@@ -198,7 +141,7 @@ describe('DaemonDocumentPage versions', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -236,12 +179,7 @@ describe('DaemonDocumentPage versions', () => {
         (input, init) => {
           const url = String(input)
           if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
@@ -251,21 +189,11 @@ describe('DaemonDocumentPage versions', () => {
             url.includes('/workspaces/w1/documents/main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ versions: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ versions: [] }))
           }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             // Malformed 200: missing the `version` envelope the schema requires.
-            return Promise.resolve(
-              new Response(JSON.stringify({ id: 'v-manual' }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ id: 'v-manual' }))
           }
           return Promise.resolve(new Response('{}', { status: 200 }))
         },
@@ -273,7 +201,7 @@ describe('DaemonDocumentPage versions', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -300,12 +228,7 @@ describe('DaemonDocumentPage versions', () => {
         (input, init) => {
           const url = String(input)
           if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
@@ -315,12 +238,7 @@ describe('DaemonDocumentPage versions', () => {
             url.includes('/workspaces/w1/documents/main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ versions: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ versions: [] }))
           }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(new Response('nope', { status: 500 }))
@@ -331,7 +249,7 @@ describe('DaemonDocumentPage versions', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -358,7 +276,7 @@ describe('DaemonDocumentPage versions', () => {
       mockListDocuments.mockResolvedValue({ documents: [] })
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -380,30 +298,22 @@ describe('DaemonDocumentPage versions', () => {
         (input) => {
           const url = String(input)
           if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           if (url.includes('/versions')) {
             return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  versions: [
-                    {
-                      id: 'v-1',
-                      path: 'main',
-                      createdAt: '2026-01-01T00:00:00Z',
-                      elementCount: 3,
-                      auto: true,
-                      branchName: 'main',
-                    },
-                  ],
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json' } },
-              ),
+              jsonResponse({
+                versions: [
+                  {
+                    id: 'v-1',
+                    path: 'main',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    elementCount: 3,
+                    auto: true,
+                    branchName: 'main',
+                  },
+                ],
+              }),
             )
           }
           return Promise.resolve(new Response('{}', { status: 200 }))
@@ -412,7 +322,7 @@ describe('DaemonDocumentPage versions', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -449,20 +359,10 @@ describe('DaemonDocumentPage versions', () => {
         (input) => {
           const url = String(input)
           if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           if (url.includes('/versions')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ versions: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ versions: [] }))
           }
           return Promise.resolve(new Response('{}', { status: 200 }))
         },
@@ -470,7 +370,7 @@ describe('DaemonDocumentPage versions', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -503,41 +403,30 @@ describe('DaemonDocumentPage versions', () => {
         (input) => {
           const url = String(input)
           if (url.includes('/restore')) {
-            return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+            return Promise.resolve(jsonResponse({ ok: true }))
           }
           if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           if (url.endsWith('/document')) {
             return Promise.resolve(
-              new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
+              jsonResponse({ kind: 'spatial', canvas: { nodes: [], edges: [] } }),
             )
           }
           if (url.includes('/versions')) {
             return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  versions: [
-                    {
-                      id: 'v-1',
-                      path: 'main',
-                      createdAt: '2026-01-01T00:00:00Z',
-                      elementCount: 3,
-                      auto: true,
-                      branchName: 'main',
-                    },
-                  ],
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json' } },
-              ),
+              jsonResponse({
+                versions: [
+                  {
+                    id: 'v-1',
+                    path: 'main',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    elementCount: 3,
+                    auto: true,
+                    branchName: 'main',
+                  },
+                ],
+              }),
             )
           }
           return Promise.resolve(new Response('{}', { status: 200 }))
@@ -546,7 +435,7 @@ describe('DaemonDocumentPage versions', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -587,7 +476,7 @@ describe('DaemonDocumentPage versions', () => {
       })
 
       // Real transport: the initial load already delivered a snapshot via
-      // onSnapshot (see FakeBackend.connect above); restore broadcasts a
+      // onSnapshot (see FakeDocumentBackend.connect); restore broadcasts a
       // second, incremental update via onRemoteUpdate — not another snapshot.
       const backend = createdBackends[0]!
       const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
@@ -629,23 +518,17 @@ describe('DaemonDocumentPage versions', () => {
       const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
         if (url.includes('/branches')) {
-          return new Response(JSON.stringify({ head: 'main', branches: [{ name: 'main' }] }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          })
+          return jsonResponse({ head: 'main', branches: [{ name: 'main' }] })
         }
         if (url.includes('/versions')) {
-          return new Response(JSON.stringify({ versions: [] }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          })
+          return jsonResponse({ versions: [] })
         }
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
       })
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}

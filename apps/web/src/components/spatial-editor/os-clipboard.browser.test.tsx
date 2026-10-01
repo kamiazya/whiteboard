@@ -8,11 +8,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endNode, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 beforeEach(clearClipboardFragmentForTests)
@@ -21,34 +20,6 @@ const initial: SpatialCanvas = {
   nodes: [textNode({ id: 'a', x: 40, y: 40, width: 160, height: 80, text: 'A' })],
   edges: [],
 }
-
-function makeHost(start: SpatialCanvas = initial) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
 function selectFirst(root: HTMLElement) {
   const r = root.getBoundingClientRect()
@@ -83,7 +54,7 @@ function dispatchClipboard(
 }
 
 it('a native copy writes the fragment as JSON into text/plain', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial: initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectFirst(root)
@@ -107,7 +78,7 @@ it('pasting our JSON from another tab recreates the nodes with reminted ids', ()
     nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'from-other-tab' })],
     edges: [],
   }
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -120,7 +91,7 @@ it('pasting our JSON from another tab recreates the nodes with reminted ids', ()
 })
 
 it('pasting arbitrary text degrades to a text node instead of doing nothing', () => {
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -131,7 +102,7 @@ it('pasting arbitrary text degrades to a text node instead of doing nothing', ()
 })
 
 it('foreign JSON is treated as plain text, never as a fragment', () => {
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const foreign = JSON.stringify({ type: 'excalidraw/clipboard', elements: [] })
@@ -143,14 +114,14 @@ it('foreign JSON is treated as plain text, never as a fragment', () => {
 })
 
 it('an empty clipboard paste is a no-op', () => {
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
   dispatchClipboard(rootOf(container), 'paste', clipboardWith('   '))
   expect(latest.commands).toHaveLength(0)
 })
 
 it('a native cut copies to the OS clipboard AND holds the selection as a ghost', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectFirst(root)
@@ -180,7 +151,7 @@ it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON c
       },
     ],
   }
-  const { Host, latest } = makeHost(wired)
+  const { Host, latest } = makeEditorHost({ initial: wired })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectFirst(root)
@@ -208,7 +179,7 @@ it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON c
 })
 
 it('the in-app store still round-trips when the event carries no clipboardData', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectFirst(root)

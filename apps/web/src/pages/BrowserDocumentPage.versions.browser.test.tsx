@@ -10,10 +10,8 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
@@ -24,18 +22,11 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { renderPage } from '../test-utils/daemon-page-harness.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
 claimIsolatedWhiteboardDb('browserdocumentpageversions')
-
-function render(ui: ReactElement) {
-  return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
-    </div>,
-  )
-}
 
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
@@ -91,7 +82,7 @@ async function storedBody(documentId: string): Promise<string> {
 }
 
 async function openNotePage() {
-  const view = render(<BrowserDocumentPage initialPath="note-a" />)
+  const view = renderPage(<BrowserDocumentPage initialPath="note-a" />)
   await waitFor(() => expect(document.querySelector('.cm-content')).not.toBeNull(), {
     timeout: 10_000,
   })
@@ -100,7 +91,7 @@ async function openNotePage() {
 }
 
 async function openPage() {
-  const view = render(<BrowserDocumentPage initialPath="canvas-a" />)
+  const view = renderPage(<BrowserDocumentPage initialPath="canvas-a" />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })

@@ -8,6 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -33,9 +34,6 @@ function Host({ onOpenInEditor }: { onOpenInEditor?: (nodeId: string, text: stri
     </div>
   )
 }
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
 async function openNodeCatalog(container: HTMLElement): Promise<void> {
   const root = rootOf(container)

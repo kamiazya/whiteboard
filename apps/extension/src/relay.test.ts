@@ -3,6 +3,11 @@
  * host process and pass messages both ways, refusing a page the manifest
  * does not admit.
  */
+import {
+  extensionHelloReplySchema,
+  extensionHelloSchema,
+  extensionToPageSchema,
+} from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { describe, expect, it } from 'vitest'
 import { type ExtensionApi, installRelay, type Port } from './relay.js'
@@ -111,13 +116,38 @@ describe('installRelay', () => {
     expect(page.sent).toEqual([
       { type: 'disconnected', message: 'Specified native messaging host not found.' },
     ])
+    // The page reads it through this schema; a field it does not know is
+    // stripped by the parse and fails the equality.
+    expect(page.sent.map((m) => extensionToPageSchema.parse(m))).toEqual(page.sent)
     expect(page.disconnected).toBe(true)
   })
 
   it('answers an admitted page that asks whether it is installed', async () => {
     const fake = fakeApi()
     installRelay(fake.api, MATCHES)
-    expect(await fake.message({ type: 'hello' }, APP)).toEqual({ type: 'hello', version: '9.9.9' })
+    const reply = await fake.message({ type: 'hello' }, APP)
+    expect(reply).toEqual({ type: 'hello', version: '9.9.9' })
+    expect(extensionHelloReplySchema.parse(reply)).toEqual(reply)
+  })
+
+  // The hello is read by hand so the background script does not carry zod;
+  // this holds that reader to `extensionHelloSchema`.
+  it.each([
+    [{ type: 'hello' }],
+    [{ type: 'hello', extra: 1 }],
+    [{ type: 'ping' }],
+    [{}],
+    [null],
+    ['hello'],
+  ])('answers %j exactly when extensionHelloSchema accepts it', async (message) => {
+    const fake = fakeApi()
+    installRelay(fake.api, MATCHES)
+    // A refused hello is never answered, so the reply is raced against a tick.
+    const reply = await Promise.race([
+      fake.message(message, APP),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 0)),
+    ])
+    expect(reply !== undefined).toBe(extensionHelloSchema.safeParse(message).success)
   })
 
   // Firefox: the page reaches the relay through the content script, whose

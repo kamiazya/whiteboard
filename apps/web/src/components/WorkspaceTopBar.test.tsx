@@ -10,13 +10,11 @@ vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.f
 
 import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 
 function mkNamesOk() {
-  return new Response(JSON.stringify({ workspace: 'My WS', documents: {}, pinned: [] }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return jsonResponse({ workspace: 'My WS', documents: {}, pinned: [] })
 }
 
 function renderBar(overrides?: { onNavigateBack?: () => void }) {
@@ -87,22 +85,12 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 
     // The newer workspace's response arrives first; the stale ws_a response
     // arrives later and must not clobber it.
-    resolveB(
-      new Response(
-        JSON.stringify({ workspace: 'B', documents: { 'shared-path': 'Fresh B' }, pinned: [] }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    )
+    resolveB(jsonResponse({ workspace: 'B', documents: { 'shared-path': 'Fresh B' }, pinned: [] }))
     await waitFor(() => {
       expect(screen.getByText('Fresh B')).toBeTruthy()
     })
 
-    resolveA(
-      new Response(
-        JSON.stringify({ workspace: 'A', documents: { 'shared-path': 'Stale A' }, pinned: [] }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    )
+    resolveA(jsonResponse({ workspace: 'A', documents: { 'shared-path': 'Stale A' }, pinned: [] }))
 
     await waitFor(() => {
       expect(screen.queryByText('Stale A')).toBeNull()

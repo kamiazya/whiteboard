@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -19,52 +20,28 @@ afterEach(cleanup)
 const PNG_HREF =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
-function makeHost(initial: SpatialCanvas) {
-  const latest: {
-    canvas: SpatialCanvas
-    commands: string[]
-    stored: File[]
-    opened: string[]
-  } = {
-    canvas: initial,
-    commands: [],
-    stored: [],
-    opened: [],
+// The host's storage seam, recording what it was asked to store and open.
+// The references are the refs the store mints, in order — data, so they cross
+// to the layout worker like a real page's object URLs do.
+function imageStore() {
+  const stored: File[] = []
+  const opened: string[] = []
+  const editorProps = {
+    onAddImage: (file: File) => {
+      stored.push(file)
+      return Promise.resolve(`asset:${stored.length}`)
+    },
+    references: referenceWire(new Map(), {
+      extras: new Map(
+        [1, 2, 3, 4].map((n) => [`asset:${n}`, { image: { href: PNG_HREF, alt: 'stored image' } }]),
+      ),
+    }),
+    isImageFileRef: (file: string) => file.startsWith('asset:'),
+    onOpenFileRef: (file: string) => {
+      opened.push(file)
+    },
   }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-          onAddImage={(file) => {
-            latest.stored.push(file)
-            return Promise.resolve(`asset:${latest.stored.length}`)
-          }}
-          references={referenceWire(new Map(), {
-            // The refs the store above mints, in order — data, so it crosses
-            // to the layout worker like a real page's object URLs do.
-            extras: new Map(
-              [1, 2, 3, 4].map((n) => [
-                `asset:${n}`,
-                { image: { href: PNG_HREF, alt: 'stored image' } },
-              ]),
-            ),
-          })}
-          isImageFileRef={(file) => file.startsWith('asset:')}
-          onOpenFileRef={(file) => latest.opened.push(file)}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
+  return { stored, opened, editorProps }
 }
 
 function pngFile(): File {
@@ -72,7 +49,8 @@ function pngFile(): File {
 }
 
 it('picking an image via the + menu stores it and renders an <image> in the node', async () => {
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { stored, editorProps } = imageStore()
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] }, editorProps })
   const { container } = render(<Host />)
 
   fireEvent.click(container.querySelector('[data-testid="add-button"]') as HTMLElement)
@@ -87,7 +65,7 @@ it('picking an image via the + menu stores it and renders an <image> in the node
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
   expect(nodeFile(latest.canvas.nodes[0] as SpatialNode)).toBe('asset:1')
-  expect(latest.stored[0]?.name).toBe('chart.png')
+  expect(stored[0]?.name).toBe('chart.png')
 
   await vi.waitFor(() => {
     const image = container.querySelector('[data-testid="viewport-transform"] svg image')
@@ -98,7 +76,8 @@ it('picking an image via the + menu stores it and renders an <image> in the node
 })
 
 it('dropping an image file creates the node at the drop point', async () => {
-  const { Host, latest } = makeHost({ nodes: [], edges: [] })
+  const { editorProps } = imageStore()
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] }, editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -153,13 +132,14 @@ it('image references get no canvas actions: double-click never navigates, menu s
     nodes: [fileNode({ id: 'i1', x: 100, y: 100, width: 240, height: 180, file: 'asset:img' })],
     edges: [],
   }
-  const { Host, latest } = makeHost(withImage)
+  const { opened, editorProps } = imageStore()
+  const { Host } = makeEditorHost({ initial: withImage, editorProps })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   await new Promise((resolve) => setTimeout(resolve, 100))
-  expect(latest.opened).toEqual([])
+  expect(opened).toEqual([])
 
   const r = root.getBoundingClientRect()
   root.dispatchEvent(

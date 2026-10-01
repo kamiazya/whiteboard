@@ -8,6 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -37,7 +38,7 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
     )
   }
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
@@ -125,7 +126,7 @@ it('a tag finished in the panel’s tag row lands on every selected box, keeping
     )
   }
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   // Select A, then shift-select B, and open the panel on A.
   fireEvent.pointerDown(root, {
@@ -195,7 +196,7 @@ it('two tags finished in the panel under a deferred parent both land on the box'
     )
   }
   const { container } = render(<DeferredHost />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement

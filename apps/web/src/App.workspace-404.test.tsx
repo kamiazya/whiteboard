@@ -11,6 +11,7 @@ import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import { App } from './App.js'
 import type { ProviderState } from './lib/provider.js'
 import './pages/DaemonIndexPage.js'
+import { jsonResponse } from './test-utils/json-response.js'
 
 vi.mock('./components/status/NotFoundPage.js', () => ({
   NotFoundPage: () => <div data-testid="not-found-page" />,
@@ -36,13 +37,6 @@ const GONE_ID = '01M3H9HEHZJE9K5MA1K2BNG644'
 const LIVE_ID = '01M3HS5Q8P7XXVNNMYGMCPFA5B'
 const ALSO_GONE_ID = '01M3HS5Q8P7XXVNNMYGMCPFA5C'
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
-
 function installDaemon(
   listed: readonly string[],
   refused: readonly string[] = [GONE_ID],
@@ -55,14 +49,16 @@ function installDaemon(
       requests.push(`${init?.method ?? 'GET'} ${url}`)
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(
-          json({ workspaces: listed.map((workspaceId) => ({ workspaceId, documentCount: 0 })) }),
+          jsonResponse({
+            workspaces: listed.map((workspaceId) => ({ workspaceId, documentCount: 0 })),
+          }),
         )
       }
-      if (url.endsWith('/api/fonts')) return Promise.resolve(json({ fonts: [] }))
+      if (url.endsWith('/api/fonts')) return Promise.resolve(jsonResponse({ fonts: [] }))
       const refusedId = refused.find((id) => url.includes(id))
       if (refusedId !== undefined) {
         return Promise.resolve(
-          json(
+          jsonResponse(
             {
               error: 'workspace_not_found',
               message: `Workspace not found: "${refusedId}". Pass createWorkspace: true on this wb_workspace_edit call.`,
@@ -71,9 +67,9 @@ function installDaemon(
           ),
         )
       }
-      if (url.endsWith('/names')) return Promise.resolve(json({ names: [] }))
-      if (url.endsWith('/document-tags')) return Promise.resolve(json({ tags: [] }))
-      return Promise.resolve(json({ documents: [] }))
+      if (url.endsWith('/names')) return Promise.resolve(jsonResponse({ names: [] }))
+      if (url.endsWith('/document-tags')) return Promise.resolve(jsonResponse({ tags: [] }))
+      return Promise.resolve(jsonResponse({ documents: [] }))
     }),
   )
   return { requests }

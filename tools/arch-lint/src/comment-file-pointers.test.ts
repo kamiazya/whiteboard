@@ -90,8 +90,6 @@ const BARE_TEST_FILE = /(?<![\w./*-])([\w][\w.-]*\.test\.tsx?)(?![\w-]|\.\w)/g
 const DELIBERATE: Record<string, string> = {
   'apps/web/src/lib/keeper-parity.test.ts#src/hooks/useBranches.ts':
     'the comment is about its ABSENCE — it stopped reaching the daemon and the ledger refuses an entry naming a module that no longer does',
-  'apps/web/src/lib/keeper-parity.test.ts#branches-backend.ts':
-    'same sentence: what the branch surface WAS, kept so the reason the entry went is readable',
   'apps/web/src/lib/provider.ts#provider.capability-reach.test.ts':
     'past tense about a deleted guard — "could never have refused" is the argument for deleting it, and a present-tense pointer would invert it',
   'packages/mcp-server/src/server/release/stryker-targets.test.ts#api-contracts/libraries.ts':

@@ -7,12 +7,11 @@
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -57,35 +56,12 @@ const start: SpatialCanvas = {
   comments: [FREE, OTHER],
 }
 
-function makeHost(threads: readonly CommentThread[] = [THREAD]) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
-    commands: [],
-  }
+function sequentialIds() {
   let seq = 0
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          threads={threads}
-          createId={() => {
-            seq += 1
-            return `id-${seq}`
-          }}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
+  return () => {
+    seq += 1
+    return `id-${seq}`
   }
-  return { Host, latest }
 }
 
 function of(commands: readonly EditorCommand[], kind: EditorCommand['kind']) {
@@ -115,7 +91,10 @@ function pressOtherBubble(root: HTMLElement, pointerId: number) {
 }
 
 it('a press opens the card with the conversation and a reply box already open', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -132,7 +111,10 @@ it('a press opens the card with the conversation and a reply box already open', 
 })
 
 it('the card commits a reply from its own box', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -153,7 +135,10 @@ it('the card commits a reply from its own box', async () => {
 })
 
 it('Resolve sits on the card itself, not only in a menu', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -171,7 +156,10 @@ it('Resolve sits on the card itself, not only in a menu', async () => {
 })
 
 it('the context menu drops Reply, since the card is where a reply is written', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -203,7 +191,10 @@ function draftText(): string {
 }
 
 it('an unsent draft does not follow the reader to the next conversation', async () => {
-  const { Host, latest } = makeHost([THREAD, OTHER_THREAD])
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD, OTHER_THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -231,7 +222,10 @@ it('an unsent draft does not follow the reader to the next conversation', async 
 })
 
 it('Escape shuts the card straight after it opens, with no click in between', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -246,7 +240,10 @@ it('Escape shuts the card straight after it opens, with no click in between', as
 })
 
 it('a press on the canvas away from the card shuts it, with no × to find', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -262,7 +259,10 @@ it('a press on the canvas away from the card shuts it, with no × to find', asyn
 it('a card on a bubble near the edge opens fully inside the root, reply box reachable', async () => {
   // The bubble at (600, 450) puts the card's natural place past the
   // 800×600 root's right and bottom edges. Slid inside, not clipped.
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -282,7 +282,10 @@ it('a card on a bubble near the edge opens fully inside the root, reply box reac
 })
 
 it('a cancelled press on a comment opens nothing later', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [THREAD], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -314,7 +317,10 @@ it('the card draws its conversation as markdown and answers it in a markdown edi
     ...THREAD,
     messages: [{ id: 'm1', body: '**tighten** this', createdAt: '2026-09-02T00:00:00.000Z' }],
   }
-  const { Host } = makeHost([thread])
+  const { Host } = makeEditorHost({
+    initial: start,
+    editorProps: { threads: [thread], createId: sequentialIds() },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)

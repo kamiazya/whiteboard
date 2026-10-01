@@ -33,11 +33,15 @@ const apiPathSchema = z.string().refine((path) => {
   return resolved.host === 'localhost' && `${resolved.pathname}${resolved.search}` === path
 }, 'must be a path under /api/ that the URL parser leaves unchanged')
 
+export const bridgeMethodSchema = z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'])
+
+export type BridgeMethod = z.infer<typeof bridgeMethodSchema>
+
 export const pageToHostSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('request'),
     id: idSchema,
-    method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']),
+    method: bridgeMethodSchema,
     path: apiPathSchema,
     headers: z.record(z.string(), z.string()),
     /** base64 */
@@ -79,10 +83,12 @@ export type ExtensionToPage = z.infer<typeof extensionToPageSchema>
 
 /** A one-off message the page sends to learn whether the extension is there. */
 export const extensionHelloSchema = z.object({ type: z.literal('hello') })
+export type ExtensionHello = z.infer<typeof extensionHelloSchema>
 export const extensionHelloReplySchema = z.object({
   type: z.literal('hello'),
   version: z.string(),
 })
+export type ExtensionHelloReply = z.infer<typeof extensionHelloReplySchema>
 
 /**
  * Firefox lets no page message an extension, so the extension's content
@@ -100,12 +106,27 @@ export const windowFromExtensionSchema = z.discriminatedUnion('kind', [
 ])
 export type WindowFromExtension = z.infer<typeof windowFromExtensionSchema>
 
-/** What the page posts to the content script. */
+/** A window message without the two fields every sender fills in the same way. */
+type WithoutEnvelope<M> = M extends M ? Omit<M, 'channel' | 'from'> : never
+export type WindowFromExtensionBody = WithoutEnvelope<WindowFromExtension>
+
+/**
+ * What the page posts to the content script. The content script reads only
+ * the envelope — the host validates each request — so it parses with the
+ * schema whose `message` stays `unknown`; the page's own sender is typed by
+ * the one that names `pageToHostSchema`.
+ */
 const fromPage = { channel: z.literal(WINDOW_BRIDGE_CHANNEL), from: z.literal('page') }
-const windowFromPageSchema = z.discriminatedUnion('kind', [
-  z.object({ ...fromPage, kind: z.literal('hello') }),
-  z.object({ ...fromPage, kind: z.literal('connect'), port: idSchema }),
-  z.object({ ...fromPage, kind: z.literal('message'), port: idSchema, message: pageToHostSchema }),
-  z.object({ ...fromPage, kind: z.literal('disconnect'), port: idSchema }),
-])
+function windowFromPage<M extends z.ZodType>(message: M) {
+  return z.discriminatedUnion('kind', [
+    z.object({ ...fromPage, kind: z.literal('hello') }),
+    z.object({ ...fromPage, kind: z.literal('connect'), port: idSchema }),
+    z.object({ ...fromPage, kind: z.literal('message'), port: idSchema, message }),
+    z.object({ ...fromPage, kind: z.literal('disconnect'), port: idSchema }),
+  ])
+}
+export const windowFromPageSchema = windowFromPage(pageToHostSchema)
 export type WindowFromPage = z.infer<typeof windowFromPageSchema>
+export type WindowFromPageBody = WithoutEnvelope<WindowFromPage>
+export const windowFromPageEnvelopeSchema = windowFromPage(z.unknown())
+export type WindowFromPageEnvelope = z.infer<typeof windowFromPageEnvelopeSchema>

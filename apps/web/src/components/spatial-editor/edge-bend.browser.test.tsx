@@ -5,10 +5,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -29,24 +28,7 @@ const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({
   ],
 })
 
-function makeHost(start: SpatialCanvas) {
-  const latest: { canvas: SpatialCanvas } = { canvas: start }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const SIZE = { width: 900, height: 600 }
 
 const storedBends = (canvas: SpatialCanvas) => canvas.edges[0]?.bends
 
@@ -117,7 +99,7 @@ const waitForOne = async (container: HTMLElement, testId: string) =>
   })
 
 it('dragging the ghost handle on a straight run stores a bend the line is drawn through', async () => {
-  const { Host, latest } = makeHost(board())
+  const { Host, latest } = makeEditorHost({ initial: board(), size: SIZE })
   const { container } = render(<Host />)
   await selectTheEdge(container)
 
@@ -140,7 +122,7 @@ it('dragging the ghost handle on a straight run stores a bend the line is drawn 
 })
 
 it('a stored bend gets a grab handle, and a double press takes it back out', async () => {
-  const { Host, latest } = makeHost(board([{ x: 320, y: 300 }]))
+  const { Host, latest } = makeEditorHost({ initial: board([{ x: 320, y: 300 }]), size: SIZE })
   const { container } = render(<Host />)
   await selectTheEdge(container)
 
@@ -150,7 +132,7 @@ it('a stored bend gets a grab handle, and a double press takes it back out', asy
 })
 
 it('an arrow key on a focused bend moves it, so the affordance is not pointer-only', async () => {
-  const { Host, latest } = makeHost(board([{ x: 320, y: 300 }]))
+  const { Host, latest } = makeEditorHost({ initial: board([{ x: 320, y: 300 }]), size: SIZE })
   const { container } = render(<Host />)
   await selectTheEdge(container)
 
@@ -185,7 +167,7 @@ it('bends a STROKE the same way, from the same handle', async () => {
       },
     ],
   }
-  const { Host, latest } = makeHost(inkBoard)
+  const { Host, latest } = makeEditorHost({ initial: inkBoard, size: SIZE })
   const { container } = render(<Host />)
   await selectTheEdge(container)
 

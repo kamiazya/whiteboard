@@ -20,6 +20,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { fc } from '../../test-utils/fast-check.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -157,7 +158,7 @@ it('a hand drag from a fresh spot pans, whatever gesture came before it', async 
     fc.asyncProperty(fc.array(gestureArb, { minLength: 1, maxLength: 5 }), async (gestures) => {
       const { container } = render(<Host />)
       try {
-        const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+        const root = rootOf(container)
         const rect = root.getBoundingClientRect()
         const client = (p: Pt): Pt => ({ x: rect.left + p.x, y: rect.top + p.y })
 

@@ -19,6 +19,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -113,7 +114,7 @@ function expectOver(root: HTMLElement, testId: string, at: { x: number; y: numbe
 
 it('hand tool pans from a press on a link node embed facade', async () => {
   const { container } = render(<Host tool="hand" />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await screen.findByTestId('link-embed-facade')
   expectOver(root, 'link-embed-facade', FACADE)
 
@@ -126,7 +127,7 @@ it('hand tool pans from a press on a link node embed facade', async () => {
 
 it('hand tool pans from a press on a live link embed', async () => {
   const { container } = render(<Host tool="select" />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.click(await screen.findByTestId('link-embed-facade'))
   await screen.findByTestId('link-embed-frame')
   await userEvent.click(screen.getByRole('button', { name: 'Hand (pan)' }))

@@ -6,10 +6,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -23,35 +22,7 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(start: SpatialCanvas, lockedNodes: readonly string[] = []) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-          lockedNodeIds={new Set(lockedNodes)}
-          onToggleNodeLock={() => {}}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+const SIZE = { width: 900, height: 700 }
 
 function selectAll(root: HTMLElement) {
   fireEvent.keyDown(root, { code: 'KeyA', key: 'a', metaKey: true })
@@ -76,7 +47,7 @@ function clickItem(container: HTMLElement, label: string) {
 const byId = (canvas: SpatialCanvas, id: string) => canvas.nodes.find((node) => node.id === id)!
 
 it('tidies the selection in one undo step', () => {
-  const { Host, latest } = makeHost(initial)
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -93,7 +64,7 @@ it('tidies the selection in one undo step', () => {
 })
 
 it('offers no Tidy for a single-node selection', () => {
-  const { Host } = makeHost(initial)
+  const { Host } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -122,7 +93,7 @@ it('never moves a locked node — it stands as a fixed obstacle, and the column'
     ],
     edges: [],
   }
-  const { Host, latest } = makeHost(withLocked, ['c'])
+  const { Host, latest } = makeEditorHost({ initial: withLocked, size: SIZE, lockedNodes: ['c'] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -157,7 +128,7 @@ it('orders a row by its edges: a hub at the end swaps with the nearest box it fa
       },
     ],
   }
-  const { Host, latest } = makeHost(board)
+  const { Host, latest } = makeEditorHost({ initial: board, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -169,7 +140,7 @@ it('orders a row by its edges: a hub at the end swaps with the nearest box it fa
 })
 
 it('tidies the whole canvas from the empty-space menu', () => {
-  const { Host, latest } = makeHost(initial)
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -193,7 +164,7 @@ it('grows a group around a member at its edge, in the same undo step as the move
     ],
     edges: [],
   }
-  const { Host, latest } = makeHost(framed)
+  const { Host, latest } = makeEditorHost({ initial: framed, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -211,7 +182,7 @@ it('grows a group around a member at its edge, in the same undo step as the move
 })
 
 it('emits nothing when the canvas is already tidy', () => {
-  const { Host, latest } = makeHost(initial)
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

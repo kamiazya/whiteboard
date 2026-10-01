@@ -9,10 +9,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -39,28 +39,6 @@ const free: SpatialCanvas = {
   ],
 }
 
-function makeHost(start: SpatialCanvas) {
-  const latest = { canvas: start }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-
 async function openInkMenuAt(container: HTMLElement, at: { x: number; y: number }) {
   const root = rootOf(container)
   const rect = root.getBoundingClientRect()
@@ -75,7 +53,7 @@ async function openInkMenuAt(container: HTMLElement, at: { x: number; y: number 
 }
 
 it('gives a stroke an arrowhead', async () => {
-  const { Host, latest } = makeHost(free)
+  const { Host, latest } = makeEditorHost({ initial: free })
   const { container } = render(<Host />)
 
   await openInkMenuAt(container, { x: 350, y: 300 })
@@ -91,7 +69,7 @@ it('ticks None on a stroke attached to a box, which is not a relation', async ()
   // apart by the `kind` a line end carries — asking whether the end names a
   // node says yes for both, so this menu showed an attached stroke a
   // Forward arrowhead it has not got.
-  const { Host } = makeHost(attached)
+  const { Host } = makeEditorHost({ initial: attached })
   const { container } = render(<Host />)
 
   await openInkMenuAt(container, { x: 488, y: 388 })
@@ -105,7 +83,7 @@ it('ticks None on a stroke attached to a box, which is not a relation', async ()
 })
 
 it('pins the side an attached end leaves the box from', async () => {
-  const { Host, latest } = makeHost(attached)
+  const { Host, latest } = makeEditorHost({ initial: attached })
   const { container } = render(<Host />)
 
   // Just short of the free end, where the last stretch runs whatever the
@@ -125,7 +103,7 @@ it('pins the side an attached end leaves the box from', async () => {
 it('offers no side row for a stroke that meets no box', async () => {
   // A free end has no side to pin, and five choices that write nothing is
   // worse than an absent row.
-  const { Host } = makeHost(free)
+  const { Host } = makeEditorHost({ initial: free })
   const { container } = render(<Host />)
 
   await openInkMenuAt(container, { x: 350, y: 300 })

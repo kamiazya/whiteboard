@@ -12,37 +12,15 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { resolveInkGroup } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { STROKE_GROUP_PAUSE_MS } from '../../lib/spatial/stroke-group.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
-const start: SpatialCanvas = { nodes: [], edges: [] }
-
-function makeHost(from: SpatialCanvas = start) {
-  const latest = { canvas: from }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(from)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="draw"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+const empty: SpatialCanvas = { nodes: [], edges: [] }
 
 function pointerAt(root: HTMLElement) {
   const rect = root.getBoundingClientRect()
@@ -86,7 +64,7 @@ function drawStroke(root: HTMLElement, path: readonly (readonly [number, number]
 }
 
 it('draws the path the pointer took as ink', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
 
   drawStroke(rootOf(container), [
@@ -114,7 +92,7 @@ it('draws the path the pointer took as ink', async () => {
 })
 
 it('shows the stroke under the pen, and takes the draft away at the release', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const at = pointerAt(root)
@@ -133,7 +111,7 @@ it('shows the stroke under the pen, and takes the draft away at the release', as
 })
 
 it('leaves the board alone when the pen only taps it', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
 
   drawStroke(rootOf(container), [
@@ -146,7 +124,7 @@ it('leaves the board alone when the pen only taps it', async () => {
 })
 
 it('hands the drawn ink to the select tool, which can then delete it', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -177,9 +155,12 @@ it('selects ink drawn ACROSS a note, where the note is what lies under the press
   // ink is what a press on it selects. Before this the node won at the first
   // branch and the line hit-test never ran, leaving ink over any content
   // unselectable and therefore undeletable except by undo.
-  const { Host, latest } = makeHost({
-    nodes: [textNode({ id: 'a', x: 250, y: 200, width: 300, height: 200, text: 'note' })],
-    edges: [],
+  const { Host, latest } = makeEditorHost({
+    initial: {
+      nodes: [textNode({ id: 'a', x: 250, y: 200, width: 300, height: 200, text: 'note' })],
+      edges: [],
+    },
+    tool: 'draw',
   })
   const { container } = render(<Host />)
   const root = rootOf(container)
@@ -230,7 +211,7 @@ it('rubber-bands over ink and takes only the strokes the band touched', async ()
   // the marquee is the gesture everybody reaches for — it looked at nodes
   // only, so dragging a band over ink selected nothing and Delete removed
   // nothing.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -290,7 +271,7 @@ it('offers Delete on the ink itself, for a device with no Delete key', async () 
   // target out of `canvas.edges`, where a LINE is not, so a press on ink fell
   // through to the empty-canvas menu. A phone has no Delete key, which makes
   // that the whole affordance — ink you can draw and cannot take back.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -334,7 +315,7 @@ it('colours the whole mark from the ink menu', async () => {
   // The whole MARK, not the stroke pressed: a handwritten character is
   // several strokes, and the other verbs on this menu already act on all of
   // them. Recolouring one at a time is a character in two colours.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -374,7 +355,7 @@ it('joins strokes written one after another into one mark', async () => {
   // A handwritten character is several strokes and a person means one thing
   // by them. Consecutive strokes near each other carry the same group, so
   // everything downstream — selection, Delete — treats them as one.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -396,7 +377,7 @@ it('joins strokes written one after another into one mark', async () => {
 it('selects and deletes the whole mark from a press on one of its strokes', async () => {
   // The point of grouping. A cross is two strokes; pressing either selects
   // both, and Delete takes the mark rather than half of it.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -434,7 +415,7 @@ it('breaks a mark apart from the menu, when the guess was wrong', async () => {
   // Strokes are joined automatically, so there has to be a way to say the
   // guess was wrong. After Ungroup each stroke stands alone: a press selects
   // one, and Delete takes one.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -481,7 +462,7 @@ it('shift-clicking ink adds it to a selection instead of replacing it', async ()
   // shift branch never ran for ink, and the press fell through to the one
   // that COLLAPSES the node extras and REPLACES the ink selection. Holding
   // shift therefore destroyed the selection it was meant to grow.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -518,9 +499,12 @@ it('holds a note and a stroke together, and one Delete takes both', async () => 
   // by shift-click. Worth its own case because the two halves live in
   // different state (`selectionState` for nodes, `selectedInkIds` for ink)
   // and only Delete puts them back together.
-  const { Host, latest } = makeHost({
-    nodes: [textNode({ id: 'a', x: 500, y: 120, width: 160, height: 90, text: 'note' })],
-    edges: [],
+  const { Host, latest } = makeEditorHost({
+    initial: {
+      nodes: [textNode({ id: 'a', x: 500, y: 120, width: 160, height: 90, text: 'note' })],
+      edges: [],
+    },
+    tool: 'draw',
   })
   const { container } = render(<Host />)
   const root = rootOf(container)
@@ -560,7 +544,7 @@ it('joins two marks the drawer meant as one, from the menu', async () => {
   // sittings a pause fell between — could never be rejoined. The automatic
   // grouping is a guess in both directions, and only one of them had an
   // escape.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: empty, tool: 'draw' })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

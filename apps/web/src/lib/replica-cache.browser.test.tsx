@@ -18,6 +18,7 @@ import { LoroDoc, VersionVector } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { connectReplicaKeeper, markReplica, openDocumentStore } from './replica-store.js'
@@ -44,14 +45,11 @@ function snapshotStub(record: LoroDoc, status = 200): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/replica-key')) {
-      return new Response(
-        JSON.stringify({
-          workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-          workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-          tier: 'offline',
-        }),
-        { status: 200 },
-      )
+      return jsonResponse({
+        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
+        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
+        tier: 'offline',
+      })
     }
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       if (status !== 200) return new Response('nope', { status })
@@ -237,7 +235,7 @@ describe('cacheDaemonWorkspace', () => {
       fetch: (async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.endsWith('/replica-key')) {
-          return new Response(JSON.stringify({ error: 'not_a_member' }), { status: 403 })
+          return jsonResponse({ error: 'not_a_member' }, 403)
         }
         throw new Error(`unexpected fetch: ${url}`)
       }) as typeof globalThis.fetch,

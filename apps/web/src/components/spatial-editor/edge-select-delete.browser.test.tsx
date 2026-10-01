@@ -5,11 +5,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -29,62 +28,18 @@ function makeStart(): SpatialCanvas {
   }
 }
 
-function makeHost() {
-  const start = makeStart()
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-/**
- * Element-relative click position ON the rendered edge, derived from the
- * committed polyline's own client rect. Hardcoded canvas coordinates break
- * under the vitest browser iframe's UI scaling (the page renders scaled, so
- * a fixed element-relative point lands elsewhere in canvas space depending
- * on the current scale); rect-derived positions live in the same scaled
- * space as the click and stay correct at any zoom.
- */
-function edgeMidpointPosition(container: HTMLElement): { x: number; y: number } {
-  const root = rootOf(container)
-  const polyline = container.querySelector(
-    '[data-testid="spatial-editor"] svg polyline',
-  ) as SVGPolylineElement
-  const edgeRect = polyline.getBoundingClientRect()
-  const rootRect = root.getBoundingClientRect()
-  return {
-    x: edgeRect.x + edgeRect.width / 2 - rootRect.x,
-    y: edgeRect.y + edgeRect.height / 2 - rootRect.y,
-  }
-}
-
 it('clicking an edge selects it and Delete removes it', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.click(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
   )
 
   rootOf(container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
   await vi.waitFor(() => expect(latest.canvas.edges).toHaveLength(0))
-  expect(latest.commands).toContain('delete-edge')
+  expect(latest.kinds).toContain('delete-edge')
   // Nodes are untouched.
   expect(latest.canvas.nodes).toHaveLength(2)
 })
@@ -97,10 +52,10 @@ it('a real keyboard Delete works after a cold edge click (focus lands in the edi
   // editor takes focus on edge selection, the real Delete lands on <body>
   // and nothing happens. userEvent.keyboard routes through activeElement,
   // pinning the real path.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.click(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
   )
@@ -110,10 +65,10 @@ it('a real keyboard Delete works after a cold edge click (focus lands in the edi
 })
 
 it('a click NEAR but not on the edge selects nothing', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  const mid = edgeMidpointPosition(container)
+  const mid = edgeMidpoint(container)
   await userEvent.click(rootOf(container), { position: { x: mid.x, y: mid.y + 50 } })
   expect(container.querySelector('[data-testid="edge-selection-highlight"]')).toBeNull()
 
@@ -122,10 +77,10 @@ it('a click NEAR but not on the edge selects nothing', async () => {
 })
 
 it('Escape and empty-space clicks clear the edge selection without deleting', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.click(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
   )
@@ -136,7 +91,7 @@ it('Escape and empty-space clicks clear the edge selection without deleting', as
   expect(latest.canvas.edges).toHaveLength(1)
 
   // The pointer path of the same policy: reselect, then click empty space.
-  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.click(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
   )
@@ -155,10 +110,10 @@ it('Shift-clicking a node ADDS it to a held edge selection, and Delete takes bot
   // thing got the verb. Both take the whole selection now, so the reason is
   // gone. Rewritten rather than deleted, because a reader finding the old
   // title in `git log` should land on what replaced it.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.click(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
   )
@@ -176,7 +131,7 @@ it('Shift-clicking a node ADDS it to a held edge selection, and Delete takes bot
 })
 
 it('Shift-clicking a second edge adds it, and one Delete takes the pair', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -210,7 +165,7 @@ it('a band over both ends of a relation takes the relation with them', async () 
   // BOTH the nodes it connects, never by where the drawn line happens to
   // run. Both boxes of the fixture sit in the band here, so the edge comes
   // along and one Delete clears the board.
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -254,10 +209,10 @@ it('a band over both ends of a relation takes the relation with them', async () 
 })
 
 it('a marquee drag that starts on an edge line ends with no edge selected', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  const mid = edgeMidpointPosition(container)
+  const mid = edgeMidpoint(container)
   // Drag from the edge line into empty space below: this is a marquee, not
   // an edge click, so the press-time edge selection must not survive it.
   await userEvent.dragAndDrop(rootOf(container), rootOf(container), {
@@ -269,5 +224,5 @@ it('a marquee drag that starts on an edge line ends with no edge selected', asyn
   )
   rootOf(container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
   expect(latest.canvas.edges).toHaveLength(1)
-  expect(latest.commands).not.toContain('delete-edge')
+  expect(latest.kinds).not.toContain('delete-edge')
 })
