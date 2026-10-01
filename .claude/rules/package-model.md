@@ -8,13 +8,14 @@ paths:
 ## What belongs here
 
 - Zod schemas: canvas meta, core/extension/raw facets, spatial canvas (JSON Canvas 1.0 + `x-whiteboard` extension), markdown body, workspace-tree node data, and the versioned mdast subset (exported via the `./mdast` subpath).
+- Pure, shared document-semantics functions: logic that defines what a document MEANS, is needed by more than one runtime, and does no I/O. The standing examples are `proposal-apply.ts`, `text-anchor.ts`, `spatial-cascade.ts`, `node-content.ts`, `generate-document-id.ts` and `derive-workspace-segment.ts`. Put one here when two runtimes would otherwise each carry a copy; a function only one root calls stays in that root.
 - Shared fast-check arbitraries in `src/test-utils/` (valid-by-construction; never duplicated per test file), and the
   generator they are drawn with: `arbitraryForSchema`, the zod-v4-to-fast-check walk (see "Generators" below).
 
 ## What does NOT belong here
 
 - File parsing/serialization (goes to `codec`, planned), Loro containers, storage, rendering, HTTP/MCP surfaces.
-- Any runtime behavior beyond schema validation — with the one deliberate exception below.
+- Runtime behavior that is not schema validation or pure document semantics (above) — I/O, clocks, storage handles, anything that needs `node:*` or a DOM — with the one deliberate exception below (base64).
 
 ## The base64 codec
 
