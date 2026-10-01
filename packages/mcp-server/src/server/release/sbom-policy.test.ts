@@ -15,6 +15,7 @@ import {
   sha512Hex,
 } from '../../../scripts/release/sbom-fingerprint.mjs'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { jobSection } from './job-section.js'
 import {
   evaluateSbomArtifactState,
   SBOM_ARTIFACT_REL_PATH,
@@ -27,18 +28,6 @@ const ROOT = join(__dirname, '../../../../..')
 
 function readFile(relPath: string): string {
   return readFileSync(join(ROOT, relPath), 'utf-8')
-}
-
-function jobSection(text: string, jobId: string, nextJobId?: string): string {
-  const marker = `  ${jobId}:`
-  const start = text.indexOf(marker)
-  if (start === -1) return ''
-  if (nextJobId) {
-    const nextMarker = `  ${nextJobId}:`
-    const end = text.indexOf(nextMarker, start)
-    return end === -1 ? text.slice(start) : text.slice(start, end)
-  }
-  return text.slice(start)
 }
 
 type ValidationResult = { ok: true } | { ok: false; reason: string }

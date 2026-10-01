@@ -33,7 +33,7 @@ const SOURCES = Array.isArray(A.sources) && A.sources.length
   : [
       {
         key: 'ci',
-        brief: `GitHub Actions CI for PR #${PR}. Run \`gh pr checks ${PR}\` to list checks; for any non-pass GitHub-Actions check, get its run id and read \`gh run view <run-id> --log-failed\` to find the failing job/step + assertion. A CI failure is almost always REAL + BLOCKING (it gates merge) — but a flaky test-isolation failure (different test fails per run, passes in isolation; see tmp/issues/audit-test-fixture-dedup) is the exception: note it as flaky, not a code bug. Report each failure with the failing test/step, the likely cause, and a fix direction.`,
+        brief: `GitHub Actions CI for PR #${PR}. Run \`gh pr checks ${PR}\` to list checks; for any non-pass GitHub-Actions check, get its run id and read \`gh run view <run-id> --log-failed\` to find the failing job/step + assertion. A CI failure is almost always REAL + BLOCKING (it gates merge) — but a flaky test-isolation failure (different test fails per run, passes in isolation; integrator-flow.md's CI-flakes section lists the known shapes) is the exception: note it as flaky, not a code bug. Report each failure with the failing test/step, the likely cause, and a fix direction.`,
       },
       {
         key: 'coderabbit',
@@ -128,5 +128,5 @@ return {
   realFindingCount: realFindings.length,
   triaged,
   needsHumanGate: true,
-  note: 'Read-only CI/automated-review triage. Integrator: clear blockingNow before merge; file track=task -> Tasks, track=issue -> tmp/issues, dismiss CodeRabbit noise by resolving the thread.',
+  note: 'Read-only CI/automated-review triage. Integrator: clear blockingNow before merge; file track=task -> Tasks, track=issue -> whiteboard documents, dismiss CodeRabbit noise by resolving the thread.',
 }

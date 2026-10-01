@@ -381,6 +381,8 @@ defect this seam has produced — Chromium's `clientDataJSON` carries
 `other_keys_can_be_added_here`, which a strict schema refuses — and restoring
 that strictness fails it.
 
+> **Note (2026-10-01):** `smoke:passkey-promote` and the `mcp-passkey-promote` smoke behind it were removed with the TCP loopback transport (#1983, 2026-09-28; ADR-0050), so neither the script nor its CI step exists. The defect it caught stays as history.
+
 **Platform matrix, as verified.** Chromium (virtual authenticator, `BE=0`)
 only. Android Chrome, whose Google Password Manager passkeys are the `BE=1`
 case, is next; Safari is out of scope (user decision, 2026-09-17). The facts

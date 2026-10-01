@@ -1,9 +1,9 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { staleHeadroom } from './size-ledger-headroom.js'
+import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
+import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
 
 // docs/contributing/review-checklist.md says "functions stay under 50
 // lines". `file-size-budget.test.ts` made its companion clause — "files stay
@@ -40,29 +40,7 @@ import { staleHeadroom } from './size-ledger-headroom.js'
 // entries, at 150 it would be 86; picking one of those would be picking the
 // number that makes the debt look smaller, over the number the checklist
 // states. The list is data rather than prose for the same reason.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
-
 const LINE_BUDGET = 50
-
-/** The `src` directory of every package/tool matching a `<group>/*` glob that has one. */
-function groupSrcDirs(group: string): string[] {
-  return readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(group, entry.name, 'src'))
-    .filter((relDir) => existsSync(join(REPO_ROOT, relDir)))
-}
-
-const SCAN_ROOTS = ['apps/web/src', ...groupSrcDirs('packages'), ...groupSrcDirs('tools')]
-
-/** The same two exclusions `file-size-budget.test.ts` makes, for the same reasons. */
-const EXCLUDED_DIR_SEGMENTS = ['/migrations/', '/vendor/budoux/']
-
-function walk(absoluteDir: string): string[] {
-  return readdirSync(absoluteDir, { withFileTypes: true }).flatMap((entry) => {
-    const absolutePath = join(absoluteDir, entry.name)
-    return entry.isDirectory() ? walk(absolutePath) : [absolutePath]
-  })
-}
 
 interface Measured {
   /** `<repo-relative path>#<qualified name>` — unique, and stable under a move of lines. */
@@ -132,17 +110,15 @@ function measureFile(absolutePath: string, relativePath: string): Measured[] {
   })
 }
 
+// The same two directory exclusions `file-size-budget.test.ts` makes, from the
+// same place (`scan-roots.ts`), for the same reasons.
 const MEASURED: readonly Measured[] = SCAN_ROOTS.flatMap((relDir) =>
-  walk(join(REPO_ROOT, relDir))
-    .filter(
-      (absolutePath) =>
-        /\.tsx?$/.test(absolutePath) &&
-        !absolutePath.endsWith('.d.ts') &&
-        !EXCLUDED_DIR_SEGMENTS.some((segment) => absolutePath.includes(segment)),
-    )
-    .flatMap((absolutePath) =>
-      measureFile(absolutePath, absolutePath.slice(REPO_ROOT.length + 1).replaceAll('\\', '/')),
-    ),
+  walk(join(REPO_ROOT, relDir), {
+    include: (absolutePath) =>
+      /\.tsx?$/.test(absolutePath) &&
+      !absolutePath.endsWith('.d.ts') &&
+      !isExcludedPath(absolutePath),
+  }).flatMap((absolutePath) => measureFile(absolutePath, relativeToRepo(absolutePath))),
 )
 
 const BY_KEY = new Map(MEASURED.map((row) => [row.key, row.lines]))
@@ -787,65 +763,26 @@ describe('functions stay under the line budget, or are recorded shrinking', () =
     expect(new Set(MEASURED.map((row) => row.key.split('#')[0])).size).toBeGreaterThan(800)
   })
 
-  it('holds no un-recorded function over the budget', () => {
-    const unlisted = MEASURED.filter(
-      (row) => row.lines > LINE_BUDGET && !(row.key in ledgerFor(row.isTest)),
-    ).map(
-      (row) =>
+  registerSizeLedgerAssertions({
+    budget: LINE_BUDGET,
+    entries: MEASURED,
+    ledgers: [FUNCTION_SIZE_GRANDFATHER, TEST_FUNCTION_SIZE_GRANDFATHER],
+    ledgerOf: (row) => ledgerFor(row.isTest),
+    readingOf: (key) => BY_KEY.get(key),
+    wording: {
+      titles: {
+        unlisted: 'holds no un-recorded function over the budget',
+        grown: 'holds no recorded function that has grown past its ceiling',
+        shrunk: 'holds no entry that has shrunk to budget — delete it instead',
+        missing: 'holds no entry for a function that was renamed, moved or deleted',
+        headroom: 'holds no entry whose ceiling stands far above its reading — lower it',
+      },
+      unlisted: (row) =>
         `${row.key}: ${row.lines} lines, over the ${LINE_BUDGET}-line budget and not recorded — split it, or add it here with a reason in the diff`,
-    )
-
-    expect(unlisted).toEqual([])
-  })
-
-  it('holds no recorded function that has grown past its ceiling', () => {
-    const grown = MEASURED.filter((row) => {
-      const ceiling = ledgerFor(row.isTest)[row.key]
-      return ceiling !== undefined && row.lines > ceiling
-    }).map((row) => {
-      const ceiling = ledgerFor(row.isTest)[row.key]
-      return `${row.key}: ${row.lines} lines, over its recorded ceiling of ${String(ceiling)} — shrink it back, or raise the ceiling here deliberately`
-    })
-
-    expect(grown).toEqual([])
-  })
-
-  it('holds no entry that has shrunk to budget — delete it instead', () => {
-    const shrunk = [
-      ...Object.keys(FUNCTION_SIZE_GRANDFATHER),
-      ...Object.keys(TEST_FUNCTION_SIZE_GRANDFATHER),
-    ]
-      .filter((key) => {
-        const lines = BY_KEY.get(key)
-        return lines !== undefined && lines <= LINE_BUDGET
-      })
-      .map(
-        (key) =>
-          `${key}: ${String(BY_KEY.get(key))} lines, at or under the ${LINE_BUDGET}-line budget`,
-      )
-
-    expect(shrunk).toEqual([])
-  })
-
-  it('holds no entry for a function that was renamed, moved or deleted', () => {
-    const missing = [
-      ...Object.keys(FUNCTION_SIZE_GRANDFATHER),
-      ...Object.keys(TEST_FUNCTION_SIZE_GRANDFATHER),
-    ].filter((key) => !BY_KEY.has(key))
-
-    expect(missing).toEqual([])
-  })
-
-  // The growth assertion above is only as tight as the ceiling, and a
-  // ceiling that stopped being lowered as its function shrank is a guard
-  // that reads as holding it: see `size-ledger-headroom.ts`.
-  it('holds no entry whose ceiling stands far above its reading — lower it', () => {
-    const stale = [
-      ...staleHeadroom(FUNCTION_SIZE_GRANDFATHER, (key) => BY_KEY.get(key)),
-      ...staleHeadroom(TEST_FUNCTION_SIZE_GRANDFATHER, (key) => BY_KEY.get(key)),
-    ]
-
-    expect(stale).toEqual([])
+      grown: (key, lines, ceiling) =>
+        `${key}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      shrunk: (key, lines) => `${key}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
+    },
   })
 
   // The source scan excludes test files and the test ledger requires them, so

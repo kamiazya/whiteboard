@@ -102,10 +102,13 @@ This logs:
 - request id
 - HTTP status
 
-Log format:
+Log format: the daemon logger writes one JSON line per record to `stderr` (never stdout, which carries the stdio frames), with `"scope":"mcp-http"`. The `msg` field says which event it is:
 
-- `[mcp-http:init]`
-- `[mcp-http]`
+- `mcp-http:init` — the `initialize` payload summary
+- `mcp-http` — the per-request line (`httpMethod`, `path`, `jsonrpcMethod`, `requestId`, `status`, `durationMs`)
+- `mcp-http:construct` / `mcp-http:destruct` (and `-skipped` / `-error`) — per-request server lifecycle timing
+
+`MCP_HTTP_DEBUG=1` lowers `WHITEBOARD_LOG_LEVEL` to `info` so these records survive the default `warning` gate; filter them with, for example, `jq 'select(.scope == "mcp-http")'`.
 
 ## Debug Checklist
 

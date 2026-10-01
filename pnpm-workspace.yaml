@@ -36,6 +36,10 @@ catalog:
   vite: "^8.2.2"
   vitest: "^5.0.0"
   "@vitest/browser-playwright": "^5.0.0"
+  # Exact pin, shared by four workspaces: the browser binary a Playwright
+  # release drives is tied to its version, so two versions would run the
+  # browser projects against different Chromium builds.
+  playwright: "1.63.0"
   # codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
   unified: "^11.0.5"
   remark-parse: "^11.0.0"
@@ -63,23 +67,13 @@ catalog:
 # Requires pnpm >= 10.16 (see packageManager in package.json).
 minimumReleaseAge: 10080
 
-# Security-patch escape hatch (see the comment above): versions listed here
-# may be installed before the 7-day window elapses because they close a
-# published advisory. Prune entries once they age past the window.
-minimumReleaseAgeExclude:
-  - js-yaml
-  - fast-uri
-  - ip-address
-  # qs@6.16.0 closes GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g (published
-  # 2026-08-29; prune once it ages past the window).
-  - qs
-  # NOT a security patch: a deliberate feature exception for the Vitest 5
-  # major (published 2026-09-03, SLSA provenance attested on the registry),
-  # taken so the test-stability work could land on it rather than wait the
-  # window out. Self-expiring — prune on or after 2026-09-11, when 5.0.0 is
-  # older than the window and these entries stop doing anything.
-  - vitest
-  - "@vitest/*"
+# Escape hatch for a version that must install before the 7-day window
+# elapses (a security patch, or a deliberate feature exception). Every entry
+# sits under a comment saying why and carrying `prune on or after YYYY-MM-DD`;
+# `minimum-release-age-exclude.test.ts` fails once that day arrives, because a
+# hole nobody closes is a hole in the supply-chain hardening above. Empty is
+# the healthy state: every locked version has aged past the window.
+minimumReleaseAgeExclude: []
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 

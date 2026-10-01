@@ -1,3 +1,5 @@
+import { decodeSegment } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+
 // Canonical URL shapes for apps/web. Kept as pure string-building/parsing
 // functions (no React Router import) so the shape is unit-testable without a
 // router context.
@@ -72,18 +74,6 @@ export function parseWorkspaceRoute(pathname: string): WorkspaceRoute | null {
     return { kind: 'index' }
   }
   return null
-}
-
-// decodeURIComponent throws URIError on a malformed percent sequence
-// (`/w/w%1/d/main`). These parsers run inside render-phase lazy
-// initializers, so a throw here takes down the whole app; an unparseable URL
-// is a not-a-route, not a crash.
-function decodeSegment(segment: string): string | null {
-  try {
-    return decodeURIComponent(segment)
-  } catch {
-    return null
-  }
 }
 
 // Inverse of parseWorkspaceRoute — the single place that turns a route back

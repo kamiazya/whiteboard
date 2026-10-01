@@ -27,9 +27,8 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 /** `new Promise((resolve) => setTimeout(resolve, 50))`, any callback name, N > 0. */
 const FIXED_SLEEP = /new Promise\(\s*\(?\w*\)?\s*=>\s*setTimeout\(\w+,\s*[1-9][0-9]*\s*\)/g

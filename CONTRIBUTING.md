@@ -9,7 +9,8 @@ git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
                    # pnpm is pinned by package.json's packageManager (pnpm@11.12.0) — run `corepack enable` first,
                    # or an older global pnpm silently rewrites the lockfile and fails CI's --frozen-lockfile
-                   # ImageMagick (convert/identify) is also required — pnpm test:scripts and pnpm check:local call it;
+                   # ImageMagick (convert/identify) is needed by pnpm test:scripts / pnpm check:local (compose-figure tests):
+                   # those tests skip locally when it is absent, but fail on CI;
                    # full prerequisites: docs/contributing/development.md
 pnpm install
 pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser / canvas-render-browser / web-browser-window-state)
@@ -24,7 +25,7 @@ For active MCP development, prefer the HTTP transport so a `tsx watch` daemon re
 pnpm mcp:http:dev
 ```
 
-See [README.md](README.md) for the full setup including Claude Code / Codex auto-override (`.claude/settings.json` / `.codex/config.toml`).
+See [docs/contributing/development.md](docs/contributing/development.md#repo-local-config-auto-override) for the Claude Code / Codex auto-override (`whiteboard` at `--scope local` / `.codex/config.toml`).
 
 ## Workflow
 
@@ -77,7 +78,7 @@ The codebase is warning-free and `pnpm lint` runs as part of the pre-push gate (
 [Lefthook](https://lefthook.dev) installs git hooks automatically on `pnpm install` (via the `prepare` script):
 
 - **pre-commit** (fast): formats the staged files with Biome and re-stages them, then runs **secretlint**, which BLOCKS the commit on a secret or an absolute home-dir path. It deliberately does NOT run lint/typecheck/tests, so it never slows the many automated commits the dev flow makes.
-- **pre-push** (the gate): runs six checks in parallel — `pnpm verify:git-hooks`, `pnpm -r typecheck`, `pnpm lint:noconsole`, `pnpm lint`, `pnpm vitest run --project canvas-render-node packages/canvas-render/src/mutation-lane-coverage.test.ts`, and `pnpm vitest run --project arch-lint-node` — static gates plus one single-file guard and the architecture scans, so a broken build or a stray `console.*` in server code is caught before it leaves your machine. Test SUITES deliberately do not run here: the dev loop already ran the nearest layer for what changed, and CI runs everything on the push — running a suite a third time at push, on a machine saturated by the push itself, was double work and the origin of a load-dependent flake class. The single-file guard is here for something a suite cannot give: the mutation-lane check is the only check anywhere that notices the lane going stale, because the lane covers a list of modules, so a new module is simply not covered and the weekly report still looks healthy. `arch-lint-node` is here for a different reason, and a wider one: most of its files scan the repo from outside the package they govern (15 of 19 today), so running the project you changed never runs the guard that owns the rule you broke — a fixed sleep added to an mcp-server test leaves `--project mcp-node` green and fails this, and the 800-line file-size budget scans `apps/web/src`, so the web projects never run it either. It is a whole project rather than a list of files because that list would be one more thing to keep in step; it still runs no product code, opens no port and asserts on no clock, which is what the no-suite rule is actually about. Neither costs the gate anything: across the measured runs the mutation-lane check took 11.0–15.1s and `arch-lint-node` 25.8–29.3s, and in each the pre-push total was exactly `pnpm -r typecheck`'s own (68.9s, 75.3s).
+- **pre-push** (the gate): runs six checks in parallel — `pnpm verify:git-hooks`, `pnpm -r typecheck`, `pnpm lint:noconsole`, `pnpm lint`, `pnpm vitest run --project canvas-render-node packages/canvas-render/src/mutation-lane-coverage.test.ts`, and `pnpm vitest run --project arch-lint-node` — static gates plus one single-file guard and the architecture scans, so a broken build or a stray `console.*` in server code is caught before it leaves your machine. Test SUITES deliberately do not run here: the dev loop already ran the nearest layer for what changed, and CI runs everything on the push — running a suite a third time at push, on a machine saturated by the push itself, was double work and the origin of a load-dependent flake class. The single-file guard is here for something a suite cannot give: the mutation-lane check is the only check anywhere that notices the lane going stale, because the lane covers a list of modules, so a new module is simply not covered and the weekly report still looks healthy. `arch-lint-node` is here for a different reason, and a wider one: most of its files scan the repo from outside the package they govern, so running the project you changed never runs the guard that owns the rule you broke — a fixed sleep added to an mcp-server test leaves `--project mcp-node` green and fails this, and the 800-line file-size budget scans `apps/web/src`, so the web projects never run it either. It is a whole project rather than a list of files because that list would be one more thing to keep in step; it still runs no product code, opens no port and asserts on no clock, which is what the no-suite rule is actually about. Neither costs the gate anything on the critical path; the measured timings and the reasoning live in `lefthook.yml`'s comments, kept in one place so they cannot disagree with the config they describe.
 
 `pnpm verify:git-hooks` checks the hooks themselves rather than your code. A tool that appends its own block to `.git/hooks/<name>` — several editor and code-intelligence integrations install that way — makes *its* exit status the script's, which silently reduces every lefthook command above to advisory while still printing failures as if they blocked. Run `pnpm verify:git-hooks --fix` to move an appended block ahead of lefthook's invocation.
 
@@ -85,7 +86,7 @@ Hooks are a local safety net, **not** a replacement for CI (the authoritative ga
 
 ## Pull request checklist
 
-- `pnpm check:local` is green — the local mirror of CI's `check` job (needs ImageMagick)
+- `pnpm check:local` is green — the local mirror of CI's `check` job (its compose-figure tests need ImageMagick; they skip without it locally and fail on CI)
 - `pnpm test` is green
 - `pnpm typecheck` is green
 - New behavior has at least one nearest-layer automated test

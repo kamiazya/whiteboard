@@ -11,29 +11,8 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CHMOD_IS_OBSERVABLE } from '../../shared/test-utils/chmod-is-observable.js'
 import { assertSecretFileIsOwnerOnly, writeSecretFileAtomicSync } from './secret-file-mode.js'
-
-// PROBED, never inferred, for `can-deny-file-read.ts`'s reason one step over:
-// these tests need a mode they SET to be a mode they READ BACK. Windows mode
-// bits are close to meaningless and some mounts drop chmod entirely, and a
-// test whose premise the filesystem cannot establish reports a broken guard
-// rather than an unavailable one. Note this is NOT the root question — these
-// read `statSync().mode` rather than attempting a denied read, so uid 0
-// changes nothing here.
-function probeChmodIsObservable(): boolean {
-  const probeDir = mkdtempSync(join(tmpdir(), 'wb-mode-probe-'))
-  try {
-    const file = join(probeDir, 'f')
-    writeFileSync(file, 'x')
-    chmodSync(file, 0o644)
-    return (statSync(file).mode & 0o777) === 0o644
-  } catch {
-    return false
-  } finally {
-    rmSync(probeDir, { recursive: true, force: true })
-  }
-}
-const CHMOD_IS_OBSERVABLE = probeChmodIsObservable()
 
 let dir: string
 beforeEach(() => {

@@ -6,19 +6,10 @@
 // behaviour.
 
 import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
-import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { node } from '../../test-utils/spatial-node.js'
 import { routeEdge } from './edge-router.js'
-
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
-  textNode({
-    id,
-    x,
-    y,
-    width,
-    height,
-    text: id,
-  })
 
 const edge = (
   fromNode: string,

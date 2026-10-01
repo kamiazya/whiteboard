@@ -192,8 +192,11 @@ describe('docs layout contract', () => {
 
   it('docs/contributing/README.md architecture/ bullet does not claim ADRs live there', () => {
     const content = readText('docs/contributing/README.md')
-    // Find the architecture/ bullet line and assert it does not contain 'ADRs'
-    const archLine = content.split('\n').find((line) => line.includes('**architecture/**'))
+    // The bullet is found by the directory it names, not by one spelling of
+    // its label: the label now links the directory's only page.
+    const archLine = content
+      .split('\n')
+      .find((line) => line.startsWith('- **') && line.includes('architecture/'))
     expect(archLine).toBeDefined()
     expect(archLine).not.toContain('ADRs')
   })

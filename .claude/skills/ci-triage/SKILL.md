@@ -5,7 +5,7 @@ description: Monitor and triage the POST-PUSH automated-review surface for the w
 
 # CI & automated-review triage (whiteboard)
 
-`lefthook` (pre-push) catches local build/test/typecheck breakage before push. This skill covers the layer ONLY the cloud sees after push: CI workflows + the GitHub-App review bots on the PR. The integrator monitors them, separates signal from noise, and files actionable items into the Task list / `tmp/issues` (or fixes quick ones on the spot).
+`lefthook` (pre-push) catches local build/test/typecheck breakage before push. This skill covers the layer ONLY the cloud sees after push: CI workflows + the GitHub-App review bots on the PR. The integrator monitors them, separates signal from noise, and files actionable items into the Task list / whiteboard `type: issue` documents (or fixes quick ones on the spot).
 
 ## What runs on this repo (verified surface)
 
@@ -61,7 +61,7 @@ done
 
 ## Filing (integrator)
 
-Per finding: blocking/CI → fix now; real but not blocking → `TaskCreate` (track=task) or `tmp/issues/<slug>.md` (backlog) per the `ticketing` skill; noise → dismiss (resolve the CodeRabbit thread with a one-line why). Don't refile what's already a Task/issue.
+Per finding: blocking/CI → fix now; real but not blocking → `TaskCreate` (track=task) or a whiteboard `type: issue` document (backlog) per the `ticketing` skill; noise → dismiss (resolve the CodeRabbit thread with a one-line why). Don't refile what's already a Task/issue.
 
 ## CodeRabbit: on-demand trigger + rate-limit re-queue
 

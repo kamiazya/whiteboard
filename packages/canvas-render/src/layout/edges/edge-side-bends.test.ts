@@ -4,21 +4,11 @@
 // a side other edges already occupy. The derivation now ranks side pairs
 // by estimated bends, breaking L-ties toward the less crowded side.
 
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import { node } from '../../test-utils/spatial-node.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
-
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
-  textNode({
-    id,
-    x,
-    y,
-    width,
-    height,
-    text: id,
-  })
 
 function bends(path: readonly { x: number; y: number }[]): number {
   let count = 0

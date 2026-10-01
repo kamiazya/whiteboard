@@ -14,10 +14,8 @@
  * anyone's local scratch file, which is noise rather than a defect.
  */
 import { execFileSync } from 'node:child_process'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
+import { REPO_ROOT } from './scan-roots.js'
 
 /**
  * Every file the root is allowed to track. A new entry here should be a

@@ -10,10 +10,10 @@ import {
 } from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection } from './direction-check.js'
+import { REPO_ROOT } from './scan-roots.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 import { findTypeOnlyCycles } from './type-cycle-check.js'
 
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
 const SHARED_LAYER_PACKAGES = [
   'packages/daemon-client',

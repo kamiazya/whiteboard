@@ -210,7 +210,7 @@ The agent returns the `wb_scene_render` result so the next turn can reason about
 
 | Topic | Where |
 |---|---|
-| Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/contributing/development.md](docs/contributing/development.md) |
+| Local checkout, HTTP MCP development loop, repo-local config override | [docs/contributing/development.md](docs/contributing/development.md) |
 | Environment variables, storage layout, Codex sandbox quirks | [docs/reference/configuration.md](docs/reference/configuration.md) |
 | Components, data flow, MCP tool surface, design boundaries | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
 | Export formats (SVG, OKF Markdown, JSON Canvas) and their tools | [docs/reference/export-formats.md](docs/reference/export-formats.md) |

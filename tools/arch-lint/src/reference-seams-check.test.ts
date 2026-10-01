@@ -25,9 +25,8 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 /** Every composition root and UI package that lays documents out. */
 const SCAN_DIRS = [

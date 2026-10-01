@@ -112,7 +112,7 @@ const TRIAGE_SCHEMA = {
           title: { type: 'string' }, severity: { enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
           kind: { type: 'string' }, area: { type: 'string' }, summary: { type: 'string' },
           suggestedAction: { type: 'string' }, effort: { enum: ['S', 'M', 'L'] },
-          track: { enum: ['task', 'issue'], description: 'task = live board (do soon); issue = tmp/issues backlog' },
+          track: { enum: ['task', 'issue'], description: 'task = live board (do soon); issue = whiteboard-document backlog' },
           relatedTo: { type: 'string', description: 'existing task/area it belongs under, if any' },
         },
         required: ['title', 'severity', 'kind', 'track', 'suggestedAction'],
@@ -217,7 +217,7 @@ log(`verify: ${toVerify.length} HIGH+ checked, ${survivors.length} findings surv
 phase('Triage')
 const triaged = await agent(
   `Triage these verified codebase-audit findings into a clean backlog for the integrator to file. Findings: ${JSON.stringify(survivors)}\n\n` +
-    `Dedupe (merge findings that are the same root issue across dimensions), re-rank by severity then leverage, and for each decide track: "task" (live board — do soon, blocks real capability) vs "issue" (tmp/issues backlog — debt to schedule). Note relatedTo when it belongs under an existing area (e.g. apps/web migration). Be concise and decision-ready; do not invent findings not present in the input.`,
+    `Dedupe (merge findings that are the same root issue across dimensions), re-rank by severity then leverage, and for each decide track: "task" (live board — do soon, blocks real capability) vs "issue" (whiteboard-document backlog — debt to schedule). Note relatedTo when it belongs under an existing area (e.g. apps/web migration). Be concise and decision-ready; do not invent findings not present in the input.`,
   { label: 'triage', phase: 'Triage', agentType: 'architect', schema: TRIAGE_SCHEMA },
 )
 
@@ -231,5 +231,5 @@ return {
   survivorCount: survivors.length,
   triaged,
   needsHumanGate: true,
-  note: 'Read-only audit. Integrator: file triaged.items into Tasks (track=task) / tmp/issues (track=issue); skip dupes of existing tickets. Check failedDimensions before trusting a clean run — it lists dimensions whose auditor agent produced no result.',
+  note: 'Read-only audit. Integrator: file triaged.items into Tasks (track=task) / whiteboard documents (track=issue); skip dupes of existing tickets. Check failedDimensions before trusting a clean run — it lists dimensions whose auditor agent produced no result.',
 }

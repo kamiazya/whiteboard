@@ -125,6 +125,32 @@ describe('docs/ contract', () => {
     }
   })
 
+  // The Browser Testing table is the one place a reader learns what each
+  // browser project is FOR, and it said "three" for a long while after a
+  // fourth landed — the name appeared in the `pnpm test:browser` comment, so
+  // the check above stayed green over a table that omitted the project.
+  it('has a table row for every real-browser vitest project, and states no count of them', () => {
+    const content = readFileSync(join(DOCS_ROOT, 'contributing/testing.md'), 'utf8')
+    const browserProjectNames = readBrowserProjectNames(REPO_ROOT)
+    expect(browserProjectNames.length).toBeGreaterThan(0)
+    for (const projectName of browserProjectNames) {
+      expect(content, `testing.md's browser table lost the ${projectName} row`).toMatch(
+        new RegExp(`^\\| \`${projectName}\` \\|`, 'm'),
+      )
+    }
+    expect(content).not.toMatch(/There are (three|four|five) real-browser/i)
+  })
+
+  // The mutation target list is owned by stryker.config.mjs (and guarded by
+  // stryker-targets.test.ts). testing.md carried a copy that named four paths
+  // that no longer exist and omitted one that did, so the doc points at the
+  // config instead. A fenced block of source paths is that copy returning.
+  it('does not copy the stryker mutate list into testing.md', () => {
+    const content = readFileSync(join(DOCS_ROOT, 'contributing/testing.md'), 'utf8')
+    expect(content).toContain('packages/mcp-server/stryker.config.mjs')
+    expect(/^src\/\S+\.ts$/m.test(content), 'a copied list of src/ paths is back').toBe(false)
+  })
+
   // The quick-start playwright command must work FROM REPO ROOT. The bare
   // `pnpm exec playwright install` form fails there (playwright is a
   // devDependency of apps/web and canvas-viewer only), which a clean-clone

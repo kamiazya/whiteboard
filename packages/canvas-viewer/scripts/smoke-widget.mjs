@@ -519,7 +519,9 @@ async function main() {
   try {
     html = readFileSync(builtHtmlPath, 'utf8')
   } catch {
-    fail(`expected a build at ${builtHtmlPath} — run "pnpm build:widget" first`)
+    fail(
+      `expected a build at ${builtHtmlPath} — run "pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget" first`,
+    )
     return
   }
 

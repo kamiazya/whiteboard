@@ -1,5 +1,5 @@
 // Vitest project that regenerates the screenshots committed under
-// docs/assets/. Run via `pnpm docs:snapshots` (NOT part of the default
+// docs/assets/. Run via `pnpm --filter @kamiazya/whiteboard-web docs:snapshots` (NOT part of the default
 // `pnpm test` run — it writes into the repo and is slower than the
 // regular browser project).
 //

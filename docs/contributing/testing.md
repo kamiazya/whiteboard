@@ -138,38 +138,24 @@ Treat surviving mutants as review input, not as automatic justification for chan
 2. Ensure the change is consistent with the stated contract and existing tests.
 3. Add a concrete regression or PBT that would have caught the original gap.
 
-If a surviving mutant reveals a gap but the production fix is out of scope for the current PR, record it in `tmp/issues/` and address it separately.
+If a surviving mutant reveals a gap but the production fix is out of scope for the current PR, file it as a whiteboard document of `type: issue` (see the `ticketing` skill, `.claude/skills/ticketing/SKILL.md`) and address it separately.
 
 ### Current mutation target set
 
-The following files are covered by `pnpm mutation:contracts`. This list must stay in sync with `packages/mcp-server/stryker.config.mjs`.
-
-```
-src/shared/diagnostics/redact.ts
-src/server/store/path-guard.ts
-src/server/output-path.ts
-src/shared/api-contracts/libraries.ts
-src/shared/api-contracts/daemon-doctor.ts
-src/shared/api-contracts/runtime.ts
-src/server/security/server-mode-env-config.ts
-src/server/security/server-mode-auth-plan.ts
-src/server/security/server-mode-exposure.ts
-src/server/security/server-mode-record.ts
-src/server/routes/canvas-thumbnail.ts
-src/server/routes/canvas-output-path-error.ts
-```
+The target list is not copied here, because a copy goes stale silently: the files that own it are `packages/mcp-server/stryker.config.mjs` (the `mutate` array run by `pnpm mutation:contracts`) and, for `canvas-render`'s separate lane, `packages/canvas-render/stryker-targets.mjs`. Both are guarded — `packages/mcp-server/src/server/release/stryker-targets.test.ts` fails on a `mutate` entry that names no file, and `canvas-render`'s `mutation-lane-coverage.test.ts` pins its list exactly.
 
 ---
 
 ## Browser Testing
 
-There are three real-browser Vitest projects:
+The real-browser Vitest projects are below. The root `vitest.config.ts` owns the list; `docs-contract.test.ts` fails if this table stops naming one:
 
 | Project | Package | Purpose |
 |---|---|---|
 | `canvas-render-browser` | `packages/canvas-render` | Cross-platform SVG-serialization determinism: the same scene must render byte-identical SVG in a real browser as it does in `canvas-render-node` |
 | `canvas-viewer-browser` | `packages/canvas-viewer` | Popovers, dialogs, scroll, focus, keyboard, pointer, and restore flows where browser layout and pointer behavior are the core risk |
 | `web-browser` | `apps/web` | `apps/web` app browser regressions: popovers, dialogs, focus, keyboard, restore flows, and tests requiring real browser APIs unavailable in jsdom (IndexedDB, OPFS, `window.showOpenFilePicker`) |
+| `web-browser-window-state` | `apps/web` | Tests that leave the browser WINDOW in a state the next file cannot tolerate (today: entering real fullscreen, after which Chromium refuses `page.viewport`). Named `*.window-state.browser.test.tsx` and run alone — the reason is in `apps/web/vitest.browser-window-state.config.ts` |
 
 ```bash
 pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state
@@ -221,9 +207,9 @@ Use E2E when the behavior depends on real app composition rather than an isolate
 
 **E2E placement:**
 
-- `tests/e2e/browser/` — Playwright browser journeys against real app/server surfaces
-- `tests/e2e/mcp/` — MCP protocol and client/server smoke behavior
-- `tests/e2e/distribution/` — packaged daemon, tarball, binary, and install-layout checks
+- `tests/e2e/distribution/` — packaged daemon, server-mode, tarball, and install-layout smokes, plus the release-gate matrix that lists them (see its `README.md`). This is the only directory under `tests/e2e/` today.
+- MCP protocol smokes are not under `tests/e2e/`: the shared implementations live in `packages/mcp-server/src/server/mcp/*.smoke-impl.ts` and the CLI wrappers in `packages/mcp-server/scripts/smoke/` (see Smoke & Distribution Tests below).
+- Real-browser regressions are Vitest browser projects (see Browser Testing above); the one browser-driving smoke in the distribution chain is `pnpm smoke:read-plane`, listed in `tests/e2e/distribution/README.md`.
 
 Keep E2E suites small and focused. If E2E finds a bug, add the nearest-layer regression unless the root cause only exists at the composed-system boundary.
 
@@ -235,7 +221,7 @@ MCP startup, protocol, and distribution-artifact smokes run as Vitest projects. 
 
 ### `mcp-smoke` — included in `pnpm test`
 
-Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. Tests run sequentially to avoid daemon port conflicts.
+Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. The project runs with `maxWorkers: 1` (`packages/mcp-server/vitest.smoke.config.ts`), so each test's daemon process runs alone; the daemon listens on an owner-only socket rather than a TCP port (ADR-0050), so this is about process and data-dir contention, not port conflicts.
 
 | Script | What it covers |
 |---|---|
@@ -250,7 +236,7 @@ pnpm --filter @kamiazya/whiteboard-mcp test:smoke    # vitest run --project mcp-
 
 ### `mcp-distribution` — opt-in, requires build
 
-Not included in `pnpm test`. Requires `dist/server/mcp/index.js` to exist. `test:distribution` includes the build step; individual `smoke:*` scripts do not (CI builds before calling them). Tests run sequentially to avoid daemon port conflicts.
+Not included in `pnpm test`. Requires `dist/server/mcp/index.js` to exist. `test:distribution` includes the build step; individual `smoke:*` scripts do not (CI builds before calling them). Tests run sequentially, one packaged daemon at a time.
 
 | Script | What it covers | Build included |
 |---|---|---|
@@ -399,7 +385,7 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#p
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state
 pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 pnpm coverage       # every non-browser project with v8 coverage -> tmp/coverage/lcov.info
@@ -441,7 +427,7 @@ module graph — which is the reason they are left out in the first place.
 | Hosted web app / Cloudflare Pages artifact | `pnpm check:pages-release` (build + `smoke:artifact` + `smoke:preview-origin`); release-candidate adjacent, see [Hosted Web App Release Gates](#hosted-web-app-cloudflare-pages-release-gates) |
 | Typing or packaging impact | `pnpm --filter @kamiazya/whiteboard-mcp typecheck && pnpm build` |
 | Behavioral production change inside Stryker target set | Run `pnpm mutation:contracts`; report killed/survived in PR body |
-| Deferred property | Record reason + unblock condition in `tmp/issues/` or planning note |
+| Deferred property | Record reason + unblock condition in a whiteboard `type: issue` document (`ticketing` skill) or planning note |
 
 ---
 
@@ -459,7 +445,7 @@ The following rules apply specifically when an AI coding agent executes the work
 
 - After each code change, manually verify the real behavior — not just the test output.
 - If the changed flow is represented by a project skill under `./skills/*`, read the relevant `SKILL.md` and dogfood the real MCP/skill flow instead of verifying through mocks only.
-- Record every still-open dogfooding finding as a small issue note under `./tmp/issues/`. Remove the note once the issue is fixed.
+- Record every still-open dogfooding finding as a whiteboard document of `type: issue` (see the `ticketing` skill). When it is fixed, change it to `type: note` with a `RESOLVED — ` name prefix rather than deleting it.
 - If runtime behavior disagrees with the test, treat runtime as the source of truth and fix the test or implementation.
 
 **Mutation testing:**

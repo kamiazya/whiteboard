@@ -98,7 +98,7 @@
         // Compile-time-only regression guard (tsc --noEmit fails/passes
         // around it); intentionally never imported at runtime.
         "src/_type-probe.ts",
-        // Regenerated on demand via `pnpm docs:snapshots`, not imported from
+        // Regenerated on demand via `pnpm --filter @kamiazya/whiteboard-web docs:snapshots`, not imported from
         // the app entry point.
         "src/docs-snapshots/*.docs-snapshot.test.tsx",
         // Documented common entry point for every surface driving the

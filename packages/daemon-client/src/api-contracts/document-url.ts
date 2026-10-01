@@ -85,7 +85,13 @@ export function documentPathForFile(tail: string[]): { path: string; fileId: str
   return { path: tail.slice(0, -2).join('/'), fileId: tail[tail.length - 1] as string }
 }
 
-function decodeSegment(segment: string): string | null {
+/**
+ * `decodeURIComponent` throws URIError on a malformed percent sequence
+ * (`/w/w%1/d/main`). Parsers run in render-phase initializers and request
+ * handlers, where a throw takes down the app or the request; an unparseable
+ * address is a not-a-route, so this answers null instead.
+ */
+export function decodeSegment(segment: string): string | null {
   try {
     return decodeURIComponent(segment)
   } catch {

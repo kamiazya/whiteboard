@@ -1,9 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-
 import { findAdapterMechanicEdges } from './adapter-mechanic-check.js'
 import {
   ADAPTER_SCAN_EXEMPT_FILES,
@@ -11,8 +9,8 @@ import {
   ADAPTERS_REACHING_MECHANICS_CEILING,
   MECHANICS_NOT_SCANNED,
 } from './architecture-map.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const SERVER_DIR = join(REPO_ROOT, 'packages/mcp-server/src/server')
 
 const actual = findAdapterMechanicEdges(

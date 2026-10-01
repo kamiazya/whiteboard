@@ -1,11 +1,9 @@
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
+import { REPO_ROOT } from './scan-roots.js'
 
 /**
  * `noExcessiveCognitiveComplexity` is ON for this repository, and the files

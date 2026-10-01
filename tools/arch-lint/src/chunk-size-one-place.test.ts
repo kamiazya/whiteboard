@@ -41,9 +41,8 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 import { stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 /** Every package that writes or reads a chunked snapshot row. */
 const SCAN_DIRS = [

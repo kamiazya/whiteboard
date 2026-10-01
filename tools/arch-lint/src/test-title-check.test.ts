@@ -18,9 +18,8 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 const TITLE = /^(\s*)(it|test|describe)(?:\.\w+)*\(\s*(['"`])((?:\\.|(?!\3).)*)\3/
 

@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 
 // A backticked filename in a comment is a POINTER, and a pointer at a file
 // that is gone sends the next reader somewhere that does not exist. It is
@@ -48,8 +48,6 @@ import { describe, expect, it } from 'vitest'
 // A leading dot is the suffix-pattern shape and is excluded by shape, like the
 // backticked scan's. Resolution is by basename alone, which is also all a bare
 // name carries, so a basename existing in ANY directory resolves.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
-
 /** Every tracked path, which is what a pointer may name. */
 function trackedFiles(): string[] {
   return execFileSync('git', ['ls-files'], {

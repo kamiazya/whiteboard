@@ -1,4 +1,5 @@
 import {
+  decodeSegment,
   documentPathForAction,
   documentPathForFile,
   parseDocumentApiPath,
@@ -118,9 +119,9 @@ export function matchDocumentsTail(
 ): { workspaceId: string; path: string; params: Record<string, string> } | null {
   const match = pathname.match(DOCUMENTS_PREFIX)
   if (match === null) return null
-  const workspaceId = decodePathSegment(match[1] ?? '')
+  const workspaceId = decodeSegment(match[1] ?? '')
   const rawTail = (match[2] ?? '').replace(/\/$/, '').split('/')
-  const tail = rawTail.map(decodePathSegment)
+  const tail = rawTail.map(decodeSegment)
   if (workspaceId === null || tail.some((segment) => segment === null || segment === '')) {
     return null
   }
@@ -162,12 +163,4 @@ export function onDocumentsRoute(
     return handler(c, await workspaceIdFromHandle(c, workspaceId), path, params)
   }
   app[method](DOCUMENTS_WILDCARD, ...(middleware as []), dispatch)
-}
-
-function decodePathSegment(segment: string): string | null {
-  try {
-    return decodeURIComponent(segment)
-  } catch {
-    return null
-  }
 }

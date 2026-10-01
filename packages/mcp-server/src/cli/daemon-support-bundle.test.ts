@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
 import { main } from './dispatcher.js'
 
@@ -16,31 +17,6 @@ afterEach(async () => {
 })
 
 const FIXED_TS = '2026-05-10T00:00:00.000Z'
-
-function captureStdio<T>(
-  body: () => Promise<T>,
-): Promise<{ result: T; stdout: string; stderr: string }> {
-  const stdoutChunks: string[] = []
-  const stderrChunks: string[] = []
-  const writeStdout = vi
-    .spyOn(process.stdout, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stdoutChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  const writeStderr = vi
-    .spyOn(process.stderr, 'write')
-    .mockImplementation((chunk: string | Uint8Array) => {
-      stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
-      return true
-    })
-  return body()
-    .then((result) => ({ result, stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') }))
-    .finally(() => {
-      writeStdout.mockRestore()
-      writeStderr.mockRestore()
-    })
-}
 
 describe('runDaemonSupportBundle helper', () => {
   it('happy path: missing daemon record + missing output dir → exit 0, JSON success result, four files on disk', async () => {

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
+import { CHMOD_IS_OBSERVABLE } from '../../shared/test-utils/chmod-is-observable.js'
 import { captureLogsForTests } from '../log.js'
 import { buildSignedPayload, createDaemonIdentity } from './daemon-identity.js'
 
@@ -143,24 +144,6 @@ describe('createDaemonIdentity', () => {
     }
   })
 })
-
-// PROBED, never inferred: these need a mode they SET to be a mode the store
-// READS BACK. Not the root question — the guard reads `statSync().mode`
-// rather than attempting a denied read, so uid 0 changes nothing.
-function probeChmodIsObservable(): boolean {
-  const probeDir = mkdtempSync(join(tmpdir(), 'wb-mode-probe-'))
-  try {
-    const file = join(probeDir, 'f')
-    writeFileSync(file, 'x')
-    chmodSync(file, 0o644)
-    return (statSync(file).mode & 0o777) === 0o644
-  } catch {
-    return false
-  } finally {
-    rmSync(probeDir, { recursive: true, force: true })
-  }
-}
-const CHMOD_IS_OBSERVABLE = probeChmodIsObservable()
 
 // The twin of the macaroon case, and the reason #32 was deferred until both
 // could land together: these two stores are deliberate copies of each other's

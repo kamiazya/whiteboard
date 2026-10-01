@@ -40,7 +40,11 @@ export default defineConfig({
   platform: 'node',
   sourcemap: true,
   dts: true,
-  clean: true,
+  // Not `true`: dist/web-app (copied in by apps/web's postbuild, which builds
+  // concurrently with this package) and dist/widget (copied in after this
+  // runs) are not tsdown's output, and a whole-outDir clean deletes them
+  // whenever this build finishes second.
+  clean: ['dist/**', '!dist/web-app/**', '!dist/widget/**'],
   // package.json's exports, the bin, and the packaged smokes all name `.js`.
   // tsdown defaults ESM to `.mjs`; this package is `"type": "module"`, so `.js`
   // already means ESM and the default would rename every published path.

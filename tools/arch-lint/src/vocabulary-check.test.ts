@@ -14,8 +14,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
+import { REPO_ROOT } from './scan-roots.js'
 
 /**
  * Every directory whose source this rule governs: both composition roots,

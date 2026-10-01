@@ -1,7 +1,7 @@
 export const meta = {
   name: 'dogfood-triage',
   description:
-    'Persona-driven exploratory dogfooding of the whole running product via real browser, then triage friction into dedup-aware, classified, verified findings for tmp/issues',
+    'Persona-driven exploratory dogfooding of the whole running product via real browser, then triage friction into dedup-aware, classified, verified findings filed as whiteboard documents',
   whenToUse:
     'Periodically or pre-release, to find real user friction (not diff-scoped). Requires the web app + MCP daemon already running. Pass args:{personaCount?, appUrl?, existingIssues?, theme?}.',
   phases: [
@@ -26,7 +26,7 @@ const A = (() => {
 })()
 const PERSONA_COUNT = A.personaCount || 3
 const APP_URL = A.appUrl || 'http://localhost:5173'
-// existingIssues: array of short titles/slugs already tracked under tmp/issues, for dedup.
+// existingIssues: array of short titles/slugs already filed as whiteboard documents, for dedup.
 const EXISTING = Array.isArray(A.existingIssues) ? A.existingIssues : []
 // theme: optional nudge so successive runs explore different angles (e.g. 'mobile', 'first-run', 'power-user').
 const THEME = A.theme || 'a broad mix of first-time and returning users'
@@ -89,7 +89,7 @@ const TRIAGE_SCHEMA = {
     severity: { enum: ['HIGH', 'MEDIUM', 'LOW'] },
     disposition: { enum: ['fix-now', 'backlog', 'wont-fix'] },
     rationale: { type: 'string' },
-    issueSlug: { type: 'string', description: 'kebab-case slug for the tmp/issues note if kept' },
+    issueSlug: { type: 'string', description: 'kebab-case slug for the whiteboard document if kept' },
   },
   required: ['isDuplicate', 'verifiedReal', 'severity', 'disposition', 'rationale'],
 }

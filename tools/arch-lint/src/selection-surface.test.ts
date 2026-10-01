@@ -24,11 +24,10 @@
  * of it, so each entry says what shape it is and why the chip is wrong for
  * it, and an entry naming a file that no longer holds a control fails.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
+import { REPO_ROOT, walk } from './scan-roots.js'
 
 /** Every place a React selection control can be written. */
 const SCAN_DIRS = [
@@ -99,15 +98,6 @@ function isSource(path: string): boolean {
   )
 }
 
-function walk(dir: string, found: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) walk(full, found)
-    else if (isSource(full)) found.push(full)
-  }
-  return found
-}
-
 interface Hit {
   readonly path: string
   readonly what: string
@@ -117,7 +107,7 @@ function scan(): { readonly hits: readonly Hit[]; readonly files: number } {
   const hits: Hit[] = []
   let files = 0
   for (const dir of SCAN_DIRS) {
-    for (const full of walk(join(REPO_ROOT, dir))) {
+    for (const full of walk(join(REPO_ROOT, dir), { include: isSource })) {
       files += 1
       const source = stripComments(readFileSync(full, 'utf8'))
       const path = relative(REPO_ROOT, full).split(sep).join('/')

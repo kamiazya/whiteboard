@@ -24,9 +24,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 /** The one module allowed to call `page.viewport`. */
 const HELPER = 'apps/web/src/test-utils/viewport.ts'

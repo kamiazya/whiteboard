@@ -282,3 +282,20 @@ was 328 production sites when measured, most of them right (platform probes,
 user input), and a scan that cries wolf gets deleted. Mutation-checked four
 ways, the fourth being the one that matters: reverting
 `readSecretFileIfPresentSync` to answer `null` for any error fails it.
+
+## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
+
+`scan-roots.ts` owns `REPO_ROOT`, the size ledgers' `SCAN_ROOTS`, their
+`EXCLUDED_DIR_SEGMENTS` and the one `walk(dir, { include, skip })`; a scan
+passes its FILTER and gets the traversal. Two of its choices are measured, not
+tidy: `skip` is judged before the entry is stat'ed, so it reaches FILES (a
+nested worktree's `.git` is a file), and `isExcludedPath` matches the path
+RELATIVE to the repo — this checkout may itself live under
+`.claude/worktrees/`, where an absolute match excludes every file in it.
+
+`size-ledger-assertions.ts` registers the five assertions every shrink-only
+size ledger makes (unlisted, grown, shrunk, missing, headroom). The titles and
+the message for each stay at the call site, because a file and a function are
+closed differently; what is shared is the judgement. A population-size floor
+and a cross-ledger check stay at the call site too, since what counts as a
+plausible population is the caller's subject.
