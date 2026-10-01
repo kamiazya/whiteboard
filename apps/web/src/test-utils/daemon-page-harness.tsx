@@ -106,6 +106,10 @@ export function MemoryRouterWrapper({ children }: { children: ReactNode }): Reac
   return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
 }
 
+export function renderWithRouterWrapper(ui: ReactElement, options?: RenderOptions): RenderResult {
+  return rtlRender(ui, { wrapper: MemoryRouterWrapper, ...options })
+}
+
 /**
  * Replaces `lib/replica-refresh`. The page schedules ADR-0023's replica pull
  * and push in the background, on an idle callback or a timer; left real they

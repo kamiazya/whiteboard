@@ -9,41 +9,26 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { act, cleanup, type RenderOptions, render as rtlRender } from '@testing-library/react'
-import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ModelContext, WebMcpToolDescriptor } from '../hooks/use-browser-tool-registry.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 // The page reads useNavigate (Settings navigation), so every render needs a
 // Router ancestor.
-function render(ui: ReactElement, options?: RenderOptions) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
-}
-
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
@@ -102,7 +87,7 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
     document.modelContext = fake
 
     await act(async () => {
-      render(
+      renderInRouter(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )

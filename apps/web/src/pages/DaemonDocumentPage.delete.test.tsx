@@ -1,31 +1,13 @@
-/**
- * Delete, on the DOCUMENT page of a daemon-kept document.
- *
- * The verb existed on the daemon INDEX row menu and nowhere else, while the
- * browser keeper offered it from the document page — the other half of
- * `issues/daemon-document-page-offers-no-document-actions`, and the entry
- * `document-menu-parity.test.ts` still records as a gap until this lands.
- *
- * What this pins that a lib-level test cannot: the row exists, the dialog
- * says the DAEMON's sentence (versions and branches do not come back), the
- * page moves to what is left, and the dialog does not outlive the document it
- * was opened for — a bare `confirmDelete` boolean confirmed after a switch
- * deletes the OTHER document, which the browser page records as measured.
- */
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import {
-  createWorkspaceDocumentAtPath,
-  documentContainers,
-  writeCoreFacets,
-  writeMarkdownBody,
-} from '@kamiazya/whiteboard-loro-adapter'
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
-import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import {
+  markdownWorkspaceSnapshot,
+  openDocumentOpsMenu,
+  renderInRouter,
+} from '../test-utils/daemon-page-harness.js'
 
 const DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const COPY_ID = '01J9ZC8XK4PQRS7TVWXY0ABCDE'
@@ -44,38 +26,21 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
   ]),
 )
 
-function snapshotFor(path: string): Uint8Array {
-  const doc = new LoroDoc()
-  createWorkspaceDocumentAtPath(doc, {
+const snapshotFor = (path: string): Uint8Array =>
+  markdownWorkspaceSnapshot({
     path,
     documentId: path === 'agent-note' ? DOCUMENT_ID : COPY_ID,
-    kind: 'markdown',
+    body: `# Body of ${path}`,
   })
-  const containers = documentContainers(doc, path === 'agent-note' ? DOCUMENT_ID : COPY_ID)
-  writeMarkdownBody(containers, `# Body of ${path}`)
-  writeCoreFacets(containers, { type: 'markdown' })
-  doc.commit()
-  return doc.export({ mode: 'snapshot' })
-}
 
 const constructed: { workspaceId: string; path: string }[] = []
 
-vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', () => ({
-  SseBackend: class {
-    readonly path: string
-    constructor(workspaceId: string, path: string) {
-      this.path = path
-      constructed.push({ workspaceId, path })
-    }
-    connect(handlers: DocumentBackendHandlers): void {
-      handlers.onConnected()
-      handlers.onSnapshot(snapshotFor(this.path))
-    }
-    disconnect(): void {}
-    pushLocalUpdate(): void {}
-    sendClientReady(): void {}
-  },
-}))
+vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).fakeSseBackendModule({
+    onConstruct: (workspaceId, path) => constructed.push({ workspaceId, path }),
+    snapshotFor: (path) => snapshotFor(path),
+  }),
+)
 
 vi.mock('../lib/replica-refresh.js', async () =>
   (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),

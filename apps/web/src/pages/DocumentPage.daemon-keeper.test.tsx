@@ -8,10 +8,9 @@ import type {
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { MemoryRouterWrapper } from '../test-utils/daemon-page-harness.js'
 import {
   type ContractDocument,
   type DocumentPageFixture,
@@ -24,25 +23,19 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   return { ...actual, SpatialEditor: CapturingSpatialEditor }
 })
 
-// Each answers a CANCEL, which the page calls on unmount: a schedule that
-// outlives its page fires against a fetch and a workspace that have moved on,
-// and in a test run the warning lands on whichever case is executing by then.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-    getDocumentBacklinks: vi.fn(),
-    deleteDocument: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+    'getDocumentBacklinks',
+    'deleteDocument',
+  ]),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
@@ -70,10 +63,6 @@ class FakeBackend implements DocumentBackend {
   disconnect(): void {}
   pushLocalUpdate(): void {}
   sendClientReady(): void {}
-}
-
-function MemoryRouterWrapper({ children }: { children: ReactNode }) {
-  return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'

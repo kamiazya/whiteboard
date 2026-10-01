@@ -2,52 +2,25 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  type RenderOptions,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
-import type { ReactElement, ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { getShellConnection } from '../lib/shell-status-store.js'
+import { renderWithRouterWrapper } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-function MemoryRouterWrapper({ children }: { children: ReactNode }) {
-  return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
-}
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-// The page now reads useNavigate (Settings navigation), so every render
-// needs a Router ancestor. Using RTL's `wrapper` option (rather than hand-
-// wrapping the element) keeps this file's `rerender(...)` calls under the
-// same Router too — RTL re-applies `wrapper` on every rerender.
-function render(ui: ReactElement, options?: RenderOptions) {
-  return rtlRender(ui, { wrapper: MemoryRouterWrapper, ...options })
-}
-
-// Each answers a CANCEL, which the page calls on unmount: a schedule that
-// outlives its page fires against a fetch and a workspace that have moved on,
-// and in a test run the warning lands on whichever case is executing by then.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
-
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-    getDocumentBacklinks: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+    'getDocumentBacklinks',
+  ]),
+)
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
@@ -88,7 +61,7 @@ function makeCreateBackend() {
 
 // WorkspaceTopBar's canvas switcher dropdown is real Radix — open on
 // pointerDown, select on pointerUp (see WorkspaceTopBar.test.tsx for the
-// same pattern). Rendering into document.body (per every render() call in
+// same pattern). Rendering into document.body (per every render call in
 // this file) keeps the portal content inside React's event-delegation root.
 // Exact match: HeaderBranchChip's "Switch branch (current: <name>)" button
 // also contains the canvas path as a substring, so a loose regex match is
@@ -154,7 +127,7 @@ describe('DaemonDocumentPage', () => {
 
     let unmount!: () => void
     await act(async () => {
-      ;({ unmount } = render(
+      ;({ unmount } = renderWithRouterWrapper(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
@@ -178,7 +151,7 @@ describe('DaemonDocumentPage', () => {
     // workspace is the moment this browser can afford to cache it.
     const { scheduleReplicaRefresh } = await import('../lib/replica-refresh.js')
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="w1"
@@ -220,7 +193,7 @@ describe('DaemonDocumentPage', () => {
     )
 
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           workspaceId="stale-pairing"
@@ -239,7 +212,7 @@ describe('DaemonDocumentPage', () => {
 
   it('mounts the editor with a mocked backend and renders the canvas list', async () => {
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -265,7 +238,7 @@ describe('DaemonDocumentPage', () => {
     // were unreachable in daemon mode with nothing failing. Both pages now
     // reach them through the shared page's ⋯.
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -292,7 +265,7 @@ describe('DaemonDocumentPage', () => {
       unlinkedMentions: [],
     })
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -319,7 +292,7 @@ describe('DaemonDocumentPage', () => {
     // not by that function's identity, so the session must survive it:
     // rebuilding tears down the WebSocket, re-hydrates, and drops the undo
     // history for a canvas the user never left.
-    const { rerender } = render(
+    const { rerender } = renderWithRouterWrapper(
       <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
       { container: document.body },
     )
@@ -339,7 +312,7 @@ describe('DaemonDocumentPage', () => {
 
   it('renders capability badges from DAEMON_CAPABILITIES', async () => {
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -368,7 +341,7 @@ describe('DaemonDocumentPage', () => {
       })
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -400,7 +373,7 @@ describe('DaemonDocumentPage', () => {
       mockListDocuments.mockResolvedValue({ documents: [] })
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -419,7 +392,7 @@ describe('DaemonDocumentPage', () => {
 
   it('disconnects the old backend before the new one is observed on canvas switch', async () => {
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -444,7 +417,7 @@ describe('DaemonDocumentPage', () => {
     // remote edits are arriving when they are not. The App-mounted shell
     // draws the chip; this page's contract is the state it publishes.
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -470,7 +443,7 @@ describe('DaemonDocumentPage', () => {
 
   it('reports "sync-off" when the backend reports a refused credential, without replacing the page', async () => {
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -497,7 +470,7 @@ describe('DaemonDocumentPage', () => {
 
   it('reports a live auth error to the shell-status store (and clears on unmount)', async () => {
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -520,7 +493,7 @@ describe('DaemonDocumentPage', () => {
 
   it('clears the reported auth error when switching to a new canvas (new backend identity)', async () => {
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -545,7 +518,7 @@ describe('DaemonDocumentPage', () => {
     // Never resolves during this test, so the page stays in the loading state.
     mockListWorkspaces.mockReturnValue(new Promise(() => {}))
 
-    render(
+    renderWithRouterWrapper(
       <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
       { container: document.body },
     )
@@ -557,7 +530,7 @@ describe('DaemonDocumentPage', () => {
     mockListWorkspaces.mockRejectedValue(new Error('daemon unreachable'))
 
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -572,7 +545,7 @@ describe('DaemonDocumentPage', () => {
     mockListDocuments.mockResolvedValue({ documents: [] })
 
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -603,7 +576,7 @@ describe('DaemonDocumentPage', () => {
     })
 
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -643,7 +616,7 @@ describe('DaemonDocumentPage', () => {
     )
 
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -680,7 +653,7 @@ describe('DaemonDocumentPage', () => {
     mockCreateDocument.mockRejectedValue(new Error('path already exists'))
 
     await act(async () => {
-      render(
+      renderWithRouterWrapper(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
         { container: document.body },
       )
@@ -706,7 +679,7 @@ describe('DaemonDocumentPage', () => {
   describe('WorkspaceTopBar chrome adoption', () => {
     it('does not render a "Back to documents" button (onNavigateBack omitted)', async () => {
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -725,7 +698,7 @@ describe('DaemonDocumentPage', () => {
     it('renders "Back to documents" and invokes onNavigateBack when provided', async () => {
       const onNavigateBack = vi.fn()
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -749,7 +722,7 @@ describe('DaemonDocumentPage', () => {
       const onNavigateBack = vi.fn()
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -817,7 +790,7 @@ describe('DaemonDocumentPage', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await act(async () => {
-        render(
+        renderWithRouterWrapper(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
@@ -877,7 +850,9 @@ describe('DaemonDocumentPage', () => {
         }),
       )
       await act(async () => {
-        render(<DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} />, { container: document.body })
+        renderWithRouterWrapper(<DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} />, {
+          container: document.body,
+        })
       })
 
       // The sync stream is the default backend's own request; the page's

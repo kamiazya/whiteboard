@@ -12,36 +12,25 @@ import type {
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import {
   latestEditorProps,
   resetCapturedEditorProps,
 } from '../test-utils/capturing-spatial-editor.js'
+import { MemoryRouterWrapper } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+  ]),
+)
 
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()
@@ -70,10 +59,6 @@ class FakeBackend implements DocumentBackend {
 }
 
 const createdBackends: FakeBackend[] = []
-
-function MemoryRouterWrapper({ children }: { children: ReactNode }) {
-  return <MemoryRouter initialEntries={['/']}>{children}</MemoryRouter>
-}
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 

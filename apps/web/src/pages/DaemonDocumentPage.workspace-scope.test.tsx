@@ -8,90 +8,42 @@
  * empty doc it used to fall back to is retired.
  */
 
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import {
-  createWorkspaceDocumentAtPath,
-  documentContainers,
-  writeCoreFacets,
-  writeMarkdownBody,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
+import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { markdownWorkspaceSnapshot, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 const DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, {
-    container: document.body,
-  })
-}
+const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    createDocument: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
-/** The workspace-document snapshot the daemon's scope=workspace socket serves. */
-function workspaceSnapshot(): Uint8Array {
-  const doc = new LoroDoc()
-  createWorkspaceDocumentAtPath(doc, {
-    path: 'agent-note',
-    documentId: DOCUMENT_ID,
-    kind: 'markdown',
-  })
-  const containers = documentContainers(doc, DOCUMENT_ID)
-  writeMarkdownBody(containers, '# Hello from the workspace document')
-  writeCoreFacets(containers, { type: 'markdown' })
-  doc.commit()
-  return doc.export({ mode: 'snapshot' })
-}
+const sseConstructed: { workspaceId: string; path: string }[] = []
 
-const sseConstructed: {
-  workspaceId: string
-  path: string
-}[] = []
+vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).fakeSseBackendModule({
+    onConstruct: (workspaceId, path) => sseConstructed.push({ workspaceId, path }),
+    // The workspace-document snapshot the daemon's scope=workspace socket serves.
+    snapshotFor: () =>
+      markdownWorkspaceSnapshot({
+        path: 'agent-note',
+        documentId: DOCUMENT_ID,
+        body: '# Hello from the workspace document',
+      }),
+  }),
+)
 
-vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', () => ({
-  SseBackend: class {
-    constructor(
-      workspaceId: string,
-      path: string,
-      _baseUrl: string,
-      _transport?: unknown,
-      _streamSource?: unknown,
-    ) {
-      sseConstructed.push({ workspaceId, path })
-    }
-    connect(handlers: DocumentBackendHandlers): void {
-      handlers.onConnected()
-      handlers.onSnapshot(workspaceSnapshot())
-    }
-    disconnect(): void {}
-    pushLocalUpdate(): void {}
-    sendClientReady(): void {}
-  },
-}))
-
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
