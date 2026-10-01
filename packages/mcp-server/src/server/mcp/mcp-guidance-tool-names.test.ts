@@ -1,13 +1,6 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 import { buildDrawDiagramPrompt, WHITEBOARD_INSTRUCTIONS } from './standalone-help.js'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-// __dirname -> packages/mcp-server/src/server/mcp
-const SERVER_SRC = resolve(__dirname, '..')
 
 /**
  * Text this server hands to a client or an agent, where a tool name would be
@@ -16,25 +9,7 @@ const SERVER_SRC = resolve(__dirname, '..')
 const GUIDANCE = [
   { where: 'initialize instructions', text: WHITEBOARD_INSTRUCTIONS },
   { where: 'draw-diagram prompt', text: buildDrawDiagramPrompt('a goal', 'architecture') },
-  {
-    where: 'viewport route messages',
-    text: callerFacingStrings('routes/viewport.ts'),
-  },
 ]
-
-/**
- * The `message:` and `hint:` strings a route hands back to its caller.
- *
- * Not the whole file: a source file also carries sync message types
- * (`client_ready`), which are tool-shaped and are not guidance. Reading
- * wholesale reports those and buries the real thing.
- */
-function callerFacingStrings(relativePath: string): string {
-  const source = readFileSync(join(SERVER_SRC, relativePath), 'utf-8')
-  return [...source.matchAll(/(?:message|hint):\s*\n?\s*'([^']*)'/g)]
-    .map((match) => match[1])
-    .join('\n')
-}
 
 /**
  * Anything shaped like one of this server's tool names.
