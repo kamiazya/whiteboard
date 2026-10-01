@@ -5,7 +5,7 @@ import {
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
-import { errorBody, invalidRequestBody } from './api-errors.js'
+import { type ApiErrorBody, errorBody, invalidRequestBody } from './api-errors.js'
 import { factsCacheFor } from './references/content-source.js'
 import { DocumentVectorCache } from './search/document-vector-cache.js'
 import type { ServerDeps } from './server-deps.js'
@@ -60,6 +60,28 @@ import { createViewportSetTool } from './tools/viewport-set.js'
 import { createWorkspaceEditTool } from './tools/workspace-edit.js'
 import { resolveWorkspaceId, withResolvedWorkspaceHandles } from './workspace-handle.js'
 
+/**
+ * The URL names the workspace and the document a write is about; the body
+ * may not. These routes parse with the TOOL inputs, which carry both ids
+ * because a tool has no URL — and composed with the body spread last, a
+ * body's own `workspaceId` won over the URL's, past a membership gate that
+ * had judged the URL's workspace. The ids are now written after the body,
+ * and a body that names either is refused by name rather than silently
+ * overridden, so the caller learns the key has no place here instead of
+ * sending it again.
+ */
+const URL_IDENTITY_KEYS = ['workspaceId', 'documentId'] as const
+
+function identityNamedBy(body: unknown): ApiErrorBody | undefined {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return undefined
+  const named = URL_IDENTITY_KEYS.filter((key) => key in body)
+  if (named.length === 0) return undefined
+  return errorBody(
+    'invalid_request',
+    `${named.join(' and ')} ${named.length === 1 ? 'is' : 'are'} named by the URL, not the body`,
+  )
+}
+
 export function createServer(deps: ServerDeps) {
   const app = new Hono<{ Variables: { workspaceId: string } }>()
   // One stamp-validated content-facts cache per server: backlinks/mentions,
@@ -84,9 +106,11 @@ export function createServer(deps: ServerDeps) {
 
   app.post('/api/v1/workspaces/:workspaceId/documents', async (c) => {
     const body = await c.req.json().catch(() => ({}))
+    const smuggled = identityNamedBy(body)
+    if (smuggled) return c.json(smuggled, 400)
     const parsed = wbDocumentCreateInputSchema.safeParse({
-      workspaceId: c.get('workspaceId'),
       ...body,
+      workspaceId: c.get('workspaceId'),
     })
     if (!parsed.success) {
       return c.json(invalidRequestBody(parsed.error), 400)
@@ -182,10 +206,12 @@ export function createServer(deps: ServerDeps) {
 
   app.post('/api/v1/workspaces/:workspaceId/documents/:documentId/linkify-mentions', async (c) => {
     const body = await c.req.json().catch(() => ({}))
+    const smuggled = identityNamedBy(body)
+    if (smuggled) return c.json(smuggled, 400)
     const parsed = linkifyMentionsInputSchema.safeParse({
+      ...body,
       workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
-      ...body,
     })
     if (!parsed.success) {
       return c.json(invalidRequestBody(parsed.error), 400)

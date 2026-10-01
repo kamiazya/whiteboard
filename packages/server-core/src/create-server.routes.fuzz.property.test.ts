@@ -100,16 +100,30 @@ const override = (path: string, schema: z.ZodTypeAny): fc.Arbitrary<unknown> | u
 /** A body from the schema (the path's own fields removed — the route supplies those), any JSON, or not JSON. */
 type Body =
   | { readonly kind: 'schema'; readonly json: unknown }
+  | { readonly kind: 'smuggled'; readonly json: unknown }
   | { readonly kind: 'json'; readonly json: unknown }
   | { readonly kind: 'text'; readonly text: string }
+/** A well-formed id the seeded workspace does not hold, for a body that tries to name one. */
+const FOREIGN_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 function bodyArb(schema: z.ZodTypeAny, pathFields: readonly string[]): fc.Arbitrary<Body> {
-  const fromSchema = arbitraryForSchema(schema, { override }).map((drawn): Body => {
+  const fromSchemaRecord = arbitraryForSchema(schema, { override }).map((drawn) => {
     const record = { ...(drawn as Record<string, unknown>) }
     for (const field of pathFields) delete record[field]
-    return { kind: 'schema', json: record }
+    return record
   })
+  const fromSchema = fromSchemaRecord.map((record): Body => ({ kind: 'schema', json: record }))
+  // A schema body that ALSO names one of the URL's own fields, aimed
+  // elsewhere: the route must refuse it by name, never act on it — a body
+  // spread after the URL's ids once let `workspaceId` win past the
+  // membership gate.
+  const smuggling = fc
+    .tuple(fromSchemaRecord, fc.constantFrom(...pathFields))
+    .map(
+      ([record, field]): Body => ({ kind: 'smuggled', json: { ...record, [field]: FOREIGN_ID } }),
+    )
   return fc.oneof(
     { weight: 4, arbitrary: fromSchema },
+    { weight: 1, arbitrary: smuggling },
     {
       weight: 1,
       arbitrary: fc.jsonValue({ maxDepth: 2 }).map((json): Body => ({ kind: 'json', json })),
@@ -309,6 +323,13 @@ describe('every /api/v1 route answers or refuses with a reason, never a 5xx', ()
       // call to make.
       if (request.seeded && request.body?.kind === 'schema' && response.status === 400) {
         expect(JSON.parse(text), detail).not.toMatchObject({ error: 'invalid_request' })
+      }
+      // A body naming the URL's own field is refused by name — a 400 whose
+      // reason is the request, not a 404 for the foreign workspace it named,
+      // which is what acting on the body would answer.
+      if (request.body?.kind === 'smuggled') {
+        expect(response.status, detail).toBe(400)
+        expect(JSON.parse(text), detail).toMatchObject({ error: 'invalid_request' })
       }
       if (response.status >= 400) {
         // What actually went out, parsed under the contract the web client
