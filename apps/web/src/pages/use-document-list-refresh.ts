@@ -50,10 +50,17 @@ export function useDocumentListRefresh(options: {
         setDocuments(list)
       })
       .catch((err: unknown) => {
-        // A stale/failed list refresh must not surface as an unhandled
-        // rejection; the switcher just keeps showing its last-known list.
+        // A failed list refresh must not surface as an unhandled rejection;
+        // the switcher just keeps showing its last-known list. One nobody is
+        // waiting on any more — superseded by a newer refresh, or the page
+        // already gone — is not reported either: the record would be filed
+        // against whatever is on screen by then.
+        if (generation !== generationRef.current) return
         log.error('listDocuments failed', err)
       })
+    return () => {
+      generationRef.current += 1
+    }
   }, [documentId, currentUpdatedAt, listDocuments])
 
   return { documents, enumeratedRef }
