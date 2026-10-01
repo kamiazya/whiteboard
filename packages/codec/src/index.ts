@@ -13,6 +13,7 @@ export type {
 export { okfMarkdownDocumentSchema, okfMarkdownFrontmatterSchema } from './okf/schema.js'
 export { serializeOkf } from './okf/serialize.js'
 export { yamlSafeValueSchema } from './okf/yaml-safe.js'
+export { documentReferenceMarkup, referenceMarkup } from './references/markup.js'
 export type { AliasResolver } from './references/resolve.js'
 export { resolveReferences } from './references/resolve.js'
 export type { DocumentPathResolver } from './references/resolve-for-export.js'

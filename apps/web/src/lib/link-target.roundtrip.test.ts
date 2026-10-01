@@ -37,7 +37,7 @@ describe('what the picker writes is what the codec reads', () => {
     ['a ]] b'],
     ['two\nlines'],
   ])('display text %j resolves to one wikiLink and no stray text', (text) => {
-    expect(nodeTypesFor(linkMarkupFor(target, [target], text))).toEqual(['wikiLink'])
+    expect(nodeTypesFor(linkMarkupFor(target, text))).toEqual(['wikiLink'])
   })
 
   it('a path shaped exactly like a document id still links (by the id form)', () => {
@@ -49,7 +49,7 @@ describe('what the picker writes is what the codec reads', () => {
       name: 'Shadowy',
       kind: 'markdown',
     }
-    expect(nodeTypesFor(linkMarkupFor(odd, [odd]))).toEqual(['wikiLink'])
+    expect(nodeTypesFor(linkMarkupFor(odd))).toEqual(['wikiLink'])
   })
 
   it.each([
@@ -60,10 +60,10 @@ describe('what the picker writes is what the codec reads', () => {
     // An unwritable path cannot come out of documentPathSchema, but the
     // fallback still has to survive an unwritable NAME in the alias slot.
     const odd: LinkTarget = { id: ID, path: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name, kind: 'markdown' }
-    expect(nodeTypesFor(linkMarkupFor(odd, [odd]))).toEqual(['wikiLink'])
+    expect(nodeTypesFor(linkMarkupFor(odd))).toEqual(['wikiLink'])
   })
 
   it('resolves the ordinary case through the same path, so the harness is honest', () => {
-    expect(nodeTypesFor(linkMarkupFor(target, [target]))).toEqual(['wikiLink'])
+    expect(nodeTypesFor(linkMarkupFor(target))).toEqual(['wikiLink'])
   })
 })

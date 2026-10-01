@@ -18,6 +18,11 @@ paths:
   closed CommonMark + GFM + math syntax set, and `normalizeMdast` (`markdown/`).
 - Pure, injected-resolver reference resolution: `resolveReferences` (import) and
   `resolveReferencesForExport` (export) (`references/`).
+- The reference grammar's WRITER (`referenceMarkup`, `documentReferenceMarkup`, `packages/codec/src/references/markup.ts`),
+  beside the scanner that reads it: what may sit inside `[[...]]` is decided once, by refusing what
+  the scanner would truncate (`]` anywhere, `|`/`#` in a target, a line break) — it has no escape
+  syntax and none is invented. Every producer of link markup (link picker, completion, Link all
+  mentions) calls it; a raw `` `[[${x}]]` `` template elsewhere is the defect.
 - `CodecParseResult<T>`/`CodecParseError` — the total-parser error contract every parser here
   returns instead of throwing (`errors.ts`).
 - The JSON Canvas PROJECTION ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)):
