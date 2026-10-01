@@ -704,7 +704,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/ports/src/test-utils/blob-store-conformance.ts#describeBlobStoreConformance': 127,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 673,
   'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 662,
-  'packages/server-core/src/create-server.ts#createServer': 219,
+  // +4: the two v1 POST routes refuse a body that names the URL's own
+  // workspace or document before parsing — two lines each, the refusal
+  // itself being a helper above the function.
+  'packages/server-core/src/create-server.ts#createServer': 223,
   'packages/server-core/src/operations/restore-version.ts#restoreToTarget': 61,
   'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
   // The tool bodies left `execute` for module functions when the write
