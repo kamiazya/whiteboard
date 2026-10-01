@@ -10,7 +10,7 @@
  * (`createSeededDocument`) and the switch is a route change, which is the
  * real mechanism rather than a stand-in for one.
  *
- * SpatialEditor is mocked (see BrowserDocumentPage.reload-elements.browser.test.tsx's
+ * SpatialEditor is mocked (see BrowserDocumentPage.reload-elements.test.tsx's
  * doc comment for why) so edits are driven deterministically via onChange —
  * this suite's subject is the backend/IndexedDB sync layer, not gesture input.
  */

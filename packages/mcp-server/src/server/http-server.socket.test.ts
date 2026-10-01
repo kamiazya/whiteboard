@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunningServer } from './http-server.js'
 
-// Its own data dir, for the reason http-server.people.test.ts gives.
+// Its own data dir: `config.js` is mocked onto it, so nothing here touches the real one.
 let tempDir: string
 
 vi.mock('./config.js', async () => {

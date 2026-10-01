@@ -98,6 +98,10 @@ from `assertLedger` at runtime:
 
 `not modelled` takes a reason, for the same purpose `blastRadius: none:`
 does — a bare exemption is the omission with a word in front of it.
+A reason's usual shape is "covered by <test file>", so both helpers resolve
+every `*.test.ts(x)` name in it against the repo's real tests and fail on one
+that exists nowhere — a stale name is a claim that something covers the member
+when nothing does, and no other gate reads a string.
 
 Runtime assertions go in `afterAll`. Note vitest reports an `afterAll`
 failure as a failed SUITE while the summary line still reads "N passed" —
