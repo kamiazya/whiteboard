@@ -149,6 +149,20 @@ export interface DocListener {
    * rejects instead, which already tells its caller.
    */
   onWriteState?: (landed: boolean) => void
+  /**
+   * The daemon refused the credential this stream carries — a 401 or 403 on
+   * the stream itself, or on a push for this document. Not a dropped
+   * connection: the hub stops reconnecting, because retrying a refused
+   * credential is the same answer every backoff step while the page reads
+   * the silence as "reconnecting". The one way out is a new credential,
+   * which arrives as `resume()`.
+   */
+  onAuthRefused?: () => void
+}
+
+/** The two answers that mean the credential, not the connection, is the problem. */
+function isAuthRefusal(status: number): boolean {
+  return status === 401 || status === 403
 }
 
 /** Exported so the SharedWorker-backed source decodes with this one
@@ -257,6 +271,8 @@ export class SseStreamHub implements SseStreamSource {
   private streamId: string | null = null
   private started = false
   private closed = false
+  /** Set by a 401/403; the reconnect loop halts on it until `resume()`. */
+  private authRefused = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryResolve: (() => void) | null = null
 
@@ -334,7 +350,24 @@ export class SseStreamHub implements SseStreamSource {
     // writer that only guards against rejection counts it as delivered and
     // moves its acknowledged version forward over an edit the daemon never
     // took. Failing loudly here is what lets a caller keep the bytes.
+    // A refusal of the CREDENTIAL is told to the document's subscribers as
+    // well: the stream can stay open under a credential the daemon no longer
+    // accepts for writes (a membership revoked mid-session), so the push is
+    // the only place that refusal is visible.
+    if (isAuthRefusal(res.status)) this.announceAuthRefused([this.docs.get(doc)])
     if (!res.ok) throw new Error(`update refused: ${res.status}`)
+  }
+
+  /**
+   * Try the daemon again after a refusal, with whatever credential the
+   * injected `fetch` now carries. A rotated pairing token reaches the worker
+   * as a re-init; the hub it keeps per origin has to try again, or every tab
+   * stays "Sync off" after the person has done the one thing that fixes it.
+   */
+  resume(): void {
+    if (!this.authRefused) return
+    this.authRefused = false
+    void this.start()
   }
 
   /**
@@ -395,14 +428,14 @@ export class SseStreamHub implements SseStreamSource {
    * nothing, so the canvas looks connected while it diverges.
    */
   private async start(): Promise<void> {
-    if (this.started || this.closed) return
+    if (this.started || this.closed || this.authRefused) return
     this.started = true
     const delayFor = this.options.retryDelayMs ?? defaultRetryDelayMs
 
     let attempt = 0
-    while (!this.closed && this.docs.size > 0) {
+    while (!this.closed && !this.authRefused && this.docs.size > 0) {
       const connected = await this.readStreamOnce()
-      if (this.closed || this.docs.size === 0) break
+      if (this.closed || this.authRefused || this.docs.size === 0) break
       attempt = connected ? 0 : attempt + 1
       await this.wait(delayFor(attempt))
     }
@@ -427,6 +460,10 @@ export class SseStreamHub implements SseStreamSource {
       // An unconsumed body holds the connection open under undici, and the
       // reconnect loop would repeat that on every failed attempt.
       void res.body?.cancel().catch(() => {})
+      if (isAuthRefusal(res.status)) {
+        this.authRefused = true
+        this.announceAuthRefused(this.docs.values())
+      }
       return false
     }
 
@@ -480,6 +517,21 @@ export class SseStreamHub implements SseStreamSource {
       for (const listener of entry.listeners) {
         try {
           listener.onConnectionChange?.(connected)
+        } catch {
+          // A listener's own failure is not this hub's to propagate.
+        }
+      }
+    }
+  }
+
+  /** Same rule as `announceConnection`: one listener's throw stops nobody else. */
+  private announceAuthRefused(
+    entries: Iterable<{ listeners: Set<DocListener> } | undefined>,
+  ): void {
+    for (const entry of entries) {
+      for (const listener of entry?.listeners ?? []) {
+        try {
+          listener.onAuthRefused?.()
         } catch {
           // A listener's own failure is not this hub's to propagate.
         }

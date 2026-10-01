@@ -20,7 +20,7 @@
  * which endpoint is called or what the snapshot bytes are, only about what a
  * caller of the port is entitled to rely on.
  */
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import type { DocumentBackend, DocumentBackendHandlers } from '../document-backend-contract.js'
 
 export interface DocumentBackendHarness {
@@ -41,6 +41,12 @@ export interface DocumentBackendHarness {
    * than asserting a behaviour that cannot exist.
    */
   dropTransport?(): void
+  /**
+   * Make the keeper refuse this backend's credential from now on, so the
+   * reconnect `dropTransport` provokes is answered 401. Omitted by an
+   * implementation with no credential to refuse (the browser-local backend).
+   */
+  refuseAuth?(): void
   cleanup(): void
 }
 
@@ -62,6 +68,7 @@ function recorder(): Recorded {
       onRestoreStarted: () => calls.push('restoreStarted'),
       onRestoreComplete: () => calls.push('restoreComplete'),
       onViewportRequest: () => calls.push('viewport'),
+      onAuthError: () => calls.push('authError'),
     } satisfies DocumentBackendHandlers,
   }
 }
@@ -129,6 +136,32 @@ export function documentBackendContract(
     await settle()
 
     expect(rec.calls).toContain('disconnected')
+    h.backend.disconnect()
+    h.cleanup()
+  })
+
+  it('reports a refused credential as an auth error, not as a disconnect', async () => {
+    // The page's "Sync off" state hangs off this callback alone. A backend
+    // that answers a 401 with `onDisconnected` and keeps retrying leaves the
+    // chip reading "reconnecting" until the tab closes.
+    const h = await create()
+    if (!h.dropTransport || !h.refuseAuth) {
+      h.cleanup()
+      return
+    }
+    const rec = recorder()
+    h.backend.connect(rec.handlers)
+    await settle()
+    expect(rec.calls).toContain('connected')
+
+    h.refuseAuth()
+    h.dropTransport()
+    // Polled, not settled: the refusal is met on the backend's own reconnect
+    // attempt, which sits behind its production backoff.
+    await vi.waitFor(() => expect(rec.calls).toContain('authError'), { timeout: 5000 })
+    await settle()
+
+    expect(rec.calls.filter((c) => c === 'authError')).toEqual(['authError'])
     h.backend.disconnect()
     h.cleanup()
   })

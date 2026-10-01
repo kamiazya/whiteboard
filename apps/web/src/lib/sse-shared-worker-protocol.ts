@@ -70,6 +70,11 @@ export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   // document. A tab's push returns at once, so this is the only way it can
   // learn that a write failed — or that the worker's retry has since landed.
   z.object({ type: z.literal('write-state'), doc: z.string(), landed: z.boolean() }),
+  // The daemon refused the worker's credential for this document. Distinct
+  // from a `status` of disconnected: the worker stops reconnecting, and a tab
+  // told only that the stream is down would report a reconnect in progress
+  // for as long as it stays open.
+  z.object({ type: z.literal('auth-refused'), doc: z.string() }),
 ])
 
 export type SseWorkerRequest = z.infer<typeof sseWorkerRequestSchema>

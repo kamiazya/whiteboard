@@ -468,7 +468,7 @@ describe('DaemonDocumentPage', () => {
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
   })
 
-  it('reports "sync-off" on WS auth failure (close 1008 -> onAuthError) without replacing the page', async () => {
+  it('reports "sync-off" when the backend reports a refused credential, without replacing the page', async () => {
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,

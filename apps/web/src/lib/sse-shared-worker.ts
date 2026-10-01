@@ -439,10 +439,13 @@ type RequestOf<Kind extends WorkerRequest['type']> = Extract<WorkerRequest, { ty
  * forever, for a port that has moved on.
  */
 function handleInit(port: MessagePort, msg: RequestOf<'init'>): void {
+  const rotated = tokens.has(msg.baseUrl) && tokens.get(msg.baseUrl) !== msg.token
   tokens.set(msg.baseUrl, msg.token)
   const existing = ports.get(port)
   if (existing?.baseUrl === msg.baseUrl) {
-    hubFor(msg.baseUrl)
+    // A hub halted by a refused credential tries the rotated one; with
+    // nothing refused this is a no-op.
+    if (rotated) hubFor(msg.baseUrl).resume()
     return
   }
   if (existing) {
@@ -496,6 +499,9 @@ function handleSubscribe(
     },
     onConnectionChange: (connected) => {
       postWorkerEvent(port, { type: 'status', doc: msg.doc, connected })
+    },
+    onAuthRefused: () => {
+      postWorkerEvent(port, { type: 'auth-refused', doc: msg.doc })
     },
   })
   state.subscriptions.set(msg.doc, off)

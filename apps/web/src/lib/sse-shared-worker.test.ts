@@ -53,7 +53,13 @@ let updateWrites: {
 const pushByStream = new Map<string, (frame: string) => void>()
 
 const server = setupServer(
-  http.get(`${BASE}/api/sync/stream`, () => {
+  http.get(`${BASE}/api/sync/stream`, ({ request }) => {
+    // The one credential the daemon no longer accepts. Matched by header so
+    // a leftover worker's reconnects, which carry their own tokens, are
+    // answered a stream as before.
+    if (request.headers.get('Authorization') === 'Bearer revoked') {
+      return HttpResponse.json({ title: 'unauthorized' }, { status: 401 })
+    }
     streamSeq += 1
     // The daemon mints the id and announces it on the stream; a client cannot
     // choose one, which is what keeps it from naming another client's stream.
@@ -347,6 +353,23 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
 
     await until(() => authFor(second) !== undefined)
     expect(authFor(second)).toBe('Bearer new')
+  })
+
+  it('tells a tab the daemon refused its credential, under the document it asked for', async () => {
+    // The worker owns the stream, so a tab can only learn this from it. Told
+    // nothing, the page reads the worker's silence as a reconnect in progress
+    // and never says the session is off.
+    const port = connect()
+    const doc = nextDoc()
+    const refused: string[] = []
+    port.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: string; doc?: string }
+      if (data.type === 'auth-refused' && data.doc !== undefined) refused.push(data.doc)
+    })
+    port.postMessage({ type: 'init', baseUrl: BASE, token: 'revoked' })
+    port.postMessage({ type: 'subscribe', doc })
+
+    await until(() => refused.includes(doc))
   })
 
   it('keeps a port’s subscriptions across a re-init', async () => {
