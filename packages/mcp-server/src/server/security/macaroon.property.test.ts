@@ -315,11 +315,14 @@ describe('macaroon — a changed token never verifies', () => {
   // The same claim one layer out, over the CHARACTERS of the string a client
   // holds. Here a flip CAN be a no-op, and that is measured rather than
   // excluded: the final character of a token whose length is not a multiple
-  // of four carries bits base64 discards, and `+`/`/` are accepted for
-  // `-`/`_`. So the stated claim is "verifies exactly when the decoded bytes
-  // are unchanged", the unchanged side judged by Node's own `Buffer` decoder
-  // and not by the module's `atob`.
+  // of four carries bits base64 discards. So the stated claim is "verifies
+  // exactly when the decoded bytes are unchanged", the unchanged side judged
+  // by Node's own `Buffer` decoder and not by the module's `atob` — with one
+  // correction the oracle needs: Node also reads `+`/`/` as `-`/`_`, while
+  // the token's grammar is url-only, so a swap to either is a refusal
+  // whatever bytes Node makes of it. They stay in the draw for that reason.
   const alphabet = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_+/']
+  const URL_ALPHABET = /^[A-Za-z0-9_-]$/
   it('one changed character verifies only if it left the decoded bytes unchanged', async () => {
     let sameBytes = 0
     let changedBytes = 0
@@ -333,9 +336,9 @@ describe('macaroon — a changed token never verifies', () => {
           const at = position < 0 ? token.length - 1 : position % token.length
           if (token[at] === replacement) return
           const mutated = `${token.slice(0, at)}${replacement}${token.slice(at + 1)}`
-          const unchanged = Buffer.from(mutated, 'base64url').equals(
-            Buffer.from(token, 'base64url'),
-          )
+          const unchanged =
+            URL_ALPHABET.test(replacement) &&
+            Buffer.from(mutated, 'base64url').equals(Buffer.from(token, 'base64url'))
           const verdict = await verifyMacaroon({ token: mutated, rootKey: ROOT_KEY, context })
           expect(verdict.ok, `char ${at} of ${token.length}: ${token[at]} -> ${replacement}`).toBe(
             unchanged,
