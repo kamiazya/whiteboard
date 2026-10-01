@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchDaemonPing, resolveConnectHost } from './daemon-ping-client.js'
+import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './daemon-ping-client.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -86,5 +87,46 @@ describe('fetchDaemonPing', () => {
     const result = await fetchDaemonPing('127.0.0.1', 3099)
 
     expect(result).toBeNull()
+  })
+})
+
+// The identity check that decides whether server-stop may kill the recorded
+// pid and whether server-status / server-doctor call a server healthy. Their
+// own tests inject an override, so the real ping + instanceId comparison is
+// pinned here.
+describe('verifyDaemonIdentity', () => {
+  const RECORD: ServerModeRecord = {
+    schemaVersion: 1,
+    pid: 42,
+    host: '0.0.0.0',
+    port: 3099,
+    publicBaseUrl: 'https://whiteboard.example.com',
+    authStrategy: 'oauth-jwt',
+    startedAt: '2026-05-19T00:00:00.000Z',
+    instanceId: 'valid-instance-id',
+  }
+
+  it('confirms identity when the ping response instanceId matches the record', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'valid-instance-id' }),
+    }))
+    await expect(verifyDaemonIdentity(RECORD)).resolves.toBe(true)
+  })
+
+  it('refuses to confirm identity when the ping response instanceId mismatches', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'some-other-instance-id' }),
+    }))
+    await expect(verifyDaemonIdentity(RECORD)).resolves.toBe(false)
+  })
+
+  it('never confirms identity when the record predates instanceId', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(verifyDaemonIdentity({ ...RECORD, instanceId: undefined })).resolves.toBe(false)
+    // Short-circuits before making a network call.
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

@@ -17,6 +17,7 @@ beforeEach(async () => {
   tmpRoot = await realpath(await mkdtemp(join(tmpdir(), 'wb-server-restore-test-')))
 })
 afterEach(async () => {
+  vi.restoreAllMocks()
   await rm(tmpRoot, { recursive: true, force: true })
 })
 
@@ -160,6 +161,29 @@ describe('runServerRestore', () => {
     })
 
     expect(outcome.kind).toBe('running-target')
+  })
+
+  // The default liveness check, with no seam injected: a process the OS says
+  // exists but will not let this user signal is still a live server.
+  it('running-target: a pid the OS refuses to signal (EPERM) still blocks restore', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'running-target')
+    await mkdir(backupDir)
+    await writeFile(join(backupDir, 'whiteboard.db'), 'rows')
+    await mkdir(targetDir)
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('EPERM'), { code: 'EPERM' })
+    })
+
+    const doRestore = vi.fn()
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      doReadRecord: () => ({ kind: 'ok', record: makeRecord({ pid: 4242 }) }),
+      doRestore,
+    })
+
+    expect(outcome.kind).toBe('running-target')
+    expect(doRestore).not.toHaveBeenCalled()
   })
 
   it('running-target: stale (dead) pid does not block restore', async () => {

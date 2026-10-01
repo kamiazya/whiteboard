@@ -130,7 +130,7 @@ async function listMirrored(backupRoot: string, store: string): Promise<Set<stri
     } catch {
       continue
     }
-    // A `.partial-*` left by an interrupted copy is not an entry; it fails
+    // A `*.partial` left by an interrupted copy is not an entry; it fails
     // this test and is left where it is rather than being counted as
     // unreferenced content and deleted.
     for (const name of rest) if (/^[0-9a-f]{62}$/.test(name)) found.add(`${shard}${name}`)

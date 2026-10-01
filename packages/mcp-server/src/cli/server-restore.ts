@@ -7,6 +7,7 @@ import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
 import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
 import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
 
 export interface RunServerRestoreOptions {
@@ -28,15 +29,6 @@ interface ServerRestoreResult {
   schemaVersion: 1
   ok: true
   operation: 'restore'
-}
-
-function defaultIsPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
 }
 
 export async function runServerRestore(

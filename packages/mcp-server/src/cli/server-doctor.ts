@@ -27,6 +27,7 @@ import {
   daemonDoctorResultSchema,
 } from '../shared/api-contracts/daemon-doctor.js'
 import { redactDiagnosticText } from '../shared/diagnostics/redact.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './daemon-ping-client.js'
 import { mergeCliFlagsIntoEnv, type ServerRunArgs } from './server-run-args.js'
 
@@ -66,20 +67,6 @@ export interface RunServerDoctorOutcome {
   exitCode: 0 | 1
 }
 
-function defaultIsPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
-// Exported for direct unit testing of the instanceId comparison logic below
-// (see server-doctor.test.ts) — the option default is otherwise only ever
-// exercised indirectly through runServerDoctor with an injected override.
-export const defaultVerifyIdentity = verifyDaemonIdentity
-
 async function defaultFetchJwks(uri: string): Promise<{ ok: boolean; hasKeys: boolean }> {
   try {
     const res = await fetch(uri, { signal: AbortSignal.timeout(5000) })
@@ -118,7 +105,7 @@ function defaultReadRecordMode(dataDir: string): number | null {
   }
 }
 
-// Exported for direct unit testing — same rationale as defaultVerifyIdentity.
+// Exported for direct unit testing — same rationale as verifyDaemonIdentity.
 export async function defaultFetchPing(
   host: string,
   port: number,
@@ -510,7 +497,7 @@ export async function runServerDoctor(
   const env = mergeCliFlagsIntoEnv(options.env ?? process.env, options.flags)
   const seams: RequiredSeams = {
     isPidAlive: options.isPidAlive ?? defaultIsPidAlive,
-    verifyIdentity: options.verifyIdentity ?? defaultVerifyIdentity,
+    verifyIdentity: options.verifyIdentity ?? verifyDaemonIdentity,
     fetchJwks: options.fetchJwks ?? defaultFetchJwks,
     checkDataDir: options.checkDataDir ?? defaultCheckDataDir,
     readRecordMode: options.readRecordMode ?? defaultReadRecordMode,

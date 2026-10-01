@@ -5,9 +5,7 @@ import {
   daemonRecordBaseSchema,
   daemonRecordSchema,
 } from './daemon-record-schema.js'
-import { getDaemonRecordPath, isPidAlive } from './daemon-registry.js'
-
-export { isPidAlive }
+import { getDaemonRecordPath } from './daemon-registry.js'
 
 export type DaemonRecordParseResult =
   | { kind: 'missing' }

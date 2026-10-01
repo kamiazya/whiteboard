@@ -2,14 +2,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
-import {
-  defaultFetchPing,
-  defaultVerifyIdentity,
-  runServerDoctor,
-  SERVER_DOCTOR_CHECK_IDS,
-} from './server-doctor.js'
+import { defaultFetchPing, runServerDoctor, SERVER_DOCTOR_CHECK_IDS } from './server-doctor.js'
 
 let dataDir: string
 
@@ -315,7 +309,7 @@ describe('runServerDoctor', () => {
   })
 
   // ─── 12b. Legacy record without instanceId → server.identity warning ──────
-  // Exercises the real defaultVerifyIdentity (no override injected), same
+  // Exercises the real verifyDaemonIdentity (no override injected), same
   // pattern as the "legacy record" tests in server-status.test.ts /
   // server-stop.test.ts, since this is the one branch of the real default
   // that never requires a live network call.
@@ -498,44 +492,9 @@ describe('runServerDoctor', () => {
   })
 })
 
-// ─── Direct unit tests for the default identity/ping implementations ────────
-// These are the seams runServerDoctor falls back to when no verifyIdentity /
-// fetchPing override is injected. Every scenario above injects overrides, so
-// without these, a regression to the real instanceId comparison logic
-// (introduced alongside the pid→instanceId rename) would go uncaught.
-
-describe('defaultVerifyIdentity', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  it('confirms identity when the ping response instanceId matches the record', async () => {
-    vi.stubGlobal('fetch', async () => ({
-      ok: true,
-      json: async () => ({ ok: true, instanceId: 'instance-a' }),
-    }))
-    const record = makeRecord({ instanceId: 'instance-a' }) as ServerModeRecord
-    await expect(defaultVerifyIdentity(record)).resolves.toBe(true)
-  })
-
-  it('refuses to confirm identity when the ping response instanceId mismatches', async () => {
-    vi.stubGlobal('fetch', async () => ({
-      ok: true,
-      json: async () => ({ ok: true, instanceId: 'instance-b' }),
-    }))
-    const record = makeRecord({ instanceId: 'instance-a' }) as ServerModeRecord
-    await expect(defaultVerifyIdentity(record)).resolves.toBe(false)
-  })
-
-  it('never confirms identity when the record predates instanceId', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-    const record = makeRecord({ instanceId: undefined }) as ServerModeRecord
-    await expect(defaultVerifyIdentity(record)).resolves.toBe(false)
-    // Short-circuits before making a network call.
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-})
+// ─── Direct unit tests for the default ping implementation ──────────────────
+// The seam runServerDoctor falls back to when no fetchPing override is
+// injected. Every scenario above injects one.
 
 describe('defaultFetchPing', () => {
   afterEach(() => {

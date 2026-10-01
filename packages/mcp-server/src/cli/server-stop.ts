@@ -24,6 +24,7 @@ import {
   type ServerStopResult,
   serverStopResultSchema,
 } from '../shared/api-contracts/server-stop.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STOP_SCHEMA_VERSION = 1 as const
@@ -89,20 +90,6 @@ async function forgetRecord(
 // 10s matches the dispatcher's SIGTERM window. Overridable in tests.
 const DEFAULT_STOP_TIMEOUT_MS = 10_000
 const DEFAULT_POLL_INTERVAL_MS = 50
-
-function defaultIsPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
-// Exported for direct unit testing of the live-ping comparison (see
-// server-stop.test.ts) — the option default is otherwise only ever
-// exercised indirectly through runServerStop with an injected override.
-export const defaultVerifyIdentity = verifyDaemonIdentity
 
 const defaultKillFn = (pid: number, signal: NodeJS.Signals | number) => {
   process.kill(pid, signal)
@@ -282,7 +269,7 @@ async function escalateAfterTimeout(
 export async function runServerStop(options: RunServerStopOptions): Promise<RunServerStopOutcome> {
   const dataDir = options.dataDir ?? resolveDefaultDataDir(process.env)
   const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
-  const verifyIdentity = options.verifyIdentity ?? defaultVerifyIdentity
+  const verifyIdentity = options.verifyIdentity ?? verifyDaemonIdentity
   const killFn = options.killFn ?? defaultKillFn
   const sleep = options.sleep ?? defaultSleep
   const removeRecord = options.removeRecord ?? defaultRemoveRecord

@@ -1,13 +1,10 @@
-import {
-  type DaemonRecordParseResult,
-  isPidAlive as defaultIsPidAlive,
-  parseDaemonRecord,
-} from '../daemon/daemon-record.js'
+import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import {
   type DaemonDoctorCheck,
   type DaemonDoctorResult,
   daemonDoctorResultSchema,
 } from '../shared/api-contracts/daemon-doctor.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 
 export interface DaemonDoctorOptions {
   dataDir: string

@@ -10,7 +10,6 @@ import { nanoid } from 'nanoid'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
 import {
   deleteDaemonRecord,
-  isPidAlive,
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
@@ -27,6 +26,7 @@ import {
 import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
+import { isPidAlive } from '../shared/process-alive.js'
 
 export type DaemonRunOutcome =
   | {

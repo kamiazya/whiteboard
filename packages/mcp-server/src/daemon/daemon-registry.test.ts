@@ -6,7 +6,6 @@ import { CAN_DENY_FILE_READ } from '../shared/test-utils/can-deny-file-read.js'
 import {
   deleteDaemonRecord,
   getDaemonRecordPath,
-  isPidAlive,
   loadDaemonRecord,
   saveDaemonRecord,
 } from './daemon-registry.js'
@@ -172,18 +171,5 @@ describe('daemon-registry', () => {
 
     await deleteDaemonRecord(dataDir)
     await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
-  })
-})
-
-describe('isPidAlive', () => {
-  it('treats the current pid as alive', () => {
-    expect(isPidAlive(process.pid)).toBe(true)
-  })
-
-  it('treats impossible pid values as dead', () => {
-    expect(isPidAlive(0)).toBe(false)
-    expect(isPidAlive(-1)).toBe(false)
-    expect(isPidAlive(Number.NaN)).toBe(false)
-    expect(isPidAlive(999_999_999)).toBe(false)
   })
 })

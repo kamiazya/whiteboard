@@ -21,11 +21,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType } from 'zod'
-import {
-  type DaemonRecordParseResult,
-  isPidAlive as defaultIsPidAlive,
-  parseDaemonRecord,
-} from '../daemon/daemon-record.js'
+import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import type { DaemonRecord } from '../daemon/daemon-record-schema.js'
 import {
   type DaemonRotateReplicaKeyResult,
@@ -33,6 +29,7 @@ import {
   daemonRotateReplicaKeyResultSchema,
   daemonSetReplicaTierResultSchema,
 } from '../shared/api-contracts/daemon-replica-posture.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 
 export interface DaemonRequest {
   readonly record: DaemonRecord

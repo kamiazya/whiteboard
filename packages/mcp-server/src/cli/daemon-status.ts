@@ -1,12 +1,9 @@
-import {
-  type DaemonRecordParseResult,
-  isPidAlive as defaultIsPidAlive,
-  parseDaemonRecord,
-} from '../daemon/daemon-record.js'
+import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import {
   type DaemonStatusResult,
   daemonStatusResultSchema,
 } from '../shared/api-contracts/daemon-status.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 
 export interface DaemonStatusOptions {
   dataDir: string

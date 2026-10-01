@@ -16,16 +16,13 @@
 // stdout is reserved for JSONL or empty; diagnostics go to stderr via
 // the `stderr` field of the returned outcome.
 
-import {
-  type DaemonRecordParseResult,
-  isPidAlive as defaultIsPidAlive,
-  parseDaemonRecord,
-} from '../daemon/daemon-record.js'
+import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import {
   type DaemonLogEntryInput,
   formatDaemonLogEntriesAsJsonLines,
   InvalidLogTimestampError,
 } from '../shared/diagnostics/log-jsonl.js'
+import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 
 export interface DaemonLogsOptions {
   dataDir: string
