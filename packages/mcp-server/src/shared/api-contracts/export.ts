@@ -3,8 +3,9 @@ import { z } from 'zod'
 
 // Request / response schemas for POST /api/w/:workspaceId/document/<path>/export.
 // Imported by the route handler, which validates incoming bodies against
-// exportRequestSchema and types its `c.json(...)` responses via the
-// ExportResponse/ExportErrorBody types derived below.
+// exportRequestSchema and types its success response via ExportResponse.
+// Refusals are not declared here: they are server-core's `apiErrorBodySchema`
+// (the one error contract), so a second, looser shape cannot sit beside it.
 
 // Strict so a field this contract does not define is refused by name instead
 // of being dropped: a caller sending one would otherwise read the 200 as
@@ -68,16 +69,4 @@ export const exportResponseSchema = z.object({
   unresolvedFamilies: z.array(z.string()),
 })
 
-// Shared error body. The route emits this for invalid_request /
-// invalid_output_path (400), not_found (404), output_exists (409),
-// payload_too_large (413), and headless_export_failed (500).
-// All fields are optional since some 5xx bodies come from proxies that
-// strip `error` without crashing the parser.
-export const exportErrorBodySchema = z.object({
-  error: z.string().optional(),
-  message: z.string().optional(),
-  hint: z.string().optional(),
-})
-
 export type ExportResponse = z.infer<typeof exportResponseSchema>
-export type ExportErrorBody = z.infer<typeof exportErrorBodySchema>

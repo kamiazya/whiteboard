@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportResponseSchema } from '../../shared/api-contracts/export.js'
@@ -667,5 +668,65 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(body.filePath).toBe(outputPath)
     const bytes = await readFile(outputPath)
     expect(bytes[0]).toBe(0x89)
+  })
+
+  // One contract for every refusal: a body that `apiErrorBodySchema` refuses
+  // is one `apiErrorReason` cannot read, so the caller sees a bare status.
+  describe.each<[string, number, () => Promise<{ body?: string }>]>([
+    [
+      'a missing document',
+      404,
+      async () => {
+        mockDocumentExists.mockResolvedValueOnce(false)
+        return {}
+      },
+    ],
+    ['malformed JSON', 400, async () => ({ body: '{' })],
+    ['a field the contract does not define', 400, async () => ({ body: '{"frameId":"f"}' })],
+    [
+      'an outputPath outside the exports directory',
+      400,
+      async () => ({ body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }) }),
+    ],
+    [
+      'an existing output file',
+      409,
+      async () => {
+        const outputPath = join(tempDir, 's1', 'exports', 'taken.png')
+        await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
+        await writeFile(outputPath, 'OLD')
+        return { body: JSON.stringify({ outputPath }) }
+      },
+    ],
+    ['an oversized body', 413, async () => ({ body: 'x'.repeat(1024 * 1024 + 1) })],
+    [
+      'a renderer that throws',
+      500,
+      async () => {
+        mockExportCanvasHeadless.mockRejectedValue(new Error('boom'))
+        return {}
+      },
+    ],
+    [
+      'a renderer that throws with no message',
+      500,
+      async () => {
+        mockExportCanvasHeadless.mockRejectedValue(new Error(''))
+        return {}
+      },
+    ],
+  ])('the refusal for %s', (_name, status, arrange) => {
+    it(`answers ${status} with a body inside apiErrorBodySchema and a readable reason`, async () => {
+      const request = await arrange()
+      const res = await makeApp().request('/api/w/s1/document/canvas-a/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        ...request,
+      })
+      expect(res.status).toBe(status)
+      const body: unknown = await res.json()
+      expect(apiErrorBodySchema.safeParse(body).success, JSON.stringify(body)).toBe(true)
+      expect(apiErrorReason(body)).toBeTruthy()
+    })
   })
 })

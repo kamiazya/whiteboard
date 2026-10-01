@@ -10,11 +10,8 @@ import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
-import {
-  type ExportErrorBody,
-  type ExportResponse,
-  exportRequestSchema,
-} from '../../shared/api-contracts/export.js'
+import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
+import { errorMessage } from '../../shared/error-message.js'
 import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
@@ -59,7 +56,7 @@ async function resolveExportOutputPath(
   body: { outputPath?: string; overwrite?: boolean },
   workspaceId: string,
 ): Promise<
-  { outputPath: string | undefined } | { error: ExportErrorBody; status: ContentfulStatusCode }
+  { outputPath: string | undefined } | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
   if (typeof body.outputPath !== 'string' || body.outputPath.length === 0) {
     return { outputPath: undefined }
@@ -91,13 +88,12 @@ async function renderedExport(
   path: string,
   body: z.infer<typeof exportRequestSchema>,
 ): Promise<
-  | Awaited<ReturnType<typeof renderHeadless>>
-  | { error: ExportErrorBody; status: ContentfulStatusCode }
+  Awaited<ReturnType<typeof renderHeadless>> | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
   try {
     return await renderHeadless(workspaceId, path, body)
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = errorMessage(err)
     if (/target size is zero/i.test(message)) {
       return {
         error: { error: 'invalid_request', message: `invalid export options: ${message}` },
@@ -145,7 +141,7 @@ export function createExportRouter(options: ExportRouterOptions) {
       // blank PNG. Reject up front with 404 so callers learn about the typo
       // instead of shipping the silently-empty file.
       if (!(await documentExists(workspaceId, path))) {
-        const errBody: ExportErrorBody = {
+        const errBody: ApiErrorBody = {
           error: 'not_found',
           message: `Canvas not found: ${workspaceId}/${path}`,
         }

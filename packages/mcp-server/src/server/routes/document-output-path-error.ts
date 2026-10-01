@@ -1,8 +1,9 @@
+import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import type { OutputPathError } from '../output-path.js'
 
 export type DocumentOutputPathErrorBody = {
   status: 400 | 409
-  body: { error: string; message: string }
+  body: Extract<ApiErrorBody, { error: string }> & { message: string }
 }
 
 // The fixed messages below intentionally never echo err.message: it can

@@ -9,11 +9,12 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
-import type { ExportErrorBody, ExportResponse } from '../../../shared/api-contracts/export.js'
+import type { ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
 } from '../../../shared/api-contracts/export-svg.js'
+import { errorMessage } from '../../../shared/error-message.js'
 import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
@@ -55,7 +56,7 @@ async function resolveSvgOutputPath(
   body: ExportSvgRequest,
   workspaceId: string,
 ): Promise<
-  { outputPath: string | undefined } | { error: ExportErrorBody; status: ContentfulStatusCode }
+  { outputPath: string | undefined } | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
   if (typeof body.outputPath !== 'string' || body.outputPath.length === 0) {
     return { outputPath: undefined }
@@ -69,7 +70,7 @@ async function resolveSvgOutputPath(
   } catch (err) {
     if (err instanceof OutputPathError) {
       const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
-      return { error: errBody as ExportErrorBody, status }
+      return { error: errBody, status }
     }
     throw err
   }
@@ -108,7 +109,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       // typoed path would otherwise return 200 and a valid-looking SVG of
       // nothing. Its absence here was the asymmetry, not a decision.
       if (!(await documentExists(workspaceId, path))) {
-        const errBody: ExportErrorBody = {
+        const errBody: ApiErrorBody = {
           error: 'not_found',
           message: `Canvas not found: ${workspaceId}/${path}`,
         }
@@ -120,7 +121,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       const body = parsedBody.body
 
       const resolved = await resolveSvgOutputPath(body, workspaceId)
-      if ('error' in resolved) return c.json(resolved.error as ExportErrorBody, resolved.status)
+      if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
 
       let svg: string
@@ -140,9 +141,9 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         undrawable = result.undrawable
         unresolvedFamilies = result.unresolvedFamilies
       } catch (err) {
-        const errBody: ExportErrorBody = {
+        const errBody: ApiErrorBody = {
           error: 'headless_export_failed',
-          message: err instanceof Error ? err.message : String(err),
+          message: errorMessage(err),
         }
         return c.json(errBody, 500)
       }
