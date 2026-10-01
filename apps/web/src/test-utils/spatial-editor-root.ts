@@ -8,8 +8,13 @@ export function rootOf(container: HTMLElement): HTMLElement {
 }
 
 /**
- * The midpoint of the first drawn edge, in the editor root's own coordinates
- * — the space `rightClick` and the pointer helpers take.
+ * Element-relative position ON the first drawn edge, derived from the
+ * committed polyline's own client rect — the space `rightClick` and the
+ * pointer helpers take. Hardcoded canvas coordinates break under the vitest
+ * browser iframe's UI scaling (the page renders scaled, so a fixed
+ * element-relative point lands elsewhere in canvas space depending on the
+ * current scale); rect-derived positions live in the same scaled space as the
+ * click and stay correct at any zoom.
  */
 export function edgeMidpoint(container: HTMLElement): { x: number; y: number } {
   const root = rootOf(container)

@@ -6,6 +6,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorText } from '../spatial-editor/node-editor-test-utils.js'
 import { SpatialEditor } from '../spatial-editor/SpatialEditor.js'
 import { CanvasVerbBar } from './CanvasVerbBar.js'
@@ -42,7 +43,7 @@ it('appears only while a node is being edited, and acts on it without closing th
   const { container } = render(<Host />)
   expect(bar()).toBeNull()
 
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 350 } })
   await vi.waitFor(() => expect(nodeEditorText(container)).not.toBeNull())
   await vi.waitFor(() => expect(bar()).not.toBeNull())
@@ -64,7 +65,7 @@ it('stays away on a coarse pointer, where the keyboard-docked bar has the job', 
   // under the header while TouchFormattingBar rides the keyboard.
   stubCoarsePointer()
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 350 } })
   await vi.waitFor(() => expect(nodeEditorText(container)).not.toBeNull())
   await new Promise((resolve) => setTimeout(resolve, 80))

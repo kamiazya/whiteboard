@@ -10,7 +10,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
-import { rootOf } from '../../test-utils/spatial-editor-root.js'
+import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -37,20 +37,6 @@ function makeStart(label?: string): SpatialCanvas {
   }
 }
 
-/** Element-relative position ON the edge polyline (see edge-select-delete). */
-function edgeMidpointPosition(container: HTMLElement): { x: number; y: number } {
-  const root = rootOf(container)
-  const polyline = container.querySelector(
-    '[data-testid="spatial-editor"] svg polyline',
-  ) as SVGPolylineElement
-  const edgeRect = polyline.getBoundingClientRect()
-  const rootRect = root.getBoundingClientRect()
-  return {
-    x: edgeRect.x + edgeRect.width / 2 - rootRect.x,
-    y: edgeRect.y + edgeRect.height / 2 - rootRect.y,
-  }
-}
-
 function labelEditor(container: HTMLElement): HTMLTextAreaElement | null {
   return container.querySelector('[data-testid="edge-label-editor"]')
 }
@@ -59,7 +45,7 @@ it('double-clicking an edge opens the label editor; committing sets the label', 
   const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.dblClick(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() => expect(labelEditor(container)).not.toBeNull())
   // The double press on an edge must NOT create a node.
   expect(latest.canvas.nodes).toHaveLength(2)
@@ -82,7 +68,7 @@ it('the editor opens pre-filled with the existing label and Escape cancels witho
   const { Host, latest } = makeEditorHost({ initial: makeStart('before') })
   const { container } = render(<Host />)
 
-  await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.dblClick(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() => expect(labelEditor(container)).not.toBeNull())
   expect((labelEditor(container) as HTMLTextAreaElement).value).toBe('before')
 
@@ -96,7 +82,7 @@ it('committing an empty value removes the label', async () => {
   const { Host, latest } = makeEditorHost({ initial: makeStart('old') })
   const { container } = render(<Host />)
 
-  await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.dblClick(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() => expect(labelEditor(container)).not.toBeNull())
 
   await userEvent.fill(labelEditor(container) as HTMLTextAreaElement, '')
@@ -115,7 +101,7 @@ it('typed spaces reach the label editor instead of arming the Space-pan', async 
   const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 
-  await userEvent.dblClick(rootOf(container), { position: edgeMidpointPosition(container) })
+  await userEvent.dblClick(rootOf(container), { position: edgeMidpoint(container) })
   await vi.waitFor(() => expect(labelEditor(container)).not.toBeNull())
 
   await userEvent.type(labelEditor(container) as HTMLTextAreaElement, 'depends on')

@@ -27,6 +27,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from '../spatial-editor/SpatialEditor.js'
 import { completionOnDelete } from './completion-on-delete.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -272,7 +273,7 @@ describe('both editing hosts install it', () => {
         <SpatialEditor defaultTool="select" canvas={canvas} onChange={vi.fn()} theme="light" />
       </div>,
     )
-    const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+    const root = rootOf(container)
     const r = root.getBoundingClientRect()
     const at = { clientX: r.left + 200, clientY: r.top + 150 }
     for (const _ of [0, 1]) {

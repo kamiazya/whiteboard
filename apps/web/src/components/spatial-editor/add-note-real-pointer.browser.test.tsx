@@ -11,6 +11,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -52,7 +53,7 @@ it('committing the new note untouched keeps a visible empty node, not a blank ca
   await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
   // Click empty canvas space without typing — the editor commits the (empty)
   // pending text and the node must survive as a visible box.
-  await userEvent.click(container.querySelector('[data-testid="spatial-editor"]') as Element, {
+  await userEvent.click(rootOf(container), {
     // A far corner: the new note (and its editor) sit at the viewport
     // centre, and clicking INSIDE the open textarea correctly keeps the
     // editor open — the commit only happens when the press lands outside.
