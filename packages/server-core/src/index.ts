@@ -65,7 +65,7 @@ export {
   bodyEditOutputSchema,
   createBodyEditTool,
 } from './tools/body-edit.js'
-export { createCanvasEditTool } from './tools/canvas-edit.js'
+export { canvasEditInputSchema, createCanvasEditTool } from './tools/canvas-edit.js'
 export type { CanvasRenderSvgInput, CanvasRenderSvgOutput } from './tools/canvas-render-svg.js'
 export {
   canvasRenderSvgInputSchema,

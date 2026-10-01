@@ -24,6 +24,10 @@
       "types": "./src/scene.ts",
       "import": "./src/scene.ts"
     },
+    "./widget-tool-calls": {
+      "types": "./src/widget/widget-tool-calls.ts",
+      "import": "./src/widget/widget-tool-calls.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

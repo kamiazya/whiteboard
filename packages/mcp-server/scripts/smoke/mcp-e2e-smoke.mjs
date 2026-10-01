@@ -16,6 +16,12 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+// The widget's own call builders: what it sends is what this smoke sends, so
+// the runtime step cannot drift from the widget by being a second hand copy.
+import {
+  canvasViewCall,
+  commentAddCall,
+} from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
@@ -1767,16 +1773,19 @@ async function theAnnotationLayerThroughWidgetShapes(ctx) {
   // exercised through the real MCP SDK because the ops union, the stored
   // per-comment map, and the outputSchema's `touched.comments` all travel
   // separately from any type the compiler checks.
-  const commented = await callTool('wb_canvas_edit', {
-    workspaceId: viewed.workspaceId,
-    documentId: viewed.documentId,
-    ops: [{ op: 'comment.add', comment: { targetNodeId: 'lockable', text: 'smoke comment' } }],
-  })
+  // In the widget's EXACT shape — the clicked point AND the node it landed in.
+  const widgetComment = commentAddCall(
+    { workspaceId: viewed.workspaceId, documentId: viewed.documentId },
+    { x: 12, y: 34, targetNodeId: 'lockable' },
+    'smoke comment',
+  )
+  const commented = await callTool(widgetComment.name, widgetComment.arguments)
   const commentId = commented.touched?.comments?.[0]
   if (commented.applied !== 1 || commentId === undefined) {
     throw new Error(`comment.add did not report its comment: ${JSON.stringify(commented)}`)
   }
-  const afterComment = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  const widgetRefresh = canvasViewCall({ workspaceId: WORKSPACE_ID, documentId })
+  const afterComment = await callTool(widgetRefresh.name, widgetRefresh.arguments)
   const commentInScene = (afterComment.scene['x-whiteboard']?.comments ?? []).some(
     (comment) => comment.id === commentId && comment.text === 'smoke comment',
   )
