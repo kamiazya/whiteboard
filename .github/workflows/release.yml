@@ -128,7 +128,7 @@ jobs:
           # Pinned inline (not via .node-version) because publish-mcp checks out an old tag whose
           # source tree may predate .node-version. Node 24 ships with npm 11.x which already meets
           # Trusted Publishing's >= 11.5.1 requirement and avoids the `npm i -g npm@latest` bug.
-          # Keep this in sync with .node-version manually.
+          # local-node-version.test.ts fails when this drifts from .node-version.
           node-version: 24
           registry-url: https://registry.npmjs.org
 
