@@ -222,10 +222,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     expect(resolveApiRouteScope('GET', '/api/runtime/ping')).toEqual({ kind: 'public' })
   })
 
-  it('POST /api/runtime/verify is public — the identity challenge must precede any credential', () => {
-    expect(resolveApiRouteScope('POST', '/api/runtime/verify')).toEqual({ kind: 'public' })
-  })
-
   it('a non-/api path is out of scope for this registry (null, not silently public)', () => {
     expect(resolveApiRouteScope('GET', '/mcp')).toBeNull()
     expect(resolveApiRouteScope('GET', '/')).toBeNull()
@@ -279,7 +275,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
 // rule fails on that rule's own entry.
 const CLAIMED_BY = {
   'runtime/ping': ['GET', '/api/runtime/ping'],
-  'runtime/verify': ['POST', '/api/runtime/verify'],
   'document file': ['GET', '/api/w/ws1/document/a/b/file/f1'],
   'workspace-document/promote': ['POST', '/api/w/ws1/workspace-document/promote'],
   'workspace-document sync': ['POST', '/api/w/ws1/workspace-document/update'],
@@ -350,7 +345,6 @@ const GATED = [
 
 const ORIGIN_TRUSTED = [
   'runtime/ping',
-  'runtime/verify',
   'sync transport',
   'workspace replica-key',
   'workspace replica-key rotate',

@@ -1,4 +1,3 @@
-import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,10 +5,7 @@ import {
   didKeyToEd25519PublicKey,
   ed25519PublicKeyToDidKey,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/did-key'
-import {
-  daemonPingResponseSchema,
-  runtimeVerifyResponseSchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { daemonPingResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type CredentialResolverConfig,
@@ -55,21 +51,13 @@ vi.mock('../../daemon/log-rotation.js', () => ({
 }))
 
 const { createRuntimeRouter } = await import('./runtime.js')
-const { buildSignedPayload, createDaemonIdentity } = await import('../security/daemon-identity.js')
+const { createDaemonIdentity } = await import('../security/daemon-identity.js')
 
 // Real identity in an isolated temp dir (injected — the router never touches
 // the mocked config seam for it).
 const identityDir = mkdtempSync(join(tmpdir(), 'wb-runtime-identity-'))
 const testIdentity = createDaemonIdentity({ dataDir: identityDir })
 process.once('exit', () => rmSync(identityDir, { recursive: true, force: true }))
-
-function verifyIdentitySignature(parts: readonly string[], signatureB64u: string) {
-  const key = createPublicKey({
-    key: { kty: 'OKP', crv: 'Ed25519', x: testIdentity.publicKey },
-    format: 'jwk',
-  })
-  return cryptoVerify(null, buildSignedPayload(parts), key, Buffer.from(signatureB64u, 'base64url'))
-}
 
 // Credentials go through a REAL resolver rather than reaching the router as
 // separate optional fields. That is the point of the refactor: these tests
@@ -244,8 +232,6 @@ describe('runtime routes', () => {
 })
 
 describe('daemon identity surfaces', () => {
-  const NONCE = Buffer.from('0123456789abcdef').toString('base64url')
-
   it('ping advertises the identity public key', async () => {
     const { app } = createApp()
     const res = await app.request('/api/runtime/ping')
@@ -267,72 +253,6 @@ describe('daemon identity surfaces', () => {
     expect(did).toMatch(/^did:key:z6Mk/)
     expect(didKeyToEd25519PublicKey(did as string)).toBe(testIdentity.publicKey)
     expect(did).toBe(ed25519PublicKeyToDidKey(testIdentity.publicKey))
-  })
-
-  it('verify answers an unauthenticated challenge with a signature binding nonce + origin', async () => {
-    const { app } = createApp()
-    const res = await app.request('/api/runtime/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: 'https://caller.example' },
-      body: JSON.stringify({ nonce: NONCE }),
-    })
-    expect(res.status).toBe(200)
-    // Executable mutation-check guard: parses the REAL HTTP body against the
-    // shared schema, so a server-side field drift (or an alg change) turns
-    // this red instead of shipping silently to the client's separate copy.
-    const body = runtimeVerifyResponseSchema.parse(await res.json())
-    expect(body.publicKey).toBe(testIdentity.publicKey)
-    expect(
-      verifyIdentitySignature(['wb-verify-v1', NONCE, 'https://caller.example'], body.signature),
-    ).toBe(true)
-    // A different origin's challenge must not verify with this signature.
-    expect(
-      verifyIdentitySignature(['wb-verify-v1', NONCE, 'https://other.example'], body.signature),
-    ).toBe(false)
-  })
-
-  it('verify binds an ABSENT Origin header as the empty string', async () => {
-    const { app } = createApp()
-    const res = await app.request('/api/runtime/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nonce: NONCE }),
-    })
-    const body = (await res.json()) as { signature: string }
-    expect(verifyIdentitySignature(['wb-verify-v1', NONCE, ''], body.signature)).toBe(true)
-  })
-
-  it('verify rejects a malformed nonce', async () => {
-    const { app } = createApp()
-    for (const nonce of [
-      '',
-      'short',
-      '!!!not-base64url!!!',
-      Buffer.alloc(64).toString('base64url'),
-    ]) {
-      const res = await app.request('/api/runtime/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nonce }),
-      })
-      expect(res.status).toBe(400)
-    }
-  })
-
-  it('verify allows exactly the configured window then rate-limits with 429', async () => {
-    const { app } = createApp()
-    const statuses: number[] = []
-    for (let i = 0; i < 65; i += 1) {
-      const res = await app.request('/api/runtime/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nonce: NONCE }),
-      })
-      statuses.push(res.status)
-    }
-    // First 60 succeed; everything after the boundary is throttled.
-    expect(statuses.slice(0, 60).every((status) => status === 200)).toBe(true)
-    expect(statuses.slice(60).every((status) => status === 429)).toBe(true)
   })
 })
 

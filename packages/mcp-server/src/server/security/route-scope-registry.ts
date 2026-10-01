@@ -137,7 +137,6 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // answerable before a caller holds any credential — it is how a caller
   // decides whether a responder is trustworthy at all. Rate-limited in the
   // router.
-  { name: 'runtime/verify', claims: exactly('/api/runtime/verify'), decide: publicRoute },
 
   // File routes: reading/writing a canvas's attached binary file. The
   // document path is multi-segment, so the discriminator is the mandatory

@@ -254,8 +254,7 @@ function credentialWiring(options: AppOptions, token: string | undefined) {
 function appWiring(options: AppOptions) {
   const instanceId = options.instanceId ?? randomUUID()
 
-  // The signing identity behind /api/runtime/ping's `identity` and
-  // /api/runtime/verify.
+  // The signing identity behind /api/runtime/ping's `identity`.
   const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
   const token = options.authMode === 'local-daemon' ? options.token : undefined
 

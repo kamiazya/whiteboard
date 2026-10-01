@@ -49,8 +49,6 @@ import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-clien
 import {
   daemonPingResponseSchema,
   runtimeStatusResponseSchema,
-  runtimeVerifyRequestSchema,
-  runtimeVerifyResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
@@ -344,11 +342,6 @@ const RULES: Record<string, Rule> = {
     body: syncClientMessageRequestSchema,
   },
   'GET /api/runtime/ping': { answers: 'json', response: daemonPingResponseSchema },
-  'POST /api/runtime/verify': {
-    answers: 'json',
-    body: runtimeVerifyRequestSchema,
-    response: runtimeVerifyResponseSchema,
-  },
   'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
   'GET /api/runtime/storage': { answers: 'json' },
   'POST /api/runtime/logs/prune': { answers: 'json' },
