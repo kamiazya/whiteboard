@@ -88,7 +88,6 @@ const LEDGER: Record<string, number> = {
   // The sleeps ride with the auto-compact describes, split out of document-store.test.ts.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 6,
   'packages/mcp-server/src/server/store/lease.test.ts': 1,
-  'packages/mcp-server/src/server/store/workspace-lock.test.ts': 0,
   'packages/mcp-server/src/shared/mkdir-lock.test.ts': 2,
 }
 
@@ -124,6 +123,14 @@ describe('fixed-duration sleeps in test files', () => {
       )
     }
     expect(drift).toEqual([])
+  })
+
+  it('holds no entry at zero, which `?? 0` would read as absence', () => {
+    // The header promises that an entry for a file holding no sleep fails;
+    // the comparison above cannot tell a `0` entry from a missing one, so a
+    // zero would sit in the ledger as a claim nothing checks.
+    const zeros = Object.entries(LEDGER).filter(([, count]) => count <= 0)
+    expect(zeros.map(([path]) => path)).toEqual([])
   })
 
   it('reaches the population it governs', () => {
