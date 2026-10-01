@@ -590,7 +590,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
   // 435 -> 182: the four workers both HTTP roots run are built and declared
   // in shared-background-work.ts; what is left here is the daemon's own.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 178,
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 139,
   'packages/mcp-server/src/server/index.ts#main': 81,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,

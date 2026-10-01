@@ -40,6 +40,48 @@ import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/wor
  */
 export const FILE_GC_STOP_TIMEOUT_MS = 5_000
 
+export interface RootShutdownSteps {
+  /** The registry's `stopAll`; read at close time because the registry is armed after this is built. */
+  stopBackgroundWork: () => Promise<void>
+  /** Stops accepting connections and waits out the in-flight ones. */
+  closeListener: () => Promise<void>
+  /** A root's own teardown that must follow the listener, before the final flush. */
+  afterListenerClosed?: () => Promise<void> | void
+  /** Takes the pending checkpoints; the trigger is handed back by `createApp`, so read at close time. */
+  flushCheckpoints: () => Promise<void>
+}
+
+/**
+ * The shutdown both HTTP roots run, memoized so concurrent or repeated
+ * close() calls (an idle timeout racing an explicit shutdown, or a caller
+ * invoking it twice) all await the SAME shutdown rather than a second call
+ * resolving while the listener is still tearing down.
+ */
+export function createRootShutdown(steps: RootShutdownSteps): () => Promise<void> {
+  const perform = async (): Promise<void> => {
+    await steps.stopBackgroundWork()
+    await steps.closeListener()
+    await steps.afterListenerClosed?.()
+
+    // A SECOND flush, after the listener is closed and every in-flight
+    // request has finished.
+    //
+    // The registry's stop already flushed, and that one is not redundant: it
+    // is what runs on a listen-failure teardown, where there is no server to
+    // close. But closing the listener keeps serving the requests already in
+    // progress, and an update handler completing during that window arms a
+    // fresh debounce — against a timer that is `unref`ed and will never fire,
+    // so the checkpoint it scheduled would leave with the process. Flushing
+    // once more here is the point at which no handler can arm another.
+    await steps.flushCheckpoints()
+  }
+  let closing: Promise<void> | null = null
+  return () => {
+    closing ??= perform()
+    return closing
+  }
+}
+
 export interface SharedWorkerFactories {
   /** Test seam: overrides the real sweeper so a wiring test can observe start/stop. */
   fileGcSweeperFactory?: typeof createFileGcSweeper

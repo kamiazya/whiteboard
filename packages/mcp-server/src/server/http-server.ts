@@ -4,14 +4,13 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { listenOnSocket } from '../daemon/daemon-socket.js'
 import { IdleTimer } from '../daemon/idle-timer.js'
-import { resolveSelfHostServerDeps } from '../di/self-host-server-deps.js'
+import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { getDataDir } from './config.js'
-import { ensureWorkspaceId } from './current-workspace.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
@@ -19,13 +18,12 @@ import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import {
+  createRootShutdown,
   createSharedWorkers,
   FILE_GC_STOP_TIMEOUT_MS,
   sharedBackgroundWork,
 } from './shared-background-work.js'
 import type { createBackupScheduler } from './store/backup-scheduler.js'
-import { getDb } from './store/db/index.js'
-import { prepareDataDir } from './store/db/prepare.js'
 import type { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import type { createWorkspaceTail } from './store/workspace-tail.js'
 
@@ -79,7 +77,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const instanceId = randomUUID()
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
-  let closePromise: Promise<void> | null = null
   let socketListener: Awaited<ReturnType<typeof listenOnSocket>> | undefined
 
   const shared = createSharedWorkers(instanceId, options)
@@ -123,33 +120,16 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     }
   }
 
-  const performClose = async (): Promise<void> => {
-    await backgroundWork.stopAll()
-    await socketListener?.close()
-
-    await options.onClose?.()
-
-    // A SECOND flush, after the listener is closed and every in-flight
-    // request has finished.
-    //
-    // The registry's stop already flushed, and that one is not redundant: it
-    // is what runs on a listen-failure teardown, where there is no server to
-    // close. But closing the listener keeps serving the requests already in
-    // progress, and an update handler completing during that window arms a
-    // fresh debounce — against a timer that is `unref`ed and will never fire,
-    // so the checkpoint it scheduled would leave with the process. Flushing
-    // once more here is the point at which no handler can arm another.
-    await autoVersionTrigger?.flush()
-  }
-
-  // Memoized so concurrent/repeated close() calls (idle timeout racing an
-  // explicit shutdown route, or a caller invoking close() twice) all await
-  // the SAME shutdown instead of a second call resolving immediately while
-  // the listener is still tearing down.
-  const close = (): Promise<void> => {
-    if (!closePromise) closePromise = performClose()
-    return closePromise
-  }
+  const close = createRootShutdown({
+    stopBackgroundWork: () => backgroundWork.stopAll(),
+    closeListener: async () => {
+      await socketListener?.close()
+    },
+    afterListenerClosed: () => options.onClose?.(),
+    flushCheckpoints: async () => {
+      await autoVersionTrigger?.flush()
+    },
+  })
 
   // ADR-0043 decision 4's root key, loaded or created once here. A composition
   // that forgets it does not fail loudly, it refuses every macaroon.
@@ -159,29 +139,16 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // (getDb memoizes per dataDir, so this container shares the connection
   // with the per-session MCP containers rather than opening a second one).
   const dataDir = getDataDir()
-  // Migrate BEFORE handing the ports a handle. `getDb` opens the file and
-  // nothing more; migrations have only ever run through `document-store.ts`'s
-  // `dbReady`, which is `prepareDataDir` then `getDb`. Anything reaching the
-  // injected ports instead of the legacy store therefore met an empty schema
-  // on a data dir nothing had touched yet — `/api/v1` answered
-  // `no such table: workspaces` from the day it was mounted. Both are
-  // memoized per data dir, so on an already-prepared dir this costs nothing.
-  await prepareDataDir(dataDir)
-  // And give the daemon its current workspace before anything reads the list.
-  // `ensureWorkspaceId` had only ever run per `/mcp` request, so a daemon a
-  // browser reached first held no workspace at all: `GET /api/workspaces`
-  // answered `{"workspaces":[]}` (measured on a fresh data dir), which is not
-  // a state the document browser can select out of. Memoized per data dir, so
-  // the per-request MCP callers below share this one resolve.
-  await ensureWorkspaceId(dataDir)
-  const db = await getDb(dataDir)
-  const resolvedDeps = resolveSelfHostServerDeps(db, dataDir)
+  // Prepared and migrated before the ports get a handle, and the daemon holds
+  // its current workspace before anything reads the list — see
+  // `prepareSelfHostDataDir` for what each one's absence produced.
+  const { db, serverDeps: bootedDeps } = await bootSelfHostDeps(dataDir)
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
   // from the same post-migration handle as the container above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {
     defaultTier: options.replicaTier ?? DEFAULT_REPLICA_TIER,
   })
-  const serverDeps = attachLiveAudience(resolvedDeps)
+  const serverDeps = attachLiveAudience(bootedDeps)
 
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.
