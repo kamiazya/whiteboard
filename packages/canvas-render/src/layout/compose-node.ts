@@ -411,7 +411,7 @@ function labelOf(node: SpatialNode, resolved: ResolvedReference | undefined): st
   return label !== undefined && label.length > 0 ? label : undefined
 }
 
-/** Depth cap matching embed-recursion.ts's contract: root is 0, the 4th level degrades. */
+/** Root is 0, the 4th level degrades — the same cap `mdast-blocks.ts` pins for a body's embeds. */
 const FILE_EMBED_DEPTH_CAP = 3
 
 /**

@@ -210,20 +210,6 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: workspacesHandle,
   },
 
-  // Branch and checkpoint routes — version-control operations at the
-  // workspace level.
-  {
-    name: 'document branches',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/branches/),
-    decide: byAccess('versions:write', 'versions:read'),
-    workspace: workspacesHandle,
-  },
-  {
-    name: 'workspace checkpoints',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/checkpoints$/),
-    decide: always('versions:write'),
-    workspace: workspacesHandle,
-  },
   {
     name: 'versions/prune-sandwiched',
     claims: matching(/^\/api\/workspaces\/[^/]+\/versions\/prune-sandwiched$/),

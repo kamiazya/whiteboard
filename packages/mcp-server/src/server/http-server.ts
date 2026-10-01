@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { listenOnSocket } from '../daemon/daemon-socket.js'
 import { IdleTimer } from '../daemon/idle-timer.js'
@@ -47,13 +46,6 @@ export interface StartHttpServerOptions {
   mcpProtectedResourceMetadata?: McpProtectedResourceMetadataConfig
   idleTimeoutMs?: number
   onClose?: () => Promise<void> | void
-  /**
-   * The plugin set this deployment registers (ADR-0013 decision 3), default
-   * the bundled one. A distribution that embeds this daemon composes its own
-   * set here — in code, which is what distribution time means; there is
-   * deliberately no config file naming modules to import.
-   */
-  facetPlugins?: readonly FacetPlugin[]
   /** Test-only seam: overrides the real createFileGcSweeper so wiring tests
    *  can observe start/stop without waiting on a real 24h interval. */
   fileGcSweeperFactory?: typeof createFileGcSweeper
@@ -186,9 +178,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // the per-request MCP callers below share this one resolve.
   await ensureWorkspaceId(dataDir)
   const db = await getDb(dataDir)
-  const resolvedDeps = resolveSelfHostServerDeps(db, dataDir, {
-    ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
-  })
+  const resolvedDeps = resolveSelfHostServerDeps(db, dataDir)
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
   // from the same post-migration handle as the container above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {

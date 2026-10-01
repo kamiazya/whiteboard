@@ -30,8 +30,11 @@ The local daemon has one person: the machine's owner
 - **The daemon's bearer token is the credential.** `/api/*` and `/mcp`
   require it when one is configured (as `whiteboard daemon run` always
   does). The native host reads it from `daemon.json` and attaches it
-  itself, so the page never holds it. A narrower credential the operator
-  mints (a macaroon) is judged against the route-scope registry.
+  itself, so the page never holds it. The route-scope registry also judges
+  a scoped macaroon, should one be presented — enforcement only: nothing
+  mints one today
+  ([ADR-0043](../contributing/adr/0043-authority-as-keys.md)
+  withdrew the minting route).
   `/api/runtime/ping` is public; there is no HTTP route that stops the
   daemon.
 - **The browser starts the native host only for the whiteboard extension.**
@@ -110,8 +113,8 @@ clears it back to the `WHITEBOARD_REPLICA_TIER` default (see
 rather than the `workspace:write` the rest of a workspace's fields sit
 behind: a tier decides whether a copy of a workspace may leave the daemon at
 all, which is an operator's call. That bar is cleared by the daemon token
-(which the extension's requests carry) and by an operator-issued macaroon
-carrying `runtime:admin`.
+(which the extension's requests carry); a scoped macaroon carrying
+`runtime:admin` would clear it too, and none is minted today.
 
 - `no-offline` — the daemon refuses to hand out a key for this workspace at
   all (`replica_not_allowed`).
@@ -240,10 +243,10 @@ the boundary described above.
 ## HTTP protections
 
 - **Bearer token**: clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the CLI, the stdio MCP server and the native host can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
-- **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A narrower credential the operator minted reaches `/mcp` only if it carries the `mcp:call` scope. A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
+- **What may call `/mcp`**: the daemon's bearer token (full authority), and — when the daemon has no token configured — any local caller. A scoped macaroon would reach `/mcp` only with the `mcp:call` scope (none is minted today). A credential that verifies but lacks the scope is refused with `403` and no `WWW-Authenticate` challenge, because re-presenting it cannot help.
 - **Security headers**: every response carries `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, and same-origin cross-origin headers.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
-- **Stopping the daemon is a signal, not a request.** `whiteboard daemon stop` reads the pid and sends `SIGTERM` (escalating to `SIGKILL` after 5s), and the idle timer calls the server's own close directly. No HTTP route ends the process, so no credential does either. `runtime:admin` gates what remains — the keepalive and the log prune. It is **not** containment against a program running as your own user: anything running as you can read `ps` and signal the process, and no token refuses a signal.
+- **Stopping the daemon is a signal, not a request.** `whiteboard daemon stop` reads the pid and sends `SIGTERM` (escalating to `SIGKILL` after 5s), and the idle timer calls the server's own close directly. No HTTP route ends the process, so no credential does either. `runtime:admin` gates what remains — the log prune, the debug routes, a workspace's replica posture (key rotation and tier) and font installation. It is **not** containment against a program running as your own user: anything running as you can read `ps` and signal the process, and no token refuses a signal.
 
 ## File-system safety
 

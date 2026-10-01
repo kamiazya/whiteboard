@@ -8,15 +8,19 @@ paths:
 ## What belongs here
 
 - The `/api` Zod contracts apps/web parses (`api-contracts/`): documents,
-  branches, errors, fonts, runtime, and the URL builders. The barrel
+  fonts, runtime, membership, promotion, replica keys, people, sign-in, the
+  `did:key` helpers and the URL builders. The barrel
   (`api-contracts/index.ts`) is deliberately NARROW — it is the whole
   contract surface apps/web reads (`api-contracts-barrel.test.ts` pins it).
-- The document backends the browser drives a daemon with: `daemon-backend`
-  (WS), `sse-backend` + `sse-stream-hub` (SSE), `select-document-transport`,
-  and the `document-backend-contract` types they implement.
+- The one document backend the browser drives a daemon with (ADR-0050
+  retired the WebSocket): `sse-backend` over `sse-stream-hub`, and the
+  `document-backend-contract` types it implements. The SSE wire itself is
+  `sync-sse-contract`, and `ws-messages` / `ws-text-message` are the text
+  frames that stream carries (the name predates the transport).
 - `api-client` (same-origin fetch wrapper — injects a `traceparent` header
-  through @opentelemetry/api's no-op surface, no SDK shipped),
-  and the ws message/protocol contracts.
+  through @opentelemetry/api's no-op surface, no SDK shipped), the extension
+  bridge the hosted page reaches a daemon through, the read plane and the
+  replica session key helpers (ADR-0042).
 - `test-utils/`: the backend contract suites apps/web runs against its own
   implementations (`document-backend-contract`, `sse-stream-source-contract`).
 
@@ -32,11 +36,10 @@ paths:
 ## Dependency rules
 
 model + server-core (the version-entry/operator contracts published by the
-routes), history (the branch schema the `/branches` contract re-exports —
-what a branch IS is the mechanic's, not the wire's), zod, and the
-OpenTelemetry browser SDK set. DOM globals are this
-package's normal job (`WebSocket`/`EventSource`/`fetch`) — exempted as
-`dom-global` in `architecture-map.ts`, the same carve-out canvas-viewer has.
+routes), zod, `@opentelemetry/api` (the no-op propagation surface alone) and
+`multiformats` (what a `did:key` is). DOM globals are this package's normal
+job (`fetch`, `ReadableStream`) — exempted as `dom-global` in
+`architecture-map.ts`, the same carve-out canvas-viewer has.
 
 ## The relationship with mcp-server
 

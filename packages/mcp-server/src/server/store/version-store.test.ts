@@ -349,68 +349,11 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   describe('branchName', () => {
-    it('persists opts.branchName into the entry and metadata', async () => {
-      const doc = new LoroDoc()
-      appendElement(doc, 'e1')
-      const entry = await store.save('sess-1', 'canvas-a', doc, {
-        auto: true,
-        branchName: 'feature-x',
-      })
-      expect(entry.branchName).toBe('feature-x')
-      const listed = await store.list('sess-1', 'canvas-a')
-      expect(listed[0]?.branchName).toBe('feature-x')
-    })
-
     it('defaults branchName to "main" when omitted', async () => {
       const doc = new LoroDoc()
       appendElement(doc, 'e1')
       const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
       expect(entry.branchName).toBe('main')
-    })
-
-    it('renameBranchInVersions rewrites branchName for every version on the target path', async () => {
-      const a = new LoroDoc()
-      appendElement(a, 'a1')
-      const v1 = await store.save('sess-1', 'canvas-a', a, { auto: true, branchName: 'feature' })
-      appendElement(a, 'a2')
-      const v2 = await store.save('sess-1', 'canvas-a', a, { auto: true, branchName: 'feature' })
-      const b = new LoroDoc()
-      appendElement(b, 'b1')
-      const vOther = await store.save('sess-1', 'canvas-b', b, {
-        auto: true,
-        branchName: 'feature',
-      })
-      const vMain = await store.save('sess-1', 'canvas-a', a, { auto: true, branchName: 'main' })
-
-      const renamedCount = await store.renameBranchInVersions(
-        'sess-1',
-        'canvas-a',
-        'feature',
-        'experimental',
-      )
-      expect(renamedCount).toBe(2)
-      const list = await store.list('sess-1', 'canvas-a')
-      const byId = new Map(list.map((v) => [v.id, v.branchName]))
-      expect(byId.get(v1.id)).toBe('experimental')
-      expect(byId.get(v2.id)).toBe('experimental')
-      expect(byId.get(vMain.id)).toBe('main')
-      const listB = await store.list('sess-1', 'canvas-b')
-      expect(listB.find((v) => v.id === vOther.id)?.branchName).toBe('feature')
-    })
-
-    it('returns 0 when no version row matches the source branch', async () => {
-      await expect(
-        store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'experimental'),
-      ).resolves.toBe(0)
-    })
-
-    it('returns 0 for a no-op rename (oldName === newName)', async () => {
-      const doc = new LoroDoc()
-      appendElement(doc, 'e1')
-      await store.save('sess-1', 'canvas-a', doc, { auto: true, branchName: 'feature' })
-      await expect(
-        store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'feature'),
-      ).resolves.toBe(0)
     })
   })
 

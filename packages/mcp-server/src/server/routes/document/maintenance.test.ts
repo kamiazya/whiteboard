@@ -48,7 +48,6 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt reco
       loadThumbnail: vi.fn(),
       earliestWorkspaceFrontiers: vi.fn().mockResolvedValue([]),
       getFrontiersBase64: vi.fn(),
-      renameBranchInVersions: vi.fn(),
       pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
@@ -102,7 +101,6 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       // the realistic dry-run shape.
       earliestWorkspaceFrontiers: vi.fn().mockResolvedValue(null),
       getFrontiersBase64: vi.fn(),
-      renameBranchInVersions: vi.fn(),
       // The bulk-optimize route doesn't exercise prune by default, but the
       // VersionStore contract requires it. Returning a no-op result keeps
       // the mock fully type-compatible so a future route change that does

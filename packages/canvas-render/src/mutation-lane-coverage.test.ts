@@ -254,9 +254,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // the reason the file they left was: what pins the router and the side
     // choice is the routing scoreboard, which re-runs per mutant at ~22s and
     // is excluded from the lane on price, and the example suites beside it.
+    //
+    // 95 since the embed-recursion module was deleted: a bundle walk whose
+    // only caller was its own property test, while the embed contract it
+    // stated is pinned where the content is laid out (decision 4).
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 19,
-      production: 96,
+      production: 95,
     })
   })
 

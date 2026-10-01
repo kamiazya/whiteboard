@@ -106,7 +106,6 @@ describe('createAutoVersionTrigger', () => {
         saveThumbnail: vi.fn(),
         loadThumbnail: vi.fn(),
         getFrontiersBase64: vi.fn(),
-        renameBranchInVersions: vi.fn(),
       },
       { quietMs: 60_000 },
     )
@@ -148,7 +147,6 @@ describe('auto-version corruption handling', () => {
       saveThumbnail: vi.fn(),
       loadThumbnail: vi.fn(),
       getFrontiersBase64: vi.fn(),
-      renameBranchInVersions: vi.fn(),
     }
 
     const clientDoc = new LoroDoc()

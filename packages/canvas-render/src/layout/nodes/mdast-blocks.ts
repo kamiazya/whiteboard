@@ -90,7 +90,7 @@ const ICON_PLACEHOLDER = '\u2003'
 // The metrics a NODE is laid out with. Exported because `apps/web`'s edit
 // overlay has to sit on the same line box the render draws, and a node is what
 // it edits — see MdastLayoutOptions.theme for the surface that differs.
-/** Root depth is 0; mirrors embed-recursion.ts's cap and cycle semantics. */
+/** Root depth is 0; a 4th level degrades to a placeholder (package rule, decision 4). */
 const EMBED_DEPTH_CAP = 3
 
 /**
@@ -743,7 +743,7 @@ function layoutBlock(
   options: ResolvedMdastOptions,
   depth: number,
   // canvasIds of the embeds currently being laid out on THIS recursion
-  // path — the embed-recursion cycle/cap contract, threaded rather than
+  // path — the cycle/cap contract (decision 4), threaded rather than
   // stored on options so sibling embeds never see each other.
   embedPath: readonly string[] = [],
 ): SceneNode {
@@ -1000,8 +1000,8 @@ function layoutListItem(
  * coordinates (no SVG transform, so the listItem/tableCell transform-
  * boundary set is untouched). Total by construction: a cycle on the
  * current path, the depth cap, and a missing/throwing resolver each
- * degrade to an `embedPlaceholder` with the matching reason — mirroring
- * embed-recursion.ts's contract — so no resolver can loop or abort layout.
+ * degrade to an `embedPlaceholder` with the matching reason, so no resolver
+ * can loop or abort layout.
  */
 function layoutEmbedBlock(
   documentId: string,

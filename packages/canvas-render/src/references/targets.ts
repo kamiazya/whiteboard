@@ -4,7 +4,7 @@ import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 
 /**
  * How deep the walk follows what has loaded — the same cap the layout draws
- * to (`embed-recursion.ts` and `mdast-blocks.ts` each pin 3: root is 0, and
+ * to (`mdast-blocks.ts` and `compose-node.ts` each pin 3: root is 0, and
  * a document at depth 3 is drawn while what IT names is a placeholder). A
  * target past the cap is never asked for, so a workspace whose notes all
  * link each other is not loaded whole to render one of them.

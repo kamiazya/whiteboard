@@ -5,7 +5,6 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { z } from 'zod'
 import { resolveSelfHostServerDeps } from '../../di/self-host-server-deps.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
-import { createCanvasClientNotifier } from '../canvas-client-notifier.js'
 import { getDataDir } from '../config.js'
 import { ensureWorkspaceId } from '../current-workspace.js'
 import { getDb } from '../store/db/index.js'
@@ -105,15 +104,19 @@ export async function createMcpServer(deps?: ServerDeps) {
 }
 
 /**
- * The stdio root's own deps. The live-audience bridge is attached here
- * rather than in `resolveServerDeps` (the di graph must not import the
- * routes layer); this root serves the same daemon process, so its tools
- * notify the same streams the HTTP root serves.
+ * The stdio root's own deps. This root opens the data directory's store in
+ * its OWN process and never reaches the daemon, so no SSE client can ever
+ * be in its sync audience — a notifier here would announce every edit,
+ * viewport request and agent activity to streams that exist only in the
+ * daemon's process. None is attached: `wb_viewport_set` answers
+ * `delivered: false` honestly, and a browser on the daemon sees a stdio
+ * edit when the daemon's workspace tail reads it, not live. Bridging the
+ * two processes is the daemon's `/mcp`, which the development proxy and a
+ * client with socket access use instead of this entry.
  */
-async function stdioRootServerDeps(): Promise<ServerDeps> {
+export async function stdioRootServerDeps(): Promise<ServerDeps> {
   const dataDir = getDataDir()
-  const deps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
-  return { ...deps, clientNotifier: createCanvasClientNotifier(deps.documentIndex) }
+  return resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
 }
 
 export async function main() {

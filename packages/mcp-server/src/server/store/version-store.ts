@@ -18,12 +18,7 @@ import { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
-import {
-  validateBranchName,
-  validateDocumentPath,
-  validateVersionId,
-  validateWorkspaceId,
-} from '../validators.js'
+import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -65,7 +60,6 @@ export interface VersionStore {
     opts: {
       auto: boolean
       label?: string
-      branchName?: string
       operator?: OperatorInfo
       /** The version this point was produced by restoring; see `versionEntrySchema`. */
       restoredFrom?: string
@@ -103,14 +97,6 @@ export interface VersionStore {
   // document's own projection — compared across that boundary they are
   // never equal. False where there is no version yet, or no such document.
   isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean>
-  // Rewrite branchName from oldName to newName for all versions of the given
-  // path. Returns the number of rewritten rows.
-  renameBranchInVersions(
-    workspaceId: string,
-    path: string,
-    oldName: string,
-    newName: string,
-  ): Promise<number>
   // Drop auto-saved versions strictly between two manual versions, per
   // branch. Manual versions are explicit user save-points so sandwiched
   // autos add no rollback value beyond what the bracketing manuals
@@ -296,7 +282,6 @@ export class FileVersionStore implements VersionStore {
     opts: {
       auto: boolean
       label?: string
-      branchName?: string
       operator?: OperatorInfo
       /** The version this point was produced by restoring; see `versionEntrySchema`. */
       restoredFrom?: string
@@ -312,8 +297,8 @@ export class FileVersionStore implements VersionStore {
     // queue keeps the lock contract uniform — all "things that might
     // change what GC considers referenced" run serially.
     return withWorkspaceWriteLock(workspaceId, async () => {
-      const branchName = opts.branchName ?? 'main'
-      validateBranchName(branchName)
+      // The column outlived the branch (ADR-0029): every version is on 'main'.
+      const branchName = 'main'
       const id = nanoid(12)
       validateVersionId(id)
 
@@ -456,30 +441,6 @@ export class FileVersionStore implements VersionStore {
       .execute()
     return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
   }
-
-  async renameBranchInVersions(
-    workspaceId: string,
-    path: string,
-    oldName: string,
-    newName: string,
-  ): Promise<number> {
-    validateWorkspaceId(workspaceId)
-    validateDocumentPath(path)
-    validateBranchName(oldName)
-    validateBranchName(newName)
-    if (oldName === newName) return 0
-    const db = await dbReady()
-    const documentId = await this.resolveDocumentId(db, workspaceId, path)
-    if (!documentId) return 0
-    const result = await db
-      .updateTable('versions')
-      .set({ branchName: newName })
-      .where('documentId', '=', documentId)
-      .where('branchName', '=', oldName)
-      .executeTakeFirst()
-    return Number(result.numUpdatedRows ?? 0)
-  }
-
   async pruneSandwichedAutoVersions(
     workspaceId: string,
     path: string,

@@ -33,7 +33,7 @@ const CATEGORIES: CategoryDescriptor[] = [
   { key: 'files', label: 'Uploaded files', description: 'Image / asset uploads' },
   { key: 'exports', label: 'Exports', description: 'PNG / JSON files you exported' },
   { key: 'logs', label: 'Logs', description: 'Daemon stdout / stderr archives' },
-  { key: 'db', label: 'Metadata DB', description: 'Workspaces, names, pins, branches' },
+  { key: 'db', label: 'Metadata DB', description: 'Workspaces, names, pins, version rows' },
   { key: 'other', label: 'Other', description: 'Unclassified files in the data dir' },
 ]
 
