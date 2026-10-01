@@ -6,13 +6,14 @@
  * them.
  */
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { DocumentsSkeleton } from '../components/document-list/DocumentsSkeleton.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import type { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import type { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import type { DaemonIndexPageProps } from './DaemonIndexPage.js'
 import type { DocumentRow } from './daemon-index-actions.js'
-import type { PendingDelete } from './pending-delete.js'
+import { deleteRequestsFor, type PendingDelete } from './pending-delete.js'
 
 /**
  * A failed list load must not dead-end the page: the POST needs no rows and
@@ -117,24 +118,6 @@ function NoWorkspacesYet({ onRetryWorkspaces }: { onRetryWorkspaces: () => void 
   )
 }
 
-/** Mounted while the documents fetch is in flight; rows=[] alone cannot say so. */
-function DocumentsSkeleton() {
-  return (
-    <div
-      role="status"
-      aria-label="Loading documents"
-      className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-    >
-      {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="animate-pulse rounded-lg border p-2">
-          <div className="aspect-[4/3] rounded-md bg-muted" />
-          <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
-        </div>
-      ))}
-    </div>
-  )
-}
-
 /** The panel itself, once a workspace is selected and its source exists. */
 interface DaemonFilesSectionProps {
   selectedWorkspace: string
@@ -161,12 +144,7 @@ function DaemonFilesSection(props: DaemonFilesSectionProps) {
         onFolderChange={props.setRoutedFolder}
         onOpenDocument={(path) => props.onOpenDocument(props.selectedWorkspace, path)}
         onDuplicateDocument={(path) => void props.onDuplicate(path)}
-        onRequestDelete={(path, displayName, kind) =>
-          props.onRequestDelete({ paths: [path], displayName, kind })
-        }
-        onRequestDeleteMany={(paths) =>
-          props.onRequestDelete({ paths, displayName: `${paths.length} documents` })
-        }
+        {...deleteRequestsFor(props.onRequestDelete)}
         // A new array on every successful read, which is exactly the
         // signal the panel needs: the page reloads this list after a
         // duplicate and after a delete, both of which it performs on

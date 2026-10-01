@@ -62,3 +62,20 @@ export function partialDeleteMessage(
   if (failed < attempted) return `${failed} of ${attempted} could not be deleted.`
   return lastError instanceof Error ? lastError.message : fallback
 }
+
+/**
+ * The files panel's two delete callbacks — one row, or a selection — as the
+ * one request the confirm flow takes. Both keepers' pages spread this into
+ * the panel, so what a multi-select is CALLED is decided once.
+ */
+export function deleteRequestsFor(request: (pending: PendingDelete) => void): {
+  readonly onRequestDelete: (path: string, displayName: string, kind?: DocumentKind) => void
+  readonly onRequestDeleteMany: (paths: readonly string[]) => void
+} {
+  return {
+    onRequestDelete: (path, displayName, kind) =>
+      request({ paths: [path], displayName, ...(kind === undefined ? {} : { kind }) }),
+    onRequestDeleteMany: (paths) =>
+      request({ paths: [...paths], displayName: `${paths.length} documents` }),
+  }
+}
