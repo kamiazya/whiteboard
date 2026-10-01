@@ -476,12 +476,7 @@ export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
   'mcp/index.ts',
 ]
 
-export const MECHANICS_NOT_SCANNED: readonly string[] = [
-  'corrupt-stored-data',
-  // Same reasoning: DocumentNotFoundError is the 404 half of the taxonomy,
-  // and an adapter importing it to pick a status code is doing translation.
-  'document-not-found-error',
-]
+export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
 
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []

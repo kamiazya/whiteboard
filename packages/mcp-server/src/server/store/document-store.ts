@@ -22,6 +22,7 @@ import {
   chunkSnapshot,
   createWorkspaceInputSchema,
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+  DocumentNotFoundError,
   DocumentPathTakenError,
   type RenameWorkspaceInput,
   renameWorkspaceInputSchema,
@@ -49,7 +50,6 @@ import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, evictWorkspaceDocs, getOrLoad, peekDoc } from './doc-cache.js'
-import { DocumentNotFoundError } from './document-not-found-error.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'

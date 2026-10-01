@@ -9,6 +9,7 @@ import {
   projectWorkspaceDocument,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { DocumentNotFoundError } from '@kamiazya/whiteboard-ports'
 import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { Insertable } from 'kysely'
@@ -23,7 +24,6 @@ import { corruptStoredData } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import type { DatabaseSchema } from './db/schema.js'
-import { DocumentNotFoundError } from './document-not-found-error.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 

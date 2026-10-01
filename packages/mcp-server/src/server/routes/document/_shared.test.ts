@@ -1,0 +1,49 @@
+import {
+  DocumentNotFoundError,
+  isDocumentNotFoundError,
+  WorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
+import { describe, expect, it } from 'vitest'
+import { handleDocumentNotFound, notFoundAs } from './_shared.js'
+
+describe('the not-found translations over the port error', () => {
+  const absent = new DocumentNotFoundError('ws', 'notes/a')
+
+  it('answers a metadata writer absence as 404 with the error message', () => {
+    expect(handleDocumentNotFound(absent)).toEqual({
+      status: 404,
+      body: { error: 'not_found', message: absent.message },
+    })
+  })
+
+  it('answers the caller-supplied title for an absent document', () => {
+    expect(notFoundAs('Canvas "notes/a" not found')(absent)).toEqual({
+      status: 404,
+      body: { title: 'Canvas "notes/a" not found' },
+    })
+  })
+
+  it('answers the same title for an absent workspace', () => {
+    expect(notFoundAs('gone')(new WorkspaceNotFoundError('ws'))).toEqual({
+      status: 404,
+      body: { title: 'gone' },
+    })
+  })
+
+  it('leaves an unrelated error to the caller', () => {
+    expect(handleDocumentNotFound(new Error('boom'))).toBeNull()
+    expect(notFoundAs('gone')(new Error('boom'))).toBeNull()
+  })
+})
+
+describe('isDocumentNotFoundError', () => {
+  it('recognises an error from another load of the same class by its name', () => {
+    const otherRealm = new Error('No document')
+    otherRealm.name = 'DocumentNotFoundError'
+    expect(isDocumentNotFoundError(otherRealm)).toBe(true)
+  })
+
+  it('refuses a non-error carrying the name', () => {
+    expect(isDocumentNotFoundError({ name: 'DocumentNotFoundError' })).toBe(false)
+  })
+})
