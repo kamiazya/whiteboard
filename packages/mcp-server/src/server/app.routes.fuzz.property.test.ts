@@ -5,7 +5,7 @@
  * server-core's `create-server.routes.fuzz` covers the `/api/v1` surface it
  * owns; this is the same question asked of everything else `createApp`
  * mounts: the legacy `/api/workspaces` and `/api/w` document routes, sync,
- * runtime, fonts, files, export, viewport, debug and the OAuth metadata. A route may answer (2xx, or 501 saying the composition lacks the
+ * runtime, fonts, files, export, debug and the OAuth metadata. A route may answer (2xx, or 501 saying the composition lacks the
  * feature), or refuse a request it understood (4xx with a JSON body naming
  * why) — never a 5xx, and never a body the browser client cannot read.
  *
@@ -53,7 +53,6 @@ import {
   daemonPingResponseSchema,
   runtimeStatusResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
@@ -305,11 +304,6 @@ const RULES: Record<string, Rule> = {
   'GET /api/w/:workspaceId/document/*/client-count': {
     answers: 'json',
     response: clientCountResponseSchema,
-  },
-  'POST /api/w/:workspaceId/document/*/viewport': {
-    // No browser is connected, so every well-formed request is a 503.
-    refusesOnly: 'needs an open page to apply the viewport',
-    body: viewportRequestParamsSchema,
   },
   'POST /api/w/:workspaceId/document/*/update': {
     answers: 'json',

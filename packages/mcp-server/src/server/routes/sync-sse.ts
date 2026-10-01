@@ -29,22 +29,9 @@ import { getLogger } from '../log.js'
 import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import { membershipRefusal } from '../security/workspace-access.js'
 import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
+import { cachedViewportRequest } from './viewport-requests.js'
 
 const log = getLogger('sync-sse')
-
-// Injected by sync-audience.ts, which owns the viewport cache and the
-// pending-request resolver. It already imports this module for the
-// broadcast fan-out, so importing it back would close a cycle.
-let getCachedViewportRequest: (docKey: string) => string | undefined = () => undefined
-let resolveViewportRequest: (requestId: string) => void = () => {}
-
-export function setSyncSseHooks(hooks: {
-  getCachedViewportRequest: (docKey: string) => string | undefined
-  resolveViewportRequest: (requestId: string) => void
-}): void {
-  getCachedViewportRequest = hooks.getCachedViewportRequest
-  resolveViewportRequest = hooks.resolveViewportRequest
-}
 
 /**
  * `ready` says the stream has signalled `client_ready` for that document. A
@@ -339,7 +326,7 @@ function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
   stream.docs.set(doc.as, entry)
   // Replay the latest viewport request so a stream that connected after
   // the request was issued still inherits the same fit/scroll/zoom intent.
-  const cached = getCachedViewportRequest(doc.key)
+  const cached = cachedViewportRequest(doc.key)
   if (cached !== undefined) stream.send('message', JSON.stringify({ doc: doc.as, raw: cached }))
 }
 
@@ -405,17 +392,17 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
   const stream = streams.get(parsed.data.streamId)
   if (!stream) return unknownStream(c, parsed.data.streamId)
 
-  const { message } = parsed.data
-  if (message.type === 'client_ready') {
-    // Upsert rather than require an existing subscription: subscribe and
-    // client_ready are separate POSTs with no ordering guarantee between
-    // them, and dropping readiness that arrived first would withhold the
-    // viewport request for good. Declaring readiness is a statement of
-    // interest in the document either way.
-    markReady(stream, doc)
-    return c.json({ ok: true })
-  }
-  resolveViewportRequest(message.requestId)
+  // `client_ready` is the one message a client sends: it used to be joined
+  // by a `viewport_response` that acknowledged a viewport request, which no
+  // client ever sent — the route that awaited it answered 504 to every real
+  // caller and was deleted with it.
+  //
+  // Upsert rather than require an existing subscription: subscribe and
+  // client_ready are separate POSTs with no ordering guarantee between them,
+  // and dropping readiness that arrived first would withhold the viewport
+  // request for good. Declaring readiness is a statement of interest in the
+  // document either way.
+  markReady(stream, doc)
   return c.json({ ok: true })
 }
 

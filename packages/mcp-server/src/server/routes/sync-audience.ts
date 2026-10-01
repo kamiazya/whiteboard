@@ -13,12 +13,12 @@ import type {
   ViewportRequestParams,
 } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import {
-  setSyncSseHooks,
   sseBroadcastText,
   sseBroadcastTextToReady,
   sseClientCount,
   sseSubscribedWorkspaceIds,
 } from './sync-sse.js'
+import { cacheViewportRequest } from './viewport-requests.js'
 
 /**
  * The workspaces with a live audience on THIS instance — an SSE stream
@@ -29,13 +29,6 @@ import {
 export function subscribedWorkspaceIds(): string[] {
   return sseSubscribedWorkspaceIds()
 }
-
-// Sticky viewport state per document. The MCP `viewport_set` tool fires its
-// `viewport_request` once, to whoever is open at that moment. Without this
-// cache, a page opening the same document a second later would land at the
-// default zoom and quietly mask that the request worked at all. Replayed on
-// `client_ready`, not earlier, so it does not race the editor's mount.
-const lastViewportRequestByDocument = new Map<string, string>()
 
 function omitUndefined<T extends object>(o: T): Partial<T> {
   const out: Partial<T> = {}
@@ -48,14 +41,6 @@ function omitUndefined<T extends object>(o: T): Partial<T> {
 function broadcastTextMessage(workspaceId: string, path: string, message: ServerTextMessage): void {
   sseBroadcastText(workspaceId, path, JSON.stringify(message))
 }
-
-// The SSE transport reads the viewport cache and the pending-request resolver
-// this module owns; injected rather than imported because this module ->
-// sync-sse.ts is already a one-way dependency.
-setSyncSseHooks({
-  getCachedViewportRequest: (key) => lastViewportRequestByDocument.get(key),
-  resolveViewportRequest: (requestId) => resolveViewportFn?.(requestId),
-})
 
 export function sendVersionCreated(workspaceId: string, path: string, version: VersionEntry): void {
   broadcastTextMessage(workspaceId, path, { type: 'version_created', version })
@@ -90,11 +75,6 @@ export function sendAgentActivity(
   broadcastTextMessage(workspaceId, path, { type: 'agent_activity', ...payload })
 }
 
-let resolveViewportFn: ((requestId: string) => void) | null = null
-export function setResolveViewportFn(fn: (requestId: string) => void): void {
-  resolveViewportFn = fn
-}
-
 export function sendViewportRequest(
   workspaceId: string,
   path: string,
@@ -106,7 +86,7 @@ export function sendViewportRequest(
     requestId,
     ...omitUndefined(params),
   } satisfies ServerTextMessage)
-  lastViewportRequestByDocument.set(`${workspaceId}/${path}`, raw)
+  cacheViewportRequest(`${workspaceId}/${path}`, raw)
   // Only to ready pages: a pre-ready page cannot apply the viewport yet and
   // is sent the cached request when it signals `client_ready`, so sending it
   // now as well would deliver it twice.

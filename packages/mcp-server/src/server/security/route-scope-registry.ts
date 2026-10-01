@@ -175,7 +175,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: wHandle,
   },
   // Remaining /api/w/:workspaceId/document/* routes: honor the write/read
-  // split so a mutating POST (e.g. /viewport) isn't authorized by
+  // split so a mutating POST isn't authorized by
   // canvas:read alone. The specific write routes above still take
   // precedence via ordering.
   {

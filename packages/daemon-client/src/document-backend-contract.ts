@@ -32,7 +32,6 @@ export {
   serverTextMessageSchema,
   versionCreatedMessageSchema,
   viewportRequestMessageSchema,
-  viewportResponseMessageSchema,
 } from './ws-messages.js'
 
 // ── Inbound callback surface (hook receives from backend) ─────────────────────

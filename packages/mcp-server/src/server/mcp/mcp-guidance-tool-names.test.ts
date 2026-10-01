@@ -25,8 +25,8 @@ const GUIDANCE = [
 /**
  * The `message:` and `hint:` strings a route hands back to its caller.
  *
- * Not the whole file: a source file also carries WebSocket message types
- * (`viewport_response`), which are tool-shaped and are not guidance. Reading
+ * Not the whole file: a source file also carries sync message types
+ * (`client_ready`), which are tool-shaped and are not guidance. Reading
  * wholesale reports those and buries the real thing.
  */
 function callerFacingStrings(relativePath: string): string {
