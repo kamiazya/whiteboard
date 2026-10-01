@@ -14,9 +14,9 @@ coverage); **this skill is the integrator's execution loop** — judgement + mer
 
 Read these before applying the reference playbook — they change several steps:
 
-- **NO GitHub Issues.** This project uses native **Tasks** (live board) + **`tmp/issues/`**
+- **NO GitHub Issues.** This project uses native **Tasks** (live board) + **whiteboard `type: issue` documents**
   (durable private backlog) — see the `ticketing` skill. So **never `gh issue create`** for a
-  migration/feature follow-up; file a `tmp/issues/<slug>.md` or a `TaskCreate` instead.
+  migration/feature follow-up; file a whiteboard `type: issue` document or a `TaskCreate` instead.
 - **Single integrator owns git/CI/merge.** The main session merges; there is no team of
   reviewers approving on GitHub. Merges go to the working branch / `main` per the push model.
 - **release-please reads merged commits.** Dependabot already titles PRs `chore(deps): bump …`
@@ -102,8 +102,8 @@ Repeat until the plan is drained:
 For `plan.needsMigration` items (adversarial verify found a breaking change reaching our code):
 do NOT merge. File a backlog entry per the `ticketing` skill:
 
-- `tmp/issues/deps-migrate-<pkg>-<from>-to-<to>.md` (frontmatter: id/status/severity/owner/
-  blocked-by/related/created) with: breaking changes, affected paths, official migration guide
+- a whiteboard document at `issues/deps-migrate-<pkg>-<from>-to-<to>` with `type: issue` (created via
+  `wb_workspace_edit` `document.create`, see the `ticketing` skill) carrying: breaking changes, affected paths, official migration guide
   link, and an action checklist. Reference the Dependabot PR number in the body.
 - Leave a pointer on the PR: `gh pr comment <n> --body "Migration tracked locally; holding this bump."`
   (Do not close it — Dependabot will keep it rebased until the migration lands.)
@@ -137,7 +137,7 @@ From `plan.alertCoverage`:
   edit `package.json` + `pnpm install`), run Step 5, commit `fix(deps): bump <pkg> to <ver> (GHSA-…)`.
   Use `fix(deps)` (not `chore`) when it closes a real vuln so release-please records a patch bump.
 - **transitive-no-fix** → add a `pnpm.overrides` pin to the patched version if one exists; if not,
-  file `tmp/issues/` and wait for upstream.
+  file a whiteboard `type: issue` document and wait for upstream.
 - **dev-only-nonci** → does NOT gate `pnpm audit --prod`; lowest priority. Batch with the next
   weekly Dependabot run rather than churning CI now.
 
@@ -164,7 +164,7 @@ re-run CI.
 - **Rate limits**: leave intervals when rebasing/merging many PRs; the alerts API + WebFetch can
   rate-limit on the free tier.
 - **GitHub Security alerts ⇄ `pnpm audit --prod` can diverge**: a dev-only path vuln shows in the
-  Security tab but not in `pnpm audit --prod`, so it does not gate CI. Track those in `tmp/issues/`
+  Security tab but not in `pnpm audit --prod`, so it does not gate CI. Track those in a whiteboard `type: issue` document
   rather than churning the lockfile.
 - **Catalog-managed groups need a manual bump**: for deps versioned via the pnpm-workspace.yaml
   `catalog:` (vite/vitest family), Dependabot's rebase/recreate cannot regenerate a lockfile

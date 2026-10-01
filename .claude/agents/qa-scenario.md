@@ -26,7 +26,7 @@ Scenario: <name>
 Result: PASS / FAIL / BLOCKED
 Evidence: <exact command output or file content excerpt>
 Issues found:
-  - <description> (add to tmp/issues/ if significant)
+  - <description> (file a whiteboard `type: issue` document if significant — see the `ticketing` skill)
 ```
 
 If BLOCKED, explain what prerequisite is missing (e.g., loopback bind not available in sandbox, pnpm build required first).

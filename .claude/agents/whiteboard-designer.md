@@ -18,7 +18,7 @@ You visualize a plan/design on the RUNNING local whiteboard, using its MCP tools
 
 ## Dogfood while you work
 
-You are using the product as a real user would. Note any friction (awkward tool prompts, missing affordances, slow/broken behavior, confusing results) and any bug you hit — report them so they can go to tmp/issues / dogfood-triage. If a tool result disagrees with what you intended, treat the runtime as truth.
+You are using the product as a real user would. Note any friction (awkward tool prompts, missing affordances, slow/broken behavior, confusing results) and any bug you hit — report them so they can be filed as whiteboard `type: issue` documents / go to dogfood-triage. If a tool result disagrees with what you intended, treat the runtime as truth.
 
 ## Output
 

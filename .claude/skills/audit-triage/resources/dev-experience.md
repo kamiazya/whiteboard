@@ -10,7 +10,7 @@ drifted from reality.
 Check:
 - Does README/CONTRIBUTING describe an install/bootstrap sequence that
   actually works from `git clone` (no assumed local state)?
-- Do referenced scripts (`pnpm mcp:http:dev`, `pnpm docs:snapshots`, etc.)
+- Do referenced scripts (`pnpm mcp:http:dev`, `pnpm --filter @kamiazya/whiteboard-web docs:snapshots`, etc.)
   exist and run without an undocumented prerequisite?
 
 ### 2. Flaky or missing local services
@@ -33,5 +33,5 @@ Check:
 ### 4. Friction discovered but never resolved
 
 Check:
-- Are there stale entries under `tmp/issues/` describing dev-experience
-  friction that was never fixed or filed as a task?
+- Are there open whiteboard `type: issue` documents describing dev-experience
+  friction that were never fixed or filed as a task?
