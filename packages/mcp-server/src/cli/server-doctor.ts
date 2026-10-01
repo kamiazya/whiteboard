@@ -14,7 +14,7 @@
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
-import { ENV_KEYS, parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
+import { parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import {
   getServerModeRecordPath,

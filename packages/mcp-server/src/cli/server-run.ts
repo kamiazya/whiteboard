@@ -19,7 +19,6 @@ import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-
 import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
 import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
 import {
-  ENV_KEYS,
   parseServerModeEnvConfig,
   type ServerModeEnvConfigResult,
 } from '../server/security/server-mode-env-config.js'
