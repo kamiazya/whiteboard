@@ -6,6 +6,7 @@ import {
   ensureDevDataDirSecured,
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
+  resolveRepoRootFromGit,
   resolveTsxWatchSpawn,
 } from './with-dev-data-dir-lib.mjs'
 
@@ -96,7 +97,6 @@ describe('reraiseSignalOrExit', () => {
 
 describe('resolveRepoRootFromGit', () => {
   it('returns the git toplevel for the current working directory', async () => {
-    const { resolveRepoRootFromGit } = await import('./with-dev-data-dir-lib.mjs')
     const result = resolveRepoRootFromGit(process.cwd())
 
     expect(typeof result).toBe('string')
@@ -105,7 +105,6 @@ describe('resolveRepoRootFromGit', () => {
   })
 
   it('resolves to the worktree root, not the main checkout, when cwd is inside a worktree', async () => {
-    const { resolveRepoRootFromGit } = await import('./with-dev-data-dir-lib.mjs')
     const result = resolveRepoRootFromGit(process.cwd())
     const gitPath = join(result, '.git')
 

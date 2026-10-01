@@ -23,9 +23,6 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', 'tmp', '
  *
  * A scan over a directory that holds none of what it is looking for reports
  * exactly what a scan that checked and found nothing reports.
- *
- * `test-lazy-import-check.test.ts` predates this and keeps its own narrower
- * list, with the exemptions measured against it.
  */
 export const TEST_SCAN_DIRS: readonly string[] = WORKSPACE_ROOTS.flatMap((root) =>
   readdirSync(join(REPO_ROOT, root), { withFileTypes: true })

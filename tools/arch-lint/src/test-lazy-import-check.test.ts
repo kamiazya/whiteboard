@@ -31,23 +31,11 @@
  * line above, the same shape as an EXEMPT_FILES entry: visible, reasoned,
  * and greppable.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
-
-const SCAN_DIRS = [
-  'apps/web/src',
-  'packages/model/src',
-  'packages/codec/src',
-  'packages/canvas-render/src',
-  'packages/ports/src',
-  'packages/loro-adapter/src',
-  'packages/server-core/src',
-  'packages/canvas-viewer/src',
-  'packages/mcp-server/src',
-  'tools/arch-lint/src',
-] as const
+import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
 
 /** Files whose `await import(` lives inside STRING FIXTURES, not code. */
 const EXEMPT_FILES: Record<string, string> = {
@@ -102,20 +90,6 @@ const MARKER = 'lazy-import:'
  */
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/
 
-function listTestFiles(dir: string): string[] {
-  const files: string[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...listTestFiles(full))
-      continue
-    }
-    if (/\.test\.(ts|tsx)$/.test(entry.name)) files.push(full)
-  }
-  return files
-}
-
 function offendingLines(source: string): Array<{ line: number; text: string }> {
   if (MOCK_MACHINERY.test(source)) return []
   const lines = source.split('\n')
@@ -154,7 +128,7 @@ function offendingLines(source: string): Array<{ line: number; text: string }> {
 
 describe('literal dynamic import in test files', () => {
   it('scans a real population', () => {
-    const all = SCAN_DIRS.flatMap((dir) => listTestFiles(join(REPO_ROOT, dir)))
+    const all = TEST_SCAN_DIRS.flatMap((dir) => listTestFiles(join(REPO_ROOT, dir)))
     expect(all.length).toBeGreaterThan(300)
   })
 
@@ -207,7 +181,7 @@ describe('literal dynamic import in test files', () => {
 
   it('every literal await import is mocked, marked, or hoisted', () => {
     const offenders: string[] = []
-    for (const dir of SCAN_DIRS) {
+    for (const dir of TEST_SCAN_DIRS) {
       for (const file of listTestFiles(join(REPO_ROOT, dir))) {
         const relativePath = relative(REPO_ROOT, file).split(sep).join('/')
         if (relativePath in EXEMPT_FILES) continue
