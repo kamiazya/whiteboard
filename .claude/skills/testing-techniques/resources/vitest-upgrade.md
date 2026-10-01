@@ -14,7 +14,8 @@ Vite ≥ 6.4 and Node ≥ 22.12; the catalog holds Vite 8.2 and `.node-version` 
    release younger than that, transitive packages included. A feature upgrade inside the
    window needs the package AND its scope (`vitest`, `"@vitest/*"`) in
    `minimumReleaseAgeExclude` with a comment saying it is a deliberate exception rather
-   than the security patch the list is documented for, plus the date it can be pruned. The
+   than a security patch, under a `prune on or after YYYY-MM-DD` line (the list is empty when
+   healthy, and `minimum-release-age-exclude.test.ts` fails on the day an entry expires). The
    registry's SLSA provenance attestation (`npm view <pkg>@<v> dist.attestations`) is the
    due diligence that stands in for the window.
 2. **Bump the catalog and `pnpm install --no-frozen-lockfile`**; read `pnpm peers check`.
