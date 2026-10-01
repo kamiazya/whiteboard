@@ -30,7 +30,7 @@ const cache = new Map<string, string>()
  * a public key does not already say (ADR-0035 decisions 1 and 2).
  *
  * Memoized per data dir because the fallback `ServerDeps` is deliberately
- * rebuilt per request (see `di/default-server-deps.ts`), and importing a
+ * rebuilt per test (see `routes/_test-helpers.ts`), and importing a
  * JWK keypair on every request that touches a route is a real cost for a
  * value that cannot change while the file does not. Keyed rather than a
  * single slot so a test that swaps data dirs is not served another one's.

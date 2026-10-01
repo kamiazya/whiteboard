@@ -100,12 +100,4 @@ describe('createApp /api/v1 document mount', () => {
     const body = (await listRes.json()) as { documents: { path: string }[] }
     expect(body.documents.map((c) => c.path)).toEqual(['notes'])
   })
-
-  it('leaves /api/v1 unmounted (404) when no serverDeps are supplied', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-    const res = await app.request('/api/v1/workspaces/default/documents', {
-      headers: { Authorization: 'Bearer secret' },
-    })
-    expect(res.status).toBe(404)
-  })
 })

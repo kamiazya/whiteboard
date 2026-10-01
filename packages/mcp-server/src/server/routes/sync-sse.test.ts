@@ -10,9 +10,11 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
+import { resolveTestServerDeps } from './_test-helpers.js'
 import {
   getClientCount,
   getReadyClientCount,
@@ -23,8 +25,17 @@ import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-ss
 
 // Its own data dir: opening a stream opens the store, and a store shared with
 // another file running in parallel waits on that file's lock until timeout.
-setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-transport-')))
+const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-transport-'))
+setDataDirForTests(dataDir)
 afterAll(() => resetDataDirForTests())
+
+// The deps the root hands createApp: the real wiring over this file's data
+// dir, since the workspaces these cases create and then subscribe to by
+// segment have to be in the store the subscribe route resolves against.
+let serverDeps: ServerDeps
+beforeAll(async () => {
+  serverDeps = await resolveTestServerDeps(dataDir)
+})
 
 // Both registries are module-level and outlive a single app instance, so a
 // stream opened here would otherwise stay subscribed for the rest of the run
@@ -41,6 +52,7 @@ function createRuntimeOptions() {
     token: TOKEN,
     touch: () => {},
     getStatus: () => ({ port: 3099 }) as never,
+    serverDeps,
   }
 }
 

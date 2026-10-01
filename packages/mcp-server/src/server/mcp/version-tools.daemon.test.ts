@@ -21,7 +21,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 const tmp = withTempDataDir('whiteboard-version-tools-')
-const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
+const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 const { clearCache } = await import('../store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('../store/document-store.js')
 const { FileVersionStore } = await import('../store/version-store.js')
@@ -71,7 +71,7 @@ async function textOf(deps: ServerDeps, documentId: string): Promise<string | un
 // panel never showed it while it lived.
 describe('wb_version_* tools over the daemon history', () => {
   it('a tool-saved version is listed by the daemon history and restores after the cache drops', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tmp.dir)
     await deps.documentIndex.createWorkspace({ workspaceId: WS })
     const { documentId } = await deps.documentIndex.createDocument({
       workspaceId: WS,
@@ -102,7 +102,7 @@ describe('wb_version_* tools over the daemon history', () => {
     // Simulate the daemon restarting between the checkpoint and the rollback.
     clearCache()
     _clearWorkspaceDocCacheForTests()
-    const reborn = await getDefaultServerDeps()
+    const reborn = await resolveTestServerDeps(tmp.dir)
     const restored = await createVersionRestoreTool(reborn).execute({
       workspaceId: WS,
       documentId,

@@ -1,7 +1,15 @@
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from './_test-helpers.js'
+import { resolveTestServerDeps, withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-routes-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
@@ -36,7 +44,7 @@ describe('createDocumentRouter composition', () => {
     // The path-addressed shape: the document path is the URL tail, one
     // segment per path segment, with the action suffix anchoring the parse.
     // A nested path is exactly what the old :path param could never match.
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const createRes = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -69,7 +77,7 @@ describe('createDocumentRouter composition', () => {
     // match a nested path): versions, restore, compact, name, pin, rename,
     // delete. One scenario, so a regression in ANY of them on a nested path
     // is loud.
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
     const create = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

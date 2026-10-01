@@ -186,6 +186,7 @@ function mountMcpMiddleware(
 function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) {
   const members = options.authMode === 'server-mode' ? options.people?.members : undefined
   return {
+    workspaceDocuments: options.serverDeps.workspaceDocuments,
     ...(admit === undefined ? {} : { admit }),
     ...(members === undefined ? {} : { userOf: (c: Context) => callerUserId(c, members) }),
   }
@@ -208,7 +209,7 @@ function mountServerModeRouters(app: Hono, options: AppOptions): void {
 function mountLocalDaemonRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'local-daemon') return
   const { serverDeps, replicaKeys } = options
-  if (serverDeps === undefined || replicaKeys === undefined) return
+  if (replicaKeys === undefined) return
   app.route(
     '/',
     createReplicaKeyRouter({
@@ -328,13 +329,7 @@ export function createApp(options: AppOptions) {
     },
   })
 
-  app.route(
-    '/',
-    createMcpRouter({
-      modernMcpHandler,
-      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
-    }),
-  )
+  app.route('/', createMcpRouter({ modernMcpHandler, serverDeps: options.serverDeps }))
 
   mountLocalDaemonRouters(app, options)
   mountServerModeRouters(app, options)
@@ -342,9 +337,7 @@ export function createApp(options: AppOptions) {
   // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
   // paths; the /api/* auth middlewares registered above already cover it.
-  if (options.serverDeps) {
-    app.route('/', createDocumentServer(options.serverDeps).app)
-  }
+  app.route('/', createDocumentServer(options.serverDeps).app)
 
   const admit = membership.admit
 
@@ -355,7 +348,7 @@ export function createApp(options: AppOptions) {
       // that cannot rotate. The identity is built above, so this is the one
       // place that answer is known without threading it through the DI graph.
       daemonActor: identity.did,
-      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+      serverDeps: options.serverDeps,
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
@@ -370,12 +363,7 @@ export function createApp(options: AppOptions) {
   // instantiate their own otherwise.
   const sharedVersionStore = new FileVersionStore()
   app.route('/', createFilesRouter({ versionStore: sharedVersionStore }))
-  app.route(
-    '/',
-    createExportRouter(
-      options.serverDeps === undefined ? {} : { liveDocuments: options.serverDeps.liveDocuments },
-    ),
-  )
+  app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments }))
   app.route('/', createFontsRouter())
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ credentialResolver }))

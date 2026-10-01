@@ -6,7 +6,6 @@ import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-serve
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
-import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { onDocumentAction } from './path-route.js'
 
 // A Loro update embeds any attachment-affecting deltas since the client's
@@ -17,10 +16,9 @@ const LIVE_DOC_UPDATE_LIMIT_BYTES = 16 * 1024 * 1024
 
 export interface LiveDocRouterOptions {
   triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
-  // The live-document seam the routes read and write through. Production
-  // wires this from document.ts; a router built without it falls back to the
-  // same wiring via getDefaultServerDeps.
-  serverDeps?: ServerDeps
+  // The live-document seam the routes read and write through, handed down
+  // from document.ts.
+  serverDeps: ServerDeps
 }
 
 // GET /api/w/:workspaceId/document/*/snapshot
@@ -32,11 +30,9 @@ export interface LiveDocRouterOptions {
 // evict-on-failure — lives in server-core's applyDocumentUpdate.
 export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
-  const depsOf = async (): Promise<ServerDeps> =>
-    options.serverDeps ?? (await getDefaultServerDeps())
+  const deps = options.serverDeps
 
   onDocumentAction(app, 'get', 'exists', async (c, workspaceId, path) => {
-    const deps = await depsOf()
     const response: DocumentExistsResponse = {
       exists: await deps.liveDocuments.exists(workspaceId, path),
     }
@@ -44,7 +40,6 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
   })
 
   onDocumentAction(app, 'get', 'snapshot', async (c, workspaceId, path) => {
-    const deps = await depsOf()
     // get()'s lazy-create would otherwise silently hand back an empty
     // doc for a canvas that does not exist — indistinguishable from a
     // never-created OR just-deleted canvas. Same problem-details { title }
@@ -74,7 +69,6 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       } catch {
         return c.json({ error: 'invalid_body', message: 'Malformed document update' }, 400)
       }
-      const deps = await depsOf()
       const doc = await applyDocumentUpdate(deps, { workspaceId, path, update: bytes })
 
       // No explicit broadcast: the save persisted through the workspace

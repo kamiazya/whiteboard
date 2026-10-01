@@ -30,10 +30,11 @@ export interface DocumentRouterOptions {
   autoVersionQuietMs?: number
   // Resolve the HEAD branch name for manual and auto version saves.
   // If omitted, ignore branch metadata. Production wires this from app.ts.
-  // The operations the routes below adapt onto (ADR-0018). Production wires
-  // this from app.ts; see `getDefaultServerDeps` for what a caller that
-  // omits it gets, which is the same wiring rather than a stand-in.
-  serverDeps?: ServerDeps
+  // The operations the routes below adapt onto (ADR-0018), handed down from
+  // app.ts. Required: a router that composed its own would be a second
+  // composition path, and the one it built carried none of what the root
+  // attaches.
+  serverDeps: ServerDeps
   /**
    * Hands the caller the checkpoint trigger this router created, so a
    * composition root can flush it when the process is going away.
@@ -82,7 +83,7 @@ function armAutoVersionTrigger(
 // optimize). Split by concern so each is independently testable; this file
 // only wires shared dependencies (versionStore, auto-version trigger,
 // auto-compact) between them.
-export function createDocumentRouter(options: DocumentRouterOptions = {}) {
+export function createDocumentRouter(options: DocumentRouterOptions) {
   const app = new Hono()
   const versionStore = options.versionStore ?? new FileVersionStore()
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
@@ -105,18 +106,12 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   )
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter())
-  app.route(
-    '/',
-    createLiveDocRouter({
-      triggerAutoVersion,
-      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
-    }),
-  )
+  app.route('/', createLiveDocRouter({ triggerAutoVersion, serverDeps: options.serverDeps }))
   app.route(
     '/',
     createWorkspaceDocumentRouter({
       triggerAutoVersion,
-      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+      serverDeps: options.serverDeps,
       ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
     }),
   )
@@ -128,12 +123,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
     }),
   )
   app.route('/', createMaintenanceRouter({ versionStore }))
-  app.route(
-    '/',
-    createDocumentSvgExportRouter(
-      options.serverDeps === undefined ? {} : { liveDocuments: options.serverDeps.liveDocuments },
-    ),
-  )
+  app.route('/', createDocumentSvgExportRouter({ liveDocuments: options.serverDeps.liveDocuments }))
   const restoreProgress: RestoreProgress = async (event) => {
     sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
   }
@@ -141,7 +131,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
     '/',
     createRestoreRouter({
       versionStore,
-      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+      serverDeps: options.serverDeps,
       progress: restoreProgress,
     }),
   )

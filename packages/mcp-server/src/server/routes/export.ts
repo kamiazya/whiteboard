@@ -6,7 +6,6 @@ import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
-import { getDefaultServerDeps } from '../../di/default-server-deps.js'
 import {
   type ExportErrorBody,
   type ExportResponse,
@@ -112,16 +111,13 @@ async function renderedExport(
  * ad-hoc caller — falls back to the same production wiring.
  */
 export interface ExportRouterOptions {
-  liveDocuments?: Pick<LiveDocuments, 'exists'>
+  liveDocuments: Pick<LiveDocuments, 'exists'>
 }
 
-export function createExportRouter(options: ExportRouterOptions = {}) {
+export function createExportRouter(options: ExportRouterOptions) {
   const app = new Hono()
   const documentExists = async (workspaceId: string, path: string) =>
-    (options.liveDocuments ?? (await getDefaultServerDeps()).liveDocuments).exists(
-      workspaceId,
-      path,
-    )
+    options.liveDocuments.exists(workspaceId, path)
 
   // POST /api/w/:workspaceId/document/<path>/export
   onDocumentAction(

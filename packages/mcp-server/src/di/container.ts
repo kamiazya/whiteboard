@@ -144,13 +144,10 @@ export function resolveServerDeps(
       return entry === undefined ? undefined : { family: entry.family, url: fontDownloadUrl(entry) }
     },
     // clientNotifier is deliberately NOT wired here. It is a bridge onto
-    // this package's own WebSocket routes, and importing those from the di
-    // graph closes a value cycle (di -> canvas-client-notifier -> ws.ts ->
-    // di, now that the routes resolve their deps through
-    // getDefaultServerDeps). The field is optional by design — "absent
-    // means nobody is told anything" — so the two roots with a live-socket
-    // audience (http-server.ts, mcp/index.ts) attach it themselves, and the
-    // route-fallback deps correctly carry none.
+    // this package's own sync routes, and the di graph must not import the
+    // routes layer. The field is optional by design — "absent means nobody
+    // is told anything" — so the one root with a live audience
+    // (http-server.ts) attaches it itself; the stdio root has none.
     // undefined unless the user opted in, and even then the model loads on
     // the first search rather than here — a daemon that starts must not pay
     // a model download before it can answer anything.

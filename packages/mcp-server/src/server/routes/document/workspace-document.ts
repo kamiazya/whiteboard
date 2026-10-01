@@ -14,7 +14,6 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
-import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
@@ -28,10 +27,9 @@ const WORKSPACE_DOC_PROMOTE_LIMIT_BYTES = 24 * 1024 * 1024
 
 export interface WorkspaceDocumentRouterOptions {
   triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
-  // The workspace-document seam the routes read and write through.
-  // Production wires this from document.ts; a router built without it falls
-  // back to the same wiring via getDefaultServerDeps.
-  serverDeps?: ServerDeps
+  // The workspace-document seam the routes read and write through, handed
+  // down from document.ts.
+  serverDeps: ServerDeps
   /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
   daemonActor?: string
 }
@@ -60,7 +58,7 @@ export interface WorkspaceDocumentRouterOptions {
  */
 async function admittedWorkspace(
   c: Context,
-  depsOf: () => Promise<ServerDeps>,
+  deps: ServerDeps,
 ): Promise<{ workspaceId: string; deps: ServerDeps } | { refusal: Response }> {
   // The route cannot match without the segment; `?? ''` is for the type,
   // and an empty handle refuses through the same validator as any other
@@ -74,7 +72,6 @@ async function admittedWorkspace(
     throw err
   }
   const workspaceId = await workspaceIdFromHandle(c, handle)
-  const deps = await depsOf()
   if (!(await deps.workspaceDocuments.exists(workspaceId))) {
     return { refusal: c.json({ title: `Workspace "${workspaceId}" not found` }, 404) }
   }
@@ -107,11 +104,9 @@ function promoteRequestFrom(json: unknown):
 
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
   const app = new Hono()
-  const depsOf = async (): Promise<ServerDeps> =>
-    options.serverDeps ?? (await getDefaultServerDeps())
 
   app.get('/api/w/:workspaceId/workspace-document/snapshot', async (c) => {
-    const admitted = await admittedWorkspace(c, depsOf)
+    const admitted = await admittedWorkspace(c, options.serverDeps)
     if ('refusal' in admitted) return admitted.refusal
     const { workspaceId, deps } = admitted
     const doc = await deps.workspaceDocuments.get(workspaceId)
@@ -133,7 +128,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         ),
     }),
     async (c) => {
-      const admitted = await admittedWorkspace(c, depsOf)
+      const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal
       const { workspaceId, deps } = admitted
       const bytes = new Uint8Array(await c.req.arrayBuffer())
@@ -189,7 +184,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         ),
     }),
     async (c) => {
-      const admitted = await admittedWorkspace(c, depsOf)
+      const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal
       const { workspaceId, deps } = admitted
       let json: unknown

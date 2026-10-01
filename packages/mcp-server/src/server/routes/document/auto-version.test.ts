@@ -1,10 +1,18 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -160,10 +168,7 @@ describe('auto-version corruption handling', () => {
 
     // Quiet immediately: the checkpoint fires on the next tick rather than
     // five minutes out, so the route's own behaviour is what this observes.
-    const app = createDocumentRouter({
-      autoVersionQuietMs: 0,
-      versionStore,
-    })
+    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 0, versionStore })
     const res = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -233,7 +238,7 @@ describe('an unchanged document', () => {
         },
       )
 
-    const first = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
+    const first = createDocumentRouter({ serverDeps, autoVersionQuietMs: 0, versionStore: store })
     expect((await post(first)).status).toBe(200)
     await vi.waitFor(async () => {
       expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
@@ -243,7 +248,7 @@ describe('an unchanged document', () => {
     // what a daemon restart leaves behind. The same bytes again: a
     // reconnecting client replaying ops the record already carries.
     const askedBefore = asked
-    const second = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
+    const second = createDocumentRouter({ serverDeps, autoVersionQuietMs: 0, versionStore: store })
     expect((await post(second)).status).toBe(200)
     await vi.waitFor(() => {
       expect(asked).toBeGreaterThan(askedBefore)

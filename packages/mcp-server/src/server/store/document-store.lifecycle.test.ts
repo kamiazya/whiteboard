@@ -26,7 +26,7 @@ vi.mock('../config.js', () => ({
 // Use dynamic import so it runs after the mock is resolved.
 const { saveDocument, loadDocument, listDocuments, renameDocumentPath, ConflictError } =
   await import('./document-store.js')
-const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
+const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -51,7 +51,7 @@ async function teardownIsolatedDb(): Promise<void> {
 // unchanged, which is the point — the implementation moved, the behaviour
 // did not.
 async function deleteDocument(workspaceId: string, path: string): Promise<boolean> {
-  const deps = await getDefaultServerDeps()
+  const deps = await resolveTestServerDeps(tempDir)
   // The tree index throws for an unknown WORKSPACE where the retired SQL
   // index answered null; the route's translation treats both as absent.
   const entry = await deps.documentIndex

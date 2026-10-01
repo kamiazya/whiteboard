@@ -1,13 +1,12 @@
 /**
  * The live-doc routes operate through the ServerDeps they were given.
  *
- * `serverDeps` is an OPTIONAL router option, so a wiring bug — the field
- * declared but never read, or document.ts forgetting to pass it on — compiles
- * clean and passes every test that exercises only the getDefaultServerDeps
- * fallback, which is all of live-doc.test.ts. Same bug class
- * handle-resolution-seam.test.ts pins for handle resolution: the recorder on
- * the INJECTED deps is what tells "went through the seam" apart from "went
- * around it to module-level state", because both persist the same bytes.
+ * `serverDeps` is required now, but a wiring bug — the field read for one
+ * route and module-level state reached for another — still compiles clean
+ * and passes every test that persists the same bytes either way, which is
+ * all of live-doc.test.ts. Same bug class handle-resolution-seam.test.ts
+ * pins for handle resolution: the recorder on the INJECTED deps is what
+ * tells "went through the seam" apart from "went around it".
  */
 
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
@@ -27,7 +26,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getDefaultServerDeps } = await import('../../../di/default-server-deps.js')
+const { resolveTestServerDeps } = await import('../_test-helpers.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
 // workaround for document.ts's dynamic import.
@@ -45,7 +44,7 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array {
 
 describe('live-doc routes and the deps they were handed', () => {
   it('POST /update reads and writes through the INJECTED liveDocuments', async () => {
-    const deps = await getDefaultServerDeps()
+    const deps = await resolveTestServerDeps(tmp.dir)
     const recorded: string[] = []
     const real = deps.liveDocuments
     deps.liveDocuments = {

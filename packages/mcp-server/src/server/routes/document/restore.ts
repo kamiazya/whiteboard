@@ -9,18 +9,14 @@ import {
   type VersionHistory,
 } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { validateDocumentPath, validateVersionId } from '../../validators.js'
 import { handleCorruptStoredData, refusedBy } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface RestoreRouterOptions {
   versionStore: VersionHistory
-  // The operation's live-document seam. Production wires this from
-  // document.ts; a router built without it falls back to the same wiring via
-  // getDefaultServerDeps (see that file for why the fallback is real, not a
-  // stand-in).
-  serverDeps?: ServerDeps
+  // The operation's live-document seam, handed down from document.ts.
+  serverDeps: ServerDeps
   // How a restore announces itself to connected clients. Absent means nobody
   // is told, which is the right answer for a router with no WS surface.
   progress?: RestoreProgress
@@ -146,7 +142,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
       if ('refusal' in asked) return c.json(asked.refusal, 400)
       const { targetPath, overwrite, subtree } = asked
       try {
-        const deps = options.serverDeps ?? (await getDefaultServerDeps())
+        const deps = options.serverDeps
         const result = await restoreVersion(
           { versions: versionStore, liveDocuments: deps.liveDocuments },
           {

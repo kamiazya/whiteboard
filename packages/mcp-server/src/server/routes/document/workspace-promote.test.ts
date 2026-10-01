@@ -9,11 +9,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promoteWorkspaceResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { seedWorkspaceRow } from '../_test-helpers.js'
+import { resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
+// The deps a router is handed by its root; here, the test wiring over the
+// isolated data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
     return tempDir
@@ -36,6 +40,7 @@ beforeEach(async () => {
   clearCache()
   _clearWorkspaceDocCacheForTests()
   await seedWorkspaceRow(tempDir, 'session1')
+  serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
   await handle.dispose()
@@ -61,7 +66,7 @@ function browserSnapshot(): Uint8Array {
 }
 
 function harness() {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const promote = (body: unknown) =>
     app.request('/api/w/session1/workspace-document/promote', {
       method: 'POST',

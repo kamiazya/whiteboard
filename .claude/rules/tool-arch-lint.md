@@ -90,6 +90,19 @@ build when it imports a Node builtin or reaches into `src/server` / `src/cli` /
 own published surface — but it means "is this checked?" has two answers
 depending on the rule.
 
+## `adapter-di-import-check.test.ts`: an adapter composes nothing
+
+The sibling of the mechanic check, one layer up: `server/routes/**` and
+`server/mcp/**` may not import `di/`, statically or through `await import`.
+Fourteen call sites in eight routers used to fall back to a `ServerDeps` they
+resolved themselves when handed none — a second composition path, carrying
+none of what the root attaches, and one that let a router threaded without the
+field compile clean and pass every test that only ever took the fallback.
+`serverDeps` is required on every router and on `createApp` now, and tests
+get theirs from `routes/_test-helpers.ts`'s `resolveTestServerDeps`. The one
+exemption is the stdio root (`server/mcp/index.ts`), listed by name and
+checked from both sides: it must keep importing `di/`, or the entry is stale.
+
 ## `adapter-mechanic-check.ts` and its three lists
 
 **A mechanic is named by its FULL path under `store/`, at whatever depth**, so

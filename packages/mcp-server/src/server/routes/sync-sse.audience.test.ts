@@ -9,6 +9,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
 import { captureLogsForTests } from '../log.js'
@@ -32,6 +33,9 @@ function app() {
     token: TOKEN,
     touch: () => {},
     getStatus: () => ({ port: 3099 }) as never,
+    // The stream's update fan-out subscribes through these; the memory
+    // store is enough, since every case here broadcasts directly.
+    serverDeps: resolveServerDeps(createContainer()),
   })
 }
 

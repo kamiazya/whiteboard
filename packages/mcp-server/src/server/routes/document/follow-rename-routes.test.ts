@@ -13,16 +13,24 @@ import {
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as documentStore from '../../store/document-store.js'
-import { withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 import { createDocumentRouter } from '../document.js'
 
 // `withTempDataDir` only registers beforeEach/afterEach hooks — it sets
 // nothing at module scope — so these imports never had to be deferred past
 // it.
 const tmp = withTempDataDir('whiteboard-follow-rename-test-')
+
+// The deps a router is handed by its root; here, the test wiring over the
+// temp data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
+beforeEach(async () => {
+  serverDeps = await resolveTestServerDeps(tmp.dir)
+})
 const { getDoc } = documentStore
 
 async function seedMarkdown(workspaceId: string, path: string, body: string) {
@@ -45,7 +53,7 @@ describe('rename routes follow references', () => {
   it('PUT :path/path repoints references written as the old path', async () => {
     await seedMarkdown('session1', 'design/login', 'the target')
     await seedMarkdown('session1', 'notes/daily', 'see [[design/login]] and [[unrelated]]')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/design%2Flogin/path', {
       method: 'PUT',
@@ -62,7 +70,7 @@ describe('rename routes follow references', () => {
     await seedMarkdown('session3', 'folder', 'the parent')
     await seedMarkdown('session3', 'folder/child', 'the child')
     await seedMarkdown('session3', 'notes/daily', 'see [[folder/child]]')
-    const app = createDocumentRouter()
+    const app = createDocumentRouter({ serverDeps })
 
     const res = await app.request('/api/workspaces/session3/documents/folder/path', {
       method: 'PUT',

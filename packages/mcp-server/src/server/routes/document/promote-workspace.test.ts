@@ -25,11 +25,15 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { seedWorkspaceRow } from '../_test-helpers.js'
+import { resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
+// The deps a router is handed by its root; here, the test wiring over the
+// isolated data dir (routers no longer compose their own).
+let serverDeps: ServerDeps
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
     return tempDir
@@ -58,6 +62,7 @@ beforeEach(async () => {
   // files `session1` as its segment, leaving the direct store reads in these
   // cases naming nothing.
   await seedWorkspaceRow(tempDir, 'session1')
+  serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
   await handle.dispose()
@@ -108,7 +113,7 @@ async function listDocuments(app: ReturnType<typeof createDocumentRouter>) {
 }
 
 it('a browser record promotes through workspace-document/update: ids, kinds, names and bodies survive; collisions shadow', async () => {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   // The daemon workspace pre-exists with its own document at the contested
   // path — the workspaceId maps by TARGETING an existing workspace, never by
   // the browser's fixed 'local' id leaking through.
@@ -156,7 +161,7 @@ it('a browser record promotes through workspace-document/update: ids, kinds, nam
 it('workspace-document/update answers 404 for a workspace the daemon never registered', async () => {
   // Promotion cannot mint a workspace as a side effect — the browser's fixed
   // 'local' id must never leak through as a new daemon workspace.
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const res = await app.request('/api/w/unregistered/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
@@ -166,7 +171,7 @@ it('workspace-document/update answers 404 for a workspace the daemon never regis
 })
 
 it('an edit made after the promotion export still lands as an incremental delta — the replica plane', async () => {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   // Promotion targets an EXISTING workspace — the update route answers 404
   // for one the daemon never registered, so the flow registers first. Here
   // that registration rides an ordinary document create.
@@ -220,7 +225,7 @@ async function daemonSnapshot(app: ReturnType<typeof createDocumentRouter>): Pro
 }
 
 it('promotion lands as ONE fan-out frame under a live subscriber, whose pending edit then merges instead of being overwritten', async () => {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const created = await app.request('/api/workspaces/session1/documents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -283,7 +288,7 @@ it('promotion lands as ONE fan-out frame under a live subscriber, whose pending 
 })
 
 it('promoting the same snapshot twice is idempotent — no duplicate documents, no error', async () => {
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const created = await app.request('/api/workspaces/session1/documents', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -314,7 +319,7 @@ it("the literal workspace id 'local' cannot be minted by a promotion", async () 
   // axis). A promotion that let it through would resurrect the retired
   // browser-local sense as a daemon workspace. The route already refuses
   // every unregistered id; this pins that 'local' gets no special pass.
-  const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+  const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
   const res = await app.request('/api/w/local/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
