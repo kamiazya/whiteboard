@@ -2,8 +2,7 @@ import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/search
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
 import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
-import { factsCacheFor } from '../references/content-source.js'
-import { DocumentVectorCache } from '../search/document-vector-cache.js'
+import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
 import { fuseByRank } from '../search/rrf.js'
@@ -100,7 +99,7 @@ function collectSearchable(
 
 export function createDocumentSearchTool(
   deps: ServerDeps,
-  vectors: DocumentVectorCache = new DocumentVectorCache(factsCacheFor(deps)),
+  vectors: DocumentVectorCache = vectorCacheFor(deps),
 ) {
   return {
     name: 'wb_document_search' as const,

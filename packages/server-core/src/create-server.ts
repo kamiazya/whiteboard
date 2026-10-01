@@ -7,7 +7,7 @@ import { Hono } from 'hono'
 import type { z } from 'zod'
 import { type ApiErrorBody, errorBody, invalidRequestBody } from './api-errors.js'
 import { factsCacheFor } from './references/content-source.js'
-import { DocumentVectorCache } from './search/document-vector-cache.js'
+import { vectorCacheFor } from './search/document-vector-cache.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyEditTool } from './tools/body-edit.js'
@@ -84,9 +84,11 @@ function identityNamedBy(body: unknown): ApiErrorBody | undefined {
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono<{ Variables: { workspaceId: string } }>()
-  // One stamp-validated content-facts cache per server: backlinks/mentions,
-  // tags, and search all read through it, so a request after a quiet period
-  // reloads only what changed — regardless of which write path changed it.
+  // One stamp-validated content-facts cache per deps, not per server: the
+  // daemon's /mcp builds a server per request, and a cache owned by the
+  // server would be empty at every search. Backlinks/mentions, tags, and
+  // search all read through it, so a request after a quiet period reloads
+  // only what changed — regardless of which write path changed it.
   const factsCache = factsCacheFor(deps)
 
   /**
@@ -298,7 +300,7 @@ export function createServer(deps: ServerDeps) {
     threadEdit: createThreadEditTool(deps),
     viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
-    documentSearch: createDocumentSearchTool(deps, new DocumentVectorCache(factsCache)),
+    documentSearch: createDocumentSearchTool(deps, vectorCacheFor(deps)),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),
