@@ -5,11 +5,12 @@
  */
 import {
   windowFromExtensionSchema,
+  windowFromPageEnvelopeSchema,
   windowFromPageSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { WINDOW_BRIDGE_CHANNEL } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { describe, expect, it } from 'vitest'
-import { installPageRelay, type PageWindow } from './page-relay.js'
+import { installPageRelay, type PageWindow, readPageEnvelope } from './page-relay.js'
 import type { Port } from './relay.js'
 
 const ORIGIN = 'https://kamiazya-whiteboard.pages.dev'
@@ -133,5 +134,39 @@ describe('installPageRelay', () => {
     page.fromPage({ kind: 'connect', port: 'p1', channel: 'another' })
     expect(page.posted).toEqual([])
     expect(page.ports).toEqual([])
+  })
+})
+
+// The hand reader exists so the content script does not carry zod; this is
+// what keeps it the schema's reader rather than a second definition.
+describe('readPageEnvelope', () => {
+  const envelope = { channel: WINDOW_BRIDGE_CHANNEL, from: 'page' }
+  const shapes: unknown[] = [
+    { ...envelope, kind: 'hello' },
+    { ...envelope, kind: 'connect', port: 'p1' },
+    { ...envelope, kind: 'message', port: 'p1', message: { type: 'abort', id: 'a' } },
+    { ...envelope, kind: 'message', port: 'p1' },
+    { ...envelope, kind: 'disconnect', port: 'p1' },
+    { ...envelope, kind: 'connect', port: '' },
+    { ...envelope, kind: 'connect', port: 'x'.repeat(64) },
+    { ...envelope, kind: 'connect', port: 'x'.repeat(65) },
+    { ...envelope, kind: 'connect', port: 7 },
+    { ...envelope, kind: 'connect' },
+    { ...envelope, kind: 'open', port: 'p1' },
+    { ...envelope, kind: 'hello', port: 'p1' },
+    { channel: WINDOW_BRIDGE_CHANNEL, from: 'extension', kind: 'hello' },
+    { channel: 'other', from: 'page', kind: 'hello' },
+    { from: 'page', kind: 'hello' },
+    null,
+    undefined,
+    'hello',
+    42,
+    [],
+  ]
+  it.each(
+    shapes.map((shape, i) => [i, shape] as const),
+  )('agrees with windowFromPageEnvelopeSchema on shape %i', (_i, shape) => {
+    const parsed = windowFromPageEnvelopeSchema.safeParse(shape)
+    expect(readPageEnvelope(shape)).toEqual(parsed.success ? parsed.data : null)
   })
 })

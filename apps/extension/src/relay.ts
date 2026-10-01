@@ -5,10 +5,10 @@
  * credential — so its own job is to admit only the hosted app.
  * https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging
  */
-import {
-  type ExtensionHelloReply,
-  type ExtensionToPage,
-  extensionHelloSchema,
+import type {
+  ExtensionHello,
+  ExtensionHelloReply,
+  ExtensionToPage,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { type AdmittingManifest, admitsOrigin } from './manifest.js'
@@ -55,6 +55,17 @@ function originOf(sender: Port['sender']): string | undefined {
   }
 }
 
+/**
+ * By hand, not `extensionHelloSchema.safeParse`: zod in the background
+ * script is 140 KB for one two-field check. `relay.test.ts` holds this to
+ * the schema.
+ */
+function isHello(message: unknown): message is ExtensionHello {
+  return (
+    typeof message === 'object' && message !== null && 'type' in message && message.type === 'hello'
+  )
+}
+
 export function installRelay(api: ExtensionApi, matches: readonly string[]): void {
   const relay = (page: Port) => {
     if (!admitsOrigin(matches, originOf(page.sender))) {
@@ -77,7 +88,7 @@ export function installRelay(api: ExtensionApi, matches: readonly string[]): voi
 
   api.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
     if (!admitsOrigin(matches, sender.origin)) return
-    if (extensionHelloSchema.safeParse(message).success) {
+    if (isHello(message)) {
       sendResponse({
         type: 'hello',
         version: api.runtime.getManifest().version,

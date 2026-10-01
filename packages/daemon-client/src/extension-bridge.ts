@@ -129,3 +129,4 @@ export const windowFromPageSchema = windowFromPage(pageToHostSchema)
 export type WindowFromPage = z.infer<typeof windowFromPageSchema>
 export type WindowFromPageBody = WithoutEnvelope<WindowFromPage>
 export const windowFromPageEnvelopeSchema = windowFromPage(z.unknown())
+export type WindowFromPageEnvelope = z.infer<typeof windowFromPageEnvelopeSchema>
