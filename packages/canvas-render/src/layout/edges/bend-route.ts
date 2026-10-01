@@ -16,9 +16,11 @@
  * built stays: it is a published contract, and it was the right seam even
  * though the concept it first carried turned out to be core.
  */
+
+import type { EdgeSide } from '@kamiazya/whiteboard-model'
 import type { RoutableElement, ScenePoint } from '@kamiazya/whiteboard-scene'
+import type { Rect } from './edge-geometry.js'
 import { sidePoint } from './edge-geometry.js'
-import type { Rect, Side } from './edge-rules.js'
 
 /**
  * The border point facing `toward`, for an end whose side nothing resolved.
@@ -55,7 +57,7 @@ function facing(rect: Rect, toward: ScenePoint): ScenePoint {
 function endpoint(
   rect: Rect,
   anchor: ScenePoint | undefined,
-  side: Side | undefined,
+  side: EdgeSide | undefined,
   toward: ScenePoint,
 ): ScenePoint {
   if (anchor !== undefined) return anchor
@@ -67,8 +69,8 @@ function endpoint(
 export interface BendRouteEnds {
   readonly from?: ScenePoint
   readonly to?: ScenePoint
-  readonly fromSide?: Side
-  readonly toSide?: Side
+  readonly fromSide?: EdgeSide
+  readonly toSide?: EdgeSide
 }
 
 /**

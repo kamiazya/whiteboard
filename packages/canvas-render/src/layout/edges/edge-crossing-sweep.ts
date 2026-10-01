@@ -14,9 +14,9 @@
 // segments are everywhere). Sweep-and-prune has no float-keyed event
 // ordering to create cross-platform ties: per-pair integer tuples are
 // summed per pair key, enumeration-order-independent.
-import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
-type Point = { readonly x: number; readonly y: number }
+import type { Point } from './edge-geometry.js'
+import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
 /** Matches spatial-edges' COST_QUANTUM discipline (quarter-pixel integers). */
 const COST_QUANTUM = 4

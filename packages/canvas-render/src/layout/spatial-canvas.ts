@@ -60,6 +60,7 @@ import { canvasTheme, resolveThemeTable, themeFace } from './canvas-theme.js'
 import { composeComments, composeRegionOutlines, regionsOf } from './comments.js'
 import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
+import type { Point } from './edges/edge-geometry.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
 import { routeEdge } from './edges/edge-router.js'
@@ -143,8 +144,6 @@ function composeEdge(
     ...(ink === undefined ? {} : { ink }),
   }
 }
-
-type Point = { readonly x: number; readonly y: number }
 
 /**
  * One END of a routed path: the point it terminates at, the point before it

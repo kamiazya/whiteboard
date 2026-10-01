@@ -25,6 +25,7 @@ import {
   patchAnchorGroups,
 } from './edge-anchors.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
+import type { Point, Rect } from './edge-geometry.js'
 import { boundingBoxOf, centerOf, pathLength, rectOf } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import {
@@ -36,14 +37,13 @@ import {
   hasRepairableProblem,
   interiorInkThrough,
   lessCost,
-  type Point,
   pairPenalty,
-  type Rect,
+  type SidePair,
   selfPenalty,
   shouldAdoptCandidate,
   zeroPenalty,
 } from './edge-rules.js'
-import type { EdgeAnchorOverride, EdgeAnchorPair, SidePair } from './edge-sides.js'
+import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
 import { initialSideChoices, rankedSidePairs } from './edge-sides.js'
 
 /** An arrowhead's own length: a final segment shorter than this paints an

@@ -27,6 +27,7 @@ import {
   COMMENT_BUBBLE_RADIUS_PX,
   type EdgePathLookup,
 } from './comments.js'
+import type { Point } from './edges/edge-geometry.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
 import type { SpatialProposalAppearance } from './nodes/spatial-appearance.js'
 import { contentExtent } from './scene-extent.js'
@@ -90,7 +91,6 @@ export function composeProposals(
   return out
 }
 
-type Point = { readonly x: number; readonly y: number }
 type OutlinePaint = { readonly appearance?: SpatialProposalAppearance['outline'] }
 
 /** A proposal's open changes outlined, where its bubble anchors, and how many conflict. */

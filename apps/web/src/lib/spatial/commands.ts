@@ -331,7 +331,7 @@ export type EditorLeafCommand =
       readonly id: string
       readonly endpoint: 'from' | 'to'
       // undefined returns the endpoint to derived (auto) routing.
-      readonly side: 'top' | 'right' | 'bottom' | 'left' | undefined
+      readonly side: EdgeSide | undefined
     }
   | {
       /**
@@ -1109,7 +1109,7 @@ function setEdgeSide(
   canvas: SpatialCanvas,
   id: string,
   endpoint: 'from' | 'to',
-  side: 'top' | 'right' | 'bottom' | 'left' | undefined,
+  side: EdgeSide | undefined,
 ): SpatialCanvas {
   return updateEdge(canvas, id, (edge) => {
     // An EDGE's end always names a node since ADR-0038 decision 2, so the

@@ -13,19 +13,12 @@
  * of them: a side is chosen before anything is placed or routed.
  */
 
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
-
+import type { EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode, endSide, isSelfLoop, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import type { Point, Rect } from './edge-geometry.js'
 import { centerOf, rectOf, sidePoint, strictlyInside } from './edge-geometry.js'
-import {
-  composeSidePairs,
-  fullyContains,
-  oppositeSide,
-  type Point,
-  type Rect,
-  type Side,
-} from './edge-rules.js'
+import { composeSidePairs, fullyContains, oppositeSide, type SidePair } from './edge-rules.js'
 
 /**
  * Side preference for the FROM end, best first: the side facing the other
@@ -34,9 +27,11 @@ import {
  * axis, then their opposites. Ties (equal offsets) prefer the horizontal
  * axis — the same fixed tie-breaker the default derivation always had.
  */
-function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] {
-  const h: Side = dx >= 0 ? 'right' : 'left'
-  const v: Side = dy >= 0 ? 'bottom' : 'top'
+type FacingSides = readonly [EdgeSide, EdgeSide, EdgeSide, EdgeSide]
+
+function facingSides(dx: number, dy: number): FacingSides {
+  const h: EdgeSide = dx >= 0 ? 'right' : 'left'
+  const v: EdgeSide = dy >= 0 ? 'bottom' : 'top'
   return Math.abs(dx) >= Math.abs(dy)
     ? [h, v, oppositeSide(v), oppositeSide(h)]
     : [v, h, oppositeSide(h), oppositeSide(v)]
@@ -58,8 +53,8 @@ export function rankedSidePairs(
   dy: number,
   fromRect: Rect,
   toRect: Rect,
-  crowd: (end: 'from' | 'to', side: Side) => number,
-): readonly { fromSide: Side; toSide: Side }[] {
+  crowd: (end: 'from' | 'to', side: EdgeSide) => number,
+): readonly SidePair[] {
   return composeSidePairs({ dx, dy, fromRect, toRect, crowd })
 }
 
@@ -84,8 +79,8 @@ export function deriveDefaultSides(
   edge: RoutableElement,
   fromRect: Rect,
   toRect: Rect,
-  crowd: (end: 'from' | 'to', side: Side) => number = () => 0,
-): { fromSide: Side; toSide: Side } {
+  crowd: (end: 'from' | 'to', side: EdgeSide) => number = () => 0,
+): SidePair {
   const fromCenter = centerOf(fromRect)
   const toCenter = centerOf(toRect)
   const dx = toCenter.x - fromCenter.x
@@ -96,19 +91,19 @@ export function deriveDefaultSides(
   const fromId = endNode(edge.from)
   const toId = endNode(edge.to)
   const foreign = nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
-  const exposed = (rect: Rect, side: Side): boolean => {
+  const exposed = (rect: Rect, side: EdgeSide): boolean => {
     const occluders = foreign.filter((r) => !fullyContains(r, rect))
     return !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))
   }
   // Ranking is geometric only; occlusion then moves an end that is buried
   // under a neighbour to its next exposed side.
   const best = pairs[0]!
-  const pick = (rect: Rect, primary: Side, mirror: readonly [Side, Side, Side, Side]): Side => {
+  const pick = (rect: Rect, primary: EdgeSide, mirror: FacingSides): EdgeSide => {
     const candidates = [primary, ...mirror.filter((sd) => sd !== primary)]
     return candidates.find((side) => exposed(rect, side)) ?? primary
   }
   const fromMirror = facingSides(dx, dy)
-  const toMirror = fromMirror.map(oppositeSide) as unknown as readonly [Side, Side, Side, Side]
+  const toMirror = fromMirror.map(oppositeSide) as unknown as FacingSides
   const fromSide = pick(fromRect, best.fromSide, fromMirror)
   // partner-follows-moved-end: an arrival is chosen as the partner of a
   // particular departure, so when occlusion moves the departure the arrival
@@ -119,11 +114,9 @@ export function deriveDefaultSides(
   // NOT take: leaving horizontally arrives on the vertical facing side, and
   // leaving vertically arrives on the horizontal one. Only the orphaned half
   // is replaced — an arrival occlusion never touched keeps its own choice.
-  const horizontal = (side: Side) => side === 'left' || side === 'right'
-  const { h, v } = {
-    h: dx >= 0 ? ('right' as Side) : ('left' as Side),
-    v: dy >= 0 ? ('bottom' as Side) : ('top' as Side),
-  }
+  const horizontal = (side: EdgeSide) => side === 'left' || side === 'right'
+  const h: EdgeSide = dx >= 0 ? 'right' : 'left'
+  const v: EdgeSide = dy >= 0 ? 'bottom' : 'top'
   const partnerSide =
     fromSide === best.fromSide ? best.toSide : oppositeSide(horizontal(fromSide) ? v : h)
   return { fromSide, toSide: pick(toRect, partnerSide, toMirror) }
@@ -140,7 +133,7 @@ const SELF_EDGE_LOOP_SPREAD_PX = 20
  * perpendicular axis so the loop reads as a visible bulge rather than a
  * straight line back to itself.
  */
-export function selfEdgeLoopControlPoints(start: Point, side: Side): [Point, Point] {
+export function selfEdgeLoopControlPoints(start: Point, side: EdgeSide): [Point, Point] {
   switch (side) {
     case 'right':
       return [
@@ -178,8 +171,8 @@ export interface EdgeAnchorPair {
    * routeEdge call does not have — so the pass records its choice and
    * routeEdge follows it, keeping the two producers agreeing.
    */
-  readonly fromSide?: Side
-  readonly toSide?: Side
+  readonly fromSide?: EdgeSide
+  readonly toSide?: EdgeSide
 }
 
 /**
@@ -201,10 +194,7 @@ export interface EdgeAnchorPair {
  * degrades those to a zero-length path on its own.
  */
 /** A resolved side pair for one edge, as consumed by `edgeSideOverrides`. */
-export interface EdgeSides {
-  readonly fromSide: Side
-  readonly toSide: Side
-}
+export type EdgeSides = SidePair
 
 /**
  * A frozen edge's full anchor state, for overrides that must not MOVE
@@ -218,8 +208,6 @@ export interface EdgeAnchorOverride extends EdgeSides {
   readonly to?: Point
   readonly toLaneDepth?: number
 }
-
-export type SidePair = EdgeSides
 
 /**
  * A crowding estimate per (node, side), plus the prospective side pair each
@@ -284,14 +272,14 @@ export function initialSideChoices(
     const fromRect = rectOf(fromNode)
     const toRect = rectOf(toNode)
     const own = prospective.get(edge.id)
-    const crowd = (end: 'from' | 'to', side: Side): number => {
+    const crowd = (end: 'from' | 'to', side: EdgeSide): number => {
       const nodeId = end === 'from' ? endNode(edge.from) : endNode(edge.to)
       const ownSide = end === 'from' ? own?.fromSide : own?.toSide
       const count = crowdCounts.get(`${nodeId} ${side}`) ?? 0
       return ownSide === side ? count - 1 : count
     }
     const derived = isSelfLoop(edge)
-      ? { fromSide: 'right' as Side, toSide: 'right' as Side }
+      ? { fromSide: 'right' as EdgeSide, toSide: 'right' as EdgeSide }
       : deriveDefaultSides(nodes, edge, fromRect, toRect, crowd)
     choices.set(edge.id, {
       fromSide: endSide(edge.from) ?? derived.fromSide,

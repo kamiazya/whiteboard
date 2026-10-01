@@ -11,7 +11,13 @@
  * reaching for each other.
  */
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasEdge,
+  CanvasLine,
+  EdgeSide,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 
 /**
  * What a router and an appearance resolver are handed: an EDGE or a LINE
@@ -103,9 +109,6 @@ export interface ScenePoint {
   readonly x: number
   readonly y: number
 }
-
-/** Which side of a node an edge leaves from or arrives at. */
-export type EdgeSide = 'top' | 'right' | 'bottom' | 'left'
 
 /**
  * The endpoints a route must honour, as the anchor pass chose them.

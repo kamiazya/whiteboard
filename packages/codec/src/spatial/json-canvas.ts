@@ -3,6 +3,7 @@ import {
   canvasCommentSchema,
   canvasLineSchema,
   documentIdSchema,
+  edgeSideSchema,
   extensionFacetsSchema,
   integerSchema,
   nodeIdSchema,
@@ -163,14 +164,12 @@ const jsonCanvasEdgeSchema = z.object({
   // derived from it: the description says what leaving a side out buys,
   // since a router that honours a pinned side draws whatever the pin makes
   // it draw.
-  fromSide: z
-    .enum(['top', 'right', 'bottom', 'left'])
+  fromSide: edgeSideSchema
     .optional()
     .describe(
       'The side the edge leaves from. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.',
     ),
-  toSide: z
-    .enum(['top', 'right', 'bottom', 'left'])
+  toSide: edgeSideSchema
     .optional()
     .describe('The side the edge arrives at. Omit it for the same reason as fromSide.'),
   fromEnd: z.enum(['none', 'arrow']).optional(),

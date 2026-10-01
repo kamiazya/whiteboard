@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { scoreSegmentPair } from './edge-crossing-sweep.js'
+import type { Rect } from './edge-geometry.js'
 import {
   addCost,
   COST_QUANTUM,
@@ -13,7 +14,6 @@ import {
   type PenaltyRule,
   type PreferenceRule,
   pairPenalty,
-  type Rect,
   SIDE_PREFERENCE_RULES,
   SLIDE_CORNER_INSET_PX,
   selfPenalty,
