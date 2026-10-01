@@ -12,6 +12,7 @@
  */
 
 import { z } from 'zod'
+import { ownValue, readScopedStorage, writeScopedStorage } from './scoped-storage.js'
 
 // Namespaced + version-suffixed, like `user-settings-store.ts`. This payload
 // is disposable — losing it costs a lane, not a setting — so a breaking change
@@ -44,54 +45,16 @@ export function recordRecentId(existing: readonly string[], id: string): readonl
   return [id, ...rest].slice(0, RECENT_CAP)
 }
 
-// localStorage access itself throws when a browser blocks storage
-// (SecurityError, privacy settings or an embedded context), so the guard has
-// to sit around the ACCESS and not only around the parse. Contract: neither
-// of these ever throws, and the picker renders with an empty lane instead.
-function readAll(): Record<string, readonly string[]> {
-  let raw: string | null
-  try {
-    raw = localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return {}
-  }
-  if (raw === null) return {}
-  try {
-    const parsed = storedSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : {}
-  } catch {
-    return {}
-  }
-}
-
-/**
- * One workspace's list, by OWN key only.
- *
- * A handle is text the user chose — `deriveWorkspaceSegment` lowercases a
- * display name, and `constructor` passes the segment charset — so a plain
- * object answers some handles with an INHERITED member. That value is
- * truthy, so `?? []` never fires: the lane was handed `Object.prototype`'s
- * constructor and threw on `.map`, crashing the whole panel for anyone whose
- * workspace was named that, with storage empty and no way to clear it.
- *
- * Nothing is ever WRITTEN to the prototype — a computed key in an object
- * literal defines an own property rather than invoking the `__proto__`
- * setter — so this is a read-side confusion, not pollution.
- */
 function scopeOf(all: Record<string, readonly string[]>, workspace: string): readonly string[] {
-  return Object.hasOwn(all, workspace) ? (all[workspace] ?? []) : []
+  return ownValue(all, workspace) ?? []
 }
 
 export function readRecentIds(workspace: string): readonly string[] {
-  return scopeOf(readAll(), workspace)
+  return scopeOf(readScopedStorage(STORAGE_KEY, storedSchema), workspace)
 }
 
 export function recordRecentDocument(workspace: string, documentId: string): void {
-  const all = readAll()
+  const all = readScopedStorage(STORAGE_KEY, storedSchema)
   const next = { ...all, [workspace]: recordRecentId(scopeOf(all, workspace), documentId) }
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  } catch {
-    // An unwritable storage degrades to not remembering, never to a failed open.
-  }
+  writeScopedStorage(STORAGE_KEY, next)
 }

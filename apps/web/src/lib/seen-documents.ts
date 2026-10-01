@@ -18,6 +18,7 @@
  */
 
 import { z } from 'zod'
+import { ownValue, readScopedStorage, writeScopedStorage } from './scoped-storage.js'
 
 // Namespaced + version-suffixed, like `recent-documents.ts` and
 // `user-settings-store.ts`. Disposable in the same way: losing it costs one
@@ -58,50 +59,16 @@ export function recordSeen(
   return next
 }
 
-// The guard around ACCESS, not only around the parse: a browser told to block
-// storage raises on the property itself. Contract: neither of these throws,
-// and the grid degrades to no dots.
-function readAll(): Record<string, Record<string, string>> {
-  let raw: string | null
-  try {
-    raw = localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return {}
-  }
-  if (raw === null) return {}
-  try {
-    const parsed = storedSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : {}
-  } catch {
-    return {}
-  }
-}
-
-/**
- * One key's value, by OWN key only, on both axes.
- *
- * A workspace handle and a document id both index a plain object, and a
- * plain object answers `constructor` (and every other `Object.prototype`
- * member) with an inherited value — truthy, so `??` never fires. That
- * crashed the recency lane's picker with storage empty, and `constructor` is
- * reachable: it passes the workspace segment charset, and
- * `deriveWorkspaceSegment` lowercases a display name.
- */
-function own<T>(record: Record<string, T>, key: string): T | undefined {
-  return Object.hasOwn(record, key) ? record[key] : undefined
-}
-
 export function readSeenDigest(workspace: string, documentId: string): string | undefined {
-  const scope = own(readAll(), workspace)
-  return scope === undefined ? undefined : own(scope, documentId)
+  const scope = ownValue(readScopedStorage(STORAGE_KEY, storedSchema), workspace)
+  return scope === undefined ? undefined : ownValue(scope, documentId)
 }
 
 export function recordSeenDocument(workspace: string, documentId: string, digest: string): void {
-  const all = readAll()
-  const next = { ...all, [workspace]: recordSeen(own(all, workspace) ?? {}, documentId, digest) }
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  } catch {
-    // An unwritable storage degrades to no dots, never to a failed open.
+  const all = readScopedStorage(STORAGE_KEY, storedSchema)
+  const next = {
+    ...all,
+    [workspace]: recordSeen(ownValue(all, workspace) ?? {}, documentId, digest),
   }
+  writeScopedStorage(STORAGE_KEY, next)
 }
