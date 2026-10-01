@@ -7,6 +7,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
+import { wbDocumentMove } from './document-move.js'
 import { createDocumentSetTool } from './document-set.js'
 
 /**
@@ -92,6 +93,15 @@ const workspaceOpSchema = z.discriminatedUnion('op', [
   z
     .object({ op: z.literal('document.set'), documentId: documentIdSchema, markdown: z.string() })
     .strict(),
+  z
+    .object({
+      op: z.literal('document.move'),
+      documentId: documentIdSchema,
+      path: documentPathSchema.describe(
+        'The new path. Documents below the old path move with it, and `[[old/path]]` references in other documents are rewritten to follow.',
+      ),
+    })
+    .strict(),
   z.object({ op: z.literal('document.delete'), documentId: documentIdSchema }).strict(),
 ])
 
@@ -162,8 +172,8 @@ export const workspaceEditOutputSchema = z
 export type WorkspaceEditOutput = z.infer<typeof workspaceEditOutputSchema>
 
 /**
- * One tool for workspace-level mutation: create, set and delete documents in
- * a single call.
+ * One tool for workspace-level mutation: create, set, move and delete
+ * documents in a single call.
  *
  * The shape follows `wb_canvas_edit` (ADR-0010) because the problem rhymes —
  * filing five findings cost ten calls — but the guarantee cannot. See
@@ -253,6 +263,15 @@ const WORKSPACE_EDIT_HANDLERS: {
     return { result: { op: op.op, documentId: op.documentId } }
   },
 
+  'document.move': async (ctx, op) => {
+    const moved = await wbDocumentMove(ctx.deps, {
+      workspaceId: ctx.workspaceId,
+      documentId: op.documentId,
+      path: op.path,
+    })
+    return { result: { op: op.op, documentId: op.documentId, path: moved.path } }
+  },
+
   'document.delete': async (ctx, op) => {
     await wbDocumentDelete(ctx.deps, {
       workspaceId: ctx.workspaceId,
@@ -274,7 +293,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
   return {
     name: 'wb_workspace_edit' as const,
     description:
-      'Create, replace and delete several documents in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
+      'Create, replace, move and delete several documents in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
     inputSchema: workspaceEditInputSchema,
     outputSchema: workspaceEditOutputSchema,
     execute: async (rawInput: WorkspaceEditInput): Promise<WorkspaceEditOutput> => {

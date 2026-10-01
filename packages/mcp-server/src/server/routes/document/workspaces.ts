@@ -1,4 +1,3 @@
-import { movesForPathChange } from '@kamiazya/whiteboard-codec'
 import {
   type CreateDocumentResponse,
   createDocumentRequestSchema,
@@ -20,11 +19,12 @@ import {
 import { type DocumentIndex, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
-  followReferencesAfterRename,
   type ServerDeps,
+  type WbDocumentMoveResult,
   wbDocumentCreate,
   wbDocumentDelete,
   wbDocumentList,
+  wbDocumentMove,
 } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import type { z } from 'zod'
@@ -140,43 +140,22 @@ export interface WorkspacesRouterOptions {
 // GET /api/workspaces/:workspaceId/documents
 // POST /api/workspaces/:workspaceId/documents  body: { path: string }
 /**
- * Rewrite the references that pointed at the OLD paths, and never fail the
- * rename for it.
- *
- * Every path the SUBTREE carried, not just the root, which is why the moves
- * are derived here rather than written by the caller. The rename itself
- * already stands by the time this runs, so both failure modes — some
- * documents unrewritten, or the pass throwing outright — are a log line and
- * a partially repaired workspace, never a failed rename.
+ * The move is `wbDocumentMove`'s; what this surface adds is saying so when
+ * the follow pass could not repair every reference, since the operation
+ * reports rather than logs (server-core has no logger). The move stands
+ * either way, so neither case changes the answer.
  */
-async function followRenameAndLog(
-  deps: ServerDeps,
-  {
-    workspaceId,
-    entriesBefore,
-    from,
-    to,
-  }: {
-    workspaceId: string
-    entriesBefore: Awaited<ReturnType<DocumentIndex['listDocuments']>>
-    from: string
-    to: string
-  },
-): Promise<void> {
-  const moves = movesForPathChange(entriesBefore, from, to)
-  if (moves.length === 0) return
-  try {
-    const follow = await followReferencesAfterRename(deps, { workspaceId, entriesBefore, moves })
-    if (follow.failedDocumentIds.length > 0) {
-      getLogger('document').warning(
-        { workspaceId, from, to, failed: follow.failedDocumentIds },
-        'rename followed references, but some documents could not be rewritten',
-      )
-    }
-  } catch (err) {
+function logFollowOutcome(workspaceId: string, moved: WbDocumentMoveResult): void {
+  const { from, path: to } = moved
+  if ('error' in moved.follow) {
     getLogger('document').warning(
-      { workspaceId, from, to, err },
+      { workspaceId, from, to, err: moved.follow.error },
       'rename succeeded but the reference follow pass failed',
+    )
+  } else if (moved.follow.failedDocumentIds.length > 0) {
+    getLogger('document').warning(
+      { workspaceId, from, to, failed: moved.follow.failedDocumentIds },
+      'rename followed references, but some documents could not be rewritten',
     )
   }
 }
@@ -491,20 +470,19 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
     { badRequest: 'problem-details' },
   )
 
-  // Rename a canvas's path in place: same documentId, same branches/versions/blob,
-  // just a new path column. Old URLs carrying the old path 404 by design — no
-  // redirect, no alias history (0.0.x).
+  // Rename a document's path in place: same documentId, same versions and
+  // bytes, just a new placement. Old URLs carrying the old path 404 by
+  // design — no redirect, no alias history (0.0.x).
   //
-  // An ADAPTER over `documentIndex.moveDocument` (ADR-0018). Straight to the
-  // port rather than through a `wb_document_*` operation, because there is no
-  // operation to write: a move is the port call and nothing else, so a use
-  // case here would forward one argument set and add a name. The delete and
-  // create differ — each composes several steps that a second surface would
-  // otherwise repeat.
+  // An ADAPTER over `wbDocumentMove` (ADR-0018), which composes the listing,
+  // the index mutation and the follow pass over references to the old path;
+  // `wb_workspace_edit`'s `document.move` op is the same operation's other
+  // surface. All this translates is the ADDRESS — this surface names a
+  // document by path, the operation by its id — and the absent case, a 404
+  // here and a throw there, the way the delete above does.
   //
   // The web app's move/rename UI reaches exactly this route
-  // (`WorkspaceFilesPanel` -> `daemon-files-source` -> `PUT …/documents/:path/path`),
-  // so a stale comment here claiming nothing called it has been removed.
+  // (`WorkspaceFilesPanel` -> `daemon-files-source` -> `PUT …/documents/:path/path`).
   onDocumentsRoute(
     app,
     'put',
@@ -519,12 +497,16 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       }
       try {
         const deps = options.serverDeps ?? (await getDefaultServerDeps())
-        // The listing BEFORE the move is the table the old path resolved
-        // against; the follow pass needs it and only this side of the
-        // mutation can take it.
-        const entriesBefore = await deps.documentIndex.listDocuments({ workspaceId })
-        await deps.documentIndex.moveDocument({ workspaceId, from: path, to: newPath })
-        await followRenameAndLog(deps, { workspaceId, entriesBefore, from: path, to: newPath })
+        const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
+        if (entry === null) {
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
+        }
+        const moved = await wbDocumentMove(deps, {
+          workspaceId,
+          documentId: entry.documentId,
+          path: newPath,
+        })
+        logFollowOutcome(workspaceId, moved)
         const response: RenameDocumentPathResponse = { path: newPath }
         return c.json(response)
       } catch (err) {

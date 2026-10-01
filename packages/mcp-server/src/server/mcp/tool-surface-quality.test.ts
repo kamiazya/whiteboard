@@ -721,11 +721,18 @@ describe('what the tool table costs to read', () => {
       wb_workspace_edit: {
         // +60 on both: `markdown` now says a string with no `---` block is
         // the BODY, typed `note` (#112). The bytes buy knowing WHICH type.
-        visibleBytes: 2347,
-        wireBytes: 3312,
-        descriptionWords: 44,
-        parameters: 18,
-        undescribed: 14,
+        // +412 on both, +3 parameters (2 undescribed: the arm's `op` and
+        // `documentId`, which every arm carries) and one description word:
+        // the `document.move` arm. What it buys is an errand the table
+        // could not do at any price — a rename, which the domain model
+        // names as the resolution of a contested path, had no tool behind
+        // it (C5); `path` says what follows the move so the caller does not
+        // spend a read finding out.
+        visibleBytes: 2759,
+        wireBytes: 3724,
+        descriptionWords: 45,
+        parameters: 21,
+        undescribed: 16,
         strays: 'refused',
         names: [],
       },
@@ -911,7 +918,9 @@ describe('what the tool table costs to read', () => {
       // `document.create`'s bare body, since the two changes touch different
       // tools and neither re-prices the other's rows.
       // Then -994 for wb_pairing_link_create's retirement (see `tools`).
-      visibleBytes: 38526,
+      // Then +412 for `wb_workspace_edit`'s `document.move` arm, priced at
+      // its own row.
+      visibleBytes: 38938,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -927,9 +936,9 @@ describe('what the tool table costs to read', () => {
       // parameters and undescribed do not move at all, because a bare-body
       // arm reuses a parameter this table already counted.
       // Then -1,442 for wb_pairing_link_create's retirement.
-      wireBytes: 108485,
-      parameters: 340,
-      undescribed: 217,
+      wireBytes: 108897,
+      parameters: 343,
+      undescribed: 219,
     })
   })
 

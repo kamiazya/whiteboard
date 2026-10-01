@@ -638,7 +638,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 101,
   'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 127,
   // 406 -> 412 (ADR-0041 S8 slice 2): the workspace list filters rows the caller is not admitted to.
-  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 323,
+  // +3: the rename route is an adapter over `wbDocumentMove` now, and the
+  // address translation it owes — path to id, absent to 404 — is three lines
+  // the port call did not need.
+  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 326,
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 67,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 127,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,

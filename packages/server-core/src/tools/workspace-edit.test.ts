@@ -127,6 +127,43 @@ describe('wb_workspace_edit', () => {
     expect(after.map((d) => d.path)).not.toContain('doomed')
   })
 
+  it('moves a document, and the references other documents wrote to its old path follow', async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    const seeded = await tool.execute({
+      workspaceId: WS,
+      ops: [
+        { op: 'document.create', path: 'design/login', kind: 'markdown', markdown: body('target') },
+        {
+          op: 'document.create',
+          path: 'notes/daily',
+          kind: 'markdown',
+          markdown: body('see [[design/login]] and [[unrelated]]'),
+        },
+      ],
+    })
+    const [target, source] = seeded.results
+
+    const out = await tool.execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.move', documentId: target?.documentId ?? '', path: 'archive/login' }],
+    })
+    expect(out.results).toEqual([
+      { op: 'document.move', documentId: target?.documentId, path: 'archive/login' },
+    ])
+
+    const placed = await deps.documentIndex.resolveDocumentById({
+      workspaceId: WS,
+      documentId: target?.documentId ?? '',
+    })
+    expect(placed?.path).toBe('archive/login')
+    const docs = await createDocumentGetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [source?.documentId ?? ''],
+    })
+    expect(docs.documents[0]?.content).toContain('see [[archive/login]] and [[unrelated]]')
+  })
+
   it('bootstraps the workspace on op 0 and applies the REST of the batch inside it', async () => {
     // The threading guard. Creating is ADR-0019's mint boundary, so op 0
     // decides an id the caller never sent — and ops 1..n reach the port

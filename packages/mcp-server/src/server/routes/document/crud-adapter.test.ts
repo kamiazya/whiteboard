@@ -347,7 +347,10 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     })
 
     expect(res.status).toBe(404)
-    expect(moved).toEqual(['absent->elsewhere'])
+    // The address is translated BEFORE the operation runs — path to id, and
+    // absent to 404 — so nothing reaches the port for a path that names
+    // nothing, the same way the delete adapter answers.
+    expect(moved).toEqual([])
   })
 
   // The collision is on a PRODUCED path, not the one the caller named: moving

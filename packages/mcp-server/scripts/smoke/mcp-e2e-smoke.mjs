@@ -565,6 +565,37 @@ async function placementNamingAndDeletionRoundTrip(ctx) {
   }
   console.log(`[e2e] wb_document_list places ${resolvedRow.documentId} at ${resolvedRow.path}`)
 
+  // document.move: the named document's placement changes and a reference
+  // another document wrote to its old path follows it.
+  const referrer = await createDocument({
+    path: 'e2e-referrer',
+    kind: 'markdown',
+    markdown: `see [[${named.path}]] here`,
+  })
+  const move = await callTool('wb_workspace_edit', {
+    workspaceId: WORKSPACE_ID,
+    ops: [{ op: 'document.move', documentId: named.documentId, path: 'archive/named' }],
+  })
+  if (move.results?.[0]?.path !== 'archive/named') {
+    throw new Error(`document.move returned unexpected shape: ${JSON.stringify(move)}`)
+  }
+  const afterMove = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
+  if (
+    !afterMove.documents.some(
+      (d) => d.documentId === named.documentId && d.path === 'archive/named',
+    )
+  ) {
+    throw new Error('document.move did not change the placement the listing reports')
+  }
+  const followed = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [referrer.documentId],
+  })
+  if (!String(followed.documents?.[0]?.content).includes('[[archive/named]]')) {
+    throw new Error(`document.move left the reference on the old path: ${JSON.stringify(followed)}`)
+  }
+  console.log('[e2e] document.move → placed at archive/named, the reference to it followed')
+
   // document.delete: a throwaway document, deleted and gone from the list.
   const doomed = await createDocument({ path: 'doomed', kind: 'spatial' })
   const deletion = await deleteDocument({ documentId: doomed.documentId })
