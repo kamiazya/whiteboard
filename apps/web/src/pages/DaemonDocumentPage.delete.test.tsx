@@ -8,6 +8,7 @@ import {
   openDocumentOpsMenu,
   renderInRouter,
 } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 const DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const COPY_ID = '01J9ZC8XK4PQRS7TVWXY0ABCDE'
@@ -82,7 +83,7 @@ describe('deleting a daemon-kept document from its own page', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/names')) {
-          return new Response(JSON.stringify({ documents: {}, pinned: [] }), { status: 200 })
+          return jsonResponse({ documents: {}, pinned: [] })
         }
         return new Response('{}', { status: 404 })
       }),

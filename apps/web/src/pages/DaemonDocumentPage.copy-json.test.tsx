@@ -9,6 +9,7 @@ import {
   openDocumentOpsMenu,
   renderInRouter,
 } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
@@ -79,7 +80,7 @@ describe('copying a daemon-kept board as JSON Canvas', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/names')) {
-          return new Response(JSON.stringify({ documents: {}, pinned: [] }), { status: 200 })
+          return jsonResponse({ documents: {}, pinned: [] })
         }
         return new Response('{}', { status: 404 })
       }),

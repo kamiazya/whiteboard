@@ -29,7 +29,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-05-01T00:00:00Z'))
   vi.stubGlobal(
     'fetch',
-    vi.fn(() => Promise.resolve(new Response(JSON.stringify(PAYLOAD), { status: 200 }))),
+    vi.fn(() => Promise.resolve(jsonResponse(PAYLOAD))),
   )
 })
 

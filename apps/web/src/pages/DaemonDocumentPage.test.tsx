@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { getShellConnection } from '../lib/shell-status-store.js'
 import { FakeDocumentBackend, renderWithRouterWrapper } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 vi.mock('../lib/replica-refresh.js', async () =>
@@ -728,12 +729,7 @@ describe('DaemonDocumentPage', () => {
         (input, init) => {
           const url = String(input)
           if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all reached `versionsResponseSchema` and this
@@ -742,28 +738,20 @@ describe('DaemonDocumentPage', () => {
             url.includes('/workspaces/w1/documents/main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ versions: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
+            return Promise.resolve(jsonResponse({ versions: [] }))
           }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  version: {
-                    id: 'v-cmd-s',
-                    path: 'main',
-                    createdAt: '2026-01-01T00:00:00Z',
-                    elementCount: 0,
-                    auto: false,
-                    branchName: 'main',
-                  },
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json' } },
-              ),
+              jsonResponse({
+                version: {
+                  id: 'v-cmd-s',
+                  path: 'main',
+                  createdAt: '2026-01-01T00:00:00Z',
+                  elementCount: 0,
+                  auto: false,
+                  branchName: 'main',
+                },
+              }),
             )
           }
           return Promise.resolve(new Response('{}', { status: 200 }))

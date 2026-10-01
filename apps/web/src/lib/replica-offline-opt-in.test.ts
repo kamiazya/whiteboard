@@ -13,6 +13,7 @@
 import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import {
   assertOfflinePasskey,
   loadOfflinePasskey,
@@ -36,7 +37,7 @@ const RESPONSE = {
 }
 
 function daemonAnswering(body: unknown = RESPONSE): typeof globalThis.fetch {
-  return vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }))
+  return vi.fn(async () => jsonResponse(body))
 }
 
 const unreachable: typeof globalThis.fetch = vi.fn(async () => {

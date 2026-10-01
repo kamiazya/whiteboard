@@ -20,6 +20,7 @@ import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
@@ -95,10 +96,7 @@ function daemonStub(
           ...(shadowed ? { shadowed: true as const } : {}),
         }
       })
-      return new Response(JSON.stringify({ documents }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ documents })
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof globalThis.fetch
@@ -246,10 +244,7 @@ describe('promoteWorkspace', () => {
       kind: 'markdown',
     })
     const fetch404 = (async () =>
-      new Response(JSON.stringify({ title: 'Workspace "ws-gone" not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      })) as typeof globalThis.fetch
+      jsonResponse({ title: 'Workspace "ws-gone" not found' }, 404)) as typeof globalThis.fetch
 
     const result = await promoteWorkspace({
       fetch: fetch404,

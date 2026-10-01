@@ -15,6 +15,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 vi.mock('../lib/replica-refresh.js', async () =>
   (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
@@ -69,7 +70,7 @@ function stubNames(names: { documents: Record<string, string>; pinned: string[] 
     vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/names')) {
-        return new Response(JSON.stringify(names), { status: 200 })
+        return jsonResponse(names)
       }
       return new Response('{}', { status: 404 })
     }),

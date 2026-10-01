@@ -24,6 +24,7 @@ import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 const render = (ui: ReactElement, search = '') =>
   renderInRouter(ui, { route: `/${search}`, container: document.body })
@@ -75,28 +76,22 @@ describe('the body surface does not outlive its document (daemon)', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/names')) {
-          return new Response(
-            JSON.stringify({ documents: { 'doc-a': 'Doc A', 'doc-b': 'Doc B' }, pinned: [] }),
-            { status: 200 },
-          )
+          return jsonResponse({ documents: { 'doc-a': 'Doc A', 'doc-b': 'Doc B' }, pinned: [] })
         }
         if (url.endsWith('/versions') && init?.method === 'POST') {
-          return new Response(
-            JSON.stringify({
-              version: {
-                id: 'v1',
-                path: 'doc-a',
-                createdAt: '2026-01-01T00:00:00Z',
-                elementCount: 0,
-                auto: false,
-                branchName: 'main',
-              },
-            }),
-            { status: 200 },
-          )
+          return jsonResponse({
+            version: {
+              id: 'v1',
+              path: 'doc-a',
+              createdAt: '2026-01-01T00:00:00Z',
+              elementCount: 0,
+              auto: false,
+              branchName: 'main',
+            },
+          })
         }
         if (url.endsWith('/versions')) {
-          return new Response(JSON.stringify({ versions: [] }), { status: 200 })
+          return jsonResponse({ versions: [] })
         }
         return new Response('{}', { status: 404 })
       }),

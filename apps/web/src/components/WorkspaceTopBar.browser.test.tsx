@@ -2,40 +2,35 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../index.css'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { setViewport } from '../test-utils/viewport.js'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
 
 function mkNamesResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      workspace: 'Design review',
-      documents: {
-        'design/login-flow': 'Login flow',
-        'design/settings-flow': 'Settings flow',
-      },
-      pinned: ['design/login-flow'],
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  return jsonResponse({
+    workspace: 'Design review',
+    documents: {
+      'design/login-flow': 'Login flow',
+      'design/settings-flow': 'Settings flow',
+    },
+    pinned: ['design/login-flow'],
+  })
 }
 
 function mkBranchesResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      head: 'main',
-      branches: [
-        {
-          name: 'main',
-          tipFrontiers: '',
-          color: '#1971c2',
-          createdAt: '2026-04-23T00:00:00Z',
-        },
-      ],
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  return jsonResponse({
+    head: 'main',
+    branches: [
+      {
+        name: 'main',
+        tipFrontiers: '',
+        color: '#1971c2',
+        createdAt: '2026-04-23T00:00:00Z',
+      },
+    ],
+  })
 }
 
 function mkVersionsResponse(count = 24): Response {
@@ -54,10 +49,7 @@ function mkVersionsResponse(count = 24): Response {
     },
   }))
 
-  return new Response(JSON.stringify({ versions }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return jsonResponse({ versions })
 }
 
 function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
@@ -80,10 +72,10 @@ beforeEach(() => {
     if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
     if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
     if (url.includes('/versions') && url.endsWith('/restore')) {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      return Promise.resolve(jsonResponse({ ok: true }))
     }
     if (url.includes('/versions') && init?.method === 'POST') {
-      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      return Promise.resolve(jsonResponse({ ok: true }))
     }
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(new Response('{}', { status: 200 }))

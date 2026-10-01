@@ -3,6 +3,7 @@
 // the main thread, and handed to every layout worker — the ones alive and
 // the ones spawned later — so both realms measure the same face.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 const registerFontBytes = vi.fn(async (_family: string, _bytes: ArrayBuffer) => 'loaded' as const)
 const hasLoadedFace = vi.fn((_family: string) => false)
@@ -19,18 +20,15 @@ function daemonFetch(installed: readonly { id: string; family: string }[]) {
     const url = String(input)
     calls.push(url)
     if (url.endsWith('/api/fonts')) {
-      return new Response(
-        JSON.stringify({
-          fonts: installed.map((f) => ({
-            ...f,
-            scripts: ['Japanese'],
-            license: 'OFL-1.1',
-            approxBytes: 1,
-            installed: true,
-          })),
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      )
+      return jsonResponse({
+        fonts: installed.map((f) => ({
+          ...f,
+          scripts: ['Japanese'],
+          license: 'OFL-1.1',
+          approxBytes: 1,
+          installed: true,
+        })),
+      })
     }
     const m = /\/api\/fonts\/([^/]+)\/file$/.exec(url)
     if (m) return new Response(bytesOf(`font:${m[1]}`), { status: 200 })

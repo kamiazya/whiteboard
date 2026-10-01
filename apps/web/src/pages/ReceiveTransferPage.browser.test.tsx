@@ -24,6 +24,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { CROSS_ORIGIN_TRANSFER_PROTOCOL } from '../lib/cross-origin-transfer-protocol.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { ReceiveTransferPage } from './ReceiveTransferPage.js'
 
 const SENDER = 'https://app.example'
@@ -60,7 +61,7 @@ function keeperStub(
     const url = typeof input === 'string' ? input : input.toString()
     // A server-mode keeper answers 401 to a browser with no session.
     if (!signedIn) {
-      return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+      return jsonResponse({ error: 'unauthorized' }, 401)
     }
     if (url.endsWith('/api/workspaces')) {
       return Response.json({ workspaces: [{ workspaceId: 'ws-here', displayName: 'Here' }] })

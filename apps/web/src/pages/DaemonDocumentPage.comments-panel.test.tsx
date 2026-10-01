@@ -25,6 +25,7 @@ import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
   (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
@@ -59,23 +60,20 @@ function stubDaemonFetch(): void {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/names')) {
-        return new Response(JSON.stringify({ documents: {}, pinned: [] }), { status: 200 })
+        return jsonResponse({ documents: {}, pinned: [] })
       }
       if (url.includes('/branches')) {
-        return new Response(
-          JSON.stringify({
-            branches: [
-              {
-                name: 'main',
-                tipFrontiers: '',
-                color: '#3b82f6',
-                createdAt: '2026-01-01T00:00:00.000Z',
-              },
-            ],
-            head: 'main',
-          }),
-          { status: 200 },
-        )
+        return jsonResponse({
+          branches: [
+            {
+              name: 'main',
+              tipFrontiers: '',
+              color: '#3b82f6',
+              createdAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          head: 'main',
+        })
       }
       return new Response('{}', { status: 404 })
     }),

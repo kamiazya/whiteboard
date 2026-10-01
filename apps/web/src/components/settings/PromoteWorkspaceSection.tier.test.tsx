@@ -10,6 +10,7 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
+import { jsonResponse } from '../../test-utils/json-response.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
 afterEach(cleanup)
@@ -24,8 +25,8 @@ function settingsStore() {
 }
 
 function stubFor(workspaces: Array<{ workspaceId: string; tier?: ReplicaTier }>, status = 200) {
-  return vi.fn(
-    async () => new Response(JSON.stringify({ workspaces }), { status }),
+  return vi.fn(async () =>
+    jsonResponse({ workspaces }, status),
   ) as unknown as typeof globalThis.fetch & ReturnType<typeof vi.fn>
 }
 
@@ -119,9 +120,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
     const stub = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ workspaces: [{ workspaceId: 'ws-1', tier: 'offline' }] }), {
-          status: 200,
-        }),
+        jsonResponse({ workspaces: [{ workspaceId: 'ws-1', tier: 'offline' }] }),
       )
       .mockReturnValueOnce(new Promise<Response>(() => {})) as unknown as typeof globalThis.fetch &
       ReturnType<typeof vi.fn>
@@ -181,11 +180,11 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
       ],
     }
     // Resolve the NEWER (ws-2) request first, then the stale ws-1 one.
-    deferred[1]?.(new Response(JSON.stringify(rows), { status: 200 }))
+    deferred[1]?.(jsonResponse(rows))
     const line = await screen.findByTestId('replica-tier-line')
     expect(line.textContent).toBe(REPLICA_TIER_COPY.bounded)
 
-    deferred[0]?.(new Response(JSON.stringify(rows), { status: 200 }))
+    deferred[0]?.(jsonResponse(rows))
     // The stale response's own row is ws-1's — only the cleanup's `cancelled`
     // guard stops it from clobbering the current ws-2 line. A macrotask
     // boundary drains the response's own `.json()` microtask chain, which a

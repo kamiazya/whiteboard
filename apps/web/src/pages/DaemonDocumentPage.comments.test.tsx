@@ -26,6 +26,7 @@ import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
@@ -88,9 +89,7 @@ describe('DaemonDocumentPage comments rail', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/names')) {
-          return new Response(JSON.stringify({ documents: { board: 'Board' }, pinned: [] }), {
-            status: 200,
-          })
+          return jsonResponse({ documents: { board: 'Board' }, pinned: [] })
         }
         return new Response('{}', { status: 404 })
       }),
