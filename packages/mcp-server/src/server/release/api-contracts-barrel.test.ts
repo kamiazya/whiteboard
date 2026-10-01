@@ -43,8 +43,8 @@ describe('api-contracts barrel scope', () => {
     // reach.
     //
     // It arrives as the SUBPATH rather than the root, and the distinction is
-    // load-bearing rather than cosmetic: `error-copy.ts` is on apps/web's
-    // critical path, so taking it from the root put server-core's whole
+    // load-bearing rather than cosmetic: a module on apps/web's critical
+    // path taking it from the root put server-core's whole
     // graph in the entry chunk — 421.4 KB gzip against a 152 KB budget,
     // caught by `smoke:bundle-size` after a build and by nothing before it.
     expect(specifiers).toEqual([

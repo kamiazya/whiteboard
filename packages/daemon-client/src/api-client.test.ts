@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { apiFetch, readRuntimeConfig, runtimeConfigSchema } from './api-client.js'
+import { apiFetch, runtimeConfigSchema } from './api-client.js'
 
 describe('runtimeConfigSchema', () => {
   it('accepts a valid daemonBaseUrl', () => {
@@ -51,38 +51,6 @@ describe('runtimeConfigSchema', () => {
     expect(
       runtimeConfigSchema.safeParse({ daemonBaseUrl: 'http://127.0.0.1:3099/pair' }).success,
     ).toBe(false)
-  })
-})
-
-describe('readRuntimeConfig', () => {
-  it('falls back to the token-free default when window is not defined', () => {
-    expect(readRuntimeConfig()).toEqual({})
-  })
-
-  it('falls back to the token-free default when the injected global fails schema validation', () => {
-    const fakeWindow = {
-      location: { origin: 'http://localhost' },
-      __WHITEBOARD_RUNTIME_CONFIG__: { daemonToken: 'secret' },
-    }
-    ;(globalThis as { window?: unknown }).window = fakeWindow
-    try {
-      expect(readRuntimeConfig()).toEqual({})
-    } finally {
-      delete (globalThis as { window?: unknown }).window
-    }
-  })
-
-  it('returns the injected daemonBaseUrl when it passes schema validation', () => {
-    const fakeWindow = {
-      location: { origin: 'http://localhost' },
-      __WHITEBOARD_RUNTIME_CONFIG__: { daemonBaseUrl: 'http://127.0.0.1:3099' },
-    }
-    ;(globalThis as { window?: unknown }).window = fakeWindow
-    try {
-      expect(readRuntimeConfig()).toEqual({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    } finally {
-      delete (globalThis as { window?: unknown }).window
-    }
   })
 })
 

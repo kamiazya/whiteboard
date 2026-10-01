@@ -242,17 +242,3 @@ export function extractContextFromHeaders(headers: Record<string, string | undef
     },
   })
 }
-
-// Convenience: write the active context's traceparent into outgoing headers
-// so downstream services join the same trace.
-export function injectContextIntoHeaders(
-  headers: Record<string, string>,
-  ctx: Context = context.active(),
-): Record<string, string> {
-  propagation.inject(ctx, headers, {
-    set(carrier, key, value) {
-      carrier[key] = value
-    },
-  })
-  return headers
-}

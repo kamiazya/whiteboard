@@ -15,7 +15,3 @@ export class IncompatibleDatabaseError extends Error {
     this.name = 'IncompatibleDatabaseError'
   }
 }
-
-export function isIncompatibleDatabaseError(error: unknown): error is IncompatibleDatabaseError {
-  return error instanceof IncompatibleDatabaseError
-}

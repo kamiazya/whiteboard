@@ -17,7 +17,7 @@
  *   is `sideEffects: false`, so a module the critical path never needs is
  *   dropped whole; one it DOES need keeps every import it makes, and
  *   server-core's root is not side-effect-free to the bundler.
- * - `error-copy.ts` took `apiErrorReason` from the root instead of
+ * - a critical-path apps/web module took `apiErrorReason` from the root instead of
  *   `/api-errors` — 421.4 KB, a 269 KB difference for one enum.
  *
  * Both were caught by `smoke:bundle-size`, after a production build, on CI.

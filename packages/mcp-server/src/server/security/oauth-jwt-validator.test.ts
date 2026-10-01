@@ -8,11 +8,9 @@ import {
 } from 'jose'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { createAsyncAuthStrategyMiddleware } from './_test-helpers.js'
 import { createOAuthJwtValidator, type JwtKeyResolver, refusalFor } from './oauth-jwt-validator.js'
-import {
-  createAsyncAuthStrategyMiddleware,
-  createOAuthResourceServerAuthStrategy,
-} from './oauth-resource-strategy.js'
+import { createOAuthResourceServerAuthStrategy } from './oauth-resource-strategy.js'
 
 const TEST_ISSUER = 'https://idp.example.com/'
 const TEST_AUDIENCE = 'https://resource.example.com'

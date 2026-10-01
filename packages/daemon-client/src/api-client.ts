@@ -66,8 +66,6 @@ export const runtimeConfigSchema = z
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>
 
-const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {}
-
 // This module compiles under both tsconfig.server.json (lib ES2022 + types
 // node — no DOM lib, no ambient `window`) and apps/web's DOM-enabled
 // tsconfig. A structurally-typed globalThis read satisfies both without
@@ -81,15 +79,6 @@ type WindowLike = {
 
 function getWindow(): WindowLike | undefined {
   return (globalThis as { window?: WindowLike }).window
-}
-
-export function readRuntimeConfig(): RuntimeConfig {
-  const injected = getWindow()?.__WHITEBOARD_RUNTIME_CONFIG__
-  if (injected === undefined) {
-    return DEFAULT_RUNTIME_CONFIG
-  }
-  const result = runtimeConfigSchema.safeParse(injected)
-  return result.success ? result.data : DEFAULT_RUNTIME_CONFIG
 }
 
 function isLocalApiRequest(input: Request | string | URL): boolean {
