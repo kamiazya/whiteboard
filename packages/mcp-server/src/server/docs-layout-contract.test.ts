@@ -8,6 +8,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { proseText } from '../shared/test-utils/markdown-code.js'
+import { trackedFiles } from '../shared/test-utils/tracked-files.js'
 
 function walkMd(dir: string, base: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -261,5 +263,48 @@ describe('docs anchor links', () => {
     }
 
     expect(broken).toEqual([])
+  })
+
+  // The anchor check above skips a link whose file is missing, and only reads
+  // docs/ and three root files: a link to a renamed ADR (`0029-proposals.md` for
+  // `0029-proposal-layer.md`) in a path-scoped rule resolved nowhere and
+  // nothing noticed. Tracked rather than walked, so ephemeral worktrees are not
+  // read once each.
+  it('every relative Markdown link in a tracked .md names a file that exists', () => {
+    // Links that are placeholders by design, each in the file that says so.
+    const MAY_DANGLE: Record<string, readonly string[]> = {
+      // The template's own placeholder, filled in per ADR.
+      'docs/contributing/adr/template.md': ['XXXX-title.md'],
+    }
+
+    const files = trackedFiles(repoRoot, '*.md')
+    expect(files.length).toBeGreaterThan(250)
+    expect(files).toContain('docs/contributing/adr/0029-proposal-layer.md')
+
+    let checked = 0
+    const broken: string[] = []
+    for (const relPath of files) {
+      for (const link of proseText(readText(relPath)).matchAll(
+        /\]\((?![a-z][a-z0-9+.-]*:|#)([^)\s#]+\.md)(?:#[^)\s]*)?\)/gi,
+      )) {
+        const target = link[1] ?? ''
+        if (MAY_DANGLE[relPath]?.includes(target)) continue
+        checked++
+        const resolved = target.startsWith('/')
+          ? resolve(repoRoot, target.slice(1))
+          : resolve(repoRoot, dirname(relPath), target)
+        if (!existsSync(resolved)) broken.push(`${relPath} -> ${target}`)
+      }
+    }
+    // Reached, not assumed: a regex that stopped matching passes every link.
+    expect(checked).toBeGreaterThan(300)
+    expect(broken).toEqual([])
+    for (const [path, targets] of Object.entries(MAY_DANGLE)) {
+      for (const target of targets) {
+        expect(readText(path), `${path} no longer links ${target}; drop its exemption`).toContain(
+          `](${target}`,
+        )
+      }
+    }
   })
 })

@@ -32,3 +32,10 @@ export function codeText(markdown: string): string {
   const spans = prose.flatMap((line) => [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? ''))
   return [...spans, ...fenced].join('\n')
 }
+
+/** What a reader reads as prose: no fenced blocks and no inline code spans, where an example link is not a link. */
+export function proseText(markdown: string): string {
+  return partition(markdown)
+    .prose.join('\n')
+    .replace(/`[^`\n]+`/g, '')
+}
