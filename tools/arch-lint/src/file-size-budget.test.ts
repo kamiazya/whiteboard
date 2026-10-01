@@ -166,13 +166,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The next shrink is the locks and the history/undo group as sub-modules
   // taking `contentOf` and `doc`.
   'apps/web/src/lib/document-sync-session.ts': 1159,
-  // Raised from 1131 because compaction's retained-history cut now reads
-  // branch tips from BOTH planes for the length of the migration: the record,
-  // where a document goes the first time its branches are written, and the
-  // rows a document that has not been written since still has. A union rather
-  // than a merge — a document is never in both — and the comment saying so is
-  // most of the 14 lines.
-  'packages/mcp-server/src/server/store/document-store.ts': 1057,
+  // The daemon's path-addressed document operations (create, save, move,
+  // delete, compaction, restore, listing) and the workspaces registry, over
+  // the workspace-record cache that left for `workspace-doc-cache.ts`. What
+  // remains is one operation per exported function, each carrying the
+  // coherence reason for the cache entries it drops; the next shrink is
+  // compaction as a module of its own.
+  'packages/mcp-server/src/server/store/document-store.ts': 844,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
