@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import {
   createDaemonFetch,
   createDocument,
@@ -15,13 +16,6 @@ import {
 } from './daemon-api-client.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
 
 describe('createDaemonFetch', () => {
   let fetchMock: ReturnType<typeof vi.fn>

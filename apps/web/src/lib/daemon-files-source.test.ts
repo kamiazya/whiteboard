@@ -1,13 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { createDaemonFilesSource } from './daemon-files-source.js'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
 
 const BASE = 'http://127.0.0.1:3099'
 

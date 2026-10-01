@@ -13,6 +13,7 @@ import {
   bindCheckForUpdates,
   resetSwStatusForTests,
 } from '../pwa/sw-status-store.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { SettingsPage } from './SettingsPage.js'
 
 vi.mock('../lib/celebrate.js', () => ({ celebrate: vi.fn().mockResolvedValue(undefined) }))
@@ -336,13 +337,6 @@ describe('SettingsPage — App version row', () => {
 })
 
 describe('SettingsPage — Connections', () => {
-  function jsonResponse(body: unknown, status = 200): Response {
-    return new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
   it('shows a not-connected row when no daemon is provided', () => {
     renderAt('/settings/connections')
     const section = screen.getByTestId('settings-section')
@@ -626,13 +620,6 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
   const DAEMON_A = { baseUrl: 'http://127.0.0.1:9999', token: 'tok-a' }
   const DAEMON_B = { baseUrl: 'http://127.0.0.1:8888', token: 'tok-b' }
 
-  function jsonResponse(body: unknown, status = 200): Response {
-    return new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
   function countingFetch(counts: { storage: number; fonts: number }) {
     return vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
@@ -800,13 +787,6 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
 // copy keeps offering a row the daemon no longer has, and becomes visible the
 // moment the viewport crosses `sm`.
 describe('SettingsPage — the active section is mounted once', () => {
-  function jsonResponse(body: unknown, status = 200): Response {
-    return new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
   it('mounts a section once, so no two copies of its controls can diverge', () => {
     renderAt('/settings/general')
     expect(screen.getAllByRole('radiogroup', { name: /theme/i })).toHaveLength(1)

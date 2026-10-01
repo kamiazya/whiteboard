@@ -7,16 +7,10 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { page } from 'vitest/browser'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
+import { jsonResponse } from '../../test-utils/json-response.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
 afterEach(cleanup)
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
 
 describe('PromoteWorkspaceSection tier line', () => {
   it('shows what this device keeps of the workspace', async () => {

@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-librar
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
 function render(ui: ReactElement) {
@@ -15,13 +16,6 @@ function render(ui: ReactElement) {
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
 
 const DOCUMENTS = /\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/
 

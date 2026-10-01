@@ -10,6 +10,7 @@
 
 import { waitFor } from '@testing-library/react'
 import { page } from 'vitest/browser'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 export function resolveDocAssetPath(name: `${string}.png`): string {
   const dir: unknown = import.meta.env.VITE_DOCS_ASSETS_DIR
@@ -17,13 +18,6 @@ export function resolveDocAssetPath(name: `${string}.png`): string {
     throw new Error('VITE_DOCS_ASSETS_DIR is not set; run through vitest.docs-snapshots.config.ts')
   }
   return `${dir}/${name}`
-}
-
-export function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
 }
 
 export type DocFetchHandler = (

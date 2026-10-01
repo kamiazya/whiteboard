@@ -18,6 +18,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import { App } from './App.js'
 import type { ProviderState } from './lib/provider.js'
+import { jsonResponse } from './test-utils/json-response.js'
 // Statically imported so `lazy()` settles in a microtask rather than racing a
 // `findBy*`'s 1000ms budget — the rule `App.lazy-coverage.test.ts` enforces
 // for `App.test.tsx`. This is the page under test, so it is imported rather
@@ -137,13 +138,6 @@ function expectWithinBudget(
   // wired to nothing passes every ceiling above.
   expect(counts.workspaces).toBeGreaterThanOrEqual(1)
   expect(counts.documents).toBeGreaterThanOrEqual(1)
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
 }
 
 /**

@@ -3,13 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // Real app styles — the bug is that these tokens never reach the page root.
 import '../index.css'
 import WorkspaceTopBar from '../components/WorkspaceTopBar'
-
-function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
+import { jsonResponse } from '../test-utils/json-response.js'
 
 // Lightness thresholds for the 0..1 estimate below: text must read as light
 // (near-white) and dark backgrounds as near-black.

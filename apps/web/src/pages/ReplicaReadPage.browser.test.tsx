@@ -35,6 +35,7 @@ import { rememberReplicaKey } from '../lib/replica-unlock.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 claimIsolatedWhiteboardDb('replica-read-page')
@@ -54,10 +55,6 @@ function b64u(bytes: Uint8Array): string {
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status })
 }
 
 /** A daemon fetch double answering /replica-key with a fixed offline key. */

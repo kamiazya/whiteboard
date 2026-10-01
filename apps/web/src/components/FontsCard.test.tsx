@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { FontsCard, formatSize } from './FontsCard.js'
 
 afterEach(cleanup)
@@ -23,13 +24,6 @@ const FONTS = [
     installed: true,
   },
 ]
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
 
 function renderCard(fetchImpl: (url: string, init?: RequestInit) => Promise<Response>) {
   const fetchFn = vi.fn(fetchImpl)
