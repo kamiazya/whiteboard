@@ -1,23 +1,17 @@
-import { documentIdSchema, nodeIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { viewportRequestParamsSchema } from '../viewport-request.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 
+// The routing keys first, then the shared params by their one declaration —
+// written as a shape spread rather than `.extend`, so the keys a model reads
+// keep the order they have always had.
 const viewportSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    /** `fit` frames the given elements (or the whole board); `move` pans without rescaling. */
-    mode: z.enum(['fit', 'move']).optional(),
-    /**
-     * What to frame. Omitted with `mode: 'fit'` means the WHOLE board, which
-     * is rarely what an agent pointing at something wants.
-     */
-    elementIds: z.array(nodeIdSchema).optional(),
-    animate: z.boolean().optional(),
-    scrollX: z.number().finite().optional(),
-    scrollY: z.number().finite().optional(),
-    zoom: z.number().finite().optional(),
+    ...viewportRequestParamsSchema.shape,
   })
   .strict()
 type ViewportSetInput = z.infer<typeof viewportSetInputSchema>
@@ -61,19 +55,11 @@ export function createViewportSetTool(deps: ServerDeps) {
       const notifier = deps.clientNotifier
       if (notifier === undefined) return { documentId: input.documentId, delivered: false }
 
-      // Field by field, never a spread of `input`: `workspaceId` is the
-      // routing key rather than a viewport parameter, and a future input
-      // field must not reach the browser just because it was added here.
-      const delivered = await notifier.requestViewport({
-        workspaceId: input.workspaceId,
-        documentId: input.documentId,
-        ...(input.mode === undefined ? {} : { mode: input.mode }),
-        ...(input.elementIds === undefined ? {} : { elementIds: input.elementIds }),
-        ...(input.animate === undefined ? {} : { animate: input.animate }),
-        ...(input.scrollX === undefined ? {} : { scrollX: input.scrollX }),
-        ...(input.scrollY === undefined ? {} : { scrollY: input.scrollY }),
-        ...(input.zoom === undefined ? {} : { zoom: input.zoom }),
-      })
+      // Everything but the routing keys IS the viewport request, by the one
+      // declaration both the tool and the wire derive from — so a parameter
+      // added there reaches the browser without a second list to keep in
+      // step. The schema has already dropped what was not sent.
+      const delivered = await notifier.requestViewport(input)
 
       return { documentId: input.documentId, delivered }
     },

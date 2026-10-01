@@ -826,7 +826,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3143 -> 3176: the agent-activity summary's only assertion was
   // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
   // pinning its wording and order.
-  'packages/server-core/src/tools/canvas-edit.test.ts': 3176,
+  // 3176 -> 3177: `ViewportRequest` moved to its own module, so the import
+  // it shared with ServerDeps became two.
+  'packages/server-core/src/tools/canvas-edit.test.ts': 3177,
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 

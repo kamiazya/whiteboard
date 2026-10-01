@@ -18,13 +18,14 @@ import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
-import type { AgentActivity, ServerDeps, ViewportRequest } from '../server-deps.js'
+import type { AgentActivity, ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import type { ViewportRequest } from '../viewport-request.js'
 import {
   canvasEditInputSchema,
   createCanvasEditTool,

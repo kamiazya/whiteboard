@@ -7,6 +7,7 @@ import type { RestoreProgressEvent } from './operations/restore-version.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
 import type { Attestation, OperatorInfo, VersionEntry } from './versions/version-entry.js'
+import type { ViewportRequest } from './viewport-request.js'
 
 /**
  * A text measurer and the families it holds a real face for, as ONE value:
@@ -42,17 +43,6 @@ export interface AgentActivity {
  * uses it.
  */
 export type CanvasOpSummaryInput = { readonly op: string; readonly locked?: boolean }
-
-export interface ViewportRequest {
-  readonly workspaceId: string
-  readonly documentId: string
-  readonly mode?: 'fit' | 'move'
-  readonly elementIds?: readonly string[]
-  readonly animate?: boolean
-  readonly scrollX?: number
-  readonly scrollY?: number
-  readonly zoom?: number
-}
 
 /**
  * The seam through which a tool reaches a browser watching the same

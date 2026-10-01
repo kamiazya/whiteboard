@@ -1,3 +1,7 @@
+import {
+  type ViewportRequestParams,
+  viewportRequestParamsSchema,
+} from '@kamiazya/whiteboard-server-core/viewport-request'
 import { z } from 'zod'
 import { operatorInfoSchema, versionEntrySchema } from './api-contracts/document.js'
 
@@ -52,28 +56,17 @@ export const agentActivityMessageSchema = z.object({
   summary: z.string(),
 })
 
+// The daemon's stamp plus the params the caller asked for, by their one
+// declaration in server-core (which the tool, the port and the HTTP route
+// read too). Not strict, like every other frame here: the producer is a
+// locally-installed daemon and the consumer an auto-updating page.
 export const viewportRequestMessageSchema = z.object({
   type: z.literal('viewport_request'),
   requestId: z.string(),
-  mode: z.enum(['fit', 'move']).optional(),
-  elementIds: z.array(z.string()).optional(),
-  animate: z.boolean().optional(),
-  scrollX: z.number().finite().optional(),
-  scrollY: z.number().finite().optional(),
-  zoom: z.number().finite().optional(),
+  ...viewportRequestParamsSchema.shape,
 })
 
-/**
- * What a caller may ask of a viewport: the message minus what the daemon
- * stamps on it. Strict, because the browser reads exactly these fields and
- * a key it has never read (`padding` was one) would otherwise be a silent
- * no-op — and a value of the wrong type a frame the browser drops, reported
- * to the caller as a timeout.
- */
-export const viewportRequestParamsSchema = viewportRequestMessageSchema
-  .omit({ type: true, requestId: true })
-  .strict()
-export type ViewportRequestParams = z.infer<typeof viewportRequestParamsSchema>
+export { type ViewportRequestParams, viewportRequestParamsSchema }
 
 // The daemon no longer sends this message — canvas export is headless-only
 // (see server/routes/export.ts). Kept for apps/web's typechecking until the
