@@ -11,7 +11,8 @@ import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFile
 import type { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import type { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import type { DaemonIndexPageProps } from './DaemonIndexPage.js'
-import type { DocumentRow, PendingDelete } from './daemon-index-actions.js'
+import type { DocumentRow } from './daemon-index-actions.js'
+import type { PendingDelete } from './pending-delete.js'
 
 /**
  * A failed list load must not dead-end the page: the POST needs no rows and

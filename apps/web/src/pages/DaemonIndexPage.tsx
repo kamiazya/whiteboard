@@ -70,15 +70,8 @@ function sortRows(rows: DocumentRow[]): DocumentRow[] {
   })
 }
 
-import {
-  type DocumentRow,
-  deleteEach,
-  duplicateRequest,
-  type PendingDelete,
-  partialDeleteMessage,
-  reofferFailures,
-} from './daemon-index-actions.js'
-
+import { useDeleteDocuments } from '../hooks/use-delete-documents.js'
+import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-actions.js'
 /**
  * What the list shows: a failed load with the recovery that is actually
  * available, the transient loading state, onboarding, or the panel. Split out
@@ -456,6 +449,36 @@ export function DaemonIndexPage({
     [sourceFor, reselectAfterStale],
   )
 
+  // Re-read after a delete settled or its dialog was dismissed: after a
+  // success the row must go, and after a FAILURE the daemon's state is
+  // unknown from here — a 404 means the document was already gone (another
+  // tab, an agent), and a stale row lingering after any failed delete is
+  // worse than one refetch.
+  const refreshAfterDelete = useCallback(() => {
+    const workspaceAtStart = selectedWorkspace
+    if (!workspaceAtStart) return
+    const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
+    void loadWorkspace(workspaceAtStart, isStale)
+  }, [selectedWorkspace, loadWorkspace])
+
+  const {
+    requestDelete,
+    reset: resetDelete,
+    dialog: deleteDialog,
+  } = useDeleteDocuments({
+    keeper: 'daemon',
+    deleteEach: (paths) => {
+      // Read when Delete is PRESSED, not when the dialog opened — see the
+      // reset in the workspace effect below.
+      const workspaceAtStart = selectedWorkspace
+      if (!workspaceAtStart) throw new Error('No workspace is selected.')
+      return deleteEach(daemonFetch, daemonBaseUrl, workspaceAtStart, paths)
+    },
+    lookup: (path) => rows.find((row) => row.path === path),
+    refresh: refreshAfterDelete,
+    onDismiss: refreshAfterDelete,
+  })
+
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     if (!selectedWorkspace) return
@@ -469,14 +492,13 @@ export function DaemonIndexPage({
     setLoadError(null)
     // Same rule, one level up: a DIALOG holding a path is the mismatched
     // identity the rows-clear above exists to prevent, and it outlives the
-    // switch that the rows do not. `handleConfirmDelete` reads
-    // `selectedWorkspace` when the button is pressed, not when the dialog
-    // opened, so confirming after a switch sends the departed workspace's
-    // path to the one now on screen. Measured before this line existed:
-    // opening Delete on ws-a's `untitled`, switching to ws-b and confirming
-    // sent `DELETE ws-b/untitled` — a document nobody selected.
-    setPendingDelete(null)
-    setDeleteError(null)
+    // switch that the rows do not. The delete reads `selectedWorkspace`
+    // when the button is pressed, not when the dialog opened, so confirming
+    // after a switch sends the departed workspace's path to the one now on
+    // screen. Measured before this line existed: opening Delete on ws-a's
+    // `untitled`, switching to ws-b and confirming sent `DELETE ws-b/untitled`
+    // — a document nobody selected.
+    resetDelete()
     setDuplicatingPath(null)
     void loadWorkspace(selectedWorkspace, () => cancelled)
     return () => {
@@ -554,61 +576,6 @@ export function DaemonIndexPage({
     [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingPath],
   )
 
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-
-  // Dismissing the dialog always refreshes the list: after a success the row
-  // must go, and after a FAILURE the daemon's state is unknown from here —
-  // a 404 means the canvas was already gone (another tab, an agent), and a
-  // stale row lingering after any failed delete is worse than one refetch.
-  const closeDeleteDialog = useCallback(() => {
-    setPendingDelete(null)
-    setDeleteError(null)
-    const workspaceAtStart = selectedWorkspace
-    if (!workspaceAtStart) return
-    const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
-    void loadWorkspace(workspaceAtStart, isStale)
-  }, [selectedWorkspace, loadWorkspace])
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (!pendingDelete) return
-    const workspaceAtStart = selectedWorkspace
-    if (!workspaceAtStart) return
-    setDeleting(true)
-    setDeleteError(null)
-    try {
-      const { failed, lastError } = await deleteEach(
-        daemonFetch,
-        daemonBaseUrl,
-        workspaceAtStart,
-        pendingDelete.paths,
-      )
-      if (failed.length > 0) {
-        const attempted = pendingDelete.paths.length
-        // Refreshed HERE rather than only in closeDeleteDialog, which this
-        // branch does not reach: the ones that went are gone, and a list
-        // still showing them behind the dialog contradicts the count above
-        // it. The panel's pruning then drops them from the selection too.
-        const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
-        void loadWorkspace(workspaceAtStart, isStale)
-        // Narrowed to what actually failed, so pressing Delete again retries
-        // exactly those. Left un-narrowed, a retry re-sent DELETE for every
-        // path the first attempt had already removed.
-        setPendingDelete(reofferFailures(failed, rows))
-        setDeleteError(partialDeleteMessage(failed.length, attempted, lastError))
-        return
-      }
-      closeDeleteDialog()
-    } catch (err) {
-      // daemon-api-client errors are already sanitized (problem-details
-      // title or a generic status message) — safe to surface directly.
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete document.')
-    } finally {
-      setDeleting(false)
-    }
-  }, [daemonFetch, daemonBaseUrl, selectedWorkspace, pendingDelete, closeDeleteDialog])
-
   // What the page calls itself. `selectedWorkspace` holds a HANDLE, not an id,
   // so the row is found through `resolveWorkspaceHandle` — the same reason the
   // loader above gives, one layer up. `workspaceLabel` owns the precedence
@@ -659,30 +626,11 @@ export function DaemonIndexPage({
           workspaceCount={workspaces.length}
           onCreate={handleCreate}
           onDuplicate={handleDuplicate}
-          onRequestDelete={setPendingDelete}
+          onRequestDelete={requestDelete}
           onRetryWorkspaces={loadWorkspaces}
           serverMode={serverMode}
         />
-        <DeleteDocumentDialog
-          pending={
-            pendingDelete === null
-              ? null
-              : {
-                  displayName: pendingDelete.displayName,
-                  ...(pendingDelete.kind === undefined ? {} : { kind: pendingDelete.kind }),
-                  ...(pendingDelete.paths.length > 1 ? { count: pendingDelete.paths.length } : {}),
-                }
-          }
-          busy={deleting}
-          error={deleteError}
-          action={
-            pendingDelete !== null && pendingDelete.paths.length > 1
-              ? 'delete-documents-daemon'
-              : 'delete-document-daemon'
-          }
-          onCancel={closeDeleteDialog}
-          onConfirm={() => void handleConfirmDelete()}
-        />
+        <DeleteDocumentDialog {...deleteDialog} />
       </div>
     </DaemonApiContext.Provider>
   )

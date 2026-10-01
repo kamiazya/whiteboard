@@ -58,6 +58,7 @@ const sources = import.meta.glob(
     './pages/use-document-list-refresh.ts',
     './pages/use-duplicate-document.ts',
     './pages/use-delete-document.ts',
+    './hooks/use-delete-documents.ts',
     './pages/use-document-actions.tsx',
     './pages/DaemonDocumentPage.tsx',
     './pages/use-connections.ts',
@@ -497,7 +498,15 @@ const CASES = [
     label: 'WorkspaceFilesPanel',
     scanRefs: true,
   },
-  { files: [DAEMON_INDEX], ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage', scanRefs: true },
+  {
+    // The delete confirmation is BOTH index pages' hook now; its state moved
+    // THERE rather than away, and the page's switch effect clears it through
+    // the hook's own marked reset.
+    files: [DAEMON_INDEX, './hooks/use-delete-documents.ts'],
+    ledger: DAEMON_INDEX_STATE,
+    label: 'DaemonIndexPage',
+    scanRefs: true,
+  },
   {
     files: [VERSION_TIMELINE],
     ledger: VERSION_TIMELINE_STATE,

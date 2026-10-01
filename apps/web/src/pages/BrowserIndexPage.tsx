@@ -6,6 +6,7 @@ import { ExtensionConnectEntry } from '../components/connection/ExtensionConnect
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
+import { useDeleteDocuments } from '../hooks/use-delete-documents.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import { browserKeeperCapacity, type KeeperCapacity } from '../lib/browser-keeper-capacity.js'
 import {
@@ -29,6 +30,7 @@ import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
+import type { PendingDelete } from './pending-delete.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 export interface BrowserIndexPageProps {
@@ -71,19 +73,6 @@ const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDoc
 const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
 
 /**
- * What the confirm dialog is asking about.
- *
- * A LIST, so one confirmation and one handler serve both the single delete
- * and the selection's bulk delete. A single delete is a list of one, and
- * keeps naming its document.
- */
-interface PendingDelete {
-  readonly paths: readonly string[]
-  readonly displayName: string
-  readonly kind?: DocumentKind
-}
-
-/**
  * Delete each path, recording rather than throwing on the ones that will not
  * go.
  *
@@ -99,7 +88,7 @@ async function deleteEach(
   pointer: DefaultDocumentPointer,
   paths: readonly string[],
   pointed: string | null,
-): Promise<string[]> {
+): Promise<{ failed: string[]; lastError: null }> {
   const failed: string[] = []
   const workspaceId = getBrowserWorkspaceId()
   for (const path of paths) {
@@ -113,26 +102,9 @@ async function deleteEach(
       failed.push(path)
     }
   }
-  return failed
-}
-
-/**
- * What the confirm dialog offers after a partial delete: exactly the ones
- * that did not go, so pressing Delete again retries those and nothing else.
- *
- * A lone survivor gets its NAME back — `Delete "2 documents"?` would be the
- * count of the ATTEMPT, not of what the dialog now offers to do.
- */
-function reofferFailures(
-  failed: readonly string[],
-  snapshots: readonly DocumentSnapshot[] | null,
-): PendingDelete {
-  const only = failed.length === 1 ? snapshots?.find((s) => s.path === failed[0]) : undefined
-  return {
-    paths: [...failed],
-    displayName: only?.name ?? (failed[0] as string),
-    ...(only?.kind === undefined ? {} : { kind: only.kind }),
-  }
+  // `lastError: null` on purpose: what the index threw is not a sentence
+  // for a person, so the dialog reports this keeper's own fallback.
+  return { failed, lastError: null }
 }
 
 /**
@@ -476,55 +448,33 @@ export function BrowserIndexPage({
   // exactly the same-tick case it would have to catch.
   const [creating, setCreating] = useState(false)
 
-  // The index deletes by PATH, and the list already addresses rows that way,
-  // so this carries the path rather than the id it used to need.
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  // Re-read after a delete settled, with the dialog still open after a
+  // partial failure: the ones that went are gone, and a list still showing
+  // them behind the dialog contradicts the count above it.
+  const refreshAfterDelete = useCallback(async () => {
+    setSnapshots(await listLocalDocuments(index, clock))
+    // The delete just moved a document INTO the trash — re-count so the
+    // onboarding decision below sees it before choosing what to render.
+    const trashRows = await filesSource.listTrash?.().catch(() => null)
+    if (trashRows != null) setTrashCount(trashRows.length)
+    // The tree view holds its own copy of the list; this identity change is
+    // its signal to re-read, same contract as the daemon page's `revision`.
+    setFilesRevision((revision) => revision + 1)
+  }, [index, clock, filesSource, setSnapshots, setTrashCount, setFilesRevision])
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!pendingDelete) return
-    setDeleting(true)
-    setDeleteError(null)
-    try {
-      // Resolved BEFORE the delete, because afterwards there is nothing left
-      // to compare the pointer against.
-      const failed = await deleteEach(index, pointer, pendingDelete.paths, await pointer.get())
-      setSnapshots(await listLocalDocuments(index, clock))
-      // The delete just moved a document INTO the trash — re-count so the
-      // onboarding decision below sees it before choosing what to render.
-      const trashRows = await filesSource.listTrash?.().catch(() => null)
-      if (trashRows != null) setTrashCount(trashRows.length)
-      // The tree view holds its own copy of the list; this identity change is
-      // its signal to re-read, same contract as the daemon page's `revision`.
-      setFilesRevision((revision) => revision + 1)
-      if (failed.length > 0) {
-        const attempted = pendingDelete.paths.length
-        // Held open on the count, because the list behind it has already
-        // changed (refreshed above): the ones that went are gone, and closing
-        // silently would read as "all deleted". The panel's own pruning
-        // leaves exactly the failures selected.
-        //
-        // Narrowed to what failed, so pressing Delete again retries exactly
-        // those. This browser index no-ops a delete for an absent row, so a
-        // re-send would be harmless here — but the daemon page answers 404
-        // and its retry genuinely diverged, and one operation should not
-        // converge differently per keeper.
-        setPendingDelete(reofferFailures(failed, snapshots))
-        setDeleteError(
-          failed.length === attempted
-            ? 'Failed to delete the document from this browser.'
-            : `${failed.length} of ${attempted} could not be deleted.`,
-        )
-        return
-      }
-      setPendingDelete(null)
-    } catch {
-      setDeleteError('Failed to delete the document from this browser.')
-    } finally {
-      setDeleting(false)
-    }
-  }, [index, clock, pointer, pendingDelete, filesSource])
+  // The index deletes by PATH, and the list already addresses rows that way,
+  // so the request carries the path rather than the id it used to need.
+  const { requestDelete, dialog: deleteDialog } = useDeleteDocuments({
+    keeper: 'browser',
+    // The pointer is resolved BEFORE the delete, because afterwards there is
+    // nothing left to compare it against.
+    deleteEach: async (paths) => deleteEach(index, pointer, paths, await pointer.get()),
+    lookup: (path) => {
+      const row = snapshots?.find((snapshot) => snapshot.path === path)
+      return row === undefined ? undefined : { displayName: row.name, kind: row.kind }
+    },
+    refresh: refreshAfterDelete,
+  })
 
   const { folder: routedFolder, setFolder: setRoutedFolder } = useRoutedFolder()
 
@@ -612,32 +562,10 @@ export function BrowserIndexPage({
         filesRevision={filesRevision}
         onCreate={handleCreate}
         onDuplicate={handleDuplicate}
-        onRequestDelete={setPendingDelete}
+        onRequestDelete={requestDelete}
         capacity={capacity}
       />
-      <DeleteDocumentDialog
-        pending={
-          pendingDelete === null
-            ? null
-            : {
-                displayName: pendingDelete.displayName,
-                ...(pendingDelete.kind === undefined ? {} : { kind: pendingDelete.kind }),
-                ...(pendingDelete.paths.length > 1 ? { count: pendingDelete.paths.length } : {}),
-              }
-        }
-        busy={deleting}
-        error={deleteError}
-        action={
-          pendingDelete !== null && pendingDelete.paths.length > 1
-            ? 'delete-documents-browser'
-            : 'delete-document-browser'
-        }
-        onCancel={() => {
-          setPendingDelete(null)
-          setDeleteError(null)
-        }}
-        onConfirm={() => void handleConfirmDelete()}
-      />
+      <DeleteDocumentDialog {...deleteDialog} />
     </div>
   )
 }
