@@ -162,3 +162,49 @@ test('every workflow script parses as a workflow function body', () => {
   }
   assert.deepEqual(bad, [], `workflow scripts that do not parse:\n${bad.join('\n')}`)
 })
+
+// An agent's `skills:` entry is a preload, and a preload that resolves to nothing is not a load
+// error — the agent just runs without the skill it was written around. A bare id must be a
+// `.claude/skills/<id>/SKILL.md` this repo ships; a `plugin:skill` id must name a plugin the
+// tracked settings.json enables, because a plugin is per-machine state that a clone does not
+// bring. `ponytail:ponytail` was neither: two agents preloaded a ladder that only existed on one
+// machine, and the agent bodies had to restate it "in case the plugin is absent".
+function agentSkillIds(source) {
+  const frontmatter = source.match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? ''
+  const block = frontmatter.match(/^skills:\n((?:[ \t]+.*\n?)*)/m)?.[1] ?? ''
+  return block
+    .split('\n')
+    .map((line) => line.match(/^\s*-\s+(\S+)\s*$/)?.[1])
+    .filter((id) => id !== undefined)
+}
+
+function undeclaredSkills(ids, { skillDirs, enabledPlugins }) {
+  return ids.filter((id) => {
+    const [plugin, skill] = id.includes(':') ? id.split(':') : [undefined, id]
+    if (plugin === undefined) return !skillDirs.includes(skill)
+    return !Object.keys(enabledPlugins).some((key) => key.split('@')[0] === plugin)
+  })
+}
+
+test('every skill an agent preloads is shipped here or declared as an enabled plugin', () => {
+  const agentsDir = path.join(repoRoot, '.claude', 'agents')
+  const skillsDir = path.join(repoRoot, '.claude', 'skills')
+  const settings = JSON.parse(readFileSync(path.join(repoRoot, '.claude', 'settings.json'), 'utf8'))
+  const world = {
+    skillDirs: readdirSync(skillsDir).filter((d) => existsSync(path.join(skillsDir, d, 'SKILL.md'))),
+    enabledPlugins: settings.enabledPlugins ?? {},
+  }
+  const agents = readdirSync(agentsDir).filter((f) => f.endsWith('.md'))
+  const preloaded = agents.flatMap((f) =>
+    agentSkillIds(readFileSync(path.join(agentsDir, f), 'utf8')).map((id) => ({ agent: f, id })),
+  )
+  // Reached, not assumed: an extraction that matched nothing would pass every id.
+  assert.ok(preloaded.length >= 8, `only ${preloaded.length} preloaded skills found`)
+  const missing = preloaded.filter(({ id }) => undeclaredSkills([id], world).length > 0)
+  assert.deepEqual(missing, [], 'agent preloads a skill that is neither in .claude/skills nor an enabled plugin')
+})
+
+test('a namespaced skill needs its plugin declared in settings.json', () => {
+  const world = { skillDirs: ['local'], enabledPlugins: { 'declared@market': true } }
+  assert.deepEqual(undeclaredSkills(['local', 'declared:any', 'ghost:any', 'absent'], world), ['ghost:any', 'absent'])
+})

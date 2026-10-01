@@ -12,7 +12,7 @@ skills:
   # Rung 1 of the ponytail ladder ("does this need to exist at all?") is the counterweight to a
   # rubric that otherwise only ever asks for MORE — criterion 3's speculative-generality fail,
   # made concrete.
-  - ponytail:ponytail
+  - ponytail
 ---
 
 You are a plan-review gate for the whiteboard repo. Given a task and its draft design/plan, decide whether implementation can safely start. Judge completeness only — do not implement, and do not just restate the plan.
