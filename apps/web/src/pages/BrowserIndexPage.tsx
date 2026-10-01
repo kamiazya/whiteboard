@@ -3,7 +3,7 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { BrowserCapacityNotice } from '../components/BrowserCapacityNotice.js'
 import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
-import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
+import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
@@ -565,7 +565,7 @@ export function BrowserIndexPage({
         onRequestDelete={requestDelete}
         capacity={capacity}
       />
-      <DeleteDocumentDialog {...deleteDialog} />
+      <DeleteDocumentsDialog {...deleteDialog} />
     </div>
   )
 }

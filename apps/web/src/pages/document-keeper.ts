@@ -13,7 +13,7 @@
  * render of the page. Mode is decided at page load (ADR-0004 decision 5), so
  * a page never changes keeper while mounted and the hook order holds.
  *
- * Mirrors `VersionsBackend` and `BranchesBackend` one level up: a seam with
+ * Mirrors `VersionsBackend` one level up: a seam with
  * two implementations and one contract suite run against both
  * (`test-utils/document-page.contract.tsx`), so a scenario written once is a scenario
  * both keepers answer.
@@ -36,7 +36,7 @@ export type DocumentKeeperAnswer =
       readonly model: DocumentPageModel
       /**
        * Providers the keeper mounts AROUND the page — the browser's versions
-       * and branches backends, the daemon's authorized fetch. Rendered by the
+       * backend, the daemon's authorized fetch. Rendered by the
        * page so the keeper's hook stays a hook.
        */
       readonly wrap?: (page: ReactNode) => ReactNode

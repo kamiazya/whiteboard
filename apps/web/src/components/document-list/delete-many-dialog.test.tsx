@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
-import { DeleteDocumentDialog } from './DeleteDocumentDialog.js'
+import { DeleteDocumentsDialog } from './DeleteDocumentsDialog.js'
 
 // The bulk confirmation reuses the single one: same busy pinning, same error
 // slot, same buttons. Only the SUBJECT differs — a count instead of a name —
@@ -15,7 +15,7 @@ const noop = () => {}
 describe('the delete confirmation with a count', () => {
   it('names the count instead of a document, and drops the quotes with it', () => {
     render(
-      <DeleteDocumentDialog
+      <DeleteDocumentsDialog
         pending={{ displayName: '', count: 3 }}
         busy={false}
         error={null}
@@ -30,7 +30,7 @@ describe('the delete confirmation with a count', () => {
 
   it('promises the trash in the plural, from the declared copy', () => {
     render(
-      <DeleteDocumentDialog
+      <DeleteDocumentsDialog
         pending={{ displayName: '', count: 2 }}
         busy={false}
         error={null}
@@ -47,7 +47,7 @@ describe('the delete confirmation with a count', () => {
 
   it('still names the document when there is no count', () => {
     render(
-      <DeleteDocumentDialog
+      <DeleteDocumentsDialog
         pending={{ displayName: 'Roadmap', kind: 'spatial' }}
         busy={false}
         error={null}

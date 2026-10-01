@@ -2,7 +2,7 @@ import type { WorkspaceSummary } from '@kamiazya/whiteboard-daemon-client/api-co
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
+import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import {
@@ -610,7 +610,7 @@ export function DaemonIndexPage({
           onRetryWorkspaces={loadWorkspaces}
           serverMode={serverMode}
         />
-        <DeleteDocumentDialog {...deleteDialog} />
+        <DeleteDocumentsDialog {...deleteDialog} />
       </div>
     </DaemonApiContext.Provider>
   )

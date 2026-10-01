@@ -8,8 +8,8 @@
  * contract and neither is visible from a call site. The create is the only
  * place a stored kind is set (the write below is a plain re-save that never
  * touches one), so a call that omits it files a markdown note as a canvas:
- * that was a real defect, closed by #1767, and a second hand-written copy of
- * this sequence is how it would come back.
+ * that was a real defect once, and a second hand-written copy of this
+ * sequence is how it would come back.
  *
  * Deliberately NOT doing the collision derivation itself: the two callers know
  * different lists (the index knows the workspace's rows, the document page

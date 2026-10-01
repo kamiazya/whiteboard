@@ -398,11 +398,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/daemon-file-adapter.ts#createDaemonFileAdapter': 70,
   'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 93,
   'apps/web/src/lib/document-sync-session.ts#commandTargetKey': 56,
-  // Raised 842 -> 884: the undo path takes back a write still inside the
-  // debounce window, which has to reach the timer and the queue this factory
-  // closes over — so it lives here rather than beside them. Shrinking it is
-  // the same job as [[unify-document-pages-behind-backend-port]], not a
-  // separate one.
+  // The undo path takes back a write still inside the debounce window, which
+  // has to reach the timer and the queue this factory closes over — so it
+  // lives here rather than beside them. Shrinking it is the same job as
+  // putting both document pages behind one backend port, not a separate one.
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 856,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
@@ -429,17 +428,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract': 95,
   'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 491,
   'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 153,
-  // Raised 697 -> 702 for Duplicate: the hook call, the ref the async
-  // handler reads the current document from, and the menu row it contributes.
-  // Raised 702 -> 727 for Delete: the hook call, two menu rows and the
-  // dialog element. Its screen state and its dialog each moved into their
-  // own module beside the page, so what is here is wiring — the hook
-  // is still the audit's slice-4 subject
-  // (`issues/audit-2026-09-21-backlog`, item 6) and splitting it is that
-  // lane's work, not this feature's.
-  // 727 -> 583: the backend seam left for `use-daemon-document-backend.ts`
-  // (audit item 6 slice 4). Recorded at the measurement rather than left at
-  // the old ceiling, so the next change spends headroom deliberately.
+  // The Duplicate and Delete verbs' screen state and dialogs each live in
+  // their own module beside the page, so what is here is wiring; the backend
+  // seam left for `use-daemon-document-backend.ts`.
   'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 449,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // 562 -> 334: the inspector column, the merged header row and the markdown

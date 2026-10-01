@@ -893,8 +893,8 @@ export function createDocumentSyncSession(
    * `publishCanvasFromDoc` runs on an EXTERNAL update, so before this the
    * only way a conversation reached the panel was a remote peer touching the
    * document: a person's own comment was written, drawn on the canvas from
-   * the optimistic value, and never listed. Found by dogfooding, not by a
-   * test — the remote-reply case was covered and this one was not.
+   * the optimistic value, and never listed — the remote-reply case was
+   * covered and this one was not.
    *
    * Gated on the VALUE having changed rather than on the command kind. A
    * classification over `EditorCommand['kind']` is silent when kind N+1
