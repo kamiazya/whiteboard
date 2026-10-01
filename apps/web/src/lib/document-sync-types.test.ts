@@ -1,21 +1,15 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
   DOCUMENT_SYNC_CHANGED_EVENT,
-  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
   dispatchIdentityEvent,
   type UseDocumentSyncOptions,
 } from './document-sync-types.js'
 
 describe('document-sync event name constants', () => {
-  // Pinned literal values: other modules (useDirtyState, HeaderBranchBanner,
-  // useBranches, merge-committed-event) still match on the raw string and are
-  // out of this slice's scope, so a rename here must not change the wire value.
+  // Pinned literal value: `useDocumentOutline` matches the raw string, so a
+  // rename of the constant must not change the wire value.
   it('keeps the doc_changed event name unchanged', () => {
     expect(DOCUMENT_SYNC_CHANGED_EVENT).toBe('whiteboard:doc_changed')
-  })
-
-  it('keeps the wb_version_saved event name unchanged', () => {
-    expect(DOCUMENT_SYNC_VERSION_SAVED_EVENT).toBe('whiteboard:wb_version_saved')
   })
 
   it('dispatchIdentityEvent fires the constant event name it is called with', () => {

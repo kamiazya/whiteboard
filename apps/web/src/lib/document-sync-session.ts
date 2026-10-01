@@ -58,7 +58,6 @@ import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { contentStateOf } from './document-state.js'
 import {
   DOCUMENT_SYNC_CHANGED_EVENT,
-  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
   type SyncStatus,
   type UseDocumentSyncOptions,
 } from './document-sync-types.js'
@@ -1196,7 +1195,6 @@ export function createDocumentSyncSession(
 
       onVersionCreated(payload) {
         if (isStale()) return
-        deps.dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, deps.getOptions().identity)
         try {
           deps.getOptions().onVersionCreated?.(payload)
         } catch (err) {

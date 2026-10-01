@@ -14,9 +14,7 @@ import type { ReactNode } from 'react'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
-import { dispatchIdentityEvent } from '../hooks/useDocumentSync.js'
 import { linkifyDocumentMentions } from '../lib/daemon-api-client.js'
-import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
 import type { DaemonPageState } from './daemon-page-state.js'
 import { DaemonTerminalScreen, membershipRefusedScreen } from './daemon-terminal-screens.js'
@@ -230,8 +228,6 @@ export function daemonVersionsSlot({
     workspaceId: labels.workspaceId,
     path: labels.path,
     announceRefresh: onVersionCreated,
-    announceOnce: () =>
-      dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, canvas ?? undefined),
   })
 }
 

@@ -646,23 +646,9 @@ describe('useDocumentSync', () => {
       expect(docChanged.calls[docChanged.calls.length - 1].detail).toEqual(identity)
     })
 
-    it('dispatches wb_version_saved with identity detail when a version_created broadcast arrives', () => {
-      const backend = makeFakeBackend()
-      const versionSaved = listenFor('whiteboard:wb_version_saved')
-      renderHook(() => useDocumentSync(backend, { identity }))
-
-      act(() => {
-        backend._ctrl.handlers!.onVersionCreated(versionCreatedPayload())
-      })
-
-      expect(versionSaved.calls).toHaveLength(1)
-      expect(versionSaved.calls[0].detail).toEqual(identity)
-    })
-
     it('does not dispatch any identity events when identity is absent', async () => {
       const backend = makeFakeBackend()
       const docChanged = listenFor('whiteboard:doc_changed')
-      const versionSaved = listenFor('whiteboard:wb_version_saved')
       renderHook(() => useDocumentSync(backend))
 
       await hydrate(backend)
@@ -670,12 +656,8 @@ describe('useDocumentSync', () => {
         backend._ctrl.handlers!.onRemoteUpdate(new LoroDoc().export({ mode: 'update' }))
         await vi.runAllTimersAsync()
       })
-      act(() => {
-        backend._ctrl.handlers!.onVersionCreated(versionCreatedPayload({ elementCount: 0 }))
-      })
 
       expect(docChanged.calls).toHaveLength(0)
-      expect(versionSaved.calls).toHaveLength(0)
     })
 
     it('changing the identity option between renders does not force a backend reconnect', () => {

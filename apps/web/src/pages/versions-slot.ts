@@ -22,13 +22,11 @@ export function versionsSlot({
   workspaceId,
   path,
   announceRefresh,
-  announceOnce,
 }: {
   backend: VersionsBackend | null
   workspaceId: string
   path: string
   announceRefresh: () => void
-  announceOnce?: () => void
 }): DocumentPageModel['versions'] {
   return {
     enabled: backend !== null,
@@ -45,6 +43,5 @@ export function versionsSlot({
       }
     },
     announceRefresh,
-    ...(announceOnce === undefined ? {} : { announceOnce }),
   }
 }

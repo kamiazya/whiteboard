@@ -6,7 +6,7 @@ import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
-import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
+import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
@@ -18,7 +18,6 @@ import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/brow
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
-import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
@@ -550,13 +549,9 @@ function useBrowserDocument(
       backend: versionsBackend,
       workspaceId,
       path: loadedPath,
-      // The top bar addresses this document as `local`/path (its
-      // `dataMode="local"` placeholder), so the dot listens under that id.
-      announceRefresh: () =>
-        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
-          workspaceId: 'local',
-          path: loadedPath,
-        }),
+      // The browser keeper's history column reads its own store, so a save
+      // has nothing to announce.
+      announceRefresh: () => {},
     }),
     ...browserConnectionsSlot(connections, navigateToDocument, linkify),
     topBar: {

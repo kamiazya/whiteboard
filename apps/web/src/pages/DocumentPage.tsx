@@ -227,7 +227,6 @@ function useVersionSavePanel(
     // so a save that lands after the reader moved on refreshes nothing.
     return () => {
       versions.announceRefresh()
-      versions.announceOnce?.()
     }
   })
   const saveVersionFromPanel = async (label: string): Promise<void> => {

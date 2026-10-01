@@ -25,13 +25,11 @@ export interface DirtyEventDetail {
  */
 export type SyncStatus = 'idle' | 'connected' | 'reconnecting' | 'error'
 
-// Named constants for the window-event contract dispatched by
-// dispatchIdentityEvent below. The literal values are pinned — several other
-// modules (HeaderBranchBanner, useBranches, merge-committed-event) still
-// match on the raw string and are out of this slice's scope, so changing the
-// constant's NAME here must never change its VALUE.
+// The window event dispatched by dispatchIdentityEvent below, which
+// `useDocumentOutline` listens for. The literal value is pinned by
+// `document-sync-types.test.ts`: a listener matches the raw string, so
+// changing this constant's NAME must never change its VALUE.
 export const DOCUMENT_SYNC_CHANGED_EVENT = 'whiteboard:doc_changed'
-export const DOCUMENT_SYNC_VERSION_SAVED_EVENT = 'whiteboard:wb_version_saved'
 
 // Daemon-only callback seam. Every member is read via optionsRef in
 // useDocumentSync (see there) so passing a fresh inline object on every render
@@ -53,9 +51,8 @@ export interface UseDocumentSyncOptions {
   // transition on a WS auth failure (close 1008), so a daemon-backed page
   // can surface a dedicated banner instead of the generic error state.
   onAuthError?: () => void
-  // When set, drives the window-event contract the version surfaces listen
-  // for: 'whiteboard:doc_changed' on local/remote doc edits and
-  // 'whiteboard:wb_version_saved' on a version_created broadcast. Read via
+  // When set, drives the window-event contract the outline listens for:
+  // 'whiteboard:doc_changed' on local/remote doc edits. Read via
   // optionsRef (never in the connect effect's dep array) so passing a fresh
   // identity object every render never forces a reconnect. Only dispatched
   // when both fields are present — a browser caller that never sets
