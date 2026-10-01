@@ -18,7 +18,6 @@ import {
   tagWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -362,7 +361,7 @@ function requiredTargetOf(input: FacetSetInput): FacetTarget {
  * server spelling one plugin's key is a server no other plugin extends.
  */
 async function resolveWriteRegistry(deps: ServerDeps, input: FacetSetInput) {
-  const deploymentRegistry = deps.facetRegistry ?? bundledFacetRegistry
+  const deploymentRegistry = deps.facetRegistry
   const writesAStencilRef = Object.entries(input.facets ?? {}).some(
     ([key, payload]) =>
       payload !== null &&

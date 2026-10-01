@@ -143,10 +143,12 @@ export interface ServerDeps {
   clientNotifier?: CanvasClientNotifier
   /**
    * The facet registry validating registered-facet writes (ADR-0013
-   * decision 6). Optional: absent means the bundled plugins — a composition
-   * root overrides it only when a deployment configures its own plugin set.
+   * decision 6): the deployment's plugin set, composed once per root.
+   * Required, as every seam here is (ADR-0018): while it was optional each
+   * tool fell back to the bundled registry on its own, so a root that
+   * forgot to compose it served the bundled plugins and nothing said so.
    */
-  facetRegistry?: FacetRegistry
+  facetRegistry: FacetRegistry
   /**
    * How a composition root disposes of everything about a document that is
    * NOT its index row or its stored bytes — thumbnail and blob files on

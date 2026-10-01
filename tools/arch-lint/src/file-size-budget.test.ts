@@ -94,10 +94,10 @@ function isScannedTestFile(absolutePath: string): boolean {
 }
 
 /**
- * This file, which the ledger deliberately does not hold.
+ * The two ledger files, which this ledger deliberately does not hold.
  *
- * Its length is a function of how many entries the list below has, so its
- * ceiling records the SIZE OF THE DEBT LIST and nothing about this file —
+ * Each one's length is a function of how many entries its list has, so its
+ * ceiling records the SIZE OF THE DEBT LIST and nothing about the file —
  * and every entry already has to carry a reason, so the deliberateness the
  * ceiling would add is already spent one line above it.
  *
@@ -106,9 +106,14 @@ function isScannedTestFile(absolutePath: string): boolean {
  * neither of them is about. Measured on one PR in one session: three
  * conflicts, each resolved by re-counting the merged file's own lines, and
  * the reasons stacked up as archaeology ("FIVE branches", then "SIX") until
- * the comment said more about merging than about sizes.
+ * the comment said more about merging than about sizes. The function ledger
+ * was held for a while and paid the same way: a two-line reason beside one
+ * of its entries moved its own ceiling here.
  */
-const LEDGER_PATH = 'tools/arch-lint/src/file-size-budget.test.ts'
+const LEDGER_PATHS = [
+  'tools/arch-lint/src/file-size-budget.test.ts',
+  'tools/arch-lint/src/function-size-budget.test.ts',
+]
 
 /** A listed file's current count, or nothing for one that is gone (another assertion's finding). */
 function readingOf(path: string): number | undefined {
@@ -119,7 +124,7 @@ function scanTestFiles(): string[] {
   return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
     .filter(isScannedTestFile)
     .map((absolutePath) => relativeToRepo(absolutePath))
-    .filter((path) => path !== LEDGER_PATH)
+    .filter((path) => !LEDGER_PATHS.includes(path))
     .sort()
 }
 
@@ -686,14 +691,6 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
 // record. `gestures.test` and this file itself are new entries rather than
 // raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  // The function-size ledger's own file crossed 800 while paying DOWN the
-  // complexity exemption list: decomposing a JSX-heavy component turns one
-  // over-budget function into several smaller ones, and each is an entry
-  // here with a reason. It is a DATA table with a header, which is the same
-  // reason its own comment gives for the list being 400-odd entries rather
-  // than 17 — so it is recorded rather than split, and splitting it would
-  // put half the ledger where a reader does not look for it.
-  'tools/arch-lint/src/function-size-budget.test.ts': 853,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
@@ -820,7 +817,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // merged table now holds; only the numbers were re-measured. A scoreboard
   // whose rows are pinned exactly is one whose history is prose, so a merge
   // of two histories costs lines rather than losing one of them.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 961,
+  // 961 -> 964: the harness hands the tools the bundled registry, now that
+  // the seam is required and the tools fall back to nothing.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 964,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next

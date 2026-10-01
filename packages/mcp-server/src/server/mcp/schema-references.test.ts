@@ -9,6 +9,8 @@
 // wrong definition. Neither breaks the server — it validates with zod and
 // never reads its own JSON Schema — so the smoke stays green and only a
 // client reading the table is hurt. Nothing else in the suite looks.
+
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
@@ -28,6 +30,7 @@ async function listTools(): Promise<readonly ListedTool[]> {
     versions: new InMemoryVersionHistory(),
     // The daemon's own seam: every mutating tool takes its write lock.
     liveDocuments: liveDocuments(),
+    facetRegistry: bundledFacetRegistry,
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

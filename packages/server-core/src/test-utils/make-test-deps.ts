@@ -1,3 +1,4 @@
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from './ignored-document-writes.js'
@@ -49,6 +50,8 @@ export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     versions: unusedVersionHistory(),
     liveDocuments: unusedLiveDocuments(),
     workspaceDocuments: unusedWorkspaceDocuments(),
+    // The bundled plugins, as a root composing no plugin set of its own gets.
+    facetRegistry: bundledFacetRegistry,
     ...overrides,
   }
 }

@@ -12,7 +12,7 @@
  */
 import { type FacetRegistry, withWorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
-import { bundledFacetRegistry, readStencilLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { readStencilLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
@@ -75,7 +75,7 @@ export async function workspaceFacetRegistry(
   // one listing however many things it reads from the workspace.
   listed?: readonly DocumentEntry[],
 ): Promise<FacetRegistry> {
-  const base = deps.facetRegistry ?? bundledFacetRegistry
+  const base = deps.facetRegistry
   const entries = listed ?? (await listWorkspaceDocuments(deps, workspaceId, unknownWorkspace))
   const library = entries.find((entry) => entry.path === STENCIL_LIBRARY_PATH)
   if (library === undefined) return base

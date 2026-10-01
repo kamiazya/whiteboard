@@ -17,7 +17,7 @@
 import { writeCoreFacets, writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import { bundledFacetRegistry, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { STENCIL_LIBRARY_PATH } from '@kamiazya/whiteboard-server-core'
@@ -115,6 +115,7 @@ async function harness(
     versions: new InMemoryVersionHistory(),
     // The daemon's own seam: every mutating tool takes its write lock.
     liveDocuments: liveDocuments(),
+    facetRegistry: bundledFacetRegistry,
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

@@ -69,11 +69,12 @@ export interface ServerDepsOptions {
  * argument instead of a binding.
  *
  * That seam existed on `ServerDeps` and NOTHING supplied it. Every root fell
- * through to each tool's own `?? bundledFacetRegistry`, and every test that
+ * through to each tool's own bundled fallback, and every test that
  * exercised the seam built `deps` by hand — so a deployment had no way to
  * register a plugin, and neither side could see it. Built-but-unwired, which
  * is the class this repo's `reachability` review dimension exists for, found
- * only by asking who actually CALLS the seam.
+ * only by asking who actually CALLS the seam. The seam is required now and
+ * the fallbacks are gone, so a root that composes none does not typecheck.
  *
  * Deliberately NOT a config file naming modules to import. ADR-0013 decision
  * 3 forbids runtime facet definition because the governance and security
