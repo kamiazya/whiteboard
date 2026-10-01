@@ -10,6 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -27,9 +28,6 @@ function Host() {
     </div>
   )
 }
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 
 /** The colour the body text actually paints with, resolved through inheritance. */
 const paintedFill = (container: HTMLElement, testId: string): string => {

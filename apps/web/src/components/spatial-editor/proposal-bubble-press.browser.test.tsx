@@ -7,6 +7,7 @@ import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -42,7 +43,7 @@ async function mount() {
       />
     </div>,
   )
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await vi.waitFor(() =>
     expect(root.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
       'proposed change',

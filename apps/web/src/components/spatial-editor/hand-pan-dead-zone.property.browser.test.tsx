@@ -29,6 +29,7 @@ import { afterEach, expect, it } from 'vitest'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import type { Viewport } from '../../lib/spatial/viewport.js'
 import { fc } from '../../test-utils/fast-check.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -215,7 +216,7 @@ it('a hand-tool press pans from any point on the canvas, at any pan and zoom', a
           await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
         })
 
-        const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+        const root = rootOf(container)
         const rect = root.getBoundingClientRect()
         const before = readViewport(container)
 

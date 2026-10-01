@@ -8,6 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -38,7 +39,7 @@ function renderHost() {
 }
 
 function clickNode(container: HTMLElement, at: [number, number]) {
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.pointerDown(root, {
     button: 0,

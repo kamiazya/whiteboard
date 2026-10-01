@@ -17,6 +17,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditor } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -36,7 +37,7 @@ function Host({ initial = start }: { initial?: SpatialCanvas }) {
 
 it('the edit overlay box styling equals the rendered chrome (shared theme producers)', async () => {
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   const editor = await vi.waitFor(() => {
     const el = nodeEditor(container)
@@ -71,7 +72,7 @@ it('the edit overlay is typed in the theme family once its face is held, like th
     facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
   }
   const { container } = render(<Host initial={sketched} />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   const editor = await vi.waitFor(() => {
     const el = nodeEditor(container)

@@ -9,6 +9,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -51,7 +52,7 @@ it('a carried edge re-sides mid-drag to match the drop result', async () => {
     )
   }
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   await new Promise((res) => setTimeout(res, 200))
 
@@ -113,7 +114,7 @@ it('bystander edges stay frozen while an unrelated node is dragged', async () =>
     )
   }
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   await new Promise((res) => setTimeout(res, 200))
 
@@ -175,7 +176,7 @@ it('a bystander edge holds its exact anchor when the carried edge joins its side
     )
   }
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   await new Promise((res) => setTimeout(res, 200))
 

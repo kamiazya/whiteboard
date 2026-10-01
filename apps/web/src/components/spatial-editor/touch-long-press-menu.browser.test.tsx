@@ -10,6 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { touch } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -32,23 +33,6 @@ function mount(canvas: SpatialCanvas, tool: 'select' | 'hand' = 'select') {
     )
   }
   return { latest, ...render(<Host />) }
-}
-
-function touch(el: HTMLElement, type: string, x: number, y: number, pointerId = 7) {
-  const r = el.getBoundingClientRect()
-  el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      clientX: r.left + x,
-      clientY: r.top + y,
-      pointerId,
-      pointerType: 'touch',
-      isPrimary: true,
-      button: type === 'pointerdown' ? 0 : -1,
-      buttons: type === 'pointerup' ? 0 : 1,
-    }),
-  )
 }
 
 it('a stationary touch long-press opens the context menu without dragging the node', async () => {
