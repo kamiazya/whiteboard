@@ -16,6 +16,7 @@ import {
 import { createUserDeactivation } from '../server/security/user-deactivation.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
 import { upsertWorkspaceRow } from '../server/store/db/upsert-workspace.js'
+import { grantMemberOutputSchema } from './operator-json.js'
 import { grantMember, runServerGrantMember } from './server-grant-member.js'
 
 const WS = 'ws-plans'
@@ -144,7 +145,8 @@ describe('whiteboard server grant-member', () => {
     const ada = await userNamed('Ada', 'ada-1')
     const res = await run(['--json', `--workspace=${WS}`, '--user=Ada', `--data-dir=${root}`])
     expect(res.code).toBe(0)
-    expect(JSON.parse(res.stdout)).toEqual({
+    expect(grantMemberOutputSchema.parse(JSON.parse(res.stdout))).toEqual({
+      schemaVersion: 1,
       kind: 'ok',
       workspaceId: WS,
       user: { id: ada.id, displayName: 'Ada' },

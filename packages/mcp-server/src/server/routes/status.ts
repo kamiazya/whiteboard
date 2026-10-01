@@ -7,11 +7,13 @@ import { getClientCount, getReadyClientCount } from './sync-audience.js'
 // It reads the browsers on the document over either transport (getClientCount).
 //
 // Usage:
-//   GET /api/w/:workspaceId/document/<path>/client-count → { count: number }
+//   GET /api/w/:workspaceId/document/<path>/client-count
+//     → { count, readyCount }  (clientCountResponseSchema)
 //
-// A caller that has just asked for the canvas to be opened polls this every
-// 100 ms until count >= 1 or it times out, rather than acting immediately and
-// failing with no_client.
+// `count` is every connected browser; `readyCount` the ones that have said
+// client_ready. A caller that has just asked for the canvas to be opened polls
+// this every 100 ms until count >= 1 or it times out, rather than acting
+// immediately and failing with no_client.
 
 export function createStatusRouter() {
   const app = new Hono()

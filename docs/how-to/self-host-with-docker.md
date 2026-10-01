@@ -361,6 +361,25 @@ with the same reason. Their workspaces, memberships and documents are kept.
 `--reactivate` lets them back in with the access they had before, but they
 have to sign in again because their old sessions do not come back.
 
+### Reading the output in a script
+
+`add-user`, `grant-member`, `grant-admin` and `deactivate-user` each print one
+JSON line on stdout and the explanation on stderr. Every line carries
+`"schemaVersion": 1` and a `kind` naming the outcome:
+
+| `kind` | when | other fields |
+|---|---|---|
+| `ok` | it did what you asked | `user` (`id`, `displayName`); plus `created` (`add-user`), `workspaceId` (`grant-member`), `administrator` (`grant-admin`), or `deactivated` and `changed` (`deactivate-user`) |
+| `unknown-user` | no user has that id or name | `users`: everyone there is |
+| `ambiguous-user` | more than one user has that name | `users`: the candidates |
+| `unknown-workspace` | `grant-member` found no such workspace | `workspaceId`, as you passed it |
+| `unknown-provider` | `add-user` found no such provider | `providers`: the ids declared |
+
+The exit code is `0` for `ok`, `1` for any other `kind`, and `64` for a usage
+error, which prints no JSON. `whiteboard native-host install --json` prints the
+same `schemaVersion` with `ok`, `launcher`, `manifests` and, when `ok` is
+false, a `reason`.
+
 ### Deleting a user
 
 Deleting is for someone who should be forgotten, not only shut out. It is

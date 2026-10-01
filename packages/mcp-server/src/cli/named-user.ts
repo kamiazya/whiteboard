@@ -1,9 +1,5 @@
 import type { MemberProfileStore } from '../server/security/member-profile-store.js'
-
-export interface NamedUser {
-  id: string
-  displayName: string
-}
+import type { NamedUser } from './operator-json.js'
 
 export type NamedUserLookup =
   | { kind: 'found'; user: NamedUser }

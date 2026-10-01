@@ -3,13 +3,17 @@ import { createMemberProfileStore } from '../server/security/member-profile-stor
 import { createWorkspaceRoles } from '../server/security/workspace-roles.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser, type NamedUser } from './named-user.js'
+import { findNamedUser } from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
+import {
+  type GrantMemberOutput,
+  grantMemberOutputSchema,
+  OPERATOR_JSON_SCHEMA_VERSION,
+  operatorJsonLine,
+  type WithoutSchemaVersion,
+} from './operator-json.js'
 
-export type GrantMemberOutcome =
-  | { kind: 'ok'; workspaceId: string; user: NamedUser }
-  | { kind: 'unknown-workspace'; workspaceId: string }
-  | { kind: 'unknown-user' | 'ambiguous-user'; users: NamedUser[] }
+export type GrantMemberOutcome = WithoutSchemaVersion<GrantMemberOutput>
 
 /**
  * ADR-0046 decision 10: an operator grants a workspace's first member from
@@ -81,7 +85,12 @@ export async function runServerGrantMember(
   if (user === undefined) return usageError(io, `--user=<id|name> is required. ${USAGE}`)
 
   const outcome = await grantMember(await openKeeperDb(dataDir, env), { workspaceId, user })
-  io.stdout(`${JSON.stringify(outcome)}\n`)
+  io.stdout(
+    operatorJsonLine(grantMemberOutputSchema, {
+      schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+      ...outcome,
+    }),
+  )
   if (outcome.kind === 'ok') return 0
   io.stderr(`${REFUSAL[outcome.kind]}\n`)
   return 1

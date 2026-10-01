@@ -18,17 +18,25 @@ import {
   WHITEBOARD_EXTENSION_ID,
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import { z } from 'zod'
 
-/** Chromium and Firefox read the same manifest, each with its own allow-list key. */
-type BrowserEngine = 'chromium' | 'firefox'
+/**
+ * One place a manifest was written. A schema because it is also part of what
+ * `whiteboard native-host install --json` prints (cli/operator-json.ts).
+ */
+export const manifestDirSchema = z
+  .object({
+    browser: z.string(),
+    // Chromium and Firefox read the same manifest, each with its own allow-list key.
+    engine: z.enum(['chromium', 'firefox']),
+    dir: z.string(),
+    /** Windows only: the HKCU key under which the browser looks the host up. */
+    registryKey: z.string().optional(),
+  })
+  .strict()
 
-export interface ManifestDir {
-  browser: string
-  engine: BrowserEngine
-  dir: string
-  /** Windows only: the HKCU key under which the browser looks the host up. */
-  registryKey?: string
-}
+export type ManifestDir = z.infer<typeof manifestDirSchema>
+type BrowserEngine = ManifestDir['engine']
 
 /**
  * Where each browser reads user-level hosts: a browser counts as installed

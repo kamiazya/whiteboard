@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { createTenantAdministratorStore } from '../server/security/tenant-administrator-store.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
+import { grantAdminOutputSchema } from './operator-json.js'
 import { grantAdmin, runServerGrantAdmin } from './server-grant-admin.js'
 
 let root: string
@@ -74,7 +75,11 @@ describe('runServerGrantAdmin', () => {
     await userNamed('Ada', 'ada-1')
     const res = await run(['--json', '--user=Ada'])
     expect(res.code).toBe(0)
-    expect(JSON.parse(res.stdout)).toMatchObject({ kind: 'ok', administrator: true })
+    expect(grantAdminOutputSchema.parse(JSON.parse(res.stdout))).toMatchObject({
+      schemaVersion: 1,
+      kind: 'ok',
+      administrator: true,
+    })
   })
 
   it('exits 1 and names the fix when nobody matches', async () => {

@@ -17,6 +17,7 @@ import {
 import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodeNativeMessage, readNativeMessages } from '../daemon/native-host/native-messaging.js'
+import { nativeHostInstallOutputSchema } from './operator-json.js'
 
 const MCP_SERVER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const CLI_SOURCE = join(MCP_SERVER_DIR, 'src/cli/index.ts')
@@ -54,7 +55,8 @@ describe('whiteboard native-host', () => {
       { cwd: MCP_SERVER_DIR, encoding: 'utf8' },
     )
     expect(installed.status, installed.stderr).toBe(0)
-    const result = JSON.parse(installed.stdout)
+    const result = nativeHostInstallOutputSchema.parse(JSON.parse(installed.stdout))
+    expect(result.ok).toBe(true)
     const manifest = JSON.parse(readFileSync(join(manifestDir, `${NATIVE_HOST_NAME}.json`), 'utf8'))
     expect(manifest.path).toBe(result.launcher)
     const firefoxManifest = JSON.parse(

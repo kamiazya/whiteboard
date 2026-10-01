@@ -15,6 +15,7 @@ import {
 import { providerAuthenticator } from '../server/security/sign-in-config.js'
 import { readSignInProviders } from '../server/security/sign-in-config-file.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
+import { addUserOutputSchema } from './operator-json.js'
 import { runServerAddUser } from './server-add-user.js'
 
 const ISSUER = 'https://sso.corp.example'
@@ -83,7 +84,8 @@ describe('whiteboard server add-user', () => {
     expect(res.code).toBe(0)
     const user = await members.profileForBinding(binding)
     expect(user?.displayName).toBe('Ada')
-    expect(JSON.parse(res.stdout)).toEqual({
+    expect(addUserOutputSchema.parse(JSON.parse(res.stdout))).toEqual({
+      schemaVersion: 1,
       kind: 'ok',
       created: true,
       user: { id: user?.id, displayName: 'Ada' },
@@ -94,7 +96,8 @@ describe('whiteboard server add-user', () => {
     const existing = await members.ensureProfile({ binding, displayName: 'Ada L.' })
     const res = await run(['--json', '--provider=corp-mcp', '--subject=ada-1', '--name=Ada'])
     expect(res.code).toBe(0)
-    expect(JSON.parse(res.stdout)).toEqual({
+    expect(addUserOutputSchema.parse(JSON.parse(res.stdout))).toEqual({
+      schemaVersion: 1,
       kind: 'ok',
       created: false,
       user: { id: existing.id, displayName: 'Ada L.' },
@@ -118,7 +121,8 @@ describe('whiteboard server add-user', () => {
   it('refuses a provider the configuration does not declare, listing those it does', async () => {
     const res = await run(['--json', '--provider=nobody', '--subject=ada-1'])
     expect(res.code).toBe(1)
-    expect(JSON.parse(res.stdout)).toEqual({
+    expect(addUserOutputSchema.parse(JSON.parse(res.stdout))).toEqual({
+      schemaVersion: 1,
       kind: 'unknown-provider',
       providers: ['corp-mcp', 'google', 'corp-proxy'],
     })

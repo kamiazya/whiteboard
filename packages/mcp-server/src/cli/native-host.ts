@@ -18,6 +18,11 @@ import {
 } from '../daemon/native-host/install.js'
 import { runNativeHost } from '../daemon/native-host/relay.js'
 import { type FlagTable, scanFlags } from './flag-table.js'
+import {
+  nativeHostInstallOutputSchema,
+  OPERATOR_JSON_SCHEMA_VERSION,
+  operatorJsonLine,
+} from './operator-json.js'
 
 const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
   booleans: ['--json'],
@@ -110,6 +115,13 @@ async function install(rest: readonly string[]): Promise<number> {
         reason:
           'no Chromium browser or Firefox was found; pass --manifest-dir=<path> or --firefox-manifest-dir=<path>',
       }
-  process.stdout.write(`${JSON.stringify({ schemaVersion: 1, ok, ...reason, ...result })}\n`)
+  process.stdout.write(
+    operatorJsonLine(nativeHostInstallOutputSchema, {
+      schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+      ok,
+      ...reason,
+      ...result,
+    }),
+  )
   return ok ? 0 : 1
 }
