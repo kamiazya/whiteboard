@@ -748,7 +748,9 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/daemon-run-auto-open-launch.test.ts#launchDaemonInPty': 70,
   'packages/mcp-server/src/cli/server-args.differential.test.ts#oldBackup': 64,
   'packages/mcp-server/src/server/app.routes.fuzz.property.test.ts#fillPattern': 65,
-  'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 77,
+  // 77 -> 79: the hand-built deps gain the daemon's lock seam, which every
+  // mutating tool now takes itself.
+  'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 79,
   'packages/mcp-server/src/server/security/server-mode-env-config.differential.test.ts#parseOld': 157,
   'packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts#fitCanvasOp': 89,
   'packages/workspace-index/src/loro-workspace-document-index.test.ts#inMemoryWorkspaceDocs': 58,

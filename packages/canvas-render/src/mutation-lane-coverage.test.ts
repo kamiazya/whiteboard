@@ -232,9 +232,16 @@ describe('the mutation lane covers what it says it covers', () => {
     //
     // 88 and 19 since `layout/canvas-theme.ts` came out of it too — which
     // theme a canvas is drawn in — outside the lane for the same reason.
+    //
+    // 90 and 19 with `references/wire-schema.ts` and `theme/theme-font.ts`:
+    // two Zod contracts the MCP Apps widget and `canvas_view` both read,
+    // placed here because this is the one package both reach. Outside the
+    // lane: a schema and a two-line projection either way have no heuristic
+    // in them for a mutant to weaken, and the example tests beside them say
+    // exactly what they admit.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 19,
-      production: 88,
+      production: 90,
     })
   })
 
