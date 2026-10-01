@@ -77,7 +77,6 @@ function connectSession(backend: BrowserBackend) {
     onRestoreComplete: () => events.push('restore-complete'),
     onHeadChanged: () => {},
     onViewportRequest: () => {},
-    onExportRequest: () => {},
     onConnected: () => {},
   }
   backend.connect(handlers)

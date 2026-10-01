@@ -18,7 +18,7 @@ export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('subscribe'), doc: z.string().min(1) }),
   z.object({ type: z.literal('unsubscribe'), doc: z.string().min(1) }),
-  // A client->server control message (client_ready, export_response). It has to
+  // A client->server control message (client_ready). It has to
   // travel through the worker because the daemon addresses it by stream, and
   // the stream belongs to the worker rather than to the tab that sends this.
   // The payload is opaque here on purpose: its shape is the daemon's contract

@@ -66,14 +66,7 @@ class FakeBackend implements DocumentBackend {
   }
   disconnect(): void {}
   pushLocalUpdate(): void {}
-  getFile(): Promise<Blob | null> {
-    return Promise.resolve(null)
-  }
-  putFile(): Promise<void> {
-    return Promise.resolve()
-  }
   sendClientReady(): void {}
-  sendExportResponse(): void {}
 }
 
 const createdBackends: FakeBackend[] = []

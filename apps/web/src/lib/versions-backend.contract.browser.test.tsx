@@ -80,7 +80,6 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
       onVersionCreated: () => {},
       onHeadChanged: () => {},
       onViewportRequest: () => {},
-      onExportRequest: () => {},
     })
     await new Promise((r) => setTimeout(r, 50))
   }

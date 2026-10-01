@@ -87,14 +87,7 @@ class FakeBackend implements DocumentBackend {
   }
   disconnect(): void {}
   pushLocalUpdate(): void {}
-  getFile(): Promise<Blob | null> {
-    return Promise.resolve(null)
-  }
-  putFile(): Promise<void> {
-    return Promise.resolve()
-  }
   sendClientReady(): void {}
-  sendExportResponse(): void {}
 }
 
 const writeText = vi.fn(async (_text: string) => {})

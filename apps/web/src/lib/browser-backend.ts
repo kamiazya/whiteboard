@@ -1,5 +1,4 @@
 import type {
-  BinaryFileDataLike,
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
@@ -16,7 +15,6 @@ import { Loro, type LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
 import { seedNameFromTitle } from './seed-name-from-title.js'
@@ -60,10 +58,6 @@ export interface BrowserBackendTarget {
  * unreadable record surfaces its load failure instead of being shadowed by
  * an empty tree node — the old record stays the damaged document's home.
  *
- * getFile/putFile: images are persisted to IndexedDB via DocumentFileStore,
- * unchanged by the workspace-document move.
- *
- * sendClientReady/sendExportResponse: no WebSocket in browser mode; no-ops.
  *
  * TOCTOU safety: all writes are serialized through a per-instance promise
  * chain (_writeQueue) so concurrent pushLocalUpdate calls import and save in
@@ -124,7 +118,6 @@ export class BrowserBackend implements DocumentBackend {
   private readonly target: BrowserBackendTarget
   private readonly docs: WorkspaceDocs
   private readonly legacy: LoroStore
-  private readonly fileStore: DocumentFileStore
   private handlers: DocumentBackendHandlers | null = null
   private disconnected = false
   /** The live workspace document — set once connect() has delivered it. */
@@ -134,16 +127,10 @@ export class BrowserBackend implements DocumentBackend {
   /** This connection's end of the record's channel to the other tabs. */
   private broadcast: WorkspaceBroadcastEnd | null = null
 
-  constructor(
-    target: BrowserBackendTarget,
-    docs?: WorkspaceDocs,
-    fileStore?: DocumentFileStore,
-    legacy?: LoroStore,
-  ) {
+  constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs, legacy?: LoroStore) {
     this.target = target
     this.docs = docs ?? new BrowserWorkspaceDocs()
     this.legacy = legacy ?? new LoroStore()
-    this.fileStore = fileStore ?? new DocumentFileStore()
   }
 
   connect(handlers: DocumentBackendHandlers): void {
@@ -335,52 +322,8 @@ export class BrowserBackend implements DocumentBackend {
     }
   }
 
-  /**
-   * Returns the persisted Blob for fileId, or null for an unknown id and for
-   * a corrupt/unknown-version record — never calls onError, since a read-path
-   * miss is not a storage failure (see DocumentFileStore.get).
-   */
-  async getFile(fileId: string): Promise<Blob | null> {
-    return this.fileStore.get(fileId)
-  }
-
-  /**
-   * Persists each entry keyed by its tuple fileId (the dedupe key
-   * useDocumentSync already uses — never `data.id`, which a caller's
-   * BinaryFileDataLike is not guaranteed to agree with). Calls
-   * onFileSuccess once per successfully stored entry. Rejects and routes
-   * handlers.onError?.('storage-failure') on any store failure so a failed
-   * upload is never observed as a silent success.
-   */
-  async putFile(
-    newEntries: [string, BinaryFileDataLike][],
-    onFileSuccess: (fileId: string) => void,
-  ): Promise<void> {
-    if (newEntries.length === 0) return
-
-    try {
-      for (const [fileId, data] of newEntries) {
-        const blob = dataUrlToBlob(data.dataURL, data.mimeType)
-        await this.fileStore.put(fileId, {
-          mimeType: blob.type,
-          blob,
-          created: data.created,
-        })
-        onFileSuccess(fileId)
-      }
-    } catch (err) {
-      this.handlers?.onError?.('storage-failure')
-      throw err
-    }
-  }
-
   /** No WebSocket in browser mode. */
   sendClientReady(): void {
-    /* no-op */
-  }
-
-  /** No WebSocket in browser mode. */
-  sendExportResponse(_requestId: string, _data: string): void {
     /* no-op */
   }
 

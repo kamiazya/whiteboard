@@ -67,7 +67,6 @@ describe('token redaction: sentinel never reaches a log record', () => {
         onRestoreComplete: () => {},
         onHeadChanged: () => {},
         onViewportRequest: () => {},
-        onExportRequest: () => {},
         onConnected: () => {},
         onAuthError: () => {},
       })

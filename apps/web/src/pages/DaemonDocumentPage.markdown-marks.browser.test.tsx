@@ -92,14 +92,7 @@ class FakeBackend implements DocumentBackend {
   pushLocalUpdate(): void {
     this.pushes++
   }
-  getFile(): Promise<Blob | null> {
-    return Promise.resolve(null)
-  }
-  putFile(): Promise<void> {
-    return Promise.resolve()
-  }
   sendClientReady(): void {}
-  sendExportResponse(): void {}
 }
 
 afterEach(() => {

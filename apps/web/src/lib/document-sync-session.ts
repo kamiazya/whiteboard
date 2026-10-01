@@ -57,10 +57,6 @@ import { applyAdoptedPassages } from './apply-adopted-passages.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { contentStateOf } from './document-state.js'
 import {
-  type ExportRequestHandlerDeps,
-  handleIncomingExportRequest,
-} from './document-sync-export.js'
-import {
   DOCUMENT_SYNC_CHANGED_EVENT,
   DOCUMENT_SYNC_VERSION_SAVED_EVENT,
   type SyncStatus,
@@ -695,7 +691,6 @@ export function createDocumentSyncSession(
   >()
   const proposalListeners = new Set<(proposals: readonly Proposal[]) => void>()
   const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
-  const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
   // Chains every onChange firing's commit so firings apply to the Loro doc
   // strictly in schedule order, never in async-settle order.
   let commitChain: Promise<void> = Promise.resolve()
@@ -1254,11 +1249,6 @@ export function createDocumentSyncSession(
         } catch (err) {
           log.error('onAgentActivity callback threw', err)
         }
-      },
-
-      onExportRequest(payload) {
-        if (isStale()) return
-        handleIncomingExportRequest(payload, { pending: pendingExportRequests })
       },
 
       onAuthError() {

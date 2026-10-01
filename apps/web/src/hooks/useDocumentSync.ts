@@ -190,7 +190,7 @@ function isEditingText(target: EventTarget | null): boolean {
  *
  * `options` wires the daemon-only capability receptors (onVersionCreated,
  * onHeadChanged) plus the restore-overlay state and
- * onViewportRequest/onExportRequest/onAuthError handling that a daemon
+ * onViewportRequest/onAuthError handling that a daemon
  * backend can drive. A browser backend never fires any of these
  * events, so passing no `options` behaves exactly as before this seam was
  * added.

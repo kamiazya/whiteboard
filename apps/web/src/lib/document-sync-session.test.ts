@@ -132,12 +132,7 @@ function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
       }
       return Promise.resolve()
     },
-    getFile: async () => null,
-    putFile: async (entries, onSuccess) => {
-      for (const [fileId] of entries) onSuccess(fileId)
-    },
     sendClientReady: () => {},
-    sendExportResponse: () => {},
   }
 }
 

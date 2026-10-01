@@ -419,10 +419,9 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
     resolveViewportRequest(message.requestId)
     return c.json({ ok: true })
   }
-  // `export_response` is inert on the WebSocket path too — the daemon stopped
-  // sending export_request once export became headless — and `ws_trace`
-  // carries a trace context that only the WebSocket's binary-frame pairing
-  // can consume. Accepted and ignored, so a client need not special-case them.
+  // `ws_trace` carries a trace context that only the WebSocket's binary-frame
+  // pairing can consume. Accepted and ignored, so a client need not
+  // special-case it.
   return c.json({ ok: true })
 }
 

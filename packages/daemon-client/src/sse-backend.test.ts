@@ -66,7 +66,6 @@ function createHandlers() {
       onRestoreComplete: () => {},
       onHeadChanged: () => {},
       onViewportRequest: () => {},
-      onExportRequest: () => {},
     } satisfies DocumentBackendHandlers,
     snapshots,
     updates,
@@ -188,7 +187,6 @@ describe('SseBackend', () => {
       onRestoreComplete: () => {},
       onHeadChanged: (h: unknown) => heads.push(h),
       onViewportRequest: () => {},
-      onExportRequest: () => {},
     } as never
     const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', fake.transport)
 
@@ -257,7 +255,6 @@ describe('SseBackend', () => {
       onRestoreComplete: () => {},
       onHeadChanged: () => {},
       onViewportRequest: () => {},
-      onExportRequest: () => {},
     } satisfies DocumentBackendHandlers
     const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', fake.transport)
 
@@ -298,15 +295,9 @@ describe('SseBackend', () => {
     backend.connect(handlers)
     await flush()
     backend.sendClientReady()
-    backend.sendExportResponse('req-1', 'data:image/png;base64,AAA')
 
-    await vi.waitFor(() => expect(sent.length).toBe(2))
+    await vi.waitFor(() => expect(sent.length).toBe(1))
     expect(sent[0]).toEqual({ doc: 'ws-1/canvas-a', message: { type: 'client_ready' } })
-    expect(sent[1]?.message).toEqual({
-      type: 'export_response',
-      requestId: 'req-1',
-      data: 'data:image/png;base64,AAA',
-    })
     expect(fake.calls.some((c) => c.url.includes('/api/sync/message'))).toBe(false)
     backend.disconnect()
   })

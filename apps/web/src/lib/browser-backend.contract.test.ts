@@ -19,7 +19,6 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, vi } from 'vitest'
 import { BrowserBackend } from './browser-backend.js'
-import type { DocumentFileStore } from './document-file-store.js'
 import type { LoroStore } from './loro-store.js'
 
 // jsdom has no IndexedDB, so the startup fold cannot run here: it throws, the
@@ -79,24 +78,15 @@ function createStores() {
     load: async (_documentId: string) => ({ kind: 'not-found' }) as const,
   } as unknown as LoroStore
 
-  const files = new Map<string, { mimeType: string; blob: Blob }>()
-  const fileStore = {
-    get: async (fileId: string) => files.get(fileId)?.blob ?? null,
-    put: async (fileId: string, record: { mimeType: string; blob: Blob }) => {
-      files.set(fileId, record)
-    },
-  } as unknown as DocumentFileStore
-
-  return { docs, legacy, fileStore }
+  return { docs, legacy }
 }
 
 describe('DocumentBackend contract: BrowserBackend', () => {
   documentBackendContract((): DocumentBackendHarness => {
-    const { docs, legacy, fileStore } = createStores()
+    const { docs, legacy } = createStores()
     const backend = new BrowserBackend(
       { documentId: DOC_ID, path: 'design', kind: 'spatial' },
       docs,
-      fileStore,
       legacy,
     )
     return { backend, cleanup: () => backend.disconnect() }
