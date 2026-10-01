@@ -376,7 +376,11 @@ JSON line on stdout and the explanation on stderr. Every line carries
 | `unknown-provider` | `add-user` found no such provider | `providers`: the ids declared |
 
 The exit code is `0` for `ok`, `1` for any other `kind`, and `64` for a usage
-error, which prints no JSON. `whiteboard native-host install --json` prints the
+error, which prints no JSON. One more refusal prints no JSON either: `add-user`
+exits `1` with only a stderr line when `WHITEBOARD_SIGN_IN_CONFIG` is unset,
+since there is then no provider to look up. A script reading these outputs
+should parse stdout only when it is non-empty rather than assuming every
+non-zero exit carries a line. `whiteboard native-host install --json` prints the
 same `schemaVersion` with `ok`, `launcher`, `manifests` and, when `ok` is
 false, a `reason`.
 

@@ -164,6 +164,9 @@ describe('createBridgeFetch', () => {
     const body = (await pending).text()
     ext.port.reply({ type: 'chunk', id, data: 'not base64!' })
     await expect(body).rejects.toThrow(TypeError)
+    // The host is still streaming; dropping the request here alone would
+    // leave it feeding chunks nobody reads.
+    expect(ext.port.sent.at(-1)).toEqual({ type: 'abort', id })
   })
 
   // Lost host, missing host, crashed host: all arrive as the port closing.

@@ -195,8 +195,9 @@ function settle(
         request.body?.enqueue(chunk)
         return
       }
-      // A body with a hole in it must not read as a complete one.
-      pending.delete(message.id)
+      // A body with a hole in it must not read as a complete one, and the
+      // host is told so, or it keeps streaming into a request nothing reads.
+      request.cancel?.()
       request.body?.error(new TypeError('the extension bridge sent a chunk that is not base64'))
       return
     }
