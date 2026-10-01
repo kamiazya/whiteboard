@@ -3,10 +3,15 @@ import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
-import { exemptedBoundaryViolationKinds, KNOWN_IMPORT_CYCLES } from './architecture-map.js'
+import {
+  exemptedBoundaryViolationKinds,
+  KNOWN_IMPORT_CYCLES,
+  KNOWN_TYPE_CYCLES,
+} from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection } from './direction-check.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
+import { findTypeOnlyCycles } from './type-cycle-check.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
@@ -199,6 +204,40 @@ describe('circular value-import check (real source coverage)', () => {
   it('every KNOWN_IMPORT_CYCLES entry is still an actually-detected cycle', () => {
     const stale = [...knownKeys].filter((key) => !foundKeys.has(key))
     expect(stale, JSON.stringify(stale)).toHaveLength(0)
+  })
+})
+
+describe('type-inclusive import-cycle check (real source coverage)', () => {
+  const files = CYCLE_SCAN_DIRS.flatMap((dir) =>
+    listTsFiles(dir, ['.ts', '.tsx']).map((path) => ({
+      path: relative(REPO_ROOT, path),
+      text: readFileSync(path, 'utf-8'),
+    })),
+  )
+  const cycles = findTypeOnlyCycles(files, CYCLE_SCAN_ALIASES)
+  const knownKeys = new Set(KNOWN_TYPE_CYCLES.map(({ members }) => [...members].sort().join('|')))
+  const foundKeys = new Set(cycles.map((group) => group.join('|')))
+
+  it('reports no type-only import cycle outside KNOWN_TYPE_CYCLES', () => {
+    const unlisted = cycles.filter((group) => !knownKeys.has(group.join('|')))
+    expect(unlisted, JSON.stringify(unlisted, null, 2)).toHaveLength(0)
+  })
+
+  it('every KNOWN_TYPE_CYCLES entry is still an actually-detected component', () => {
+    const stale = [...knownKeys].filter((key) => !foundKeys.has(key))
+    expect(stale, JSON.stringify(stale)).toHaveLength(0)
+  })
+
+  it('gives every KNOWN_TYPE_CYCLES entry a reason and no duplicate member set', () => {
+    for (const { members, reason } of KNOWN_TYPE_CYCLES) {
+      expect(reason.trim().length, members.join(', ')).toBeGreaterThan(20)
+    }
+    expect(knownKeys.size).toBe(KNOWN_TYPE_CYCLES.length)
+  })
+
+  // A scan that resolves nothing reports no cycle and reads as a clean tree.
+  it('scans a graph that actually has type edges to find', () => {
+    expect(files.length).toBeGreaterThan(500)
   })
 })
 

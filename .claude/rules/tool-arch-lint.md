@@ -62,6 +62,22 @@ rather than dead code over an empty map.
 `KNOWN_IMPORT_CYCLES` is the allowlist for cycles found and not yet fixed. It
 is **currently empty**.
 
+`type-cycle-check.ts` is the same graph with `import type` edges kept, because a
+type-only edge never fails at load and so the value scan above is blind to a
+loop closed by one. It is not harmless: measured 2026-10-01 over the same file
+set, it found **12** strongly connected components the value scan called clean
+(canvas-render's 15-file knot among them, which contradicted that package's
+decision 14 — the seams' producer imported the layout back for two types).
+`KNOWN_TYPE_CYCLES` is its ledger, pinned from both sides like the others: a
+component not listed fails naming its members, and a listed one that stopped
+being a component fails as stale. Each entry carries a REASON, since unlike a
+value cycle there is nothing it crashes on to argue for fixing it. A component
+the value scan already reports with the same members is left to
+`KNOWN_IMPORT_CYCLES`, so one debt is never a two-place edit. It follows the
+same `CYCLE_SCAN_ALIASES` as the value scan, because it shares the scan's file
+set. The usual fix is a leaf module that owns the type both sides name, not an
+exemption.
+
 `package-cycle-check.ts` is the cross-PACKAGE half: a graph over every
 workspace manifest (enumerated from pnpm-workspace's globs, so a new package
 joins unlisted) reading `dependencies` AND `devDependencies` — the latter is
