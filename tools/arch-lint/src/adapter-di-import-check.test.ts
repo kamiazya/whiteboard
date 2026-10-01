@@ -18,11 +18,12 @@
  * above it to hand deps down — so it is listed by name rather than by
  * pattern.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT, walk } from './scan-roots.js'
 
-const SERVER_ROOT = resolve(__dirname, '../../../packages/mcp-server/src/server')
+const SERVER_ROOT = join(REPO_ROOT, 'packages/mcp-server/src/server')
 const ADAPTER_DIRS = ['routes', 'mcp'] as const
 /** Composition roots that live beside the adapters; each carries its reason. */
 const COMPOSITION_ROOTS_AMONG_ADAPTERS: ReadonlySet<string> = new Set([
@@ -32,19 +33,15 @@ const COMPOSITION_ROOTS_AMONG_ADAPTERS: ReadonlySet<string> = new Set([
 // Static and dynamic alike: the SSE router's fallback hid behind `await import`.
 const DI_IMPORT = /(?:from\s+|import\()\s*'(?:\.\.\/)+di\//
 
-function walk(dir: string, found: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) walk(full, found)
-    // `_test-helpers.ts` is a test utility that happens to live beside the
-    // routes; it builds deps for tests the way a root would.
-    else if (full.endsWith('.ts') && !/(\.test|_test-helpers)\.ts$/.test(full)) found.push(full)
-  }
-  return found
-}
+// `_test-helpers.ts` is a test utility that happens to live beside the
+// routes; it builds deps for tests the way a root would.
+const isAdapterFile = (full: string): boolean =>
+  full.endsWith('.ts') && !/(\.test|_test-helpers)\.ts$/.test(full)
 
 describe('an adapter never imports the di graph', () => {
-  const files = ADAPTER_DIRS.flatMap((dir) => walk(join(SERVER_ROOT, dir)))
+  const files = ADAPTER_DIRS.flatMap((dir) =>
+    walk(join(SERVER_ROOT, dir), { include: isAdapterFile }),
+  )
 
   it('scans the adapter population', () => {
     // A walk that found nothing would pass the rule vacuously.

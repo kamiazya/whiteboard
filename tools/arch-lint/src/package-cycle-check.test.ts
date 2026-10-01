@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { KNOWN_PACKAGE_CYCLES } from './architecture-map.js'
 import { findPackageCycles } from './package-cycle-check.js'
+import { REPO_ROOT } from './scan-roots.js'
 
 function manifest(
   name: string,
@@ -54,7 +55,6 @@ describe('the real workspace', () => {
   // Enumerated from the same globs pnpm-workspace.yaml declares
   // (packages/*, apps/*, tools/*), so a new package joins this scan the
   // moment it exists — no list to keep in step.
-  const REPO_ROOT = join(__dirname, '../../..')
   const manifests = ['packages', 'apps', 'tools'].flatMap((group) =>
     readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

@@ -44,8 +44,8 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const DAEMON_CLIENT_SRC = join(REPO_ROOT, 'packages', 'daemon-client', 'src')
 
 const ROOT_IMPORT = /from\s+'@kamiazya\/whiteboard-server-core'/

@@ -20,20 +20,12 @@
  * fourteenth one to keep in step — and the first to drift, since nothing
  * would be checking it.
  */
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT, WORKTREES_PATH, walk } from './scan-roots.js'
 
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const BRAND_DOC = 'apps/web/BRAND.md'
 const SELF = 'tools/arch-lint/src/brand-signature.test.ts'
 
@@ -108,24 +100,15 @@ const SURFACES: Readonly<Record<string, string>> = {
     'composes: nothing — it QUOTES the path in a comment to say where the favicon geometry came from, and draws no SVG of its own.',
 }
 
-/**
- * `.claude/worktrees/` holds whole checkouts of other branches, gitignored and
- * per-machine. Walking into one reports that branch's copy of every surface
- * as unclassified, so a developer's parallel work blocks a push of code that
- * is itself fine. Matched by path from the walk's root, because `worktrees`
- * alone is a name other directories may legitimately carry.
- */
-const SKIP_PATHS: ReadonlySet<string> = new Set(['.claude/worktrees'])
+/** The worktree checkouts, matched by path from the walk's root (see `WORKTREES_PATH`). */
+const SKIP_PATHS: ReadonlySet<string> = new Set([WORKTREES_PATH])
 
-function walk(root: string, dir: string = root, found: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (SKIP_DIRS.has(entry)) continue
-    const full = join(dir, entry)
-    if (SKIP_PATHS.has(relative(root, full).split(sep).join('/'))) continue
-    if (statSync(full).isDirectory()) walk(root, full, found)
-    else found.push(full)
-  }
-  return found
+/** Every file under `root` a mark could be hand-authored in. */
+function walkRepo(root: string): string[] {
+  return walk(root, {
+    skip: (full, name) =>
+      SKIP_DIRS.has(name) || SKIP_PATHS.has(relative(root, full).split(sep).join('/')),
+  })
 }
 
 interface Copy {
@@ -157,7 +140,7 @@ function canonicalPath(): string {
 function findCopies(): { readonly copies: readonly Copy[]; readonly files: number } {
   const copies: Copy[] = []
   let files = 0
-  for (const full of walk(REPO_ROOT)) {
+  for (const full of walkRepo(REPO_ROOT)) {
     files += 1
     let source: string
     try {
@@ -193,7 +176,7 @@ describe('the brand signature walk', () => {
       writeFileSync(join(root, 'apps', 'web', 'mark.svg'), '')
       writeFileSync(join(root, '.claude', 'rules', 'note.md'), '')
       writeFileSync(join(root, '.claude', 'worktrees', 'feature', 'apps', 'web', 'mark.svg'), '')
-      const found = walk(root).map((path) => relative(root, path).split(sep).join('/'))
+      const found = walkRepo(root).map((path) => relative(root, path).split(sep).join('/'))
       // The sibling under `.claude/rules` proves the skip is the worktrees
       // path and not all of `.claude`.
       expect(found.sort()).toEqual(['.claude/rules/note.md', 'apps/web/mark.svg'])

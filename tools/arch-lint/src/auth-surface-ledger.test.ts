@@ -23,9 +23,9 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const SCAN_DIR = 'packages/mcp-server/src'
 
 /** A surface asks the resolver what a credential carries… */

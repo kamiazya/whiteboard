@@ -1,8 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { staleHeadroom } from './size-ledger-headroom.js'
+import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
+import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
 
 // docs/contributing/review-checklist.md says "Files stay under 800 lines",
 // and until this guard existed nothing enforced it — 17 files already over
@@ -31,8 +31,6 @@ import { staleHeadroom } from './size-ledger-headroom.js'
 // scan of `apps/web/src` was filed under the daemon. It is an arch-lint scan
 // by every criterion that package states — it reads other packages' source,
 // runs no product code, opens no port and asserts on no clock.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
-
 const LINE_BUDGET = 800
 
 /** `wc -l` semantics: the number of '\n' characters, not `split('\n').length`. */
@@ -41,46 +39,15 @@ function lineCount(absolutePath: string): number {
   return (text.match(/\n/g) ?? []).length
 }
 
-/** The `src` directory of every package/tool matching a `<group>/*` glob that has one. */
-function groupSrcDirs(group: string): string[] {
-  return readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(group, entry.name, 'src'))
-    .filter((relDir) => existsSync(join(REPO_ROOT, relDir)))
-}
-
-const SCAN_ROOTS = ['apps/web/src', ...groupSrcDirs('packages'), ...groupSrcDirs('tools')]
-
-/**
- * Directories excluded WHOLE, with the reason a line count there would be
- * noise rather than debt.
- *
- * `migrations/` is history — a migration's own text does not change once
- * written (see .claude/rules/vocabulary.md). `vendor/budoux/` is a vendored
- * third-party file (`ja-model.ts`, a generated data table copied from the
- * `budoux` package — see its own README for why it is vendored rather than
- * depended on); its size is not this repo's code to shrink.
- */
-const EXCLUDED_DIR_SEGMENTS = ['/migrations/', '/vendor/budoux/']
-
-function walk(absoluteDir: string): string[] {
-  return readdirSync(absoluteDir, { withFileTypes: true }).flatMap((entry) => {
-    const absolutePath = join(absoluteDir, entry.name)
-    if (entry.isDirectory()) return walk(absolutePath)
-    return [absolutePath]
-  })
-}
-
 function isScannedSourceFile(absolutePath: string): boolean {
   if (!/\.tsx?$/.test(absolutePath)) return false
   if (absolutePath.endsWith('.d.ts')) return false
   // Test files are held by TEST_FILE_SIZE_GRANDFATHER below, at the SAME
   // budget, so they are moved to a sibling ledger rather than exempted. This
-  // line was a silent exclusion for a long time, unlike the two directory
-  // exclusions above that each say why.
+  // line was a silent exclusion for a long time, unlike the directory
+  // exclusions in `scan-roots.ts`, which each say why.
   if (isTestFile(absolutePath)) return false
-  const normalized = absolutePath.replaceAll('\\', '/')
-  return !EXCLUDED_DIR_SEGMENTS.some((segment) => normalized.includes(segment))
+  return !isExcludedPath(absolutePath)
 }
 
 function isTestFile(absolutePath: string): boolean {
@@ -88,9 +55,7 @@ function isTestFile(absolutePath: string): boolean {
 }
 
 function isScannedTestFile(absolutePath: string): boolean {
-  if (!isTestFile(absolutePath)) return false
-  const normalized = absolutePath.replaceAll('\\', '/')
-  return !EXCLUDED_DIR_SEGMENTS.some((segment) => normalized.includes(segment))
+  return isTestFile(absolutePath) && !isExcludedPath(absolutePath)
 }
 
 /**
@@ -121,31 +86,20 @@ function readingOf(path: string): number | undefined {
 }
 
 function scanTestFiles(): string[] {
-  return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
-    .filter(isScannedTestFile)
+  return SCAN_ROOTS.flatMap((relRoot) =>
+    walk(join(REPO_ROOT, relRoot), { include: isScannedTestFile }),
+  )
     .map((absolutePath) => relativeToRepo(absolutePath))
     .filter((path) => !LEDGER_PATHS.includes(path))
     .sort()
 }
 
 function scanFiles(): string[] {
-  return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
-    .filter(isScannedSourceFile)
+  return SCAN_ROOTS.flatMap((relRoot) =>
+    walk(join(REPO_ROOT, relRoot), { include: isScannedSourceFile }),
+  )
     .map((absolutePath) => relativeToRepo(absolutePath))
     .sort()
-}
-
-/**
- * The repo-relative path in the form BOTH ledgers are keyed with.
- *
- * Normalised because the ledgers hold forward slashes and `join` produces
- * backslashes on Windows, where an unnormalised key matches nothing — so
- * every listed file would be reported as unlisted, which reads as the guard
- * finding real debt. The two filters above already normalise for the same
- * reason; this helper did not, and served both ledgers.
- */
-function relativeToRepo(absolutePath: string): string {
-  return absolutePath.slice(REPO_ROOT.length + 1).replaceAll('\\', '/')
 }
 
 /**
@@ -278,52 +232,26 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
     expect(files.length).toBeGreaterThan(500)
   })
 
-  it('flags no over-budget file outside FILE_SIZE_GRANDFATHER', () => {
-    const unlisted = files
-      .map((path) => ({ path, lines: lineCount(join(REPO_ROOT, path)) }))
-      .filter(({ path, lines }) => lines > LINE_BUDGET && !(path in FILE_SIZE_GRANDFATHER))
-      .map(({ path, lines }) => `${path}: ${lines} lines`)
-
-    expect(unlisted).toEqual([])
-  })
-
-  it('holds every grandfathered file at or under its recorded ceiling', () => {
-    const grown = Object.entries(FILE_SIZE_GRANDFATHER)
-      .filter(([path]) => existsSync(join(REPO_ROOT, path)))
-      .map(([path, ceiling]) => ({ path, ceiling, lines: lineCount(join(REPO_ROOT, path)) }))
-      .filter(({ lines, ceiling }) => lines > ceiling)
-      .map(
-        ({ path, lines, ceiling }) =>
-          `${path}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
-      )
-
-    expect(grown).toEqual([])
-  })
-
-  it('holds no grandfather entry that has shrunk to budget — delete it instead', () => {
-    const shrunk = Object.keys(FILE_SIZE_GRANDFATHER)
-      .filter((path) => existsSync(join(REPO_ROOT, path)))
-      .map((path) => ({ path, lines: lineCount(join(REPO_ROOT, path)) }))
-      .filter(({ lines }) => lines <= LINE_BUDGET)
-      .map(
-        ({ path, lines }) => `${path}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
-      )
-
-    expect(shrunk).toEqual([])
-  })
-
-  it('holds no grandfather entry for a file that moved or was deleted', () => {
-    const missing = Object.keys(FILE_SIZE_GRANDFATHER).filter(
-      (path) => !existsSync(join(REPO_ROOT, path)),
-    )
-    expect(missing).toEqual([])
-  })
-
-  // The ratchet above is only as tight as the ceiling, and a ceiling that
-  // stopped being lowered as its file shrank is a guard that reads as
-  // holding it: see `size-ledger-headroom.ts`.
-  it('holds no grandfather entry whose ceiling stands far above its reading — lower it', () => {
-    expect(staleHeadroom(FILE_SIZE_GRANDFATHER, readingOf)).toEqual([])
+  registerSizeLedgerAssertions({
+    budget: LINE_BUDGET,
+    entries: files.map((key) => ({ key, lines: lineCount(join(REPO_ROOT, key)) })),
+    ledgers: [FILE_SIZE_GRANDFATHER],
+    ledgerOf: () => FILE_SIZE_GRANDFATHER,
+    readingOf,
+    wording: {
+      titles: {
+        unlisted: 'flags no over-budget file outside FILE_SIZE_GRANDFATHER',
+        grown: 'holds every grandfathered file at or under its recorded ceiling',
+        shrunk: 'holds no grandfather entry that has shrunk to budget — delete it instead',
+        missing: 'holds no grandfather entry for a file that moved or was deleted',
+        headroom:
+          'holds no grandfather entry whose ceiling stands far above its reading — lower it',
+      },
+      unlisted: ({ key, lines }) => `${key}: ${lines} lines`,
+      grown: (key, lines, ceiling) =>
+        `${key}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      shrunk: (key, lines) => `${key}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
+    },
   })
 })
 
@@ -491,49 +419,25 @@ describe('file-size budget: test files, same 800-line budget, same shrink-only c
     expect(testFiles.length).toBeGreaterThan(900)
   })
 
-  it('flags no over-budget test file outside TEST_FILE_SIZE_GRANDFATHER', () => {
-    const unlisted = testFiles
-      .map((path) => ({ path, lines: lineCount(join(REPO_ROOT, path)) }))
-      .filter(({ path, lines }) => lines > LINE_BUDGET && !(path in TEST_FILE_SIZE_GRANDFATHER))
-      .map(({ path, lines }) => `${path}: ${lines} lines`)
-
-    expect(unlisted).toEqual([])
-  })
-
-  it('holds every grandfathered test file at or under its recorded ceiling', () => {
-    const grown = Object.entries(TEST_FILE_SIZE_GRANDFATHER)
-      .filter(([path]) => existsSync(join(REPO_ROOT, path)))
-      .map(([path, ceiling]) => ({ path, ceiling, lines: lineCount(join(REPO_ROOT, path)) }))
-      .filter(({ lines, ceiling }) => lines > ceiling)
-      .map(
-        ({ path, lines, ceiling }) =>
-          `${path}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
-      )
-
-    expect(grown).toEqual([])
-  })
-
-  it('holds no test-file entry that has shrunk to budget — delete it instead', () => {
-    const shrunk = Object.keys(TEST_FILE_SIZE_GRANDFATHER)
-      .filter((path) => existsSync(join(REPO_ROOT, path)))
-      .map((path) => ({ path, lines: lineCount(join(REPO_ROOT, path)) }))
-      .filter(({ lines }) => lines <= LINE_BUDGET)
-      .map(
-        ({ path, lines }) => `${path}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
-      )
-
-    expect(shrunk).toEqual([])
-  })
-
-  it('holds no test-file entry for a file that moved or was deleted', () => {
-    const missing = Object.keys(TEST_FILE_SIZE_GRANDFATHER).filter(
-      (path) => !existsSync(join(REPO_ROOT, path)),
-    )
-    expect(missing).toEqual([])
-  })
-
-  it('holds no test-file entry whose ceiling stands far above its reading — lower it', () => {
-    expect(staleHeadroom(TEST_FILE_SIZE_GRANDFATHER, readingOf)).toEqual([])
+  registerSizeLedgerAssertions({
+    budget: LINE_BUDGET,
+    entries: testFiles.map((key) => ({ key, lines: lineCount(join(REPO_ROOT, key)) })),
+    ledgers: [TEST_FILE_SIZE_GRANDFATHER],
+    ledgerOf: () => TEST_FILE_SIZE_GRANDFATHER,
+    readingOf,
+    wording: {
+      titles: {
+        unlisted: 'flags no over-budget test file outside TEST_FILE_SIZE_GRANDFATHER',
+        grown: 'holds every grandfathered test file at or under its recorded ceiling',
+        shrunk: 'holds no test-file entry that has shrunk to budget — delete it instead',
+        missing: 'holds no test-file entry for a file that moved or was deleted',
+        headroom: 'holds no test-file entry whose ceiling stands far above its reading — lower it',
+      },
+      unlisted: ({ key, lines }) => `${key}: ${lines} lines`,
+      grown: (key, lines, ceiling) =>
+        `${key}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      shrunk: (key, lines) => `${key}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
+    },
   })
 
   // The two ledgers must not both claim a file: the source scan excludes test

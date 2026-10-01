@@ -28,9 +28,8 @@ import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { findReadFailuresAsAbsence } from './read-failure-as-absence.js'
+import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 const VOCABULARY = /^(probe|fails-safe|degrades-visibly|deliberate|debt): (\S+\s+){7,}\S+/
 

@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 
 // The property-test prelude (`fc`, `fcTest`, `withDefaults`) was written
 // THIRTEEN times, once per package, and the count had grown by four in the
@@ -20,8 +20,6 @@ import { describe, expect, it } from 'vitest'
 //
 // So the rule is: a package's `test-utils/fast-check.ts` re-exports the one in
 // `model`, or it is named below with a reason.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
-
 /** Where the prelude actually lives. */
 const CANONICAL = 'packages/model/src/test-utils/fast-check.ts'
 

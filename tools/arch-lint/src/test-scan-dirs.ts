@@ -1,7 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
+import { REPO_ROOT } from './scan-roots.js'
 
 /** Where this monorepo keeps its workspace packages, per `pnpm-workspace.yaml`. */
 const WORKSPACE_ROOTS = ['apps', 'packages', 'tools'] as const

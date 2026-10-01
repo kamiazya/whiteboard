@@ -17,9 +17,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 import { TEST_SCAN_DIRS } from './test-scan-dirs.js'
-
-const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
 /**
  * Test files that are deliberately NOT scanned, each with the reason.

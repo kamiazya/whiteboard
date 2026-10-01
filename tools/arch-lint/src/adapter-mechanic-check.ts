@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { walk } from './scan-roots.js'
 
 /**
  * ADR-0018's invariant, made mechanical: an ADAPTER may not reach a
@@ -18,13 +19,8 @@ import { join, relative } from 'node:path'
  */
 const ADAPTER_DIRS = ['routes', 'mcp'] as const
 
-function walk(dir: string, acc: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) walk(full, acc)
-    else if (entry.endsWith('.ts') && !entry.endsWith('.test.ts')) acc.push(full)
-  }
-  return acc
+function isAdapterSource(file: string): boolean {
+  return file.endsWith('.ts') && !file.endsWith('.test.ts')
 }
 
 /**
@@ -60,7 +56,7 @@ export function findAdapterMechanicEdges(
   const edges = new Set<string>()
   for (const base of ADAPTER_DIRS) {
     const dir = join(serverDir, base)
-    for (const file of walk(dir)) {
+    for (const file of walk(dir, { include: isAdapterSource })) {
       const from = relative(serverDir, file).split('\\').join('/')
       if (exempt.has(from)) continue
       for (const match of readFileSync(file, 'utf8').matchAll(
