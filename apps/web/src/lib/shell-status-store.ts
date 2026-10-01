@@ -1,4 +1,5 @@
 import type { ConnectionState } from './connection-state.js'
+import { createSubscribers } from './subscribers.js'
 /**
  * What the page holding a live document session knows about its connection.
  *
@@ -25,12 +26,9 @@ export interface ShellConnection {
  * "Reconnecting" is a true thing to say there.
  */
 let connection: ShellConnection | null = null
-const listeners = new Set<() => void>()
+const changed = createSubscribers()
 
-export function subscribeShellStatus(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
+export const subscribeShellStatus = changed.subscribe
 
 export function getShellConnection(): ShellConnection | null {
   return connection
@@ -54,10 +52,10 @@ function sameConnection(a: ShellConnection | null, b: ShellConnection | null): b
 export function setShellConnection(next: ShellConnection | null): void {
   if (sameConnection(next, connection)) return
   connection = next
-  for (const listener of listeners) listener()
+  changed.emit()
 }
 
 export function resetShellStatusForTests(): void {
   connection = null
-  listeners.clear()
+  changed.clear()
 }
