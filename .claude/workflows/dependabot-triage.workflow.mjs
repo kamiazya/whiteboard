@@ -131,7 +131,7 @@ const PLAN_SCHEMA = {
       },
     },
     needsMigration: {
-      type: 'array', description: 'major/breaking bumps to file as backlog (tmp/issues or Task) — NOT a GitHub issue',
+      type: 'array', description: 'major/breaking bumps to file as backlog (whiteboard document or Task) — NOT a GitHub issue',
       items: {
         type: 'object', additionalProperties: false,
         properties: {
@@ -222,12 +222,12 @@ const findings = results.filter(Boolean)
 // --- Phase 4: synthesize the merge plan + alert coverage (barrier — needs all findings) ---
 phase('Synthesize')
 const plan = await agent(
-  `Synthesize a Dependabot merge plan for ${REPO} from these per-PR findings. The repo uses NO GitHub Issues — backlog goes to native Tasks / tmp/issues, NOT \`gh issue create\`. A single integrator executes merges.\n\n` +
+  `Synthesize a Dependabot merge plan for ${REPO} from these per-PR findings. The repo uses NO GitHub Issues — backlog goes to native Tasks / whiteboard documents, NOT \`gh issue create\`. A single integrator executes merges.\n\n` +
     `Per-PR findings (with any adversarial verdict): ${JSON.stringify(findings)}\n\n` +
     `Open alerts: ${gathered?.alertsAvailable ? JSON.stringify(gathered.alerts || []) : '(alerts API unavailable — note this)'}\n\n` +
     `Produce:\n` +
     `1. mergeOrder: the PRs to act on, ordered Security > patch > minor > major; resolve supersedes FIRST (action close-superseded for the stale one). Honor the adversarial verdict — if refuted=true, downgrade merge -> needs-migration. Mark merge-with-care for load-bearing bumps. Remember the conflict-cascade rule: only ONE lock-touching PR merges cleanly at a time, the rest need rebase-first — reflect that in notes/order.\n` +
-    `2. needsMigration: majors/breaking bumps to file as backlog (suggestedTrack task|issue) — these are tmp/issues or Tasks, never GitHub issues.\n` +
+    `2. needsMigration: majors/breaking bumps to file as backlog (suggestedTrack task|issue) — these are whiteboard documents or Tasks, never GitHub issues.\n` +
     `3. alertCoverage: map each open alert to fixed-by-pr (a listed PR bumps past firstPatched) | needs-manual-bump (no PR; direct dep — integrator bumps it) | transitive-no-fix | dev-only-nonci (development scope — does NOT gate \`pnpm audit --prod\` so not CI-blocking, lower priority). Prioritize critical/high runtime-scope alerts.\n` +
     `Be concrete and decision-ready; do not invent PRs or alerts.`,
   { label: 'synthesize', phase: 'Synthesize', agentType: 'architect', schema: PLAN_SCHEMA },

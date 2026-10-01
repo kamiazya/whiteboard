@@ -530,5 +530,5 @@ return {
   decisions,
   openFollowups,
   needsHumanGate: true,
-  note: 'Inner loop complete. Integrator: review the report, then commit-as-is / open PR / merge. Backlog openFollowups to tmp/issues.',
+  note: 'Inner loop complete. Integrator: review the report, then commit-as-is / open PR / merge. Backlog openFollowups as whiteboard documents (ticketing skill).',
 }
