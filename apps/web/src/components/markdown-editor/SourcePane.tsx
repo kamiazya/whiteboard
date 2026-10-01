@@ -1,6 +1,4 @@
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import {
   EditorState,
   type Extension,
@@ -11,18 +9,15 @@ import {
 } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
-import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
-import {
-  type ActiveMarkdownEditor,
-  clearActiveMarkdownEditor,
-  setActiveMarkdownEditor,
-} from './active-markdown-editor.js'
-import { markdownStyleKeymap } from './editor-verbs.js'
-import { emojiShortcodeMarks } from './emoji-shortcode-marks.js'
+import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
-import { headingLevelAt } from './line-prefix.js'
+import {
+  activeMarkdownEditorFor,
+  followCaret,
+  markdownEditingBase,
+} from './markdown-editing-base.js'
 import { rangeToActOn } from './word-at.js'
 
 /**
@@ -52,38 +47,6 @@ const pinnedRange = StateField.define<{ from: number; to: number } | null>({
     return { from: tr.changes.mapPos(value.from, 1), to: tr.changes.mapPos(value.to, -1) }
   },
 })
-
-/**
- * Markdown token styling, as class names rather than inline colors: the
- * app's palette lives in CSS custom properties that already flip with the
- * theme (`:root` / `.dark` in index.css), so the rules for these classes go
- * there too and dark mode needs no second definition here.
- *
- * The palette is deliberately achromatic (every token is `oklch(L 0 0)`),
- * so structure is carried by WEIGHT, SLANT and CONTRAST instead of hue —
- * a syntax rainbow would be the one colorful surface in the whole app.
- * Markers (`#`, `-`, `**`) recede rather than highlight: they are scaffolding
- * for the prose, and reading them as loudly as the prose inverts the point.
- *
- * `HeaderMark` and friends carry BOTH their own `processingInstruction` tag
- * and the enclosing heading's, and a `HighlightStyle` applies every matching
- * rule — so `.cm-md-marker` has to win on the shared properties by order in
- * the stylesheet, not by being the only match.
- */
-export const markdownHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, class: 'cm-md-heading' },
-  { tag: tags.strong, class: 'cm-md-strong' },
-  { tag: tags.emphasis, class: 'cm-md-emphasis' },
-  { tag: tags.strikethrough, class: 'cm-md-strikethrough' },
-  { tag: tags.link, class: 'cm-md-link' },
-  { tag: tags.url, class: 'cm-md-url' },
-  { tag: tags.monospace, class: 'cm-md-code' },
-  { tag: tags.quote, class: 'cm-md-quote' },
-  { tag: tags.list, class: 'cm-md-list' },
-  { tag: tags.contentSeparator, class: 'cm-md-separator' },
-  { tag: tags.labelName, class: 'cm-md-label' },
-  { tag: tags.processingInstruction, class: 'cm-md-marker' },
-])
 
 /**
  * Imperative surface the toolbar drives. Kept to commands that need the
@@ -263,22 +226,7 @@ export function SourcePane({
         // another line. Everywhere else this reports unhandled and
         // continuation runs as usual.
         Prec.highest(keymap.of([{ key: 'Enter', run: exitEmptyListItem }])),
-        syntaxHighlighting(markdownHighlightStyle),
-        // `:rocket:` drawn as 🚀 once the caret leaves it. Unconditional,
-        // because every surface this pane serves — the document editor, a
-        // comment composer, a comment card — is drawn by the same
-        // `mdast-blocks` walk that expands the shortcode. A pane that showed
-        // the source where the render shows the character would be previewing
-        // something that does not happen.
-        emojiShortcodeMarks(),
-        history(),
-        // styleKeymap precedes defaultKeymap so Mod-b/Mod-i win over any
-        // default binding; it also owns Tab (indent / outdent) and keeps it
-        // in the editor.
-        keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
-        // Prose, not code: long paragraphs soft-wrap instead of growing a
-        // horizontal scrollbar.
-        EditorView.lineWrapping,
+        ...markdownEditingBase(),
         ...(placeholderText !== undefined ? [placeholder(placeholderText)] : []),
         // Host extensions last, after every built-in: a CRDT binding must
         // observe the final document the built-ins produce.
@@ -352,41 +300,19 @@ export function SourcePane({
             onChangeRef.current(update.state.doc.toString())
           }
         }),
-        // The touch formatting bar follows whichever host holds the caret.
-        EditorView.domEventHandlers({
-          focus: () => {
-            if (activeRef.current !== null) setActiveMarkdownEditor(activeRef.current)
-            return false
-          },
-          blur: () => {
-            if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
-            return false
-          },
-        }),
+        followCaret(activeRef),
       ],
     })
     const view = new EditorView({ state, parent: host })
     viewRef.current = view
-    activeRef.current = {
-      run: (command) => {
-        command({ state: view.state, dispatch: view.dispatch })
-        view.focus()
-      },
-      headingLevel: () => headingLevelAt(view.state),
-      focus: () => view.focus(),
-      selectedRange: () => {
-        const { from, to } = view.state.selection.main
-        return from === to ? null : { from, to }
-      },
+    const active = activeMarkdownEditorFor(view, {
       openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
-    }
+    })
+    activeRef.current = active
     if (apiRef) {
       apiRef.current = {
-        run: (command) => {
-          command({ state: view.state, dispatch: view.dispatch })
-          view.focus()
-        },
-        headingLevel: () => headingLevelAt(view.state),
+        run: active.run,
+        headingLevel: active.headingLevel,
         pinScope: () => {
           const scope = rangeToActOn(view.state)
           view.dispatch({ effects: setPinnedRange.of(scope) })
