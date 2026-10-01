@@ -1,14 +1,13 @@
 #!/usr/bin/env node
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { McpServer } from '@modelcontextprotocol/server'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { z } from 'zod'
-import { createContainer, resolveServerDeps } from '../../di/container.js'
-import { createSelfHostStoreLocalModule } from '../../di/store-local.module.js'
+import { resolveSelfHostServerDeps } from '../../di/self-host-server-deps.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { createCanvasClientNotifier } from '../canvas-client-notifier.js'
 import { getDataDir } from '../config.js'
 import { ensureWorkspaceId } from '../current-workspace.js'
-import { daemonDeviceActor } from '../daemon-actor.js'
 import { getDb } from '../store/db/index.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
@@ -20,7 +19,15 @@ import {
 } from './standalone-help.js'
 import { installStdioLifecycle } from './stdio-lifecycle.js'
 
-export async function createMcpServer() {
+/**
+ * One MCP server over the given `ServerDeps`. An HTTP root passes the deps
+ * it composed for `createApp` — the plugin set a deployment registered, the
+ * live-audience notifier — so a tool answers with what the root chose, and
+ * the container and the facet registry are built once per root rather than
+ * once per `/mcp` request. Only the stdio root, which has no `createApp`,
+ * composes its own here.
+ */
+export async function createMcpServer(deps?: ServerDeps) {
   // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
   // HTTP /mcp handler does not race concurrent requests on the marker file.
   // Called for its prepareDataDir migration side effect ahead of the DB use
@@ -92,20 +99,21 @@ export async function createMcpServer() {
 
   registerMcpAppsExtension(server)
 
-  const dataDir = getDataDir()
-  const db = await getDb(dataDir)
-  const container = createContainer(createSelfHostStoreLocalModule(db, dataDir))
-  const deps = resolveServerDeps(container, { daemonActor: daemonDeviceActor(dataDir) })
-  // The WS-route bridge is attached at the roots rather than in
-  // resolveServerDeps (the di graph must not import the routes layer); this
-  // stdio root serves the same daemon process, so its tools notify the same
-  // sockets the HTTP root serves.
-  registerDocumentTools(server, {
-    ...deps,
-    clientNotifier: createCanvasClientNotifier(deps.documentIndex),
-  })
+  registerDocumentTools(server, deps ?? (await stdioRootServerDeps()))
 
   return server
+}
+
+/**
+ * The stdio root's own deps. The live-audience bridge is attached here
+ * rather than in `resolveServerDeps` (the di graph must not import the
+ * routes layer); this root serves the same daemon process, so its tools
+ * notify the same streams the HTTP root serves.
+ */
+async function stdioRootServerDeps(): Promise<ServerDeps> {
+  const dataDir = getDataDir()
+  const deps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
+  return { ...deps, clientNotifier: createCanvasClientNotifier(deps.documentIndex) }
 }
 
 export async function main() {

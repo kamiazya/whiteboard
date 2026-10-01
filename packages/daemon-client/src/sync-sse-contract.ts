@@ -39,7 +39,7 @@ export const syncUpdateEventSchema = z.object({
 export type SyncUpdateEvent = z.infer<typeof syncUpdateEventSchema>
 
 /**
- * A server text message (version_created, head_changed, …) wrapped with the
+ * A server text message (version_created, restore_started, …) wrapped with the
  * document it belongs to. A WebSocket is per-canvas so its text frames need no
  * addressing; one SSE stream serves many documents, so an unaddressed frame
  * would be applied to whichever canvas happened to be listening.

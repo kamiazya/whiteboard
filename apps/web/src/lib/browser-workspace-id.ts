@@ -29,6 +29,7 @@
 import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
+import { createSubscribers } from './subscribers.js'
 
 type ResolutionState =
   | { readonly kind: 'unresolved' }
@@ -63,20 +64,15 @@ let inFlight: Promise<string> | null = null
 // React is already mounted, so nothing re-renders — the deep link stays on
 // the index and every URL builder keeps answering null. That is not a slow
 // start, it is an app that stays unusable until a reload.
-const listeners = new Set<() => void>()
+const changed = createSubscribers()
 
 function setResolutionState(next: ResolutionState): void {
   state = next
-  for (const listener of listeners) listener()
+  changed.emit()
 }
 
 /** `useSyncExternalStore`'s subscribe half. */
-export function subscribeBrowserWorkspaceIdentity(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
+export const subscribeBrowserWorkspaceIdentity = changed.subscribe
 
 /**
  * `useSyncExternalStore`'s snapshot half — the identity, or null while it is

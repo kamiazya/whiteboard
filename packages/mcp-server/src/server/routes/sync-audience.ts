@@ -57,11 +57,6 @@ setSyncSseHooks({
   resolveViewportRequest: (requestId) => resolveViewportFn?.(requestId),
 })
 
-// The checkpoint trigger's holder lives in auto-version.ts so neither side
-// needs an import of the other — see its comment for the dangling promise
-// that arrangement replaced.
-export { setAutoVersionTrigger } from './document/auto-version.js'
-
 export function sendVersionCreated(workspaceId: string, path: string, version: VersionEntry): void {
   broadcastTextMessage(workspaceId, path, { type: 'version_created', version })
 }
@@ -93,10 +88,6 @@ export function sendAgentActivity(
   payload: Omit<AgentActivityMessage, 'type'>,
 ): void {
   broadcastTextMessage(workspaceId, path, { type: 'agent_activity', ...payload })
-}
-
-export function sendHeadChanged(workspaceId: string, path: string, head: string): void {
-  broadcastTextMessage(workspaceId, path, { type: 'head_changed', head })
 }
 
 let resolveViewportFn: ((requestId: string) => void) | null = null

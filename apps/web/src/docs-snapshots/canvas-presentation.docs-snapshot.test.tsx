@@ -6,9 +6,8 @@ import { ARCHITECTURE_SCENE } from './_scenes.js'
 
 // Generates docs/assets/canvas-presentation.png — the same architecture
 // scene rendered chrome-free at a larger viewport, suitable for embedding
-// in docs. This is a plain canvas render, not a capture of the app's real
-// fullscreen route (apps/web/src/lib/canvas-fullscreen-hash.ts) — see the
-// README caption this image backs.
+// in docs. This is a plain canvas render, not a capture of the app — see
+// the README caption this image backs.
 
 afterEach(() => {
   cleanup()

@@ -4,7 +4,6 @@ import {
   type CheckpointScheduler,
   createCheckpointScheduler,
 } from '@kamiazya/whiteboard-history'
-import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../../log.js'
 import type { OperatorInfo, VersionEntry, VersionStore } from '../../store/version-store.js'
 
@@ -38,44 +37,6 @@ export interface AutoVersionOptions {
 }
 
 export type AutoVersionTrigger = CheckpointScheduler
-
-/**
- * The "this document changed" signal, held where BOTH halves can import it
- * statically.
- *
- * `document.ts` registers it and `sync-audience.ts` calls it, and those two cannot import
- * each other — the di wiring's chain closes a value cycle back through
- * canvas-client-notifier. document.ts bridged that with
- * `void import('./sync-audience.js').then(...)`, a promise nobody awaited: measured, TWO
- * were still in flight when a router-building test file's last test ended, so
- * whether that module graph finished before vitest tore the environment down
- * was a coin flip. Losing it read as
- * `EnvironmentTeardownError: Cannot load .../timing-safe.ts` — an unhandled
- * rejection that exits the run 1 while every test reports passed, which is the
- * most misleading shape a red run has.
- *
- * A third module both halves can see costs nothing and leaves nothing in
- * flight. It also closes a real if narrow window: registration is now
- * synchronous, where before a WS message arriving between the router's
- * construction and the import's landing signalled the no-op below and took no
- * checkpoint at all.
- *
- * Looser than `AutoVersionTrigger` deliberately — a caller needs the call
- * signature and nothing else, and ws.ts's own tests register a bare function
- * carrying neither `flush` nor `stop`.
- */
-export type AutoVersionSignal = (workspaceId: string, path: string, doc: LoroDoc) => void
-
-let registeredSignal: AutoVersionSignal = () => {}
-
-export function setAutoVersionTrigger(fn: AutoVersionSignal): void {
-  registeredSignal = fn
-}
-
-/** The registered signal, or the no-op that stands in before one arrives. */
-export function currentAutoVersionSignal(): AutoVersionSignal {
-  return registeredSignal
-}
 
 export function createAutoVersionTrigger(
   versionStore: VersionStore,

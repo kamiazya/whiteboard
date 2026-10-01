@@ -91,10 +91,9 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     return c.json({ ...report, lastAutoCompactedAt })
   })
 
-  // Manual override of the daemon-log rotation. The daemon also runs
-  // purgeOldDaemonLogs fire-and-forget on every spawn, but exposing this
-  // route lets the Storage tab's Logs row show a Cleanup affordance for
-  // users who want immediate disk reclamation without restarting.
+  // The one caller of the daemon-log rotation: the Storage tab's Logs row
+  // shows a Cleanup affordance for the daemon-*.log files an older daemon
+  // left under the data dir.
   //
   // Defense-in-depth on auth: the per-router middleware above also gates
   // this path, but the global daemon-mutation middleware in app.ts

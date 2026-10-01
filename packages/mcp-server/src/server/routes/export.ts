@@ -146,7 +146,7 @@ export function createExportRouter(options: ExportRouterOptions = {}) {
       // instead of shipping the silently-empty file.
       if (!(await documentExists(workspaceId, path))) {
         const errBody: ExportErrorBody = {
-          error: 'canvas_not_found',
+          error: 'not_found',
           message: `Canvas not found: ${workspaceId}/${path}`,
         }
         return c.json(errBody, 404)

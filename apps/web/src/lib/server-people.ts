@@ -8,11 +8,13 @@ import {
   administratorResponseSchema,
   deactivationResponseSchema,
   deletionResponseSchema,
+  tenantPeopleRefusalSchema,
   tenantPeopleResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
 import {
   invitationLinkResponseSchema,
   removeWorkspacePersonResponseSchema,
+  workspacePeopleRefusalSchema,
   workspacePeopleResponseSchema,
   workspacePersonSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
@@ -37,19 +39,24 @@ export type InvitationLink = z.infer<typeof invitationLinkResponseSchema>
 const UNREACHABLE = 'Could not reach the server. Try again.'
 const UNEXPECTED = 'The server answered in a way this page does not understand.'
 
+/** Every refusal either people route writes, read with the schema it was written under. */
+const peopleRefusalSchema = tenantPeopleRefusalSchema.or(workspacePeopleRefusalSchema)
+
 function refusal(body: unknown): Refused {
-  const { message, error, workspaceIds } = (body ?? {}) as {
-    message?: unknown
-    error?: unknown
-    workspaceIds?: unknown
-  }
-  const said = typeof message === 'string' && message !== '' ? message : 'That was refused.'
+  const parsed = peopleRefusalSchema.safeParse(body)
+  // A body neither schema admits (a bare 401, a proxy's HTML) still has to
+  // become a sentence; it just cannot carry a code this page acts on.
+  if (!parsed.success) return { ok: false, message: 'That was refused.' }
+  const said = parsed.data.message
   // ADR-0051: a sole owner's deletion is refused naming the workspaces.
-  const named = Array.isArray(workspaceIds) ? `${said}: ${workspaceIds.join(', ')}` : said
+  const named =
+    'workspaceIds' in parsed.data && parsed.data.workspaceIds !== undefined
+      ? `${said}: ${parsed.data.workspaceIds.join(', ')}`
+      : said
   return {
     ok: false,
     message: named,
-    ...(error === 'reauthentication_required' ? { reauthenticate: true } : {}),
+    ...(parsed.data.error === 'reauthentication_required' ? { reauthenticate: true } : {}),
   }
 }
 

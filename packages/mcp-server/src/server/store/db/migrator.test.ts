@@ -18,9 +18,7 @@ vi.mock('../../config.js', () => ({
 
 const { getDb, closeDb, clearDbCache } = await import('./index.js')
 const { runMigrations } = await import('./migrator.js')
-const { IncompatibleDatabaseError, isIncompatibleDatabaseError } = await import(
-  './incompatible-database.js'
-)
+const { IncompatibleDatabaseError } = await import('./incompatible-database.js')
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
 
 describe('runMigrations', () => {
@@ -105,7 +103,7 @@ describe('runMigrations', () => {
     await expect(runMigrations(db)).rejects.toThrow(/whiteboard\.db|re-create|mcp-debugging/)
     // The typed guard recognizes it.
     const err = await runMigrations(db).catch((e: unknown) => e)
-    expect(isIncompatibleDatabaseError(err)).toBe(true)
+    expect(err).toBeInstanceOf(IncompatibleDatabaseError)
   })
 
   // 0011-import-fs-blobs walks {dataDir}/blobs/<workspaceId>/canvas — an

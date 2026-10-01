@@ -18,7 +18,6 @@
 // All payload types originate from z.infer<> in ws-messages.ts.
 export type {
   ClientTextMessage,
-  HeadChangedMessage,
   RestoreStartedMessage,
   ServerTextMessage,
   VersionCreatedPayload,
@@ -28,7 +27,6 @@ export type {
 export {
   clientReadyMessageSchema,
   clientTextMessageSchema,
-  headChangedMessageSchema,
   restoreCompleteMessageSchema,
   restoreStartedMessageSchema,
   serverTextMessageSchema,
@@ -41,14 +39,12 @@ export {
 
 import type {
   AgentActivityMessage,
-  HeadChangedMessage,
   RestoreStartedMessage,
   VersionCreatedPayload,
   ViewportRequestMessage,
 } from './ws-messages.js'
 
 export type RestoreStartedPayload = RestoreStartedMessage
-export type HeadChangedPayload = HeadChangedMessage
 export type ViewportRequestPayload = ViewportRequestMessage
 export type AgentActivityPayload = AgentActivityMessage
 
@@ -63,8 +59,6 @@ export interface DocumentBackendHandlers {
   onRestoreStarted: (payload: Omit<RestoreStartedPayload, 'type'>) => void
   /** Restore finished; unblock input and clear overlay. */
   onRestoreComplete: () => void
-  /** HEAD pointer moved to a different branch. */
-  onHeadChanged: (payload: Omit<HeadChangedPayload, 'type'>) => void
   /** Server requests the current viewport. Backend ACKs; hook adjusts view. */
   onViewportRequest: (payload: Omit<ViewportRequestPayload, 'type'>) => void
   /**

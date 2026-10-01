@@ -1,6 +1,6 @@
 import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import { canvasColorSchema } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { computeTagsInUse, tagInUseSchema } from './document-tags.js'
@@ -266,7 +266,7 @@ export function createFacetListTool(deps: ServerDeps) {
           : await listWorkspaceDocuments(deps, parsed.workspaceId, 'refuse')
       const registry =
         parsed.workspaceId === undefined
-          ? (deps.facetRegistry ?? bundledFacetRegistry)
+          ? deps.facetRegistry
           : await workspaceFacetRegistry(deps, parsed.workspaceId, 'refuse', listed)
       const allFacets = registry.plugins
         .flatMap((plugin) =>

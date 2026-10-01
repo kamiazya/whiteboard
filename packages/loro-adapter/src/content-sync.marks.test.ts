@@ -7,7 +7,7 @@
 // `wb_workspace_edit`'s document.set) and a version restore.
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { writeMarkdownBody } from './loro-bridge.js'
+import { writeMarkdownBody } from './markdown-body.js'
 import { markThreadPassages, readThreadMarks } from './thread-marks.js'
 import {
   createWorkspaceDocument,

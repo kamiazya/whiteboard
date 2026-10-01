@@ -75,7 +75,6 @@ function connectSession(backend: BrowserBackend) {
     onVersionCreated: () => {},
     onRestoreStarted: (payload) => events.push(`restore-started:${payload.label ?? ''}`),
     onRestoreComplete: () => events.push('restore-complete'),
-    onHeadChanged: () => {},
     onViewportRequest: () => {},
     onConnected: () => {},
   }

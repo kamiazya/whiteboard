@@ -12,7 +12,7 @@ import { Button } from '../../components/ui/button.js'
 import { DESTRUCTIVE_COPY, type DestructiveActionId } from '../../lib/destructive-copy.js'
 import { kindNoun } from '../../lib/kind-noun.js'
 
-export interface DeleteDocumentDialogProps {
+export interface DeleteDocumentsDialogProps {
   /**
    * The document pending deletion, or null when the dialog is closed.
    *
@@ -40,14 +40,14 @@ export interface DeleteDocumentDialogProps {
 // dialog stays pinned while the delete is in flight: dismissing mid-request
 // would let the user re-open and fire a second delete before the first
 // settles (same rule as the version-restore dialog).
-export function DeleteDocumentDialog({
+export function DeleteDocumentsDialog({
   pending,
   busy,
   error,
   action,
   onCancel,
   onConfirm,
-}: DeleteDocumentDialogProps) {
+}: DeleteDocumentsDialogProps) {
   return (
     <AlertDialog
       open={pending !== null}

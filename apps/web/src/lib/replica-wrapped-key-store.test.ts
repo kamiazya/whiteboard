@@ -8,12 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'
-import {
-  dropWrappedKey,
-  dropWrappedKeysForDaemon,
-  loadWrappedKey,
-  saveWrappedKey,
-} from './replica-wrapped-key-store.js'
+import { dropWrappedKey, loadWrappedKey, saveWrappedKey } from './replica-wrapped-key-store.js'
 
 const DAEMON = 'http://127.0.0.1:3099'
 const OTHER = 'http://127.0.0.1:4000'
@@ -82,23 +77,6 @@ describe('dropWrappedKey', () => {
 
     expect(loadWrappedKey(DAEMON, 'ws-1')).toBeNull()
     expect(loadWrappedKey(DAEMON, 'ws-2')).toEqual(BLOB)
-  })
-})
-
-describe('dropWrappedKeysForDaemon', () => {
-  it('removes every pair of one daemon and leaves another daemon whole', () => {
-    saveWrappedKey(DAEMON, 'ws-1', BLOB)
-    saveWrappedKey(DAEMON, 'ws-2', BLOB)
-    saveWrappedKey(OTHER, 'ws-1', BLOB)
-
-    // Disconnecting a daemon forgets its keys; a blob that outlived the
-    // connection would be a key sitting on disk for a daemon this browser
-    // no longer talks to.
-    dropWrappedKeysForDaemon(DAEMON)
-
-    expect(loadWrappedKey(DAEMON, 'ws-1')).toBeNull()
-    expect(loadWrappedKey(DAEMON, 'ws-2')).toBeNull()
-    expect(loadWrappedKey(OTHER, 'ws-1')).toEqual(BLOB)
   })
 })
 

@@ -12,7 +12,7 @@
 // stamping `lastRouteSyncPathRef` before it navigates is what stops the
 // URL->state effect, reading the same stale pathname a moment later in that
 // same flush, from parsing it back and starting the two of them overwriting
-// each other forever (the request storm #1721 measured at ~500 req/s).
+// each other forever (a request storm measured at ~500 req/s).
 // `use-workspace-address-sync.ordering.test.ts` pins those source positions
 // and reads THIS file.
 //

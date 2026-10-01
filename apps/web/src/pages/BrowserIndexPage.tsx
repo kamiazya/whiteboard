@@ -3,7 +3,8 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { BrowserCapacityNotice } from '../components/BrowserCapacityNotice.js'
 import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
-import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
+import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
+import { DocumentsSkeleton } from '../components/document-list/DocumentsSkeleton.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
@@ -29,7 +30,7 @@ import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
-import type { PendingDelete } from './pending-delete.js'
+import { deleteRequestsFor, type PendingDelete } from './pending-delete.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
 
@@ -327,21 +328,7 @@ interface BrowserIndexBodyProps {
 }
 
 function BrowserIndexBody(props: BrowserIndexBodyProps) {
-  if (props.snapshots === null && !props.error) {
-    return (
-      <div
-        role="status"
-        aria-label="Loading documents"
-        className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-      >
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="animate-pulse rounded-lg border p-2">
-            <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
-          </div>
-        ))}
-      </div>
-    )
-  }
+  if (props.snapshots === null && !props.error) return <DocumentsSkeleton />
   if (props.snapshots !== null && props.snapshots.length === 0 && props.trashCount === 0) {
     // The onboarding state renders INSTEAD of the panel: a three-pane browser
     // of nothing teaches less than one sentence and one button, and this
@@ -405,12 +392,7 @@ function BrowserFilesPanel(props: BrowserIndexBodyProps) {
       // Duplicating does NOT open the copy, matching the daemon row: the
       // person is working in the list, and the copy appears there.
       onDuplicateDocument={(path) => void props.onDuplicate(path)}
-      onRequestDelete={(path, displayName, kind) =>
-        props.onRequestDelete({ paths: [path], displayName, kind })
-      }
-      onRequestDeleteMany={(paths) =>
-        props.onRequestDelete({ paths, displayName: `${paths.length} documents` })
-      }
+      {...deleteRequestsFor(props.onRequestDelete)}
       revision={props.filesRevision}
     />
   )
@@ -565,7 +547,7 @@ export function BrowserIndexPage({
         onRequestDelete={requestDelete}
         capacity={capacity}
       />
-      <DeleteDocumentDialog {...deleteDialog} />
+      <DeleteDocumentsDialog {...deleteDialog} />
     </div>
   )
 }

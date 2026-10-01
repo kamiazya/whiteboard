@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
+import { createAsyncAuthStrategyMiddleware } from './_test-helpers.js'
 import {
   type AsyncAuthStrategy,
-  createAsyncAuthStrategyMiddleware,
   createOAuthResourceServerAuthStrategy,
   type OAuthResourceTokenValidationInput,
   type OAuthResourceTokenValidationResult,

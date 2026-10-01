@@ -3,7 +3,6 @@ import {
   extractContextFromHeaders,
   getTracer,
   initTracing,
-  injectContextIntoHeaders,
   MCP_ATTR,
   resetTracingForTesting,
   SERVICE_NAME,
@@ -220,32 +219,6 @@ describe('W3C traceparent propagation', () => {
   it('returns an active context even when no traceparent header is present', () => {
     const ctx = extractContextFromHeaders({})
     expect(ctx).toBeDefined()
-  })
-
-  it('injectContextIntoHeaders returns the same carrier object and writes at least one header when a span context is active', () => {
-    // Extract a real span context so the propagator has something to inject.
-    const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
-    const ctx = extractContextFromHeaders({ traceparent })
-    const headers: Record<string, string> = {}
-    const result = injectContextIntoHeaders(headers, ctx)
-    // Reference equality: the carrier must be returned unchanged.
-    expect(result).toBe(headers)
-    // Injection must have written at least one W3C header.
-    expect(Object.keys(headers).length).toBeGreaterThan(0)
-  })
-
-  it('round-trips a traceparent through extract then inject with a fully conforming W3C traceparent', () => {
-    const traceId = '4bf92f3577b34da6a3ce929d0e0e4736'
-    const traceparent = `00-${traceId}-00f067aa0ba902b7-01`
-    const inCtx = extractContextFromHeaders({ traceparent })
-    const outHeaders: Record<string, string> = {}
-    injectContextIntoHeaders(outHeaders, inCtx)
-    // The injected traceparent must conform to the W3C trace-context spec:
-    // 00-<32-hex traceId>-<16-hex spanId>-<2-hex flags>
-    expect(outHeaders.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
-    // And must carry the original traceId so the downstream service joins
-    // the same trace.
-    expect(outHeaders.traceparent).toContain(traceId)
   })
 })
 

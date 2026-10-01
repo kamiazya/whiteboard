@@ -1,4 +1,5 @@
 import { getAppLogger } from './app-logger.js'
+import { createSubscribers } from './subscribers.js'
 
 const log = getAppLogger('install-prompt')
 
@@ -22,7 +23,7 @@ interface BeforeInstallPromptEvent extends Event {
 let state: InstallState = { status: 'not-captured' }
 let deferredPrompt: BeforeInstallPromptEvent | null = null
 let initialized = false
-const listeners = new Set<() => void>()
+const changed = createSubscribers()
 
 const onBeforeInstallPrompt = (event: Event): void => {
   // preventDefault suppresses Chrome's own mini-infobar so the install
@@ -39,13 +40,10 @@ const onAppInstalled = (): void => {
 
 function set(next: InstallState): void {
   state = next
-  for (const listener of listeners) listener()
+  changed.emit()
 }
 
-export function subscribeInstallState(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
+export const subscribeInstallState = changed.subscribe
 
 export function getInstallState(): InstallState {
   return state
@@ -76,5 +74,5 @@ export function resetInstallPromptForTests(): void {
   state = { status: 'not-captured' }
   deferredPrompt = null
   initialized = false
-  listeners.clear()
+  changed.clear()
 }

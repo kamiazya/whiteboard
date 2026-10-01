@@ -101,7 +101,7 @@ function rememberDaemon(daemonBaseUrl: string, extra: Record<string, unknown> = 
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
-      version: 4,
+      version: 5,
       storage: { daemonBaseUrl, ...extra },
       migration: {},
       // The USER SETTINGS' capabilities (`webMcpEnabled`). Required by a

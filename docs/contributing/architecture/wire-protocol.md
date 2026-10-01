@@ -21,7 +21,6 @@ Common server-to-client notifications include:
 - `version_created`
 - `restore_started`
 - `restore_complete`
-- `head_changed`
 
 Common client-to-server traffic includes:
 
@@ -38,7 +37,6 @@ Common client-to-server traffic includes:
 ## Why this matters
 
 - `doc_update` is the core synchronization message for whiteboard state.
-- `head_changed` keeps branch-aware views in sync after restore or branch moves.
 - `restore_started` / `restore_complete` let the browser coordinate long-running restore flows without stale UI.
 
 For MCP debugging steps, use [mcp-debugging](../mcp-debugging.md).

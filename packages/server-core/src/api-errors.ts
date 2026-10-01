@@ -47,7 +47,7 @@ export const apiErrorBodySchema = z.union([
   // `status`, `detail` and `instance` beside `title`, and explicitly allows
   // extension members. Refusing them would discard the title of a real
   // Problem Details body — measured, `{type, title, status}` from the branch
-  // routes stopped reaching `safeErrorCopy` the moment this arm was closed.
+  // routes stopped reaching the UI's error copy the moment this arm was closed.
   z.object({ title: z.string().min(1) }),
   z
     .object({

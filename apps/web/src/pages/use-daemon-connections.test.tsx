@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 
 // The response is parsed through `backlinkEntrySchema`, which is `.strict()`
@@ -11,13 +12,6 @@ const BACKLINK = {
   path: 'a',
   name: 'A',
   contexts: ['mentions it here'],
-}
-
-function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
 }
 
 describe('useDaemonConnections', () => {

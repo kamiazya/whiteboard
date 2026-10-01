@@ -21,8 +21,9 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { spatialCanvasArbitrary, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { MARKDOWN_BODY_KEY } from './containers.js'
 import { contentDigestOfDocument } from './content-digest.js'
-import { MARKDOWN_BODY_KEY, writeSpatialCanvas } from './loro-bridge.js'
+import { writeSpatialCanvas } from './loro-bridge.js'
 import { fcTest, withDefaults } from './test-utils/fast-check.js'
 import {
   createWorkspaceDocumentAtPath,

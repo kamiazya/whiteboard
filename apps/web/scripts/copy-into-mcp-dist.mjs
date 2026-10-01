@@ -6,10 +6,9 @@
 // packages/mcp-server/dist already exists by the time this step runs.
 //
 // The generated service worker is deliberately excluded: a Workbox-precached
-// index.html would pin a stale injected __WHITEBOARD_DAEMON_TOKEN__ /
-// __WHITEBOARD_RUNTIME_CONFIG__ across daemon restarts, since those are
-// injected server-side into every response and a cached shell would never
-// see the new values. The daemon origin ships no service worker; only the
+// index.html would pin a stale injected __WHITEBOARD_RUNTIME_CONFIG__ across
+// daemon restarts, since it is injected server-side into every response and
+// a cached shell would never see the new value. The daemon origin ships no service worker; only the
 // static Cloudflare Pages deploy (apps/web's own `dist`) gets one.
 import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, relative, resolve, sep } from 'node:path'

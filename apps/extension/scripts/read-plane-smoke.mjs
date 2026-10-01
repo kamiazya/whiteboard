@@ -48,8 +48,8 @@
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
 // Chromium: `pnpm exec playwright install chromium`.
-import { mkdtempSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { chromium } from 'playwright'
 import {
   buildAll,
@@ -64,16 +64,36 @@ import {
 } from './smoke-kit.mjs'
 
 const BRIDGE_DAEMON_BASE_URL = 'https://daemon.whiteboard.invalid'
-const SETTINGS_KEY = 'whiteboard:user-settings:v4'
+/**
+ * The live settings key and version, read off the store rather than
+ * remembered here. A key remembered here goes stale the next time the store
+ * bumps its version, and the failure is indirect: the seed below still
+ * works, through the one-time legacy migration, while the registry probe
+ * reads a key the app has stopped writing — so a replica the pull DID
+ * register reads as unregistered.
+ */
+const SETTINGS = (() => {
+  const source = readFileSync(
+    resolve(EXTENSION_DIR, '../web/src/lib/user-settings-store.ts'),
+    'utf8',
+  )
+  const match = /export const STORAGE_KEY = '(whiteboard:user-settings:v(\d+))'/.exec(source)
+  if (match === null) {
+    throw new Error(
+      'user-settings-store.ts no longer declares STORAGE_KEY the way this script reads it',
+    )
+  }
+  return { key: match[1], version: Number(match[2]) }
+})()
 const DOCUMENT_PATH = 'read-plane-note'
 const MARKER = 'read-plane-smoke-marker-body-text'
 const smoke = createSmoke('read-plane-smoke')
 const { check, dataDir, scratch } = smoke
 
 // Runs IN the page (serialised by Playwright), so it may close over nothing.
-const replicaRegistered = (ws) => {
+const replicaRegistered = ({ ws, key }) => {
   try {
-    const raw = window.localStorage.getItem('whiteboard:user-settings:v4')
+    const raw = window.localStorage.getItem(key)
     return raw !== null && JSON.parse(raw)?.storage?.replicas?.[ws] !== undefined
   } catch {
     return false
@@ -255,19 +275,19 @@ async function openBrowser() {
     args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
   })
   await context.addInitScript(
-    ({ key, base }) => {
+    ({ key, version, base }) => {
       if (window.localStorage.getItem(key) !== null) return
       window.localStorage.setItem(
         key,
         JSON.stringify({
-          version: 4,
+          version,
           storage: { daemonBaseUrl: base },
           migration: {},
           capabilities: {},
         }),
       )
     },
-    { key: SETTINGS_KEY, base: BRIDGE_DAEMON_BASE_URL },
+    { key: SETTINGS.key, version: SETTINGS.version, base: BRIDGE_DAEMON_BASE_URL },
   )
   return context
 }
@@ -321,7 +341,11 @@ async function readPlane(record, appUrl, restartDaemon) {
       page.url(),
     )
     const registered = await page
-      .waitForFunction(replicaRegistered, workspaceId, { timeout: 30_000 })
+      .waitForFunction(
+        replicaRegistered,
+        { ws: workspaceId, key: SETTINGS.key },
+        { timeout: 30_000 },
+      )
       .then(
         () => true,
         () => false,
@@ -350,7 +374,7 @@ async function readPlane(record, appUrl, restartDaemon) {
     const restarted = await restartDaemon(async () => {
       await page.goto(docUrl)
       check(
-        await page.evaluate(replicaRegistered, workspaceId),
+        await page.evaluate(replicaRegistered, { ws: workspaceId, key: SETTINGS.key }),
         'the registry entry survives the cold reload',
         'a fresh navigation must never re-seed over an existing replica registry',
       )

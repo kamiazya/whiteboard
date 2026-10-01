@@ -1,15 +1,10 @@
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { getLogger } from '../log.js'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import {
-  type AutoVersionTrigger,
-  createAutoVersionTrigger,
-  setAutoVersionTrigger,
-} from './document/auto-version.js'
+import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
@@ -19,6 +14,7 @@ import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
+import { sendRestoreEvent, sendVersionCreated } from './sync-audience.js'
 
 export type { AutoVersionTrigger }
 export { createAutoVersionTrigger }
@@ -73,18 +69,10 @@ function armAutoVersionTrigger(
     // The checkpoint lands long after the update that signalled it, so the
     // broadcast is the trigger's to make rather than the caller's.
     onSaved: (workspaceId, path, entry) => {
-      void import('./sync-audience.js')
-        .then(({ sendVersionCreated }) => sendVersionCreated(workspaceId, path, entry))
-        .catch((err: unknown) => {
-          getLogger('auto-version').error({ err: err as Error }, 'version_created broadcast failed')
-        })
+      sendVersionCreated(workspaceId, path, entry)
     },
   })
   options.onAutoVersionTrigger?.(trigger)
-  // Register the same trigger for the WS path, synchronously. The holder is
-  // auto-version.ts rather than ws.ts precisely so this needs no import of a
-  // module that imports back — see its comment for the promise this replaced.
-  setAutoVersionTrigger(trigger)
   return trigger
 }
 
@@ -146,10 +134,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
       options.serverDeps === undefined ? {} : { liveDocuments: options.serverDeps.liveDocuments },
     ),
   )
-  // Restore progress goes out over the WS surface; same dynamic import as
-  // setAutoVersionTrigger above, for the same eval-order reason.
   const restoreProgress: RestoreProgress = async (event) => {
-    const { sendRestoreEvent } = await import('./sync-audience.js')
     sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
   }
   app.route(

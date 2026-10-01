@@ -479,10 +479,10 @@ jobs:
           pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
           node packages/mcp-server/scripts/copy-widget-into-dist.mjs
 
-      # mcp-smoke spawns the MCP stdio server which in turn calls ensureDaemon.
-      # Without WHITEBOARD_DEV=1, ensureDaemon tries dist/server/index.js which
-      # does not exist before build. WHITEBOARD_DEV=1 makes it use tsx against
-      # source instead, matching how pnpm smoke:e2e runs the same flow.
+      # mcp-smoke spawns the MCP stdio server, which serves in-process.
+      # WHITEBOARD_DEV=1 makes it resolve its own tree against source rather
+      # than dist, which does not exist before build, matching how
+      # pnpm smoke:e2e runs the same flow.
       - name: Test mcp-smoke
         env:
           WHITEBOARD_DEV: '1'

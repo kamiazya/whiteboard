@@ -17,6 +17,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+import { jsonResponse } from '../test-utils/json-response.js'
 import '../index.css'
 
 // Each answers a CANCEL, which the page calls on unmount: a schedule that
@@ -60,13 +61,6 @@ class FakeBackend implements DocumentBackend {
   disconnect(): void {}
   pushLocalUpdate(): void {}
   sendClientReady(): void {}
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
 }
 
 function pathOf(input: Request | string | URL): string {

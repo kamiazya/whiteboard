@@ -12,6 +12,7 @@ import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
@@ -49,13 +50,6 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 // A real canonical id, so a test that says "not the raw identifier" is
 // checking against the shape ADR-0019 actually mints.
 const WS_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
 
 // The list contract requires id and kind on every row (the daemon always
 // serves both); fixtures may omit them for brevity and get daemon-shaped

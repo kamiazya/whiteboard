@@ -1,6 +1,7 @@
 import type { ProposedChangeStatus, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { DocumentContainers } from './containers.js'
-import { writeMarkdownBodyInto, writeSpatialCanvasInto } from './loro-bridge.js'
+import { writeSpatialCanvasInto } from './loro-bridge.js'
+import { writeMarkdownBodyInto } from './markdown-body.js'
 import { setProposedChangeStatusInto } from './proposals.js'
 
 /**

@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from '../ui/alert-dialog.js'
 
-export interface DeleteDocumentDialogProps {
+export interface DeleteOpenDocumentDialogProps {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   /** Only for the wording: "Delete this note?" against "…this canvas?". */
@@ -33,14 +33,14 @@ export interface DeleteDocumentDialogProps {
   readonly onConfirm: () => void
 }
 
-export function DeleteDocumentDialog({
+export function DeleteOpenDocumentDialog({
   open,
   onOpenChange,
   documentKind,
   copyId,
   triggerRef,
   onConfirm,
-}: DeleteDocumentDialogProps) {
+}: DeleteOpenDocumentDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent

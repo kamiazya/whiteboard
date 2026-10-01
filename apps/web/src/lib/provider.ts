@@ -37,10 +37,10 @@ function toInvalidConfigState(err: unknown): Extract<ProviderState, { kind: 'inv
  *
  * What replaced it is better than a flag, and this is the part worth
  * carrying forward: where the keepers still differ, the difference is a fact
- * about a DOCUMENT rather than about a keeper — `BranchesBackend`'s
- * `hasBranches` (a markdown body has no record-holding backend, so no
- * variations), answered where it is known by something that cannot forget to
- * mention it.
+ * about a DOCUMENT rather than about a keeper, answered where it is known by
+ * something that cannot forget to mention it. The first instance was the
+ * since-retired branches backend's `hasBranches`: a markdown body has no
+ * record-holding backend, so no variations.
  *
  * `VersionTimelineCapabilities` stood beside it here as the second example,
  * and it is gone: the browser keeper's rows grew the variation they were

@@ -325,14 +325,20 @@ export function createApp(options: AppOptions) {
   // `enableJsonResponse: true`, which the entry's built-in legacy fallback
   // does not set, and changing legacy clients' response framing (JSON body →
   // SSE) would break the stdio proxy and the web app's daemon client.
-  const modernMcpHandler = createMcpHandler(() => createMcpServer(), {
+  const modernMcpHandler = createMcpHandler(() => createMcpServer(options.serverDeps), {
     legacy: 'reject',
     onerror: (error) => {
       httpLog.warning({ err: error }, 'mcp-http:modern-error')
     },
   })
 
-  app.route('/', createMcpRouter({ modernMcpHandler }))
+  app.route(
+    '/',
+    createMcpRouter({
+      modernMcpHandler,
+      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+    }),
+  )
 
   mountLocalDaemonRouters(app, options)
   mountServerModeRouters(app, options)

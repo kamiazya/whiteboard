@@ -17,7 +17,7 @@ import { loadDocumentContent } from './workspace-content.js'
  * a row filed a markdown document as a canvas.
  *
  * The copy is a DEEP one: the source's record is read through
- * `mergeToSnapshot` (snapshot + delta log collapsed into one), so the new
+ * `readMergedContent` (snapshot + delta log collapsed into one), so the new
  * document shares no bytes, deltas or LoroDoc with the source.
  */
 export async function duplicateBrowserDocument(input: {

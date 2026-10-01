@@ -58,13 +58,13 @@ import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { contentStateOf } from './document-state.js'
 import {
   DOCUMENT_SYNC_CHANGED_EVENT,
-  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
   type SyncStatus,
   type UseDocumentSyncOptions,
 } from './document-sync-types.js'
 import { PersistenceLedger } from './persistence-ledger.js'
 import { type BodyBinding, bodyBindingFor } from './session-body-binding.js'
 import type { EditorCommand, EditorLeafCommand } from './spatial/commands.js'
+import { createSubscribers } from './subscribers.js'
 import { missingThreadMarks } from './text-anchor.js'
 
 const log = getAppLogger('document-sync')
@@ -666,15 +666,15 @@ export function createDocumentSyncSession(
   let disposed = false
   let doc: LoroDoc | null = null
   let undoManager: UndoManager | null = null
-  const historyListeners = new Set<() => void>()
-  const lockListeners = new Set<() => void>()
-  const bodyListeners = new Set<() => void>()
+  const historyChanged = createSubscribers()
+  const locksChanged = createSubscribers()
+  const bodyChanged = createSubscribers()
   // Microtask defer: onPush fires inside Loro's commit, and a listener that
   // synchronously setStates mid-commit would re-enter React from a doc
   // mutation path.
   function notifyHistoryChanged(): void {
     queueMicrotask(() => {
-      for (const listener of historyListeners) listener()
+      historyChanged.emit()
     })
   }
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
@@ -686,11 +686,10 @@ export function createDocumentSyncSession(
   // fresh LoroDoc for every reconnect, and a boolean would leave the second
   // one un-backfilled forever.
   let backfilledMarksFor: LoroDoc | null = null
-  const annotationListeners = new Set<
-    (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void
-  >()
-  const proposalListeners = new Set<(proposals: readonly Proposal[]) => void>()
-  const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
+  const annotationsChanged =
+    createSubscribers<[readonly CommentThread[], ReadonlyMap<string, PassageRange>]>()
+  const proposalsChanged = createSubscribers<[readonly Proposal[]]>()
+  const canvasChanged = createSubscribers<[SpatialCanvas, 'local' | 'external']>()
   // Chains every onChange firing's commit so firings apply to the Loro doc
   // strictly in schedule order, never in async-settle order.
   let commitChain: Promise<void> = Promise.resolve()
@@ -789,11 +788,11 @@ export function createDocumentSyncSession(
   }
 
   function notify(canvas: SpatialCanvas, origin: 'local' | 'external'): void {
-    for (const listener of listeners) listener(canvas, origin)
+    canvasChanged.emit(canvas, origin)
   }
 
   function notifyAnnotations(threads: readonly CommentThread[]): void {
-    for (const listener of annotationListeners) listener(threads, currentThreadMarks)
+    annotationsChanged.emit(threads, currentThreadMarks)
   }
 
   /**
@@ -809,7 +808,7 @@ export function createDocumentSyncSession(
    * already moved.
    */
   function notifyProposals(proposals: readonly Proposal[]): void {
-    for (const listener of proposalListeners) listener(proposals)
+    proposalsChanged.emit(proposals)
   }
 
   function getCanvas(): SpatialCanvas {
@@ -833,10 +832,7 @@ export function createDocumentSyncSession(
   }
 
   function subscribeProposals(listener: (proposals: readonly Proposal[]) => void): () => void {
-    proposalListeners.add(listener)
-    return () => {
-      proposalListeners.delete(listener)
-    }
+    return proposalsChanged.subscribe(listener)
   }
 
   function getThreadMarks(): ReadonlyMap<string, PassageRange> {
@@ -846,19 +842,13 @@ export function createDocumentSyncSession(
   function subscribeAnnotations(
     listener: (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void,
   ): () => void {
-    annotationListeners.add(listener)
-    return () => {
-      annotationListeners.delete(listener)
-    }
+    return annotationsChanged.subscribe(listener)
   }
 
   function subscribe(
     listener: (canvas: SpatialCanvas, origin: 'local' | 'external') => void,
   ): () => void {
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
+    return canvasChanged.subscribe(listener)
   }
 
   /**
@@ -893,8 +883,8 @@ export function createDocumentSyncSession(
    * `publishCanvasFromDoc` runs on an EXTERNAL update, so before this the
    * only way a conversation reached the panel was a remote peer touching the
    * document: a person's own comment was written, drawn on the canvas from
-   * the optimistic value, and never listed. Found by dogfooding, not by a
-   * test — the remote-reply case was covered and this one was not.
+   * the optimistic value, and never listed — the remote-reply case was
+   * covered and this one was not.
    *
    * Gated on the VALUE having changed rather than on the command kind. A
    * classification over `EditorCommand['kind']` is silent when kind N+1
@@ -1205,7 +1195,6 @@ export function createDocumentSyncSession(
 
       onVersionCreated(payload) {
         if (isStale()) return
-        deps.dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, deps.getOptions().identity)
         try {
           deps.getOptions().onVersionCreated?.(payload)
         } catch (err) {
@@ -1222,15 +1211,6 @@ export function createDocumentSyncSession(
         if (isStale()) return
         deps.onRestoreChange(false, null)
         clearUndo()
-      },
-
-      onHeadChanged(payload) {
-        if (isStale()) return
-        try {
-          deps.getOptions().onHeadChanged?.(payload)
-        } catch (err) {
-          log.error('onHeadChanged callback threw', err)
-        }
       },
 
       onViewportRequest(payload) {
@@ -1426,10 +1406,7 @@ export function createDocumentSyncSession(
   }
 
   function subscribeHistory(listener: () => void): () => void {
-    historyListeners.add(listener)
-    return () => {
-      historyListeners.delete(listener)
-    }
+    return historyChanged.subscribe(listener)
   }
 
   function getNodeLocks(): ReadonlySet<string> {
@@ -1437,7 +1414,7 @@ export function createDocumentSyncSession(
   }
 
   function notifyLocksChanged(): void {
-    for (const listener of lockListeners) listener()
+    locksChanged.emit()
   }
 
   function setNodeLock(nodeId: string, locked: boolean): void {
@@ -1473,21 +1450,15 @@ export function createDocumentSyncSession(
   }
 
   function notifyBodyChanged(): void {
-    for (const listener of bodyListeners) listener()
+    bodyChanged.emit()
   }
 
   function subscribeMarkdownBody(listener: () => void): () => void {
-    bodyListeners.add(listener)
-    return () => {
-      bodyListeners.delete(listener)
-    }
+    return bodyChanged.subscribe(listener)
   }
 
   function subscribeLocks(listener: () => void): () => void {
-    lockListeners.add(listener)
-    return () => {
-      lockListeners.delete(listener)
-    }
+    return locksChanged.subscribe(listener)
   }
 
   return {

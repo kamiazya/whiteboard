@@ -12,7 +12,7 @@
 // The error contract moved DOWN to server-core to join them — `/api/v1` is
 // served from there, so a contract filed in this package was above half the
 // routes it describes — and it comes from the SUBPATH, never the root
-// barrel. The difference is 269 KB. `error-copy.ts` is on apps/web's critical path, so
+// barrel. The difference is 269 KB. A module on apps/web's critical path
 // taking `apiErrorReason` from '@kamiazya/whiteboard-server-core' put that
 // package's whole graph — hono, loro-crdt, canvas-render, search — in the
 // entry chunk: measured 421.4 KB gzip against a 152 KB budget. Nothing

@@ -2,6 +2,7 @@ import { storageCategorySchema } from '@kamiazya/whiteboard-daemon-client/api-co
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { drainSchedulerMacrotasks } from '../test-utils/scheduler-drain.js'
 import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
@@ -21,10 +22,6 @@ const PAYLOAD = {
     db: { bytes: 1024, files: 1 },
     other: { bytes: 0, files: 2 },
   },
-}
-
-function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), { status: 200 })
 }
 
 beforeEach(() => {

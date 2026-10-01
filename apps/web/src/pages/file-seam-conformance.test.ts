@@ -289,10 +289,14 @@ const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'InspectorSegment', 'Connecti
  * it the VERBS (what deleting means is the keeper's business) and spreads
  * the answer into its slots. A keeper drawing its own copy is how the two
  * drifted before: the browser page carried an inline `AlertDialog` beside
- * the shared `DeleteDocumentDialog`, and its refusal lived in a second error
+ * the shared `DeleteOpenDocumentDialog`, and its refusal lived in a second error
  * state the shared bundle never saw.
  */
-const DOCUMENT_ACTION_CHROME = ['DropdownMenuItem', 'AlertDialog', 'DeleteDocumentDialog'] as const
+const DOCUMENT_ACTION_CHROME = [
+  'DropdownMenuItem',
+  'AlertDialog',
+  'DeleteOpenDocumentDialog',
+] as const
 
 describe('document kebab rows', () => {
   it('reads every keeper module it judges', () => {

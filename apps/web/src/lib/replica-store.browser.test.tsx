@@ -8,6 +8,7 @@ import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { disconnectFromDaemon } from './disconnect-daemon.js'
 import {
   connectReplicaKeeper,
@@ -39,10 +40,6 @@ function b64u(bytes: Uint8Array): string {
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status })
 }
 
 /** A daemon fetch double answering /replica-key with a fixed offline key. */

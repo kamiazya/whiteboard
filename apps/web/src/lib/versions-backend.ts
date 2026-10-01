@@ -50,8 +50,8 @@ export interface VersionsBackend {
  * `reason` is the daemon's OWN display copy, read through `apiErrorReason` —
  * the only thing that tells a reader why a restore did not happen (`a document
  * already exists there`, and the rest of the route's { error, message }
- * family). It has to travel on the error because `safeErrorCopy` answers the
- * fallback for every `Error` by contract: a UI handed only this class would
+ * family). It has to travel on the error because the UI's fallback copy
+ * answers every `Error` the same way by contract: a UI handed only this class would
  * say "try again" to a refusal that will never succeed.
  */
 export class VersionsRequestError extends Error {

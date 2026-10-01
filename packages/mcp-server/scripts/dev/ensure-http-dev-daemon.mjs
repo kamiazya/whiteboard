@@ -45,10 +45,9 @@ const READY_TIMEOUT_MS = resolveReadyTimeoutMs(process.env)
 const READY_POLL_INTERVAL_MS = 200
 const PING_TIMEOUT_MS = 3_000
 // The token this checkout's clients (the stdio proxy) send. Set
-// WHITEBOARD_TOKEN in the shell to use a custom token consistently across the
-// browser (vite-dev-token-plugin.ts) and these clients. When a custom value is
+// WHITEBOARD_TOKEN in the shell to use a custom token; when a custom value is
 // set the spawned daemon receives an explicit --token flag that overrides the
-// default baked into the pnpm script, keeping all three in sync.
+// default baked into the pnpm script, keeping the two in sync.
 const DEV_BEARER_TOKEN = resolveDevBearerToken(process.env)
 const LOG_DIR = join(REPO_ROOT, 'tmp', 'logs')
 const LOG_PATH = join(LOG_DIR, 'mcp-http-dev.log')

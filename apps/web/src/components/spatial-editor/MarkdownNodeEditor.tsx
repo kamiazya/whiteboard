@@ -35,9 +35,7 @@ import {
   closeCompletion,
   completionStatus,
 } from '@codemirror/autocomplete'
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
-import { syntaxHighlighting } from '@codemirror/language'
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
@@ -50,7 +48,6 @@ import { EditorExitHint } from '../EditorExitHint.js'
 import {
   type ActiveMarkdownEditor,
   clearActiveMarkdownEditor,
-  setActiveMarkdownEditor,
 } from '../markdown-editor/active-markdown-editor.js'
 import {
   annotationMarks,
@@ -58,11 +55,12 @@ import {
 } from '../markdown-editor/annotation-decorations.js'
 import { completionOnDelete } from '../markdown-editor/completion-on-delete.js'
 import { completionPopupTheme, completionTouchAccept } from '../markdown-editor/completion-popup.js'
-import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
-import { emojiShortcodeMarks } from '../markdown-editor/emoji-shortcode-marks.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
-import { headingLevelAt } from '../markdown-editor/line-prefix.js'
-import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
+import {
+  activeMarkdownEditorFor,
+  followCaret,
+  markdownEditingBase,
+} from '../markdown-editor/markdown-editing-base.js'
 import {
   shortcodeCompletionSource,
   shortcodeOptionRenderers,
@@ -240,34 +238,18 @@ export function MarkdownNodeEditor({
         // written against; what it does is accept whatever option was
         // tapped, whichever source offered it.
         completionTouchAccept,
-        syntaxHighlighting(markdownHighlightStyle),
-        // The node behind this editor draws its body with the shortcode
-        // expanded, so the draft over it does too — otherwise committing
-        // changes the picture for a reason nothing on screen explains.
-        emojiShortcodeMarks(),
-        history(),
-        keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
-        EditorView.lineWrapping,
+        ...markdownEditingBase(),
         annotationMarks(),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) callbacksRef.current.onChange?.(update.state.doc.toString())
         }),
-        EditorView.domEventHandlers({
-          // The touch formatting bar follows whichever host holds the caret.
-          focus: () => {
-            if (activeRef.current !== null) setActiveMarkdownEditor(activeRef.current)
-            return false
-          },
-          blur: (event, view) => {
-            if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
-            // Focus moving INTO a menu is the editing catalog taking the
-            // keyboard for its rows, not the user leaving the node: the
-            // catalog acts on this editor and hands the caret back on
-            // close, so the edit stays open. Any other departure commits.
-            if (isMenuTarget(event.relatedTarget)) return false
-            commit(view)
-            return false
-          },
+        followCaret(activeRef, (event, view) => {
+          // Focus moving INTO a menu is the editing catalog taking the
+          // keyboard for its rows, not the user leaving the node: the
+          // catalog acts on this editor and hands the caret back on
+          // close, so the edit stays open. Any other departure commits.
+          if (isMenuTarget(event.relatedTarget)) return
+          commit(view)
         }),
         // Inherit the node's own typography from the wrapper — the parity
         // styles live there so the SVG render and the editor agree.
@@ -293,18 +275,9 @@ export function MarkdownNodeEditor({
     mountedRef.current = true
     const view = new EditorView({ state, parent: host })
     viewRef.current = view
-    activeRef.current = {
-      run: (command) => {
-        command({ state: view.state, dispatch: view.dispatch })
-        view.focus()
-      },
-      headingLevel: () => headingLevelAt(view.state),
-      focus: () => view.focus(),
-      selectedRange: () => {
-        const { from, to } = view.state.selection.main
-        return from === to ? null : { from, to }
-      },
-      ...(onRequestCommentRef.current === undefined
+    activeRef.current = activeMarkdownEditorFor(
+      view,
+      onRequestCommentRef.current === undefined
         ? {}
         : {
             composeThread: () => {
@@ -314,8 +287,8 @@ export function MarkdownNodeEditor({
               if (anchor === null) return false
               return onRequestCommentRef.current?.(anchor) ?? false
             },
-          }),
-    }
+          },
+    )
     view.focus()
     // Continue typing where the text ends — programmatic focus leaves the
     // caret at position 0, which reads as "my text got replaced".

@@ -2,6 +2,8 @@
 // model reads it: through a real McpServer + Client over an in-memory
 // transport, so the SDK's own argument validation is what answers rather
 // than a restatement of the schema in a unit test.
+
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
@@ -20,6 +22,7 @@ async function connect(): Promise<Client> {
     versions: new InMemoryVersionHistory(),
     // The daemon's own seam: every mutating tool takes its write lock.
     liveDocuments: liveDocuments(),
+    facetRegistry: bundledFacetRegistry,
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

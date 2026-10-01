@@ -18,7 +18,7 @@ import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
-import { DeleteDocumentDialog } from '../components/document-editor/DeleteDocumentDialog.js'
+import { DeleteOpenDocumentDialog } from '../components/document-editor/DeleteOpenDocumentDialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import type { DestructiveActionId } from '../lib/destructive-copy.js'
 import { useDeleteDocument } from './use-delete-document.js'
@@ -113,7 +113,7 @@ export function useDocumentActions({
       </>
     ),
     afterMenu: (
-      <DeleteDocumentDialog
+      <DeleteOpenDocumentDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         documentKind={documentKind}

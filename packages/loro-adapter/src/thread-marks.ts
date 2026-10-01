@@ -20,7 +20,7 @@
 import type { LoroDoc } from 'loro-crdt'
 import { readAnnotations } from './annotations.js'
 import type { DocumentContainers } from './containers.js'
-import { MARKDOWN_BODY_KEY } from './loro-bridge.js'
+import { MARKDOWN_BODY_KEY } from './containers.js'
 
 const KEY_PREFIX = 'comment-'
 

@@ -2,7 +2,7 @@ import type { WorkspaceSummary } from '@kamiazya/whiteboard-daemon-client/api-co
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
+import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import {
@@ -17,6 +17,13 @@ import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
+import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-actions.js'
+// What the list shows: a failed load with the recovery that is actually
+// available, the transient loading state, onboarding, or the panel. Split out
+// of the page body — each arm is a different screen, and the page is about
+// deciding WHICH, not about drawing them.
+import { DaemonIndexBody } from './daemon-index-body.js'
+import { useDeleteDocuments } from './use-delete-documents.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
 // time — the one the ADDRESS names. Choosing which is the shell switcher's,
@@ -54,31 +61,6 @@ export interface DaemonIndexPageProps {
   /** Served by a server-mode keeper (ADR-0047), so the copy names a server. */
   serverMode?: boolean
 }
-
-function sortRows(rows: DocumentRow[]): DocumentRow[] {
-  return [...rows].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-    if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
-    // Newest first, and a document with no recorded timestamp sorts last
-    // rather than winning by accident: `undefined` fails every `<`
-    // comparison, so a bare `a.updatedAt < b.updatedAt` would have quietly
-    // ordered it as if it were the newest.
-    const left = a.updatedAt ?? ''
-    const right = b.updatedAt ?? ''
-    if (left !== right) return left < right ? 1 : -1
-    return 0
-  })
-}
-
-import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-actions.js'
-/**
- * What the list shows: a failed load with the recovery that is actually
- * available, the transient loading state, onboarding, or the panel. Split out
- * of the page body — each arm is a different screen, and the page above is
- * about deciding WHICH, not about drawing them.
- */
-import { DaemonIndexBody } from './daemon-index-body.js'
-import { useDeleteDocuments } from './use-delete-documents.js'
 
 const WORKSPACE_GONE = 'This workspace is not on the daemon any more.'
 
@@ -401,17 +383,15 @@ export function DaemonIndexPage({
         // because the count decides whether onboarding may replace the panel.
         const { entries, trash } = await sourceFor(workspaceId).refresh()
         if (isStale()) return
+        // Unordered on purpose: the panel orders what it shows from the same
+        // source, and these rows serve lookups (a name, a path, a kind) only.
         setRows(
-          sortRows(
-            entries.map((entry) => ({
-              path: entry.path,
-              displayName: entry.name ?? entry.path,
-              updatedAt: entry.updatedAt,
-              ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-              pinned: entry.pinOrder !== undefined,
-              pinOrder: entry.pinOrder ?? Number.POSITIVE_INFINITY,
-            })),
-          ),
+          entries.map((entry) => ({
+            path: entry.path,
+            displayName: entry.name ?? entry.path,
+            updatedAt: entry.updatedAt,
+            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          })),
         )
         setTrashCount(trash?.length ?? 0)
         setLoaded(true)
@@ -630,7 +610,7 @@ export function DaemonIndexPage({
           onRetryWorkspaces={loadWorkspaces}
           serverMode={serverMode}
         />
-        <DeleteDocumentDialog {...deleteDialog} />
+        <DeleteDocumentsDialog {...deleteDialog} />
       </div>
     </DaemonApiContext.Provider>
   )

@@ -295,7 +295,7 @@ describe('publish contract', () => {
     expect(securityModelDoc).toContain('Bearer')
     expect(wireProtocolDoc).toContain('# Wire Protocol')
     expect(wireProtocolDoc).toContain('doc_update')
-    expect(wireProtocolDoc).toContain('head_changed')
+    expect(wireProtocolDoc).toContain('version_created')
   })
 
   it('configures shared Vitest coverage output for local inspection', () => {

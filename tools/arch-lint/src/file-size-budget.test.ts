@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { staleHeadroom } from './size-ledger-headroom.js'
 
 // docs/contributing/review-checklist.md says "Files stay under 800 lines",
 // and until this guard existed nothing enforced it — 17 files already over
@@ -93,10 +94,10 @@ function isScannedTestFile(absolutePath: string): boolean {
 }
 
 /**
- * This file, which the ledger deliberately does not hold.
+ * The two ledger files, which this ledger deliberately does not hold.
  *
- * Its length is a function of how many entries the list below has, so its
- * ceiling records the SIZE OF THE DEBT LIST and nothing about this file —
+ * Each one's length is a function of how many entries its list has, so its
+ * ceiling records the SIZE OF THE DEBT LIST and nothing about the file —
  * and every entry already has to carry a reason, so the deliberateness the
  * ceiling would add is already spent one line above it.
  *
@@ -105,15 +106,25 @@ function isScannedTestFile(absolutePath: string): boolean {
  * neither of them is about. Measured on one PR in one session: three
  * conflicts, each resolved by re-counting the merged file's own lines, and
  * the reasons stacked up as archaeology ("FIVE branches", then "SIX") until
- * the comment said more about merging than about sizes.
+ * the comment said more about merging than about sizes. The function ledger
+ * was held for a while and paid the same way: a two-line reason beside one
+ * of its entries moved its own ceiling here.
  */
-const LEDGER_PATH = 'tools/arch-lint/src/file-size-budget.test.ts'
+const LEDGER_PATHS = [
+  'tools/arch-lint/src/file-size-budget.test.ts',
+  'tools/arch-lint/src/function-size-budget.test.ts',
+]
+
+/** A listed file's current count, or nothing for one that is gone (another assertion's finding). */
+function readingOf(path: string): number | undefined {
+  return existsSync(join(REPO_ROOT, path)) ? lineCount(join(REPO_ROOT, path)) : undefined
+}
 
 function scanTestFiles(): string[] {
   return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
     .filter(isScannedTestFile)
     .map((absolutePath) => relativeToRepo(absolutePath))
-    .filter((path) => path !== LEDGER_PATH)
+    .filter((path) => !LEDGER_PATHS.includes(path))
     .sort()
 }
 
@@ -218,7 +229,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // are the added lines.
   // Lowered 1626 -> 1516: the ink-id family (which collection an id is in,
   // per verb) left for `ink-commands.ts`.
-  'apps/web/src/lib/spatial/commands.ts': 1516,
+  'apps/web/src/lib/spatial/commands.ts': 1504,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -264,44 +275,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Lowered 1130 -> 879: the pane scroll sync and the preview geometry it
   // shares with the rail now live in their own modules.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 879,
-  // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
-  // (ADR-0029). One line, and it has to be here — the list is what a
-  // tree-node host pre-attaches from, and a container attached on first
-  // READ instead clears the UndoManager's redo stack.
-  // +9: `writeSpatialCanvas` and `writeMarkdownBody` each split into a
-  // committing wrapper over a non-committing `*Into`, so `withDocumentBatch`
-  // can fold a whole act into ONE commit. The bodies did not grow; these are
-  // the two wrappers and the two lines saying what the split is for.
-  // +8: `commentToFields` refuses a comment naming both a node and an edge,
-  // the same loud refusal it already gives a non-finite anchor and for the
-  // same reason — the thread it becomes is one every reader would drop.
-  // +1: an edge's `x-whiteboard` facets bucket crosses the bridge the way a
-  // node's already did, so a per-edge facet survives a round trip.
-  // +3: an edge's `bends`, written as one value — the round-trip property
-  // reported it dropped before the line existed.
-  // +6 for the comment on `edgeToFields` saying WHY an endpoint is stored as
-  // one value: it is one thing with one meaning, so last-writer-wins per key
-  // is the whole merge story, and two peers re-attaching the same end
-  // converge on an end one of them chose rather than on a half of each.
-  // +21: ADR-0038 decision 3's read-side lift (`liftLegacyNodeKind` plus the
-  // `liftStoredNode` that composes it with the ADR-0037 one). Load-bearing,
-  // and the comment is most of the lines: the model is `.strict()`, so a node
-  // stored under the node-kind union fails its schema and the read drops what
-  // fails — the node VANISHES rather than losing its content. Net of the
-  // switch `nodeToFields` no longer needs.
-  // +22 on the merge: a node's stored fields are written once as a
-  // resource (ADR-0038 decision 3) beside the tag write ADR-0040 added,
-  // and the kind switch the resource replaced was the shorter of the two.
-  // 1126 -> 1141: the three id-keyed collections and two optional fields
-  // that `reconcileSpatialCanvas` and the resync each spelled out became five
-  // named helpers, each carrying the measured reason its behaviour has (op
-  // order is part of the bytes; a delete only when present spares the log).
-  // 1141 -> 1152: the node delete cascades to anchored ink too, through the
-  // model's one definition of the sweep, and says why it did not before.
-  'packages/loro-adapter/src/loro-bridge.ts': 1152,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
-  'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
+  'packages/canvas-render/src/layout/edges/edge-rules.ts': 845,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
@@ -364,14 +340,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // write after an undo wrote the pre-undo canvas back over a document the
   // screen had already left, publishing nothing and discarding the redo
   // stack.
-  'apps/web/src/lib/document-sync-session.ts': 1535,
+  'apps/web/src/lib/document-sync-session.ts': 1515,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
   // rows a document that has not been written since still has. A union rather
   // than a merge — a document is never in both — and the comment saying so is
   // most of the 14 lines.
-  'packages/mcp-server/src/server/store/document-store.ts': 1145,
+  'packages/mcp-server/src/server/store/document-store.ts': 1057,
   // +1 for a task list's checkbox, which is one import and one branch here:
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
@@ -634,6 +610,13 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
     )
     expect(missing).toEqual([])
   })
+
+  // The ratchet above is only as tight as the ceiling, and a ceiling that
+  // stopped being lowered as its file shrank is a guard that reads as
+  // holding it: see `size-ledger-headroom.ts`.
+  it('holds no grandfather entry whose ceiling stands far above its reading — lower it', () => {
+    expect(staleHeadroom(FILE_SIZE_GRANDFATHER, readingOf)).toEqual([])
+  })
 })
 
 /**
@@ -673,14 +656,6 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
 // record. `gestures.test` and this file itself are new entries rather than
 // raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  // The function-size ledger's own file crossed 800 while paying DOWN the
-  // complexity exemption list: decomposing a JSX-heavy component turns one
-  // over-budget function into several smaller ones, and each is an entry
-  // here with a reason. It is a DATA table with a header, which is the same
-  // reason its own comment gives for the list being 400-odd entries rather
-  // than 17 — so it is recorded rather than split, and splitting it would
-  // put half the ledger where a reader does not look for it.
-  'tools/arch-lint/src/function-size-budget.test.ts': 878,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
@@ -700,7 +675,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // pinned here, not only in the hook's test).
   // 1956 -> 1997 for the /receive-transfer route case: the fragment carries
   // the whole handshake, so it is pinned here beside /pair's same guard.
-  'apps/web/src/App.test.tsx': 1998,
+  'apps/web/src/App.test.tsx': 1373,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
@@ -710,7 +685,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // passkey the precondition for moving, so all twenty renders arrange one.
   // Raised 1086 -> 1089: app-logger reaches the console in browser tests now,
   // so the deferred-demote case claims the warn it provokes (import + two lines).
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1089,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 887,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // Raised 2708 -> 2724, two lines for each of the eight ink entries the
   // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
@@ -739,7 +714,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2768 -> 2855 for the three cases pinning that undo: the document
   // agreeing with the screen after an undo and after a redo, and a taken-back
   // write settling as saved rather than reading as pending forever.
-  'apps/web/src/lib/document-sync-session.test.ts': 2855,
+  'apps/web/src/lib/document-sync-session.test.ts': 2850,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
   // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
@@ -760,19 +735,19 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // aimed at empty space.
   // 2042 -> 2075: two rules of `set-line-end` that nothing pinned (a stale
   // box id, and both ends on one box) now have tests.
-  'apps/web/src/lib/spatial/commands.test.ts': 2075,
+  'apps/web/src/lib/spatial/commands.test.ts': 2072,
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.
   // 1068 -> 1078: its SIBLING, the note-body embed, has failed the same way
   // twice more, so it takes the same instrument and the note says the two
   // are one subject.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1078,
-  'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1076,
+  'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
   // Raised 876 -> 914 for the cancel case: the page's effect cleanup has to
   // stop the replica refresh and the push it armed, and both schedulers'
   // mocks have to answer a spy cancel rather than undefined.
-  'apps/web/src/pages/DaemonDocumentPage.test.tsx': 914,
+  'apps/web/src/pages/DaemonDocumentPage.test.tsx': 890,
   // Raised 2139 -> 2173: a duplicated note's copy was filed as a canvas, and
   // the case needs this file's installFetchMock/selectCard harness. Moving
   // that harness to test-utils/ is what would shrink this entry properly.
@@ -781,8 +756,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // index-page tests stayed green, so the comment explaining why the dialog
   // must not read `Delete "2 documents"?` was pinning nothing.
   'apps/web/src/pages/DaemonIndexPage.test.tsx': 2221,
-  'apps/web/src/pages/SettingsPage.test.tsx': 905,
-  'apps/web/src/pages/use-browser-document-controller.test.ts': 1500,
+  'apps/web/src/pages/SettingsPage.test.tsx': 839,
+  'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
   'packages/canvas-render/src/layout/comments.test.ts': 823,
   'packages/canvas-render/src/layout/edges/edge-rules.properties.test.ts': 843,
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
@@ -801,18 +776,22 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // "writes only what changed" test above it could not see.
   // 1324 -> 1354: the delete cascade pinned over ink — anchored ink goes,
   // free ink stays, the line's lock goes with it.
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1354,
+  // 1354 -> 1356: the import block names the envelope and body modules the
+  // bridge was split into.
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1356,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
   // whose rows are pinned exactly is one whose history is prose, so a merge
   // of two histories costs lines rather than losing one of them.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 976,
+  // 961 -> 964: the harness hands the tools the bundled registry, now that
+  // the seam is required and the tools fall back to nothing.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 964,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
   // reader loosens it again.
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1317,
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1311,
   // 881 -> 901 when compaction became workspace-keyed: one test pins that
   // saves to two documents of one workspace collapse into one compaction.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
@@ -881,6 +860,10 @@ describe('file-size budget: test files, same 800-line budget, same shrink-only c
       (path) => !existsSync(join(REPO_ROOT, path)),
     )
     expect(missing).toEqual([])
+  })
+
+  it('holds no test-file entry whose ceiling stands far above its reading — lower it', () => {
+    expect(staleHeadroom(TEST_FILE_SIZE_GRANDFATHER, readingOf)).toEqual([])
   })
 
   // The two ledgers must not both claim a file: the source scan excludes test

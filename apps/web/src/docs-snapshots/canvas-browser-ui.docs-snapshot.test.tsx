@@ -2,9 +2,9 @@ import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import '../index.css'
+import { jsonResponse } from '../test-utils/json-response.js'
 import {
   captureDocAsset,
-  jsonResponse,
   makeFetchMock,
   topBarFetchHandler,
   waitForSnapshotContent,

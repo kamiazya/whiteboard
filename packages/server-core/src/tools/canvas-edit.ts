@@ -6,7 +6,6 @@ import {
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { type SpatialCanvas, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { LoroDoc } from 'loro-crdt'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
@@ -63,7 +62,7 @@ async function resolveEditRegistry(deps: ServerDeps, input: CanvasEditInput) {
   )
   return namesAStencil
     ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
-    : (deps.facetRegistry ?? bundledFacetRegistry)
+    : deps.facetRegistry
 }
 
 /**

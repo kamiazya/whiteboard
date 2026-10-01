@@ -28,8 +28,8 @@ export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
 /**
  * The running daemon's record, or `null` when there is none.
  *
- * `null` is what `ensure-daemon` answers by deleting the record and spawning
- * a new daemon with a new token, so it is only returned where that is safe:
+ * `null` is what a caller reads as "no daemon is running" before it deletes
+ * the record and starts a new daemon, so it is only returned where that is safe:
  * ENOENT; text that is not a JSON object (writes are atomic, so that is a
  * damaged file, not a half-written one, and it names no process); and a
  * record this build cannot interpret whose `pid` is not running.

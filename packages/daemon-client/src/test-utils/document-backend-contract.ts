@@ -61,7 +61,6 @@ function recorder(): Recorded {
       onVersionCreated: () => calls.push('version'),
       onRestoreStarted: () => calls.push('restoreStarted'),
       onRestoreComplete: () => calls.push('restoreComplete'),
-      onHeadChanged: () => calls.push('head'),
       onViewportRequest: () => calls.push('viewport'),
     } satisfies DocumentBackendHandlers,
   }

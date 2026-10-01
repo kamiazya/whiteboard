@@ -82,13 +82,3 @@ export function dropWrappedKey(daemonBaseUrl: string, workspaceId: string): void
   const { [entryKey(daemonBaseUrl, workspaceId)]: _dropped, ...rest } = load()
   save(rest)
 }
-
-/**
- * Every pair of one daemon, for a disconnect. A blob that outlived the
- * connection is a key on disk for a daemon this browser no longer talks to.
- */
-export function dropWrappedKeysForDaemon(daemonBaseUrl: string): void {
-  const prefix = `${daemonKey(daemonBaseUrl)}${SEPARATOR}`
-  const kept = Object.fromEntries(Object.entries(load()).filter(([key]) => !key.startsWith(prefix)))
-  save(kept)
-}

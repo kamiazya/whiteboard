@@ -1,5 +1,7 @@
 import {
   autoVersionsOverCap,
+  frontiersFromBase64,
+  frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
   sandwichedAutoVersionIds,
 } from '@kamiazya/whiteboard-history'
@@ -12,7 +14,7 @@ import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index
 import type { Insertable } from 'kysely'
 import { sql } from 'kysely'
 import type { Frontiers } from 'loro-crdt'
-import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -118,14 +120,6 @@ export interface VersionStore {
     workspaceId: string,
     path: string,
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64')
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  return new Uint8Array(Buffer.from(b64, 'base64'))
 }
 
 async function dbReady() {
@@ -353,7 +347,7 @@ export class FileVersionStore implements VersionStore {
         throw new DocumentNotFoundError(workspaceId, path)
       }
       const documentId = entry.documentId
-      const frontiers = bytesToBase64(encodeFrontiers(storedWorkspace.frontiers()))
+      const frontiers = frontiersToBase64(storedWorkspace.frontiers())
       await db
         .insertInto('versions')
         .values(
@@ -407,7 +401,7 @@ export class FileVersionStore implements VersionStore {
     }
     const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
     try {
-      clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
+      clone.checkout(frontiersFromBase64(row.frontiers))
     } catch (error) {
       throw corruptStoredData(
         `versions/${id}`,
@@ -434,7 +428,7 @@ export class FileVersionStore implements VersionStore {
     if (storedWorkspace === null) return null
     const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
     try {
-      clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
+      clone.checkout(frontiersFromBase64(row.frontiers))
     } catch (error) {
       throw corruptStoredData(
         `versions/${id}`,
@@ -590,7 +584,7 @@ export class FileVersionStore implements VersionStore {
       .executeTakeFirst()
     if (!row) return null
     try {
-      return decodeFrontiers(base64ToBytes(row.frontiers))
+      return frontiersFromBase64(row.frontiers)
     } catch (error) {
       throw corruptStoredData(
         `versions/${workspaceId}`,

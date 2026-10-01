@@ -84,7 +84,7 @@ export interface BrowserVersionStoreDeps {
  * workspace record, whose lineage is durable — the fold re-snapshots the
  * same ops, so a frontier saved before any number of folds still checks
  * out after them. A per-document copy would be the second place to keep a
- * version, which is the defect #1235 removed from the daemon.
+ * version, which is the defect the daemon's store had and removed.
  *
  * `loadPast` answers the past state of ONE document as a standalone doc,
  * which is what a restore reconciles from; who reconciles it onto the live

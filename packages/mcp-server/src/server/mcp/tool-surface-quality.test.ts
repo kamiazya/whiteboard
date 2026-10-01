@@ -16,6 +16,8 @@
 // and exist so a change cannot buy one with the other silently: a
 // consolidation that folds three tools into one can halve the count and
 // double `visibleBytes`, and the pair is what says which happened.
+
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
@@ -46,6 +48,7 @@ async function connect(): Promise<{ client: Client; tools: readonly ListedTool[]
     versions: new InMemoryVersionHistory(),
     // The daemon's own seam: every mutating tool takes its write lock.
     liveDocuments: liveDocuments(),
+    facetRegistry: bundledFacetRegistry,
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

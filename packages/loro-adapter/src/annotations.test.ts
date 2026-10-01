@@ -11,7 +11,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readAnnotations } from './annotations.js'
 import { writeCommentThread } from './comment-threads.js'
-import { writeMarkdownBody } from './loro-bridge.js'
+import { writeMarkdownBody } from './markdown-body.js'
 
 const THREAD: CommentThread = {
   id: 't1',

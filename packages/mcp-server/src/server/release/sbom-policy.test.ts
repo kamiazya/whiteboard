@@ -556,10 +556,6 @@ describe('release.yml publish job step ordering hazards', () => {
       expect(section, `${jobId} job must exist`).not.toBe('')
       expect(
         section,
-        `${jobId} must set WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS for slow CI cold starts`,
-      ).toContain('WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS')
-      expect(
-        section,
         `${jobId} must set WHITEBOARD_SMOKE_RPC_TIMEOUT_MS for slow CI cold starts`,
       ).toContain('WHITEBOARD_SMOKE_RPC_TIMEOUT_MS')
     }

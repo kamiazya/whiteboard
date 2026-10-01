@@ -6,6 +6,7 @@
 // the line the handler was registered at, after the auth middleware and
 // before the other routers.
 
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import {
   type createMcpHandler,
   isLegacyRequest,
@@ -27,6 +28,8 @@ const httpLog = getLogger('mcp-http')
 export interface McpRouterDeps {
   /** The SDK handler  built; this router only routes to it. */
   readonly modernMcpHandler: ReturnType<typeof createMcpHandler>
+  /** The deps the root composed, so a legacy-era server answers with them too. */
+  readonly serverDeps?: ServerDeps
 }
 
 /**
@@ -118,12 +121,13 @@ async function handleLegacy(
   parsedBody: unknown,
   startedAt: number,
   trace: McpHttpTrace,
+  serverDeps: ServerDeps | undefined,
 ): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true })
   let response: Response | undefined
   try {
     const constructStartedAt = trace.at()
-    const server = await createMcpServer()
+    const server = await createMcpServer(serverDeps)
     trace.construct(constructStartedAt)
     await server.connect(transport)
     response = await transport.handleRequest(c.req.raw, { parsedBody })
@@ -180,7 +184,7 @@ export function createMcpRouter(deps: McpRouterDeps): Hono {
       parsedBody !== undefined
         ? await isLegacyRequest(c.req.raw, parsedBody)
         : await isLegacyRequest(c.req.raw)
-    if (legacy) return handleLegacy(c, parsedBody, startedAt, trace)
+    if (legacy) return handleLegacy(c, parsedBody, startedAt, trace, deps.serverDeps)
 
     const response = await deps.modernMcpHandler.fetch(c.req.raw, { parsedBody })
     trace.exchange({ c, parsedBody, status: response.status, startedAt, era: 'modern' })

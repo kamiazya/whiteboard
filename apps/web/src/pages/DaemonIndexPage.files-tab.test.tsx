@@ -13,6 +13,7 @@ import {
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
@@ -24,13 +25,6 @@ function render(ui: ReactElement) {
 }
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
 
 const OKF_DOC = '---\ntype: note\ntitle: Design\n---\n\n# Palette decisions'
 

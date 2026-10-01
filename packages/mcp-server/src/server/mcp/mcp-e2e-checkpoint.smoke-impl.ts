@@ -1,9 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { retryDaemonStartup } from './daemon-readiness.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 
 /** Workspace path used for every canvas the smoke creates. */
@@ -14,15 +12,6 @@ interface RunOptions {
   entry: string
   /** Package root used as cwd for the spawned child process. */
   root: string
-  /**
-   * Opt-in: retry the daemon-triggering RPC across bounded cold-start
-   * windows instead of failing on the first "Daemon startup timeout".
-   * Defaults to false so callers running under a fixed vitest testTimeout
-   * (mcp-e2e-checkpoint.smoke.test.ts) keep exact single-window semantics.
-   */
-  retryDaemonStartup?: boolean
-  /** Extra RPC attempts beyond the first when retryDaemonStartup is set. */
-  maxDaemonStartupRetries?: number
   /**
    * Ambient environment to spread into the spawned child. Defaults to
    * process.env; callers that must not forward an ambient flag (e.g. the
@@ -37,10 +26,9 @@ type RpcResponse = {
 }
 
 /**
- * Builds the child process env, preserving WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS
- * (and any other inherited var) from the parent process while pointing the
- * child at an isolated data dir. Pure so env propagation is unit-testable
- * without spawning a real process.
+ * Builds the child process env, preserving every inherited var from the
+ * parent process while pointing the child at an isolated data dir. Pure so
+ * env propagation is unit-testable without spawning a real process.
  */
 export function buildCheckpointChildEnv(
   processEnv: NodeJS.ProcessEnv,
@@ -49,64 +37,24 @@ export function buildCheckpointChildEnv(
   return { ...processEnv, WHITEBOARD_DATA_DIR: dataDir }
 }
 
-/**
- * Issues the first daemon-triggering tool call (a `wb_workspace_edit`
- * `document.create`), optionally
- * retried across bounded cold-start windows via retryDaemonStartup. Extracted
- * so the retry wiring is unit-testable against a fake callTool without spawning
- * a real MCP child process.
- */
-export function triggerDaemonDocumentCreate(
+/** The first tool call that touches storage: a `wb_workspace_edit` `document.create`. */
+function createFirstDocument(
   callTool: (name: string, args: unknown) => Promise<Record<string, unknown>>,
-  options: { retryDaemonStartup: boolean; maxDaemonStartupRetries: number },
 ): Promise<Record<string, unknown>> {
-  const attempt = () =>
-    callTool('wb_workspace_edit', {
-      workspaceId: WORKSPACE_ID,
-      createWorkspace: true,
-      ops: [
-        {
-          op: 'document.create',
-          path: 'e2e-src',
-          // markdown, because the flow below sets a facet on it — facets are
-          // OKF frontmatter, and nothing here needs a spatial canvas: version
-          // save/list/restore is about history, not content shape.
-          kind: 'markdown',
-        },
-      ],
-    })
-  return options.retryDaemonStartup
-    ? retryDaemonStartup({ attempt, maxRetries: options.maxDaemonStartupRetries })
-    : attempt()
-}
-
-/**
- * Reads every daemon-*.log file under <dataDir>/logs, which is where
- * ensureDaemon (see ensure-daemon.ts openDaemonLogFile) redirects the
- * detached daemon child's stdout/stderr. The caller's tmp data dir is
- * deleted right after this smoke fails, so a "Daemon startup timeout"
- * would otherwise discard the one artifact that explains why the daemon
- * process never bound its port (crash on require, missing devDependency
- * when run against an installed-only tree, etc.). Best-effort: absent or
- * unreadable logs must never mask the original failure.
- */
-export async function readDaemonLogsForFailure(dataDir: string): Promise<string> {
-  try {
-    const logsDir = join(dataDir, 'logs')
-    const files = (await readdir(logsDir)).filter(
-      (f) => f.startsWith('daemon-') && f.endsWith('.log'),
-    )
-    if (files.length === 0) return ''
-    const contents = await Promise.all(
-      files.map(async (f) => {
-        const body = await readFile(join(logsDir, f), 'utf-8')
-        return `--- ${f} ---\n${body.trim()}`
-      }),
-    )
-    return `\n--- daemon log(s) ---\n${contents.join('\n')}\n--- end daemon log(s) ---`
-  } catch {
-    return ''
-  }
+  return callTool('wb_workspace_edit', {
+    workspaceId: WORKSPACE_ID,
+    createWorkspace: true,
+    ops: [
+      {
+        op: 'document.create',
+        path: 'e2e-src',
+        // markdown, because the flow below sets a facet on it — facets are
+        // OKF frontmatter, and nothing here needs a spatial canvas: version
+        // save/list/restore is about history, not content shape.
+        kind: 'markdown',
+      },
+    ],
+  })
 }
 
 /**
@@ -283,8 +231,6 @@ async function exerciseVersionRoundTrip(callTool: CallTool, documentId: string):
 export async function runE2eCheckpointSmoke({
   entry,
   root,
-  retryDaemonStartup: shouldRetryDaemonStartup = false,
-  maxDaemonStartupRetries = 1,
   env: ambientEnv = process.env,
 }: RunOptions): Promise<void> {
   const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-e2e-'))
@@ -336,13 +282,7 @@ export async function runE2eCheckpointSmoke({
     const toolsResult = (await rpc('tools/list', {})) as { tools: Array<{ name: string }> }
     assertToolSurface(toolsResult.tools.map((t) => t.name))
 
-    // This create is the first daemon-dependent RPC, so its failure mode is
-    // the daemon cold-starting under contention. Retrying is opt-in: only the
-    // tarball smoke (no fixed vitest testTimeout) enables it.
-    const batch = await triggerDaemonDocumentCreate(callTool, {
-      retryDaemonStartup: shouldRetryDaemonStartup,
-      maxDaemonStartupRetries,
-    })
+    const batch = await createFirstDocument(callTool)
     const created = (batch.results as { documentId?: unknown; path?: unknown }[] | undefined)?.[0]
     if (typeof created?.documentId !== 'string' || created.path !== 'e2e-src') {
       throw new Error(`wb_workspace_edit returned unexpected shape: ${JSON.stringify(batch)}`)
@@ -369,10 +309,7 @@ export async function runE2eCheckpointSmoke({
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const detail = stderrBuf ? `\n--- MCP stderr ---\n${stderrBuf}\n--- end ---` : ''
-    // Read before `finally` deletes tmpDataDir, so a startup failure still
-    // surfaces why the detached daemon process never bound its port.
-    const daemonLogDetail = await readDaemonLogsForFailure(tmpDataDir)
-    throw new Error(`${msg}${detail}${daemonLogDetail}`)
+    throw new Error(`${msg}${detail}`)
   } finally {
     process.removeListener('exit', exitHandler)
     try {

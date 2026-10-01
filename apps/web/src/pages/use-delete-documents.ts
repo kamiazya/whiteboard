@@ -12,7 +12,7 @@
  * departed workspace's path to the one now on screen.
  */
 import { useCallback, useRef, useState } from 'react'
-import type { DeleteDocumentDialogProps } from '../components/document-list/DeleteDocumentDialog.js'
+import type { DeleteDocumentsDialogProps } from '../components/document-list/DeleteDocumentsDialog.js'
 import type { DestructiveActionId } from '../lib/destructive-copy.js'
 import {
   type DeleteRowLookup,
@@ -57,14 +57,14 @@ export interface DeleteDocumentsState {
   readonly requestDelete: (pending: PendingDelete) => void
   /** The page's own clear — a workspace switch — with no dismiss hook. */
   readonly reset: () => void
-  /** Spread straight into `DeleteDocumentDialog`; a test may also await the confirm. */
-  readonly dialog: Omit<DeleteDocumentDialogProps, 'onConfirm'> & {
+  /** Spread straight into `DeleteDocumentsDialog`; a test may also await the confirm. */
+  readonly dialog: Omit<DeleteDocumentsDialogProps, 'onConfirm'> & {
     readonly onConfirm: () => Promise<void>
   }
 }
 
 /** What the dialog says it is about: the name, the kind, and a count for a bulk. */
-function dialogSubject(pending: PendingDelete | null): DeleteDocumentDialogProps['pending'] {
+function dialogSubject(pending: PendingDelete | null): DeleteDocumentsDialogProps['pending'] {
   if (pending === null) return null
   return {
     displayName: pending.displayName,

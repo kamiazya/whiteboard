@@ -135,9 +135,9 @@ destinations.add(stderrDestination)
 
 // Every path below is a real secret/PII carrier found in this codebase, or
 // a common credential name a careless call site could introduce later:
-//   - token / daemonToken / bootstrapToken: the local-daemon bearer token
-//     (see shared/token-store.ts) — an Authorization header round-trips
-//     this value, and it grants full daemon access to whoever holds it.
+//   - token / daemonToken / bootstrapToken: the local-daemon bearer token —
+//     an Authorization header round-trips this value, and it grants full
+//     daemon access to whoever holds it.
 //   - accessToken: OAuth access tokens (security/oauth-resource-strategy.ts).
 //   - authorization / cookie: raw auth headers a route handler might log
 //     wholesale while debugging (`c.req.header('authorization')`).

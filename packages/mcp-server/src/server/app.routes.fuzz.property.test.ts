@@ -36,6 +36,7 @@ import {
   renameWorkspaceRequestSchema,
   restoreTrashResponseSchema,
   restoreVersionRequestSchema,
+  restoreVersionResponseSchema,
   saveVersionRequestSchema,
   saveVersionResponseSchema,
   setNameRequestSchema,
@@ -275,6 +276,7 @@ const RULES: Record<string, Rule> = {
   'POST /api/workspaces/:workspaceId/documents/*/versions/:id/restore': {
     answers: 'json',
     body: restoreVersionRequestSchema,
+    response: restoreVersionResponseSchema,
   },
   'PUT /api/workspaces/:workspaceId/documents/*/name': {
     answers: 'json',

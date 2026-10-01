@@ -117,11 +117,16 @@ implementations live in the composition roots.
   re-projects. `comment-threads.durability.test.ts` and
   `proposals.durability.test.ts` cross that reopen; a new plane whose
   entries are containers gets a test of the same shape.
-- **`containers.ts` holds the `DocumentContainers` seam and the container keys
-  more than one module reads.** A key lives in `loro-bridge.ts` until a second
-  module needs it and moves here then — which is also what keeps `loro-bridge`
-  and `comment-threads` from importing each other, a value cycle
-  `cycle-check.ts` would fail on.
+- **`containers.ts` holds the `DocumentContainers` seam and every container
+  key.** The content bridge is four modules by what they read: the spatial
+  canvas and its locks (`loro-bridge.ts`), the document envelope — kind,
+  core, trust and extension facets (`document-envelope.ts`) — the markdown
+  body (`markdown-body.ts`), and the read-only lifts of the two shapes older
+  writers left (`legacy-lifts.ts`). Each reaches for a key here and never
+  for a sibling's, which is what keeps them, `comment-threads` and
+  `proposals` from forming a value cycle `cycle-check.ts` would fail on;
+  `markdown-body` is the one that imports `loro-bridge`, since a body
+  written as a node is read through the canvas and writing one empties it.
 - **A comment lives in the `threads` plane (ADR-0026), and `readSpatialCanvas`
   PROJECTS one back.** Every writer — `writeCanvasComment`, the resync inside
   `writeSpatialCanvas`, `withSpatialBatch` — goes through the thread plane, so

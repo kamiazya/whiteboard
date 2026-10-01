@@ -1,4 +1,5 @@
 import { getAppLogger } from '../lib/app-logger.js'
+import { createSubscribers } from '../lib/subscribers.js'
 
 const log = getAppLogger('sw-status')
 
@@ -18,17 +19,14 @@ export interface SwStatus {
 let status: SwStatus = { supported: false, updateReady: false, checking: false }
 let applyHandler: (() => Promise<void>) | null = null
 let checkHandler: (() => Promise<void>) | null = null
-const listeners = new Set<() => void>()
+const changed = createSubscribers()
 
 function set(next: Partial<SwStatus>): void {
   status = { ...status, ...next }
-  for (const listener of listeners) listener()
+  changed.emit()
 }
 
-export function subscribeSwStatus(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
+export const subscribeSwStatus = changed.subscribe
 
 export function getSwStatus(): SwStatus {
   return status
@@ -69,5 +67,5 @@ export function resetSwStatusForTests(): void {
   status = { supported: false, updateReady: false, checking: false }
   applyHandler = null
   checkHandler = null
-  listeners.clear()
+  changed.clear()
 }

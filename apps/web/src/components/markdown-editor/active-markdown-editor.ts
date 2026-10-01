@@ -1,5 +1,6 @@
 import type { StateCommand } from '@codemirror/state'
 import { useSyncExternalStore } from 'react'
+import { createSubscribers } from '../../lib/subscribers.js'
 
 /**
  * What the keyboard-docked formatting bar needs from whichever CodeMirror
@@ -32,10 +33,10 @@ export interface ActiveMarkdownEditor {
 }
 
 let current: ActiveMarkdownEditor | null = null
-const listeners = new Set<() => void>()
+const changed = createSubscribers()
 
 function notify(): void {
-  for (const listener of listeners) listener()
+  changed.emit()
 }
 
 export function getActiveMarkdownEditor(): ActiveMarkdownEditor | null {
@@ -59,12 +60,7 @@ export function clearActiveMarkdownEditor(editor: ActiveMarkdownEditor): void {
   notify()
 }
 
-export function subscribeActiveMarkdownEditor(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
+export const subscribeActiveMarkdownEditor = changed.subscribe
 
 export function useActiveMarkdownEditor(): ActiveMarkdownEditor | null {
   return useSyncExternalStore(subscribeActiveMarkdownEditor, getActiveMarkdownEditor, () => null)

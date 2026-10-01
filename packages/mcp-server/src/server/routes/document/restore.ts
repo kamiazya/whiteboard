@@ -1,4 +1,7 @@
-import { restoreVersionRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import {
+  type RestoreVersionResponse,
+  restoreVersionRequestSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   type RestoreProgress,
   restoreVersion,
@@ -38,30 +41,37 @@ export interface RestoreRouterOptions {
  * operation, and which of eight outcomes came back is the operation's
  * vocabulary, not the route's control flow.
  */
+type RestoreAnswer =
+  | { status: 200; body: RestoreVersionResponse }
+  | { status: 400 | 404 | 409; body: unknown }
+
+/** A restore that happened answers under the one contract the client reads it with. */
+const restored = (body: RestoreVersionResponse): RestoreAnswer => ({ status: 200, body })
+const refused = (body: unknown, status: 400 | 404 | 409): RestoreAnswer => ({ status, body })
+
 function restoreAnswer(
   result: Awaited<ReturnType<typeof restoreVersion>>,
   { workspaceId, targetPath }: { workspaceId: string; targetPath: string | undefined },
-): { status: 200 | 400 | 404 | 409; body: unknown } {
-  const answer = (b: unknown, status: 200 | 400 | 404 | 409 = 200) => ({ status, body: b })
+): RestoreAnswer {
   switch (result.kind) {
     case 'not-found':
-      return answer({ error: 'not_found' }, 404)
+      return refused({ error: 'not_found' }, 404)
     case 'invalid-target-path':
       // The operation's schema backstop rejected it; re-run the rich
       // per-segment validator for the same 400 body this route has
       // always sent.
       {
         const invalidTarget = refusedBy(() => validateDocumentPath(targetPath ?? ''))
-        if (invalidTarget) return answer(invalidTarget, 400)
+        if (invalidTarget) return refused(invalidTarget, 400)
       }
-      return answer({ error: 'invalid_body', message: 'invalid restore options' }, 400)
+      return refused({ error: 'invalid_body', message: 'invalid restore options' }, 400)
     case 'subtree-takes-no-target':
-      return answer(
+      return refused(
         { error: 'invalid_body', message: 'subtree rollback cannot take a targetPath' },
         400,
       )
     case 'subtree-needs-workspace-version':
-      return answer(
+      return refused(
         {
           error: 'unsupported',
           message: 'subtree rollback needs a workspace-scoped version',
@@ -69,7 +79,7 @@ function restoreAnswer(
         409,
       )
     case 'output-exists':
-      return answer(
+      return refused(
         {
           error: 'output_exists',
           message: `Target canvas "${result.targetPath}" already exists. Pass overwrite=true to replace it.`,
@@ -77,14 +87,14 @@ function restoreAnswer(
         409,
       )
     case 'restored-to-target':
-      return answer({
+      return restored({
         documentId: `${workspaceId}/${result.targetPath}`,
         elementCount: result.elementCount,
       })
     case 'restored-subtree':
-      return answer({ ok: true, restoredCount: result.restoredCount })
+      return restored({ ok: true, restoredCount: result.restoredCount })
     case 'restored-in-place':
-      return answer({ ok: true })
+      return restored({ ok: true })
   }
 }
 

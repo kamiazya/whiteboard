@@ -64,7 +64,6 @@ function createHandlers() {
       onVersionCreated: () => {},
       onRestoreStarted: () => {},
       onRestoreComplete: () => {},
-      onHeadChanged: () => {},
       onViewportRequest: () => {},
     } satisfies DocumentBackendHandlers,
     snapshots,
@@ -174,8 +173,8 @@ describe('SseBackend', () => {
   })
 
   it('ignores a text message addressed to a different document', async () => {
-    // The misrouting this addressing exists to prevent: a head_changed for a
-    // sibling canvas sharing the stream must not be applied here.
+    // The misrouting this addressing exists to prevent: a restore_started
+    // for a sibling canvas sharing the stream must not be applied here.
     const fake = createFakeTransport([])
     const heads: unknown[] = []
     const handlers = {
@@ -183,22 +182,21 @@ describe('SseBackend', () => {
       onRemoteUpdate: () => {},
       onConnected: () => {},
       onVersionCreated: () => {},
-      onRestoreStarted: () => {},
+      onRestoreStarted: (h: unknown) => heads.push(h),
       onRestoreComplete: () => {},
-      onHeadChanged: (h: unknown) => heads.push(h),
       onViewportRequest: () => {},
     } as never
     const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', fake.transport)
 
     backend.connect(handlers)
     await flush()
-    const headChanged = JSON.stringify({ type: 'head_changed', head: 'other-head' })
-    fake.push(sseFrame('message', JSON.stringify({ doc: 'ws-1/other', raw: headChanged })))
+    const probe = JSON.stringify({ type: 'restore_started', label: 'other-head' })
+    fake.push(sseFrame('message', JSON.stringify({ doc: 'ws-1/other', raw: probe })))
     await flush()
     expect(heads).toEqual([])
 
     // …while the same message for this document is applied.
-    fake.push(sseFrame('message', JSON.stringify({ doc: 'ws-1/canvas-a', raw: headChanged })))
+    fake.push(sseFrame('message', JSON.stringify({ doc: 'ws-1/canvas-a', raw: probe })))
     await vi.waitFor(() => expect(heads.length).toBe(1))
     backend.disconnect()
   })
@@ -253,7 +251,6 @@ describe('SseBackend', () => {
       onVersionCreated: () => {},
       onRestoreStarted: () => {},
       onRestoreComplete: () => {},
-      onHeadChanged: () => {},
       onViewportRequest: () => {},
     } satisfies DocumentBackendHandlers
     const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', fake.transport)
