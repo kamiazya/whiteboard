@@ -7,11 +7,10 @@
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -36,31 +35,6 @@ const start: SpatialCanvas = {
   comments: [ANCHORED, FREE],
 }
 
-function makeHost(initial: SpatialCanvas = start) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: initial,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 function commentOf(canvas: SpatialCanvas, id: string): CanvasComment | undefined {
   return canvas.comments?.find((c) => c.id === id)
 }
@@ -70,7 +44,7 @@ function movesOf(commands: readonly EditorCommand[]) {
 }
 
 it('dragging a point-anchored pin moves the anchor and commits one move-comment', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -110,7 +84,7 @@ it('dragging a point-anchored pin moves the anchor and commits one move-comment'
 })
 
 it('a pressed pin stays on screen before the pointer has moved', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -137,7 +111,7 @@ it('a pressed pin stays on screen before the pointer has moved', async () => {
 })
 
 it('a press on a pin that does not travel is not a move', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -159,7 +133,7 @@ it('a press on a pin that does not travel is not a move', async () => {
 })
 
 it('a pointercancel mid-drag writes nothing, and the torn-down drag cannot commit on a later release', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -193,7 +167,7 @@ it('a pointercancel mid-drag writes nothing, and the torn-down drag cannot commi
 })
 
 it('a node-anchored pin does not detach: no move-comment, the anchor stays the corner', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -232,7 +206,9 @@ const FILLER = Array.from({ length: 12 }, (_, i) =>
 )
 
 it('a drop lands the comment at the new anchor with no flight back from the old one', async () => {
-  const { Host, latest } = makeHost({ ...start, nodes: [...start.nodes, ...FILLER] })
+  const { Host, latest } = makeEditorHost({
+    initial: { ...start, nodes: [...start.nodes, ...FILLER] },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()

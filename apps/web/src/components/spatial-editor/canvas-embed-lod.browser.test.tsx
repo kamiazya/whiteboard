@@ -7,10 +7,9 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -22,25 +21,11 @@ const referenced: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(initial: SpatialCanvas) {
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          fileRefOptions={[{ file: 'ref-1', label: 'Referenced canvas' }]}
-          references={referenceWire(new Map(), {
-            extras: new Map([['ref-1', { canvas: referenced }]]),
-          })}
-        />
-      </div>
-    )
-  }
-  return Host
+const EMBED_PROPS = {
+  fileRefOptions: [{ file: 'ref-1', label: 'Referenced canvas' }],
+  references: referenceWire(new Map(), {
+    extras: new Map([['ref-1', { canvas: referenced }]]),
+  }),
 }
 
 function embeddedTextExists(container: HTMLElement): boolean {
@@ -52,7 +37,7 @@ it('a large file node renders the referenced canvas inline; a small one stays a 
     nodes: [fileNode({ id: 'big', x: 60, y: 60, width: 320, height: 240, file: 'ref-1' })],
     edges: [],
   }
-  const Host = makeHost(large)
+  const { Host } = makeEditorHost({ initial: large, editorProps: EMBED_PROPS })
   const { container } = render(<Host />)
   await vi.waitFor(() => expect(embeddedTextExists(container)).toBe(true))
 
@@ -62,7 +47,7 @@ it('a large file node renders the referenced canvas inline; a small one stays a 
     nodes: [fileNode({ id: 'tiny', x: 60, y: 60, width: 120, height: 80, file: 'ref-1' })],
     edges: [],
   }
-  const SmallHost = makeHost(small)
+  const { Host: SmallHost } = makeEditorHost({ initial: small, editorProps: EMBED_PROPS })
   const { container: smallContainer } = render(<SmallHost />)
   // Below the expand threshold: the card (resolved label) renders, not the
   // referenced content.
@@ -79,7 +64,7 @@ it('zooming far out collapses an expanded miniature back to the card', async () 
     nodes: [fileNode({ id: 'big', x: 300, y: 220, width: 320, height: 240, file: 'ref-1' })],
     edges: [],
   }
-  const Host = makeHost(large)
+  const { Host } = makeEditorHost({ initial: large, editorProps: EMBED_PROPS })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await vi.waitFor(() => expect(embeddedTextExists(container)).toBe(true))

@@ -16,12 +16,11 @@
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -50,32 +49,6 @@ const start: SpatialCanvas = {
   comments: [FREE],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          threads={[THREAD]}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 function messageEdits(commands: readonly EditorCommand[]) {
   return commands.filter((c) => c.kind === 'edit-thread-message')
 }
@@ -97,7 +70,7 @@ function pressBubble(root: HTMLElement, pointerId: number) {
 }
 
 it('rewrites a REPLY from the card, the message this surface could not reach', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start, editorProps: { threads: [THREAD] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -120,7 +93,7 @@ it('rewrites a REPLY from the card, the message this surface could not reach', a
 })
 
 it('rewrites the opening message the same way, saying it is the one the canvas draws', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start, editorProps: { threads: [THREAD] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -141,7 +114,7 @@ it('rewrites the opening message the same way, saying it is the one the canvas d
 })
 
 it('Escape abandons the edit and keeps the stored text, without shutting the card', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start, editorProps: { threads: [THREAD] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
@@ -165,7 +138,7 @@ it('Escape abandons the edit and keeps the stored text, without shutting the car
 })
 
 it('offers no second way to edit from the comment context menu', async () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial: start, editorProps: { threads: [THREAD] } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)

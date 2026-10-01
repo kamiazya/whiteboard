@@ -9,13 +9,11 @@
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -30,35 +28,6 @@ const start: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE],
-}
-
-function makeHost() {
-  const latest: {
-    canvas: SpatialCanvas
-    commands: EditorCommand[]
-    handle: SpatialEditorHandle | null
-  } = { canvas: start, commands: [], handle: null }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          ref={(handle) => {
-            latest.handle = handle
-          }}
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
 }
 
 /** Zoom 1.3 puts every screen pixel at a fractional canvas coordinate. */
@@ -77,7 +46,7 @@ async function zoomTo13(container: HTMLElement, latest: { handle: SpatialEditorH
 }
 
 it('a pin dragged at a fractional zoom commits an integer anchor', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await vi.waitFor(() =>
@@ -107,7 +76,7 @@ it('a pin dragged at a fractional zoom commits an integer anchor', async () => {
 })
 
 it('Comment here at a fractional zoom commits an integer anchor', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await zoomTo13(container, latest)
