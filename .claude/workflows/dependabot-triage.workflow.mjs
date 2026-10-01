@@ -241,5 +241,5 @@ return {
   plan,
   needsHumanGate: true,
   note:
-    'Read-only triage. Integrator executes per the dependabot-review skill: merge in plan.mergeOrder one-lock-PR-at-a-time (rebase the next via `@dependabot rebase`), close superseded PRs, file plan.needsMigration into Tasks/tmp-issues (NOT GitHub issues), and bump any needs-manual-bump alerts. Re-run `pnpm audit --prod --audit-level=high` after to confirm the CI gate clears.',
+    'Read-only triage. Integrator executes per the dependabot-review skill: merge in plan.mergeOrder one-lock-PR-at-a-time (rebase the next via `@dependabot rebase`), close superseded PRs, file plan.needsMigration into Tasks / whiteboard issue documents (NOT GitHub issues), and bump any needs-manual-bump alerts. Re-run `pnpm audit --prod --audit-level=high` after to confirm the CI gate clears.',
 }

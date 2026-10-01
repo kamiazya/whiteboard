@@ -1,7 +1,7 @@
 export const meta = {
   name: 'audit-triage',
   description:
-    'Standing whole-codebase health audit: fan out one auditor per health dimension (wiring-gaps / architecture / maintainability / contract-drift / test-gaps / dev-experience), adversarially verify the HIGH+ findings to kill false positives, then triage into a deduped, severity-ranked backlog of task/issue candidates. Read-only — the integrator (main session) files the survivors as Tasks / tmp-issues.',
+    'Standing whole-codebase health audit: fan out one auditor per health dimension (wiring-gaps / architecture / maintainability / contract-drift / test-gaps / dev-experience), adversarially verify the HIGH+ findings to kill false positives, then triage into a deduped, severity-ranked backlog of task/issue candidates. Read-only — the integrator (main session) files the survivors as Tasks / whiteboard issue documents.',
   whenToUse:
     'Periodically (after a fold, weekly, or before a milestone) to surface standing problems the per-diff review never sees: unwired/incomplete features, architecture debt, maintainability rot, contract drift, missing tests, onboarding friction. Pass args:{scope?, dimensions?, cwd?, auditorAgent?, verifyFloor?}. Not a diff review (use the review workflow for a change). Returns triaged candidates; it cannot create Tasks itself.',
   phases: [

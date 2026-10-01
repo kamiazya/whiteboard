@@ -1,6 +1,6 @@
 ---
 name: ci-triage
-description: Monitor and triage the POST-PUSH automated-review surface for the whiteboard repo — GitHub Actions CI, CodeRabbit, AccessLint, the WIP app, CodeQL, and Dependabot — into Tasks/tmp-issues. Use after the integrator pushes, when CI/PR checks complete or a review bot comments, to decide what is real and file/fix it. Complements the local lefthook pre-push gate (which runs before push); this covers what only the cloud sees.
+description: Monitor and triage the POST-PUSH automated-review surface for the whiteboard repo — GitHub Actions CI, CodeRabbit, AccessLint, the WIP app, CodeQL, and Dependabot — into Tasks / whiteboard issue documents. Use after the integrator pushes, when CI/PR checks complete or a review bot comments, to decide what is real and file/fix it. Complements the local lefthook pre-push gate (which runs before push); this covers what only the cloud sees.
 ---
 
 # CI & automated-review triage (whiteboard)

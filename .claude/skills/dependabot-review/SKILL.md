@@ -1,6 +1,6 @@
 ---
 name: dependabot-review
-description: Triage, review, and merge Dependabot dependency-bump PRs + clear Dependabot security alerts for the whiteboard repo. Security-first, semver x ecosystem classification, verify-CI + `pnpm audit --prod` gate awareness, conflict-cascade-safe batch merging by the single integrator. Adapted for this repo's constraints — NO GitHub Issues (backlog -> Tasks/tmp-issues), release-please conventional commits, npm-published runtime-dep priority. Pairs with the dependabot-triage workflow (which does the read-only analysis fan-out).
+description: Triage, review, and merge Dependabot dependency-bump PRs + clear Dependabot security alerts for the whiteboard repo. Security-first, semver x ecosystem classification, verify-CI + `pnpm audit --prod` gate awareness, conflict-cascade-safe batch merging by the single integrator. Adapted for this repo's constraints — NO GitHub Issues (backlog -> Tasks / whiteboard issue documents), release-please conventional commits, npm-published runtime-dep priority. Pairs with the dependabot-triage workflow (which does the read-only analysis fan-out).
 ---
 
 # dependabot-review (whiteboard)
