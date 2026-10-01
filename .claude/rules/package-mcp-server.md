@@ -51,7 +51,7 @@ scan says.
   with `decodeImportBlobMeta` before the import, as the workspace-document
   route already did); an export `scale` the schema admitted but that sized
   the render to nothing answered 500 `headless_export_failed` (the schema
-  now bounds `scale`/`padding`/`minFontPx`, and the renderer's zero-size
+  now bounds `scale`/`padding`, and the renderer's zero-size
   refusal maps to 400); a missing file answered Hono's plain-text 404 (now
   JSON `not_found`); an empty upload stored a zero-byte file (now 400
   `empty_body`); and creating a document under a handle that passes the id

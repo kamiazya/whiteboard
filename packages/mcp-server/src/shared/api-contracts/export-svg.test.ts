@@ -9,7 +9,6 @@ describe('exportSvgRequestSchema', () => {
   it('accepts every field populated', () => {
     const input = {
       padding: 16,
-      frameId: 'frame-1',
       outputPath: '/tmp/out.svg',
       overwrite: true,
       theme: 'dark' as const,
@@ -17,15 +16,19 @@ describe('exportSvgRequestSchema', () => {
     expect(exportSvgRequestSchema.parse(input)).toEqual(input)
   })
 
-  it('rejects a non-string frameId', () => {
-    expect(() => exportSvgRequestSchema.parse({ frameId: 42 })).toThrow()
-  })
-
   it('rejects a theme outside the light/dark enum', () => {
     expect(() => exportSvgRequestSchema.parse({ theme: 'sepia' })).toThrow()
   })
 
-  it('has no scale field (vector output is resolution-independent)', () => {
-    expect(exportSvgRequestSchema.parse({ scale: 2 })).toEqual({})
+  // Each value is well-typed for the field it once carried (or, for `scale`,
+  // for the PNG request), so the refusal is for the field's existence.
+  it.each([
+    ['frameId', 'frame-1'],
+    ['scale', 2],
+    ['background', '#fff'],
+  ])('refuses the undefined field %s', (field, value) => {
+    const parsed = exportSvgRequestSchema.safeParse({ [field]: value })
+    expect(parsed.success).toBe(false)
+    expect(JSON.stringify(parsed.error?.issues)).toContain(field)
   })
 })

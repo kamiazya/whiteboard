@@ -32,8 +32,6 @@ type MockHeadlessArgs = {
   options?: {
     padding?: number
     scale?: number
-    frameId?: string
-    minFontPx?: number
     theme?: 'light' | 'dark'
   }
 }
@@ -292,7 +290,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     )
   })
 
-  it('passes scale and minFontPx through to exportCanvasHeadless options', async () => {
+  it('passes scale through to exportCanvasHeadless options', async () => {
     mockExportCanvasHeadless.mockResolvedValue({
       png: Buffer.from('fake-png-bytes'),
       width: 100,
@@ -305,13 +303,11 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     const res = await app.request('/api/w/s1/document/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ padding: 32, scale: 2, minFontPx: 14 }),
+      body: JSON.stringify({ padding: 32, scale: 2 }),
     })
     expect(res.status).toBe(200)
     expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: expect.objectContaining({ padding: 32, scale: 2, minFontPx: 14 }),
-      }),
+      expect.objectContaining({ options: expect.objectContaining({ padding: 32, scale: 2 }) }),
     )
   })
 
@@ -368,27 +364,24 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(body).toMatchObject({ error: 'payload_too_large' })
   })
 
-  it('passes frameId through to exportCanvasHeadless options', async () => {
-    mockExportCanvasHeadless.mockResolvedValue({
-      png: Buffer.from('fake-png-bytes'),
-      width: 100,
-      height: 50,
-      undrawable: [],
-      unresolvedFamilies: [],
-    })
+  // A field the contract does not define used to be dropped on the floor,
+  // so a caller sending one read a 200 as "honoured".
+  it.each([
+    ['minFontPx', 12],
+    ['frameId', 'frame-1'],
+    ['background', '#fff'],
+  ])('refuses the undefined field %s by name with 400 invalid_request', async (field, value) => {
     const app = makeApp()
-
     const res = await app.request('/api/w/s1/document/canvas-a/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ frameId: 'frame-abc', padding: 24 }),
+      body: JSON.stringify({ padding: 24, [field]: value }),
     })
-    expect(res.status).toBe(200)
-    expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: expect.objectContaining({ frameId: 'frame-abc', padding: 24 }),
-      }),
-    )
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('invalid_request')
+    expect(body.message).toContain(field)
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
   it('returns 200 and filePath for a plain export request', async () => {

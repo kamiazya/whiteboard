@@ -30,13 +30,10 @@ const log = getLogger('headless-export')
 // compile time here rather than silently drifting — this is the exact
 // subset of exportRequestSchema that routes/export.ts forwards into the
 // headless renderer; outputPath/overwrite are route-level concerns, not
-// renderer options. `frameId`/`minFontPx` are accepted for wire
-// compatibility (older browser-export callers still send them) but are
-// Excalidraw-era concepts with no SpatialCanvas equivalent, so the renderer
-// deliberately ignores both.
+// renderer options.
 export type HeadlessCanvasExportOptions = Pick<
   z.infer<typeof exportRequestSchema>,
-  'padding' | 'scale' | 'frameId' | 'minFontPx' | 'theme' | 'style'
+  'padding' | 'scale' | 'theme' | 'style'
 >
 
 // `doc.getMovableList(name)` CREATES the root container as a side effect of

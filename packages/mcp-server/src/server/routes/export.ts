@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { LiveDocuments } from '@kamiazya/whiteboard-server-core'
+import {
+  type ApiErrorBody,
+  invalidRequestBody,
+  type LiveDocuments,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -17,8 +21,8 @@ import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { onDocumentAction } from './document/path-route.js'
 import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
 
-// The body is a small JSON options object (padding/scale/frameId/theme/
-// outputPath), never canvas content — the PNG is always rendered headlessly
+// The body is a small JSON options object (padding/scale/theme/style/
+// outputPath/overwrite), never canvas content — the PNG is always rendered headlessly
 // from the persisted document. 1 MiB is a generous ceiling for that shape
 // while still bounding an adversarial request.
 const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
@@ -29,7 +33,7 @@ const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
  */
 function parseExportBody(
   rawText: string,
-): { body: z.infer<typeof exportRequestSchema> } | { error: ExportErrorBody } {
+): { body: z.infer<typeof exportRequestSchema> } | { error: ApiErrorBody } {
   if (rawText.length === 0) return { body: {} }
   let json: unknown
   try {
@@ -39,7 +43,7 @@ function parseExportBody(
   }
   const parsed = exportRequestSchema.safeParse(json)
   if (!parsed.success) {
-    return { error: { error: 'invalid_request', message: 'invalid export options' } }
+    return { error: invalidRequestBody(parsed.error) }
   }
   return { body: parsed.data }
 }
@@ -194,8 +198,6 @@ async function renderHeadless(
     options: {
       padding: body.padding,
       scale: body.scale,
-      frameId: body.frameId,
-      minFontPx: body.minFontPx,
       theme: body.theme,
       style: body.style,
     },

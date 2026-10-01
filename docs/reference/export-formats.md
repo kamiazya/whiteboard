@@ -192,8 +192,12 @@ degradation, never an error.
 A themed render also comes back on that theme's **paper**: the background is the theme
 palette's surface for the mode asked for (`theme: "dark"` on a neon canvas gives `#030711`),
 so an export is the board a person drawing on it sees rather than the theme's strokes on the
-bundled sheet. A `clean` render keeps the bundled white or near-black surface, and an explicit
-`background` in the request wins over both.
+bundled sheet. A `clean` render keeps the bundled white or near-black surface. There is no request field for the background
+colour.
+
+Both request bodies refuse a field they do not define, naming it in a `400 invalid_request` —
+`POST …/export` takes `padding`, `scale`, `theme`, `style`, `outputPath` and `overwrite`, and
+`POST …/export-svg` the same without `scale`, since vector output has no resolution to set.
 
 A theme's font family is declared in the SVG only where the daemon can measure it — the
 vendored face or an installed one — and otherwise the bundled family is declared, so the face

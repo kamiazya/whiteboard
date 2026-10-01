@@ -10,8 +10,6 @@ describe('exportRequestSchema', () => {
     const input = {
       padding: 16,
       scale: 2,
-      minFontPx: 12,
-      frameId: 'frame-1',
       outputPath: '/tmp/out.png',
       overwrite: true,
       theme: 'dark' as const,
@@ -31,5 +29,17 @@ describe('exportRequestSchema', () => {
     expect(exportRequestSchema.parse({ style: 'document' })).toEqual({ style: 'document' })
     expect(exportRequestSchema.parse({ style: 'visual.neon' })).toEqual({ style: 'visual.neon' })
     expect(() => exportRequestSchema.parse({ style: 'neon' })).toThrow()
+  })
+
+  // Each value is well-typed for the field it once carried, so the refusal
+  // is for the field's existence and not for a type mismatch.
+  it.each([
+    ['minFontPx', 12],
+    ['frameId', 'frame-1'],
+    ['background', '#fff'],
+  ])('refuses the undefined field %s', (field, value) => {
+    const parsed = exportRequestSchema.safeParse({ [field]: value })
+    expect(parsed.success).toBe(false)
+    expect(JSON.stringify(parsed.error?.issues)).toContain(field)
   })
 })

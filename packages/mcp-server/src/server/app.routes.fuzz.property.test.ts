@@ -421,12 +421,12 @@ function overrideFor(seed: Seeded) {
     if (path.endsWith('markdown')) return OKF_OR_NOT
     if (path.endsWith('nonce')) return fc.constantFrom(...NONCES)
     // Absent: the route refuses any explicit output path outside the
-    // workspace's own exports directory before rendering, and a random
-    // frame id names no frame — either would leave the export rows
-    // refusing on nearly every draw and their ledger starving (measured:
-    // one stress run in five). The default output path is unique per
-    // export, so absent is also what lets the row answer more than once.
-    if (path.endsWith('outputPath') || path.endsWith('frameId')) return fc.constant(undefined)
+    // workspace's own exports directory before rendering, which would leave
+    // the export rows refusing on nearly every draw and their ledger
+    // starving (measured: one stress run in five). The default output path
+    // is unique per export, so absent is also what lets the row answer more
+    // than once.
+    if (path.endsWith('outputPath')) return fc.constant(undefined)
     // A restore to a random target path is refused before it restores.
     if (path.endsWith('targetPath')) return fc.constant(undefined)
     return undefined

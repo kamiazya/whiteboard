@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { LiveDocuments } from '@kamiazya/whiteboard-server-core'
+import {
+  type ApiErrorBody,
+  invalidRequestBody,
+  type LiveDocuments,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -16,7 +20,7 @@ import { OutputPathError, validateOutputPath } from '../../output-path.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
 
-// The body is a small JSON options object (padding/frameId/theme/outputPath),
+// The body is a small JSON options object (padding/theme/style/outputPath/overwrite),
 // never canvas content — the export itself is rendered server-side from the
 // persisted doc. 1 MiB is a generous ceiling for that shape while still
 // bounding an adversarial request.
@@ -26,9 +30,7 @@ const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
  * An empty body is a valid export request — every option has a default — so
  * only a body that is PRESENT and unreadable refuses.
  */
-function parseExportSvgBody(
-  rawText: string,
-): { body: ExportSvgRequest } | { error: ExportErrorBody } {
+function parseExportSvgBody(rawText: string): { body: ExportSvgRequest } | { error: ApiErrorBody } {
   if (rawText.length === 0) return { body: {} }
   let json: unknown
   try {
@@ -38,7 +40,7 @@ function parseExportSvgBody(
   }
   const parsed = exportSvgRequestSchema.safeParse(json)
   if (!parsed.success) {
-    return { error: { error: 'invalid_request', message: 'invalid export options' } }
+    return { error: invalidRequestBody(parsed.error) }
   }
   return { body: parsed.data }
 }
@@ -130,7 +132,6 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
           path,
           options: {
             padding: body.padding,
-            frameId: body.frameId,
             theme: body.theme,
             style: body.style,
           },

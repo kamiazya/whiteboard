@@ -6,28 +6,31 @@ import { z } from 'zod'
 // exportRequestSchema and types its `c.json(...)` responses via the
 // ExportResponse/ExportErrorBody types derived below.
 
-export const exportRequestSchema = z.object({
-  // Bounds a caller can get wrong in either direction: a negative padding
-  // or a scale of zero sizes the render to nothing, which the renderer
-  // refuses after the work; a huge one asks for a target no process can
-  // allocate (scale is resvg's zoom factor, padding widens the bounds on
-  // every side). 8x is four times a retina export; 1024px of padding is
-  // a poster's margin.
-  padding: z.number().nonnegative().max(1024).optional(),
-  scale: z.number().positive().max(8).optional(),
-  minFontPx: z.number().nonnegative().optional(),
-  frameId: z.string().optional(),
-  outputPath: z.string().optional(),
-  overwrite: z.boolean().optional(),
-  // theme: forces the rendered scene into 'light' or 'dark'. Lets callers
-  // export the same canvas under both themes for dark-mode QA / before-after
-  // comparison without mutating the persisted appState.
-  theme: z.enum(['light', 'dark']).optional(),
-  // style: which look to draw (ADR-0030 decision 6). Absent is 'clean', so
-  // an export never picks up the document's theme unasked; 'document' draws
-  // the theme the canvas names; a theme id previews one.
-  style: spatialRenderStyleSchema.optional(),
-})
+// Strict so a field this contract does not define is refused by name instead
+// of being dropped: a caller sending one would otherwise read the 200 as
+// "honoured".
+export const exportRequestSchema = z
+  .object({
+    // Bounds a caller can get wrong in either direction: a negative padding
+    // or a scale of zero sizes the render to nothing, which the renderer
+    // refuses after the work; a huge one asks for a target no process can
+    // allocate (scale is resvg's zoom factor, padding widens the bounds on
+    // every side). 8x is four times a retina export; 1024px of padding is
+    // a poster's margin.
+    padding: z.number().nonnegative().max(1024).optional(),
+    scale: z.number().positive().max(8).optional(),
+    outputPath: z.string().optional(),
+    overwrite: z.boolean().optional(),
+    // theme: forces the rendered scene into 'light' or 'dark'. Lets callers
+    // export the same canvas under both themes for dark-mode QA / before-after
+    // comparison without mutating the persisted appState.
+    theme: z.enum(['light', 'dark']).optional(),
+    // style: which look to draw (ADR-0030 decision 6). Absent is 'clean', so
+    // an export never picks up the document's theme unasked; 'document' draws
+    // the theme the canvas names; a theme id previews one.
+    style: spatialRenderStyleSchema.optional(),
+  })
+  .strict()
 
 export const exportResponseSchema = z.object({
   filePath: z.string(),

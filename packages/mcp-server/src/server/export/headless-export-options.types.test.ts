@@ -11,22 +11,18 @@ import type { HeadlessCanvasExportOptions } from './headless-export.js'
 // it fails to compile (under `pnpm typecheck`, not the runtime test run —
 // expectTypeOf assertions are erased at runtime) if the derived type and the
 // route-forwarded field set ever diverge. routes/export.ts forwards
-// padding/scale/frameId/minFontPx/theme from exportRequestSchema;
-// routes/document/export-svg.ts forwards only padding/frameId/theme from
-// exportSvgRequestSchema (no scale/minFontPx — vector output has neither
-// raster scale nor a font-bump ceiling).
+// padding/scale/theme/style from exportRequestSchema;
+// routes/document/export-svg.ts forwards only padding/theme/style from
+// exportSvgRequestSchema (no scale — vector output has no raster scale).
 
 it('HeadlessCanvasExportOptions matches the PNG route-forwarded exportRequestSchema fields exactly', () => {
   expectTypeOf<HeadlessCanvasExportOptions>().toEqualTypeOf<
-    Pick<
-      z.infer<typeof exportRequestSchema>,
-      'padding' | 'scale' | 'frameId' | 'minFontPx' | 'theme'
-    >
+    Pick<z.infer<typeof exportRequestSchema>, 'padding' | 'scale' | 'theme' | 'style'>
   >()
 })
 
 it('the SVG-relevant subset of HeadlessCanvasExportOptions matches exportSvgRequestSchema exactly', () => {
-  expectTypeOf<Pick<HeadlessCanvasExportOptions, 'padding' | 'frameId' | 'theme'>>().toEqualTypeOf<
-    Pick<z.infer<typeof exportSvgRequestSchema>, 'padding' | 'frameId' | 'theme'>
+  expectTypeOf<Pick<HeadlessCanvasExportOptions, 'padding' | 'theme' | 'style'>>().toEqualTypeOf<
+    Pick<z.infer<typeof exportSvgRequestSchema>, 'padding' | 'theme' | 'style'>
   >()
 })

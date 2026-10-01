@@ -64,15 +64,9 @@ export interface HeadlessExportOptions {
   padding?: number
   // scale: pixel scale factor. 1 = 100%, 2 = retina-equivalent. Default 1.
   scale?: number
-  // background: CSS color or 'transparent'. Defaults to the surface of the
-  // palette this render draws in — the theme's when `style` names one, else
-  // the bundled light/dark surface for `theme`.
-  background?: string
-  // theme: forces light/dark background on the rendered scene. `frameId`
-  // and `minFontPx` are accepted upstream (exportRequestSchema) for wire
-  // compatibility but are Excalidraw-era concepts with no SpatialCanvas
-  // equivalent (no frame grouping, no per-element fontSize to clamp) — this
-  // renderer never reads them.
+  // theme: forces light/dark on the rendered scene; the background is the
+  // surface of the palette this render draws in — the theme's when `style`
+  // names one, else the bundled light/dark surface for `theme`.
   theme?: 'light' | 'dark'
   /**
    * Which look to draw (ADR-0030 decision 6): `'clean'` — the default, so
@@ -238,9 +232,7 @@ function buildSvg(
 ): { svg: string; scene: Scene; background: string } {
   const mode = exportMode(options)
   const palette = exportPalette(canvas, options)
-  // An empty string is not a colour: it reads as unset, the way an absent
-  // field does, rather than as a background nobody can name.
-  const background = options.background ? options.background : palette.surface
+  const background = palette.surface
   const scene = buildSpatialScene(
     canvas,
     measure,

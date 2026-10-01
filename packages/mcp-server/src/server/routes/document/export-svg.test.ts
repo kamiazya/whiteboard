@@ -35,7 +35,7 @@ const mockExportCanvasHeadlessSvg =
     (args: {
       workspaceId: string
       path: string
-      options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
+      options?: { padding?: number; theme?: 'light' | 'dark' }
     }) => Promise<{
       svg: string
       undrawable: readonly string[]
@@ -46,7 +46,7 @@ vi.mock('../../export/headless-export.js', () => ({
   exportCanvasHeadlessSvg: (args: {
     workspaceId: string
     path: string
-    options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
+    options?: { padding?: number; theme?: 'light' | 'dark' }
   }) => mockExportCanvasHeadlessSvg(args),
 }))
 
@@ -144,13 +144,13 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     }
   })
 
-  it('forwards padding, frameId, and theme to exportCanvasHeadlessSvg', async () => {
+  it('forwards padding and theme to exportCanvasHeadlessSvg', async () => {
     const app = makeApp()
 
     const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
+      body: JSON.stringify({ padding: 24, theme: 'dark' }),
     })
 
     expect(res.status).toBe(200)
@@ -158,9 +158,29 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
       expect.objectContaining({
         workspaceId: 's1',
         path: 'canvas-a',
-        options: expect.objectContaining({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
+        options: expect.objectContaining({ padding: 24, theme: 'dark' }),
       }),
     )
+  })
+
+  // `scale` is PNG-only: vector output is resolution-independent, and a
+  // caller sending one used to read a 200 as "honoured".
+  it.each([
+    ['frameId', 'frame-1'],
+    ['scale', 2],
+    ['background', '#fff'],
+  ])('refuses the undefined field %s by name with 400 invalid_request', async (field, value) => {
+    const app = makeApp()
+    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 24, [field]: value }),
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('invalid_request')
+    expect(body.message).toContain(field)
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
   it('rejects invalid workspaceId or path with 400', async () => {
