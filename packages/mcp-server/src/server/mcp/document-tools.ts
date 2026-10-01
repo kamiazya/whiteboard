@@ -184,10 +184,6 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.canvasEdit.inputSchema.parse(args)
-      // Under the per-document write lock: this is the one tool that reads
-      // the whole canvas, decides ids and placements against what it read,
-      // and writes it back. Two concurrent batches without the lock can
-      // mint the same id and the later save wins silently.
       const result = await tools.canvasEdit.execute(parsed)
       return structuredJsonResult(result)
     },
@@ -203,10 +199,6 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.threadEdit.inputSchema.parse(args)
-      // Same lock as wb_canvas_edit, for the same reason one level in: this
-      // reads the threads the document holds, mints ids against what it read,
-      // and saves the whole snapshot back. Two concurrent batches without it
-      // mint the same thread id and the later save wins silently.
       const result = await tools.threadEdit.execute(parsed)
       return structuredJsonResult(result)
     },
@@ -222,9 +214,6 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.versionSave.inputSchema.parse(args)
-      // Every document in the batch, held for the batch's whole duration:
-      // a caller asked for these as one checkpoint, so another writer must
-      // not land between two of them.
       const result = await tools.versionSave.execute(parsed)
       return structuredJsonResult(result)
     },
