@@ -4,6 +4,7 @@
  * app's calls — plain requests and the SSE stream alike — keep their shape
  * and only the function they are handed changes.
  */
+import { pageToHostSchema } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL, isBridgeDaemon } from './bridge-address.js'
@@ -31,8 +32,13 @@ class FakePort implements BridgePort {
   private disconnect_: Array<() => void> = []
   readonly onMessage = { addListener: (l: (m: unknown) => void) => void this.message.push(l) }
   readonly onDisconnect = { addListener: (l: () => void) => void this.disconnect_.push(l) }
+  // The host reads every message through this schema, so what the page posts
+  // must survive it unchanged: a stray or misspelled field is stripped by the
+  // parse and so fails the equality.
   postMessage(m: unknown) {
-    this.sent.push(m as Record<string, unknown>)
+    const parsed = pageToHostSchema.parse(m)
+    expect(parsed).toEqual(m)
+    this.sent.push(parsed)
   }
   disconnect() {}
   reply(m: unknown) {
@@ -96,6 +102,15 @@ describe('createBridgeFetch', () => {
       method: 'POST',
       body: bytesToBase64(new Uint8Array([0, 1, 255])),
     })
+  })
+
+  it('refuses a method the bridge does not carry without posting anything', async () => {
+    const ext = new FakeExtension()
+    const bridgeFetch = createBridgeFetch(ext.connect)
+    await expect(bridgeFetch(at('/api/workspaces'), { method: 'OPTIONS' })).rejects.toThrow(
+      /does not carry OPTIONS/,
+    )
+    expect(ext.ports).toEqual([])
   })
 
   // The SSE stream is read as it arrives, never after an end it may not have.

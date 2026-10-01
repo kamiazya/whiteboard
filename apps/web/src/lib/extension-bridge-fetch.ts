@@ -8,6 +8,9 @@
  * The page holds no credential: the native host attaches the daemon's own.
  */
 import {
+  type BridgeMethod,
+  bridgeMethodSchema,
+  type ExtensionHello,
   type ExtensionToPage,
   extensionHelloReplySchema,
   extensionToPageSchema,
@@ -44,7 +47,8 @@ export function extensionPresent(timeoutMs = 1_500, signal?: AbortSignal): Promi
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), timeoutMs)
     try {
-      runtime.sendMessage(WHITEBOARD_EXTENSION_ID, { type: 'hello' }, (reply) => {
+      const hello: ExtensionHello = { type: 'hello' }
+      runtime.sendMessage(WHITEBOARD_EXTENSION_ID, hello, (reply) => {
         clearTimeout(timer)
         resolve(extensionHelloReplySchema.safeParse(reply).success)
       })
@@ -113,9 +117,10 @@ export function createBridgeFetch(connect: () => BridgePort | null): typeof glob
     if (url.origin !== BRIDGE_ORIGIN) {
       throw new TypeError(`the extension bridge carries only ${BRIDGE_ORIGIN}`)
     }
+    const method = carriedMethod(request)
     request.signal.throwIfAborted()
     const body = await requestBody(request)
-    return await sendRequest(open(), pending, request, body)
+    return await sendRequest(open(), pending, request, method, body)
   }
 }
 
@@ -128,6 +133,7 @@ function sendRequest(
   bridge: BridgePort,
   pending: Map<string, Pending>,
   request: Request,
+  method: BridgeMethod,
   body: string | undefined,
 ): Promise<Response> {
   const url = new URL(request.url)
@@ -153,12 +159,18 @@ function sendRequest(
     bridge.postMessage({
       type: 'request',
       id,
-      method: request.method,
+      method,
       path: `${url.pathname}${url.search}`,
       headers: Object.fromEntries(request.headers),
       ...(body === undefined ? {} : { body }),
     })
   })
+}
+
+function carriedMethod(request: Request): BridgeMethod {
+  const method = bridgeMethodSchema.safeParse(request.method)
+  if (!method.success) throw new TypeError(`the extension bridge does not carry ${request.method}`)
+  return method.data
 }
 
 async function requestBody(request: Request): Promise<string | undefined> {

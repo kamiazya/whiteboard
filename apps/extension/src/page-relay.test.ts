@@ -3,6 +3,10 @@
  * window and the extension, for ports the page names, and answer whether it
  * is there. It reads nothing it relays; the host validates.
  */
+import {
+  windowFromExtensionSchema,
+  windowFromPageSchema,
+} from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { WINDOW_BRIDGE_CHANNEL } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { describe, expect, it } from 'vitest'
 import { installPageRelay, type PageWindow } from './page-relay.js'
@@ -35,6 +39,9 @@ function fakePage() {
     addEventListener: (_type, l) => (listener = l),
     postMessage: (message, targetOrigin) => {
       expect(targetOrigin).toBe(ORIGIN)
+      // What the page reads is parsed by this schema, so a field it does not
+      // know is stripped by the parse and fails the equality.
+      expect(windowFromExtensionSchema.parse(message)).toEqual(message)
       posted.push(message)
     },
   }
@@ -51,7 +58,15 @@ function fakePage() {
   })
   const fromPage = (data: object, source: unknown = win, origin = ORIGIN) =>
     listener?.({ source, origin, data: { channel: WINDOW_BRIDGE_CHANNEL, from: 'page', ...data } })
-  return { posted, ports, fromPage }
+  // A message the page's own sender would produce: it must be one the schema
+  // that types that sender accepts, or the test is driving the relay with
+  // something the page can never post.
+  const fromPageTyped = (data: object) => {
+    const message = { channel: WINDOW_BRIDGE_CHANNEL, from: 'page', ...data }
+    expect(windowFromPageSchema.parse(message)).toEqual(message)
+    return listener?.({ source: win, origin: ORIGIN, data: message })
+  }
+  return { posted, ports, fromPage, fromPageTyped }
 }
 
 const toPage = (data: object) => ({ channel: WINDOW_BRIDGE_CHANNEL, from: 'extension', ...data })
@@ -59,14 +74,14 @@ const toPage = (data: object) => ({ channel: WINDOW_BRIDGE_CHANNEL, from: 'exten
 describe('installPageRelay', () => {
   it('answers a page that asks whether it is there', () => {
     const page = fakePage()
-    page.fromPage({ kind: 'hello' })
+    page.fromPageTyped({ kind: 'hello' })
     expect(page.posted).toEqual([toPage({ kind: 'hello', version: '9.9.9' })])
   })
 
   it('opens a port for the page, and carries messages both ways under its name', () => {
     const page = fakePage()
-    page.fromPage({ kind: 'connect', port: 'p1' })
-    page.fromPage({ kind: 'message', port: 'p1', message: { type: 'abort', id: 'a' } })
+    page.fromPageTyped({ kind: 'connect', port: 'p1' })
+    page.fromPageTyped({ kind: 'message', port: 'p1', message: { type: 'abort', id: 'a' } })
     const port = page.ports[0]
     if (port === undefined) throw new Error('no port was opened')
     for (const l of port.messageListeners) l({ type: 'end', id: 'a' })
@@ -78,11 +93,30 @@ describe('installPageRelay', () => {
     ])
   })
 
-  it('closes a port either side ends', () => {
+  // The host answers a request it refuses with a `bad-request` of its own, so
+  // the relay must not drop what it cannot judge.
+  it('carries a request the host will refuse, rather than dropping it', () => {
+    const page = fakePage()
+    page.fromPageTyped({ kind: 'connect', port: 'p1' })
+    const refused = { type: 'request', id: 'r', method: 'GET', path: '/api/../x', headers: {} }
+    page.fromPage({ kind: 'message', port: 'p1', message: refused })
+    expect(page.ports[0]?.sent).toEqual([refused])
+  })
+
+  it('ignores a port message with no port name', () => {
     const page = fakePage()
     page.fromPage({ kind: 'connect', port: 'p1' })
-    page.fromPage({ kind: 'connect', port: 'p2' })
-    page.fromPage({ kind: 'disconnect', port: 'p1' })
+    page.fromPage({ kind: 'message', message: { type: 'abort', id: 'a' } })
+    page.fromPage({ kind: 'connect', port: 7 })
+    expect(page.ports).toHaveLength(1)
+    expect(page.ports[0]?.sent).toEqual([])
+  })
+
+  it('closes a port either side ends', () => {
+    const page = fakePage()
+    page.fromPageTyped({ kind: 'connect', port: 'p1' })
+    page.fromPageTyped({ kind: 'connect', port: 'p2' })
+    page.fromPageTyped({ kind: 'disconnect', port: 'p1' })
     for (const l of page.ports[1]?.disconnectListeners ?? []) l()
 
     expect(page.ports.map((p) => p.disconnected)).toEqual([true, false])

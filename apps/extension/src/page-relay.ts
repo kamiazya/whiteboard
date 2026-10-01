@@ -6,7 +6,11 @@
  * keeps only which of the page's named ports is which.
  * https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#communicating_with_the_web_page
  */
-import type { WindowFromExtension } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
+import {
+  type WindowFromExtension,
+  type WindowFromExtensionBody,
+  windowFromPageEnvelopeSchema,
+} from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { WINDOW_BRIDGE_CHANNEL } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import type { Port } from './relay.js'
 
@@ -25,31 +29,25 @@ export interface ContentScriptApi {
   runtime: { connect(): Port; getManifest(): { version: string } }
 }
 
-type Outgoing = WindowFromExtension extends infer M
-  ? M extends WindowFromExtension
-    ? Omit<M, 'channel' | 'from'>
-    : never
-  : never
-
 /** A message on this channel from the page itself, as far as the relay needs to know. */
 function fromPage(event: { source: unknown; origin: string; data: unknown }, win: PageWindow) {
   if (event.source !== win || event.origin !== win.location.origin) return null
-  // Read field by field: the page's message is its own, and only these
-  // fields are the relay's business — the host validates what it carries.
-  const data = event.data as
-    | {
-        [K in 'channel' | 'from' | 'kind' | 'port' | 'message']?: unknown
-      }
-    | null
-  if (data?.channel !== WINDOW_BRIDGE_CHANNEL || data.from !== 'page') return null
-  return data
+  // The envelope only: the message a port carries is the page's own, and the
+  // host validates it, so a request it will refuse still reaches it and is
+  // answered by name.
+  const parsed = windowFromPageEnvelopeSchema.safeParse(event.data)
+  return parsed.success ? parsed.data : null
 }
 
 export function installPageRelay(win: PageWindow, api: ContentScriptApi): void {
   const ports = new Map<string, Port>()
-  const post = (message: Outgoing) =>
+  const post = (message: WindowFromExtensionBody) =>
     win.postMessage(
-      { channel: WINDOW_BRIDGE_CHANNEL, from: 'extension', ...message },
+      {
+        channel: WINDOW_BRIDGE_CHANNEL,
+        from: 'extension',
+        ...message,
+      } satisfies WindowFromExtension,
       win.location.origin,
     )
 
@@ -71,7 +69,6 @@ export function installPageRelay(win: PageWindow, api: ContentScriptApi): void {
       post({ kind: 'hello', version: api.runtime.getManifest().version })
       return
     }
-    if (typeof data.port !== 'string') return
     if (data.kind === 'connect') open(data.port)
     else if (data.kind === 'message') ports.get(data.port)?.postMessage(data.message)
     else if (data.kind === 'disconnect') {
