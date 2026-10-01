@@ -24,35 +24,26 @@ import type {
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import { act, cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, {
-    container: document.body,
-  })
-}
+const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return { ...actual, listWorkspaces: vi.fn(), listDocuments: vi.fn(), createDocument: vi.fn() }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
-// This page schedules ADR-0023's replica pull and push in the background, on
-// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
-// the schedulers are stubbed: left real they run mid-file against a fetch mock
-// shaped for something else, and the warning that follows is charged to
-// whichever case is executing by then
-// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
-// CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 

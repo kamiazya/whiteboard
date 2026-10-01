@@ -19,41 +19,28 @@ import {
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 const DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const COPY_ID = '01J9ZC8XK4PQRS7TVWXY0ABCDE'
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, {
-    container: document.body,
-  })
-}
+const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return {
-    ...actual,
-    listWorkspaces: vi.fn(),
-    listDocuments: vi.fn(),
-    getDocumentSnapshot: vi.fn(),
-    createDocument: vi.fn(),
-    updateDocument: vi.fn(),
-    setDocumentDisplayName: vi.fn(),
-  }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'getDocumentSnapshot',
+    'createDocument',
+    'updateDocument',
+    'setDocumentDisplayName',
+  ]),
+)
 
 function snapshotFor(path: string): Uint8Array {
   const doc = new LoroDoc()
@@ -88,13 +75,9 @@ vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', () => ({
   },
 }))
 
-// Background replica work, stubbed for the reason every sibling file stubs
-// it: left real it fires mid-test against a fetch mock shaped for something
-// else. Each answers the CANCEL the page calls on unmount.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
@@ -111,12 +94,6 @@ const SOURCE = {
   updatedAt: '2026-01-01',
   kind: 'markdown' as const,
   displayName: 'Agent note',
-}
-
-async function openDocumentOpsMenu() {
-  const trigger = await screen.findByRole('button', { name: 'More actions' })
-  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
-  return screen.findByRole('menu')
 }
 
 describe('duplicating a daemon-kept document from its own page', () => {

@@ -18,36 +18,26 @@ import type {
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render as rtlRender,
-  screen,
-  waitFor,
-} from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, {
-    container: document.body,
-  })
-}
+const render = (ui: ReactElement) => renderInRouter(ui, { container: document.body })
 
-vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
-  return { ...actual, listWorkspaces: vi.fn(), listDocuments: vi.fn(), createDocument: vi.fn() }
-})
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
+  (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
+    'listWorkspaces',
+    'listDocuments',
+    'createDocument',
+  ]),
+)
 
-// Background replica work, stubbed for the reason every sibling file stubs it.
-vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(() => () => {}),
-  scheduleReplicaPush: vi.fn(() => () => {}),
-}))
+vi.mock('../lib/replica-refresh.js', async () =>
+  (await import('../test-utils/daemon-page-harness.js')).replicaRefreshMock(),
+)
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 
@@ -91,12 +81,6 @@ class FakeBackend implements DocumentBackend {
 }
 
 const writeText = vi.fn(async (_text: string) => {})
-
-async function openDocumentOpsMenu() {
-  const trigger = await screen.findByRole('button', { name: 'More actions' })
-  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
-  return screen.findByRole('menu')
-}
 
 async function mountPage(path: string, snapshot: () => Uint8Array): Promise<void> {
   await act(async () => {
