@@ -144,7 +144,7 @@ describe('docs/ contract', () => {
   // The mutation target list is owned by stryker.config.mjs (and guarded by
   // stryker-targets.test.ts). testing.md carried a copy that named four paths
   // that no longer exist and omitted one that did, so the doc points at the
-  // config instead. A fenced block of `src/...ts` paths is that copy returning.
+  // config instead. A fenced block of source paths is that copy returning.
   it('does not copy the stryker mutate list into testing.md', () => {
     const content = readFileSync(join(DOCS_ROOT, 'contributing/testing.md'), 'utf8')
     expect(content).toContain('packages/mcp-server/stryker.config.mjs')
