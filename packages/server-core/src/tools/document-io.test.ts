@@ -2,6 +2,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -113,6 +114,54 @@ describe('documentWritten', () => {
     )
 
     expect(seen).toEqual([DOCUMENT_ID])
+  })
+
+  // What an observer needs to take a history checkpoint: the doc just
+  // written and the path the index places it at.
+  test('the observer is handed the doc written and the path the index places it at', async () => {
+    const documentIndex = new InMemoryDocumentIndex()
+    await documentIndex.createWorkspace({ workspaceId: WORKSPACE_ID })
+    const entry = await documentIndex.createDocument({
+      workspaceId: WORKSPACE_ID,
+      path: 'placed/here',
+      kind: 'spatial',
+    })
+    const heard: { path?: string; doc: LoroDoc }[] = []
+    const doc = new LoroDoc()
+
+    await saveDocumentBodySnapshot(
+      {
+        ...makeTestDeps({ documentStore: new FakeDocumentStore(), documentIndex }),
+        documentWritten: async (input) => {
+          heard.push({ doc: input.doc, ...(input.path === undefined ? {} : { path: input.path }) })
+        },
+      },
+      WORKSPACE_ID,
+      entry.documentId,
+      doc,
+      { nodes: [], edges: [] } satisfies SpatialCanvas,
+    )
+
+    expect(heard).toEqual([{ doc, path: 'placed/here' }])
+  })
+
+  test('an index that cannot place the document still notifies, without a path', async () => {
+    const heard: { path?: string }[] = []
+
+    await saveDocumentBodySnapshot(
+      {
+        ...canvasDeps(new FakeDocumentStore()),
+        documentWritten: async (input) => {
+          heard.push(input.path === undefined ? {} : { path: input.path })
+        },
+      },
+      WORKSPACE_ID,
+      DOCUMENT_ID,
+      new LoroDoc(),
+      { nodes: [], edges: [] } satisfies SpatialCanvas,
+    )
+
+    expect(heard).toEqual([{}])
   })
 
   test('the bytes are stored before the observer hears about it', async () => {

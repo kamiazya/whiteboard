@@ -20,6 +20,7 @@ const { documentWritten } = await import('./document-written.js')
 const { saveDocument } = await import('./document-store.js')
 const { getDb } = await import('./db/index.js')
 const { prepareDataDir } = await import('./db/prepare.js')
+const { installAutoCheckpoint, uninstallAutoCheckpoint } = await import('./auto-checkpoint.js')
 const { _autoCompactTimerCountForTests, disposeAutoCompact, uninstallAutoCompact } = await import(
   './auto-compact.js'
 )
@@ -30,6 +31,7 @@ describe('documentWritten', () => {
   })
 
   afterEach(async () => {
+    uninstallAutoCheckpoint()
     await disposeAutoCompact()
     await rm(tempDir, { recursive: true, force: true })
   })
@@ -52,7 +54,7 @@ describe('documentWritten', () => {
     // is what keeps it that way.
     expect(_autoCompactTimerCountForTests()).toBe(0)
 
-    await documentWritten({ workspaceId: 'ws-1', documentId })
+    await documentWritten({ workspaceId: 'ws-1', documentId, doc: new LoroDoc() })
 
     expect(_autoCompactTimerCountForTests()).toBe(1)
   })
@@ -115,9 +117,55 @@ describe('documentWritten', () => {
     expect(_autoCompactTimerCountForTests()).toBe(0)
 
     await expect(
-      documentWritten({ workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
+      documentWritten({
+        workspaceId: 'ws-1',
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        doc: new LoroDoc(),
+      }),
     ).resolves.toBeUndefined()
 
+    expect(_autoCompactTimerCountForTests()).toBe(1)
+  })
+
+  // The checkpoint is per document and addressed by path, so what the seam
+  // hands over is exactly what reaches the scheduler.
+  it('signals the installed checkpoint scheduler with the path and doc it was handed', async () => {
+    const signalled: { workspaceId: string; path: string; doc: LoroDoc }[] = []
+    installAutoCheckpoint(
+      Object.assign(
+        (workspaceId: string, path: string, doc: LoroDoc) => {
+          signalled.push({ workspaceId, path, doc })
+        },
+        { flush: async () => undefined, stop: () => undefined },
+      ),
+    )
+    const doc = new LoroDoc()
+
+    await documentWritten({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'agent-written',
+      doc,
+    })
+
+    expect(signalled).toEqual([{ workspaceId: 'ws-1', path: 'agent-written', doc }])
+  })
+
+  // A document the index does not place has no path to checkpoint under;
+  // the compaction half still runs.
+  it('takes no checkpoint for a write the index does not place, and still schedules compaction', async () => {
+    const signal = vi.fn()
+    installAutoCheckpoint(
+      Object.assign(signal, { flush: async () => undefined, stop: () => undefined }),
+    )
+
+    await documentWritten({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      doc: new LoroDoc(),
+    })
+
+    expect(signal).not.toHaveBeenCalled()
     expect(_autoCompactTimerCountForTests()).toBe(1)
   })
 })
