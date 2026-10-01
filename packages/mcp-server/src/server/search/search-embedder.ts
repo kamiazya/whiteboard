@@ -31,9 +31,9 @@ let held: Embedder | undefined
 
 /**
  * Memoized for the life of the process, and that is load-bearing rather
- * than a micro-optimisation: `/mcp` is stateless per request, so the MCP
- * server — and with it every `ServerDeps` — is rebuilt for each call. A
- * per-call embedder re-loads the whole model on every single search.
+ * than a micro-optimisation: a `ServerDeps` is composed per root, and the
+ * stdio root composes one per connection, so an embedder held by the deps
+ * would re-load the whole model each time one is composed.
  *
  * Weights are read from the daemon's own data directory and never fetched
  * here. A download does not belong on a request path at any size, let alone

@@ -54,10 +54,8 @@ export function withTempDataDir(prefix = 'whiteboard-test-'): { get dir(): strin
 export async function seedWorkspaceRow(dataDir: string, workspaceId: string): Promise<void> {
   const { getDb } = await import('../store/db/index.js')
   const { prepareDataDir } = await import('../store/db/prepare.js')
-  const { createContainer, resolveServerDeps } = await import('../../di/container.js')
-  const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
+  const { resolveSelfHostServerDeps } = await import('../../di/self-host-server-deps.js')
   await prepareDataDir(dataDir)
-  const db = await getDb(dataDir)
-  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, dataDir)))
+  const deps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
   await deps.documentIndex.createWorkspace({ workspaceId })
 }

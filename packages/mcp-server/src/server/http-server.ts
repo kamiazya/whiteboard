@@ -6,8 +6,7 @@ import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { listenOnSocket } from '../daemon/daemon-socket.js'
 import { IdleTimer } from '../daemon/idle-timer.js'
-import { createContainer, resolveServerDeps } from '../di/container.js'
-import { createSelfHostStoreLocalModule } from '../di/store-local.module.js'
+import { resolveSelfHostServerDeps } from '../di/self-host-server-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
@@ -15,7 +14,6 @@ import { LOOP_COSTS } from './background-work-costs.js'
 import { createCanvasClientNotifier } from './canvas-client-notifier.js'
 import { getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
-import { daemonDeviceActor } from './daemon-actor.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
@@ -188,13 +186,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // the per-request MCP callers below share this one resolve.
   await ensureWorkspaceId(dataDir)
   const db = await getDb(dataDir)
-  const resolvedDeps = resolveServerDeps(
-    createContainer(createSelfHostStoreLocalModule(db, dataDir)),
-    {
-      ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
-      daemonActor: daemonDeviceActor(dataDir),
-    },
-  )
+  const resolvedDeps = resolveSelfHostServerDeps(db, dataDir, {
+    ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
+  })
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
   // from the same post-migration handle as the container above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {

@@ -9,14 +9,12 @@ import { randomUUID } from 'node:crypto'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
 import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
-import { createContainer, resolveServerDeps } from '../di/container.js'
-import { createSelfHostStoreLocalModule } from '../di/store-local.module.js'
+import { resolveSelfHostServerDeps } from '../di/self-host-server-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
-import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
@@ -139,13 +137,9 @@ export async function startServerModeHttp(
   // data dir must not answer an empty workspace list.
   const dataDir = getDataDir()
   await ensureWorkspaceId(dataDir)
-  const serverDeps = resolveServerDeps(
-    createContainer(createSelfHostStoreLocalModule(await getDb(dataDir), dataDir)),
-    {
-      ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
-      daemonActor: daemonDeviceActor(dataDir),
-    },
-  )
+  const serverDeps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir, {
+    ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
+  })
 
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.
