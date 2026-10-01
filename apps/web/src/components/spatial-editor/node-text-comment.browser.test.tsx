@@ -8,13 +8,11 @@ import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorText } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -30,32 +28,8 @@ const NODE = textNode({
 const NODE_TEXT = nodeText(NODE) ?? ''
 const start: SpatialCanvas = { nodes: [NODE], edges: [] }
 
-function makeHost(threads?: readonly CommentThread[], initial: SpatialCanvas = start) {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: initial,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600, position: 'relative' }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          threads={threads}
-          createId={() => 't-passage'}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const POSITIONED = { position: 'relative' } as const
+const PASSAGE_ID = () => 't-passage'
 
 it('editing a node draws its commented passage highlighted, with no gutter shifting the text', async () => {
   const thread: CommentThread = {
@@ -64,7 +38,11 @@ it('editing a node draws its commented passage highlighted, with no gutter shift
     status: 'open',
     messages: [{ id: 'm1', body: 'which friday?' }],
   }
-  const { Host } = makeHost([thread])
+  const { Host } = makeEditorHost({
+    initial: start,
+    frameStyle: POSITIONED,
+    editorProps: { threads: [thread], createId: PASSAGE_ID },
+  })
   const { container } = render(<Host />)
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 340 } })
   await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE_TEXT))
@@ -85,11 +63,15 @@ it('the quoted words are highlighted on the canvas itself, and a press on them o
   }
   // As the app holds it: the thread's flat projection (the pin at the node's
   // corner) rides the canvas, the thread itself arrives beside it.
-  const { Host } = makeHost([thread], {
-    ...start,
-    comments: [
-      { id: 't1', x: NODE.x + NODE.width, y: NODE.y, text: 'which plan?', targetNodeId: 'n1' },
-    ],
+  const { Host } = makeEditorHost({
+    initial: {
+      ...start,
+      comments: [
+        { id: 't1', x: NODE.x + NODE.width, y: NODE.y, text: 'which plan?', targetNodeId: 'n1' },
+      ],
+    },
+    frameStyle: POSITIONED,
+    editorProps: { threads: [thread], createId: PASSAGE_ID },
   })
   const { container } = render(<Host />)
   const root = rootOf(container)
@@ -121,7 +103,11 @@ it('the quoted words are highlighted on the canvas itself, and a press on them o
 })
 
 it('a right-click inside the node editor opens the editing catalog, Comment included', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    frameStyle: POSITIONED,
+    editorProps: { createId: PASSAGE_ID },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 340 } })
@@ -164,7 +150,11 @@ it('a right-click inside the node editor opens the editing catalog, Comment incl
 })
 
 it('dismissing the catalog hands the caret back: the edit stays open and commits on exit', async () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    frameStyle: POSITIONED,
+    editorProps: { createId: PASSAGE_ID },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 340 } })

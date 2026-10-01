@@ -5,10 +5,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -28,27 +28,8 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
 function selectNodeB(container: HTMLElement): HTMLElement {
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
   // x 250 lands on b ONLY (a ends at 200, c starts at 300).
   fireEvent.pointerDown(root, {
@@ -65,7 +46,7 @@ function selectNodeB(container: HTMLElement): HTMLElement {
 const orderOf = (canvas: SpatialCanvas) => canvas.nodes.map((node) => node.id)
 
 it('bracket shortcuts reorder the selected node through all four placements', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = selectNodeB(container)
 
@@ -87,7 +68,7 @@ it('bracket shortcuts reorder the selected node through all four placements', ()
 })
 
 it('never fires from a text-entry surface or with a browser modifier held', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = selectNodeB(container)
 
@@ -107,9 +88,9 @@ it('never fires from a text-entry surface or with a browser modifier held', () =
 })
 
 it("the node context menu's Order row applies each placement in one tap", () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
-  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const root = rootOf(container)
   const r = root.getBoundingClientRect()
 
   fireEvent.contextMenu(root, { clientX: r.left + 250, clientY: r.top + 140 })
@@ -125,7 +106,7 @@ it("the node context menu's Order row applies each placement in one tap", () => 
 })
 
 it('a multi-selection reorders as one block', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = selectNodeB(container)
   const r = root.getBoundingClientRect()

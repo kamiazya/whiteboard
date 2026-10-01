@@ -6,9 +6,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { SpatialEditor } from './SpatialEditor.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -23,29 +23,7 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost(canvas0: SpatialCanvas = initial, lockedNodes: readonly string[] = []) {
-  const latest: { canvas: SpatialCanvas } = { canvas: canvas0 }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(canvas0)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          lockedNodeIds={new Set(lockedNodes)}
-          onToggleNodeLock={() => {}}
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+const SIZE = { width: 900, height: 700 }
 
 /** Drag from one canvas-space point to another, optionally holding Cmd. */
 function drag(
@@ -84,7 +62,7 @@ const GRAB = { x: 450, y: 430 }
 const DROP_NEAR_A = { x: 185, y: 430 }
 
 it('lands a dragged node on a near-miss neighbour edge instead of where the pointer stopped', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
 
   drag(rootOf(container), GRAB, DROP_NEAR_A)
@@ -96,7 +74,7 @@ it('lands a dragged node on a near-miss neighbour edge instead of where the poin
 })
 
 it('draws the guide that justifies the snap while the drag is in flight', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -140,7 +118,7 @@ it.each([
   ['Cmd', { metaKey: true }],
   ['Ctrl', { ctrlKey: true }],
 ] as const)('places the node exactly where the pointer stopped while %s is held', (_name, mod) => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
 
   drag(rootOf(container), GRAB, DROP_NEAR_A, mod)
@@ -149,7 +127,7 @@ it.each([
 })
 
 it('snaps to the grid when no neighbour edge is in range', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
 
   // Drop far from `a`: the left edge would be 603, and only the lattice is
@@ -173,7 +151,7 @@ const FRAME_GRAB = { x: 450, y: 420 }
 const FRAME_DROP = { x: 453, y: 420 }
 
 it('never snaps a group frame to a member it is carrying', () => {
-  const { Host, latest } = makeHost(framedCanvas)
+  const { Host, latest } = makeEditorHost({ initial: framedCanvas, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
 
   drag(rootOf(container), FRAME_GRAB, FRAME_DROP)
@@ -186,7 +164,11 @@ it('DOES snap a group frame to a LOCKED member, which stays put', () => {
   // member with its frame. So a locked member is stationary content, not
   // something travelling with the drag — excluding it would throw away a
   // real alignment target.
-  const { Host, latest } = makeHost(framedCanvas, ['inner'])
+  const { Host, latest } = makeEditorHost({
+    initial: framedCanvas,
+    size: SIZE,
+    lockedNodes: ['inner'],
+  })
   const { container } = render(<Host />)
 
   drag(rootOf(container), FRAME_GRAB, FRAME_DROP)
@@ -216,7 +198,7 @@ function startResize(container: HTMLElement, handleKind: string) {
 }
 
 it('snaps a resized edge to a neighbour edge, leaving the anchored edge alone', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const { root, r, handle } = startResize(container, 'w')
 
@@ -241,7 +223,7 @@ it('snaps a resized edge to a neighbour edge, leaving the anchored edge alone', 
 })
 
 it('leaves a resized edge where the pointer stopped while Cmd is held', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)
   const { root, r, handle } = startResize(container, 'w')
 

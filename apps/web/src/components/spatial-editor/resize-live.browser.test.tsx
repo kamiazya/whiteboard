@@ -9,6 +9,8 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { fakeMeasure } from '../../test-utils/fake-measure.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -27,26 +29,8 @@ const start: SpatialCanvas = {
   ],
 }
 
-function makeHost(initial: SpatialCanvas) {
-  const latest = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
+const SIZE = { width: 900, height: 700 }
 
-const rootOf = (c: HTMLElement) => c.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 const frame = () => new Promise((r) => requestAnimationFrame(r))
 
 /** Select node a, grab its EAST resize handle, drag right — no release. */
@@ -84,7 +68,7 @@ async function resizeWithoutRelease(container: HTMLElement, dx: number) {
 }
 
 it('re-routes the touched edge to the resized border while the gesture is in flight', async () => {
-  const { Host } = makeHost(start)
+  const { Host } = makeEditorHost({ initial: start, size: SIZE })
   const { container } = render(<Host />)
   await resizeWithoutRelease(container, 100)
 
@@ -99,7 +83,7 @@ it('re-routes the touched edge to the resized border while the gesture is in fli
 })
 
 it('renders the node itself at its live size, not the committed one', async () => {
-  const { Host } = makeHost(start)
+  const { Host } = makeEditorHost({ initial: start, size: SIZE })
   const { container } = render(<Host />)
   await resizeWithoutRelease(container, 100)
 
@@ -114,7 +98,7 @@ it('renders the node itself at its live size, not the committed one', async () =
 })
 
 it('drops the live layers and commits the resize on release', async () => {
-  const { Host, latest } = makeHost(start)
+  const { Host, latest } = makeEditorHost({ initial: start, size: SIZE })
   const { container } = render(<Host />)
   const root = await resizeWithoutRelease(container, 100)
   const r = root.getBoundingClientRect()

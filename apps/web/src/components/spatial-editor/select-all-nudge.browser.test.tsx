@@ -8,7 +8,9 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { selectAt } from '../../test-utils/spatial-editor-pointer.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -22,53 +24,8 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function makeHost() {
-  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: initial,
-    commands: [],
-  }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { Host, latest }
-}
-
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-
-function selectAt(root: HTMLElement, x: number, y: number, shift = false) {
-  const r = root.getBoundingClientRect()
-  fireEvent.pointerDown(root, {
-    button: 0,
-    pointerId: 1,
-    shiftKey: shift,
-    clientX: r.left + x,
-    clientY: r.top + y,
-  })
-  fireEvent.pointerUp(root, {
-    pointerId: 1,
-    shiftKey: shift,
-    clientX: r.left + x,
-    clientY: r.top + y,
-  })
-}
-
 it('Cmd/Ctrl+A selects every node; Delete then removes them all', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
@@ -80,7 +37,7 @@ it('Cmd/Ctrl+A selects every node; Delete then removes them all', () => {
 })
 
 it('arrow-key nudge moves the WHOLE multi-selection by the same delta', () => {
-  const { Host, latest } = makeHost()
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   selectAt(root, 120, 80)
@@ -101,7 +58,7 @@ it('arrow-key nudge moves the WHOLE multi-selection by the same delta', () => {
 })
 
 it('Cmd+A always consumes the event, so the browser never runs its own select-all', () => {
-  const { Host } = makeHost()
+  const { Host } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const withNodes = fireEvent.keyDown(root, { code: 'KeyA', key: 'a', metaKey: true })
