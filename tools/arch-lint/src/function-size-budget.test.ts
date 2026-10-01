@@ -613,8 +613,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/app.ts#createApp': 433,
   'packages/mcp-server/src/server/canvas-client-notifier.ts#createCanvasClientNotifier': 88,
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
-  // 431 -> 435 (ADR-0041 S8 slice 2): the WS upgrade's membership refusal call and the target binding it reads.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 435,
+  // 435 -> 182: the four workers both HTTP roots run are built and declared
+  // in shared-background-work.ts; what is left here is the daemon's own.
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 182,
   'packages/mcp-server/src/server/index.ts#main': 182,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 305,
@@ -667,7 +668,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 62 -> 82 (ADR-0042 decision 1, 2026-09-21 rotation addendum): rotateKey
   // belongs beside keyFor/setTier for the same reason.
   'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 82,
-  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 202,
+  // 202 -> 132: the same move; server mode declares nothing of its own.
+  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 132,
+  // The shared set: four declarations, each carrying the rationale that
+  // used to be copied in both roots, and the construction of the workers
+  // they wrap. Long because a declaration list is long, not because it
+  // branches — a reader shrinking it would be deleting the reasons.
+  'packages/mcp-server/src/server/shared-background-work.ts#createSharedWorkers': 61,
+  'packages/mcp-server/src/server/shared-background-work.ts#sharedBackgroundWork': 63,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
   // 53 -> 58: the refresh interval's in-flight write is now held and awaited
   // before the marker is removed. `clearInterval` cancels the next tick and

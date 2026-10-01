@@ -14,13 +14,11 @@ import { createSelfHostStoreLocalModule } from '../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
-import { LOOP_COSTS } from './background-work-costs.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
-import { subscribedWorkspaceIds } from './routes/sync-audience.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AuthenticatorBinding } from './security/member-profile-store.js'
@@ -38,18 +36,16 @@ import { createUserDeactivation } from './security/user-deactivation.js'
 import { createUserDeletion } from './security/user-deletion.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { serverModeUiStatus } from './server-mode-web-app.js'
-import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
+import {
+  createSharedWorkers,
+  FILE_GC_STOP_TIMEOUT_MS,
+  sharedBackgroundWork,
+} from './shared-background-work.js'
 import { accountRetirementFor } from './store/db/account-retirement.js'
 import { getDb } from './store/db/index.js'
 import type { TenantDatabase } from './store/db/tenant-database.js'
-import {
-  cacheBackedWorkspaceDocs,
-  emitWorkspaceDocUpdated,
-  getWorkspaceDoc,
-} from './store/document-store.js'
-import { createFileGcSweeper } from './store/file-gc-sweeper.js'
-import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
-import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
+import type { createFileGcSweeper } from './store/file-gc-sweeper.js'
+import type { createWorkspaceTail } from './store/workspace-tail.js'
 
 export interface StartServerModeHttpOptions {
   host: string
@@ -84,12 +80,6 @@ export interface StartServerModeHttpOptions {
 // every request regardless, so this bounds only how stale a REFUSAL can be.
 const SIGN_IN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-// Caps how long close() waits for an in-flight file-gc pass. Same value and
-// same reason as the local daemon's: a full pass can be expensive, and a
-// shutdown that appears to hang is worse than one that leaves a pass to
-// finish in the background.
-const FILE_GC_STOP_TIMEOUT_MS = 5_000
-
 export interface ServerModeRunning {
   port: number
   host: string
@@ -108,28 +98,6 @@ function isDataDirWritable(dir: string): boolean {
   } catch {
     return false
   }
-}
-
-/**
- * Several instances share one record (ADR-0020 decision 5), and the tail is
- * how a browser on THIS one learns what another wrote. Off unless the
- * operator sets the interval: one instance hears all its own writes.
- */
-function serverModeWorkspaceTail(options: StartServerModeHttpOptions) {
-  const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
-  const workspaceTail =
-    workspaceTailIntervalMs === null
-      ? null
-      : (options.workspaceTailFactory ?? createWorkspaceTail)({
-          subscribedWorkspaces: subscribedWorkspaceIds,
-          docs: cacheBackedWorkspaceDocs(),
-          // The CACHED document, which is what every reader here is served
-          // from — catching up a fresh copy would leave it untouched.
-          liveDoc: getWorkspaceDoc,
-          emit: emitWorkspaceDocUpdated,
-          intervalMs: workspaceTailIntervalMs,
-        })
-  return { workspaceTail, workspaceTailIntervalMs }
 }
 
 export async function startServerModeHttp(
@@ -221,83 +189,20 @@ export async function startServerModeHttp(
   // Server mode is the MULTI-INSTANCE deployment (ADR-0020), so it is the one
   // the backup lease was built for — and until this was wired it was the one
   // deployment taking no scheduled backups at all, because this composition
-  // root started no background work whatsoever. The registry is what made
-  // that visible: local-daemon declared four workers and this file declared
-  // none.
-  const fileGcSweeper = (options.fileGcSweeperFactory ?? createFileGcSweeper)()
-  const backupDir = parseBackupDir(process.env)
-  const backupSchedule = parseBackupSchedule(process.env)
-  const backupKeep = parseBackupKeep(process.env)
-  const { workspaceTail, workspaceTailIntervalMs } = serverModeWorkspaceTail(options)
-  const backgroundWork = startBackgroundWork([
-    {
-      name: 'auto-checkpoint',
-      trigger: 'a document update, taken once that document has been quiet for five minutes',
-      instances: {
-        runs: 'every-instance',
-        because:
-          'the debounce is about documents THIS process is holding edits for — another ' +
-          'instance has neither the pending timer nor the LoroDoc the checkpoint would be ' +
-          'taken from, so a leader could not take it',
+  // root started no background work whatsoever. The shared set is what makes
+  // that impossible to repeat: both roots declare it from one place.
+  const shared = createSharedWorkers(instanceId, options)
+  const backgroundWork = startBackgroundWork(
+    sharedBackgroundWork(shared, {
+      flushCheckpoints: async () => {
+        await autoVersionTrigger?.flush()
       },
-      loop: LOOP_COSTS['auto-checkpoint'],
-      // Nothing to arm: the trigger schedules itself from the update that
-      // signalled it, which is why it is declared here for its STOP rather
-      // than its start. A trailing debounce loses exactly the checkpoint it
-      // exists to take if the process goes away without flushing — the one
-      // at the pause where editing stopped — so shutting down TAKES the
-      // pending checkpoints instead of dropping them.
-      worker: {
-        start: () => {},
-        stop: async () => {
-          await autoVersionTrigger?.flush()
-        },
+      fileGc: {
+        start: () => shared.fileGcSweeper.start(),
+        stop: () => shared.fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
       },
-    },
-    {
-      name: 'backup-scheduler',
-      trigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
-      instances: { runs: 'leader-only', lease: 'backup' },
-      loop: LOOP_COSTS['backup-scheduler'],
-      worker: createBackupScheduler({
-        dataDir: getDataDir(),
-        backupDir: backupDir.ok ? backupDir.value : null,
-        ...(backupSchedule.ok ? { schedule: backupSchedule.value } : {}),
-        ...(backupKeep.ok && backupKeep.value !== null ? { keep: backupKeep.value } : {}),
-        runExclusively: createBackupLease({ holder: instanceId }),
-      }),
-    },
-    {
-      name: 'file-gc-sweeper',
-      trigger: 'every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it',
-      instances: {
-        runs: 'every-instance',
-        because:
-          'ADR-0020 rejects a GC leader: it removes GC-versus-GC races and leaves ' +
-          'GC-versus-WRITE untouched, since the write barrier is in-process. Two passes ' +
-          'racing the same file is the benign half — the second unlink answers ENOENT and ' +
-          'is logged and skipped.',
-      },
-      loop: LOOP_COSTS['file-gc-sweeper'],
-      worker: {
-        start: () => fileGcSweeper.start(),
-        stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
-      },
-    },
-    {
-      name: 'workspace-tail',
-      trigger:
-        workspaceTailIntervalMs === null
-          ? 'off (WHITEBOARD_WORKSPACE_TAIL_MS unset)'
-          : `every ${workspaceTailIntervalMs}ms`,
-      instances: {
-        runs: 'every-instance',
-        because: 'each instance catches ITS OWN cached documents up with what another wrote',
-      },
-      loop: LOOP_COSTS['workspace-tail'],
-      worker: workspaceTail,
-    },
-  ])
+    }),
+  )
 
   const server = serve({ fetch: app.fetch, port: options.port, hostname: options.host })
 
