@@ -96,22 +96,24 @@ const EXEMPT: Record<string, string> = {
     'a disclosure triangle: the chevron ROTATES, which is the state expression a tree row wants',
   './components/workspace-files/WorkspaceFolderTree.tsx':
     'a disclosure triangle, same as the file tree',
-  './components/workspace-top-bar/VersionPanel.tsx':
-    'a grab handle whose CHEVRON swaps (ChevronDown expanded, ChevronUp collapsed), so the state is shown by the glyph rather than by a background — the same shape as the two trees above',
   './components/spatial-editor/ContextMenu.tsx':
     'its aria-expanded is the colour SUBMENU while its bg-accent is the SELECTED colour — two different subjects, so deriving one from the other would be wrong',
 }
 
-function offenders(entries: Record<string, string>): string[] {
+/** Every file with a toggle that does not derive its state, exemptions not applied. */
+function undeclaredToggles(entries: Record<string, string>): string[] {
   const found: string[] = []
   for (const [path, source] of Object.entries(entries)) {
-    if (path in EXEMPT) continue
     for (const match of source.matchAll(TOGGLE_ATTRIBUTE)) {
       const tag = openingTagAround(source, match.index)
       if (!derivesState(tag)) found.push(path)
     }
   }
   return [...new Set(found)].sort()
+}
+
+function offenders(entries: Record<string, string>): string[] {
+  return undeclaredToggles(entries).filter((path) => !(path in EXEMPT))
 }
 
 describe('a toggle expresses its state from its ARIA attribute', () => {
@@ -123,6 +125,15 @@ describe('a toggle expresses its state from its ARIA attribute', () => {
 
   it('finds no control that announces a state it does not show', () => {
     expect(offenders(sources)).toEqual([])
+  })
+
+  it('keeps no exemption for a file that no longer holds a toggle it excuses', () => {
+    const excused = new Set(undeclaredToggles(sources))
+    const stale = Object.keys(EXEMPT).filter((path) => !excused.has(path))
+    expect(
+      stale,
+      'these files are exempt but no longer carry an aria-pressed/aria-expanded that needs excusing — delete the entry',
+    ).toEqual([])
   })
 
   it('detects each shape, so clean means clean rather than blind', () => {
