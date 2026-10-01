@@ -15,11 +15,10 @@ import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { outlineContains } from './nodes/node-outline.js'
+import { outlineContains, resolveShapeTable } from './nodes/node-outline.js'
 import {
   layoutSpatialCanvas,
   type RenderContribution,
-  resolveShapeTable,
   type SpatialLayoutOptions,
 } from './spatial-canvas.js'
 

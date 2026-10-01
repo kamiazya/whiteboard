@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BUILT_IN_SHAPES,
+  BUNDLED_SHAPE_TABLE,
   nodeOutline,
   outlineContains,
   outlineContentBox,
@@ -301,7 +301,7 @@ describe('outlineContentBox — the inscribed box content must stay inside', () 
   // copy of the silhouette vocabulary (ADR-0036 decision 4 retired three
   // others), and a copy is what lets kind N+1 ship with its inscription
   // unchecked — which is exactly what these two invariants are for.
-  const kinds = Object.keys(BUILT_IN_SHAPES)
+  const kinds = Object.keys(BUNDLED_SHAPE_TABLE)
 
   it('every corner of the content box lies inside the outline, for every kind', () => {
     for (const kind of kinds) {

@@ -7,7 +7,7 @@ import { test } from '@fast-check/vitest'
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { BUILT_IN_SHAPES, nodeOutline } from '../nodes/node-outline.js'
+import { BUNDLED_SHAPE_TABLE, nodeOutline } from '../nodes/node-outline.js'
 import { SKETCH_INK_REACH_PX, SKETCH_PASSES, sketchEdge, sketchShape } from './sketch.js'
 
 /** Every number pair in a path's `d`: end AND control points, which bound a quadratic. */
@@ -27,7 +27,7 @@ const box = fc.record({
   h: fc.integer({ min: 20, max: 300 }),
 })
 const seed = fc.integer({ min: 0, max: 0xffffffff })
-const shapeId = fc.constantFrom(undefined, ...Object.keys(BUILT_IN_SHAPES))
+const shapeId = fc.constantFrom(undefined, ...Object.keys(BUNDLED_SHAPE_TABLE))
 
 const within = (p: { x: number; y: number }, b: BoundingBox, reach: number) =>
   p.x >= b.x - reach && p.x <= b.x + b.w + reach && p.y >= b.y - reach && p.y <= b.y + b.h + reach

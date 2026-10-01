@@ -89,6 +89,7 @@ export {
   outlineContains,
   outlineContentBox,
   outlineEntryPoint,
+  resolveShapeTable,
 } from './layout/nodes/node-outline.js'
 export type {
   SpatialAppearanceResolver,
@@ -122,7 +123,6 @@ export {
   layoutSpatialEdges,
   naturalNodeContentSize,
   paintOrderOf,
-  resolveShapeTable,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'

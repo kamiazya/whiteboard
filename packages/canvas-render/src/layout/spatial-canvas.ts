@@ -64,7 +64,7 @@ import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
 import { assignEdgeAnchors, type EdgeAnchorPair, routeEdge } from './edges/spatial-edges.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
-import { outlineEntryPoint, type ShapeContribution, type ShapeTable } from './nodes/node-outline.js'
+import { outlineEntryPoint, resolveShapeTable, type ShapeTable } from './nodes/node-outline.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { nodePassagesOf } from './passage-highlight.js'
 import { composeProposals } from './proposals.js'
@@ -467,18 +467,6 @@ function withCanvasTheme(
       activeTheme?.tokens.defaults.nodeShape,
     ),
   }
-}
-
-/** The composed shape table a contribution set resolves to — what the SVG
- *  backend must be handed alongside the scene. */
-export function resolveShapeTable(contributions: readonly RenderContribution[]): ShapeTable {
-  const table: Record<string, ShapeContribution> = {}
-  for (const contribution of contributions) {
-    for (const [name, shape] of Object.entries(contribution.shapes ?? {})) {
-      table[`${contribution.namespace}.${name}`] = shape
-    }
-  }
-  return table
 }
 
 function composeDecorations(
