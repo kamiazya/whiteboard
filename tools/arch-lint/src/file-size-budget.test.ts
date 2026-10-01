@@ -753,14 +753,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stop the replica refresh and the push it armed, and both schedulers'
   // mocks have to answer a spy cancel rather than undefined.
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 890,
-  // Raised 2139 -> 2173: a duplicated note's copy was filed as a canvas, and
-  // the case needs this file's installFetchMock/selectCard harness. Moving
-  // that harness to test-utils/ is what would shrink this entry properly.
-  // 2173 -> 2221: the lone-survivor naming gained a test. A mutation showed
-  // the re-offer's row lookup could be replaced with `undefined` and all 108
-  // index-page tests stayed green, so the comment explaining why the dialog
-  // must not read `Delete "2 documents"?` was pinning nothing.
-  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2221,
+  // The index page's whole surface — switching, creating, deleting, trash,
+  // names, the duplicate flow — in one file. Its daemon fake is
+  // `test-utils/fake-daemon-fetch.ts` now (2221 -> 2073), answering through
+  // the api-contract schemas; what is left over budget is the cases.
+  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2073,
   'apps/web/src/pages/SettingsPage.test.tsx': 839,
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
   'packages/canvas-render/src/layout/comments.test.ts': 823,

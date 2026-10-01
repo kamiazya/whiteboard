@@ -745,7 +745,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/promote-workspace.browser.test.tsx#daemonStub': 52,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 72,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
-  'apps/web/src/pages/DaemonIndexPage.test.tsx#installFetchMock': 93,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
   'packages/canvas-render/src/layout/edges/grid-route.optimality.properties.test.ts#referenceCost': 106,
   'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,

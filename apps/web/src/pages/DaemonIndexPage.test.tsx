@@ -12,6 +12,7 @@ import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
+import { installFakeDaemonFetch, withSummaryDefaults } from '../test-utils/fake-daemon-fetch.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
@@ -51,149 +52,6 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 // checking against the shape ADR-0019 actually mints.
 const WS_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-// The list contract requires id and kind on every row (the daemon always
-// serves both); fixtures may omit them for brevity and get daemon-shaped
-// defaults filled in here.
-function withSummaryDefaults(
-  rows: Array<{
-    path: string
-    updatedAt: string
-    id?: string
-    kind?: string
-    displayName?: string
-  }>,
-) {
-  return rows.map((row) => ({ id: `id-${row.path}`, kind: 'spatial', ...row }))
-}
-
-interface MockRoutes {
-  workspaces: Array<{ workspaceId: string; segment?: string; displayName?: string }>
-  documentsByWorkspace: Record<
-    string,
-    Array<{ path: string; updatedAt: string; id?: string; kind?: string; displayName?: string }>
-  >
-  namesByWorkspace?: Record<
-    string,
-    { workspace?: string; documents: Record<string, string>; pinned: string[] } | 'fail'
-  >
-  onCreateDocument?: (workspaceId: string, path: string, kind?: string) => void
-  // Return a Response (or a pending promise of one) to override the
-  // default 200 {ok:true}.
-  onDeleteCanvas?: (workspaceId: string, path: string) => Response | Promise<Response> | undefined
-  snapshotByCanvas?: Record<string, Uint8Array>
-  onUpdateCanvas?: (workspaceId: string, path: string, bytes: Uint8Array) => void
-  onSetCanvasName?: (workspaceId: string, path: string, name: string) => void
-  /** When set, the documents fetch resolves only after this promise settles. */
-  delayCanvases?: Promise<void>
-  /** Same, for the workspaces list. Consulted per call, so a test can leave
-   *  it unset for the initial load and set it before the re-list. */
-  delayWorkspaces?: Promise<void>
-  /** Override the documents GET. Return undefined to fall through to the
-   *  default. Consulted per call, so a test can answer 404 once and then
-   *  behave normally — a workspace deleted out from under the page. */
-  onListDocuments?: (workspaceId: string) => Response | undefined
-  /** Override the workspaces GET. Return undefined to fall through to the
-   *  default. Consulted per call, so a test can answer 500 only on the
-   *  re-list a switch triggers. */
-  onListWorkspaces?: () => Response | undefined
-  /** Rows the trash GET answers with; defaults to an empty trash. */
-  trashByWorkspace?: Record<string, Array<{ documentId: string; path: string; deletedAt: number }>>
-}
-
-function installFetchMock(routes: MockRoutes) {
-  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
-      const override = routes.onListWorkspaces?.()
-      if (override) return Promise.resolve(override)
-      const respond = () => jsonResponse({ workspaces: routes.workspaces })
-      // Held open so a test can inspect what renders WHILE the re-list is in
-      // flight — the window in which a deleted workspace is still selected.
-      if (routes.delayWorkspaces) return routes.delayWorkspaces.then(respond)
-      return Promise.resolve(respond())
-    }
-    const documentsMatch = url.match(/\/api\/(?:v1\/)?workspaces\/([^/]+)\/documents$/)
-    if (documentsMatch && (!init || init.method === undefined)) {
-      const workspaceId = decodeURIComponent(documentsMatch[1])
-      const override = routes.onListDocuments?.(workspaceId)
-      if (override) return Promise.resolve(override)
-      const documents = routes.documentsByWorkspace[workspaceId]
-      if (!documents) return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
-      const respond = () => jsonResponse({ documents: withSummaryDefaults(documents) })
-      if (routes.delayCanvases) return routes.delayCanvases.then(respond)
-      return Promise.resolve(respond())
-    }
-    if (documentsMatch && init?.method === 'POST') {
-      const workspaceId = decodeURIComponent(documentsMatch[1])
-      const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
-      routes.onCreateDocument?.(workspaceId, body.path, body.kind)
-      return Promise.resolve(
-        jsonResponse(
-          { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
-          201,
-        ),
-      )
-    }
-    const canvasDeleteMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents\/([^/]+)$/)
-    if (canvasDeleteMatch && init?.method === 'DELETE') {
-      const workspaceId = decodeURIComponent(canvasDeleteMatch[1])
-      const path = decodeURIComponent(canvasDeleteMatch[2])
-      const override = routes.onDeleteCanvas?.(workspaceId, path)
-      return Promise.resolve(override ?? jsonResponse({ ok: true }))
-    }
-    const trashMatch = url.match(/\/api\/workspaces\/([^/]+)\/trash$/)
-    if (trashMatch && (!init || init.method === undefined)) {
-      const workspaceId = decodeURIComponent(trashMatch[1])
-      return Promise.resolve(
-        jsonResponse({ entries: routes.trashByWorkspace?.[workspaceId] ?? [] }),
-      )
-    }
-    const namesMatch = url.match(/\/api\/workspaces\/([^/]+)\/names$/)
-    if (namesMatch) {
-      const workspaceId = decodeURIComponent(namesMatch[1])
-      const names = routes.namesByWorkspace?.[workspaceId]
-      if (names === 'fail' || !names) {
-        return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
-      }
-      return Promise.resolve(jsonResponse(names))
-    }
-    const snapshotMatch = url.match(/\/api\/w\/([^/]+)\/document\/(.+)\/snapshot$/)
-    if (snapshotMatch) {
-      const path = decodeURIComponent(snapshotMatch[2])
-      const bytes = routes.snapshotByCanvas?.[path]
-      if (!bytes) return Promise.resolve(jsonResponse({ title: 'Not found' }, 404))
-      return Promise.resolve(
-        new Response(bytes as BodyInit, {
-          status: 200,
-          headers: { 'Content-Type': 'application/octet-stream' },
-        }),
-      )
-    }
-    const updateMatch = url.match(/\/api\/w\/([^/]+)\/document\/(.+)\/update$/)
-    if (updateMatch && init?.method === 'POST') {
-      const workspaceId = decodeURIComponent(updateMatch[1])
-      const path = decodeURIComponent(updateMatch[2])
-      routes.onUpdateCanvas?.(workspaceId, path, new Uint8Array(init.body as ArrayBuffer))
-      return Promise.resolve(jsonResponse({ ok: true }))
-    }
-    const canvasNameMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents\/([^/]+)\/name$/)
-    if (canvasNameMatch && init?.method === 'PUT') {
-      const workspaceId = decodeURIComponent(canvasNameMatch[1])
-      const path = decodeURIComponent(canvasNameMatch[2])
-      const body = JSON.parse(String(init.body)) as { name: string }
-      routes.onSetCanvasName?.(workspaceId, path, body.name)
-      const names = routes.namesByWorkspace?.[workspaceId]
-      const documents = names && names !== 'fail' ? names.documents : {}
-      return Promise.resolve(
-        jsonResponse({ documents: { ...documents, [path]: body.name }, pinned: [] }),
-      )
-    }
-    return Promise.resolve(jsonResponse({}, 404))
-  })
-  vi.stubGlobal('fetch', fetchMock)
-  return fetchMock
-}
-
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -208,7 +66,7 @@ async function selectCard(name: string) {
 
 describe('DaemonIndexPage', () => {
   it('renders one card per document of the selected workspace with display name and relative updatedAt', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         // displayName rides on the list row exactly as the daemon's
@@ -235,7 +93,7 @@ describe('DaemonIndexPage', () => {
     // into DocumentRow and reaches the card's text marker. The create/POST
     // direction is covered separately; without this test every page-level
     // mock defaults to spatial and the mapping could silently drop kind.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
@@ -267,7 +125,7 @@ describe('DaemonIndexPage', () => {
     // away), so the error state keeps the same recovery path the toolbar
     // used to provide.
     const created: Array<[string, string]> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {},
       onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
@@ -283,7 +141,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('fades the loaded panel in for skeleton-to-content continuity', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -310,7 +168,7 @@ describe('DaemonIndexPage', () => {
   // would hide a real anomaly, and creating into a workspace that no longer
   // exists would silently make a DIFFERENT one.
   it('re-lists and selects another workspace when the selected one has been deleted', async () => {
-    const routes: Parameters<typeof installFetchMock>[0] = {
+    const routes: Parameters<typeof installFakeDaemonFetch>[0] = {
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -323,7 +181,7 @@ describe('DaemonIndexPage', () => {
         return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
       },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
 
     const onWorkspaceResolved = vi.fn()
     render(
@@ -351,7 +209,7 @@ describe('DaemonIndexPage', () => {
   // same path forever.
   it('does not re-select the stale workspace when the list still reports it', async () => {
     let staleFetches = 0
-    const routes: Parameters<typeof installFetchMock>[0] = {
+    const routes: Parameters<typeof installFakeDaemonFetch>[0] = {
       // ws-a is never removed from the listing, on purpose.
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
@@ -363,7 +221,7 @@ describe('DaemonIndexPage', () => {
         return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
       },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
@@ -386,7 +244,7 @@ describe('DaemonIndexPage', () => {
     const relistGate = new Promise<void>((resolve) => {
       releaseRelist = resolve
     })
-    const routes: Parameters<typeof installFetchMock>[0] = {
+    const routes: Parameters<typeof installFakeDaemonFetch>[0] = {
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
@@ -400,7 +258,7 @@ describe('DaemonIndexPage', () => {
         return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
       },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
@@ -422,7 +280,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('honors the addressed workspace over the daemon-listed first workspace', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -439,7 +297,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('falls back to the first-listed workspace when the addressed workspace is not in the daemon list', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -464,7 +322,7 @@ describe('DaemonIndexPage', () => {
     // behaviour — but the FALLBACK has to reach the address, or the page
     // serves one workspace under an address naming another and every document
     // created lands somewhere the URL does not say.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -514,7 +372,7 @@ describe('DaemonIndexPage', () => {
         'ws-new': [{ path: 'freshly-made', updatedAt: new Date().toISOString() }],
       },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
     const onWorkspaceResolved = vi.fn()
     const { rerender } = render(
       <DaemonIndexPage
@@ -564,7 +422,7 @@ describe('DaemonIndexPage', () => {
         return workspaceCalls === 1 ? undefined : jsonResponse({ message: 'nope' }, 500)
       },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
     const onOpenDocument = vi.fn()
     const { rerender } = render(
       <DaemonIndexPage
@@ -615,7 +473,7 @@ describe('DaemonIndexPage', () => {
         'ws-other': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
     const onWorkspaceResolved = vi.fn()
     const { rerender } = render(
       <DaemonIndexPage
@@ -650,7 +508,7 @@ describe('DaemonIndexPage', () => {
     // renders whatever workspace the address names. Until this, `workspace`
     // was an INITIAL value — read once at mount — so a switch from outside
     // moved the URL and left the cards where they were.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -739,7 +597,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('sorts pinned documents before unpinned in the folder pane', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
@@ -762,7 +620,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('filters cards by search input matching path or display name', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
@@ -785,7 +643,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('degrades gracefully to unpinned/path-only when the names fetch fails', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -798,7 +656,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('shows an alert (not a blank page) when listDocuments fails for the selected workspace', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {},
     })
@@ -862,7 +720,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('calls onOpenDocument with the card identity via the preview Open action', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -882,7 +740,7 @@ describe('DaemonIndexPage', () => {
     // is where a daemon URL is born — `onOpenDocument` is what App.tsx turns
     // into `/w/:handle/d/:path` — so a raw ULID handed over here is a
     // raw ULID in the address bar.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: WS_ULID, segment: 'design-team' }],
       documentsByWorkspace: {
         // Keyed under BOTH so this test is about the handle `onOpenDocument`
@@ -904,7 +762,7 @@ describe('DaemonIndexPage', () => {
     // The durable half of segment-first resolution: an id-form URL is the
     // link that survives a rename, so it must keep selecting the workspace
     // even once that workspace answers to a name.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [
         { workspaceId: 'ws-a', segment: 'alpha-space' },
         { workspaceId: WS_ULID, segment: 'design-team' },
@@ -930,7 +788,7 @@ describe('DaemonIndexPage', () => {
   it('a workspace with no segment is still addressed by its id', async () => {
     // 0019 left a legacy workspace's segment NULL rather than inventing one,
     // so the id-as-handle path is not a legacy curiosity — it is live.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-unnamed' }],
       documentsByWorkspace: {
         'ws-unnamed': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
@@ -949,16 +807,16 @@ describe('DaemonIndexPage', () => {
     const updates: Array<[string, string, Uint8Array]> = []
     const created: Array<[string, string]> = []
     const names: Array<[string, string, string]> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', displayName: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
-      snapshotByCanvas: { alpha: new Uint8Array([1, 2, 3]) },
+      snapshotByDocument: { alpha: new Uint8Array([1, 2, 3]) },
       onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
-      onUpdateCanvas: (workspaceId, path, bytes) => updates.push([workspaceId, path, bytes]),
-      onSetCanvasName: (workspaceId, path, name) => names.push([workspaceId, path, name]),
+      onUpdateDocument: (workspaceId, path, bytes) => updates.push([workspaceId, path, bytes]),
+      onSetDocumentName: (workspaceId, path, name) => names.push([workspaceId, path, name]),
     })
     const onOpenDocument = vi.fn()
 
@@ -983,7 +841,7 @@ describe('DaemonIndexPage', () => {
     // reads the markdown body while `references/extract.ts` runs
     // `readSpatialCanvas` over the same note.
     const created: Array<[string, string, string | undefined]> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
@@ -996,7 +854,7 @@ describe('DaemonIndexPage', () => {
         ],
       },
       namesByWorkspace: { 'ws-a': { documents: { notes: 'Notes' }, pinned: [] } },
-      snapshotByCanvas: { notes: new Uint8Array([1, 2, 3]) },
+      snapshotByDocument: { notes: new Uint8Array([1, 2, 3]) },
       onCreateDocument: (workspaceId, path, kind) => created.push([workspaceId, path, kind]),
     })
 
@@ -1087,13 +945,13 @@ describe('DaemonIndexPage', () => {
   })
 
   it('shows an alert and keeps the Duplicate button usable when duplicating fails', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', displayName: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
-      // No snapshotByCanvas entry for 'alpha' -> the mock 404s the snapshot read.
+      // No snapshotByDocument entry for 'alpha' -> the mock 404s the snapshot read.
     })
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await selectCard('Alpha')
@@ -1200,7 +1058,7 @@ describe('DaemonIndexPage', () => {
 
   it("creates a canvas from the panel's New menu, opening it with no name typed first", async () => {
     const created: Array<[string, string]> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'existing', updatedAt: new Date().toISOString() }],
@@ -1227,7 +1085,7 @@ describe('DaemonIndexPage', () => {
 
   it('creates a markdown document from the panel button, sending kind to the daemon', async () => {
     const created: Array<[string, string, string | undefined]> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'existing', updatedAt: new Date().toISOString() }],
@@ -1246,7 +1104,7 @@ describe('DaemonIndexPage', () => {
 
   it('derives a unique path from the listed documents, skipping an already-used "untitled"', async () => {
     const created: Array<[string, string]> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'untitled', updatedAt: new Date().toISOString() }],
@@ -1440,7 +1298,7 @@ describe('DaemonIndexPage', () => {
   it('the delete dialog names the kind: note for markdown, canvas for spatial', async () => {
     // Hardcoding "canvas" back into this page's dialog must go red here —
     // the local page has the same pin, and the daemon page is not exempt.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
@@ -1494,7 +1352,7 @@ describe('DaemonIndexPage', () => {
   // in-SPA route change, and browser Back is not blocked by a dialog.
   it('a delete dialog left open across a workspace switch sends no DELETE into the new workspace', async () => {
     const deleted: Array<{ workspaceId: string; path: string }> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
         // The SAME path in both, which is the ordinary case rather than a
@@ -1504,7 +1362,7 @@ describe('DaemonIndexPage', () => {
           { path: 'untitled', displayName: 'Someone else', updatedAt: new Date().toISOString() },
         ],
       },
-      onDeleteCanvas: (workspaceId, path) => {
+      onDeleteDocument: (workspaceId, path) => {
         deleted.push({ workspaceId, path })
         return undefined
       },
@@ -1535,7 +1393,7 @@ describe('DaemonIndexPage', () => {
 
   it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {
     const deleted: string[] = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
@@ -1543,7 +1401,7 @@ describe('DaemonIndexPage', () => {
         ],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha Board' }, pinned: [] } },
-      onDeleteCanvas: (_ws, path) => {
+      onDeleteDocument: (_ws, path) => {
         deleted.push(path)
         return undefined
       },
@@ -1573,20 +1431,20 @@ describe('DaemonIndexPage', () => {
       { path: 'alpha', updatedAt: new Date().toISOString() },
       { path: 'beta', updatedAt: new Date().toISOString() },
     ]
-    const routes: Parameters<typeof installFetchMock>[0] = {
+    const routes: Parameters<typeof installFakeDaemonFetch>[0] = {
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         get 'ws-a'() {
           return rows
         },
       },
-      onDeleteCanvas: (_ws, path) => {
+      onDeleteDocument: (_ws, path) => {
         deleted.push(path)
         rows = rows.filter((r) => r.path !== path)
         return undefined
       },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
       container: document.body,
@@ -1609,12 +1467,12 @@ describe('DaemonIndexPage', () => {
     // second click can dispatch on the now-disabled confirm button.
     let resolveDelete: ((res: Response) => void) | undefined
     const deleted: string[] = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
       },
-      onDeleteCanvas: (_ws, path) => {
+      onDeleteDocument: (_ws, path) => {
         deleted.push(path)
         return new Promise<Response>((resolve) => {
           resolveDelete = resolve
@@ -1644,7 +1502,7 @@ describe('DaemonIndexPage', () => {
   it('a failed Delete shows the sanitized error in the dialog and refreshes after dismissal', async () => {
     let listFetches = 0
     let rows = [{ path: 'alpha', updatedAt: new Date().toISOString() }]
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         get 'ws-a'() {
@@ -1652,7 +1510,7 @@ describe('DaemonIndexPage', () => {
           return rows
         },
       },
-      onDeleteCanvas: () => jsonResponse({ title: 'Canvas not found' }, 404),
+      onDeleteDocument: () => jsonResponse({ title: 'Canvas not found' }, 404),
     })
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
@@ -1677,7 +1535,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('has no Storage tab — storage and pairing live on the routed Settings page (design refactor D2)', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
@@ -1705,7 +1563,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('names the create control in text and hides its glyph from the accessible name', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
@@ -1724,7 +1582,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('mounts no permanent creation form in the toolbar (ADR-0006)', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
@@ -1741,10 +1599,10 @@ describe('DaemonIndexPage', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
-      delayCanvases: gate,
+      delayDocuments: gate,
     })
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
@@ -1768,7 +1626,7 @@ describe('DaemonIndexPage', () => {
       workspaces: [] as Array<{ workspaceId: string }>,
       documentsByWorkspace: {} as Record<string, never[]>,
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
@@ -1786,7 +1644,7 @@ describe('DaemonIndexPage', () => {
       workspaces: [] as Array<{ workspaceId: string }>,
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     }
-    installFetchMock(routes)
+    installFakeDaemonFetch(routes)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText(/no workspaces/i)
@@ -1886,7 +1744,7 @@ describe('DaemonIndexPage', () => {
 
   it('empty workspace shows one clear next action that creates and opens a canvas', async () => {
     const created: Array<[string, string]> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [] },
       onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
@@ -1913,7 +1771,7 @@ describe('DaemonIndexPage', () => {
     // Deleting the last document just filled the trash; swapping to the
     // onboarding state would hide the one affordance that undoes it — the
     // same rule BrowserIndexPage keeps for the browser keeper.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [] },
       trashByWorkspace: {
@@ -1933,7 +1791,7 @@ describe('DaemonIndexPage', () => {
     // The onboarding moment is where a writing-first user arrives too — an
     // empty state that can only make a canvas turns them away at the door.
     const kinds: Array<string | undefined> = []
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [] },
       onCreateDocument: (_workspaceId, _path, kind) => kinds.push(kind),
@@ -1950,7 +1808,7 @@ describe('DaemonIndexPage', () => {
   })
 
   it('renders the panel as the one document surface, with no view toggle left', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
     })
@@ -1970,7 +1828,7 @@ describe('DaemonIndexPage', () => {
 // sighted reader could see it; this is the other half.
 describe('the workspace names the page', () => {
   it('heads the page with the workspace name, and keeps Documents as the list label', async () => {
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team', displayName: 'Marketing' }],
       // Keyed by the SEGMENT, because that is what the page addresses with:
       // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
@@ -1995,7 +1853,7 @@ describe('the workspace names the page', () => {
     // A workspace with a segment and no display name: the middle layer is
     // what a person chose, so it is what they read. workspaceLabel owns this
     // precedence — the page must not re-derive it and skip a layer.
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team' }],
       // Keyed by the SEGMENT, because that is what the page addresses with:
       // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
@@ -2033,14 +1891,14 @@ describe('the workspace names the page', () => {
       { path: 'beta', updatedAt: new Date().toISOString() },
       { path: 'gamma', updatedAt: new Date().toISOString() },
     ]
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         get 'ws-a'() {
           return rows
         },
       },
-      onDeleteCanvas: (_ws, path) => {
+      onDeleteDocument: (_ws, path) => {
         deleted.push(path)
         rows = rows.filter((r) => r.path !== path)
         return undefined
@@ -2077,14 +1935,14 @@ describe('the workspace names the page', () => {
       { path: 'beta', updatedAt: new Date().toISOString() },
     ]
     let betaFails = true
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         get 'ws-a'() {
           return rows
         },
       },
-      onDeleteCanvas: (_ws, path) => {
+      onDeleteDocument: (_ws, path) => {
         attempts.push(path)
         if (path === 'beta' && betaFails) return jsonResponse({ title: 'nope' }, 500)
         rows = rows.filter((r) => r.path !== path)
@@ -2132,14 +1990,14 @@ describe('the workspace names the page', () => {
       { path: 'alpha', displayName: 'Alpha board', updatedAt: new Date().toISOString() },
       { path: 'beta', displayName: 'Beta board', updatedAt: new Date().toISOString() },
     ]
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         get 'ws-a'() {
           return rows
         },
       },
-      onDeleteCanvas: (_ws, path) => {
+      onDeleteDocument: (_ws, path) => {
         if (path === 'beta') return jsonResponse({ title: 'nope' }, 500)
         rows = rows.filter((r) => r.path !== path)
         return undefined
@@ -2180,14 +2038,14 @@ describe('the workspace names the page', () => {
       { path: 'alpha', updatedAt: new Date().toISOString() },
       { path: 'beta', updatedAt: new Date().toISOString() },
     ]
-    installFetchMock({
+    installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         get 'ws-a'() {
           return rows
         },
       },
-      onDeleteCanvas: (_ws, path) => {
+      onDeleteDocument: (_ws, path) => {
         if (path === 'beta') return jsonResponse({ title: 'not found' }, 404)
         rows = rows.filter((r) => r.path !== path)
         return undefined

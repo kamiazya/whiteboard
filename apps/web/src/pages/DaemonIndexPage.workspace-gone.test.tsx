@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-librar
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
+import { installFakeDaemonFetch } from '../test-utils/fake-daemon-fetch.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
@@ -17,23 +18,13 @@ function render(ui: ReactElement) {
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
-const DOCUMENTS = /\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/
-
 function stubDaemon(answers: { documents: () => Response; create?: () => Response }) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.endsWith('/api/workspaces')) {
-        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
-      }
-      if (DOCUMENTS.test(url) && init?.method === 'POST' && answers.create) {
-        return Promise.resolve(answers.create())
-      }
-      if (DOCUMENTS.test(url)) return Promise.resolve(answers.documents())
-      return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
-    }),
-  )
+  installFakeDaemonFetch({
+    workspaces: [{ workspaceId: 'default' }],
+    documentsByWorkspace: {},
+    onListDocuments: answers.documents,
+    ...(answers.create ? { onCreateDocument: answers.create } : {}),
+  })
 }
 
 afterEach(() => {
