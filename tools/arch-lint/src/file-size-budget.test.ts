@@ -340,7 +340,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // write after an undo wrote the pre-undo canvas back over a document the
   // screen had already left, publishing nothing and discarding the redo
   // stack.
-  'apps/web/src/lib/document-sync-session.ts': 1515,
+  'apps/web/src/lib/document-sync-session.ts': 1159,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the

@@ -397,7 +397,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/clipboard-fragment.ts#remintClipboardFragment': 55,
   'apps/web/src/lib/daemon-file-adapter.ts#createDaemonFileAdapter': 70,
   'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 93,
-  'apps/web/src/lib/document-sync-session.ts#commandTargetKey': 56,
+  'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
   // The undo path takes back a write still inside the debounce window, which
   // has to reach the timer and the queue this factory closes over — so it
   // lives here rather than beside them. Shrinking it is the same job as
@@ -405,7 +405,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 856,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
-  'apps/web/src/lib/document-sync-session.ts#writeCommandTarget': 139,
+  'apps/web/src/lib/command-writes.ts#writeCommandTarget': 139,
   'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
