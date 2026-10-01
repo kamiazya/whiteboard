@@ -280,8 +280,13 @@ describe('test:e2e:distribution step-count drift', () => {
     expect(countDistributionSteps(script)).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
-  it('README says "sixteen steps" matching the current chain', () => {
+  it('README says "sixteen steps" matching the current chain, and lists that many', () => {
     expect(readmeText).toMatch(/The chain has sixteen steps/)
+    // The sentence alone was pinned while the list beneath it ended at
+    // fifteen: a count and a list drift apart unless one is read off the
+    // other.
+    const listed = readmeText.match(/^\d+\. /gm) ?? []
+    expect(listed.length).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
   it('every `pnpm <script>` step in the chain resolves to a script that exists', () => {

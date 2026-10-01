@@ -18,11 +18,12 @@ The chain has sixteen steps after the initial build prerequisite:
 8. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
 9. packaged daemon backup/restore smoke
 10. packaged daemon logs smoke
-11. packaged daemon support-bundle smoke
-12. packaged daemon token smoke
-13. packaged server-mode app smoke
-14. packaged server-mode CLI smoke
-15. packaged server-mode entrypoint smoke
+11. packaged daemon replica-key smoke — `daemon rotate-replica-key` / `set-replica-tier` against a running daemon
+12. packaged daemon support-bundle smoke
+13. packaged daemon token smoke
+14. packaged server-mode app smoke
+15. packaged server-mode CLI smoke
+16. packaged server-mode entrypoint smoke
 
 ## Vitest-backed vs Node-script smokes
 

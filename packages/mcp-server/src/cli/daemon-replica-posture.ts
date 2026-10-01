@@ -19,6 +19,7 @@ import {
   rotateReplicaKeyResponseSchema,
   setReplicaTierResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType } from 'zod'
 import {
   type DaemonRecordParseResult,
@@ -128,13 +129,15 @@ async function runningDaemon(
   return { record: parsed.record }
 }
 
-/** What a refusing daemon said, from the body shapes its routes answer with. */
+/**
+ * What a refusing daemon said. `apiErrorReason` is the one reader of an
+ * error body — a hand-rolled one here answered the error CODE where the
+ * route had written a sentence beside it — and a body outside the contract
+ * is reported as the text it was, or as the status alone.
+ */
 function refusalMessage(body: unknown, status: number): string {
-  if (body !== null && typeof body === 'object') {
-    const { title, error } = body as { title?: unknown; error?: unknown }
-    if (typeof title === 'string') return title
-    if (typeof error === 'string') return error
-  }
+  const reason = apiErrorReason(body)
+  if (reason !== undefined) return reason
   return typeof body === 'string' && body !== '' ? body : `the daemon answered ${status}`
 }
 

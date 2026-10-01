@@ -728,8 +728,12 @@ describe('what the tool table costs to read', () => {
         // names as the resolution of a contested path, had no tool behind
         // it (C5); `path` says what follows the move so the caller does not
         // spend a read finding out.
+        // +579 wire, 0 visible: a `document.move`'s result row carries its
+        // follow report (what was rewritten, what could not be, or the error
+        // that stopped the pass) — output only, so the model reads nothing
+        // more and the client receives what the op's description promised.
         visibleBytes: 2759,
-        wireBytes: 3724,
+        wireBytes: 4303,
         descriptionWords: 45,
         parameters: 21,
         undescribed: 16,
@@ -936,7 +940,7 @@ describe('what the tool table costs to read', () => {
       // parameters and undescribed do not move at all, because a bare-body
       // arm reuses a parameter this table already counted.
       // Then -1,442 for wb_pairing_link_create's retirement.
-      wireBytes: 108897,
+      wireBytes: 109476,
       parameters: 343,
       undescribed: 219,
     })

@@ -109,6 +109,24 @@ describe('whiteboard daemon rotate-replica-key', () => {
     })
   })
 
+  it("reports the daemon's sentence, not its code, when the refusal carries both", async () => {
+    const daemon = daemonAnswering(404, {
+      error: 'unknown_workspace',
+      message: 'Workspace "nope" is not one this daemon holds.',
+    })
+    const { result } = await runDaemonRotateReplicaKey({
+      dataDir: '/data',
+      workspaceId: 'nope',
+      parseRecord: async () => running,
+      isPidAlive: () => true,
+      request: daemon.request,
+    })
+    expect(result).toMatchObject({
+      reason: 'refused',
+      message: 'Workspace "nope" is not one this daemon holds.',
+    })
+  })
+
   it('refuses a 2xx whose body is not the rotate contract rather than inventing a keyId', async () => {
     const daemon = daemonAnswering(200, { keyId: 'short' })
     const { result, exitCode } = await runDaemonRotateReplicaKey({

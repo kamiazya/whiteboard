@@ -451,9 +451,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // of two histories costs lines rather than losing one of them.
   // 961 -> 964: the harness hands the tools the bundled registry, now that
   // the seam is required and the tools fall back to nothing.
-  // 964 -> 973: the `document.move` arm's row, re-pinned with why it moved
-  // — the prose a pinned scoreboard carries instead of a changelog.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 973,
+  // 964 -> 977: the `document.move` arm's row, re-pinned with why it moved
+  // and why its follow report costs wire bytes and no visible ones — the
+  // prose a pinned scoreboard carries instead of a changelog.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 977,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
