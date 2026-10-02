@@ -46,6 +46,7 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
@@ -100,35 +101,63 @@ function titleBudget(projectName: string): number {
   return NAME_LIMIT - fixedOverhead
 }
 
+const SUITES = new Set(['describe'])
+const CASES = new Set(['it', 'test'])
+
 /**
- * Every `describe`/`it` title in a file, with nesting resolved by brace depth.
- * Titles built from a template with a substitution are skipped — their length
- * is not knowable here, and none of them are near the limit.
+ * The identifier a call's callee starts from: `describe` for a modifier
+ * property (`only`, a parked case) and for `describe.each(table)(` alike,
+ * since vitest spells modifiers as properties and parameterised forms as a
+ * curried call.
+ */
+function rootName(callee: ts.Expression): string | undefined {
+  let node: ts.Expression = callee
+  for (;;) {
+    if (ts.isIdentifier(node)) return node.text
+    if (ts.isPropertyAccessExpression(node) || ts.isCallExpression(node)) node = node.expression
+    else return undefined
+  }
+}
+
+/**
+ * A title whose length is knowable here. A template with a substitution is
+ * not, and none of them are near the limit, so it is skipped.
+ */
+function staticTitle(argument: ts.Expression | undefined): string | undefined {
+  if (argument === undefined) return undefined
+  return ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument)
+    ? argument.text
+    : undefined
+}
+
+/**
+ * Every `describe`/`it`/`test` title in a file, nested as the source nests
+ * them. Parsed rather than matched, because a brace in a comment or a string
+ * is not a scope: a `// }` inside a describe used to close it early, so the
+ * next test's title was measured without its suite's — and an oversized
+ * title read as fitting.
  */
 function titlePaths(source: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    't.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  )
   const paths: string[] = []
-  const stack: { title: string; depth: number }[] = []
-  let depth = 0
-  const pattern = /\b(describe|it)(?:\.\w+)?\(\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2|[{}]/g
-  for (const match of source.matchAll(pattern)) {
-    const token = match[0]
-    if (token === '{') {
-      depth += 1
-      continue
+  const walk = (node: ts.Node, stack: readonly string[]): void => {
+    const name = ts.isCallExpression(node) ? rootName(node.expression) : undefined
+    const title = ts.isCallExpression(node) ? staticTitle(node.arguments[0]) : undefined
+    if (name !== undefined && title !== undefined && CASES.has(name)) {
+      paths.push([...stack, title].join('-'))
+      return
     }
-    if (token === '}') {
-      depth -= 1
-      continue
-    }
-    const [, kind, , title] = match
-    if (title === undefined || title.includes('${')) continue
-    // A SIBLING describe opens at the same depth as the one that just closed,
-    // so drop anything at or below this depth before pushing — otherwise every
-    // sibling accumulates and the reported title path is one nobody wrote.
-    while (stack.length > 0 && (stack[stack.length - 1]?.depth ?? 0) >= depth) stack.pop()
-    if (kind === 'describe') stack.push({ title, depth })
-    else paths.push([...stack.map((entry) => entry.title), title].join('-'))
+    const inner =
+      name !== undefined && title !== undefined && SUITES.has(name) ? [...stack, title] : stack
+    ts.forEachChild(node, (child) => walk(child, inner))
   }
+  walk(sourceFile, [])
   return paths
 }
 
@@ -173,6 +202,26 @@ describe('browser test names fit the trace attachment filename', () => {
     ].join('\n')
     expect(titlePaths(source)).toEqual(['outer-first-a', 'outer-second-b', 'outer-top'])
     expect(sanitize('導線 (a — b)')).toBe('----a---b-')
+  })
+
+  it('reads scope from syntax, so a brace in a comment or a string closes nothing (self-test)', () => {
+    const source = [
+      "describe('suite', () => {",
+      '  // }',
+      "  const s = '{'",
+      "  it('after a comment brace', () => {})",
+      "  test('spelled test', () => {})",
+      "  it.each([1, 2])('curried %i', () => {})",
+      // Spelled apart so the live quarantine scan does not read this fixture as a parked test.
+      `  ${['describe', 'skip'].join('.')}('modified', () => { it('inside', () => {}) })`,
+      '})',
+    ].join('\n')
+    expect(titlePaths(source)).toEqual([
+      'suite-after a comment brace',
+      'suite-spelled test',
+      'suite-curried %i',
+      'suite-modified-inside',
+    ])
   })
 
   it('reaches the browser files it governs, in every browser project', () => {

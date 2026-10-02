@@ -18,8 +18,10 @@ export function createFakeEmbedder(): Embedder {
           const slot = (char.codePointAt(0) ?? 0) % FAKE_DIMENSIONS
           vector[slot] = (vector[slot] ?? 0) + 1
         }
-        const length = Math.hypot(...vector) || 1
-        return vector.map((component) => component / length)
+        const length = Math.hypot(...vector)
+        // An empty text folds to nothing; the port still owes it a unit vector.
+        if (length === 0) vector[0] = 1
+        return length === 0 ? vector : vector.map((component) => component / length)
       })
     },
   }

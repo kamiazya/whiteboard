@@ -21,8 +21,20 @@ after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
 })
 
+/**
+ * The environment the fixtures run git in. A caller inside a git hook has
+ * GIT_DIR and its siblings exported, and a git run with those set operates on
+ * THAT repository whatever its cwd says — so the throwaway repos here would be
+ * the caller's own.
+ */
+function gitEnv(extra = {}) {
+  const env = { ...process.env, ...extra }
+  for (const key of Object.keys(env)) if (/^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(key)) delete env[key]
+  return env
+}
+
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim()
+  return execFileSync('git', args, { cwd, env: gitEnv(), encoding: 'utf-8' }).trim()
 }
 
 function commitFile(repo, name, content, message) {
@@ -42,10 +54,10 @@ function makeRepoPair() {
   scratchDirs.push(dir)
   const origin = join(dir, 'origin')
   const work = join(dir, 'work')
-  execFileSync('git', ['init', '-b', 'main', origin], { encoding: 'utf-8' })
+  execFileSync('git', ['init', '-b', 'main', origin], { env: gitEnv(), encoding: 'utf-8' })
   configureIdentity(origin)
   commitFile(origin, 'base.txt', 'base\n', 'base')
-  execFileSync('git', ['clone', origin, work], { encoding: 'utf-8' })
+  execFileSync('git', ['clone', origin, work], { env: gitEnv(), encoding: 'utf-8' })
   configureIdentity(work)
   return { origin, work }
 }
@@ -54,6 +66,7 @@ function runHook(cwd, input) {
   const stdin = typeof input === 'string' ? input : JSON.stringify(input)
   const stdout = execFileSync('node', [scriptPath], {
     cwd,
+    env: gitEnv(),
     input: stdin,
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],

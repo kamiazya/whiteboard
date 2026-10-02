@@ -38,6 +38,13 @@ export function embedderContract(label: string, makeEmbedder: () => Embedder): v
       }
     })
 
+    it('gives an empty text a unit vector too, not a zero one', async () => {
+      const embedder = makeEmbedder()
+      const [vector] = await embedder.embed([''], 'document')
+      expect(vector).toHaveLength(embedder.dimensions)
+      expect(Math.abs(norm(vector as Float32Array) - 1)).toBeLessThan(UNIT_NORM_TOLERANCE)
+    })
+
     it('answers nothing for an empty batch', async () => {
       expect(await makeEmbedder().embed([], 'document')).toEqual([])
     })

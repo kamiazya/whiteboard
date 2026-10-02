@@ -121,6 +121,35 @@ describe('fixed-duration sleeps in test files', () => {
     expect(countFixedSleeps(`${timers}await Promise.race([p, delay(5000, 'timeout')])`)).toBe(0)
   })
 
+  it('counts a call by what the name resolves to, not by the name', () => {
+    const timers = "import { setTimeout as delay } from 'node:timers/promises'\n"
+    // A parameter named like the import is whatever was passed in.
+    expect(
+      countFixedSleeps(`${timers}function invoke(delay: (v: number) => void) { delay(50) }`),
+    ).toBe(0)
+    const helper = 'const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))\n'
+    expect(countFixedSleeps(`${helper}it('x', (sleep: Fn) => { sleep(50) })`)).toBe(0)
+    expect(countFixedSleeps(`${helper}it('x', () => { sleep(50) })`)).toBe(1)
+    expect(
+      countFixedSleeps(
+        `${helper}async function wait(ms: number) { await sleep(ms) }\nawait wait(50)`,
+      ),
+    ).toBe(0)
+  })
+
+  it('registers a helper only when the sleep is its whole body', () => {
+    // A fake that sleeps and then answers is a latency injection; its literal is configuration.
+    const fake =
+      "async function fakePut(ms: number) {\n  await new Promise((r) => setTimeout(r, ms))\n  return 'stored'\n}\n"
+    expect(countFixedSleeps(`${fake}await fakePut(50)`)).toBe(0)
+    const block =
+      'async function sleep(ms: number) {\n  await new Promise((r) => setTimeout(r, ms))\n}\n'
+    expect(countFixedSleeps(`${block}await sleep(50)`)).toBe(1)
+    const returned =
+      'function sleep(ms: number) {\n  return new Promise((r) => setTimeout(r, ms))\n}\n'
+    expect(countFixedSleeps(`${returned}await sleep(50)`)).toBe(1)
+  })
+
   it('leaves a fake latency read from a parameter, this or a property alone', () => {
     expect(
       countFixedSleeps(
