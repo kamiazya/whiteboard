@@ -5,6 +5,7 @@
 // flags are required, and what the ok result is shaped like.
 
 import { type FlagTable, redactFlagValue, scanFlags } from './flag-table.js'
+import { parseSupportBundleArgs, type SupportBundleArgs } from './support-bundle-args.js'
 
 export { redactFlagValue }
 
@@ -155,27 +156,10 @@ export function parseDaemonReplicaTierArgs(args: readonly string[]): DaemonRepli
   }
 }
 
-export type DaemonSupportBundleArgs =
-  | { kind: 'ok'; json: true; outputDir: string; dataDir?: string }
-  | { kind: 'usage-error'; message: string }
-
-const SUPPORT_BUNDLE_FLAGS: FlagTable<'outputDir' | 'dataDir'> = {
-  booleans: ['--json'],
-  values: { '--output-dir': 'outputDir', '--data-dir': 'dataDir' },
-}
-
-export function parseDaemonSupportBundleArgs(args: readonly string[]): DaemonSupportBundleArgs {
-  const scan = scanFlags(args, SUPPORT_BUNDLE_FLAGS)
-  if (scan.kind === 'usage-error') return scan
-  if (!scan.seen.has('--json')) {
-    return {
-      kind: 'usage-error',
-      message:
-        'Only --json is supported. Re-run with: whiteboard daemon support-bundle --json --output-dir=<path>',
-    }
-  }
-  if (scan.values.outputDir === undefined) {
-    return { kind: 'usage-error', message: '--output-dir=<path> is required' }
-  }
-  return { kind: 'ok', json: true, outputDir: scan.values.outputDir, dataDir: scan.values.dataDir }
+export function parseDaemonSupportBundleArgs(args: readonly string[]): SupportBundleArgs {
+  return parseSupportBundleArgs(args, {
+    jsonOnly:
+      'Only --json is supported. Re-run with: whiteboard daemon support-bundle --json --output-dir=<path>',
+    outputDirRequired: '--output-dir=<path> is required',
+  })
 }

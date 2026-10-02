@@ -51,7 +51,7 @@ import { parseServerBackupArgs } from './server-backup-args.js'
 import { parseServerLifecycleArgs } from './server-lifecycle-args.js'
 import { parseServerRestoreArgs } from './server-restore-args.js'
 import { parseServerRunArgs } from './server-run-args.js'
-import { parseServerSupportBundleArgs } from './server-support-bundle-args.js'
+import { parseServerSupportBundleArgs } from './support-bundle-args.js'
 
 export const USAGE = `whiteboard --version | -v
 whiteboard mcp

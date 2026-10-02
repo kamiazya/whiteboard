@@ -1,5 +1,33 @@
 import { describe, expect, it } from 'vitest'
-import { parseServerSupportBundleArgs } from './server-support-bundle-args.js'
+import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
+import { parseDaemonSupportBundleArgs } from './argv.js'
+import { parseServerSupportBundleArgs } from './support-bundle-args.js'
+
+const FLAGS = [
+  '--json',
+  '--output-dir=/out',
+  '--output-dir=',
+  '--output-dir',
+  '--data-dir=/data',
+  '--data-dir=',
+  '--data-dir',
+  '--bogus',
+  'bare',
+] as const
+
+describe('the daemon and server support-bundle commands share one flag grammar', () => {
+  // Only the two sentences that name the command differ, so the property
+  // compares what was ACCEPTED and which flag was refused, not the wording.
+  fcTest.prop([fc.array(fc.constantFrom(...FLAGS), { maxLength: 5 })], withDefaults())(
+    'accept the same arguments and answer the same fields',
+    (args) => {
+      const daemon = parseDaemonSupportBundleArgs(args)
+      const server = parseServerSupportBundleArgs(args)
+      expect(daemon.kind).toBe(server.kind)
+      if (daemon.kind === 'ok' && server.kind === 'ok') expect(daemon).toEqual(server)
+    },
+  )
+})
 
 describe('parseServerSupportBundleArgs', () => {
   it('success: --json and --output-dir', () => {
