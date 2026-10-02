@@ -24,19 +24,30 @@ export const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
  */
 export const WORKTREES_PATH = '.claude/worktrees'
 
-/** The `src` directory of every package/tool matching a `<group>/*` glob that has one. */
-function groupSrcDirs(group: string): string[] {
+/** The `<sub>` directory of every package/tool matching a `<group>/*` glob that has one. */
+function groupSubdirs(group: string, sub: string): string[] {
   return readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => join(group, entry.name, 'src'))
+    .map((entry) => join(group, entry.name, sub))
     .filter((relDir) => existsSync(join(REPO_ROOT, relDir)))
 }
 
 /** The source trees the size ledgers scan, relative to the repo root. */
 export const SCAN_ROOTS: readonly string[] = [
   'apps/web/src',
-  ...groupSrcDirs('packages'),
-  ...groupSrcDirs('tools'),
+  ...groupSubdirs('packages', 'src'),
+  ...groupSubdirs('tools', 'src'),
+]
+
+/**
+ * The plain-Node script trees the size ledgers scan beside `SCAN_ROOTS`: the
+ * distribution and end-to-end smokes under `tests/`, and each package's
+ * `scripts/`. They are `.mjs` rather than TypeScript, run only on a release
+ * path or in CI, and were outside every budget while they grew past 2600 lines.
+ */
+export const SCRIPT_SCAN_ROOTS: readonly string[] = [
+  'tests',
+  ...groupSubdirs('packages', 'scripts'),
 ]
 
 /**

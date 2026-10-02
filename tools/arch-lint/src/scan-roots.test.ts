@@ -2,7 +2,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isExcludedPath, REPO_ROOT, SCAN_ROOTS, WORKTREES_PATH, walk } from './scan-roots.js'
+import {
+  isExcludedPath,
+  REPO_ROOT,
+  SCAN_ROOTS,
+  SCRIPT_SCAN_ROOTS,
+  WORKTREES_PATH,
+  walk,
+} from './scan-roots.js'
 
 describe('scan roots', () => {
   it('reaches every package and tool source tree, plus the web app', () => {
@@ -11,6 +18,12 @@ describe('scan roots', () => {
     expect(SCAN_ROOTS).toContain('apps/web/src')
     expect(SCAN_ROOTS).toContain(join('tools', 'arch-lint', 'src'))
     expect(SCAN_ROOTS.length).toBeGreaterThan(15)
+  })
+
+  it('reaches the end-to-end tree and every package scripts directory', () => {
+    expect(SCRIPT_SCAN_ROOTS).toContain('tests')
+    expect(SCRIPT_SCAN_ROOTS).toContain(join('packages', 'mcp-server', 'scripts'))
+    expect(SCRIPT_SCAN_ROOTS.length).toBeGreaterThan(2)
   })
 
   it('excludes history, vendored and worktree directories by their path inside the repo', () => {

@@ -1,7 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
+import {
+  isExcludedPath,
+  REPO_ROOT,
+  relativeToRepo,
+  SCAN_ROOTS,
+  SCRIPT_SCAN_ROOTS,
+  walk,
+} from './scan-roots.js'
 import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
 
 // docs/contributing/review-checklist.md says "Files stay under 800 lines",
@@ -91,6 +98,18 @@ function scanTestFiles(): string[] {
   )
     .map((absolutePath) => relativeToRepo(absolutePath))
     .filter((path) => !LEDGER_PATHS.includes(path))
+    .sort()
+}
+
+function isScannedScriptFile(absolutePath: string): boolean {
+  return absolutePath.endsWith('.mjs') && !isExcludedPath(absolutePath)
+}
+
+function scanScriptFiles(): string[] {
+  return SCRIPT_SCAN_ROOTS.flatMap((relRoot) =>
+    walk(join(REPO_ROOT, relRoot), { include: isScannedScriptFile }),
+  )
+    .map((absolutePath) => relativeToRepo(absolutePath))
     .sort()
 }
 
@@ -450,5 +469,64 @@ describe('file-size budget: test files, same 800-line budget, same shrink-only c
       (path) => path in FILE_SIZE_GRANDFATHER,
     )
     expect(shared).toEqual([])
+  })
+})
+
+/**
+ * Plain-Node `.mjs` scripts over the SAME 800-line budget, on the same
+ * shrink-only contract: the smokes under `tests/` and each package's
+ * `scripts/`. They were outside both ledgers above only because the scan
+ * looked for TypeScript, and the largest of them grew to 2668 lines unwatched.
+ * An entry is a ceiling, both sides are guarded, and growing a listed file
+ * means raising its ceiling here in the same diff.
+ */
+const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
+  // The errands the LLM-driven tool-surface eval asks a model to run, each
+  // with its prompt and the outcome it is graded by. It is a table, so it
+  // grows by the number of tasks the eval holds.
+  'packages/mcp-server/scripts/eval/tasks.mjs': 1041,
+  // The stdio round-trip smoke: every registered tool exercised through one
+  // spawned server, whose state each step builds on. The next shrink is the
+  // steps leaving as modules that take the shared client, the way the
+  // distribution smokes' helpers did.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2668,
+  // The server backup/restore/support-bundle CLI scenarios, which share one
+  // seeded data dir, two spawned servers and one leak pass over everything
+  // they printed. What has left: the JWT, TLS, CLI-runner and readiness
+  // helpers (`smoke-helpers.mjs`). The next shrink is the support-bundle
+  // scenarios as their own script.
+  'tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs': 1082,
+}
+
+describe('file-size budget: .mjs scripts, same 800-line budget, same shrink-only contract', () => {
+  const scripts = scanScriptFiles()
+
+  // Same guard-that-never-reaches-its-subject discipline as above: a root that
+  // stopped resolving would leave every assertion below over an empty set.
+  it('reaches the script trees this repo actually has', () => {
+    expect(scripts.length).toBeGreaterThan(20)
+    expect(scripts).toContain('packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs')
+    expect(scripts).toContain('tests/e2e/distribution/smoke-helpers.mjs')
+  })
+
+  registerSizeLedgerAssertions({
+    budget: LINE_BUDGET,
+    entries: scripts.map((key) => ({ key, lines: lineCount(join(REPO_ROOT, key)) })),
+    ledgers: [SCRIPT_FILE_SIZE_GRANDFATHER],
+    ledgerOf: () => SCRIPT_FILE_SIZE_GRANDFATHER,
+    readingOf,
+    wording: {
+      titles: {
+        unlisted: 'flags no over-budget script outside SCRIPT_FILE_SIZE_GRANDFATHER',
+        grown: 'holds every grandfathered script at or under its recorded ceiling',
+        shrunk: 'holds no script entry that has shrunk to budget — delete it instead',
+        missing: 'holds no script entry for a file that moved or was deleted',
+        headroom: 'holds no script entry whose ceiling stands far above its reading — lower it',
+      },
+      unlisted: ({ key, lines }) => `${key}: ${lines} lines`,
+      grown: (key, lines, ceiling) =>
+        `${key}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      shrunk: (key, lines) => `${key}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
+    },
   })
 })
