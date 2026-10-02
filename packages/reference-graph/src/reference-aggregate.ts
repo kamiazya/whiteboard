@@ -195,7 +195,7 @@ function* unlinkedContexts(texts: readonly string[], name: string): Iterable<str
  * target and alias halves alike — so an already-linking document surfaces
  * only its EXTRA prose mentions.
  */
-export function mentionsOfIn(
+function mentionsOfIn(
   target: { readonly documentId: string; readonly name: string },
   sources: ReadonlyMap<string, DocumentReferenceFacts>,
 ): BacklinkEntry[] {
