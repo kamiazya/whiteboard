@@ -280,8 +280,10 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
  * Why the same budget rather than a higher one, which is the question that
  * kept this exclusion silent. The case for a higher ceiling is that a test
  * file legitimately repeats setup, so it should be allowed to run larger.
- * Measured across this repo on 2026-09-19, that is not what the sizes say —
- * test files are barely larger than source files at every percentile:
+ * Measured across this repo on 2026-09-19 — a reading of that day, not one
+ * kept current; the file counts have since moved, the ratio is what held —
+ * that is not what the sizes say: test files are barely larger than source
+ * files at every percentile:
  *
  * |            | median | p90 | p95 | p99  | max  |
  * |------------|--------|-----|-----|------|------|
