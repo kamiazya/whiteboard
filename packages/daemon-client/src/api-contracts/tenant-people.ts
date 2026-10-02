@@ -8,51 +8,50 @@ import { z } from 'zod'
  * schemas directly.
  */
 
-export const tenantPersonSchema = z
-  .object({
-    userId: z.string().min(1),
-    displayName: z.string().min(1),
-    deactivated: z.boolean(),
-    // Appointed in the product or named in configuration; the list does not
-    // say which, since only an appointment can be dismissed here.
-    administrator: z.boolean(),
-  })
-  .strict()
+export const tenantPersonSchema = z.object({
+  userId: z.string().min(1),
+  displayName: z.string().min(1),
+  deactivated: z.boolean(),
+  // Appointed in the product or named in configuration; the list does not
+  // say which, since only an appointment can be dismissed here.
+  administrator: z.boolean(),
+})
 
-export const tenantPeopleResponseSchema = z.object({ people: z.array(tenantPersonSchema) }).strict()
+export const tenantPeopleResponseSchema = z.object({ people: z.array(tenantPersonSchema) })
 
-export const deactivationResponseSchema = z
-  .object({ userId: z.string().min(1), deactivated: z.boolean() })
-  .strict()
+export const deactivationResponseSchema = z.object({
+  userId: z.string().min(1),
+  deactivated: z.boolean(),
+})
 
-export const administratorResponseSchema = z
-  .object({ userId: z.string().min(1), administrator: z.boolean() })
-  .strict()
+export const administratorResponseSchema = z.object({
+  userId: z.string().min(1),
+  administrator: z.boolean(),
+})
 
 /** ADR-0051: deleting is final, so the only answer is that it happened. */
-export const deletionResponseSchema = z
-  .object({ userId: z.string().min(1), deleted: z.literal(true) })
-  .strict()
+export const deletionResponseSchema = z.object({
+  userId: z.string().min(1),
+  deleted: z.literal(true),
+})
 
 /** Why an administrator's change was refused. A narrowing of `apiErrorBodySchema`. */
-export const tenantPeopleRefusalSchema = z
-  .object({
-    error: z.enum([
-      'not_an_administrator',
-      'unknown_user',
-      'cannot_deactivate_self',
-      'cannot_dismiss_self',
-      'not_deactivated',
-      'sole_owner',
-      // ADR-0051 decision 5: an action needs a recent sign-in at the provider,
-      // which a bearer cannot give and an older session no longer does.
-      'sign_in_required',
-      'reauthentication_required',
-    ]),
-    message: z.string().min(1),
-    // `sole_owner` only: the workspaces that would be left without an owner.
-    workspaceIds: z.array(z.string().min(1)).min(1).optional(),
-  })
-  .strict()
+export const tenantPeopleRefusalSchema = z.object({
+  error: z.enum([
+    'not_an_administrator',
+    'unknown_user',
+    'cannot_deactivate_self',
+    'cannot_dismiss_self',
+    'not_deactivated',
+    'sole_owner',
+    // ADR-0051 decision 5: an action needs a recent sign-in at the provider,
+    // which a bearer cannot give and an older session no longer does.
+    'sign_in_required',
+    'reauthentication_required',
+  ]),
+  message: z.string().min(1),
+  // `sole_owner` only: the workspaces that would be left without an owner.
+  workspaceIds: z.array(z.string().min(1)).min(1).optional(),
+})
 
 export type TenantPeopleRefusal = z.infer<typeof tenantPeopleRefusalSchema>

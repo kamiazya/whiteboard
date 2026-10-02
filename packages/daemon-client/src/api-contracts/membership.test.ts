@@ -41,11 +41,13 @@ describe('membershipRefusalSchema', () => {
     )
   })
 
-  it('rejects an extra status field', () => {
-    expect(
-      membershipRefusalSchema.safeParse({ error: 'not_a_member', message: 'x', status: 403 })
-        .success,
-    ).toBe(false)
+  it('reads the code and message of a refusal a newer daemon gave an extra field', () => {
+    const parsed = membershipRefusalSchema.safeParse({
+      error: 'not_a_member',
+      message: 'x',
+      status: 403,
+    })
+    expect(parsed.success && parsed.data).toEqual({ error: 'not_a_member', message: 'x' })
   })
 
   it('is a strict narrowing of apiErrorBodySchema: every valid refusal also parses there and apiErrorReason reads its message', () => {

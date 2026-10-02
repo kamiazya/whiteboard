@@ -27,15 +27,13 @@ export const promoteWorkspaceRequestSchema = z
   .strict()
 export type PromoteWorkspaceRequest = z.infer<typeof promoteWorkspaceRequestSchema>
 
-export const promoteWorkspaceResponseSchema = z
-  .object({
-    ok: z.literal(true),
-    /** True iff the rows carry a verified attestation. */
-    attested: z.boolean(),
-    recorded: z.array(z.string()),
-    shadowed: z.array(z.string()),
-  })
-  .strict()
+export const promoteWorkspaceResponseSchema = z.object({
+  ok: z.literal(true),
+  /** True iff the rows carry a verified attestation. */
+  attested: z.boolean(),
+  recorded: z.array(z.string()),
+  shadowed: z.array(z.string()),
+})
 export type PromoteWorkspaceResponse = z.infer<typeof promoteWorkspaceResponseSchema>
 
 /**

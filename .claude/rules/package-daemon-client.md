@@ -12,6 +12,12 @@ paths:
   `did:key` helpers and the URL builders. The barrel
   (`api-contracts/index.ts`) is deliberately NARROW — it is the whole
   contract surface apps/web reads (`api-contracts-barrel.test.ts` pins it).
+- **Strict requests, tolerant answers.** The hosted app and the daemon update
+  independently, so a schema the browser parses an answer with is NOT
+  `.strict()` and one the daemon parses a request with is; the line is the
+  declaration's name (`*RequestSchema`), held by arch-lint's
+  `api-contract-response-tolerance.test.ts` and explained in
+  `docs/contributing/architecture/wire-protocol.md`.
 - The one document backend the browser drives a daemon with (ADR-0050
   retired the WebSocket): `sse-backend` over `sse-stream-hub`, and the
   `document-backend-contract` types it implements. The SSE wire itself is

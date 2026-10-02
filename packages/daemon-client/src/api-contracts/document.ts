@@ -90,11 +90,9 @@ export const restoreVersionRequestSchema = z.object({
  * counts the documents it reverted; an in-place restore has nothing to add.
  */
 export const restoreVersionResponseSchema = z.union([
-  z
-    .object({ documentId: z.string().min(1), elementCount: z.number().int().nonnegative() })
-    .strict(),
-  z.object({ ok: z.literal(true), restoredCount: z.number().int().nonnegative() }).strict(),
-  z.object({ ok: z.literal(true) }).strict(),
+  z.object({ documentId: z.string().min(1), elementCount: z.number().int().nonnegative() }),
+  z.object({ ok: z.literal(true), restoredCount: z.number().int().nonnegative() }),
+  z.object({ ok: z.literal(true) }),
 ])
 export type RestoreVersionResponse = z.infer<typeof restoreVersionResponseSchema>
 
@@ -145,25 +143,21 @@ export const updateDocumentResponseSchema = z.object({
 // The trash: what a delete evacuated, listed for a human and restorable by
 // documentId. Metadata only — blob digests are the store's business and
 // never cross this boundary.
-export const trashEntrySummarySchema = z
-  .object({
-    documentId: z.string().min(1),
-    path: z.string().min(1),
-    deletedAt: z.number().int().nonnegative(),
-  })
-  .strict()
+export const trashEntrySummarySchema = z.object({
+  documentId: z.string().min(1),
+  path: z.string().min(1),
+  deletedAt: z.number().int().nonnegative(),
+})
 
 export const listTrashResponseSchema = z.object({
   entries: z.array(trashEntrySummarySchema),
 })
 
 export const restoreTrashResponseSchema = z.object({
-  restored: z
-    .object({
-      documentId: z.string().min(1),
-      path: z.string().min(1),
-    })
-    .strict(),
+  restored: z.object({
+    documentId: z.string().min(1),
+    path: z.string().min(1),
+  }),
 })
 
 export const deleteDocumentResponseSchema = z.object({
