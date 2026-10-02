@@ -36,7 +36,7 @@ function stubDaemon(): { fetch: typeof globalThis.fetch; calls: Call[] } {
     }
     if (url.endsWith('/documents') && method === 'POST') {
       const body = JSON.parse(String(init?.body)) as { path: string }
-      // A real ULID: the v1 create response is `.strict()` over
+      // A real ULID: the v1 create response is checked against
       // `documentIdSchema`, so a placeholder id fails the parse and the
       // failure names schema validation rather than the fixture.
       return Response.json(

@@ -27,34 +27,17 @@
 // earlier catches it, because no boundary test can see what a re-export
 // DRAGS; only `smoke:bundle-size` can, and only after a build.
 // `./api-errors` imports zod and nothing else.
+//
+// `apiErrorBodySchema` is NOT re-exported: it is what a daemon EMITS, strict
+// by design, and a browser reads a refusal through `apiErrorReason`, which
+// tolerates a field a newer daemon added.
 export type { ApiErrorBody } from '@kamiazya/whiteboard-server-core/api-errors'
 export {
-  apiErrorBodySchema,
   apiErrorCodeSchema,
   apiErrorReason,
   errorBody,
   invalidRequestBody,
 } from '@kamiazya/whiteboard-server-core/api-errors'
-// The /api/v1 schemas still come from the root. They are off the critical
-// path today, which is a property of who imports them rather than a
-// Re-exported from server-core so apps/web keeps consuming every daemon HTTP
-// contract through this one barrel instead of importing a shared-layer
-// package it is not allowed to depend on directly (see
-// .claude/rules/architecture-map.md).
-//
-// These seven come from `./contracts`, which declares nothing and
-// re-exports each schema from a schemas-only module beside the tool that
-// serves it. They used to come from the ROOT, where being harmless was a
-// property of who imported them rather than a guarantee — see the block
-// below for what the root costs when that stops being true.
-export {
-  backlinksOutputSchema as documentBacklinksResponseSchema,
-  documentSearchOutputSchema as documentSearchResponseSchema,
-  documentTagsOutputSchema as workspaceDocumentTagsResponseSchema,
-  exportOkfOutputSchema as documentOkfV1ResponseSchema,
-  linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
-  wbDocumentCreateOutputSchema as createDocumentV1ResponseSchema,
-} from '@kamiazya/whiteboard-server-core/contracts'
 export * from './daemon-urls.js'
 export * from './document.js'
 export * from './document-url.js'
@@ -68,17 +51,6 @@ export {
 } from './promotion.js'
 export type { DaemonPingResponse } from './runtime.js'
 export { daemonPingResponseSchema } from './runtime.js'
-
-import type {
-  exportOkfOutputSchema as _canvasOkfV1ResponseSchema,
-  backlinksOutputSchema as _documentBacklinksResponseSchema,
-  documentSearchOutputSchema as _documentSearchResponseSchema,
-  linkifyMentionsOutputSchema as _linkifyMentionsResponseSchema,
-  documentTagsOutputSchema as _workspaceDocumentTagsResponseSchema,
-} from '@kamiazya/whiteboard-server-core/contracts'
-import type { z as _z } from 'zod'
-export type DocumentBacklinksResponse = _z.infer<typeof _documentBacklinksResponseSchema>
-export type WorkspaceDocumentTagsResponse = _z.infer<typeof _workspaceDocumentTagsResponseSchema>
-export type LinkifyMentionsResponse = _z.infer<typeof _linkifyMentionsResponseSchema>
-export type DocumentOkfV1Response = _z.infer<typeof _canvasOkfV1ResponseSchema>
-export type DocumentSearchResponse = _z.infer<typeof _documentSearchResponseSchema>
+// The six /api/v1 answers, derived from the tool outputs the routes serve and
+// tolerant of a newer daemon's added fields (see v1-answers.ts).
+export * from './v1-answers.js'

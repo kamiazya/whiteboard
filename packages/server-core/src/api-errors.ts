@@ -9,17 +9,18 @@ import { z } from 'zod'
  * depends on it, so a contract filed with the browser CLIENT was out of
  * reach of half the routes it describes — `create-server.ts` answered nine
  * refusals with a raw `issues` array because the constructor was one layer
- * above it. `daemon-client`'s barrel re-exports it, the way it already
- * re-exports six `/api/v1` schemas from here for exactly this reason.
+ * above it. `daemon-client`'s barrel re-exports the reader, the way it already
+ * re-exports the `/api/v1` answers from here for exactly this reason.
  *
- * Only the second arm is STRICT: that family
- * is this project's own, so a key outside it is a reason written where no
- * reader looks, while the first is a standard whose extensions belong to it.
+ * Two schemas over one declaration, because emitting and reading are
+ * opposite jobs: `apiErrorBodySchema` is strict in its code family (what a
+ * daemon may write) and `apiErrorReadSchema` tolerates what a newer daemon
+ * added (what a client may meet).
  *
  * - `{ title }` — RFC 9457-flavoured Problem Details, used by the canvas
  *   CRUD routes. `title` is static, display-intended copy.
  * - `{ error, message? }` — the code+reason family used everywhere else
- *   (branches, pairing, runtime, validation). `message`, when present
+ *   (branches, runtime, validation). `message`, when present
  *   beside an `error` code, is daemon-authored display copy: the branch
  *   routes put the human-readable reason ("A variation named X already
  *   exists") there and nowhere else.
@@ -42,27 +43,49 @@ import { z } from 'zod'
  */
 export const apiErrorCodeSchema = z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/)
 
-export const apiErrorBodySchema = z.union([
-  // NOT strict, and the asymmetry is the RFC's: 9457 defines `type`,
-  // `status`, `detail` and `instance` beside `title`, and explicitly allows
-  // extension members. Refusing them would discard the title of a real
-  // Problem Details body — measured, `{type, title, status}` from the branch
-  // routes stopped reaching the UI's error copy the moment this arm was closed.
-  z.object({ title: z.string().min(1) }),
-  z
-    .object({
-      error: apiErrorCodeSchema,
-      message: z.string().min(1).optional(),
-      /**
-       * What to DO about it, for a caller that can act — the viewport routes
-       * tell an agent to open the canvas in a browser. Never the reason:
-       * `apiErrorReason` answers `message`, so a hint is additional and a
-       * body carrying only a hint says nothing.
-       */
-      hint: z.string().min(1).optional(),
-    })
-    .strict(),
-])
+// NOT strict, and the asymmetry is the RFC's: 9457 defines `type`,
+// `status`, `detail` and `instance` beside `title`, and explicitly allows
+// extension members. Refusing them would discard the title of a real
+// Problem Details body — measured, `{type, title, status}` from the branch
+// routes stopped reaching the UI's error copy the moment this arm was closed.
+const problemDetailsArm = z.object({ title: z.string().min(1) })
+
+const codeArmShape = {
+  error: apiErrorCodeSchema,
+  message: z.string().min(1).optional(),
+  /**
+   * What to DO about it, for a caller that can act — the viewport routes
+   * tell an agent to open the canvas in a browser. Never the reason:
+   * `apiErrorReason` answers `message`, so a hint is additional and a
+   * body carrying only a hint says nothing.
+   */
+  hint: z.string().min(1).optional(),
+  /**
+   * `sole_owner` only (ADR-0051): the workspaces a deletion would leave
+   * without an owner. Declared here because the route emits it, so the
+   * emission contract admits what is really written; the one reader that
+   * shows it is the people screen.
+   */
+  workspaceIds: z.array(z.string().min(1)).min(1).optional(),
+}
+
+/**
+ * What a daemon EMITS, which is why the code arm is strict: that family is
+ * this project's own, so a key outside it is a reason written where no
+ * reader looks. Route tests and the fuzz lanes hold what actually went out
+ * against it. A BROWSER does not parse with it — see `apiErrorReadSchema`.
+ */
+export const apiErrorBodySchema = z.union([problemDetailsArm, z.object(codeArmShape).strict()])
+
+/**
+ * What a client READS an error body with. The same two families as
+ * `apiErrorBodySchema`, minus the strictness: the hosted app and the daemon
+ * update independently, so a newer daemon that adds a field to a refusal
+ * (`retryAfter` beside a `rate_limited`) must not make the whole body
+ * unreadable to an older bundle — which would drop the very sentence the
+ * field travelled with. Zod's default object strips what it does not know.
+ */
+const apiErrorReadSchema = z.union([problemDetailsArm, z.object(codeArmShape)])
 
 export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>
 
@@ -74,7 +97,7 @@ export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>
  * got discarded for months.
  */
 export function apiErrorReason(body: unknown): string | undefined {
-  const parsed = apiErrorBodySchema.safeParse(body)
+  const parsed = apiErrorReadSchema.safeParse(body)
   if (!parsed.success) return undefined
   if ('title' in parsed.data) return parsed.data.title
   return parsed.data.message

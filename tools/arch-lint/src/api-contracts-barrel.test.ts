@@ -22,23 +22,23 @@ describe('api-contracts barrel scope', () => {
   it('re-exports exactly the declared public surface — no other api-contracts modules', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
-    // The two '@kamiazya/whiteboard-server-core/*' entries are a deliberate
-    // widening: the /api/v1 document contracts (canvas list + OKF read) AND
-    // the api error body contract are consumed by apps/web through this
-    // barrel so it never imports the shared-layer package directly
-    // (architecture-map.md).
+    // The one '@kamiazya/whiteboard-server-core/*' entry is a deliberate
+    // widening: the api error reader (`apiErrorReason`) is consumed by
+    // apps/web through this barrel so it never imports the shared-layer
+    // package directly (architecture-map.md).
     //
-    // Both are SUBPATHS, and there is no root entry any more. That is now a
-    // rule rather than a habit — tools/arch-lint's
-    // daemon-client-subpath.test.ts fails on a root import anywhere in
-    // daemon-client — and `/contracts` is the subpath the tool contracts
-    // arrived through when it landed.
+    // It is a SUBPATH, and there is no root entry. That is now a rule rather
+    // than a habit — tools/arch-lint's daemon-client-subpath.test.ts fails on
+    // a root import anywhere in daemon-client. The tool contracts the
+    // `/api/v1` routes answer with arrive as `./v1-answers.js`, DERIVED
+    // there and tolerant of a newer daemon's added fields: a schema
+    // re-exported from the server-core `/contracts` subpath as it stands is
+    // `.strict()`, and an older cached bundle then fails to read a document
+    // that was created.
     //
     // `./errors.js` left this list when that contract moved DOWN to
     // server-core: `/api/v1` is served from there, so a contract declared in
-    // the CLIENT was above half the routes it describes and nine of them
-    // answered with a raw `issues` array because the constructor was out of
-    // reach.
+    // the CLIENT was above half the routes it describes.
     //
     // It arrives as the SUBPATH rather than the root, and the distinction is
     // load-bearing rather than cosmetic: a module on apps/web's critical
@@ -47,7 +47,6 @@ describe('api-contracts barrel scope', () => {
     // caught by `smoke:bundle-size` after a build and by nothing before it.
     expect(specifiers).toEqual([
       '@kamiazya/whiteboard-server-core/api-errors',
-      '@kamiazya/whiteboard-server-core/contracts',
       // daemon-urls: one builder per daemon route apps/web requests, so a
       // path is spelled once and `daemon-client-urls.routes.test.ts` holds
       // every builder against the routes the daemon really mounts. It
@@ -58,9 +57,6 @@ describe('api-contracts barrel scope', () => {
       // builds request URLs through the same function the daemon's own
       // clients use instead of re-deriving the shape by hand.
       './document-url.js',
-      // errors: the ONE daemon error-body contract (title | error+message),
-      // exported so every client error surface reads through the same
-      // parser instead of hand-rolled per-file field checks.
       // fonts: the installable-font catalogue, exported so the settings
       // picker sends an id the daemon gave it. Publishing the contract is
       // what keeps a URL out of the request (ADR-0012).
@@ -70,6 +66,7 @@ describe('api-contracts barrel scope', () => {
       // the bytes the daemon recomputes instead of a mirror of them.
       './promotion.js',
       './runtime.js',
+      './v1-answers.js',
     ])
   })
 })

@@ -4,6 +4,7 @@
  * people as its owners manage them. Each answer is parsed with the keeper's
  * own contract; a refusal comes back as the sentence the keeper wrote for it.
  */
+import { apiErrorReason } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   administratorResponseSchema,
   deactivationResponseSchema,
@@ -44,9 +45,11 @@ const peopleRefusalSchema = tenantPeopleRefusalSchema.or(workspacePeopleRefusalS
 
 function refusal(body: unknown): Refused {
   const parsed = peopleRefusalSchema.safeParse(body)
-  // A body neither schema admits (a bare 401, a proxy's HTML) still has to
-  // become a sentence; it just cannot carry a code this page acts on.
-  if (!parsed.success) return { ok: false, message: 'That was refused.' }
+  // A body neither schema admits still has to become a sentence; it just
+  // cannot carry a code this page acts on. A refusal code a newer keeper
+  // added still carries its own sentence, which the shared reader finds; a
+  // bare 401 or a proxy's HTML carries none.
+  if (!parsed.success) return { ok: false, message: apiErrorReason(body) ?? 'That was refused.' }
   const said = parsed.data.message
   // ADR-0051: a sole owner's deletion is refused naming the workspaces.
   const named =

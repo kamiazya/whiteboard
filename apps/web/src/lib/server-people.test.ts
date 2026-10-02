@@ -43,6 +43,13 @@ describe('server-people refusals', () => {
     expect(outcome).toEqual({ ok: false, message: 'still the only owner: a, b' })
   })
 
+  it('carries the sentence of a refusal code a newer keeper added, with a field this page has not heard of', async () => {
+    const outcome = await tenantPeople.list(
+      refusing({ error: 'rate_limited', message: 'slow down', retryAfter: 3 }, 429),
+    )
+    expect(outcome).toEqual({ ok: false, message: 'slow down' })
+  })
+
   it('answers a body neither contract admits with a plain refusal, never a crash', async () => {
     const outcome = await tenantPeople.list(refusing({ error: 'unauthorized' }, 401))
     expect(outcome).toEqual({ ok: false, message: 'That was refused.' })

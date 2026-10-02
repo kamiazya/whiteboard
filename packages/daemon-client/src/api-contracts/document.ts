@@ -6,6 +6,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { replicaTierSchema } from './replica-key.js'
+import { tolerantAnswer } from './tolerant-answer.js'
 
 // Request/response schemas for the canvas / workspace mutation endpoints.
 // Imported by routes/document.ts (validates incoming bodies) and by any client
@@ -96,9 +97,14 @@ export const exportDocumentJsonRequestSchema = z.object({
  *
  * Discriminated on `kind` so a reader cannot mistake an empty canvas for a
  * markdown document with no body.
+ *
+ * The canvas is the stored model, strict because a WRITE must refuse a key it
+ * does not know; here it is read back, by a bundle that may be older than the
+ * daemon that stored the version, so a field added to a node must not make
+ * the whole past state unreadable (`tolerantAnswer`).
  */
 export const versionDocumentResponseSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('spatial'), canvas: spatialCanvasSchema }),
+  z.object({ kind: z.literal('spatial'), canvas: tolerantAnswer(spatialCanvasSchema) }),
   z.object({ kind: z.literal('markdown'), body: z.string() }),
 ])
 export type VersionDocumentResponse = z.infer<typeof versionDocumentResponseSchema>

@@ -6,6 +6,8 @@ describe('apiErrorBodySchema', () => {
     [{ title: 'Canvas not found' }],
     [{ error: 'branch_conflict' }],
     [{ error: 'branch_conflict', message: 'A variation named "x" already exists' }],
+    // A refusal that names what it concerns (ADR-0051: a sole owner's deletion).
+    [{ error: 'sole_owner', message: 'm', workspaceIds: ['w'] }],
   ])('accepts %j', (body) => {
     expect(apiErrorBodySchema.safeParse(body).success).toBe(true)
   })
@@ -18,6 +20,9 @@ describe('apiErrorBodySchema', () => {
     [{ oops: 1 }],
     [{ title: '' }],
     [{ message: 'reason without a code' }],
+    // The EMISSION contract stays closed: an undeclared field a route wrote is
+    // a reason put where no reader looks. Reading is the tolerant half.
+    [{ error: 'branch_conflict', issues: [] }],
     [null],
     ['plain string'],
   ])('rejects %j', (body) => {
@@ -34,6 +39,19 @@ describe('apiErrorReason', () => {
     expect(apiErrorReason({ error: 'branch_conflict', message: 'already exists' })).toBe(
       'already exists',
     )
+  })
+
+  it('reads the reason of a body a newer daemon gave a field this bundle has not heard of', () => {
+    expect(apiErrorReason({ error: 'rate_limited', message: 'slow down', retryAfter: 3 })).toBe(
+      'slow down',
+    )
+    expect(apiErrorReason({ title: 'Gone', type: 'about:blank', status: 410 })).toBe('Gone')
+  })
+
+  it('reads the sentence of a refusal naming the workspaces it concerns', () => {
+    expect(
+      apiErrorReason({ error: 'sole_owner', message: 'still the only owner', workspaceIds: ['w'] }),
+    ).toBe('still the only owner')
   })
 
   it('returns undefined for a bare code and for out-of-contract bodies', () => {
