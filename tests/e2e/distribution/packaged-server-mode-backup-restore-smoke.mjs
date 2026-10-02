@@ -472,12 +472,12 @@ try {
     // Create a canvas in it (workspace:write).
     const createRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
+      `/api/v1/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
       jwt,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: CANVAS_PATH }),
+        body: JSON.stringify({ path: CANVAS_PATH, kind: 'spatial' }),
       },
     )
     if (!createRes.ok) {
@@ -785,12 +785,12 @@ try {
     const wrongJwt = makeJwt(privateKey, 'workspace:read')
     const wrongScopeRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
+      `/api/v1/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
       wrongJwt,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: 'should-fail' }),
+        body: JSON.stringify({ path: 'should-fail', kind: 'spatial' }),
       },
     )
     if (wrongScopeRes.status !== 403) {

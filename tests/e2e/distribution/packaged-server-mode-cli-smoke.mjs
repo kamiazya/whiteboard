@@ -321,11 +321,11 @@ try {
     const createStatus = await socketRequest(
       ready.socketPath,
       'POST',
-      `/api/workspaces/${WORKSPACE_ID}/documents`,
+      `/api/v1/workspaces/${WORKSPACE_ID}/documents`,
       { 'Content-Type': 'application/json', Authorization: `Bearer ${SEED_TOKEN}` },
-      JSON.stringify({ path: CANVAS_PATH }),
+      JSON.stringify({ path: CANVAS_PATH, kind: 'spatial', createWorkspace: true }),
     )
-    if (createStatus !== 200) fail('scenario 2: canvas create failed', { status: createStatus })
+    if (createStatus !== 201) fail('scenario 2: canvas create failed', { status: createStatus })
 
     killProc(seedDaemon)
     // Give the daemon time to flush and write its record.

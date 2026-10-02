@@ -6,12 +6,16 @@ import {
   renameDocumentPathResponseSchema,
   workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, seedWorkspaceRow, withTempDataDir } from '../_test-helpers.js'
+import {
+  createTestDocument,
+  resolveTestServerDeps,
+  seedWorkspaceRow,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspaces-test-')
 
@@ -225,288 +229,19 @@ describe('GET /api/workspaces', () => {
   })
 })
 
+// Documents are created through `/api/v1` (server-core's route over
+// `wbDocumentCreate`), which every client has used since the web app moved
+// there. This router keeping a second way in meant two creation surfaces with
+// their own validation and error wording over one operation.
 describe('POST /api/workspaces/:workspaceId/documents', () => {
-  it('returns { path } on success', async () => {
+  it('is not a route any more: creation goes through /api/v1', async () => {
     const app = createDocumentRouter({ serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: 'new-canvas' }),
     })
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as unknown
-    expect(json).toEqual({ path: 'new-canvas' })
-  })
-
-  it('returns 409 with Problem Details title on duplicate path', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    // Create once to seed the conflict.
-    await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'existing' }),
-    })
-    // Second creation must return Problem Details with a title field.
-    const res = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'existing' }),
-    })
-    expect(res.status).toBe(409)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
-  })
-
-  // A handle that passes the id validator but cannot be a SEGMENT is the
-  // caller's to change; the mint boundary refuses it, and that refusal used
-  // to fall through the catch-all to a 500 that named nothing.
-  it('returns 400 with a Problem Details title when the handle cannot be a workspace segment', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/-/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'board' }),
-    })
-    expect(res.status).toBe(400)
-    const json = (await res.json()) as { title?: string }
-    expect(json.title).toMatch(/segment|workspace/i)
-  })
-
-  it('returns 500 with Problem Details title when saveDocument fails unexpectedly', async () => {
-    // Force the snapshot export saveDocument makes internally to throw, so
-    // it surfaces a non-ConflictError, exercising the catch-all 500 branch
-    // (mutation-check guard for the 400 -> 500 change).
-    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
-      throw new Error('snapshot serialization failed')
-    })
-    try {
-      const app = createDocumentRouter({ serverDeps })
-      const res = await app.request('/api/workspaces/ws1/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: 'new-canvas' }),
-      })
-      expect(res.status).toBe(500)
-      const json = (await res.json()) as { title?: string }
-      expect(json.title).toBe('Failed to create canvas.')
-    } finally {
-      exportSpy.mockRestore()
-    }
-  })
-
-  it('returns 400 with Problem Details title on invalid path', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'bad path!' }),
-    })
-    expect(res.status).toBe(400)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-  })
-
-  // The TITLE, not merely that one is present: a body that is not JSON at
-  // all and a body that is JSON of the wrong shape are different mistakes,
-  // and a caller can only act on the difference if the route says which.
-  // Asserting `typeof title === 'string'` alone cannot tell them apart —
-  // deleting the not-JSON refusal outright leaves that assertion green,
-  // because the shape check then refuses the `null` a failed parse yields.
-  it('returns 400 saying the body must be JSON when it is not JSON at all', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: 'not-json',
-    })
-    expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ title: 'JSON body required' })
-  })
-
-  it('returns 400 with Problem Details title when body has no path field', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'oops' }),
-    })
-    expect(res.status).toBe(400)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
-  })
-
-  it('creates a kind:markdown canvas, and the list carries it back', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const createRes = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'note', kind: 'markdown' }),
-    })
-    expect(createRes.status).toBe(200)
-    // Response body stays exactly { path } — kind is not echoed back.
-    expect(await createRes.json()).toEqual({ path: 'note' })
-
-    const listRes = await app.request('/api/workspaces/ws1/documents')
-    const listJson = (await listRes.json()) as { documents: { path: string; kind: string }[] }
-    const created = listJson.documents.find((c) => c.path === 'note')
-    expect(created?.kind).toBe('markdown')
-
-    // The empty LoroDoc a markdown-kind create saves loads without error —
-    // an empty doc is a valid initial document for either kind.
-    const snapshotRes = await app.request('/api/w/ws1/document/note/snapshot')
-    expect(snapshotRes.status).toBe(200)
-  })
-
-  // A dialog that collects a name has to apply it in the SAME request. Split
-  // across create-then-PUT-name, the second half can fail on its own and
-  // leave a document the user named sitting in the list as untitled-N, with
-  // nothing on screen explaining which half went wrong. wbDocumentCreate
-  // has taken a name in one call since it shipped; this is the HTTP surface
-  // catching up.
-  it('applies an optional name in the same request that creates the document', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const createRes = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'notes/weekly', kind: 'markdown', name: '週次メモ' }),
-    })
-    expect(createRes.status).toBe(200)
-    // Still just { path }: the name is not echoed, exactly like kind.
-    expect(await createRes.json()).toEqual({ path: 'notes/weekly' })
-
-    const namesRes = await app.request('/api/workspaces/ws1/names')
-    const names = (await namesRes.json()) as { documents: Record<string, string> }
-    expect(names.documents['notes/weekly']).toBe('週次メモ')
-  })
-
-  // What drops a blank name is `setDocumentDisplayName`'s own trim, not
-  // anything in this route — verified by removing the route's guard and
-  // watching this stay green. Pinned here anyway because the end-to-end
-  // promise is the route's: a name never decides whether the document
-  // exists, whichever layer keeps that true.
-  it('creates the document anyway when the name is blank', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'blank', kind: 'spatial', name: '   ' }),
-    })
-    expect(res.status).toBe(200)
-
-    const namesRes = await app.request('/api/workspaces/ws1/names')
-    const names = (await namesRes.json()) as { documents: Record<string, string> }
-    expect(names.documents.blank).toBeUndefined()
-  })
-
-  it('creates a canvas without kind — response and list stay byte-identical to spatial back-compat', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const createRes = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'legacy' }),
-    })
-    expect(createRes.status).toBe(200)
-    expect(await createRes.json()).toEqual({ path: 'legacy' })
-
-    const listRes = await app.request('/api/workspaces/ws1/documents')
-    const listJson = (await listRes.json()) as { documents: { path: string; kind: string }[] }
-    expect(listJson.documents.find((c) => c.path === 'legacy')?.kind).toBe('spatial')
-  })
-
-  it('writes kind onto the stored Loro doc itself, not only the SQL row', async () => {
-    // Registered up front so the POST below is not the thing that creates it:
-    // that route passes `createWorkspace: true`, which is ADR-0019's mint
-    // boundary, and a mint would key the workspace by a ULID and file `ws1`
-    // as its segment — leaving the store reads further down naming nothing.
-    await seedWorkspaceRow(tmp.dir, 'ws1')
-    const app = createDocumentRouter({ serverDeps })
-
-    const markdownRes = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'markdown-note', kind: 'markdown' }),
-    })
-    expect(markdownRes.status).toBe(200)
-    const markdownDoc = await documentStore.loadDocument('ws1', 'markdown-note')
-    expect(readDocumentKind(markdownDoc)).toBe('markdown')
-
-    const spatialRes = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'board', kind: 'spatial' }),
-    })
-    expect(spatialRes.status).toBe(200)
-    const spatialDoc = await documentStore.loadDocument('ws1', 'board')
-    expect(readDocumentKind(spatialDoc)).toBe('spatial')
-  })
-
-  it('stamps the schema-defaulted kind onto the doc bytes when kind is omitted', async () => {
-    // Registered up front so the POST below is not the thing that creates it:
-    // that route passes `createWorkspace: true`, which is ADR-0019's mint
-    // boundary, and a mint would key the workspace by a ULID and file `ws1`
-    // as its segment — leaving the store reads further down naming nothing.
-    await seedWorkspaceRow(tmp.dir, 'ws1')
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'legacy-kind-bytes' }),
-    })
-    expect(res.status).toBe(200)
-    const doc = await documentStore.loadDocument('ws1', 'legacy-kind-bytes')
-    expect(readDocumentKind(doc)).toBe('spatial')
-  })
-
-  it('returns 400 with Problem Details title naming the actual failing field on an invalid kind', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'bad-kind', kind: 'bogus' }),
-    })
-    expect(res.status).toBe(400)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    // A valid path plus an invalid kind must not be told "path is required" —
-    // that names the wrong field and gives no path to recovery.
-    expect(json.title).toMatch(/kind/i)
-    expect(json.title).not.toMatch(/path is required/i)
-  })
-
-  it('falls back to the issue message when the invalid field is neither path nor kind', async () => {
-    // An array body parses as JSON but fails the object schema at the TOP level — path [] —
-    // exercising createDocumentRequestErrorTitle's fallback branch rather than a field-specific
-    // message that would name the wrong thing.
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/ws-a/documents', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify([1, 2, 3]),
-    })
-    expect(res.status).toBe(400)
-    const json = (await res.json()) as { title: string }
-    expect(json.title).not.toMatch(/path is required/i)
-    expect(json.title).not.toMatch(/spatial/i)
-    expect(json.title.length).toBeGreaterThan(0)
-  })
-
-  it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/workspaces/bad.workspace/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'test' }),
-    })
-    expect(res.status).toBe(400)
-    const json = (await res.json()) as Record<string, unknown>
-    // Must have a Problem Details title, not the legacy { error, message } shape.
-    expect(typeof json.title).toBe('string')
-    expect(json.title as string).toBeTruthy()
-    // Must NOT carry the old shape keys.
-    expect(json).not.toHaveProperty('error')
-    expect(json).not.toHaveProperty('message')
+    expect(res.status).toBe(404)
   })
 })
 
@@ -619,11 +354,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createDocumentRouter({ serverDeps })
-    await app.request('/api/workspaces/session1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'cached' }),
-    })
+    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'cached' })
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
     const list = clientDoc.getMovableList('elements')
@@ -645,12 +376,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     expect(delRes.status).toBe(200)
 
     // Re-creating must succeed (not 409) and must not resurrect the old doc.
-    const createRes = await app.request('/api/workspaces/session1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'cached' }),
-    })
-    expect(createRes.status).toBe(200)
+    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'cached' })
 
     const snapshotRes = await app.request('/api/w/session1/document/cached/snapshot')
     expect(snapshotRes.status).toBe(200)
@@ -721,12 +447,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     const oldSnapshotRes = await app.request('/api/w/session1/document/a/snapshot')
     expect(oldSnapshotRes.status).toBe(404)
 
-    const recreateRes = await app.request('/api/workspaces/session1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'a' }),
-    })
-    expect(recreateRes.status).toBe(200)
+    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'a' })
   })
 
   it('returns 404 with Problem Details { title } for a missing source canvas', async () => {
@@ -878,11 +599,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createDocumentRouter({ serverDeps })
-    await app.request('/api/workspaces/session1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'a' }),
-    })
+    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'a' })
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
     const list = clientDoc.getMovableList('elements')
@@ -1225,11 +942,7 @@ describe('GET /api/workspaces document counts', () => {
     const none = await created(app, 'No docs')
 
     for (const path of ['alpha', 'beta']) {
-      await app.request(`/api/workspaces/${two.workspaceId}/documents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
-      })
+      await createTestDocument(serverDeps, { workspaceId: two.workspaceId, path })
     }
 
     const { workspaces } = await listed(app)
@@ -1243,11 +956,7 @@ describe('GET /api/workspaces document counts', () => {
     const app = createWorkspacesRouter({ serverDeps })
     const ws = await created(app, 'Nested')
     for (const path of ['top', 'folder/one', 'folder/deeper/two']) {
-      await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
-      })
+      await createTestDocument(serverDeps, { workspaceId: ws.workspaceId, path })
     }
 
     const { workspaces } = await listed(app)
@@ -1257,11 +966,7 @@ describe('GET /api/workspaces document counts', () => {
   it('stops counting a document once it is deleted', async () => {
     const app = createWorkspacesRouter({ serverDeps })
     const ws = await created(app, 'Deletes')
-    await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'gone' }),
-    })
+    await createTestDocument(serverDeps, { workspaceId: ws.workspaceId, path: 'gone' })
     expect(
       (await listed(app)).workspaces.find((w) => w.workspaceId === ws.workspaceId)?.documentCount,
     ).toBe(1)

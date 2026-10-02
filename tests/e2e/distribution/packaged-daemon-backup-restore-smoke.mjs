@@ -242,11 +242,11 @@ try {
   // through the real DB + filesystem stores, NOT via fixture writes.
   const createRes = await authedFetch(
     daemonA,
-    `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
+    `/api/v1/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: SEED_CANVAS_PATH }),
+      body: JSON.stringify({ path: SEED_CANVAS_PATH, kind: 'spatial', createWorkspace: true }),
     },
   )
   if (!createRes.ok) {

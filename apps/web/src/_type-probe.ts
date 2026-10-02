@@ -65,10 +65,8 @@ export declare function _useRuntimeConfig(c: RuntimeConfig): void
 
 // ── api-contracts barrel: proves the canvas Zod schemas resolve and
 // z.infer-derived types compile under this DOM-enabled tsconfig too ─────────
-export { createDocumentRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+export { setNameRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 
-import type { createDocumentRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { setNameRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { z } from 'zod'
-export declare function _useCreateDocumentRequest(
-  r: z.infer<typeof createDocumentRequestSchema>,
-): void
+export declare function _useSetNameRequest(r: z.infer<typeof setNameRequestSchema>): void

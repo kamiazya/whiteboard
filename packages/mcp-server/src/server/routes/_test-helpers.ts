@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach } from 'vitest'
 
 /**
@@ -76,4 +76,23 @@ export async function resolveTestServerDeps(dataDir: string): Promise<ServerDeps
   const { resolveSelfHostServerDeps } = await import('../../di/self-host-server-deps.js')
   await prepareDataDir(dataDir)
   return resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
+}
+
+/**
+ * Creates a document through the operation every surface shares, the way a
+ * fixture that has no HTTP route to bootstrap with needs to: the workspace is
+ * minted under the handle given when it does not exist yet, exactly as a
+ * create with `createWorkspace: true` does (ADR-0019's mint boundary).
+ */
+export async function createTestDocument(
+  deps: ServerDeps,
+  input: { workspaceId: string; path: string; kind?: 'spatial' | 'markdown'; name?: string },
+): Promise<void> {
+  await wbDocumentCreate(deps, {
+    workspaceId: input.workspaceId,
+    path: input.path,
+    kind: input.kind ?? 'spatial',
+    createWorkspace: true,
+    ...(input.name === undefined ? {} : { name: input.name }),
+  })
 }

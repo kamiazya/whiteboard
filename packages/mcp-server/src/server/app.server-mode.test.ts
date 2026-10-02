@@ -562,9 +562,9 @@ describe('app — server-mode composition', () => {
     })
 
     // Workspace write operations
-    it('POST /api/workspaces/:wid/documents → 403 with workspace:read only (requires workspace:write)', async () => {
+    it('POST /api/v1/workspaces/:wid/documents → 403 with workspace:read only (requires workspace:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/documents', {
+      const res = await app.request('/api/v1/workspaces/w1/documents', {
         method: 'POST',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({ path: 'new-canvas', name: 'New Canvas' }),

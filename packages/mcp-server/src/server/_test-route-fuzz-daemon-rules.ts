@@ -5,8 +5,6 @@
 import {
   canvasExistsResponseSchema,
   compactWorkspaceResultSchema,
-  createDocumentRequestSchema,
-  createDocumentResponseSchema,
   createWorkspaceRequestSchema,
   deleteDocumentResponseSchema,
   listDocumentsResponseSchema,
@@ -61,11 +59,6 @@ export const RULES: Record<string, Rule> = {
   'GET /api/workspaces/:workspaceId/documents': {
     answers: 'json',
     response: listDocumentsResponseSchema,
-  },
-  'POST /api/workspaces/:workspaceId/documents': {
-    answers: 'json',
-    body: createDocumentRequestSchema,
-    response: createDocumentResponseSchema,
   },
   'GET /api/workspaces/:workspaceId/names': { answers: 'json', response: workspaceNamesSchema },
   'PUT /api/workspaces/:workspaceId/name': {

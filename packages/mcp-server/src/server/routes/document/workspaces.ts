@@ -1,6 +1,4 @@
 import {
-  type CreateDocumentResponse,
-  createDocumentRequestSchema,
   createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
   type ListDocumentsResponse,
@@ -21,13 +19,11 @@ import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
   type ServerDeps,
   type WbDocumentMoveResult,
-  wbDocumentCreate,
   wbDocumentDelete,
   wbDocumentList,
   wbDocumentMove,
 } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
-import type { z } from 'zod'
 import { getLogger } from '../../log.js'
 import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate.js'
 import { membershipRefusal } from '../../security/workspace-access.js'
@@ -43,22 +39,9 @@ import {
   pathTakenAs,
   refusedBy,
   segmentTaken,
-  segmentUnusable,
   workspaceNotFoundAs,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
-
-// Names the specific field createDocumentRequestSchema rejected, instead of a
-// single message covering the whole request — a valid path with an invalid
-// kind must not be told "path is required", which names the wrong field and
-// gives the caller no path to recovery.
-function createDocumentRequestErrorTitle(error: z.ZodError): string {
-  const issue = error.issues[0]
-  const field = issue?.path[0]
-  if (field === 'kind') return 'kind must be "spatial" or "markdown"'
-  if (field === 'path') return 'path is required'
-  return issue?.message ?? 'invalid request body'
-}
 
 /**
  * The first segment nobody holds, starting from the candidate a display name
@@ -363,65 +346,6 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       ])
       if (owned) return c.json(owned.body, owned.status)
       throw err
-    }
-  })
-
-  // Save a new empty LoroDoc under path. Return 409 for conflicts and 400 for invalid paths.
-  // On success, return { path } for client-side navigation.
-  app.post('/api/workspaces/:workspaceId/documents', async (c) => {
-    const handle = c.req.param('workspaceId')
-    const invalidWorkspaceId = refusedBy(() => validateWorkspaceId(handle))
-    if (invalidWorkspaceId) {
-      return c.json({ title: invalidWorkspaceId.message } satisfies ApiErrorBody, 400)
-    }
-    const workspaceId = await workspaceIdFromHandle(c, handle)
-    const body = await jsonBody(c, createDocumentRequestSchema, createDocumentRequestErrorTitle)
-    if ('refusal' in body) return c.json(body.refusal, 400)
-    const path = body.data.path
-    const invalidDocumentPath = refusedBy(() => validateDocumentPath(path))
-    if (invalidDocumentPath) {
-      return c.json({ title: invalidDocumentPath.message } satisfies ApiErrorBody, 400)
-    }
-    try {
-      const deps = options.serverDeps
-      await wbDocumentCreate(deps, {
-        workspaceId,
-        path,
-        kind: body.data.kind,
-        // Kept, and now safe. `saveDocument` used to upsert the workspace
-        // row on the way past, so posting into a workspace that does not
-        // exist has always worked here — the one surface that opted out of
-        // "workspaces never materialize implicitly".
-        //
-        // Under ADR-0019's mint boundary the flag no longer risks a phantom:
-        // it resolves first, so an existing workspace is a no-op, and a
-        // handle that names nothing is either minted with that handle as its
-        // segment or refused (400) when it cannot be one — which is what a
-        // browser posting a canonical id for a workspace the daemon no
-        // longer has now gets, instead of a silent new workspace.
-        //
-        // Removing it outright is a real improvement and a SEPARATE
-        // increment: measured, six other suites bootstrap their fixtures by
-        // POSTing here, so it is a 20-test fixture change rather than the
-        // no-op `workspaces.test.ts` alone suggests.
-        createWorkspace: true,
-        // Passed through as given. A blank name meaning "no name" is the
-        // OPERATION's rule now, not a second copy of it here — two places
-        // normalising the same field is two places that can stop agreeing.
-        ...(body.data.name === undefined ? {} : { name: body.data.name }),
-      })
-      const response: CreateDocumentResponse = { path }
-      return c.json(response)
-    } catch (err) {
-      // `segmentUnusable` is the refusal the comment above promises: a handle
-      // that names nothing and cannot be a segment is the caller's to change.
-      const owned = firstOwned(err, [
-        pathTakenAs(`Canvas "${path}" already exists`),
-        segmentUnusable,
-      ])
-      if (owned) return c.json(owned.body, owned.status)
-      getLogger('document').error({ err: err as Error }, 'wbDocumentCreate failed unexpectedly')
-      return c.json({ title: 'Failed to create canvas.' } satisfies ApiErrorBody, 500)
     }
   })
 

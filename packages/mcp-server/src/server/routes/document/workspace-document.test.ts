@@ -23,7 +23,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
+import { createTestDocument, resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
 // The deps a router is handed by its root; here, the test wiring over the
@@ -73,13 +73,8 @@ function canvasUpdate(doc: LoroDoc, ids: string[]): Uint8Array {
   return new Uint8Array(doc.export({ mode: 'update', from }))
 }
 
-async function createDoc(app: ReturnType<typeof createDocumentRouter>, path: string) {
-  const res = await app.request('/api/workspaces/session1/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  })
-  expect(res.status).toBe(200)
+async function createDoc(path: string) {
+  await createTestDocument(serverDeps, { workspaceId: 'session1', path })
 }
 
 async function pushDoc(app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc, ids: string[]) {
@@ -103,7 +98,7 @@ async function fetchWorkspaceSnapshot(
 
 it('GET workspace-document/snapshot answers a document a peer can resolve paths in', async () => {
   const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
-  await createDoc(app, 'c')
+  await createDoc('c')
   await pushDoc(app, new LoroDoc(), ['n-a'])
 
   const peer = await fetchWorkspaceSnapshot(app)
@@ -122,7 +117,7 @@ it('GET workspace-document/snapshot refuses an unregistered workspace', async ()
 
 it('POST workspace-document/update lands on the tree and refreshes per-document reads', async () => {
   const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
-  await createDoc(app, 'c')
+  await createDoc('c')
   await pushDoc(app, new LoroDoc(), ['n-a'])
   // Warm the per-document projection cache so the test proves invalidation,
   // not just a cold read.
@@ -159,7 +154,7 @@ it('POST workspace-document/update lands on the tree and refreshes per-document 
 
 it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => {
   const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
-  await createDoc(app, 'c')
+  await createDoc('c')
   await pushDoc(app, new LoroDoc(), ['n-a'])
 
   const replica = await fetchWorkspaceSnapshot(app)
@@ -190,7 +185,7 @@ it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => 
 
 it('a malformed workspace-document update is a 400, not a daemon crash', async () => {
   const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
-  await createDoc(app, 'c')
+  await createDoc('c')
   const res = await app.request('/api/w/session1/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },

@@ -1,6 +1,6 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, withTempDataDir } from './_test-helpers.js'
+import { createTestDocument, resolveTestServerDeps, withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-routes-test-')
 
@@ -45,12 +45,11 @@ describe('createDocumentRouter composition', () => {
     // segment per path segment, with the action suffix anchoring the parse.
     // A nested path is exactly what the old :path param could never match.
     const app = createDocumentRouter({ serverDeps })
-    const createRes = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'notes/2026/plan', kind: 'spatial' }),
+    await createTestDocument(serverDeps, {
+      workspaceId: 'ws1',
+      path: 'notes/2026/plan',
+      kind: 'spatial',
     })
-    expect(createRes.status).toBe(200)
 
     const exists = await app.request('/api/w/ws1/document/notes/2026/plan/exists')
     expect(exists.status).toBe(200)
@@ -62,12 +61,11 @@ describe('createDocumentRouter composition', () => {
     // A document whose LAST segment is an action name stays unambiguous,
     // because the action suffix is mandatory: /a/snapshot/snapshot is the
     // document a/snapshot.
-    const collide = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'a/snapshot', kind: 'spatial' }),
+    await createTestDocument(serverDeps, {
+      workspaceId: 'ws1',
+      path: 'a/snapshot',
+      kind: 'spatial',
     })
-    expect(collide.status).toBe(200)
     const collideSnapshot = await app.request('/api/w/ws1/document/a/snapshot/snapshot')
     expect(collideSnapshot.status).toBe(200)
   })
@@ -78,12 +76,11 @@ describe('createDocumentRouter composition', () => {
     // delete. One scenario, so a regression in ANY of them on a nested path
     // is loud.
     const app = createDocumentRouter({ serverDeps })
-    const create = await app.request('/api/workspaces/ws1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'notes/2026/plan', kind: 'spatial' }),
+    await createTestDocument(serverDeps, {
+      workspaceId: 'ws1',
+      path: 'notes/2026/plan',
+      kind: 'spatial',
     })
-    expect(create.status).toBe(200)
     const P = '/api/workspaces/ws1/documents/notes/2026/plan'
 
     // name + pin (PUT with suffix)

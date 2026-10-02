@@ -18,22 +18,6 @@ export const workspaceNamesSchema = z.object({
   pinned: z.array(z.string()),
 })
 
-export const createDocumentRequestSchema = z.object({
-  path: z.string().trim().min(1),
-  // Defaulted so every existing caller (which posts { path } alone) keeps
-  // creating a spatial canvas byte-identically to before this field existed.
-  kind: documentKindSchema.default('spatial'),
-  // What a human reads, applied by the same request that creates the
-  // document — the shape wb_document_create has always had. Split into a
-  // create then a PUT /name, the second half can fail alone and leave a
-  // document the user named sitting in the list as untitled-N.
-  //
-  // Optional because naming must never gate creation (ADR-0006 point 3):
-  // omitted, the document has no name of its own and readers fall back to
-  // the path's last segment.
-  name: z.string().optional(),
-})
-
 // `name: ''` deletes the stored name and falls back to the path/workspaceId.
 export const setNameRequestSchema = z.object({
   name: z.string(),
@@ -125,13 +109,6 @@ export const listVersionsResponseSchema = z.object({
 
 export const saveVersionResponseSchema = z.object({
   version: versionEntrySchema,
-})
-
-// RFC 7807 / RFC 9457 Problem Details error response. Only the fields the UI
-// needs to surface a human-readable error string without leaking server internals.
-// POST /api/workspaces/:workspaceId/documents — success body.
-export const createDocumentResponseSchema = z.object({
-  path: z.string(),
 })
 
 // POST /api/w/:workspaceId/document/<path>/update — success body.
@@ -310,7 +287,6 @@ export const listDocumentsResponseSchema = z.object({
   documents: z.array(documentSummarySchema),
 })
 
-export type CreateDocumentRequest = z.infer<typeof createDocumentRequestSchema>
 export type SetNameRequest = z.infer<typeof setNameRequestSchema>
 export type SetPinnedRequest = z.infer<typeof setPinnedRequestSchema>
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
@@ -326,7 +302,6 @@ export type CreateWorkspaceRequest = z.infer<typeof createWorkspaceRequestSchema
 export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>
 export type DocumentSummary = z.infer<typeof documentSummarySchema>
 export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
-export type CreateDocumentResponse = z.infer<typeof createDocumentResponseSchema>
 export type UpdateDocumentResponse = z.infer<typeof updateDocumentResponseSchema>
 export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema>
 export type TrashEntrySummary = z.infer<typeof trashEntrySummarySchema>

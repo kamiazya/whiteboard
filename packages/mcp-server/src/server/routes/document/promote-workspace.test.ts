@@ -28,7 +28,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
+import { createTestDocument, resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
 // The deps a router is handed by its root; here, the test wiring over the
@@ -117,12 +117,7 @@ it('a browser record promotes through workspace-document/update: ids, kinds, nam
   // The daemon workspace pre-exists with its own document at the contested
   // path — the workspaceId maps by TARGETING an existing workspace, never by
   // the browser's fixed 'local' id leaking through.
-  const created = await app.request('/api/workspaces/session1/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: 'contested' }),
-  })
-  expect(created.status).toBe(200)
+  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'contested' })
 
   const browser = browserRecord()
   const res = await app.request('/api/w/session1/workspace-document/update', {
@@ -175,12 +170,7 @@ it('an edit made after the promotion export still lands as an incremental delta 
   // Promotion targets an EXISTING workspace — the update route answers 404
   // for one the daemon never registered, so the flow registers first. Here
   // that registration rides an ordinary document create.
-  const created = await app.request('/api/workspaces/session1/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: 'daemon-own' }),
-  })
-  expect(created.status).toBe(200)
+  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'daemon-own' })
   const browser = browserRecord()
   const promote = await app.request('/api/w/session1/workspace-document/update', {
     method: 'POST',
@@ -226,12 +216,7 @@ async function daemonSnapshot(app: ReturnType<typeof createDocumentRouter>): Pro
 
 it('promotion lands as ONE fan-out frame under a live subscriber, whose pending edit then merges instead of being overwritten', async () => {
   const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
-  const created = await app.request('/api/workspaces/session1/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: 'daemon-own' }),
-  })
-  expect(created.status).toBe(200)
+  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'daemon-own' })
 
   // A live daemon-mode session: its own replica of the workspace record,
   // with an UNCOMMITTED local edit pending when the promotion arrives.
@@ -289,12 +274,7 @@ it('promotion lands as ONE fan-out frame under a live subscriber, whose pending 
 
 it('promoting the same snapshot twice is idempotent — no duplicate documents, no error', async () => {
   const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
-  const created = await app.request('/api/workspaces/session1/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: 'daemon-own' }),
-  })
-  expect(created.status).toBe(200)
+  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'daemon-own' })
 
   // The retry case: a promotion whose response was lost re-sends the SAME
   // snapshot. Loro import of already-known ops is a no-op, so the second
