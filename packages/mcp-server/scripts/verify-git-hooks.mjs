@@ -16,6 +16,7 @@
  *   node verify-git-hooks.mjs          # report; exit 1 when a hook is broken
  *   node verify-git-hooks.mjs --fix    # move appended blocks ahead of lefthook
  */
+import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
@@ -54,11 +55,26 @@ export function hoistAppendedBlock(script) {
   return `${head}${tail.replace(/^\n+/, '')}\n${call}\n`
 }
 
+/**
+ * The directory git runs hooks from, asked of git rather than assumed to be
+ * `<root>/.git/hooks`: in a linked worktree `.git` is a FILE and the hooks
+ * live in the common directory, and `core.hooksPath` moves them anywhere. A
+ * guessed path there reads as "no hooks installed" and the check passes over
+ * a hook it never opened.
+ */
+export function gitHooksDir(cwd) {
+  const printed = execFileSync('git', ['rev-parse', '--git-path', 'hooks'], {
+    cwd,
+    encoding: 'utf8',
+  })
+  return resolve(cwd, printed.trim())
+}
+
 function main(argv) {
   const repoRoot = resolve(import.meta.dirname, '../../../')
-  const hooksDir = join(repoRoot, '.git', 'hooks')
+  const hooksDir = gitHooksDir(repoRoot)
   if (!existsSync(hooksDir)) {
-    process.stdout.write('no .git/hooks directory — nothing to verify\n')
+    process.stdout.write(`no hooks directory at ${hooksDir} — nothing to verify\n`)
     return 0
   }
   const shouldFix = argv.includes('--fix')
@@ -70,7 +86,7 @@ function main(argv) {
     if (extra.length === 0) continue
     broken += 1
     process.stdout.write(
-      `.git/hooks/${name} runs after lefthook, so git sees THIS exit status:\n` +
+      `${path} runs after lefthook, so git sees THIS exit status:\n` +
         extra.map((line) => `    ${line}\n`).join(''),
     )
     if (shouldFix) {
