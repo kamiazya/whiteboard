@@ -13,7 +13,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { testDataLayout, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-live-doc-seam-')
 
@@ -32,14 +32,14 @@ const { createDocumentRouter } = await import('../document.js')
 // workaround for document.ts's dynamic import.
 await import('../sync-audience.js')
 
-function updateBytes(nodeIds: readonly string[]): Uint8Array {
+function updateBytes(nodeIds: readonly string[]): Uint8Array<ArrayBuffer> {
   const doc = new LoroDoc()
   const vv0 = doc.version()
   writeSpatialCanvas(doc, {
     nodes: nodeIds.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
-  return doc.export({ mode: 'update', from: vv0 }) as Uint8Array
+  return doc.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>
 }
 
 describe('live-doc routes and the deps they were handed', () => {
@@ -59,7 +59,11 @@ describe('live-doc routes and the deps they were handed', () => {
       },
     }
 
-    const app = createDocumentRouter({ serverDeps: deps, autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({
+      dataLayout: testDataLayout(),
+      serverDeps: deps,
+      autoVersionQuietMs: 60_000,
+    })
     const res = await app.request('/api/w/seam-ws/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },

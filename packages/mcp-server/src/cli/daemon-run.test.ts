@@ -104,6 +104,7 @@ describe('runDaemonRun --data-dir storage redirection', () => {
   it('redirects the shared data-dir seam so all storage follows the explicit dataDir', async () => {
     const dir = join(tmpdir(), `daemon-run-datadir-${Date.now()}`)
     const outcome = await runDaemonRun({
+      tokenStdin: false,
       dataDir: dir,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
@@ -128,6 +129,7 @@ describe('runDaemonRun --data-dir storage redirection', () => {
     if (isAbsolute(rel)) ctx.skip()
     expect(resolve(rel).startsWith(process.cwd())).toBe(false)
     const outcome = await runDaemonRun({
+      tokenStdin: false,
       dataDir: rel,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
@@ -141,6 +143,7 @@ describe('runDaemonRun --data-dir storage redirection', () => {
   it('leaves the seam untouched when no dataDir option is given', async () => {
     const before = getDataDir()
     const outcome = await runDaemonRun({
+      tokenStdin: false,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
     expect(outcome.kind).toBe('running')
@@ -162,6 +165,7 @@ describe('runDaemonRun legacy reconnect trust-file purge', () => {
     await fs.writeFile(trustFile, '{"schemaVersion":2,"origins":[]}')
 
     const outcome = await runDaemonRun({
+      tokenStdin: false,
       dataDir: dir,
       env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
     })
@@ -181,6 +185,7 @@ describe('runDaemonRun legacy reconnect trust-file purge', () => {
       // ENOENT/permission cases the function already swallows internally)
       // must not change runDaemonRun's outcome — it can only add a log line.
       const outcome = await runDaemonRun({
+        tokenStdin: false,
         dataDir: dir,
         env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
       })

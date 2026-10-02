@@ -6,7 +6,7 @@ import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.
 import { BackupError } from '../server/server-mode-backup-restore.js'
 import { backupIsInProgress } from '../server/store/backup-in-progress.js'
 import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
-import { runServerBackup } from './server-backup.js'
+import { type RunServerBackupOptions, runServerBackup } from './server-backup.js'
 
 let tmpRoot: string
 
@@ -34,7 +34,7 @@ describe('runServerBackup', () => {
     })
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -88,7 +88,7 @@ describe('runServerBackup', () => {
     // manifest.
     let existedWhenDelegated: boolean | null = null
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: vi.fn(async () => {
         existedWhenDelegated = await lstat(outputDir).then(
@@ -110,7 +110,13 @@ describe('runServerBackup', () => {
     await symlink(realOutside, link)
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir: join(link, 'backup'), dataDir: tmpRoot },
+      args: {
+        kind: 'ok',
+        json: true,
+        outputDir: join(link, 'backup'),
+        dataDir: tmpRoot,
+        mirrorDir: undefined,
+      },
       env: {},
       doBackup: vi.fn(),
       doSnapshot: async () => {},
@@ -139,7 +145,7 @@ describe('runServerBackup', () => {
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: vi.fn(async () => {
         throw new BackupError('Backup directory is not empty.')
@@ -175,7 +181,7 @@ describe('runServerBackup', () => {
     await symlink(realDir, linkPath)
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir: linkPath, dataDir: tmpRoot },
+      args: { kind: 'ok', json: true, outputDir: linkPath, dataDir: tmpRoot, mirrorDir: undefined },
       env: {},
       doBackup: vi.fn(),
       doSnapshot: async () => {},
@@ -191,7 +197,13 @@ describe('runServerBackup', () => {
     await symlink(realData, link)
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir: join(tmpRoot, 'out'), dataDir: link },
+      args: {
+        kind: 'ok',
+        json: true,
+        outputDir: join(tmpRoot, 'out'),
+        dataDir: link,
+        mirrorDir: undefined,
+      },
       env: {},
       doBackup: vi.fn(),
       doSnapshot: async () => {},
@@ -205,7 +217,7 @@ describe('runServerBackup', () => {
     await writeFile(filePath, 'content')
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir: filePath, dataDir: tmpRoot },
+      args: { kind: 'ok', json: true, outputDir: filePath, dataDir: tmpRoot, mirrorDir: undefined },
       env: {},
       doBackup: vi.fn(),
       doSnapshot: async () => {},
@@ -223,7 +235,7 @@ describe('runServerBackup', () => {
     const outputDir = join(tmpRoot, 'out')
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: vi.fn(async () => {
         throw new BackupError('some internal error with path /internal/detail')
@@ -265,9 +277,9 @@ describe('runServerBackup with the database outside the data directory', () => {
     // The fossil: what a move to libSQL leaves behind.
     await writeFile(join(dataDir, 'whiteboard.db'), 'pre-migration rows')
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -293,9 +305,9 @@ describe('runServerBackup with the database outside the data directory', () => {
     // case at the bottom of this file), so the happy paths seed one.
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: { WHITEBOARD_DATABASE_URL: `file:${join(dataDir, 'whiteboard.db')}` },
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -330,9 +342,9 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(join(dataDir, 'blobs'), { recursive: true })
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -348,9 +360,9 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
     await mkdir(dataDir, { recursive: true })
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -389,9 +401,9 @@ describe('runServerBackup with a stale database file left behind', () => {
     // …except the one the server itself wrote when it last opened one.
     await writeDatabaseLocationRecord(dataDir, false)
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       // The host shell, exactly as the Docker how-to leaves it.
       env: {},
       doBackup: mockDoBackup,
@@ -419,9 +431,9 @@ describe('runServerBackup with a stale database file left behind', () => {
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
     await writeDatabaseLocationRecord(dataDir, true)
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       // The two sources in conflict, which is the only arrangement that can
       // show the record is consulted at all: an operator whose shell exports
       // the variable for a DIFFERENT deployment. A clean env would agree with
@@ -446,9 +458,9 @@ describe('runServerBackup with a stale database file left behind', () => {
     await mkdir(dataDir, { recursive: true })
     await writeDatabaseLocationRecord(dataDir, true)
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -483,9 +495,9 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(join(dataDir, 'blobs'), { recursive: true })
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: externalEnv,
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -507,7 +519,7 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     await mkdir(join(dataDir, 'blobs'), { recursive: true })
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: externalEnv,
       doBackup: async () => {},
       doSnapshot: async () => {},
@@ -529,7 +541,7 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: async () => {},
       doSnapshot: async () => {},
@@ -551,9 +563,9 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(join(dataDir, 'blobs'), { recursive: true })
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -586,10 +598,10 @@ describe('runServerBackup captures the rows through the database', () => {
     await mkdir(dataDir, { recursive: true })
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
-    const mockDoBackup = vi.fn(async () => {})
-    const mockDoSnapshot = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
+    const mockDoSnapshot = vi.fn<NonNullable<RunServerBackupOptions['doSnapshot']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: mockDoBackup,
       doSnapshot: mockDoSnapshot,
@@ -611,9 +623,9 @@ describe('runServerBackup captures the rows through the database', () => {
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(join(dataDir, 'blobs'), { recursive: true })
 
-    const mockDoSnapshot = vi.fn(async () => {})
+    const mockDoSnapshot = vi.fn<NonNullable<RunServerBackupOptions['doSnapshot']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
       doBackup: async () => {},
       doSnapshot: mockDoSnapshot,
@@ -635,7 +647,7 @@ describe('runServerBackup captures the rows through the database', () => {
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: async () => {},
       doSnapshot: async () => {
@@ -665,9 +677,9 @@ describe('runServerBackup against a running server', () => {
     await mkdir(dataDir, { recursive: true })
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
-    const mockDoBackup = vi.fn(async () => {})
+    const mockDoBackup = vi.fn<NonNullable<RunServerBackupOptions['doBackup']>>(async () => {})
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
@@ -690,7 +702,7 @@ describe('runServerBackup against a running server', () => {
     let markerDuringCopy = false
     let markerDuringSnapshot = false
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: async () => {
         markerDuringCopy = await backupIsInProgress(dataDir)
@@ -714,7 +726,7 @@ describe('runServerBackup against a running server', () => {
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir },
+      args: { kind: 'ok', json: true, outputDir, dataDir, mirrorDir: undefined },
       env: {},
       doBackup: async () => {
         throw new Error('copy blew up')

@@ -13,7 +13,7 @@ const record = {
   socketPath: '/tmp/wb.sock',
   token: 'the-daemon-token',
 }
-const running: DaemonRecordParseResult = { kind: 'ok', record }
+const running: DaemonRecordParseResult = { kind: 'valid', record }
 
 /** A daemon that answers one canned response, recording what it was asked. */
 function daemonAnswering(status: number, body: unknown) {

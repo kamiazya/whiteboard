@@ -1,6 +1,11 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTestDocument, resolveTestServerDeps, withTempDataDir } from './_test-helpers.js'
+import {
+  createTestDocument,
+  resolveTestServerDeps,
+  testDataLayout,
+  withTempDataDir,
+} from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-routes-test-')
 
@@ -44,7 +49,7 @@ describe('createDocumentRouter composition', () => {
     // The path-addressed shape: the document path is the URL tail, one
     // segment per path segment, with the action suffix anchoring the parse.
     // A nested path is exactly what the old :path param could never match.
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     await createTestDocument(serverDeps, {
       workspaceId: 'ws1',
       path: 'notes/2026/plan',
@@ -71,7 +76,7 @@ describe('createDocumentRouter composition', () => {
     // match a nested path): versions, restore, compact, name, pin, rename,
     // delete. One scenario, so a regression in ANY of them on a nested path
     // is loud.
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     await createTestDocument(serverDeps, {
       workspaceId: 'ws1',
       path: 'notes/2026/plan',

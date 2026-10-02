@@ -31,10 +31,9 @@ const VALID_FLAGS = {
   jwtScopeClaim: undefined,
   host: undefined,
   port: undefined,
-  dataDir,
 }
 
-function checkById(checks: Array<{ id: string }>, id: string) {
+function checkById<T extends { id: string }>(checks: readonly T[], id: string): T {
   const found = checks.find((c) => c.id === id)
   if (!found)
     throw new Error(`expected check ${id}, got: ${JSON.stringify(checks.map((c) => c.id))}`)

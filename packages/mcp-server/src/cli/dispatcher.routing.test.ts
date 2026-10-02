@@ -529,6 +529,7 @@ describe('dispatcher routing: whiteboard server backup', () => {
   it('exits 1 and writes to stderr on error outcome', async () => {
     vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
       kind: 'error',
+      message: 'backup failed',
     })
     const { result: exitCode, stderr } = await captureStdio(() =>
       main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),

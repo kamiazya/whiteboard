@@ -62,7 +62,7 @@ const ROUTES: readonly { method: string; path: string; body?: string }[] = [
 describe('a malformed workspace handle', () => {
   for (const { method, path, body } of ROUTES) {
     it(`is a 400 { error, message } on ${method} ${path.replace(MALFORMED, ':workspaceId')}`, async () => {
-      const app = createDocumentRouter({ serverDeps, versionStore })
+      const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps, versionStore })
       app.route('/', createFilesRouter({ dataLayout: testDataLayout(tmp.dir) }))
       const res = await app.request(path, {
         method,
@@ -74,7 +74,7 @@ describe('a malformed workspace handle', () => {
   }
 
   it('is Problem Details { title } on the page-facing workspace-document surface', async () => {
-    const app = createDocumentRouter({ serverDeps, versionStore })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps, versionStore })
     const res = await app.request(`/api/w/${MALFORMED}/workspace-document/snapshot`)
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ title: REFUSAL.message })

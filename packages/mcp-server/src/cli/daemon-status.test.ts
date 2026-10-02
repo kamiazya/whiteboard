@@ -47,7 +47,7 @@ describe('runDaemonStatus: record malformed', () => {
   it('returns exitCode 1, ok=false, reason=record-malformed', async () => {
     const { result, exitCode } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'malformed' }),
+      parseRecord: async () => ({ kind: 'malformed', message: 'not json' }),
       isPidAlive: () => false,
     })
     expect(exitCode).toBe(1)

@@ -1,7 +1,7 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testDataLayout, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-restore-race-')
 
@@ -55,7 +55,11 @@ describe('restore targetPath-overwrite vs delete race', () => {
   })
 
   it('does not resurrect deleted content when a DELETE of the overwrite target races the restore reading it', async () => {
-    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({
+      dataLayout: testDataLayout(),
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+    })
 
     // Source canvas-a with a saved version to restore from.
     const sourceDoc = new LoroDoc()
@@ -67,7 +71,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
-      body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      body: sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     })
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
@@ -86,7 +90,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     await app.request('/api/w/session1/document/canvas-b/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
-      body: targetDoc.export({ mode: 'update', from: tvv0 }),
+      body: targetDoc.export({ mode: 'update', from: tvv0 }) as Uint8Array<ArrayBuffer>,
     })
 
     // Stall the restore route's getDoc(targetPath) call so a DELETE of the
@@ -150,7 +154,11 @@ describe('restore in-place vs delete race', () => {
   })
 
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
-    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({
+      dataLayout: testDataLayout(),
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+    })
 
     // Single canvas with a saved version to restore onto itself (no targetPath).
     const sourceDoc = new LoroDoc()
@@ -162,7 +170,7 @@ describe('restore in-place vs delete race', () => {
     await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
-      body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      body: sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     })
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',

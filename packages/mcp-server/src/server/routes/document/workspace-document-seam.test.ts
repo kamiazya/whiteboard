@@ -9,7 +9,7 @@ import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { testDataLayout, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspace-doc-seam-')
 
@@ -31,12 +31,12 @@ await import('../sync-audience.js')
 
 const WS = 'seam-ws'
 
-function workspaceUpdateBytes(path: string): Uint8Array {
+function workspaceUpdateBytes(path: string): Uint8Array<ArrayBuffer> {
   const doc = new LoroDoc()
   const vv0 = doc.version()
   createWorkspaceDocumentAtPath(doc, { path, documentId: generateDocumentId(), kind: 'spatial' })
   doc.commit()
-  return doc.export({ mode: 'update', from: vv0 }) as Uint8Array
+  return doc.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>
 }
 
 describe('workspace-document routes and the deps they were handed', () => {
@@ -57,7 +57,11 @@ describe('workspace-document routes and the deps they were handed', () => {
       },
     }
 
-    const app = createDocumentRouter({ serverDeps: deps, autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({
+      dataLayout: testDataLayout(),
+      serverDeps: deps,
+      autoVersionQuietMs: 60_000,
+    })
     const res = await app.request(`/api/w/${WS}/workspace-document/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },

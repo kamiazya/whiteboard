@@ -16,7 +16,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { testDataLayout, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-trash-test-')
 
@@ -58,7 +58,7 @@ async function appWithRealDeps() {
   // regression in the DI's structural capability detection fails loudly,
   // rather than as a cascade of 501s in the tests below.
   expect(deps.trash).toBeDefined()
-  return createDocumentRouter({ serverDeps: deps })
+  return createDocumentRouter({ dataLayout: testDataLayout(), serverDeps: deps })
 }
 
 describe('trash routes', () => {
@@ -114,7 +114,7 @@ describe('trash routes', () => {
     // restoreDocument, so resolveServerDeps leaves deps.trash undefined.
     const deps = resolveServerDeps(createContainer())
     expect(deps.trash).toBeUndefined()
-    const app = createDocumentRouter({ serverDeps: deps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps: deps })
 
     expect((await app.request('/api/workspaces/ws/trash')).status).toBe(501)
     expect(

@@ -58,7 +58,7 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
     const element = clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
     element.set('id', 'e1')
     clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from })
+    const update = clientDoc.export({ mode: 'update', from }) as Uint8Array<ArrayBuffer>
 
     const socketPath = testSocketPath()
     running = await startHttpServer({ socketPath })
