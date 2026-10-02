@@ -23,6 +23,7 @@ import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
+import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
@@ -238,12 +239,8 @@ function isViewMode(value: unknown): value is MarkdownViewMode {
 }
 
 function readStoredViewMode(): MarkdownViewMode {
-  try {
-    const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY)
-    return isViewMode(stored) ? stored : 'split'
-  } catch {
-    return 'split'
-  }
+  const stored = safeGetItem(VIEW_MODE_STORAGE_KEY)
+  return isViewMode(stored) ? stored : 'split'
 }
 
 function countWords(value: string): number {
@@ -380,11 +377,8 @@ export function MarkdownEditor({
     // prop, still write the store) would leave the writer side poisoning
     // concurrent mounts.
     if (initialViewMode !== undefined) return
-    try {
-      window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, next)
-    } catch {
-      // Preference persistence is best-effort; the session state still works.
-    }
+    // Preference persistence is best-effort; the session state still works.
+    safeSetItem(VIEW_MODE_STORAGE_KEY, next)
   }
 
   // Source-pane share of the split, clamped so neither pane can vanish.

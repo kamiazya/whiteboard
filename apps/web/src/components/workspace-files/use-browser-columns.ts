@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
 
 /**
  * How many columns stand between the workspace and the preview.
@@ -26,19 +27,12 @@ const COLUMNS_STORAGE_KEY = 'whiteboard.document-browser.columns.v1'
  * anything at all.
  */
 function readStoredColumns(): BrowserColumns {
-  try {
-    return globalThis.localStorage?.getItem(COLUMNS_STORAGE_KEY) === 'one' ? 'one' : 'two'
-  } catch {
-    return 'two'
-  }
+  return safeGetItem(COLUMNS_STORAGE_KEY) === 'one' ? 'one' : 'two'
 }
 
 function storeColumns(next: BrowserColumns): void {
-  try {
-    globalThis.localStorage?.setItem(COLUMNS_STORAGE_KEY, next)
-  } catch {
-    // A remembered layout is a courtesy; losing it must never break the view.
-  }
+  // A remembered layout is a courtesy; losing it must never break the view.
+  safeSetItem(COLUMNS_STORAGE_KEY, next)
 }
 
 /** The column preference: read once on mount, persisted on every choice. */

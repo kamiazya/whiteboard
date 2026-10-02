@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { safeGetItem, safeRemoveItem, safeSetItem } from './safe-local-storage.js'
 
 // Namespaced + version-suffixed. Adding a NEW OPTIONAL field is backward- and
 // forward-compatible under `.strict()` (old payloads simply lack it; old tabs
@@ -23,33 +24,6 @@ export const LEGACY_V4_STORAGE_KEY = 'whiteboard:user-settings:v4'
 export const LEGACY_V3_STORAGE_KEY = 'whiteboard:user-settings:v3'
 export const LEGACY_V2_STORAGE_KEY = 'whiteboard:user-settings:v2'
 export const LEGACY_V1_STORAGE_KEY = 'whiteboard:user-settings:v1'
-
-// localStorage access itself can throw (SecurityError when the browser blocks
-// storage via privacy settings or embedded contexts). The store's contract is
-// "never throws" — treat a throwing storage like an empty one.
-function safeGetItem(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-function safeSetItem(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value)
-  } catch {
-    // Contract: never throws; an unwritable storage degrades to in-memory-only.
-  }
-}
-
-function safeRemoveItem(key: string): void {
-  try {
-    localStorage.removeItem(key)
-  } catch {
-    // Contract: never throws.
-  }
-}
 
 /**
  * Constrained to http/https because these values are rendered into an `href`

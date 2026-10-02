@@ -1,3 +1,5 @@
+import { safeRemoveItem } from './safe-local-storage.js'
+
 // The module that owned this constant is deleted along with unattended
 // reconnect; the literal is inlined here since this is now its sole reader.
 const LEGACY_RECONNECT_SECRET_STORAGE_KEY = 'whiteboard.reconnect-secret.v1'
@@ -23,9 +25,5 @@ const LEGACY_RECONNECT_SECRET_STORAGE_KEY = 'whiteboard.reconnect-secret.v1'
  * reason the app fails to start.
  */
 export function purgeLegacyReconnectCredentials(): void {
-  try {
-    localStorage.removeItem(LEGACY_RECONNECT_SECRET_STORAGE_KEY)
-  } catch {
-    // Contract: never throws.
-  }
+  safeRemoveItem(LEGACY_RECONNECT_SECRET_STORAGE_KEY)
 }

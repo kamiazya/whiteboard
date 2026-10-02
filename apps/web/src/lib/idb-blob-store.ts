@@ -22,6 +22,7 @@
  * changes nothing a caller can see.
  */
 
+import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import type {
   BlobDeleteInput,
   BlobGetInput,
@@ -33,7 +34,6 @@ import type {
   BlobRef,
   BlobStore,
 } from '@kamiazya/whiteboard-ports'
-import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { BLOBS_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'

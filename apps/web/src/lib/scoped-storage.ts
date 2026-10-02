@@ -6,22 +6,14 @@
  */
 
 import type { z } from 'zod'
+import { safeGetItem, safeSetItem } from './safe-local-storage.js'
 
-/**
- * The guard sits around the ACCESS and not only around the parse: a browser
- * that blocks storage (privacy settings, an embedded context) raises on the
- * `localStorage` property itself, before any method is called.
- */
+/** The access is guarded as well as the parse: see `safe-local-storage.ts`. */
 export function readScopedStorage<T>(
   key: string,
   schema: z.ZodType<Record<string, T>>,
 ): Record<string, T> {
-  let raw: string | null
-  try {
-    raw = localStorage.getItem(key)
-  } catch {
-    return {}
-  }
+  const raw = safeGetItem(key)
   if (raw === null) return {}
   try {
     const parsed = schema.safeParse(JSON.parse(raw))
@@ -33,9 +25,9 @@ export function readScopedStorage<T>(
 
 export function writeScopedStorage(key: string, value: unknown): void {
   try {
-    localStorage.setItem(key, JSON.stringify(value))
+    safeSetItem(key, JSON.stringify(value))
   } catch {
-    // An unwritable storage degrades to not remembering.
+    // A value that cannot be serialised (a cycle) is not remembered either.
   }
 }
 
