@@ -1,10 +1,10 @@
 /**
  * Source-scan guard: apps/web production code must mutate/inspect a spatial
- * LoroDoc only through crdt's bridge functions
+ * LoroDoc only through loro-adapter's bridge functions
  * (writeSpatialNode/writeSpatialEdge/deleteSpatialNode/deleteSpatialEdge/
  * writeSpatialCanvas/readSpatialCanvas), never by calling
- * `doc.getMap('nodes'|'edges')` directly — see package-crdt.md's
- * "callers never manipulate the Loro layout directly" rule.
+ * `doc.getMap('nodes'|'edges')` directly — see package-loro-adapter.md's
+ * "LoroDoc spatial layout" section.
  *
  * The one documented exemption is `src/test-utils/` — browser-document.ts
  * reads `doc.getMap('nodes')` to assert on the persisted doc from OUTSIDE the

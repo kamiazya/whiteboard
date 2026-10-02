@@ -1,7 +1,8 @@
-// Shared pure origin-pattern parser/matcher used by both allowlist paths
-// (local-daemon web-origin-allowlist.ts and server-mode's exposure/auth-plan/
-// app.ts sites). A pattern is either an exact https(s) origin or a
-// leftmost-label wildcard subdomain pattern (https://*.example.com).
+// Shared pure origin-pattern parser/matcher used by server mode's allowlist
+// sites (server-mode-exposure.ts, server-mode-env-config.ts,
+// server-mode-auth-plan.ts and server-mode-middleware.ts). A pattern is either
+// an exact https(s) origin or a leftmost-label wildcard subdomain pattern
+// (https://*.example.com).
 //
 // Wildcard contract (non-negotiable):
 //   - Bare '*' is always rejected — this module never treats '*' alone as

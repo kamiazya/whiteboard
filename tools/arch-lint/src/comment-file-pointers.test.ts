@@ -84,6 +84,27 @@ function isPointer(name: string): boolean {
 const BARE_TEST_FILE = /(?<![\w./*-])([\w][\w.-]*\.test\.tsx?)(?![\w-]|\.\w)/g
 
 /**
+ * A bare source or Markdown file name in a COMMENT, the way a comment names
+ * the file it is about without backticks.
+ * Fifteen such names pointed at files that no longer exist when this was added,
+ * every one invisible to the backticked scan above. Resolved by basename, or by
+ * tracked suffix when a directory is written.
+ */
+const BARE_SOURCE_NAME =
+  /(?<![\w./*@`-])([A-Za-z][\w-]*(?:\/[\w.-]+)*\.(?:tsx?|mjs|md))(?![\w-]|\.\w)/g
+
+/**
+ * Shapes that are not pointers: an illustration of a path (`path/to/…`), a
+ * build output (`dist/…`), and the tail of a name wrapped across two comment
+ * lines (a name split after its hyphen or dot), where only the tail survives.
+ */
+function isBareSourcePointer(name: string, line: string, previous: string): boolean {
+  if (/^(path\/to|dist)\//.test(name)) return false
+  const tail = /^\s*(?:\/\/|\*|\/\*)\s*([^\s]+)/.exec(line)?.[1]
+  return !(tail?.startsWith(name) === true && /[-._]\s*$/.test(previous))
+}
+
+/**
  * Names that resolve to nothing AND are meant to. Each says why, because a
  * bare exemption is the omission with a word in front of it.
  */
@@ -103,6 +124,30 @@ const DELIBERATE: Record<string, string> = {
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#sweep-imported-fs-blobs.ts':
     "a migration's own text is history and is never rewritten (.claude/rules/vocabulary.md); the sweeper existed when this was written (#858)",
 
+  // Bare names in comments (the scan that reads a name without backticks).
+  'apps/web/src/hooks/use-document-file-seams.ts#index.md':
+    "a quotation of the OKF spec's own words about generators, not a pointer",
+  'packages/canvas-render/src/theme/spatial-theme.ts#viewer-appearance.ts':
+    'lists the per-surface resolvers this theme layer replaced; the sentence is the record of what they were',
+  'packages/canvas-render/src/theme/spatial-theme.ts#spatial-scene-appearance.ts': 'same list',
+  'packages/mcp-server/src/daemon/purge-legacy-trust-file.ts#web-origin-trust-store.ts':
+    'names the legacy file this module exists to purge; correcting it would erase the reason',
+  // Stale pointers the bare-name scan found in files other lanes owned when
+  // it landed; each lane repoints its own, and the entry goes with it.
+  'apps/web/src/lib/daemon-auth-fetch.ts#packages/mcp-server/src/shared/api-client.ts':
+    'stale (now daemon-client api-client.ts); W7 lane C owns the file, repoint next wave',
+  'apps/web/src/lib/document-sync-types.ts#hooks/use-identity-event.ts':
+    'stale; W7 lane C owns the file, repoint next wave',
+  'packages/daemon-client/src/api-client.ts#daemon-connection-payload.ts':
+    'stale; W7 lane C owns the package, repoint next wave',
+  'packages/daemon-client/src/api-contracts/index.ts#libraries.ts':
+    'stale; W7 lane C owns the package, repoint next wave',
+  'packages/mcp-server/src/server/store/document-store.test.ts#ws.ts':
+    'stale (the sync routes replaced it); W7 lane A owns the store, repoint next wave',
+  'tools/arch-lint/src/architecture-map.ts#ws.ts':
+    'stale; W7 lane F owns tools/arch-lint, repoint next wave',
+  'tools/arch-lint/src/workflow-hygiene.test.ts#spawn-args.ts':
+    'stale; W7 lane F owns tools/arch-lint, repoint next wave',
   // Stale directory-qualified pointers the suffix rule exposed in files other
   // lanes owned when it landed; each is repointed by the lane that owns the
   // file, and the entry goes with it (guarded from both sides below).
@@ -133,6 +178,43 @@ interface Pointer {
   readonly name: string
 }
 
+/** Whether a name written with a directory matches a tracked suffix, or a bare one a tracked basename. */
+function resolvesTo(name: string, tracked: readonly string[], byBasename: ReadonlySet<string>) {
+  // A bare name carries only a basename, so that is all it resolves by; a name
+  // WITH a directory must match a tracked suffix, or a pointer at the wrong
+  // directory resolves because the file exists elsewhere.
+  if (name.includes('/')) return tracked.some((path) => path === name || path.endsWith(`/${name}`))
+  return byBasename.has(basename(name))
+}
+
+/** Every pointer on one line that names a file nothing tracks. */
+function unresolvedOnLine(
+  line: string,
+  previous: string,
+  wholeFile: boolean,
+  tracked: readonly string[],
+  byBasename: ReadonlySet<string>,
+): string[] {
+  const names: string[] = []
+  if (!wholeFile) {
+    for (const match of line.matchAll(BARE_SOURCE_NAME)) {
+      const name = match[1] ?? ''
+      if (isBareSourcePointer(name, line, previous) && !resolvesTo(name, tracked, byBasename)) {
+        names.push(name)
+      }
+    }
+  }
+  for (const match of line.matchAll(/`([A-Za-z0-9._/-]+\.tsx?)`/g)) {
+    const name = match[1] ?? ''
+    if (isPointer(name) && !resolvesTo(name, tracked, byBasename)) names.push(name)
+  }
+  for (const match of line.matchAll(BARE_TEST_FILE)) {
+    const name = match[1] ?? ''
+    if (!byBasename.has(name)) names.push(name)
+  }
+  return names
+}
+
 function unresolvedPointers(): Pointer[] {
   const tracked = trackedFiles()
   const byBasename = new Set(tracked.map((path) => basename(path)))
@@ -143,26 +225,11 @@ function unresolvedPointers(): Pointer[] {
   )
   for (const file of scanned) {
     const wholeFile = file.endsWith('.md')
-    for (const line of readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')) {
+    const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
+    for (const [lineIndex, line] of lines.entries()) {
       if (!wholeFile && !/^\s*(\/\/|\*|\/\*)/.test(line)) continue
-      for (const match of line.matchAll(/`([A-Za-z0-9._/-]+\.tsx?)`/g)) {
-        const name = match[1] ?? ''
-        if (!isPointer(name)) continue
-        const resolves =
-          tracked.some((path) => path === name || path.endsWith(`/${name}`)) ||
-          // A bare name carries only a basename, so that is all it resolves by;
-          // a name WITH a directory must match a tracked suffix, or a pointer
-          // at the wrong directory resolves because the file exists elsewhere.
-          (!name.includes('/') && byBasename.has(basename(name)))
-        if (resolves) continue
-        const key = `${file}#${name}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        found.push({ key, file, name })
-      }
-      for (const match of line.matchAll(BARE_TEST_FILE)) {
-        const name = match[1] ?? ''
-        if (byBasename.has(name)) continue
+      const previous = lines[lineIndex - 1] ?? ''
+      for (const name of unresolvedOnLine(line, previous, wholeFile, tracked, byBasename)) {
         const key = `${file}#${name}`
         if (seen.has(key)) continue
         seen.add(key)

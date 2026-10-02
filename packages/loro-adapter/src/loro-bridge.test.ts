@@ -923,7 +923,7 @@ describe('edge lock sidecar', () => {
   })
 })
 
-// The reload path in the browser-local app is: snapshot bytes, then a
+// The reload path in the browser-kept app is: snapshot bytes, then a
 // REPLAY of incremental update bytes. A lock written after the snapshot
 // travels only in those updates, so it has to survive that exact route.
 test('a lock written after the snapshot survives snapshot + update replay', () => {

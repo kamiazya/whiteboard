@@ -94,7 +94,7 @@ const MARK_DELIMITERS: Record<Mark, readonly [open: string, close: string]> = {
   link: ['[[', ']]'],
   math: ['$', '$'],
 }
-/** The mdast node each mark becomes; `link` is text to codec (see references.ts). */
+/** The mdast node each mark becomes; `link` is text to codec (see the codec's references/ modules). */
 const MARK_NODE: Record<Mark, string | null> = {
   bold: 'strong',
   italic: 'emphasis',

@@ -3,12 +3,12 @@
  * from one that points at another canvas.
  *
  * Shared by every backend and every reader deliberately: a canvas authored in
- * browser-local mode, one authored against the daemon, and the daemon's own
+ * the browser keeper, one authored against the daemon, and the daemon's own
  * file-GC reference walk must all mean the same thing by the same `file`
  * value, or moving content between them (or garbage-collecting it) would
  * silently reinterpret every image node as a canvas reference.
  *
- * The colon is what makes this unambiguous — a daemon path and a browser-local
+ * The colon is what makes this unambiguous — a daemon path and a browser-kept
  * canvas id both match /^[a-zA-Z0-9_-]+$/, so neither can ever collide with a
  * prefixed reference.
  */

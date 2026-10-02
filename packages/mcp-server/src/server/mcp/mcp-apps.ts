@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import { WHITEBOARD_ROOT } from '../config.js'
 import { getLogger } from '../log.js'
 
-// Re-exported so callers (tool-registration.ts, tests) share one import
+// Re-exported so callers (tool-support.ts, tests) share one import
 // source for the MCP Apps (SEP-1865, io.modelcontextprotocol/ui) wire
 // constants instead of reaching into the ext-apps package directly.
 export { EXTENSION_ID, RESOURCE_MIME_TYPE }

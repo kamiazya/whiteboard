@@ -1,7 +1,7 @@
 // A markdown document's body is stored in ONE place: the Loro text
 // container named `body`. `writeMarkdownBody` is the only writer, and both
 // the daemon (`wb_document_set`, the sync session's `set-body` command) and
-// apps/web's browser-local editor go through it.
+// apps/web's browser-kept editor go through it.
 //
 // The `okf-body` TEXT NODE is history: documents an older writer left still
 // carry one, so `readMarkdownBody` falls back to it and `writeMarkdownBody`
@@ -24,7 +24,7 @@ function withBodyNode(doc: LoroDoc, text: string): LoroDoc {
   return doc
 }
 
-/** The shape apps/web's browser-local markdown editor writes. */
+/** The shape apps/web's browser-kept markdown editor writes. */
 function withBodyContainer(doc: LoroDoc, text: string): LoroDoc {
   doc.getText('body').insert(0, text)
   doc.commit()

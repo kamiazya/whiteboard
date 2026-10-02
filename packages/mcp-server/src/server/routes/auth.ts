@@ -23,7 +23,7 @@ const _log = getLogger('daemon-auth')
 // or anyone who gets past the allowlist, could then read every canvas with
 // no credential at all. The client-side cost of closing this turned out to
 // be zero — every read already goes through a bearer-carrying fetch
-// (shared/api-client.ts's apiFetch, and every thumbnail/file consumer
+// (daemon-client's api-client.ts apiFetch, and every thumbnail/file consumer
 // fetches bytes and renders an object URL instead of a bare <img src>) — so
 // there is no reason left to leave the server side open.
 export function requiresDaemonAuth(path: string): boolean {

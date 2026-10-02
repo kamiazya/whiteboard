@@ -85,6 +85,23 @@ const WEBSOCKET_WORDING: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/routes/document.ts': 'W7 lane G owns; sweep next wave',
 }
 
+/**
+ * Where `browser-local` survives under `packages/*\/src`, with why. The first
+ * is a quoted assertion ABOUT the retired word; the second is sample text a
+ * search test indexes; the rest belong to a lane that owned the file when the
+ * guard reached `packages/`.
+ */
+const BROWSER_LOCAL_IN_PACKAGES: Readonly<Record<string, string>> = {
+  'packages/mcp-server/src/server/routes/document/promote-workspace.test.ts':
+    'pins that the retired keeper id gets no special pass; naming it is the assertion',
+  'packages/server-core/src/search/search-corpus.ts':
+    'sample document text the search tests index; the word is its content',
+  'packages/daemon-client/src/document-backend-contract.ts': 'W7 lane C owns; sweep next wave',
+  'packages/daemon-client/src/document-backend.contract.test.ts': 'W7 lane C owns; sweep next wave',
+  'packages/daemon-client/src/test-utils/document-backend-contract.ts':
+    'W7 lane C owns; sweep next wave',
+}
+
 /** Test and test-support source: a test may spell what it asserts about. */
 function isTestSource(path: string): boolean {
   return /\.test\.[a-z]+$|(^|\/)test-utils\/|(^|\/)_test-|__screenshots__/.test(path)
@@ -151,8 +168,13 @@ const BANNED = [
       '.claude',
       'README.md',
       'apps/web/DESIGN.md',
+      // `packages/` was unscanned and held the same word in nine comments: the
+      // guard's scope followed where the first rename happened, not where the
+      // word was.
+      ...PACKAGE_SRC_DIRS,
     ],
     exempt: [
+      ...Object.keys(BROWSER_LOCAL_IN_PACKAGES),
       // PERSISTED value under a `.strict()` schema whose loader falls back to
       // defaults on any parse failure: renaming it in place would discard an
       // existing reader's whole settings payload. It moves with a migration.
@@ -333,6 +355,7 @@ describe('retired vocabulary', () => {
   // wider than anyone meant. Each must still hold the word it excuses.
   for (const [label, pattern, table] of [
     ['WebSocket / WS', /\bWebSocket\b|\bWS\b/, WEBSOCKET_WORDING],
+    ['browser-local', /browser[-_]?local/i, BROWSER_LOCAL_IN_PACKAGES],
   ] as const) {
     it(`holds no ${label} exemption for a file that no longer says it`, () => {
       const stale = Object.keys(table).filter(

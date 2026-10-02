@@ -114,7 +114,7 @@ export type Fields = Record<string, unknown>
 
 /**
  * The Loro text container a markdown document's body lives in, and the one
- * apps/web's browser-local editor binds its CRDT editing session to.
+ * apps/web's browser-kept editor binds its CRDT editing session to.
  *
  * Exported because that binding needs the container HANDLE, not its text —
  * `readMarkdownBody` cannot serve it, and a second `'body'` literal on the
