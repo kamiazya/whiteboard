@@ -5,9 +5,10 @@
 // Why a ledger rather than a clean program: the test files were checked
 // nowhere before this ran, so some already disagree with the production types
 // they call. Those files are listed in typecheck-tests-debt.json with the
-// number of errors each carries, and the program must reproduce that exactly:
-// an error anywhere else is new, and a file that carries fewer than recorded
-// (or none) must be lowered in the ledger, so the debt only falls.
+// error codes each carries, and the program must reproduce that exactly: an
+// error anywhere else is new, an error swapped for a different one is new, and
+// a file that carries fewer than recorded (or none) must be lowered in the
+// ledger, so the debt only falls.
 // `--ratchet` rewrites the ledger from the current run and refuses to record
 // anything that grew.
 import { spawnSync } from 'node:child_process'
@@ -21,7 +22,20 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const LEDGER_PATH = resolve(PACKAGE_ROOT, 'scripts', 'typecheck-tests-debt.json')
 
 function readLedger() {
-  return JSON.parse(readFileSync(LEDGER_PATH, 'utf8')).files
+  const { files } = JSON.parse(readFileSync(LEDGER_PATH, 'utf8'))
+  const unlisted = Object.entries(files).filter(([, codes]) => !Array.isArray(codes))
+  if (unlisted.length > 0) {
+    // The count-only shape could not see a swapped error. A ledger merged in
+    // from a branch that still writes it cannot be read, and re-recording it
+    // by hand would be re-recording debt without looking at it.
+    console.error(
+      `typecheck-tests-debt.json records a count, not a list of error codes, for ${unlisted
+        .map(([file]) => file)
+        .join(', ')}. Take the ledger from the branch that records codes and run the ratchet.`,
+    )
+    process.exit(2)
+  }
+  return files
 }
 
 function writeLedger(files) {
@@ -72,7 +86,7 @@ function main() {
 
   const verdict = compareToLedger(byFile, ledger)
   if (!verdict.failed) {
-    const owed = [...byFile.values()].reduce((a, b) => a + b, 0)
+    const owed = [...byFile.values()].reduce((total, codes) => total + codes.length, 0)
     console.error(
       `test typecheck: ${tsconfig} clean apart from ${byFile.size} ledgered file(s), ${owed} error(s)`,
     )
@@ -82,18 +96,26 @@ function main() {
   return 1
 }
 
-function report({ added, grew, shrunk, cleared }, output) {
+const codesOf = (novel) =>
+  novel.map(({ code, count, recorded }) => `${code} x${count} (was ${recorded})`).join(', ')
+
+function report({ added, grew, swapped, shrunk, cleared }, output) {
   // The ledgered files' errors are known; the ones to read are the new ones.
-  const offending = new Set([...added, ...grew].map(({ file }) => file))
+  const offending = new Set([...added, ...grew, ...swapped].map(({ file }) => file))
   for (const line of output.split('\n')) {
     if ([...offending].some((file) => line.startsWith(`${file}(`))) console.error(line)
   }
   for (const { file, count } of added) {
     console.error(`new type errors in ${file} (${count}): fix them (the ledger takes no new files)`)
   }
-  for (const { file, count, recorded } of grew) {
+  for (const { file, count, recorded, novel } of grew) {
     console.error(
-      `${file} has ${count} type error(s), ledger records ${recorded}: fix the new ones`,
+      `${file} has ${count} type error(s), ledger records ${recorded}: fix the new ones (${codesOf(novel)})`,
+    )
+  }
+  for (const { file, novel } of swapped) {
+    console.error(
+      `${file} carries an error the ledger does not owe, in place of one it does: ${codesOf(novel)}. Fix the new one.`,
     )
   }
   for (const { file, count, recorded } of shrunk) {

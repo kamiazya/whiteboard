@@ -84,6 +84,10 @@ interface Stats {
   refusals: number
   straddles: number
   catchUps: number
+  /** Catch-ups that followed the log's tail and brought in a write this
+   *  instance's doc did not have: the arrangement where skipping the tail's
+   *  import is visible. */
+  tailCatchUps: number
 }
 
 /**
@@ -307,10 +311,17 @@ class CatchUpCommand implements fc.AsyncCommand<Model, Real> {
     const doc = real.instances[this.instance]
     const cursor = real.cursors[this.instance]
     if (doc === undefined || cursor === undefined) return
-    real.cursors[this.instance] = await real.docs.catchUp(WORKSPACE, doc, cursor)
+    const keysHeld = () =>
+      new Set(Object.keys(doc.getMap('meta').toJSON() as Record<string, unknown>))
+    const missing = [...model.acknowledged].some((key) => !keysHeld().has(key))
+    const caught = await real.docs.catchUp(WORKSPACE, doc, cursor)
+    real.cursors[this.instance] = caught.cursor
     real.stats.catchUps += 1
+    if (missing && cursor.generation !== null && caught.cursor.generation === cursor.generation) {
+      real.stats.tailCatchUps += 1
+    }
 
-    const held = new Set(Object.keys(doc.getMap('meta').toJSON() as Record<string, unknown>))
+    const held = keysHeld()
     const expected = new Set([...model.acknowledged, ...(model.pending[this.instance] ?? [])])
     expect(held).toEqual(expected)
     await assertRecordMatchesModel(model, real)
@@ -344,6 +355,39 @@ class ReopenCommand implements fc.AsyncCommand<Model, Real> {
   }
 }
 
+/**
+ * A reader that has just caught up to the record, another instance appending a
+ * small write, and the reader catching up again.
+ *
+ * Reached by chance, the tail path (a warm cursor in the generation the record
+ * is still in, with a write from ANOTHER instance to import) was almost never
+ * the one a catch-up took: the cursor is only warm after a reopen or an
+ * earlier catch-up, and the next foreign write has to be a small one that does
+ * not fold. Measured: with the tail's import deleted, 2 of 8 runs failed. This
+ * supplies the conjunction, as `StraddledFoldCommand` does for the fence.
+ */
+class FollowTailCommand implements fc.AsyncCommand<Model, Real> {
+  constructor(
+    private readonly reader: number,
+    private readonly writer: number,
+  ) {}
+
+  check(): boolean {
+    return this.reader !== this.writer
+  }
+
+  async run(model: Model, real: Real): Promise<void> {
+    await new ReopenCommand(this.reader).run(model, real)
+    await new EditCommand(this.writer, false).run(model, real)
+    await new SaveCommand(this.writer).run(model, real)
+    await new CatchUpCommand(this.reader).run(model, real)
+  }
+
+  toString(): string {
+    return `followTail(reader=${this.reader}, writer=${this.writer})`
+  }
+}
+
 const instanceArbitrary = fc.integer({ min: 0, max: INSTANCE_COUNT - 1 })
 
 /**
@@ -371,10 +415,11 @@ const allCommands = [
   // Rarest on purpose: a reopen REMOVES staleness, which is the very
   // condition under test.
   instanceArbitrary.map((i) => new ReopenCommand(i)),
+  fc.tuple(instanceArbitrary, instanceArbitrary).map(([r, w]) => new FollowTailCommand(r, w)),
 ]
 
 describe('multi-instance convergence (ADR-0020)', () => {
-  const stats: Stats = { folds: 0, refusals: 0, straddles: 0, catchUps: 0 }
+  const stats: Stats = { folds: 0, refusals: 0, straddles: 0, catchUps: 0, tailCatchUps: 0 }
 
   /**
    * The fixture reached its subject.
@@ -389,6 +434,7 @@ describe('multi-instance convergence (ADR-0020)', () => {
     expect(stats.refusals).toBeGreaterThan(0)
     expect(stats.straddles).toBeGreaterThan(0)
     expect(stats.catchUps).toBeGreaterThan(0)
+    expect(stats.tailCatchUps).toBeGreaterThan(0)
   })
 
   /**

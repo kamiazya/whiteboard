@@ -5,7 +5,10 @@ import {
   didKeyToEd25519PublicKey,
   ed25519PublicKeyToDidKey,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/did-key'
-import { daemonPingResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import {
+  daemonPingResponseSchema,
+  type RuntimeStatusResponse,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type CredentialResolverConfig,
@@ -17,7 +20,7 @@ import { testDataLayout } from './_test-helpers.js'
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR) and the helpers behind
 // /api/runtime/storage so a buggy route can not stat the user's blobs/.
-const mockComputeStorageReport = vi.fn(async () => ({
+const mockComputeStorageReport = vi.fn(async (_dir: string) => ({
   totalBytes: 0,
   fileCount: 0,
   byCategory: {
@@ -57,6 +60,22 @@ const identityDir = mkdtempSync(join(tmpdir(), 'wb-runtime-identity-'))
 const testIdentity = createDaemonIdentity({ dataDir: identityDir })
 process.once('exit', () => rmSync(identityDir, { recursive: true, force: true }))
 
+// The status the keeper reports, typed as the contract the web app parses so a
+// field the contract gains or drops fails here rather than asserting the fake.
+const STATUS: RuntimeStatusResponse = {
+  ok: true,
+  pid: 10,
+  socketPath: '/run/user/1000/whiteboard/d.sock',
+  version: '0.0.0-test',
+  startedAt: '2026-04-23T00:00:00.000Z',
+  uptimeMs: 100,
+  idleForMs: 50,
+  auth: { mode: 'local-daemon', hasToken: true },
+  storage: { dataDir: '/__test__/data', dataDirWritable: true },
+  mcp: { httpEnabled: true },
+  clients: { connected: 2, ready: 1 },
+}
+
 // Credentials go through a REAL resolver rather than reaching the router as
 // separate optional fields. That is the point of the refactor: these tests
 // exercise the same component production does, so a branch that works here
@@ -75,15 +94,7 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
     identity: testIdentity,
     dataLayout: testDataLayout(LAYOUT_DIR),
     touch,
-    getStatus: () => ({
-      pid: 10,
-      socketPath: '/run/user/1000/whiteboard/d.sock',
-      startedAt: '2026-04-23T00:00:00.000Z',
-      uptimeMs: 100,
-      idleForMs: 50,
-      connectedClients: 2,
-      readyClients: 1,
-    }),
+    getStatus: () => STATUS,
   })
 
   return { app, touch }
@@ -126,12 +137,7 @@ describe('runtime routes', () => {
       headers: { Authorization: 'Bearer secret' },
     })
     expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toMatchObject({
-      pid: 10,
-      socketPath: '/run/user/1000/whiteboard/d.sock',
-      connectedClients: 2,
-      readyClients: 1,
-    })
+    await expect(res.json()).resolves.toEqual(STATUS)
     expect(touch).toHaveBeenCalledTimes(1)
   })
 

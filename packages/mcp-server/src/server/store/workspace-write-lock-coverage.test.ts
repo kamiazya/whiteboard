@@ -42,6 +42,9 @@ const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
+// The lock is taken before the id is looked at, so any well-formed id reaches it.
+const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-lock-coverage-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
@@ -111,7 +114,7 @@ it('index.setDocumentName waits for the workspace write lock', async () => {
   const index = treeIndex()
   await expect(
     raceAgainstHeldLock(WS, () =>
-      index.setDocumentName({ workspaceId: WS, path: 'doc', name: 'renamed' }),
+      index.setDocumentName({ workspaceId: WS, documentId: DOCUMENT_ID, name: 'renamed' }),
     ),
   ).resolves.toBe('blocked')
 })
@@ -164,7 +167,7 @@ const WRITER_CASES: Record<string, (index: TreeIndex, workspaceId: string) => Pr
   createDocument: (index, workspaceId) =>
     index.createDocument({ workspaceId, path: 'second', kind: 'spatial' }),
   setDocumentName: (index, workspaceId) =>
-    index.setDocumentName({ workspaceId, path: 'doc', name: 'renamed' }),
+    index.setDocumentName({ workspaceId, documentId: DOCUMENT_ID, name: 'renamed' }),
   restoreDocument: (index, workspaceId) =>
     index.restoreDocument({ workspaceId, documentId: 'not-in-the-trash' }),
   moveDocument: (index, workspaceId) =>

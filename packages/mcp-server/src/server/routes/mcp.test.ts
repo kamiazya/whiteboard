@@ -4,15 +4,26 @@
 // handler's response unchanged. The protocol itself is the SDK's and is
 // covered end to end by `scripts/smoke/mcp-e2e-smoke.mjs`.
 
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it, vi } from 'vitest'
 import { createMcpRouter, type McpRouterDeps } from './mcp.js'
+
+// Only the legacy era answers from the root's deps, and every request here is
+// modern, so a read of them means a request was routed to the wrong era.
+const LEGACY_ERA_ONLY = new Proxy(
+  {},
+  {
+    get(_target, key) {
+      throw new Error(`a modern request read the legacy era's deps: ${String(key)}`)
+    },
+  },
+) as ServerDeps
 
 function routerWith(fetchImpl: (request: Request) => Promise<Response>) {
   const fetch = vi.fn(fetchImpl)
   const deps = {
     modernMcpHandler: { fetch } as unknown as McpRouterDeps['modernMcpHandler'],
-    pairingLinkContext: undefined,
-    pairingUnavailableReason: 'no-daemon-base-url',
+    serverDeps: LEGACY_ERA_ONLY,
   } satisfies McpRouterDeps
   return { router: createMcpRouter(deps), fetch }
 }

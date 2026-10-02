@@ -158,12 +158,13 @@ const PARTLY_UNCHECKED: Readonly<
 const PARTLY_UNCHECKED_PACKAGES_PINNED = 1
 
 /**
- * mcp-server's test typecheck tolerates the files recorded in its ledger
- * (scripts/typecheck-tests.mjs fails on any error outside it, and on a file
- * that carries fewer than recorded), and this pins its size from outside, so
+ * mcp-server's test typecheck tolerates the error codes recorded per file in
+ * its ledger (scripts/typecheck-tests.mjs fails on any error outside it, a swap
+ * of one for another, and a file that carries fewer than recorded), and this
+ * pins its size from outside, so
  * a file cannot be added to it without this number being raised in review.
  */
-const MCP_TEST_TYPE_DEBT = { files: 41, errors: 72 }
+const MCP_TEST_TYPE_DEBT = { files: 48, errors: 115 }
 
 describe('every package type-checks its test files', () => {
   const dirs = TEST_SCAN_DIRS
@@ -204,13 +205,14 @@ describe('every package type-checks its test files', () => {
 
 describe('mcp-server test typecheck ledger', () => {
   const ledgerPath = join(REPO_ROOT, 'packages/mcp-server/scripts/typecheck-tests-debt.json')
-  const files = (JSON.parse(readFileSync(ledgerPath, 'utf-8')) as { files: Record<string, number> })
-    .files
+  const files = (
+    JSON.parse(readFileSync(ledgerPath, 'utf-8')) as { files: Record<string, readonly string[]> }
+  ).files
 
   it('is the size this file pins, so the debt cannot grow unseen', () => {
     expect(Object.keys(files).length, 'files in the ledger').toBe(MCP_TEST_TYPE_DEBT.files)
     expect(
-      Object.values(files).reduce((a, b) => a + b, 0),
+      Object.values(files).reduce((total, codes) => total + codes.length, 0),
       'errors in the ledger',
     ).toBe(MCP_TEST_TYPE_DEBT.errors)
   })
