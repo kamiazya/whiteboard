@@ -106,6 +106,12 @@ chunks in insertion order where the real store sorts by index, which the
 parity property had missed because its generator only ever produced them in
 order. Two implementations agreeing is not the same as a contract.
 
+`InMemoryDocumentStore` (here, beside `InMemoryDocumentIndex`) is the one in-memory
+`DocumentStore` double: it answers the suite above, copies every buffer in and
+out, and `server-core`'s `FakeDocumentStore` and `mcp-server`'s memory module
+are built on it rather than on a private copy. `doc-ref-key-one-place.test.ts`
+in `arch-lint` fails on a second spelling of the stored key.
+
 `docRefKey` lives here for the same reason. It is a STORED key, and two
 stores that spell it differently cannot read each other's documents — with
 nothing to say so at compile time.

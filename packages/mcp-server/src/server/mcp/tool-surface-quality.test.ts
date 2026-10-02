@@ -18,7 +18,7 @@
 // double `visibleBytes`, and the pair is what says which happened.
 
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it } from 'vitest'
@@ -31,7 +31,6 @@ import {
   parameterCoverage,
   wireBytes,
 } from '../../shared/test-utils/tool-surface-metrics.js'
-import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'

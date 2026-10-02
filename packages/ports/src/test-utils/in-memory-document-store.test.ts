@@ -1,5 +1,5 @@
-import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe } from 'vitest'
+import { describeDocumentStoreConformance } from './document-store-conformance.js'
 import { InMemoryDocumentStore } from './in-memory-document-store.js'
 
 describe('InMemoryDocumentStore', () => {

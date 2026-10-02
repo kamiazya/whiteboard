@@ -1,9 +1,9 @@
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { getLogger as getServerCoreLogger } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { InMemoryBlobStore } from '../store/inmemory/in-memory-blob-store.js'
-import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 import { registerDocumentTools } from './document-tools.js'
 // Side-effect import: registering these tools also installs the server-core
 // log-sink wiring at module scope (see document-tools.ts).

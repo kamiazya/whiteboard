@@ -1,6 +1,6 @@
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createDocumentGetTool } from './document-get.js'
@@ -286,7 +286,7 @@ describe('wb_workspace_edit', () => {
     // forward, op 1 addressed the caller's handle, which by then named
     // nothing: `ops[1] ... Workspace not found: "batch"`.
     const deps: ServerDeps = makeTestDeps({
-      documentStore: createInMemoryDocumentStore(),
+      documentStore: new InMemoryDocumentStore(),
       documentTeardown: inMemoryDocumentTeardown(),
     })
 

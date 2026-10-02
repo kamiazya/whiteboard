@@ -18,7 +18,7 @@
  * asked, and reporting one alone is how a small corpus over-claims.
  */
 import { fileURLToPath } from 'node:url'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import {
   bootstrapCi,
   createDocumentSearchTool,
@@ -33,7 +33,6 @@ import {
   standardDeviation,
   wbDocumentCreate,
 } from '@kamiazya/whiteboard-server-core'
-import { createInMemoryDocumentStore } from '../../../server-core/src/test-utils/in-memory-document-store.ts'
 import { getDataDir } from '../../src/server/config.ts'
 import {
   corpusDigest,
@@ -66,7 +65,7 @@ const CORPUS = loadDocsCorpus(repoRoot)
 
 async function seed() {
   const deps = {
-    documentStore: createInMemoryDocumentStore(),
+    documentStore: new InMemoryDocumentStore(),
     blobStore: {},
     documentIndex: new InMemoryDocumentIndex(),
   }
