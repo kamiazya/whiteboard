@@ -18,7 +18,9 @@
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Cron } from 'croner'
+import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay.js'
 import { getLogger } from '../log.js'
+import { backupDirName, isBackupDirName } from './backup-dir-name.js'
 import { collectMirroredBlobs } from './backup-mirror-retention.js'
 import type { ServerBackupOutcome } from './backup-pass.js'
 import { runBackupInSubprocess } from './backup-subprocess.js'
@@ -32,30 +34,6 @@ const log = getLogger('backup-scheduler')
 
 const DEFAULT_KEEP = 7
 const DEFAULT_SCHEDULE: BackupSchedule = { expression: '0 3 * * *', timezone: null }
-
-// setTimeout only supports delays up to a signed 32-bit int and silently
-// truncates anything larger to 1ms, which would turn a monthly schedule into
-// a near-continuous backup loop. Same clamp, same reason, as
-// file-gc-sweeper — and reachable here, since a cron expression can name a
-// date more than 24.8 days out. The pass simply re-arms when it wakes and
-// finds the target still ahead.
-const MAX_TIMER_DELAY_MS = 2_147_483_647
-
-/**
- * A directory this scheduler wrote, by name.
- *
- * Retention counts BACKUPS, not directory entries: an operator's own notes
- * file sitting beside them must neither be deleted nor push a real backup out
- * of the window. The name is the timestamp with `:` replaced, so it is
- * filesystem-safe on every platform and still sorts chronologically — which
- * is what lets retention order by name rather than by mtime, a field a copy
- * or a restore can rewrite.
- */
-const BACKUP_DIR_NAME = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/
-
-function backupDirName(at: Date): string {
-  return at.toISOString().replace(/:/g, '-')
-}
 
 export interface BackupSchedulerOptions {
   dataDir: string
@@ -211,9 +189,7 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
       return
     }
     // Newest first by name, which for this format is newest first by time.
-    const ours = entries
-      .filter((name) => BACKUP_DIR_NAME.test(name))
-      .sort((a, b) => (a < b ? 1 : -1))
+    const ours = entries.filter((name) => isBackupDirName(name)).sort((a, b) => (a < b ? 1 : -1))
     for (const name of ours.slice(keepCount)) {
       try {
         await rm(join(dir, name), { recursive: true, force: true })

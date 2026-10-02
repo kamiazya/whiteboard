@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isIsoDatetime } from './iso-datetime.js'
 import { type DaemonLogEntryInput, formatDaemonLogEntriesAsJsonLines } from './log-jsonl.js'
 import { redactDiagnosticText, scrubAuthMarkers } from './redact.js'
 
@@ -8,20 +9,11 @@ function redactStrict(text: string): string {
   return scrubAuthMarkers(redactDiagnosticText(text))
 }
 
-// ISO 8601 datetime with timezone offset — same shape `createdAt`
-// enforces. Used for `record.startedAt`, which is a structural
-// timestamp field; tolerating arbitrary strings here would let a
-// caller smuggle Authorization / paths / stack frames into
-// status.json untouched, since the timestamp shape would otherwise
-// flow verbatim into the JSON.
-const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
-
+// Same shape `createdAt` enforces; `record.startedAt` is a structural
+// timestamp, so an arbitrary string must not flow verbatim into status.json.
 function assertIsoTimestamp(value: string, label: string): string {
-  if (!ISO_DATETIME_RE.test(value)) {
+  if (!isIsoDatetime(value)) {
     // Generic message — never echoes the offending input value.
-    throw new SupportBundleError(`Invalid ${label}: expected ISO 8601 datetime with offset.`)
-  }
-  if (Number.isNaN(Date.parse(value))) {
     throw new SupportBundleError(`Invalid ${label}: expected ISO 8601 datetime with offset.`)
   }
   return value

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isIsoDatetime } from './iso-datetime.js'
 import {
   type RedactionOptions,
   redactDiagnosticText,
@@ -121,18 +122,10 @@ export class InvalidLogTimestampError extends Error {
 }
 
 const EPOCH_ISO = new Date(0).toISOString()
-// Lightweight ISO 8601 check that matches the same shape Zod's
-// `.datetime({ offset: true })` accepts (millisecond precision is
-// optional; offset can be `Z` or `±HH:MM`). Keeping the regex local
-// avoids a round-trip through Zod for every emitted entry.
-const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
 
 function normalizeTimestamp(input: string | undefined): string {
   if (input === undefined) return EPOCH_ISO
-  if (!ISO_DATETIME_RE.test(input)) throw new InvalidLogTimestampError()
-  // Belt-and-suspenders: reject "2026-13-40T..." style values that
-  // pass the regex but produce NaN through Date.parse.
-  if (Number.isNaN(Date.parse(input))) throw new InvalidLogTimestampError()
+  if (!isIsoDatetime(input)) throw new InvalidLogTimestampError()
   return input
 }
 

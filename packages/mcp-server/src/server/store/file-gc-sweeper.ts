@@ -15,6 +15,7 @@ import type { Dirent } from 'node:fs'
 import { lstat, readdir, realpath } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 import { isMissingFileError } from '../../shared/errno.js'
+import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { workspaceDir, workspaceFilesDir, workspacesRoot } from '../tenant/data-layout.js'
@@ -29,12 +30,6 @@ import { FileVersionStore } from './version-store.js'
 const log = getLogger('file-gc-sweeper')
 
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000
-
-// setTimeout() only supports delays up to a signed 32-bit int; Node silently
-// truncates anything larger to 1ms (with a TimeoutOverflowWarning), which
-// would turn an intended "run monthly" interval into a near-continuous
-// full-workspace scan. Clamp instead of trusting every safe integer through.
-const MAX_TIMER_DELAY_MS = 2_147_483_647
 
 // Env parsing is deliberately STRICTER than file-gc.ts's resolveGraceMs
 // (which uses Number.parseInt and would silently accept "1x" as 1): only a

@@ -17,7 +17,7 @@ const log = getLogger('backup-pass')
 /**
  * What an unfinished backup is called.
  *
- * Deliberately not a name `BACKUP_DIR_NAME` matches, so retention and the
+ * Deliberately not a name `isBackupDirName` accepts, so retention and the
  * mirror's collector both pass over it — a fragment must not be counted as a
  * backup by anything.
  */
