@@ -150,7 +150,7 @@ export async function writeRenderEntry(path: string, value: unknown): Promise<vo
 }
 
 /** Drops everything this store holds. For tests, and for a storage reset. */
-export async function clearRenderStore(): Promise<void> {
+export async function clearRenderStoreForTests(): Promise<void> {
   const rootPromise = storageDirectory()
   if (rootPromise === null) return
   sweptBuild = null

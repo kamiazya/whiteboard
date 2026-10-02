@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { forgetAll, sessionKey } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import {
+  forgetAllForTests,
+  sessionKey,
+} from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { disconnectFromDaemon } from './disconnect-daemon.js'
@@ -20,7 +23,7 @@ function keyResponse(): Response {
 
 beforeEach(() => {
   localStorage.clear()
-  forgetAll()
+  forgetAllForTests()
 })
 
 describe('disconnectFromDaemon', () => {

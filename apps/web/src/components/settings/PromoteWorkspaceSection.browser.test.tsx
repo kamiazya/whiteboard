@@ -9,7 +9,7 @@
  * section's count and the posted bytes come from the production read path.
  */
 
-import { forget, forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { forget, forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
@@ -223,7 +223,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup()
   connectReplicaKeeper(null)
-  forgetAll()
+  forgetAllForTests()
   vi.restoreAllMocks()
 })
 

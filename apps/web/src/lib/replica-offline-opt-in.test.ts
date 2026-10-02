@@ -10,7 +10,7 @@
  * different key and open nothing.
  */
 
-import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
@@ -102,11 +102,11 @@ function authenticator({
 
 beforeEach(() => {
   localStorage.clear()
-  forgetAll()
+  forgetAllForTests()
 })
 
 afterEach(() => {
-  forgetAll()
+  forgetAllForTests()
 })
 
 describe('makeReplicaReadableOffline', () => {

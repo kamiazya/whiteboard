@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { deriveDocumentKey, openBytes, sealBytes } from './read-plane.js'
 import {
   forget,
-  forgetAll,
+  forgetAllForTests,
   type ReplicaSource,
   replicaKeyProviderFor,
   sessionKey,
@@ -42,7 +42,7 @@ function sourceWith(fetchImpl: typeof fetch): ReplicaSource {
 
 describe('replica-session-key: sessionKey', () => {
   afterEach(() => {
-    forgetAll()
+    forgetAllForTests()
     vi.useRealTimers()
   })
 
@@ -170,7 +170,7 @@ describe('replica-session-key: bounded lease lapse', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
   })
   afterEach(() => {
-    forgetAll()
+    forgetAllForTests()
     vi.useRealTimers()
   })
 
@@ -240,7 +240,7 @@ describe('replica-session-key: bounded lease lapse', () => {
 
 describe('replica-session-key: sessionKeyStatus', () => {
   afterEach(() => {
-    forgetAll()
+    forgetAllForTests()
     vi.useRealTimers()
   })
 
@@ -293,9 +293,9 @@ describe('replica-session-key: sessionKeyStatus', () => {
   })
 })
 
-describe('replica-session-key: forget / forgetAll', () => {
+describe('replica-session-key: forget / forgetAllForTests', () => {
   afterEach(() => {
-    forgetAll()
+    forgetAllForTests()
   })
 
   it('forget() clears the cached key and forces a re-request', async () => {
@@ -307,12 +307,12 @@ describe('replica-session-key: forget / forgetAll', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
-  it('forgetAll() clears every daemon', async () => {
+  it('forgetAllForTests() clears every daemon', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(keyResponse()))
     const source = sourceWith(fetchImpl)
     await sessionKey(DAEMON, WORKSPACE, source)
     await sessionKey(DAEMON, 'ws-2', source)
-    forgetAll()
+    forgetAllForTests()
     await sessionKey(DAEMON, WORKSPACE, source)
     await sessionKey(DAEMON, 'ws-2', source)
     expect(fetchImpl).toHaveBeenCalledTimes(4)
@@ -350,7 +350,7 @@ describe('replica-session-key: forget / forgetAll', () => {
 
 describe('replicaKeyProviderFor', () => {
   afterEach(() => {
-    forgetAll()
+    forgetAllForTests()
   })
 
   it('keyFor derives a non-extractable key matching deriveDocumentKey on the same inputs', async () => {
@@ -440,14 +440,14 @@ describe('replicaKeyProviderFor', () => {
     expect(new TextDecoder().decode(await openBytes(fresh.key, envelope, context))).toBe('probe')
   })
 
-  it('forgetAll() clears the derived-key memo too', async () => {
+  it('forgetAllForTests() clears the derived-key memo too', async () => {
     const fetchImpl1 = vi.fn(async () => jsonResponse(keyResponse()))
     const first = await replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl1)).keyFor(
       'doc-1',
     )
     expect(first).not.toBe('withheld')
 
-    forgetAll()
+    forgetAllForTests()
 
     const otherWorkspaceKey = Uint8Array.from({ length: 32 }, (_, i) => 255 - i)
     const fetchImpl2 = vi.fn(async () =>
@@ -469,7 +469,7 @@ describe('replicaKeyProviderFor', () => {
 
 describe('replica-session-key: property — TTL boundary and concurrent dedup', () => {
   afterEach(() => {
-    forgetAll()
+    forgetAllForTests()
     vi.useRealTimers()
   })
 
@@ -548,7 +548,7 @@ describe('replica-session-key: an unreachable daemon heals itself', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
   })
   afterEach(() => {
-    forgetAll()
+    forgetAllForTests()
     vi.useRealTimers()
   })
 

@@ -8,7 +8,7 @@
  * rather than forking.
  */
 
-import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
@@ -103,7 +103,7 @@ describe('cacheDaemonWorkspace', () => {
   beforeEach(clearWhiteboardDb)
   afterEach(() => {
     connectReplicaKeeper(null)
-    forgetAll()
+    forgetAllForTests()
   })
 
   it("reports the DAEMON's own frontier, not the merged local one, and keeps local edits", async () => {

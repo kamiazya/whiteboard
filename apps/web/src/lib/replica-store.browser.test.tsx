@@ -4,7 +4,7 @@
  * the first-pull ordering `markReplica` exists to protect.
  */
 
-import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
@@ -95,7 +95,7 @@ describe('replica-store', () => {
 
   afterEach(async () => {
     connectReplicaKeeper(null)
-    forgetAll()
+    forgetAllForTests()
     await clearNamedDb(DB_NAME)
   })
 
