@@ -1,7 +1,25 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Every workspace but the two script workspaces below is a PRIVATE package
+  // (only @kamiazya/whiteboard-mcp publishes, and its public surface is the
+  // CLI), so an entry barrel is not public API: an export no workspace
+  // imports serves nothing. Without this, knip treats every entry file's
+  // exports as used and the barrels accumulate dead surface unseen.
+  "includeEntryExports": true,
+  // The Vite plugin turns every `import.meta.glob(...)` into an entry with
+  // exports analysis skipped. This repo's source-scan guards glob a whole
+  // source tree with `{ query: '?raw' }` to READ the text, never to import it
+  // (canvas-render's import-guard.test.ts globs `./**/*.ts`; apps/web has
+  // twenty such scans), so with the plugin on, every file under those trees
+  // became an entry and none of their exports were ever judged. The plugin's
+  // only other jobs here are vite.config.ts and index.html entries, which the
+  // workspaces below declare themselves.
+  "vite": false,
   "workspaces": {
     ".": {
+      // The exports of these scripts are a loader's contract (a workflow's
+      // `meta`) or a script's own surface, not a package barrel.
+      "includeEntryExports": false,
       "entry": [
         ".claude/workflows/*.workflow.mjs",
         ".claude/scripts/*.mjs",
@@ -16,6 +34,9 @@
       "ignore": [".claude/scripts/fixtures/**"]
     },
     "tools/checks": {
+      // Standalone scripts: their exports are read by tests knip does not
+      // follow, not imported across a package boundary.
+      "includeEntryExports": false,
       "entry": [
         // CI/test-invoked standalone scripts: run via `node tools/checks/...`
         // (release.yml) or loaded with a dynamically-built path
@@ -72,6 +93,33 @@
     "packages/loro-adapter": {
       "project": ["src/**/*.ts"]
     },
+    "packages/daemon-client": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/facet-engine": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/facet-ui": {
+      "project": ["src/**/*.ts", "src/**/*.tsx"]
+    },
+    "packages/history": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/reference-graph": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/scene": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/search": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/server-core": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/workspace-index": {
+      "project": ["src/**/*.ts"]
+    },
     "packages/canvas-render": {
       "project": ["src/**/*.ts"]
     },
@@ -89,9 +137,12 @@
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]
     },
     "apps/extension": {
-      // The Firefox content script: a second, classic-script build that
-      // vite.config.ts starts from closeBundle, which knip cannot follow.
-      "entry": ["src/content.ts"]
+      // vite.config.ts builds src/background.ts (`lib.entry`) and, for
+      // Firefox, src/content.ts as a second classic-script build started from
+      // closeBundle; knip reads neither path out of the config.
+      "entry": ["src/background.ts", "src/content.ts", "vite.config.ts"],
+      // A config file's default export is read by Vite, not imported.
+      "ignoreIssues": { "vite.config.ts": ["exports"] }
     },
     "apps/web": {
       "entry": [
@@ -101,15 +152,13 @@
         // Regenerated on demand via `pnpm --filter @kamiazya/whiteboard-web docs:snapshots`, not imported from
         // the app entry point.
         "src/docs-snapshots/*.docs-snapshot.test.tsx",
-        // Documented common entry point for every surface driving the
-        // canvas programmatically (WebMCP tool executor, in-page assistant,
-        // debug panel). Some re-exports (createSceneExportHandler,
-        // createWhiteboardCommands) are already consumed through this barrel;
-        // the rest is the module's intentional forward-looking public
-        // surface for those future consumers.
-        "src/lib/commands/index.ts",
         "scripts/*.mjs"
       ],
+      "ignoreIssues": {
+        // Re-exports whose only purpose is to be resolved by tsc, so the
+        // probe fails to compile when a component or contract goes missing.
+        "src/_type-probe.ts": ["exports", "types"]
+      },
       // `src/**/*.css` is in the project so knip follows `@import "tailwindcss"` /
       // `@import "tw-animate-css"` in src/index.css: without it the `.css`
       // compiler is enabled but its imports are never followed, and both packages
