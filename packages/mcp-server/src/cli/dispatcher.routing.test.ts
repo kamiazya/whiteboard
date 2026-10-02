@@ -10,15 +10,24 @@ vi.mock('../server/mcp/index.js', () => ({
 }))
 
 vi.mock('./daemon-status.js', () => ({
-  runDaemonStatus: vi.fn(async () => ({ result: { schemaVersion: 1, ok: true }, exitCode: 0 })),
+  runDaemonStatus: vi.fn(async () => ({
+    result: { schemaVersion: 1, ok: true, reason: null, recordFound: true, recordFresh: true },
+    exitCode: 0,
+  })),
 }))
 
 vi.mock('./daemon-doctor.js', () => ({
-  runDaemonDoctor: vi.fn(async () => ({ result: { schemaVersion: 1, ok: true }, exitCode: 0 })),
+  runDaemonDoctor: vi.fn(async () => ({
+    result: { schemaVersion: 1, ok: true, status: 'ok', checks: [] },
+    exitCode: 0,
+  })),
 }))
 
 vi.mock('./daemon-stop.js', () => ({
-  runDaemonStop: vi.fn(async () => ({ result: { schemaVersion: 1, ok: true }, exitCode: 0 })),
+  runDaemonStop: vi.fn(async () => ({
+    result: { schemaVersion: 1, ok: true, action: 'not-running', reason: null, pid: null },
+    exitCode: 0,
+  })),
 }))
 
 vi.mock('./daemon-logs.js', () => ({
@@ -56,21 +65,55 @@ vi.mock('./daemon-run.js', () => ({
 }))
 
 vi.mock('./server-status.js', () => ({
-  runServerStatus: vi.fn(async () => ({ result: { schemaVersion: 1, ok: true }, exitCode: 0 })),
+  runServerStatus: vi.fn(async () => ({
+    result: {
+      schemaVersion: 1,
+      ok: true,
+      state: 'running',
+      pid: 42,
+      host: '127.0.0.1',
+      port: 3099,
+      publicBaseUrl: 'https://wb.example.com',
+      authStrategy: 'oauth-jwt',
+      startedAt: '2026-05-21T00:00:00.000Z',
+      recordFresh: true,
+    },
+    exitCode: 0,
+  })),
 }))
 
 vi.mock('./server-stop.js', () => ({
-  runServerStop: vi.fn(async () => ({ result: { schemaVersion: 1, ok: true }, exitCode: 0 })),
+  runServerStop: vi.fn(async () => ({
+    result: {
+      schemaVersion: 1,
+      ok: true,
+      action: 'not-running',
+      reason: null,
+      recordFound: false,
+      recordFresh: false,
+    },
+    exitCode: 0,
+  })),
 }))
 
 vi.mock('./server-doctor.js', () => ({
-  runServerDoctor: vi.fn(async () => ({ result: { schemaVersion: 1, ok: true }, exitCode: 0 })),
+  runServerDoctor: vi.fn(async () => ({
+    result: { schemaVersion: 1, ok: true, status: 'ok', checks: [] },
+    exitCode: 0,
+  })),
 }))
 
 vi.mock('./server-run.js', () => ({
   runServerRun: vi.fn(async () => ({
     kind: 'dry-run-ok',
-    result: { schemaVersion: 1, ok: true },
+    result: {
+      schemaVersion: 1,
+      ok: true,
+      dryRun: true,
+      publicBaseUrl: 'https://wb.example.com',
+      allowedOrigins: ['https://wb.example.com'],
+      authStrategy: 'oauth-jwt',
+    },
   })),
 }))
 
@@ -92,7 +135,7 @@ vi.mock('./server-backup.js', () => ({
 vi.mock('./server-restore.js', () => ({
   runServerRestore: vi.fn(async () => ({
     kind: 'ok',
-    result: { schemaVersion: 1, ok: true },
+    result: { schemaVersion: 1, ok: true, operation: 'restore' },
   })),
 }))
 
@@ -507,6 +550,17 @@ describe('dispatcher routing: whiteboard server restore', () => {
     )
     expect(exitCode).toBe(0)
     expect(vi.mocked(serverRestoreModule.runServerRestore)).toHaveBeenCalledOnce()
+  })
+
+  it('prints nothing when the result carries a field its schema does not declare', async () => {
+    vi.mocked(serverRestoreModule.runServerRestore).mockResolvedValueOnce({
+      kind: 'ok',
+      result: { schemaVersion: 1, ok: true, operation: 'restore', targetDir: '/tmp/tg' } as never,
+    })
+    const stdio = captureStdio(() =>
+      main(['server', 'restore', '--json', '--backup-dir=/tmp/bk', '--target-dir=/tmp/tg']),
+    )
+    await expect(stdio).rejects.toThrow()
   })
 
   /**

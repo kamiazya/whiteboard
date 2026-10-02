@@ -1,5 +1,6 @@
 import { lstat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import type { z } from 'zod'
 import { hasAncestorSymlink } from '../server/backup-restore.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
@@ -8,6 +9,7 @@ import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.j
 import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
 import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
+import type { serverRestoreOutputSchema } from './operator-json.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
 
 export interface RunServerRestoreOptions {
@@ -25,11 +27,7 @@ export type ServerRestoreOutcome =
   | { kind: 'invalid-target-path' }
   | { kind: 'error'; message: string }
 
-interface ServerRestoreResult {
-  schemaVersion: 1
-  ok: true
-  operation: 'restore'
-}
+type ServerRestoreResult = z.infer<typeof serverRestoreOutputSchema>
 
 export async function runServerRestore(
   options: RunServerRestoreOptions,

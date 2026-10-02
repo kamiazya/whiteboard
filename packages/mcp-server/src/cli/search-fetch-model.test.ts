@@ -4,6 +4,7 @@ import {
   EMBEDDER_LOAD_REMEDY,
   EMBEDDING_DIMENSIONS,
 } from '../server/search/transformers-embedder.js'
+import { searchFetchModelOutputSchema } from './operator-json.js'
 import { runSearchFetchModel } from './search-fetch-model.js'
 
 const pipeline = vi.hoisted(() => vi.fn())
@@ -22,7 +23,7 @@ describe('runSearchFetchModel', () => {
     const { result, exitCode } = await runSearchFetchModel({ cacheDir: '/data/models' })
 
     expect(exitCode).toBe(0)
-    expect(result).toMatchObject({
+    expect(searchFetchModelOutputSchema.parse(result)).toMatchObject({
       ok: true,
       cacheDir: '/data/models',
       model: DEFAULT_MODEL,
@@ -50,7 +51,7 @@ describe('runSearchFetchModel', () => {
     const { result, exitCode } = await runSearchFetchModel({ cacheDir: '/data/models' })
 
     expect(exitCode).toBe(1)
-    expect(result).toMatchObject({
+    expect(searchFetchModelOutputSchema.parse(result)).toMatchObject({
       ok: false,
       failure: 'runtime-missing',
       remedy: EMBEDDER_LOAD_REMEDY['runtime-missing'],
@@ -66,7 +67,10 @@ describe('runSearchFetchModel', () => {
     const { result, exitCode } = await runSearchFetchModel({ cacheDir: '/data/models' })
 
     expect(exitCode).toBe(1)
-    expect(result).toMatchObject({ ok: false, failure: 'unexpected-dimensions' })
+    expect(searchFetchModelOutputSchema.parse(result)).toMatchObject({
+      ok: false,
+      failure: 'unexpected-dimensions',
+    })
   })
 })
 
@@ -79,7 +83,10 @@ describe('runSearchFetchModel diagnostics', () => {
 
     const { result } = await runSearchFetchModel({ cacheDir: '/data/models' })
 
-    expect(result).toMatchObject({ ok: false, failure: 'load-failed' })
+    expect(searchFetchModelOutputSchema.parse(result)).toMatchObject({
+      ok: false,
+      failure: 'load-failed',
+    })
     expect(result.ok === false && result.detail).toContain('CONNECT tunnel failed')
   })
 

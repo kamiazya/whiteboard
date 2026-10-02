@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { serverRunDryRunOutputSchema, serverRunReadyOutputSchema } from './operator-json.js'
 import type { StartServerFn } from './server-run.js'
 import { runServerRun } from './server-run.js'
 import type { ServerRunArgs } from './server-run-args.js'
@@ -43,6 +44,7 @@ describe('runServerRun — dry-run success', () => {
     const outcome = await runServerRun({ flags: dryRunFlags(), env: VALID_ENV })
     expect(outcome.kind).toBe('dry-run-ok')
     if (outcome.kind !== 'dry-run-ok') return
+    expect(serverRunDryRunOutputSchema.parse(outcome.result)).toEqual(outcome.result)
     expect(outcome.result.schemaVersion).toBe(1)
     expect(outcome.result.ok).toBe(true)
     expect(outcome.result.dryRun).toBe(true)
@@ -236,6 +238,7 @@ describe('runServerRun — actual run (no --dry-run)', () => {
     })
     expect(outcome.kind).toBe('running')
     if (outcome.kind !== 'running') return
+    expect(serverRunReadyOutputSchema.parse(outcome.result)).toEqual(outcome.result)
     expect(outcome.result.schemaVersion).toBe(1)
     expect(outcome.result.ok).toBe(true)
     expect(outcome.result.pid).toBe(process.pid)

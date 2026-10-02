@@ -28,7 +28,11 @@ import {
   supportBundleDoctorSectionSchema,
   supportBundleManifestSchema,
 } from '../shared/diagnostics/support-bundle.js'
-import { operatorJsonLine } from './operator-json.js'
+import {
+  OPERATOR_JSON_SCHEMA_VERSION,
+  operatorJsonLine,
+  serverSupportBundleOutputSchema,
+} from './operator-json.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
 import type { RunServerStatusOutcome } from './server-status.js'
 
@@ -61,11 +65,14 @@ export interface ServerSupportBundleOutcome {
   exitCode: 0 | 1
 }
 
-interface ServerSupportBundleResultJson {
-  schemaVersion: 1
-  ok: true
-  operation: 'support-bundle'
-  files: string[]
+function succeeded(): ServerSupportBundleOutcome {
+  const stdout = operatorJsonLine(serverSupportBundleOutputSchema, {
+    schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+    ok: true,
+    operation: 'support-bundle',
+    files: [...ALL_FILES],
+  })
+  return { stdout, stderr: '', exitCode: 0 }
 }
 
 function fail(message: string): ServerSupportBundleOutcome {
@@ -301,11 +308,5 @@ export async function runServerSupportBundle(
     return fail('support bundle failed')
   }
 
-  const result: ServerSupportBundleResultJson = {
-    schemaVersion: 1,
-    ok: true,
-    operation: 'support-bundle',
-    files: [...ALL_FILES],
-  }
-  return { stdout: `${JSON.stringify(result)}\n`, stderr: '', exitCode: 0 }
+  return succeeded()
 }

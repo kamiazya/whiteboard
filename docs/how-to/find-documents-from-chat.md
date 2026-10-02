@@ -73,6 +73,11 @@ width the search index is built for. If a step is missing it says which one
 — `runtime-missing` means the first command, `weights-missing` means the
 second.
 
+With `--json` it prints one object with `"schemaVersion": 1` and a `kind` of
+`ok` or `failed`; a failure carries `failure` (the names above, plus
+`load-failed` and `unexpected-dimensions`), `remedy`, and, when there is
+something more to say, a redacted `detail`.
+
 Working from a clone of the repository instead? `pnpm --filter
 @kamiazya/whiteboard-mcp search:fetch-model` runs the same command against
 your checkout.

@@ -4,11 +4,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   addUserOutputSchema,
+  daemonSupportBundleOutputSchema,
   deactivateUserOutputSchema,
   grantAdminOutputSchema,
   grantMemberOutputSchema,
   nativeHostInstallOutputSchema,
   OPERATOR_JSON_SCHEMA_VERSION,
+  searchFetchModelOutputSchema,
+  serverRestoreOutputSchema,
+  serverRunDryRunOutputSchema,
+  serverRunReadyOutputSchema,
+  serverSupportBundleOutputSchema,
 } from './operator-json.js'
 
 const ada = { id: '01JZ0000000000000000000001', displayName: 'Ada' }
@@ -74,11 +80,91 @@ const CONTRACTS = {
       },
     ],
   },
+  'server restore': {
+    schema: serverRestoreOutputSchema,
+    outputs: [{ ...v, ok: true, operation: 'restore' }],
+  },
+  'server run --dry-run': {
+    schema: serverRunDryRunOutputSchema,
+    outputs: [
+      {
+        ...v,
+        ok: true,
+        dryRun: true,
+        publicBaseUrl: 'https://wb.example.com',
+        allowedOrigins: ['https://wb.example.com', 'https://app.example.com'],
+        authStrategy: 'oauth-jwt',
+      },
+    ],
+  },
+  'server run (ready)': {
+    schema: serverRunReadyOutputSchema,
+    outputs: [
+      {
+        ...v,
+        ok: true,
+        pid: 4242,
+        host: '0.0.0.0',
+        port: 3099,
+        publicBaseUrl: 'https://wb.example.com',
+        authStrategy: 'oauth-jwt',
+        startedAt: '2026-05-21T00:00:00.000Z',
+      },
+    ],
+  },
+  'server support-bundle': {
+    schema: serverSupportBundleOutputSchema,
+    outputs: [
+      {
+        ...v,
+        ok: true,
+        operation: 'support-bundle',
+        files: ['status.json', 'doctor.json', 'record.json', 'manifest.json'],
+      },
+    ],
+  },
+  'daemon support-bundle': {
+    schema: daemonSupportBundleOutputSchema,
+    outputs: [
+      {
+        ...v,
+        ok: true,
+        outputDir: '/tmp/bundle',
+        files: ['status.json', 'doctor.json', 'logs.jsonl', 'manifest.json'],
+      },
+    ],
+  },
+  'search fetch-model': {
+    schema: searchFetchModelOutputSchema,
+    outputs: [
+      {
+        ...v,
+        kind: 'ok',
+        ok: true,
+        cacheDir: '/data/models',
+        model: 'Xenova/multilingual-e5-small',
+        dtype: 'q8',
+        dimensions: 384,
+        elapsedMs: 1200,
+      },
+      {
+        ...v,
+        kind: 'failed',
+        ok: false,
+        cacheDir: '/data/models',
+        model: 'Xenova/multilingual-e5-small',
+        dtype: 'fp32',
+        failure: 'runtime-missing',
+        remedy: 'npm install @huggingface/transformers',
+        detail: 'Cannot find package',
+      },
+    ],
+  },
 } as const
 
 describe('operator --json output contracts', () => {
   it('declares a schema for every operator command, each with at least one arm', () => {
-    expect(Object.keys(CONTRACTS)).toHaveLength(5)
+    expect(Object.keys(CONTRACTS)).toHaveLength(11)
     for (const { outputs } of Object.values(CONTRACTS)) expect(outputs.length).toBeGreaterThan(0)
   })
 
