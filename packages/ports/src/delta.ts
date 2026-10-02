@@ -14,8 +14,6 @@ export const deltaBatchSchema = z
   })
   .strict()
 
-export type DeltaBatch = z.infer<typeof deltaBatchSchema>
-
 /**
  * When a delta log is worth folding back into its snapshot.
  *

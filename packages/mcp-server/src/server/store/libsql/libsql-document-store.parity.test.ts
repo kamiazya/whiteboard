@@ -2,7 +2,6 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type {
-  DeltaBatch,
   DocRef,
   DocumentStore,
   LoadDeltasResult,
@@ -68,8 +67,10 @@ async function applyOp(store: DocumentStore, op: Op): Promise<void> {
     const { manifest, chunks } = buildSnapshotArgs(op.chunkByteArrays)
     await store.saveSnapshot({ docRef, manifest, chunks, frontier: op.frontier })
   } else if (op.type === 'appendDeltas') {
-    const deltaBatch: DeltaBatch = { updates: op.updates, newFrontier: op.newFrontier }
-    await store.appendDeltas({ docRef, deltaBatch })
+    await store.appendDeltas({
+      docRef,
+      deltaBatch: { updates: op.updates, newFrontier: op.newFrontier },
+    })
   } else {
     await store.deleteDoc({ docRef })
   }
