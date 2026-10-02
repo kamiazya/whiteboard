@@ -754,7 +754,7 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
-          return Promise.resolve(new Response('{}', { status: 200 }))
+          return Promise.resolve(jsonResponse({}))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -816,7 +816,7 @@ describe('DaemonDocumentPage', () => {
         'fetch',
         vi.fn(async (input: RequestInfo | URL) => {
           requested.push(typeof input === 'string' ? input : input.toString())
-          return new Response('{}', { status: 404 })
+          return jsonResponse({}, 404)
         }),
       )
       await act(async () => {

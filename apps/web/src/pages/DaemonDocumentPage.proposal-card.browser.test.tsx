@@ -25,6 +25,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const { daemonApiClientMock, daemonWithOneDocument } = await import(
@@ -98,7 +99,7 @@ it('an agent’s proposal is drawn in place, and Adopt moves the node and closes
   sessionStorage.setItem('wb.lastTool', 'select')
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response('{}', { status: 404 })),
+    vi.fn(async () => jsonResponse({}, 404)),
   )
   renderPage(
     <DaemonDocumentPage
@@ -140,7 +141,7 @@ it('the Proposals opener counts what is waiting, and a row opens the card in pla
   sessionStorage.setItem('wb.lastTool', 'select')
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response('{}', { status: 404 })),
+    vi.fn(async () => jsonResponse({}, 404)),
   )
   renderPage(
     <DaemonDocumentPage

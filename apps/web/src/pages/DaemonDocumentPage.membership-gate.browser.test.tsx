@@ -61,7 +61,7 @@ function daemonFetchDouble(refuse: 'requires_person_session' | 'not_a_member') {
             403,
           )
     }
-    return new Response('{}', { status: 404 })
+    return jsonResponse({}, 404)
   }) as typeof fetch
   return { fetchDouble, sentPaths }
 }

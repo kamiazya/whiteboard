@@ -90,7 +90,7 @@ beforeEach(() => {
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-    return Promise.resolve(new Response('{}', { status: 200 }))
+    return Promise.resolve(jsonResponse({}))
   })
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -229,7 +229,7 @@ describe('VersionTimeline', () => {
           }),
         )
       }
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -288,7 +288,7 @@ describe('VersionTimeline', () => {
           }),
         )
       }
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -311,7 +311,7 @@ describe('VersionTimeline', () => {
       if (url.includes('/versions')) {
         return Promise.resolve(jsonResponse({ versions: [] }))
       }
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -359,7 +359,7 @@ describe('VersionTimeline', () => {
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -403,7 +403,7 @@ describe('VersionTimeline', () => {
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -441,7 +441,7 @@ describe('VersionTimeline', () => {
       if (url.includes('/restore')) return Promise.reject(new TypeError('Failed to fetch'))
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -487,7 +487,7 @@ describe('VersionTimeline', () => {
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -541,7 +541,7 @@ describe('VersionTimeline', () => {
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -612,7 +612,7 @@ describe('formatRelative display branches (via rendered version rows)', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/versions')) return Promise.resolve(mkSingleVersionResponse(createdAt))
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
   }
@@ -696,7 +696,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', underlyingFetch)
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
@@ -736,7 +736,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       }
       if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', underlyingFetch)
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
@@ -783,7 +783,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
           }),
         )
       }
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', underlyingFetch)
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
@@ -815,7 +815,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/versions')) return Promise.reject(new TypeError('network down'))
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
@@ -837,8 +837,8 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/versions')) return Promise.resolve(new Response('{}', { status: 500 }))
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      if (url.includes('/versions')) return Promise.resolve(jsonResponse({}, 500))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
@@ -871,7 +871,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
           /* canvas-new's request never resolves in this test */
         })
       }
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -945,7 +945,7 @@ describe('VersionTimeline draws where a restored state came from', () => {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
         if (url.includes('/versions')) return Promise.resolve(restoredHistory())
-        return Promise.resolve(new Response('{}', { status: 200 }))
+        return Promise.resolve(jsonResponse({}))
       }),
     )
 

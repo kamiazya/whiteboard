@@ -19,6 +19,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: (_props: { canvas: SpatialCanvas }) => (
@@ -69,7 +70,7 @@ afterEach(() => {
 it('opens the rail from the document actions row, without the opener overlaying the editor surface', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response('{}', { status: 404 })),
+    vi.fn(async () => jsonResponse({}, 404)),
   )
 
   renderPage(

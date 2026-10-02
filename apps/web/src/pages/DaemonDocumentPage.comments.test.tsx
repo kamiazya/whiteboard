@@ -91,7 +91,7 @@ describe('DaemonDocumentPage comments rail', () => {
         if (url.includes('/names')) {
           return jsonResponse({ documents: { board: 'Board' }, pinned: [] })
         }
-        return new Response('{}', { status: 404 })
+        return jsonResponse({}, 404)
       }),
     )
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })

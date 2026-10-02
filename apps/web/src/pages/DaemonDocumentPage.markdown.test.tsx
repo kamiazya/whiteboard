@@ -72,7 +72,7 @@ function stubNames(names: { documents: Record<string, string>; pinned: string[] 
       if (url.includes('/names')) {
         return jsonResponse(names)
       }
-      return new Response('{}', { status: 404 })
+      return jsonResponse({}, 404)
     }),
   )
 }

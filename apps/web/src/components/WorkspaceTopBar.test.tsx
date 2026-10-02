@@ -34,7 +34,7 @@ function renderBar(overrides?: { onNavigateBack?: () => void }) {
 beforeEach(() => {
   vi.mocked(apiFetch).mockImplementation(async (url) => {
     if (String(url).includes('/names')) return mkNamesOk()
-    return new Response('{}', { status: 200 })
+    return jsonResponse({})
   })
 })
 
@@ -69,7 +69,7 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
       const u = String(url)
       if (u.includes('/workspaces/ws_a/names')) return pendingA
       if (u.includes('/workspaces/ws_b/names')) return pendingB
-      return new Response('{}', { status: 200 })
+      return jsonResponse({})
     })
 
     const baseProps = {
@@ -113,7 +113,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
   it('with a DaemonApiContext provider mounted, loads names through the injected daemon fetch instead of apiFetch', async () => {
     const daemonFetch = vi.fn(async (url: string | URL | Request) => {
       if (String(url).includes('/names')) return mkNamesOk()
-      return new Response('{}', { status: 200 })
+      return jsonResponse({})
     })
 
     render(
@@ -142,7 +142,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
   }) {
     const daemonFetch = vi.fn(async (url: string | URL | Request) => {
       if (String(url).includes('/names')) return mkNamesOk()
-      return new Response('{}', { status: 200 })
+      return jsonResponse({})
     })
 
     render(
