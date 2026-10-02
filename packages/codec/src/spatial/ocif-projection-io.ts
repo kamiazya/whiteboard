@@ -15,6 +15,7 @@ import {
   nodeText,
   nodeUrl,
   RESOURCE_KINDS,
+  spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
 import { type CodecParseResult, codecFailure, codecSuccess } from '../errors.js'
 import {
@@ -637,5 +638,16 @@ export function parseOcif(text: string): CodecParseResult<SpatialCanvas> {
   if (!parsed.success) {
     return codecFailure('ocif-schema', 'OCIF document failed schema validation', parsed.error)
   }
-  return codecSuccess(fromOcif(parsed.data))
+  // The lift casts where the wire schema is loose, so what it builds is only
+  // as good as the document it read. The model is the judge of what a canvas
+  // may hold, the way the JSON Canvas reader's schema is of its own.
+  const lifted = spatialCanvasSchema.safeParse(fromOcif(parsed.data))
+  if (!lifted.success) {
+    return codecFailure(
+      'ocif-schema',
+      'OCIF document lifts to a canvas this model does not accept',
+      lifted.error,
+    )
+  }
+  return codecSuccess(lifted.data)
 }
