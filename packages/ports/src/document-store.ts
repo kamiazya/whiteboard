@@ -65,7 +65,7 @@ export type SaveSnapshotInput = z.infer<typeof saveSnapshotInputSchema>
  * compares it for equality and never does arithmetic on it, so a store is
  * free to implement it as a counter, a row version, or a clock.
  */
-export const snapshotGenerationSchema = z.number().int().min(0)
+const snapshotGenerationSchema = z.number().int().min(0)
 export type SnapshotGeneration = z.infer<typeof snapshotGenerationSchema>
 
 /**
@@ -79,7 +79,7 @@ export type SnapshotGeneration = z.infer<typeof snapshotGenerationSchema>
  * not exist when the caller folded. Naming how many were superseded lets the
  * store drop exactly those and keep the rest.
  */
-export const saveCompactedSnapshotInputSchema = saveSnapshotInputSchema.safeExtend({
+const saveCompactedSnapshotInputSchema = saveSnapshotInputSchema.safeExtend({
   supersededDeltaCount: z.number().int().min(0),
   /**
    * The generation this fold was computed against, or `null` to mean "there
@@ -101,7 +101,7 @@ export type SaveCompactedSnapshotInput = z.infer<typeof saveCompactedSnapshotInp
  * instead. Throwing would push a routine control-flow branch through a catch,
  * where it reads as a failure worth logging.
  */
-export const saveCompactedSnapshotResultSchema = z.discriminatedUnion('ok', [
+const saveCompactedSnapshotResultSchema = z.discriminatedUnion('ok', [
   z.object({ ok: z.literal(true), generation: snapshotGenerationSchema }).strict(),
   z
     .object({ ok: z.literal(false), currentGeneration: snapshotGenerationSchema.nullable() })
@@ -127,7 +127,7 @@ export type AppendDeltasResult = z.infer<typeof appendDeltasResultSchema>
  * store already assigns to order the log costs it nothing, and CRDT updates
  * are idempotent, so a cursor that over-delivers is slower rather than wrong.
  */
-export const deltaSeqSchema = z.number().int().min(0)
+const deltaSeqSchema = z.number().int().min(0)
 export type DeltaSeq = z.infer<typeof deltaSeqSchema>
 
 export const loadDeltasInputSchema = z
@@ -170,16 +170,16 @@ export type ReadFrontierInput = z.infer<typeof readFrontierInputSchema>
 export const readFrontierResultSchema = z.object({ frontier: frontierSchema }).strict().nullable()
 export type ReadFrontierResult = z.infer<typeof readFrontierResultSchema>
 
-export const readSnapshotManifestInputSchema = z.object({ docRef: docRefSchema }).strict()
+const readSnapshotManifestInputSchema = z.object({ docRef: docRefSchema }).strict()
 export type ReadSnapshotManifestInput = z.infer<typeof readSnapshotManifestInputSchema>
 
-export const readSnapshotManifestResultSchema = z
+const readSnapshotManifestResultSchema = z
   .object({ manifest: snapshotManifestSchema, generation: snapshotGenerationSchema })
   .strict()
   .nullable()
 export type ReadSnapshotManifestResult = z.infer<typeof readSnapshotManifestResultSchema>
 
-export const deleteDocInputSchema = z.object({ docRef: docRefSchema }).strict()
+const deleteDocInputSchema = z.object({ docRef: docRefSchema }).strict()
 export type DeleteDocInput = z.infer<typeof deleteDocInputSchema>
 
 /**

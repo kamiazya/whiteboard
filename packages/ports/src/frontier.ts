@@ -14,5 +14,3 @@ export type Frontier = z.infer<typeof frontierSchema>
 
 /** Sync-protocol version numbers are positive integers, e.g. 1, 2, 3. */
 export const protocolVersionSchema = z.number().int().min(1)
-
-export type ProtocolVersion = z.infer<typeof protocolVersionSchema>

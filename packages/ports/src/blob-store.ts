@@ -15,7 +15,7 @@ export const blobRefSchema = z
 
 export type BlobRef = z.infer<typeof blobRefSchema>
 
-export const blobPutInputSchema = z
+const blobPutInputSchema = z
   .object({
     bytes: z.instanceof(Uint8Array),
     contentType: z.string().min(1).optional(),
@@ -23,13 +23,13 @@ export const blobPutInputSchema = z
   .strict()
 export type BlobPutInput = z.infer<typeof blobPutInputSchema>
 
-export const blobPutResultSchema = z.object({ ref: blobRefSchema }).strict()
+const blobPutResultSchema = z.object({ ref: blobRefSchema }).strict()
 export type BlobPutResult = z.infer<typeof blobPutResultSchema>
 
-export const blobGetInputSchema = z.object({ ref: blobRefSchema }).strict()
+const blobGetInputSchema = z.object({ ref: blobRefSchema }).strict()
 export type BlobGetInput = z.infer<typeof blobGetInputSchema>
 
-export const blobGetResultSchema = z
+const blobGetResultSchema = z
   .object({
     bytes: z.instanceof(Uint8Array),
     contentType: z.string().min(1).optional(),
@@ -38,13 +38,13 @@ export const blobGetResultSchema = z
   .nullable()
 export type BlobGetResult = z.infer<typeof blobGetResultSchema>
 
-export const blobHasInputSchema = z.object({ ref: blobRefSchema }).strict()
+const blobHasInputSchema = z.object({ ref: blobRefSchema }).strict()
 export type BlobHasInput = z.infer<typeof blobHasInputSchema>
 
-export const blobHasResultSchema = z.object({ exists: z.boolean() }).strict()
+const blobHasResultSchema = z.object({ exists: z.boolean() }).strict()
 export type BlobHasResult = z.infer<typeof blobHasResultSchema>
 
-export const blobDeleteInputSchema = z.object({ ref: blobRefSchema }).strict()
+const blobDeleteInputSchema = z.object({ ref: blobRefSchema }).strict()
 export type BlobDeleteInput = z.infer<typeof blobDeleteInputSchema>
 
 /**

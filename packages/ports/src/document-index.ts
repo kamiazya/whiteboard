@@ -173,25 +173,25 @@ export const renameWorkspaceInputSchema = z
   .strict()
 export type RenameWorkspaceInput = z.infer<typeof renameWorkspaceInputSchema>
 
-export const resolveDocumentByIdInputSchema = z
+const resolveDocumentByIdInputSchema = z
   .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
 export type ResolveDocumentByIdInput = z.infer<typeof resolveDocumentByIdInputSchema>
 
-export const resolveDocumentInputSchema = z
+const resolveDocumentInputSchema = z
   .object({ workspaceId: workspaceIdSchema, path: documentPathSchema })
   .strict()
 export type ResolveDocumentInput = z.infer<typeof resolveDocumentInputSchema>
 
-export const listDocumentsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
+const listDocumentsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
 export type ListDocumentsInput = z.infer<typeof listDocumentsInputSchema>
 
-export const moveDocumentInputSchema = z
+const moveDocumentInputSchema = z
   .object({ workspaceId: workspaceIdSchema, from: documentPathSchema, to: documentPathSchema })
   .strict()
 export type MoveDocumentInput = z.infer<typeof moveDocumentInputSchema>
 
-export const setDocumentNameInputSchema = z
+const setDocumentNameInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
@@ -200,7 +200,7 @@ export const setDocumentNameInputSchema = z
   .strict()
 export type SetDocumentNameInput = z.infer<typeof setDocumentNameInputSchema>
 
-export const deleteDocumentInputSchema = z
+const deleteDocumentInputSchema = z
   .object({ workspaceId: workspaceIdSchema, path: documentPathSchema })
   .strict()
 export type DeleteDocumentInput = z.infer<typeof deleteDocumentInputSchema>
