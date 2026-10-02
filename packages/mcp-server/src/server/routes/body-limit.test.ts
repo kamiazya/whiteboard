@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../../shared/test-utils/strip-comments.js'
 import {
   CONTENT_BODY_LIMIT_BYTES,
   EXPORT_OPTIONS_BODY_LIMIT_BYTES,
@@ -63,10 +64,7 @@ describe('CONTENT_BODY_LIMIT_BYTES', () => {
     const offenders: string[] = []
     for (const entry of sources) {
       if (entry === 'body-limit.ts') continue
-      const code = (await readFile(join(import.meta.dirname, entry), 'utf8')).replace(
-        /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
-        '',
-      )
+      const code = stripComments(await readFile(join(import.meta.dirname, entry), 'utf8'))
       if (spelling.test(code)) offenders.push(entry)
     }
     expect(offenders).toEqual([])

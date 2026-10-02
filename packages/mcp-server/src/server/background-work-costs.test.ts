@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../shared/test-utils/strip-comments.js'
 import { LOOP_COSTS, stallCeilingMs } from './background-work-costs.js'
 
 const SERVER_SRC = fileURLToPath(new URL('.', import.meta.url))
@@ -117,7 +118,7 @@ describe('every declared stall ceiling is asserted by a test', () => {
     for (const root of COMPOSITION_ROOTS) {
       const source = await readFile(join(SERVER_SRC, root), 'utf8')
       // Comments first: these files discuss `loop:` and the registry in prose.
-      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      const code = stripComments(source)
 
       const declarations = [...code.matchAll(/name: '([^']+)',[\s\S]*?loop: ([^,\n]+)/g)]
       found += declarations.length

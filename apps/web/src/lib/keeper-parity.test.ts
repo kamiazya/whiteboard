@@ -37,6 +37,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { assertScannedLedger } from '../test-utils/coverage-ledger.js'
+import { stripComments } from '../test-utils/strip-comments.js'
 
 type KeeperReach =
   /**
@@ -308,7 +309,7 @@ function reachesDaemon(text: string): boolean {
  * only MENTIONS the daemon teaches people to write an entry to shut it up.
  */
 function code(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+  return stripComments(text)
 }
 
 function daemonReachingModules(): string[] {

@@ -84,34 +84,23 @@ describe('the two dependency-free copies are one definition', () => {
 const BLOCK_COMMENT_REGEX = String.raw`\/\*[\s\S]*?\*\/`
 
 /**
- * Scans that still strip with a regex, each of which reads only its own tree
- * and had not been moved to the helper when the others were. Shrink-only: an
- * entry that no longer carries the regex must be deleted, and a new
- * file must use the helper.
+ * Scans that still strip with a regex. Shrink-only, and EMPTY: the last eight
+ * copies were moved to the helpers in one pass, so a new file must use a
+ * helper rather than earn an entry here.
  */
-const REGEX_STRIPPERS: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/keeper-parity.test.ts': 'a scan of its own source tree',
-  'apps/web/src/lib/promote-workspace.keeper-agnostic.test.ts': 'a scan of its own source tree',
-  'apps/web/src/pages/document-menu-parity.test.ts': 'a scan of its own source tree',
-  'packages/mcp-server/src/server/background-work-costs.test.ts': 'a scan of its own source tree',
-  'packages/mcp-server/src/server/composition-roots.guard.test.ts': 'a scan of its own source tree',
-  'packages/mcp-server/src/server/release/web-api-paths-mounted.test.ts':
-    'a scan of its own source tree',
-  'packages/mcp-server/src/server/routes/body-limit.test.ts': 'a scan of its own source tree',
-  'tools/arch-lint/src/selection-surface.test.ts': 'a scan of its own source tree',
-}
+const REGEX_STRIPPERS: Readonly<Record<string, string>> = {}
 
 describe('no scan strips comments with a regex of its own', () => {
-  const holders = sourceFiles()
+  const scanned = sourceFiles()
     .map((path) => relativeToRepo(path))
     .filter((rel) => rel !== relativeToRepo(import.meta.filename))
-    .filter((rel) => read(rel).includes(BLOCK_COMMENT_REGEX))
+  const holders = scanned.filter((rel) => read(rel).includes(BLOCK_COMMENT_REGEX))
 
   it('is looking at the tree', () => {
-    expect(
-      holders.length,
-      'a scan that finds none has stopped reaching the files that held it',
-    ).toBeGreaterThan(0)
+    // With nothing left to find, the premise is held from the other side: the
+    // walk still reaches both helper copies, and the probe still matches.
+    expect(scanned).toEqual(expect.arrayContaining([WEB_COPY, MCP_COPY]))
+    expect(`s.replace(/${BLOCK_COMMENT_REGEX}/g, '')`.includes(BLOCK_COMMENT_REGEX)).toBe(true)
   })
 
   it('finds the regex nowhere outside the ledger', () => {

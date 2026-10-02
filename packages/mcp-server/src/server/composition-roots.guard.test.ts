@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../shared/test-utils/strip-comments.js'
 
 /**
  * What every composition root has to do the same way, held structurally so a
@@ -52,9 +53,6 @@ import { describe, expect, it } from 'vitest'
  * rather than from a list, so a third one is checked the day it appears.
  */
 const SERVER_DIR = fileURLToPath(new URL('.', import.meta.url))
-
-const stripComments = (source: string): string =>
-  source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 
 type RootKind = 'http' | 'stdio'
 
