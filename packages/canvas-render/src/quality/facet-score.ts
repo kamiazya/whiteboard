@@ -41,6 +41,7 @@ import {
   resolveNodeStencil,
   VISUAL_AXES_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
+import { contains, rectOf } from './rect.js'
 
 export interface FacetScore {
   /**
@@ -252,14 +253,6 @@ function treatmentOf(node: SpatialNode): Treatment {
 
 const channelsApart = (a: Treatment, b: Treatment): number =>
   (a.colour === b.colour ? 0 : 1) + (a.shape === b.shape ? 0 : 1)
-
-type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
-const rectOf = (n: SpatialNode): Rect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
-const contains = (outer: Rect, inner: Rect): boolean =>
-  inner.x >= outer.x &&
-  inner.y >= outer.y &&
-  inner.x + inner.w <= outer.x + outer.w &&
-  inner.y + inner.h <= outer.y + outer.h
 
 /**
  * A partition is a map from a box's id to the class it is in. Only one with
