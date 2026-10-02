@@ -25,6 +25,7 @@ import {
 import { daemonRunReadyResultSchema } from '../shared/api-contracts/daemon-run.js'
 import { daemonStatusResultSchema } from '../shared/api-contracts/daemon-status.js'
 import { daemonStopResultSchema } from '../shared/api-contracts/daemon-stop.js'
+import { searchFetchModelOutputSchema } from '../shared/api-contracts/search-fetch-model.js'
 import { serverStatusResultSchema } from '../shared/api-contracts/server-status.js'
 import { serverStopResultSchema } from '../shared/api-contracts/server-stop.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
@@ -42,7 +43,6 @@ import { runDaemonStop } from './daemon-stop.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
 import {
   operatorJsonLine,
-  searchFetchModelOutputSchema,
   serverRestoreOutputSchema,
   serverRunDryRunOutputSchema,
   serverRunReadyOutputSchema,

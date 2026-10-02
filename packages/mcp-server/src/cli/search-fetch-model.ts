@@ -8,7 +8,6 @@
 // silently not engaged.
 
 import { messageOf } from '@kamiazya/whiteboard-model'
-import type { z } from 'zod'
 import {
   classifyEmbedderLoadFailure,
   DEFAULT_MODEL,
@@ -16,8 +15,9 @@ import {
   EMBEDDING_DIMENSIONS,
   loadEmbeddingPipeline,
 } from '../server/search/transformers-embedder.js'
+import type { SearchFetchModelOutput } from '../shared/api-contracts/search-fetch-model.js'
 import { redactDiagnosticText } from '../shared/diagnostics/redact.js'
-import { OPERATOR_JSON_SCHEMA_VERSION, type searchFetchModelOutputSchema } from './operator-json.js'
+import { OPERATOR_JSON_SCHEMA_VERSION } from './operator-json.js'
 
 export interface SearchFetchModelOptions {
   /** Where weights are written. The daemon reads the same directory. */
@@ -32,7 +32,7 @@ export interface SearchFetchModelOptions {
   model?: string
 }
 
-export type SearchFetchModelResult = z.infer<typeof searchFetchModelOutputSchema>
+export type SearchFetchModelResult = SearchFetchModelOutput
 
 const UNEXPECTED_DIMENSIONS_REMEDY =
   'the model loaded but produced vectors of the wrong width — the cache may be from a different model; delete it and re-run'

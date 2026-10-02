@@ -177,16 +177,13 @@ const FILES: readonly SourceFile[] = walk(SRC, {
  * where its importers can reach it.
  */
 const UPWARD_EDGES: Readonly<Record<string, string>> = {
-  'server/mcp/tarball.distribution-impl.ts -> cli/operator-json.ts':
-    'distribution-smoke support filed under the adapter tree reaches the CLI JSON sink; moving ' +
-    'the smoke impls beside the smokes retires it',
   'server/security/membership-gate.ts -> server/workspace-handle.ts':
     'the gate resolves an address through the adapter helper `workspace-handle.ts`; handing it the ' +
     'resolved workspace, as `createApp` hands routes everything else, retires it',
 }
 
 /** How many entries {@link UPWARD_EDGES} may hold — pinned by equality, a ratchet and not a budget. */
-const UPWARD_EDGES_CEILING = 2
+const UPWARD_EDGES_CEILING = 1
 
 describe('what counts as an upward edge', () => {
   const edgesOf = (files: Record<string, string>): string[] =>

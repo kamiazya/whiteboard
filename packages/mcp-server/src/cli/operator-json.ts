@@ -145,42 +145,6 @@ export const daemonSupportBundleOutputSchema = z
   })
   .strict()
 
-const searchFetchModelTarget = {
-  schemaVersion,
-  cacheDir: z.string(),
-  model: z.string(),
-  dtype: z.enum(['q8', 'fp32']),
-}
-
-export const searchFetchModelOutputSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      ...searchFetchModelTarget,
-      kind: z.literal('ok'),
-      ok: z.literal(true),
-      dimensions: z.number().int(),
-      elapsedMs: z.number(),
-    })
-    .strict(),
-  z
-    .object({
-      ...searchFetchModelTarget,
-      kind: z.literal('failed'),
-      ok: z.literal(false),
-      failure: z.enum([
-        'runtime-missing',
-        'weights-missing',
-        'load-failed',
-        'unexpected-dimensions',
-      ]),
-      remedy: z.string(),
-      // The underlying message, redacted, when there is something to say
-      // beyond the remedy.
-      detail: z.string().optional(),
-    })
-    .strict(),
-])
-
 /** What a command computes before it stamps the version on. */
 export type WithoutSchemaVersion<T> = T extends unknown ? Omit<T, 'schemaVersion'> : never
 
