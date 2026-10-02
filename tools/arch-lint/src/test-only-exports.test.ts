@@ -32,52 +32,7 @@ import { findTestOnlyExports, isTestFile, type ScannedFile } from './test-only-e
 
 /** Dead outright: not even used inside their own file, only by a test. */
 const NO_USE_BESIDE_TESTS: readonly string[] = [
-  'apps/web/src/components/spatial-editor/gesture-trace.ts#replayNavigation',
-  'apps/web/src/components/spatial-editor/navigation.ts#NAVIGATION_MEMORY_KEYS',
-  'apps/web/src/components/ui/dock-button.ts#dockControlSizesPx',
-  'apps/web/src/components/ui/header-button.ts#headerControlSizesPx',
-  'apps/web/src/lib/document-file-store.ts#dataUrlToBlob',
-  'apps/web/src/lib/local-document-summary.ts#InMemoryDefaultDocumentPointer',
-  'apps/web/src/lib/png-embed.ts#extractTextFromPng',
-  'apps/web/src/lib/provider.ts#resolveProviderStateFromRaw',
-  'apps/web/src/lib/render-store.ts#clearRenderStore',
-  'apps/web/src/lib/render-surfaces.ts#RENDER_SURFACES',
   'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract',
-  'apps/web/src/runtime-config.ts#EMPTY_RUNTIME_CONFIG',
-  'packages/daemon-client/src/replica-session-key.ts#forgetAll',
-  'packages/facet-engine/src/theme-tokens.ts#SAMPLE_THEME_TOKENS',
-  'packages/facet-ui/src/plugin-ui.ts#createFacetWriter',
-  'packages/loro-adapter/src/loro-bridge.ts#deleteCanvasComment',
-  'packages/loro-adapter/src/loro-bridge.ts#deleteSpatialEdge',
-  'packages/loro-adapter/src/mergeable-containers.ts#openMergeableText',
-  'packages/loro-adapter/src/workspace-tree.ts#createWorkspaceDocument',
-  'packages/loro-adapter/src/workspace-tree.ts#deleteWorkspaceDocument',
-  'packages/loro-adapter/src/workspace-tree.ts#moveWorkspaceDocument',
-  'packages/mcp-server/src/server/backup-restore.ts#NEVER_COPIED_FOR_TESTS',
-  'packages/mcp-server/src/server/current-workspace.ts#clearWorkspaceIdCache',
-  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#ALL_REGISTERED_TOOLS',
-  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#COVERED_TOOLS',
-  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#DEFERRED_TOOLS',
-  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#UI_LINKED_TOOLS',
-  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#UNIT_ONLY_TOOLS',
-  'packages/mcp-server/src/server/observability/tracing.ts#MCP_ATTR',
-  'packages/mcp-server/src/server/observability/tracing.ts#resetTracingForTesting',
-  'packages/mcp-server/src/server/release/sbom-artifact-state.ts#SBOM_ARTIFACT_REL_PATH',
-  'packages/mcp-server/src/server/release/sbom-artifact-state.ts#evaluateSbomArtifactState',
-  'packages/mcp-server/src/server/security/member-profile-store.ts#passkeyBinding',
-  'packages/mcp-server/src/server/store/auto-checkpoint.ts#uninstallAutoCheckpoint',
-  'packages/mcp-server/src/server/store/auto-version.ts#AUTO_VERSION_CEILING_MS',
-  'packages/mcp-server/src/server/store/auto-version.ts#AUTO_VERSION_QUIET_MS',
-  'packages/mcp-server/src/server/store/backup-retention.ts#snapshotIsRestorable',
-  'packages/mcp-server/src/server/store/db/index.ts#clearDbCache',
-  'packages/mcp-server/src/server/store/db/schema-ledger.ts#SqlType',
-  'packages/mcp-server/src/server/store/doc-cache.ts#clearCache',
-  'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts#InMemoryBlobStore',
-  'packages/plugin-visual/src/emoji/catalog-data.ts#EMOJI_VERSION',
-  'packages/plugin-visual/src/emoji/catalog-ja.ts#EMOJI_JA_TAG',
-  'packages/ports/src/delta.ts#DeltaBatch',
-  'packages/ports/src/frontier.ts#protocolVersionSchema',
-  'packages/server-core/src/tools/errors.ts#PatchValidationError',
 ]
 
 /** Exported so a test can reach an internal: used in their own file, and by a test. */
@@ -435,6 +390,14 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'apps/web/src/components/spatial-editor/gesture-trace.ts#replayNavigation':
+    'the replay fold that is the reason the flight recorder stores whole events, proven by gesture-trace.test.ts reproducing a recorded run',
+  'apps/web/src/components/spatial-editor/navigation.ts#NAVIGATION_MEMORY_KEYS':
+    'the declared set of fields allowed to outlive a gesture, over which the idle invariant is stated for the whole state type',
+  'apps/web/src/lib/png-embed.ts#extractTextFromPng':
+    'the reading half of the PNG-embedded document format, the only way the export tests can prove a shared PNG carries its document',
+  'apps/web/src/lib/render-surfaces.ts#RENDER_SURFACES':
+    'the render-surface ledger to review against, whose reasons and kind coverage render-surfaces.test.ts holds',
   'packages/canvas-render/src/quality/drawing-score.ts#FRAME_CLEARANCE_FLOOR_PX':
     'part of the `scoring` subpath’s published surface, whose name list scoring-subpath.test.ts pins',
   'packages/codec/src/markdown/normalize.ts#normalizeMdast':
@@ -451,20 +414,50 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'generates the published JSON Canvas loss table that loss-table.test.ts holds equal to the committed docs page',
   'packages/codec/src/spatial/loss-table.ts#ocifLossTable':
     'generates the published OCIF loss table that loss-table.test.ts holds equal to the committed docs page',
+  'packages/history/src/checkpoints/scheduler.ts#CHECKPOINT_QUIET_MS':
+    'the shared checkpoint cadence that keeper tests advance fake timers by, so a retune cannot leave them stale',
+  'packages/loro-adapter/src/loro-bridge.ts#deleteCanvasComment':
+    'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
+  'packages/loro-adapter/src/loro-bridge.ts#deleteSpatialEdge':
+    'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
+  'packages/loro-adapter/src/workspace-tree.ts#createWorkspaceDocument':
+    'the tree raw create operation the concurrent convergence property drives, while production reaches the tree by path',
+  'packages/loro-adapter/src/workspace-tree.ts#deleteWorkspaceDocument':
+    'the tree raw delete operation the concurrent convergence property drives, while production reaches the tree by path',
+  'packages/loro-adapter/src/workspace-tree.ts#moveWorkspaceDocument':
+    'the tree raw move operation the concurrent convergence property drives, while production reaches the tree by path',
+  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#ALL_REGISTERED_TOOLS':
+    'the authoritative registered-tool ledger the smoke checkpoint and the naming and structured-content guards hold to reality',
+  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#COVERED_TOOLS':
+    'a category of the smoke-coverage ledger that the partition property and the smoke parity guard read',
+  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#DEFERRED_TOOLS':
+    'a category of the smoke-coverage ledger that the partition property and the smoke parity guard read',
+  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#UI_LINKED_TOOLS':
+    'a category of the smoke-coverage ledger that the partition property and the smoke parity guard read',
+  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#UNIT_ONLY_TOOLS':
+    'a category of the smoke-coverage ledger that the partition property and the smoke parity guard read',
+  'packages/mcp-server/src/server/release/sbom-artifact-state.ts#evaluateSbomArtifactState':
+    'the staleness judgement the SBOM policy guard makes before its content checks, pure so the pre-push gate stays cheap',
   'packages/mcp-server/src/server/security/macaroon.ts#attenuateMacaroon':
     'the other half of that core: attenuation by arithmetic is the property the file exists for',
   'packages/mcp-server/src/server/security/macaroon.ts#mintMacaroon':
     'the tested core of the ADR-0043 act-plane token, kept until a surface mints one',
+  'packages/mcp-server/src/server/security/member-profile-store.ts#passkeyBinding':
+    'the encoder paired with the passkey subject decoder in the same file, so the subject format lives in one place',
   'packages/mcp-server/src/server/security/route-scope-registry.ts#API_ROUTE_RULE_NAMES':
     'the rule names the shadowing walk and the partition test are asserted over, kept beside the rules',
   'packages/mcp-server/src/server/security/route-scope-registry.ts#GATED_RULE_NAMES':
     'the other half of the membership-gate partition, asserted by route-scope-registry.test.ts against the origin-trusted list',
   'packages/mcp-server/src/server/store/backup-retention.ts#sealableSnapshots':
     'no production caller on purpose: it presumes a mirror running behind the snapshot (see ADR-0021 status note), kept correct by its property test',
+  'packages/mcp-server/src/server/store/backup-retention.ts#snapshotIsRestorable':
+    'the restorability invariant the retention property tests assert, written once beside the functions it holds to account',
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#LEDGER':
     'the schema the migrations are held to, read by the schema-ledger test',
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#NULLABLE_IN_DATABASE':
     'deliberate NOT-NULL gaps, each with its reason and checked from the other side by the schema-ledger test',
+  'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts#InMemoryBlobStore':
+    'the in-memory BlobStore double, the differential oracle for the fs blob store; no-production-wiring.test.ts keeps it out of production',
   'packages/model/src/facets.ts#CoreFacets':
     'the published type of coreFacetsSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
   'packages/model/src/facets.ts#FacetsRaw':
@@ -484,7 +477,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the two debt lists hold, pinned by equality. */
-const DEBT_CEILING = 395
+const DEBT_CEILING = 350
 
 const DIRS = [
   'apps',
@@ -573,9 +566,10 @@ describe('what counts as an export only a test uses, on fixture files', () => {
   it('leaves out names built to be test-only, and the files of the repo-policing tools', () => {
     expect(
       found({
-        [lib]: 'export const resetForTests = 1\nexport const _internal = 2\n',
+        [lib]:
+          'export const resetForTests = 1\nexport const _internal = 2\nexport const SKIPPED_FOR_TESTS = 3\n',
         'tools/arch-lint/src/x.ts': 'export const policed = 1\n',
-        'packages/a/src/lib.test.ts': 'resetForTests; _internal; policed\n',
+        'packages/a/src/lib.test.ts': 'resetForTests; _internal; policed; SKIPPED_FOR_TESTS\n',
       }),
     ).toEqual([])
   })

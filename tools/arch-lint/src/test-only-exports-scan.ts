@@ -129,7 +129,7 @@ export function findTestOnlyExports(files: readonly ScannedFile[]): TestOnlyExpo
     for (const def of exportsOf(path, source)) defs.push({ ...def, counts })
   }
   return defs
-    .filter(({ name }) => !name.endsWith('ForTests') && !name.startsWith('_'))
+    .filter(({ name }) => !/(ForTests|_FOR_TESTS)$/.test(name) && !name.startsWith('_'))
     .filter(({ name, path }) => {
       const holders = production.get(name)
       const usedElsewhere = holders !== undefined && [...holders].some((holder) => holder !== path)
