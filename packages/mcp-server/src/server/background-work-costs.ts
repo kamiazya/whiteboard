@@ -87,7 +87,8 @@ export const LOOP_COSTS = {
     stallCeilingMs: 800,
     fixture:
       'asserted by auto-compact-loop-availability.test.ts, which rewrites one document 100 ' +
-      'times behind a version floor and reads 34-200ms there, in ONE unbroken stall. It ' +
+      'times behind a version floor (doubling, to 400 at most, on a machine that folds that ' +
+      'in under 30ms) and reads 34-200ms there, in ONE unbroken stall. It ' +
       "tracks the record's history rather than how many documents there are — by hand, " +
       'median of three: 400 rewrites 425ms (281-660), 1000 rewrites 840ms (705-2080). A ' +
       'workspace with that much history behind its earliest version is the case this ' +

@@ -79,8 +79,16 @@ async function seedWorkspace(
 /** Ten sampler intervals of work, at least. */
 const MIN_PASS_MS = 30
 
-/** Rewrites of one document behind the version floor; the stall tracks the record's history. */
+/**
+ * Rewrites of one document behind the version floor; the stall tracks the
+ * record's history. The fixture starts here and DOUBLES until a pass is long
+ * enough for the sampler to say something, because a fixed count is a
+ * threshold on the machine rather than on the code: a runner fast enough to
+ * fold 100 rewrites in 28ms reads as the guard never reaching its subject.
+ * The cap is still well under the ceiling (400 rewrites read 425ms by hand).
+ */
 const EDITS = 100
+const MAX_EDITS = 400
 
 /** Readings per fixture, ODD so the median is the middle element. */
 const READINGS = 3
@@ -107,16 +115,22 @@ describe('what an auto-compaction costs the loop that is serving requests', () =
     // that has been running for a day charges its loop.
     await readAt(store, 10, 1)
 
-    const readings = await readAt(store, EDITS, READINGS)
+    let edits = EDITS
+    let readings = await readAt(store, edits, READINGS)
+    while (median(readings, (r) => r.elapsedMs) < MIN_PASS_MS && edits < MAX_EDITS) {
+      edits *= 2
+      readings = await readAt(store, edits, READINGS)
+    }
 
     const stalls = readings.map((r) => r.worstStallMs).sort((a, b) => a - b)
-    const detail = `${EDITS} edits, stalls ${stalls.join('/')}ms`
+    const detail = `${edits} edits, stalls ${stalls.join('/')}ms`
     process.stdout.write(`auto-compact: ${detail}\n`)
 
     // The fixture is long enough for the sampler to say something: a pass of a
     // couple of intervals would report a tiny stall whether or not it held the
     // loop, and a guard that never reaches its subject reads like one that
-    // checked.
+    // checked. The growth loop above is what makes this hold on a fast
+    // machine; here it fails only when the cap itself is too small.
     expect(
       median(readings, (r) => r.elapsedMs),
       detail,
