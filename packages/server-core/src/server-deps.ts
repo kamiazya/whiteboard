@@ -25,7 +25,7 @@ export interface SceneTextMeasurer {
  *
  * Deliberately carries no operator identity: server-core does not know who
  * the daemon is, and inventing an actor here would put a second source of
- * truth beside the one `ws-messages.ts` already has. The implementation
+ * truth beside the one `ws-messages.ts` (the sync text-message vocabulary) already has. The implementation
  * fills it in.
  */
 export interface AgentActivity {
@@ -240,8 +240,8 @@ export interface ServerDeps {
   /**
    * The workspace-granularity half of the live-document surface: ONE Loro
    * doc per workspace holding the tree and every document's content plane.
-   * The axis the restore increment named and deferred; ws.ts's migration
-   * (the last scheduled adapter) reuses it.
+   * The axis the restore increment named and deferred; the SSE sync routes
+   * read it.
    *
    * Deliberately has NO lock method: the workspace write lock is
    * `liveDocuments.withWriteLock`, and it is the SAME lock — a second

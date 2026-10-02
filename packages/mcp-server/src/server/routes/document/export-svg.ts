@@ -73,8 +73,8 @@ async function resolveSvgOutputPath(
 // Unlike PNG export, this always renders headless straight from the
 // persisted LoroDoc — unlike export.ts (PNG, which prefers the browser). SVG
 // requests are typically automation / doc-generation use cases, not "match
-// what's on the connected browser's screen right now", so there is no WS
-// round-trip and no browser-connection requirement to plumb through.
+// what's on the connected browser's screen right now", so there is no
+// browser round-trip and no browser-connection requirement to plumb through.
 /**
  * The SVG route's `exists`, like the PNG route's in `routes/export.ts`, is asked of the LiveDocuments seam rather than the store
  * (ADR-0018: an adapter translates, it does not reach a mechanic). The

@@ -3,12 +3,12 @@
  *
  * ADR-0019 splits one string into three layers, two of which — the canonical
  * id and the per-keeper `segment` — can both arrive in the same position of a
- * URL, a WS target, or an MCP tool argument. `resolveWorkspaceHandle` in ports
+ * URL, a sync-stream target, or an MCP tool argument. `resolveWorkspaceHandle` in ports
  * fixes which wins; this file is where that decision is APPLIED, once, at the
  * request boundary.
  *
  * Once is the load-bearing word. Everything downstream keys on the resolved
- * id — workspace write locks, document caches, WS and SSE `docKey`s — and two
+ * id — workspace write locks, document caches, sync-stream `docKey`s — and two
  * of those resolving independently is how one request ends up holding a lock
  * under one spelling while writing under another.
  */

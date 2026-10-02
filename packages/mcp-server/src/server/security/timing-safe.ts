@@ -1,6 +1,6 @@
 // Shared timing-safe string comparison for every credential comparison in
-// the server (Bearer daemon token over HTTP in auth.ts, daemon token over
-// the WS Sec-WebSocket-Protocol subprotocol in ws-auth.ts). A naive `===`
+// the server (the bearer daemon token in bearer-token.ts, a macaroon's
+// signature in macaroon.ts). A naive `===`
 // or `!==` leaks, through response timing, how many leading bytes of a
 // guessed credential matched the real one — irrelevant for a single
 // request, but a real distinguisher across many requests from an attacker

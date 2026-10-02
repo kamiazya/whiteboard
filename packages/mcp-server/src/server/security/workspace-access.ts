@@ -10,7 +10,7 @@
  * migration.
  *
  * Every membership-gated surface (replica-key today; the route-scope-
- * registry gate, SSE and the WS upgrade later) calls this rather than
+ * registry gate and the SSE sync routes later) calls this rather than
  * keeping its own copy. When membership was consulted by replica-key.ts
  * alone, an L1 revoke killed a removed person's bound SESSIONS but left
  * their browser's origin-only pairing token able to read and write every

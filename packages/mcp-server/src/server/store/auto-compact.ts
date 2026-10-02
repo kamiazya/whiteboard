@@ -156,7 +156,7 @@ export function scheduleAutoCompact(
     announceAutoCompactStateChange()
   }, options.debounceMs ?? AUTO_COMPACT_DEBOUNCE_MS)
   // Do not keep the event loop alive just for this debounce. Node will
-  // still flush the compaction if anything else (HTTP, WS) holds the
+  // still flush the compaction if anything else (HTTP, SSE) holds the
   // loop open; in tests we explicitly wait for the timeout.
   if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
     timer.unref()

@@ -107,7 +107,7 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     to: string
   }): Promise<void> {
     // Under the workspace write lock, like the retired SQL index's move: the
-    // route flows (WS updates, live-doc saves) load-and-save inside this
+    // route flows (sync updates, live-doc saves) load-and-save inside this
     // lock, so a move outside it can land between an update's stalled read
     // and its write — the update then lazily recreates the source path and a
     // phantom duplicate survives the rename.

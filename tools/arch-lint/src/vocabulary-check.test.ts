@@ -11,7 +11,7 @@
  * and the JSON Canvas format; only its use as the CONTAINER noun is wrong,
  * and telling those apart needs a reader.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
@@ -45,6 +45,50 @@ const SCAN_DIRS = [
   'packages/server-core/src',
   'tests',
 ]
+
+/** Every package's `src`, found rather than listed so a new package is scanned the day it exists. */
+const PACKAGE_SRC_DIRS: readonly string[] = readdirSync(join(REPO_ROOT, 'packages'))
+  .filter((name) => existsSync(join(REPO_ROOT, 'packages', name, 'src')))
+  .map((name) => `packages/${name}/src`)
+
+/**
+ * Production source that still says WebSocket / WS, with why. The WebSocket
+ * transport is retired (ADR-0050): every page syncs over an SSE stream with
+ * POSTs upstream, so a comment calling it live sends the next reader to a
+ * transport that is gone. Two kinds of entry, and the second is meant to
+ * shrink: files that STATE the retirement (the word is the point), and files
+ * another lane owned when the guard landed, swept the wave after.
+ */
+const WEBSOCKET_WORDING: Readonly<Record<string, string>> = {
+  'packages/daemon-client/src/sse-backend.ts': 'says why a page has no WebSocket path',
+  'packages/mcp-server/src/server/routes/sync-sse.ts': 'states that the WebSocket is retired',
+  'packages/mcp-server/src/server/routes/sync-audience.ts': 'states that the WebSocket is retired',
+  'apps/web/src/pages/ServerModeWorkspace.tsx': 'says server mode has no WebSocket',
+  'packages/server-core/src/search/search-corpus.ts':
+    'sample document text the search tests index; the word is its content',
+  // W7 lane C owns these; sweep next wave.
+  'apps/web/src/components/VersionTimeline.tsx': 'W7 lane C owns; sweep next wave',
+  'apps/web/src/hooks/use-agent-activity.ts': 'W7 lane C owns; sweep next wave',
+  'apps/web/src/hooks/use-workspace-address-sync.ts': 'W7 lane C owns; sweep next wave',
+  'apps/web/src/lib/browser-backend.ts': 'W7 lane C owns; sweep next wave',
+  'apps/web/src/pages/DaemonDocumentPage.tsx': 'W7 lane C owns; sweep next wave',
+  'packages/daemon-client/src/document-backend-contract.ts': 'W7 lane C owns; sweep next wave',
+  'packages/daemon-client/src/sync-sse-contract.ts': 'W7 lane C owns; sweep next wave',
+  // W7 lane B owns these; sweep next wave.
+  'packages/mcp-server/src/daemon/daemon-registry.ts': 'W7 lane B owns; sweep next wave',
+  // W7 lane A owns these; sweep next wave.
+  'packages/mcp-server/src/server/store/doc-cache.ts': 'W7 lane A owns; sweep next wave',
+  'packages/mcp-server/src/server/store/document-store.ts': 'W7 lane A owns; sweep next wave',
+  'packages/mcp-server/src/server/store/workspace-doc-cache.ts': 'W7 lane A owns; sweep next wave',
+  // W7 lane G owns these; sweep next wave.
+  'packages/mcp-server/src/server/backup-restore.ts': 'W7 lane G owns; sweep next wave',
+  'packages/mcp-server/src/server/routes/document.ts': 'W7 lane G owns; sweep next wave',
+}
+
+/** Test and test-support source: a test may spell what it asserts about. */
+function isTestSource(path: string): boolean {
+  return /\.test\.[a-z]+$|(^|\/)test-utils\/|(^|\/)_test-|__screenshots__/.test(path)
+}
 
 /**
  * A migration is HISTORY: its log key is recorded in the database and every
@@ -159,6 +203,20 @@ const BANNED = [
       '.claude/rules/vocabulary.md',
     ],
   },
+  // The WebSocket transport is retired (ADR-0050). Case-sensitive on purpose:
+  // lowercase `ws` is a workspace-id abbreviation all over the tree and
+  // `/ws` a reserved path, while the transport was only ever written
+  // `WebSocket` or `WS`. Production source only — a test names it to assert
+  // it is gone.
+  {
+    pattern: /\bWebSocket\b|\bWS\b/,
+    word: 'WebSocket / WS (as a live transport)',
+    instead:
+      "'SSE' or 'sync stream' — pages sync over SSE with POSTs upstream (ADR-0050); say 'WebSocket' only to state that it is retired",
+    dirs: [...PACKAGE_SRC_DIRS, 'apps/web/src'],
+    productionOnly: true,
+    exempt: Object.keys(WEBSOCKET_WORDING),
+  },
   // The discriminant VALUE, still apps/web-only: in `packages/mcp-server` the
   // same quoted string is the network-sense auth mode and is correct there.
   {
@@ -247,11 +305,13 @@ const hitsByWord = BANNED.map((entry) => {
   // Per-word, never per-file: exempting a file for one retired word must not
   // quietly stop another word being checked in it.
   const exempt: readonly string[] = 'exempt' in entry ? entry.exempt : []
+  const productionOnly = 'productionOnly' in entry
   const hits: string[] = []
   for (const dir of dirs) {
     for (const file of listSourceFiles(join(REPO_ROOT, dir))) {
       const relativePath = relative(REPO_ROOT, file).split(sep).join('/')
       if (relativePath in EXEMPT_FILES || exempt.includes(relativePath)) continue
+      if (productionOnly && isTestSource(relativePath)) continue
       scannedFileCount += 1
       for (const [index, line] of linesOf(file).entries()) {
         if (pattern.test(line)) hits.push(`${relativePath}:${index + 1}: ${line.trim()}`)
@@ -267,6 +327,27 @@ describe('retired vocabulary', () => {
       expect(hitsByWord[index]).toEqual([])
     })
   }
+
+  // An exemption outlives the file's reason to be one unless something checks
+  // it: a lane sweeps its comments, the entry stays, and the guard is quietly
+  // wider than anyone meant. Each must still hold the word it excuses.
+  for (const [label, pattern, table] of [
+    ['WebSocket / WS', /\bWebSocket\b|\bWS\b/, WEBSOCKET_WORDING],
+  ] as const) {
+    it(`holds no ${label} exemption for a file that no longer says it`, () => {
+      const stale = Object.keys(table).filter(
+        (path) => !linesOf(join(REPO_ROOT, path)).some((line) => pattern.test(line)),
+      )
+      expect(stale).toEqual([])
+    })
+  }
+
+  it('scans the packages it claims to', () => {
+    // A directory listing that came back short would scan nothing under
+    // `packages/` and report it clean.
+    expect(PACKAGE_SRC_DIRS.length).toBeGreaterThan(15)
+    expect(PACKAGE_SRC_DIRS).toContain('packages/mcp-server/src')
+  })
 
   it('reads each scanned file once, however many words share its directory', () => {
     // Measured with the cache removed: 4826 reads over 2141 distinct files,

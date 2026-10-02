@@ -4,7 +4,7 @@
 // whole duration — measured with a 5ms sampler that fired ZERO times across a
 // 4767ms snapshot of a 421MB database, and roughly linear below that (33ms
 // empty, 314ms at 25MB, 1242ms at 103MB). Inside the daemon that is every
-// HTTP request, WebSocket frame and MCP call stopped for seconds, nightly,
+// HTTP request, SSE event and MCP call stopped for seconds, nightly,
 // and it grows with the data. The blob copy is well behaved by comparison
 // (under 3.1ms of lag across a 200MB tree), but the pass moves whole: putting
 // the two halves of one backup in two places would need them to agree about
