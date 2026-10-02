@@ -78,9 +78,16 @@ function useChange(reload: () => void) {
 /** A created link, shown once with a way to copy it. */
 function InvitationLinkField({ link }: { link: InvitationLink }) {
   const [copied, setCopied] = useState(false)
+  // "Copied" is a claim about the clipboard, so it waits for the write. A
+  // refusal or a missing clipboard leaves the label alone, and the field
+  // beside it stays selectable for the one time the link is shown.
   const copy = async () => {
-    await navigator.clipboard?.writeText(link.url).catch(() => undefined)
-    setCopied(true)
+    try {
+      await navigator.clipboard.writeText(link.url)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
   }
   return (
     <div className="flex flex-col gap-1">
