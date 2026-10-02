@@ -104,7 +104,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // the one part of the logging policy that only a session editing `log.ts`
   // needs, and AGENTS.md keeps the rule that matters to everyone (never log a
   // secret-bearing object wholesale). Pins only go down on a cut.
-  'AGENTS.md': 16,
+  //
+  // 15 when the browser-mode detail (the title-length measurement, the
+  // window-state project, the DOM-less default trace; ~1.3 KB) moved to
+  // `test-authoring.md`, which loads for exactly the files that need it. What
+  // stays is the default place for a browser test, the commands, and a pointer.
+  'AGENTS.md': 15,
   // 16 since `packages/history` joined the table — the shared mechanics both
   // keepers read a branch, a merge plan and a checkpoint out of. A package
   // that is not in the table is a package nobody can place, so the row is

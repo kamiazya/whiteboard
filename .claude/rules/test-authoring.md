@@ -44,7 +44,24 @@ The write-time rules, so the skill is a lookup rather than a prerequisite:
 Executable rungs already hold most of these (`pnpm lint`'s GritQL plugin, `arch-lint`'s scans,
 the jsdom setup's teardown). A shape that costs a real defect twice moves up the ladder —
 `testing-techniques/resources/executable-rungs.md` says how, fixture pair included.
-Browser `describe` + `it` titles stay under their project's budget (166 minus the project
-name's length: 155 for `web-browser`, 145 for the canvas projects, 142 for the window-state
-one); timeouts are ceilings
-sized on a recorded measurement, never delays.
+## Browser mode
+
+- **Window state.** A test that leaves the browser WINDOW in a state the next file cannot
+  tolerate (today: entering real fullscreen, which makes Chromium refuse `page.viewport` for
+  the next file that resizes) is named `*.window-state.browser.test.tsx` and runs alone in
+  `web-browser-window-state`. Why a project rather than a fix in the test is measured in
+  `apps/web/vitest.browser-window-state.config.ts`.
+- **The default trace has no DOM view** — actions, stacks and screenshots only, because
+  recording the DOM records every resource vite serves: 23GB a run, filling the disk and
+  reporting a test count short of the real one. Re-run the ONE failing file under
+  `pnpm run test:browser:trace` for it — that traces every test, so never point it at the suite.
+- **Keep a browser test's `describe` + `it` titles under its project's budget: 166 minus the
+  project name's length** (155 for `web-browser`, 145 for the canvas projects, 142 for the
+  window-state one), in characters, not UTF-8 bytes: vitest turns every non-alphanumeric
+  character into one ASCII `-`, so `導線` costs two. vitest copies the trace into
+  `.vitest/attachments/` under a name flattened from its path, and past the filesystem's
+  255-byte limit that copy throws `ENAMETOOLONG` during teardown — so vitest abandons the REST
+  OF THE FILE. Measured: a 194-char title reported `1 failed | 2 passed (6)`, a 58-char one
+  `1 failed | 5 passed (6)` — three tests silently did not run, which reads like good news.
+  `tools/arch-lint/src/browser-test-name-length.test.ts` enforces the budget.
+- Timeouts are ceilings sized on a recorded measurement, never delays.
