@@ -376,8 +376,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
   // The undo path takes back a write still inside the debounce window, which
   // has to reach the timer and the queue this factory closes over — so it
-  // lives here rather than beside them. Shrinking it is the same job as
-  // putting both document pages behind one backend port, not a separate one.
+  // lives here rather than beside them. Shrinking it is the next shrink
+  // `file-size-budget.test.ts` names for this file: the history/undo group and
+  // the locks lifted as sub-modules, the undo one handed `dropQueuedWrite`
+  // rather than the queue itself. Both document pages already sit behind one
+  // `DocumentBackend`, so that port is not what is left to do.
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 856,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,

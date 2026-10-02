@@ -157,7 +157,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // lines were for, so it is not met that way.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 879,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
-  // measured, separately from what the named rules charge for it.
+  // measured, separately from what the named rules charge for it. The next
+  // shrink is the PREFERENCE half (candidate generation, from
+  // `facingLaneWindow` through `shouldAdoptCandidate`) as a sibling the same
+  // way: it reads only `fullyContains` from the penalty half, which moves to
+  // `edge-geometry.ts` first, and the penalty half (`PENALTY_RULES` and the
+  // cost tuple) reads `bendCount` and `fullyContains` and none of the rest.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 845,
   // The file browser's host: the column area's four views as a discriminated
   // union built once and drawn by one switch, and `refreshAndSelect`, the one
@@ -179,7 +184,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the command writes (`command-writes.ts`), the adopted-passage write
   // (`apply-adopted-passages.ts`) and the listener sets (`subscribers.ts`).
   // The next shrink is the locks and the history/undo group as sub-modules
-  // taking `contentOf` and `doc`.
+  // taking `contentOf` and `doc`; the undo one is also handed
+  // `dropQueuedWrite`, because the debounce timer and the queue stay closed
+  // over by the factory (`function-size-budget.test.ts` carries the same path
+  // for `createDocumentSyncSession`).
   'apps/web/src/lib/document-sync-session.ts': 1159,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
