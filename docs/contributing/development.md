@@ -207,7 +207,7 @@ Two layers close that gap:
 ```bash
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket)
 pnpm mcp             # MCP server only (tsx)
-pnpm build           # dist/server (apps/web build copies dist/web-app in via its postbuild step)
+pnpm build           # dist/server (apps/web's `build` ends with `copy-into-mcp-dist.mjs`, which copies dist/web-app in)
 pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke

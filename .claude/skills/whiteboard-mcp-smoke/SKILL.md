@@ -117,7 +117,7 @@ first passes. Do not open with a quota-consuming one.
 - If the target tool does not appear in `tools/list`
   - It is likely missing from `src/server/mcp/index.ts`
 - If you get an error other than `no_client`
-  - A guard likely regressed in `routes/export.ts`, `routes/viewport.ts`, or `routes/sync-audience.ts`
+  - A guard likely regressed in `routes/export.ts`, `routes/viewport-requests.ts`, or `routes/sync-audience.ts`
 - If version restore returns the wrong element count
   - There is likely a regression in `routes/document.ts` or `store/version-store.ts`
 

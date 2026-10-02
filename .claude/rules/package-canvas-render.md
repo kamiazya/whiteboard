@@ -987,8 +987,8 @@ the table alone.
     spatial-node policy rather than a block one.
     `layout/frame-containment-quality.test.ts` counts what the law hides —
     a bound says nothing about how often its escape is taken.
-    `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
-    see the Tests section.
+    `layout/nodes/text-wrapping-quality.test.ts` is its scoreboard; see the
+    Tests section.
 
 14. **`references/` is the one producer of the reference seams.**
     `LoadedReference` is the record a keeper answers for one referenced
@@ -1233,7 +1233,7 @@ editor half is the one that stands.)
   by more than one surface — painted by the SVG backend AND hit-tested,
   bounded, translated, or exported — has exactly one producing function;
   when two producers are unavoidable, a parity test pins their agreement
-  (precedents: `theme/spatial-geometry-parity.test.ts` for layout
+  (precedents: `layout/spatial-geometry-parity.test.ts` for layout
   geometry, `layout/edges/edge-rounding.ts` for the drawn-vs-hit curve). Two
   independently-grown producers of "the same" geometry is the pixel
   version of the Zod schema/interface drift class, and it has shipped
@@ -1272,7 +1272,7 @@ editor half is the one that stands.)
   text-free like the rest, and for a stricter reason: a baseline is compared
   at zero mismatched pixels on machines whose installed fonts differ, so a
   rendered glyph is the one thing in a scene that cannot be reproduced.
-- `layout/text-wrapping-quality.test.ts` is the text-wrapping SCOREBOARD, the
+- `layout/nodes/text-wrapping-quality.test.ts` is the text-wrapping SCOREBOARD, the
   same instrument-first shape as the routing one below: 11 corpus cases x 3
   narrow widths, every number pinned EXACTLY. Debt (overflowing runs, worst
   overflow px, blocks whose bbox under-reports their ink) targets zero; price

@@ -103,6 +103,14 @@ const DELIBERATE: Record<string, string> = {
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#sweep-imported-fs-blobs.ts':
     "a migration's own text is history and is never rewritten (.claude/rules/vocabulary.md); the sweeper existed when this was written (#858)",
 
+  // Stale directory-qualified pointers the suffix rule exposed in files other
+  // lanes owned when it landed; each is repointed by the lane that owns the
+  // file, and the entry goes with it (guarded from both sides below).
+  'apps/web/src/pages/DaemonIndexPage.test.tsx#references/extract.ts':
+    'stale pointer in an apps/web page test; repoint when that area is next touched, then drop this entry',
+  'packages/server-core/src/tools/viewport-set.ts#routes/viewport.ts':
+    'stale pointer in a server-core tool; the route is routes/viewport-requests.ts — repoint, then drop this entry',
+
   // The `.claude/**/*.md` half. Every one of these is a sentence whose
   // SUBJECT is the file's absence — a rule explaining why a surface went.
   // Correcting the name would make each say the opposite of what it says.
@@ -142,7 +150,10 @@ function unresolvedPointers(): Pointer[] {
         if (!isPointer(name)) continue
         const resolves =
           tracked.some((path) => path === name || path.endsWith(`/${name}`)) ||
-          byBasename.has(basename(name))
+          // A bare name carries only a basename, so that is all it resolves by;
+          // a name WITH a directory must match a tracked suffix, or a pointer
+          // at the wrong directory resolves because the file exists elsewhere.
+          (!name.includes('/') && byBasename.has(basename(name)))
         if (resolves) continue
         const key = `${file}#${name}`
         if (seen.has(key)) continue
@@ -218,6 +229,15 @@ const REPO_ROOTED_PATH =
 /** Matches that name no tracked path and are meant to. Guarded from both sides. */
 const NOT_A_TRACKED_PATH: Record<string, string> = {
   'tools/list': 'the MCP method name, not a directory',
+  'tools/call': 'the MCP method name, not a directory',
+  'packages/mcp-server/_artifacts/npm-sbom.cdx.json':
+    'a release build output, gitignored by design (docs/contributing/releasing.md)',
+  'packages/mcp-server/_artifacts/npm-sbom.inputs.json': 'same build output',
+  'packages/canvas-render/tmp/vitest-traces':
+    'where a failing browser test writes its trace; gitignored',
+  'packages/canvas-viewer/tmp/vitest-traces': 'same trace directory, canvas-viewer half',
+  'apps/web/tmp/vitest-traces': 'same trace directory, apps/web half',
+  'apps/web/dist/': 'the web build output, gitignored by design',
   '.claude/settings.local.json': 'per-machine and gitignored by design (.gitignore)',
   '.claude/worktrees/':
     'per-machine and gitignored by design — where `new-worktree.mjs` puts a lane',
@@ -233,8 +253,14 @@ interface RootedPath {
 function repoRootedPaths(): RootedPath[] {
   const found: RootedPath[] = []
   for (const file of trackedFiles()) {
+    // The contributor docs are read from the README onward and name the same
+    // paths the rules do, so they rot the same way. `adr/` is history and is
+    // a subdirectory, which the anchored pattern leaves out.
     const inScope =
-      file === 'AGENTS.md' || (/^\.claude\/(rules|skills)\//.test(file) && file.endsWith('.md'))
+      file === 'AGENTS.md' ||
+      file === 'CONTRIBUTING.md' ||
+      /^docs\/contributing\/[^/]+\.md$/.test(file) ||
+      (/^\.claude\/(rules|skills)\//.test(file) && file.endsWith('.md'))
     if (!inScope) continue
     for (const match of readFileSync(join(REPO_ROOT, file), 'utf8').matchAll(REPO_ROOTED_PATH)) {
       found.push({ file, path: match[1] ?? '' })
@@ -248,7 +274,7 @@ function resolvesExactly(path: string, tracked: readonly string[]): boolean {
   return tracked.some((entry) => entry === bare || entry.startsWith(`${bare}/`))
 }
 
-describe('a repo-rooted path in AGENTS.md, a rule or a skill names something tracked', () => {
+describe('a repo-rooted path in AGENTS.md, a contributor doc, a rule or a skill names something tracked', () => {
   const tracked = trackedFiles()
   const rooted = repoRootedPaths()
 
