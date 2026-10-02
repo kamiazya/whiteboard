@@ -76,7 +76,12 @@ describe('entry-point guard', () => {
     let stdout = ''
     let status = 0
     try {
-      stdout = execFileSync('node', [scriptCopy], { encoding: 'utf-8' })
+      // The child is expected to fail its checks; piping stderr keeps its FAIL lines out of the
+      // runner's output, where a green run would otherwise print them as if something had failed.
+      stdout = execFileSync('node', [scriptCopy], {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
     } catch (error) {
       const execError = error as { stdout?: string; status?: number }
       stdout = execError.stdout ?? ''
