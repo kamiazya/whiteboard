@@ -59,7 +59,7 @@ Launch via `Workflow({scriptPath})` — they are NOT name-registered. `args` arr
 
 developer (TDD), plan-reviewer, reviewer-dimension, security-scanner, qa-scenario, simplifier (repo-owned; preloads the `ponytail` ladder — the plugin `code-simplifier` carries another project's coding standards in its own prompt, so it is deliberately NOT used here), dogfood-persona, technical-writer (docs sync), repo-hygiene-investigator (read-only repo policy/portability/hygiene investigation — default investigator for `investigate`, but `Explore` is the registered fallback until a session reload picks it up); planning panel: architect, security-architect, ux-designer, project-manager, product-manager, research-analyst (web research: best practices / prior art / standards), whiteboard-designer; release-time: marketing (drafts only, human ships). **Do not use internal-only agents (e.g. `anymind:*`) in this repo's flows. Custom agents added mid-session aren't registered as an `agentType` until reload — see the `workflow-authoring` skill.**
 
-## Gates (Codex second opinion on gate decisions)
+## Codex second opinion on gate decisions
 
 - **PlanReview**: `plan-reviewer` + Codex run in parallel — either fail → gate fails; Codex unavailable (null) never blocks.
 - **review gate**: dimensions + adversarial verify + Codex lane + QA (+ dogfood).
