@@ -113,19 +113,7 @@ export function createBridgeFetch(
     port = null
   }
 
-  const onMessage = (raw: unknown) => {
-    const parsed = extensionToPageSchema.safeParse(raw)
-    if (!parsed.success) {
-      abandonUnreadable(pending, raw)
-      return
-    }
-    const message = parsed.data
-    if (message.type === 'disconnected') {
-      failAll(new TypeError(`the whiteboard extension lost its host: ${message.message}`))
-      return
-    }
-    settle(pending, message)
-  }
+  const onMessage = (raw: unknown) => receive(pending, raw, failAll)
 
   const open = (): BridgePort => {
     if (port !== null) return port
@@ -148,7 +136,8 @@ export function createBridgeFetch(
     const method = carriedMethod(request)
     request.signal.throwIfAborted()
     const body = await requestBody(request)
-    const incompatible = await (skewed ??= skew())
+    skewed ??= skew()
+    const incompatible = await skewed
     if (incompatible !== null) throw new TypeError(incompatible)
     return await sendRequest(open(), pending, request, method, body)
   }
@@ -207,6 +196,25 @@ async function requestBody(request: Request): Promise<string | undefined> {
   if (request.method === 'GET' || request.method === 'HEAD') return undefined
   const bytes = new Uint8Array(await request.arrayBuffer())
   return bytes.length === 0 ? undefined : bytesToBase64(bytes)
+}
+
+/** Reads one message off the port and lands it on the request it belongs to. */
+function receive(
+  pending: Map<string, Pending>,
+  raw: unknown,
+  failAll: (reason: Error) => void,
+): void {
+  const parsed = extensionToPageSchema.safeParse(raw)
+  if (!parsed.success) {
+    abandonUnreadable(pending, raw)
+    return
+  }
+  const message = parsed.data
+  if (message.type === 'disconnected') {
+    failAll(new TypeError(`the whiteboard extension lost its host: ${message.message}`))
+    return
+  }
+  settle(pending, message)
 }
 
 /**
