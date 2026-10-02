@@ -335,8 +335,25 @@ Comments and string bodies are stripped before matching (`source-scan.ts`'s
 ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
 from both sides, size pinned, every entry carrying its reason. It holds one
 entry, `mcp/index.ts`, the stdio composition root that resolves the data dir
-once before booting. The store layer's own reads (`store/**`) are not
-adapters and are not in scope.
+once before booting. `findCompositionGlobalReads` covers the layers that BUILD
+stores: `di/**` (also banning `globalStoreScope`, the stores' default) and
+`server/store/**`. Its both-sided, size-pinned ledger holds the reads that are
+each the one place allowed to choose the data dir or tenant; a new
+`getDataDir()` in either tree fails until it takes the `StoreScope` instead.
+
+## `no-test-utils-in-production.test.ts` and `blob-identity-one-place.test.ts`
+
+No non-test, non-bench, non-`_test-*`, non-`test-utils/` file under
+`packages/*/src`, `apps/*/src` or `tools/*/src` imports a specifier with a
+`test-utils` segment: those barrels re-export vitest-importing suites, and the
+built daemon bundle once carried `class InMemoryDocumentStore` because the
+production container defaulted to the in-memory module. Two allowlist entries,
+each with a reason, guarded from both sides.
+
+`blob-identity-one-place.test.ts` keeps where a blob digest lives
+(`tenant/data-layout.ts`), how a ref is keyed (`ports`' `blobRefKey`) and
+sha-256-to-hex (`shared/sha256.ts`) to one spelling each in non-test
+mcp-server source; a test that hand-spells a path is the oracle and is exempt.
 
 ## The spatial-codec registry scan
 

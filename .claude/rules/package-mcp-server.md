@@ -42,12 +42,12 @@ scan says.
   out, so a field the route emits and the contract lacks — or the reverse
   — is drift only a reader would find.
 - **Its seed composes the app the way production does, and the reason is a
-  trap.** `createContainer()` defaults to the IN-MEMORY store, so an app
-  built from it has `/api/v1` and the legacy `/api/workspaces` routes
-  looking at different worlds — a document created through one is invisible
-  to the other, and a lane seeded that way reports every legacy route as
-  refusing. The lane builds `serverDeps` from `createStoreLocalModule` over
-  the same data dir the module-level document store reads. Each seeded app
+  trap.** A container over the in-memory module gives an app whose
+  `/api/v1` and legacy `/api/workspaces` routes look at different worlds — a
+  document created through one is invisible to the other, and a lane seeded
+  that way reports every legacy route as refusing. The lane builds
+  `serverDeps` from `createStoreLocalModule` over the same data dir the
+  module-level document store reads. Each seeded app
   also gets its OWN workspace handle and data dir: the document store is
   module-level and keyed by workspace, and a checkpoint a previous app
   scheduled can land after its test ended — under a reused handle it wrote
@@ -190,6 +190,33 @@ one-shot (~40-60ms stall, 150-220ms wall) and is not registry work.
 `env-docs-contract.test.ts` reads `envFlag('…')` and `env.OTEL_*` as well as
 `env.WHITEBOARD_*` and `env.MCP_*`, so a new variable of any of those shapes
 needs its documentation in the same increment.
+
+## A store follows the directory it is handed
+
+**Through a `StoreScope`.** `bootSelfHostDeps(dataDir)` builds the document
+store, blob store and index over `dataDir`; the seams beside them (live
+documents, workspace documents, versions, teardown, the write signal) and the
+doc and workspace-doc caches under them follow the same `StoreScope`
+(`server/store/store-scope.ts`), which the store module binds under
+`STORE_SCOPE`. Functions in `store/` take a trailing `scope` defaulting to
+`globalStoreScope` (the process's data dir, read lazily), so routers and
+workers with no composition are unchanged. `boot-self-host-deps.test.ts` is
+the executable half: it boots over one dir while `getDataDir()` names another
+and asserts the other stays empty. What still follows the process dir is
+listed in `bootSelfHostDeps`'s doc comment.
+
+**`createContainer(storeModule)` takes its module; the in-memory one is a
+test double at `shared/test-utils/store-memory.module.ts`.** There is no
+default, and `no-test-utils-in-production.test.ts` plus
+`no-production-wiring.test.ts` (which scans `di/**`) fail on a production file
+importing a `test-utils` module.
+
+**Where a blob digest sits on disk is `tenant/data-layout.ts`'s
+`blobShardPath` / `parseBlobShard`, and a `BlobRef`'s map key is `ports`'
+`blobRefKey`.** `tools/arch-lint/src/blob-identity-one-place.test.ts` bans
+re-spelling either — digest slicing, the shard and digest regexes, and inline
+sha-256-to-hex outside `shared/sha256.ts` — in non-test mcp-server source;
+tests that hand-spell a path are the independent oracle and are exempt.
 
 ## Log redaction
 
