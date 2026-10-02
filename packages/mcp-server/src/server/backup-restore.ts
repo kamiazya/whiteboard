@@ -16,6 +16,7 @@ import {
   blobsRoot,
   FILES_DIRNAME,
   isAnyTenantBlobsPath,
+  tenantsRoot,
 } from './tenant/data-layout.js'
 
 // Backup / restore drill helper for the local daemon data directory.
@@ -372,7 +373,7 @@ const MIRROR_STORE_DIRNAMES = [BLOBS_DIRNAME, FILES_DIRNAME]
  * and is what the retention property tests hold; this path asks the
  * filesystem, so it does not call it.
  */
-async function materialiseMirroredBlobs(
+export async function materialiseMirroredBlobs(
   backupDir: string,
   targetDataDir: string,
   references: BackupBlobReferences,
@@ -382,7 +383,7 @@ async function materialiseMirroredBlobs(
   // The mirror is flat and the manifest says whose each blob is, so every
   // tenant's bytes go back under that tenant rather than into one of them.
   for (const [tenantId, refs] of Object.entries(references.tenants)) {
-    const into = blobsRoot(targetDataDir, tenantId)
+    const into = await tenantBlobsRootWithinTenants(targetDataDir, tenantId)
     for (const digest of refs.blobs) {
       wanted.push({
         from: blobShardPath(join(mirrorRoot, BLOBS_DIRNAME), digest),
@@ -392,7 +393,7 @@ async function materialiseMirroredBlobs(
     for (const [relativePath, digest] of Object.entries(refs.files)) {
       wanted.push({
         from: blobShardPath(join(mirrorRoot, FILES_DIRNAME), digest),
-        to: join(into, ...relativePath.split('/')),
+        to: await strictlyInside(into, join(into, ...relativePath.split('/'))),
       })
     }
   }
@@ -413,6 +414,39 @@ async function materialiseMirroredBlobs(
     await mkdir(dirname(item.to), { recursive: true })
     await cp(item.from, item.to, { dereference: false, errorOnExist: true, force: false })
   }
+}
+
+/**
+ * `<target>/tenants/<tenantId>/blobs`, refused unless that really is a
+ * directory directly under `tenants/`. The manifest schema already refuses a
+ * tenant id that is not one path segment; this is the same question asked of
+ * the path that was built, because `join` collapses `..` and a manifest that
+ * reaches here by another route would otherwise write wherever it names.
+ */
+async function tenantBlobsRootWithinTenants(
+  targetDataDir: string,
+  tenantId: string,
+): Promise<string> {
+  const into = blobsRoot(targetDataDir, tenantId)
+  const tenantDirectory = dirname(await canonicalizeWithMissingTail(into))
+  if (
+    dirname(tenantDirectory) !== (await canonicalizeWithMissingTail(tenantsRoot(targetDataDir)))
+  ) {
+    throw new BackupError('Backup names a tenant that is not directly under the tenants directory.')
+  }
+  return into
+}
+
+/** `path` itself, refused unless it is below `root` on whole path segments once both are canonical. */
+async function strictlyInside(root: string, path: string): Promise<string> {
+  const canonical = await canonicalizeWithMissingTail(path)
+  if (
+    canonical === (await canonicalizeWithMissingTail(root)) ||
+    !(await isWithinAllowedRoots(canonical, [root]))
+  ) {
+    throw new BackupError('Backup names a file outside the blob directory it belongs to.')
+  }
+  return path
 }
 
 async function pathExists(path: string): Promise<boolean> {

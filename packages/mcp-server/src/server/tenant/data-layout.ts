@@ -51,8 +51,13 @@ declare const tenantDir: unique symbol
  */
 export type TenantDir = string & { readonly [tenantDir]: 'tenant' }
 
+/** The directory every tenant's own directory is a direct child of. */
+export function tenantsRoot(dataDir: string): string {
+  return join(dataDir, TENANTS_DIRNAME)
+}
+
 export function tenantRoot(dataDir: string, tenantId: string): TenantDir {
-  return join(dataDir, TENANTS_DIRNAME, tenantId) as TenantDir
+  return join(tenantsRoot(dataDir), tenantId) as TenantDir
 }
 
 export function blobsRoot(dataDir: string, tenantId: string): string {

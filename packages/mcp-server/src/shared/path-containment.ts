@@ -60,6 +60,28 @@ export async function isWithinAllowedRoots(
   return false
 }
 
+/**
+ * Whether a string is ONE path segment that names a child: not empty, not `.`
+ * or `..`, and holding no separator of either platform or NUL.
+ *
+ * For a name an artifact supplies (a tenant id in a backup manifest) that is
+ * then joined under a directory the reader owns. `join` collapses `..`, so
+ * without this a name is a way out of that directory rather than a name in it.
+ */
+export function isSafePathSegment(name: string): boolean {
+  return name !== '' && name !== '.' && name !== '..' && !/[\\/\0]/.test(name)
+}
+
+/**
+ * Whether a string is a relative path of `/`-separated safe segments. Refuses
+ * an absolute path, an empty or `.` segment (`a//b`, `a/./b`), `..` anywhere,
+ * and a backslash, so the string means the same on every platform it is
+ * joined on and cannot resolve outside the directory it is joined under.
+ */
+export function isSafeRelativePosixPath(path: string): boolean {
+  return path.split('/').every(isSafePathSegment)
+}
+
 async function lstatOrNull(path: string) {
   try {
     return await lstat(path)
