@@ -274,9 +274,15 @@ describe('the mutation lane covers what it says it covers', () => {
     //
     // 97 since the highlight folder's one-line barrel was deleted: a
     // re-export nothing imported, outside the lane for the reason a barrel is.
+    //
+    // 99 since `layout/compose-node.ts` gave up its box primitives
+    // (`node-box.ts`) and a file node's representations
+    // (`compose-file-node.ts`). Outside the lane for the reason the file they
+    // left was: the scene and SVG example suites pin them, and a split moves
+    // none of that.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 20,
-      production: 97,
+      production: 99,
     })
   })
 
