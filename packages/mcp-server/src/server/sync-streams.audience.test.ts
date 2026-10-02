@@ -1,6 +1,6 @@
 /**
  * Which open pages each emitter reaches, against the real stream registry.
- * `sync-audience.property.test.ts` replaces the registry to check what is
+ * `sync-audience.test.ts` replaces the registry to check what is
  * sent, so it cannot see who it is sent to.
  */
 import { afterEach, describe, expect, it } from 'vitest'
