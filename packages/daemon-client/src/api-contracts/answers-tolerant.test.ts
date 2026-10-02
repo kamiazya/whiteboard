@@ -179,7 +179,7 @@ const LOCKSTEP: ReadonlyMap<string, string> = new Map([
     'JSON Canvas 1.0 colour presets: the document vocabulary, held in lockstep with the model package this build ships, which draws a past state it can name or refuses it',
   ],
   [
-    ['db', 'blobs', 'exports', 'files', 'logs', 'other', 'versions'].sort().join('|'),
+    ['db', 'blobs', 'exports', 'files', 'other', 'versions'].sort().join('|'),
     'storage report categories: exhaustive on purpose, so a category the daemon stopped counting fails loudly instead of rendering 0 B (see storageCategorySchema)',
   ],
   [
