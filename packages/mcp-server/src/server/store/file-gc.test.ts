@@ -296,20 +296,11 @@ describe('purgeDanglingFiles', () => {
       load: async () => {
         throw new Error('frontier rows missing')
       },
-      // The remaining VersionStore methods are unreachable from this code path.
-      save: async () => {
-        throw new Error('not used')
-      },
-      saveThumbnail: async () => {
-        throw new Error('not used')
-      },
-      loadThumbnail: async () => null,
-      getFrontiersBase64: async () => null,
     }
 
-    await expect(
-      purgeDanglingFiles('ws_brk', { versionStore: fakeStore as any }),
-    ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
+    await expect(purgeDanglingFiles('ws_brk', { versionStore: fakeStore })).rejects.toBeInstanceOf(
+      IncompleteFileGcScanError,
+    )
 
     // Crucially: nothing was deleted, even though only-by-broken-version
     // would have been classified as dangling under the old behaviour.
@@ -490,18 +481,10 @@ describe('purgeDanglingFiles', () => {
         },
       ],
       load: async () => null,
-      save: async () => {
-        throw new Error('not used')
-      },
-      saveThumbnail: async () => {
-        throw new Error('not used')
-      },
-      loadThumbnail: async () => null,
-      getFrontiersBase64: async () => null,
     }
 
     await expect(
-      purgeDanglingFiles('ws_nullver', { versionStore: fakeStore as any, graceMs: 0 }),
+      purgeDanglingFiles('ws_nullver', { versionStore: fakeStore, graceMs: 0 }),
     ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
 
     const remaining = (
@@ -604,19 +587,11 @@ it('stands down when another instance writes while the pass is deciding', async 
       return []
     },
     load: async () => null,
-    save: async () => {
-      throw new Error('not used')
-    },
-    saveThumbnail: async () => {
-      throw new Error('not used')
-    },
-    loadThumbnail: async () => null,
-    getFrontiersBase64: async () => null,
   }
 
   const result = await purgeDanglingFiles(workspaceId, {
     graceMs: 0,
-    versionStore: versionStore as never,
+    versionStore,
   })
   expect(wrote).toBe(true)
   expect(result.skippedReason).toBe('record-moved')

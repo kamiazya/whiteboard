@@ -153,7 +153,7 @@ export function incompleteFileGcScanErrorBody(
 async function collectReferencedFileIds(
   workspaceId: string,
   scope: StoreScope,
-  versionStore?: VersionStore,
+  versionStore?: GcVersionReader,
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
@@ -195,8 +195,15 @@ async function collectReferencedFileIds(
   return referenced
 }
 
+/**
+ * The two reads a scan makes of the version store. Typed as only these so a
+ * caller (and a test double) supplies what the scan uses, and a new method on
+ * `VersionStore` does not reach a fake that cannot know it.
+ */
+type GcVersionReader = Pick<VersionStore, 'list' | 'load'>
+
 export interface PurgeFilesOptions {
-  versionStore?: VersionStore
+  versionStore?: GcVersionReader
   // Don't unlink files whose mtime is younger than this many ms. Closes
   // the upload-but-not-yet-saveDocument race: routes/files.ts writes the
   // blob first, the user (or agent) calls saveDocument later to add the
