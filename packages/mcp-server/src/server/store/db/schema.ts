@@ -228,7 +228,9 @@ interface WorkspaceMembersOnlyTable {
 // Every tenant-scoped table (`tenant-scope.ts`) also has a `tenantId` column,
 // deliberately NOT declared here: the tenant-bound handle stamps it on insert,
 // filters on it and strips it from results, so a store cannot name it at all.
-// `tenant-database.test.ts` checks the physical columns against the ledger.
+// `tenant-database.test.ts` checks which tables carry it against that ledger,
+// and `schema-conformance.test.ts` holds every other physical column to what is
+// declared here.
 interface TenantsTable {
   id: string
   createdAt: Timestamp
