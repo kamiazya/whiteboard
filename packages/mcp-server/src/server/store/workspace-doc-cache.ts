@@ -41,7 +41,7 @@ function workspaceDocCacheKey(workspaceId: string): string {
 // A workspace record whose stored bytes will not decode is CORRUPTION, and
 // every reader should say so with the same structured error the per-document
 // path uses — a raw wasm decode error surfaces as an unstructured 500.
-export function throwWorkspaceRecordCorrupt(workspaceId: string, err: unknown): never {
+function throwWorkspaceRecordCorrupt(workspaceId: string, err: unknown): never {
   if (isCorruptStoredDataError(err)) throw err
   throw corruptStoredData(
     `workspace-tree:${workspaceId}`,

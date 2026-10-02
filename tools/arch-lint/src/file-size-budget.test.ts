@@ -165,16 +165,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // line, the object pane, the card menu's items and each column view — are
   // `workspace-files-panel-parts.tsx` beside it.
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 889,
-  // The workspace tree over a Loro doc: node lookup, the document PLANES (a
-  // mergeable child map on a document's node, namespaced `plane:` so a plane
-  // is never carried into the projection and written back by the next
-  // content save — measured through the daemon's merge before that, a branch
-  // tip read back as "" with nothing red) and the fold that carries a nested
+  // The workspace tree over a Loro doc: node lookup, the stored-plane skip
+  // (a `plane:` key a branch-era record still carries is kept out of the
+  // projection and the content save) and the fold that carries a nested
   // container instead of flattening it. The content-sync rule the tree write,
   // the standalone restore and the projection all apply is `content-sync.ts`.
-  // Planes stay here rather than in a sibling because `nodeById` is this
-  // module's, and splitting them would export the lookup for one caller.
-  'packages/loro-adapter/src/workspace-tree.ts': 998,
+  'packages/loro-adapter/src/workspace-tree.ts': 945,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
@@ -185,13 +181,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The next shrink is the locks and the history/undo group as sub-modules
   // taking `contentOf` and `doc`.
   'apps/web/src/lib/document-sync-session.ts': 1159,
-  // The daemon's path-addressed document operations (create, save, move,
-  // delete, compaction, restore, listing) and the workspaces registry, over
-  // the workspace-record cache that left for `workspace-doc-cache.ts`. What
-  // remains is one operation per exported function, each carrying the
-  // coherence reason for the cache entries it drops; the next shrink is
-  // compaction as a module of its own.
-  'packages/mcp-server/src/server/store/document-store.ts': 844,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step

@@ -31,12 +31,10 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
-  DocumentStoreWorkspaceDocs,
   LoroWorkspaceDocumentIndex,
   type WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
-import type { Frontiers } from 'loro-crdt'
-import { encodeFrontiers, LoroDoc } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { blobsRoot } from '../tenant/data-layout.js'
@@ -53,7 +51,6 @@ import {
   getWorkspaceDoc,
   openWorkspaceDocIfStored,
   saveWorkspaceDoc,
-  throwWorkspaceRecordCorrupt,
 } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -100,52 +97,6 @@ export async function requireDocumentAtPath(workspaceId: string, path: string): 
   const documentId = await resolveDocumentIdAtPath(workspaceId, path)
   if (documentId === null) throw new DocumentNotFoundError(workspaceId, path)
   return documentId
-}
-
-export async function workspaceFrontiersForPath(
-  workspaceId: string,
-  path: string,
-): Promise<Uint8Array | null> {
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
-  const stored = await docs.open(workspaceId)
-  if (stored === null || resolveWorkspaceDocument(stored, path) === null) return null
-  return new Uint8Array(encodeFrontiers(stored.frontiers()))
-}
-
-/**
- * The document at `path` as it stood at `frontiers` of the WORKSPACE
- * document — null when the tree does not serve the path (legacy plane).
- * Throws when the frontiers cannot be checked out — a point recorded against
- * a different lineage, e.g. a pre-cutover version of a since-folded document,
- * whose history the fold deliberately did not carry.
- */
-export async function projectDocumentAtWorkspaceFrontiers(
-  workspaceId: string,
-  path: string,
-  frontiers: Frontiers,
-): Promise<LoroDoc | null> {
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
-  const stored = await docs.open(workspaceId)
-  if (stored === null) return null
-  const entry = resolveWorkspaceDocument(stored, path)
-  if (entry === null) return null
-  const clone = LoroDoc.fromSnapshot(stored.export({ mode: 'snapshot' }))
-  clone.checkout(frontiers)
-  return projectWorkspaceDocument(clone, entry.documentId)
-}
-
-/**
- * A detached clone of the STORED workspace record, or null when none is
- * stored. What the version machinery forks and checks out: the stored
- * record's oplog is durable across restarts, where a projection's is
- * per-process.
- */
-export async function cloneStoredWorkspaceDoc(workspaceId: string): Promise<LoroDoc | null> {
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
-  const stored = await docs
-    .open(workspaceId)
-    .catch((err) => throwWorkspaceRecordCorrupt(workspaceId, err))
-  return stored === null ? null : LoroDoc.fromSnapshot(stored.export({ mode: 'snapshot' }))
 }
 
 /**

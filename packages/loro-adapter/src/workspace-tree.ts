@@ -39,7 +39,7 @@ import {
   syncRootContainer,
 } from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
-import { openMergeableMap, openMergeableMovableList } from './mergeable-containers.js'
+import { openMergeableMovableList } from './mergeable-containers.js'
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'
@@ -239,80 +239,27 @@ export function updateWorkspaceDocumentMeta(
 }
 
 /**
- * Opens a named PLANE on a document's node: a child map beside the meta
- * fields, holding state that belongs to the document but is not one of them.
+ * A node's data map once held a `plane:`-prefixed child map beside a
+ * document's content: the record's branch state. Nothing writes one now, but
+ * a record written while branches existed still carries it, and it must stay
+ * out of the document.
  *
- * The branch plane is what this exists for. A branch is a name and a frontier
- * of the record, so it belongs to the document; it is also a growing keyed
- * collection, which `workspaceNodeMetaSchema` is deliberately not — that
- * schema is a fixed set of scalars, and `updateWorkspaceDocumentMeta`'s patch
- * is `.strict()` so nothing can smuggle a collection through it.
- *
- * Mergeable, and this is the whole reason the primitive is here rather than
- * at the call site: nothing pre-attaches a plane, so the FIRST replica to
- * make a branch is the one that opens it, and two replicas doing that
- * independently is the ordinary case rather than a rare one. A regular child
- * container there loses one side's whole plane with both replicas agreeing
- * on the survivor — see `mergeable-containers.ts` for the measurement.
- *
- * Returns null when no document carries the id. Callers that only READ take
- * `readWorkspaceDocumentPlane` instead: opening writes an activation marker,
- * so a read through this one would grow the record of every document anybody
- * merely looked at.
- */
-export function openWorkspaceDocumentPlane(
-  doc: LoroDoc,
-  documentId: string,
-  key: string,
-): LoroMap | null {
-  const node = nodeById(doc, documentId)
-  if (node === null) return null
-  return openMergeableMap(node.data, planeKey(key))
-}
-
-/** The plane as it stands, or null when the document or the plane is absent. Never writes. */
-export function readWorkspaceDocumentPlane(
-  doc: LoroDoc,
-  documentId: string,
-  key: string,
-): LoroMap | null {
-  const node = nodeById(doc, documentId)
-  if (node === null) return null
-  const stored = node.data.get(planeKey(key))
-  return stored instanceof LoroMap ? stored : null
-}
-
-/**
- * A plane is namespaced under this prefix, and that is what keeps it out of
- * the document.
- *
- * A node's data map holds a document's CONTENT containers beside its meta,
- * and `projectWorkspaceDocument` copies every container it finds there into
- * the standalone document every reader, exporter and renderer sees. A plane
- * living in that same flat namespace is therefore carried into the
- * projection — and written back by the next content save, from whatever the
- * projection held when it was taken.
- *
- * That is not a theoretical ordering: measured through the daemon's merge, a
- * branch tip set to `AcbqreGZ2OWvNjQ=` read back as `""` after the reconcile
- * saved a projection taken beforehand. No error, no conflict, and the suite
- * green — the branch simply had the wrong tip.
+ * `projectWorkspaceDocument` copies every container it finds on the node into
+ * the standalone document every reader, exporter and renderer sees, and the
+ * next content save writes that projection back. A plane taken for content is
+ * therefore carried into the projection and reverted by a save made from one
+ * taken earlier: measured through the daemon's merge, a branch tip set to
+ * `AcbqreGZ2OWvNjQ=` read back as `""`, with no error and a green suite.
  *
  * A prefix rather than a registry of plane names, because the two readers
- * that must skip planes (`projectWorkspaceDocument` and
- * `writeWorkspaceDocumentContent`) have no business knowing what any plane
- * HOLDS. `:` cannot appear in a content root's name — those come from the
- * bridge's own `CONTENT_CONTAINER_KEYS` and from a document's roots.
+ * that must skip planes have no business knowing what any plane HOLDS. `:`
+ * cannot appear in a content root's name: those come from the bridge's own
+ * `CONTENT_CONTAINER_KEYS` and from a document's roots.
  */
-const PLANE_KEY_PREFIX = 'plane:'
+const STORED_PLANE_KEY_PREFIX = 'plane:'
 
-function planeKey(key: string): string {
-  return `${PLANE_KEY_PREFIX}${key}`
-}
-
-/** Whether a node-data key names a plane rather than content or meta. */
 function isPlaneKey(key: string): boolean {
-  return key.startsWith(PLANE_KEY_PREFIX)
+  return key.startsWith(STORED_PLANE_KEY_PREFIX)
 }
 
 /**
@@ -738,8 +685,8 @@ export function writeWorkspaceDocumentContent(
   let changed = false
   for (const [key, value] of Object.entries(projected)) {
     // Belt to the projection's braces: a source that somehow carries a plane
-    // key (an import, a document written before the prefix) must not write it
-    // onto the node's plane namespace.
+    // key (an import, a record from the branch era) must not write it onto
+    // the node.
     if (isPlaneKey(key)) continue
     if (syncRootContainer(roots, key, value, source)) changed = true
   }
@@ -939,8 +886,8 @@ export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): Loro
   if (node === null) return null
   const out = new LoroDoc()
   for (const key of node.data.keys()) {
-    // A plane belongs to the document without being IN it: see
-    // PLANE_KEY_PREFIX for what carrying one into the projection costs.
+    // A stored plane belongs to the record, not the document: see
+    // STORED_PLANE_KEY_PREFIX for what carrying one into the projection costs.
     if (isPlaneKey(key)) continue
     const value = node.data.get(key) as unknown
     const kind = containerKind(value)

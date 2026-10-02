@@ -36,24 +36,12 @@ implementations live in the composition roots.
   (`compareDocumentPaths`) and the error taxonomy, and now reads the tree
   instead of its own rows.
 
-- **A document's PLANES** (`openWorkspaceDocumentPlane` /
-  `readWorkspaceDocumentPlane`): a named child map on a document's tree node,
-  for state that belongs to the document without being one of
-  `workspaceNodeMetaSchema`'s fixed scalars. The branch plane is what it
-  exists for; `updateWorkspaceDocumentMeta`'s patch is `.strict()` precisely
-  so a growing collection cannot be smuggled in as a meta field.
-
-  Mergeable, and the primitive lives here rather than at the call site for
-  that reason: nothing pre-attaches a plane, so the first replica to use one
-  opens it, and two replicas doing that independently is the ordinary case.
-  The READ never opens — opening writes an activation marker, so a read that
-  created the plane would grow the record of every document anybody merely
-  looked at. `workspace-tree.plane.test.ts` holds both, the second by
-  asserting the snapshot is byte-identical across a read.
-
-  A plane is outside `CONTENT_CONTAINER_KEYS`, so writing one does not move
-  the document's `contentDigest` — a branch tip recorded on every save would
-  otherwise invalidate every cached picture of the document.
+- **A stored plane key is skipped, never read.** The branch's `plane:` child map
+  on a document's node is gone with the branch (ADR-0029), but a record
+  written then still carries it, so `projectWorkspaceDocument` and
+  `writeWorkspaceDocumentContent` skip every `plane:`-prefixed key rather than
+  carry it into the document and write a stale copy back.
+  `workspace-tree.stored-plane-key.test.ts` holds both.
 
 ## What does NOT belong here
 

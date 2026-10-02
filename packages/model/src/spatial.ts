@@ -417,19 +417,6 @@ export function endSide(end: LineEnd | EdgeEnd): EdgeSide | undefined {
   return end.kind === 'node' ? end.side : undefined
 }
 
-/** A line end on a node, spelled once so a fixture is not three keys of ceremony. */
-export function nodeLineEnd(
-  node: string,
-  rest: { readonly side?: EdgeSide; readonly end?: 'none' | 'arrow' } = {},
-): LineEnd {
-  return {
-    kind: 'node',
-    node,
-    ...(rest.side === undefined ? {} : { side: rest.side }),
-    ...(rest.end === undefined ? {} : { end: rest.end }),
-  }
-}
-
 /**
  * An EDGE is a relation: node to node, and what "what is connected to what"
  * means ([ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)

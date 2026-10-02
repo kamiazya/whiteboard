@@ -3,7 +3,7 @@ import {
   type CapturedLogsHandle,
   captureLogsForTests,
   getLogger,
-  isLogLevelEnabled,
+  getLogLevel,
   parseLogLevel,
   setLogLevel,
 } from './log.js'
@@ -35,7 +35,7 @@ describe('parseLogLevel', () => {
   })
 })
 
-describe('isLogLevelEnabled', () => {
+describe('setLogLevel', () => {
   let cap: CapturedLogsHandle
   beforeEach(() => {
     cap = captureLogsForTests('warning')
@@ -44,20 +44,11 @@ describe('isLogLevelEnabled', () => {
     cap.restore()
   })
 
-  it('drops levels below the threshold and keeps the threshold and above', () => {
-    expect(isLogLevelEnabled('debug')).toBe(false)
-    expect(isLogLevelEnabled('info')).toBe(false)
-    expect(isLogLevelEnabled('notice')).toBe(false)
-    expect(isLogLevelEnabled('warning')).toBe(true)
-    expect(isLogLevelEnabled('error')).toBe(true)
-    expect(isLogLevelEnabled('emergency')).toBe(true)
-  })
-
-  it('reflects setLogLevel updates so MCP logging/setLevel can change the threshold at runtime', () => {
+  it('moves the threshold at runtime so MCP logging/setLevel can change it', () => {
     setLogLevel('debug')
-    expect(isLogLevelEnabled('debug')).toBe(true)
+    expect(getLogLevel()).toBe('debug')
     setLogLevel('error')
-    expect(isLogLevelEnabled('warning')).toBe(false)
+    expect(getLogLevel()).toBe('error')
   })
 })
 

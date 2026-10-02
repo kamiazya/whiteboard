@@ -106,7 +106,7 @@ export function* emojiShortcodeRanges(text: string): Generator<EmojiShortcodeRan
   // it is the gate that keeps the table unbuilt for those.
   if (!text.includes(':')) return
   for (const match of text.matchAll(CANDIDATE)) {
-    const char = shortcodes().get(match[1] as string)
+    const char = emojiForShortcode(match[1] as string)
     if (char === undefined) continue
     const from = match.index
     yield { from, to: from + match[0].length, char }

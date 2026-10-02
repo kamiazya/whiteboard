@@ -9,7 +9,7 @@ import {
   type WhiteboardConfigFile,
   whiteboardConfigFileSchema,
 } from './config-file.js'
-import { captureLogsForTests, getLogLevel, isLogLevelEnabled, setLogLevel } from './log.js'
+import { captureLogsForTests, getLogLevel, setLogLevel } from './log.js'
 
 let dir: string
 
@@ -266,7 +266,6 @@ describe('applyConfigFileToEnvAndLogLevel', () => {
     try {
       applyConfigFileToEnvAndLogLevel({ logLevel: 'debug' }, env)
       expect(getLogLevel()).toBe('debug')
-      expect(isLogLevelEnabled('debug')).toBe(true)
     } finally {
       setLogLevel(previousLevel)
     }

@@ -41,9 +41,6 @@ export const HEADER_BUTTON_CLASS = `${HEADER_BUTTON_BASE_CLASS} ${HEADER_BUTTON_
 /** A header control whose content sets its width (icon plus a count). */
 const HEADER_WIDE_BUTTON_CLASS = `${HEADER_BUTTON_BASE_CLASS} ${HEADER_BUTTON_HEIGHT_CLASS} min-w-8 gap-1 px-1.5 pointer-coarse:min-w-11`
 
-/** `HEADER_BUTTON_CLASS` for a control that opens something and must look open. */
-export const HEADER_TOGGLE_CLASS = `${HEADER_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`
-
 /** `HEADER_WIDE_BUTTON_CLASS` for a control that opens something and must look open. */
 export const HEADER_WIDE_TOGGLE_CLASS = `${HEADER_WIDE_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`
 
