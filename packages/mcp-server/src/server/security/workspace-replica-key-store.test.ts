@@ -68,6 +68,20 @@ describe('keyFor', () => {
     expect(b.keyId).not.toBe(a1.keyId)
   })
 
+  // The vector was computed outside this code (python3 hashlib over the
+  // documented construction: sha256 of the tag, key and salt, first 16 bytes,
+  // base64url), so it pins the derivation itself rather than agreeing with it.
+  it('derives keyId as the truncated sha256 of the tag, key and salt (golden vector)', async () => {
+    const key = Uint8Array.from({ length: 32 }, (_, i) => i)
+    const salt = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
+    await handle.db
+      .insertInto('workspaceReplicaKeys')
+      .values({ workspaceId: 'ws-golden', key, salt, createdAt: 0 })
+      .execute()
+
+    expect((await store.keyFor('ws-golden')).keyId).toBe('wyFLgyaLRJNp6IYnmDPprg')
+  })
+
   // The race is real at the JS level (every keyFor call starts before any
   // insert resolves), though libsql serialises statements on one connection
   // — so this proves the onConflict path answers correctly under

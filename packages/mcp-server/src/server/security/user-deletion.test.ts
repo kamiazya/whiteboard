@@ -113,6 +113,29 @@ describe('createUserDeletion', () => {
     expect(retireAccount).toHaveBeenCalledWith(accountId)
   })
 
+  it('keeps an invitation they issued that was already redeemed, and drops one still open', async () => {
+    const user = await deactivated(ada, 'Ada')
+    const redeemed = await invitations.createLink({
+      invitedBy: user.id,
+      workspaceId: 'ws-1',
+      now: 0,
+      ttlMs: HOUR,
+    })
+    const open = await invitations.createLink({
+      invitedBy: user.id,
+      workspaceId: 'ws-1',
+      now: 0,
+      ttlMs: HOUR,
+    })
+    await invitations.redeem(redeemed.invitation.id, 'p-bob', 1)
+
+    await deletion().delete(user.id)
+
+    // A deleted row answers 'unknown'; a kept redeemed one still says it was redeemed.
+    expect(await invitations.openLink(redeemed.token, 2)).toEqual({ ok: false, reason: 'redeemed' })
+    expect(await invitations.openLink(open.token, 2)).toEqual({ ok: false, reason: 'unknown' })
+  })
+
   it('ends a session still held, so nothing is left to resume as them', async () => {
     const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
     await createUserDeactivation(handle.db).deactivate(user.id, 1_000)
@@ -121,5 +144,13 @@ describe('createUserDeletion', () => {
     const late = await sessions.create(ada, 0, HOUR)
     await deletion().delete(user.id)
     expect(await sessions.resolve(late, 1)).toBeNull()
+  })
+
+  it('leaves a session for the same subject under a different authenticator', async () => {
+    const user = await deactivated(ada, 'Ada')
+    const namesake = { authenticator: 'oidc:https://other.example', subject: ada.subject }
+    const namesakes = await sessions.create(namesake, 0, HOUR)
+    await deletion().delete(user.id)
+    expect(await sessions.resolve(namesakes, 1)).toEqual(namesake)
   })
 })

@@ -265,6 +265,156 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
   })
 })
 
+// What each rule DECIDES, as a table: the rest of this file proves a route has
+// SOME decision and that no rule is shadowed, not that the decision is the one
+// the route was written for. The first scoped credential that ships inherits
+// whatever this table holds, so a destructive route quietly sitting at a read
+// scope is a hole the other guards cannot see.
+const scoped = (...scopes: string[]) => ({ kind: 'scoped', scopes })
+const WRITE_VERBS = ['POST', 'PUT', 'PATCH', 'DELETE']
+
+// [rule, method, path, decision]. Every rule owes at least one row, and a rule
+// that splits on write/read owes both halves.
+const SCOPE_DECISIONS = [
+  ['runtime/ping', 'GET', '/api/runtime/ping', { kind: 'public' }],
+  ['document file', 'GET', '/api/w/ws1/document/a/b/file/f1', scoped('files:read')],
+  ['document file', 'PUT', '/api/w/ws1/document/a/b/file/f1', scoped('files:write')],
+  [
+    'workspace-document/promote',
+    'POST',
+    '/api/w/ws1/workspace-document/promote',
+    scoped('canvas:write', 'versions:write'),
+  ],
+  [
+    'workspace-document sync',
+    'GET',
+    '/api/w/ws1/workspace-document/snapshot',
+    scoped('canvas:read'),
+  ],
+  [
+    'workspace-document sync',
+    'POST',
+    '/api/w/ws1/workspace-document/update',
+    scoped('canvas:write'),
+  ],
+  ['document update/export', 'POST', '/api/w/ws1/document/d1/update', scoped('canvas:write')],
+  ['document update/export', 'POST', '/api/w/ws1/document/d1/export', scoped('canvas:write')],
+  ['document (rest)', 'GET', '/api/w/ws1/document/d1', scoped('canvas:read')],
+  ['document (rest)', 'DELETE', '/api/w/ws1/document/d1', scoped('canvas:write')],
+  // Reading the stream, subscribing and posting a message are all read-level
+  // whatever the verb: they change only what this stream is told about.
+  ['sync transport', 'GET', '/api/sync/stream', scoped('canvas:read')],
+  ['sync transport', 'POST', '/api/sync/subscribe', scoped('canvas:read')],
+  ['sync transport', 'POST', '/api/sync/message', scoped('canvas:read')],
+  [
+    'document versions',
+    'GET',
+    '/api/workspaces/ws1/documents/d1/versions',
+    scoped('versions:read'),
+  ],
+  [
+    'document versions',
+    'POST',
+    '/api/workspaces/ws1/documents/d1/versions',
+    scoped('versions:write'),
+  ],
+  [
+    'document versions',
+    'DELETE',
+    '/api/workspaces/ws1/documents/d1/versions/v1',
+    scoped('versions:write'),
+  ],
+  [
+    'versions/prune-sandwiched',
+    'POST',
+    '/api/workspaces/ws1/versions/prune-sandwiched',
+    scoped('versions:write'),
+  ],
+  [
+    'files/purge-dangling',
+    'POST',
+    '/api/workspaces/ws1/files/purge-dangling',
+    scoped('files:write'),
+  ],
+  [
+    'documents/optimize-all',
+    'POST',
+    '/api/workspaces/ws1/documents/optimize-all',
+    scoped('versions:write'),
+  ],
+  ['workspace replica-key', 'POST', '/api/workspaces/ws1/replica-key', scoped('workspace:read')],
+  [
+    'workspace replica-key rotate',
+    'POST',
+    '/api/workspaces/ws1/replica-key/rotate',
+    scoped('runtime:admin'),
+  ],
+  ['workspace replica-tier', 'PUT', '/api/workspaces/ws1/replica-tier', scoped('runtime:admin')],
+  ['workspaces (rest)', 'GET', '/api/workspaces/ws1', scoped('workspace:read')],
+  ['workspaces (rest)', 'GET', '/api/workspaces/ws1/trash', scoped('workspace:read')],
+  ['workspaces (rest)', 'PATCH', '/api/workspaces/ws1', scoped('workspace:write')],
+  ['workspaces (rest)', 'DELETE', '/api/workspaces/ws1', scoped('workspace:write')],
+  ['workspaces (rest)', 'POST', '/api/workspaces/ws1/trash/d1/restore', scoped('workspace:write')],
+  ['tenant people', 'GET', '/api/people', scoped('workspace:read')],
+  ['tenant people', 'PUT', '/api/people/u1/administrator', scoped('workspace:write')],
+  ['tenant people', 'POST', '/api/invitations', scoped('workspace:write')],
+  ['runtime (rest)', 'GET', '/api/runtime/status', scoped('runtime:read')],
+  ['debug', 'GET', '/api/debug', scoped('runtime:admin')],
+  ['fonts', 'GET', '/api/fonts', scoped('runtime:read')],
+  ['fonts', 'POST', '/api/fonts/install', scoped('runtime:admin')],
+] as const
+
+describe('what each rule decides', () => {
+  it('has a row for every rule the table declares', () => {
+    const covered = new Set<string>(SCOPE_DECISIONS.map(([name]) => name))
+    expect([...covered].sort()).toEqual([...API_ROUTE_RULE_NAMES].sort())
+  })
+
+  it.for(SCOPE_DECISIONS)('%s: $1 $2 reaches its rule and decides what was written for it', ([
+    name,
+    method,
+    path,
+    decision,
+  ]) => {
+    expect(ruleClaiming(method, path)).toBe(name)
+    expect(resolveApiRouteScope(method, path)).toEqual(decision)
+  })
+
+  // The destructive and mutating routes by VERB rather than by the one verb
+  // mounted today: a write-scoped rule that asked for read on some verb
+  // would let a read-only credential reach it.
+  it.for([
+    ['/api/w/ws1/document/d1', 'canvas:write'],
+    ['/api/w/ws1/workspace-document/update', 'canvas:write'],
+    ['/api/workspaces/ws1/documents/d1/versions/v1', 'versions:write'],
+    ['/api/workspaces/ws1/trash/d1/restore', 'workspace:write'],
+    ['/api/workspaces/ws1', 'workspace:write'],
+    ['/api/v1/workspaces/ws1/documents/d1', 'workspace:write'],
+    ['/api/people/u1', 'workspace:write'],
+    ['/api/fonts/install', 'runtime:admin'],
+  ] as const)('%s needs %s under every write verb', ([path, scope]) => {
+    for (const method of WRITE_VERBS) {
+      expect(resolveApiRouteScope(method, path), `${method} ${path}`).toEqual(scoped(scope))
+    }
+  })
+
+  it('prune-sandwiched needs versions:write whichever verb reaches it', () => {
+    for (const method of ['POST', 'PUT', 'DELETE']) {
+      expect(
+        resolveApiRouteScope(method, '/api/workspaces/ws1/versions/prune-sandwiched'),
+        method,
+      ).toEqual(scoped('versions:write'))
+    }
+  })
+
+  it('debug needs runtime:admin under every verb and for any path beneath it', () => {
+    for (const method of ['GET', ...WRITE_VERBS]) {
+      expect(resolveApiRouteScope(method, '/api/debug'), method).toEqual(scoped('runtime:admin'))
+    }
+    expect(resolveApiRouteScope('GET', '/api/debug/documents')).toEqual(scoped('runtime:admin'))
+  })
+})
+
 // The table is ordered and FIRST MATCH WINS, so a rule placed under a broader
 // one is dead policy — and dead in the direction that matters: it is the
 // NARROWER rule that gets shadowed, so the route it was written to protect

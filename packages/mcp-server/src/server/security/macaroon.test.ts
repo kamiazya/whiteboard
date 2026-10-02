@@ -194,6 +194,42 @@ describe('macaroon — parsing is total', () => {
     expect(parseMacaroon(value)).toBeNull()
   })
 
+  // Each row breaks exactly one rule of the schema, so a loosened rule fails
+  // its own row instead of hiding behind another.
+  const wire = (macaroon: unknown) => Buffer.from(JSON.stringify(macaroon)).toString('base64url')
+  const base = { id: 'tok-1', caveats: [], sig: 'AA' }
+  const withCaveat = (caveat: unknown) => wire({ ...base, caveats: [caveat] })
+
+  it('accepts the boundary values the rows below sit just outside of', () => {
+    expect(parseMacaroon(wire(base))).toEqual(base)
+    expect(parseMacaroon(withCaveat({ kind: 'expiresAt', epochMs: 0 }))).not.toBeNull()
+  })
+
+  it.for([
+    ['an unknown field on the macaroon', wire({ ...base, extra: true })],
+    ['an empty token id', wire({ ...base, id: '' })],
+    ['an empty signature', wire({ ...base, sig: '' })],
+    [
+      'an unknown field on a workspace caveat',
+      withCaveat({ kind: 'workspace', workspaceId: 'w', x: 1 }),
+    ],
+    ['an empty workspace id', withCaveat({ kind: 'workspace', workspaceId: '' })],
+    [
+      'an unknown field on a scope caveat',
+      withCaveat({ kind: 'scope', scopes: ['canvas:read'], x: 1 }),
+    ],
+    ['an empty scope list', withCaveat({ kind: 'scope', scopes: [] })],
+    [
+      'a scope outside the vocabulary',
+      withCaveat({ kind: 'scope', scopes: ['canvas:everything'] }),
+    ],
+    ['an unknown field on an expiry caveat', withCaveat({ kind: 'expiresAt', epochMs: 1, x: 1 })],
+    ['a fractional expiry', withCaveat({ kind: 'expiresAt', epochMs: 1.5 })],
+    ['a negative expiry', withCaveat({ kind: 'expiresAt', epochMs: -1 })],
+  ] as const)('answers null for %s', ([, token]) => {
+    expect(parseMacaroon(token)).toBeNull()
+  })
+
   it('round-trips a token through parse and serialize unchanged', async () => {
     const token = await mintMacaroon({
       rootKey: ROOT_KEY,

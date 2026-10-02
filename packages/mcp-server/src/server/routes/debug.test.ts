@@ -5,7 +5,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
-import { createCredentialResolver } from '../security/credential-resolver.js'
+import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
+import { createCredentialResolver, type ResolvedGrant } from '../security/credential-resolver.js'
 import { testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
@@ -249,6 +250,22 @@ describe('GET /api/debug', () => {
       headers: { Authorization: 'Bearer secret' },
     })
     expect(authenticated.status).toBe(200)
+  })
+
+  it.for([
+    'signed-in',
+    'macaroon',
+    'external-bearer',
+  ] as const)('refuses a %s grant even when it carries every scope', async (kind) => {
+    const grant: ResolvedGrant = { kind, scopes: ALL_AUTH_SCOPES }
+    const app = createDebugRouter({
+      scope: testStoreScope(),
+      credentialResolver: { resolve: async () => grant },
+    })
+
+    const res = await app.request('/api/debug', { headers: { Authorization: 'Bearer anything' } })
+
+    expect(res.status).toBe(401)
   })
 
   it('remains public when no daemon token is configured', async () => {
