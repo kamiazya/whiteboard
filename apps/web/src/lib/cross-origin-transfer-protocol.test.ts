@@ -64,6 +64,77 @@ describe('the transfer offer', () => {
   })
 })
 
+describe('the bounds of the transfer messages', () => {
+  const ready = (over: Record<string, unknown> = {}) => ({
+    type: 'transfer-ready',
+    protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+    nonce: NONCE,
+    ...over,
+  })
+  const refusal = (over: Record<string, unknown> = {}) => ({
+    type: 'transfer-result',
+    nonce: NONCE,
+    ok: false,
+    reason: 'declined',
+    ...over,
+  })
+
+  it('accepts a nonce of 16 to 128 characters on every message and refuses one outside that', () => {
+    const messages = [
+      [transferRequestSchema, ready],
+      [transferRequestSchema, offer],
+      [transferResponseSchema, refusal],
+    ] as const
+    for (const [schema, build] of messages) {
+      for (const length of [16, 128]) {
+        const nonce = 'n'.repeat(length)
+        expect(schema.safeParse(build({ nonce })).success, `${build({}).type} ${length}`).toBe(true)
+      }
+      for (const length of [0, 15, 129]) {
+        const nonce = 'n'.repeat(length)
+        expect(schema.safeParse(build({ nonce })).success, `${build({}).type} ${length}`).toBe(
+          false,
+        )
+      }
+    }
+  })
+
+  it('refuses a protocol that is not a positive integer', () => {
+    for (const protocol of [0, -1, 1.5, '1']) {
+      expect(transferRequestSchema.safeParse(ready({ protocol })).success, String(protocol)).toBe(
+        false,
+      )
+      expect(transferRequestSchema.safeParse(offer({ protocol })).success, String(protocol)).toBe(
+        false,
+      )
+    }
+  })
+
+  it('accepts a claim of zero documents and refuses a negative or fractional one', () => {
+    expect(transferRequestSchema.safeParse(offer({ documentCount: 0 })).success).toBe(true)
+    expect(transferRequestSchema.safeParse(offer({ documentCount: -1 })).success).toBe(false)
+    expect(transferRequestSchema.safeParse(offer({ documentCount: 1.5 })).success).toBe(false)
+  })
+
+  it('refuses an offer that names no source workspace', () => {
+    expect(transferRequestSchema.safeParse(offer({ sourceWorkspaceId: '' })).success).toBe(false)
+  })
+
+  it('refuses a success that names no workspace in the receiving keeper', () => {
+    const success = {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: true,
+      workspaceId: 'ws-there',
+      promotedDocumentIds: [],
+      shadowedPaths: [],
+      attested: false,
+    }
+    expect(transferResponseSchema.safeParse(success).success).toBe(true)
+    expect(transferResponseSchema.safeParse({ ...success, workspaceId: '' }).success).toBe(false)
+  })
+})
+
 describe('the transfer result', () => {
   it('carries what the receiver merged, and a refusal carries a sentence', () => {
     const ok = transferResponseSchema.safeParse({
@@ -136,6 +207,15 @@ describe('the window URL carries the sender origin in its fragment', () => {
       const hash = `#${new URLSearchParams({ from, nonce: NONCE }).toString()}`
       expect(parseTransferWindowUrl(hash), from).toBeNull()
     }
+  })
+
+  it('refuses a missing sender and a nonce longer than the protocol allows', () => {
+    expect(parseTransferWindowUrl(`#${new URLSearchParams({ nonce: NONCE })}`)).toBeNull()
+    expect(
+      parseTransferWindowUrl(
+        `#${new URLSearchParams({ from: 'https://app.example', nonce: 'n'.repeat(129) })}`,
+      ),
+    ).toBeNull()
   })
 
   it('refuses a missing nonce and a nonce too short, rather than defaulting one', () => {
