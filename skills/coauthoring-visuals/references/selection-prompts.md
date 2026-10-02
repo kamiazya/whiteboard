@@ -92,7 +92,7 @@ Return:
 Rules:
 - Optimize for comprehension, not visual variety.
 - Do not create a separate shape just because a role has a different name.
-- Keep dashed treatment to one meaning per frame.
+- Keep any distinguishing edge color to one meaning per frame.
 ```
 
 ## Surface Selection Prompt

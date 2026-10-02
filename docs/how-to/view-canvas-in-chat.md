@@ -7,7 +7,7 @@
 > the conversation so the agent responds to it. Everything on this page
 > reflects what ships today.
 
-Whiteboard's local daemon MCP server implements the [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps)
+Whiteboard's MCP server — the stdio entry `npx @kamiazya/whiteboard-mcp` and the daemon's `/mcp` alike — implements the [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps)
 (`io.modelcontextprotocol/ui`, spec 2026-01-26). When your MCP client supports it, calling
 the `canvas_view` tool renders an interactive canvas view directly inside the chat —
 no need to switch to a browser tab to see what the agent drew.
@@ -85,7 +85,7 @@ This is **Phase A** of MCP Apps support:
 
 ## Requirements
 
-- A local daemon connection (see [Connect to a local daemon](connect-to-local-daemon.md)).
+- The Whiteboard MCP server, nothing more: `canvas_view` answers over the stdio entry with no daemon running. (A daemon is what a browser tab needs to follow your agent's writes; see [Connect to a local daemon](connect-to-local-daemon.md).)
 - An MCP client that implements the MCP Apps extension. As of this writing that
   includes Claude Desktop, VS Code (Copilot), Goose, Postman, and MCPJam — check your
   client's own documentation, since host support varies. Clients without MCP Apps
@@ -103,8 +103,8 @@ Ask your agent to view the canvas, or call the tool directly:
 }
 ```
 
-The result's `structuredContent` carries `{ workspaceId, documentId, scene, references }`, where
-`references` maps each file node's reference to its resolved `{ label?, body? }` and
+The result's `structuredContent` carries `{ workspaceId, documentId, scene, threads, references }`, where
+`threads` lists the comment threads pinned on the canvas, `references` maps each file node's reference to its resolved `{ label?, body? }` and
 `scene` is a
 shape the canvas-viewer package's `parseViewerScene` accepts, so a supporting client
 renders it immediately. On a client without MCP Apps support, you see this JSON as

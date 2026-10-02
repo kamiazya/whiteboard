@@ -91,7 +91,7 @@ In either case, do not mix multiple questions inside one region.
 | what changed | before / after comparison | `float only the change` |
 | what should be compared | comparison matrix | `align the comparison axis` |
 | where the problem is | hotspot annotation | `point to the problem area` |
-| what is still unresolved | note / dashed grouping / neutral node | `make uncertainty explicit` |
+| what is still unresolved | note / group labelled as unresolved / neutral node | `make uncertainty explicit` |
 | what boundary something belongs to and how it connects | infrastructure / network topology | `fix boundaries and connection type` |
 
 ## Intent -> Diagram Mapping

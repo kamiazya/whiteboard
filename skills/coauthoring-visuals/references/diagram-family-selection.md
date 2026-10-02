@@ -89,7 +89,7 @@ Use it when:
 Helpful compositions:
 - access flow
 - trust zone
-- dashed audit path
+- audit path in its own edge color, labeled
 
 ### Cloud / Network Zone
 

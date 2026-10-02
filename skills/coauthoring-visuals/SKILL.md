@@ -69,10 +69,10 @@ If the content really wants to become a structured table, such as a comparison m
 ## Stage 2: Refinement & Structure
 
 The working unit is a **section** — one coherent question and its answer — not necessarily a whole
-document. The whiteboard MCP surface has no frame/membership feature and no section-level render, so
-a section is either its own document (a `wb_workspace_edit` `document.create` op), or a loosely bounded region within one
-document marked with a `group` node (label + background only — it tracks no membership and cannot be
-exported on its own).
+document. The whiteboard MCP surface has no frame feature, so a section is either its own document
+(a `wb_workspace_edit` `document.create` op), or a region within one document marked with a `group`
+node (label + background; what it holds is whatever lies inside its bounds). `wb_scene_render` with
+`fragment` set to the group's label draws that one section on its own.
 
 Default rule: 1 section = 1 question.
 Use this loop:
@@ -176,7 +176,7 @@ Check:
 - would the hierarchy survive if unnecessary containers were removed?
 - has the semantic role profile stayed consistent?
   - do gateway / service / queue / database / external keep stable appearances?
-  - do dashed / accent / danger avoid carrying more than one meaning? (note: JSON Canvas edges have
+  - do accent / danger colors avoid carrying more than one meaning? (note: JSON Canvas edges have
     no dash/line-style field, so "different meaning" has to come from color or label, not stroke style)
 - does the chosen diagram family fit the viewer's question?
   - is a responsibility problem accidentally shown as a workflow?

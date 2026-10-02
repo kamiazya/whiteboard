@@ -41,7 +41,7 @@ In cloud / network zone diagrams, separate **nested boundaries and path types** 
 - Keep legends / notes outside the zone
 - Do not bury queues / buses in arrow labels
 - Do not style physical links and logical flows the same way
-- Do not overload solid / dashed / dotted with multiple meanings in one frame
+- Do not overload one edge color with multiple meanings in one frame
 - Do not run long diagonal cross-zone arrows through the middle of zones
 - Do not recolor provider icons in ways that hurt recognizability
 

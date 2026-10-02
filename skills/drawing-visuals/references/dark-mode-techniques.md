@@ -23,7 +23,7 @@ Dark mode is not about splashing bright colors onto a black background. It is ab
 - Keep grouping / zone fill at low opacity
 - Use glow only for emphasis, never as the meaning itself
 - Neutral text disappears easily on dark backgrounds, so do not weaken subtitles too far
-- Dashed / dotted differences are easier to miss in dark mode; reinforce the meaning with labels too
+- Differences carried by edge color alone are easier to miss in dark mode; reinforce the meaning with labels too
 
 ## Techniques That Work Well On A Dark Canvas
 
@@ -52,7 +52,7 @@ Dark mode is not about splashing bright colors onto a black background. It is ab
 
 - Can the main path still be followed in 5 seconds in both dark and light mode?
 - Does any neutral text disappear?
-- Are dashed / dotted lines still legible?
+- Are the edge colors still distinguishable, with labels carrying the meaning?
 - If you remove the glow, does the meaning remain?
 - Does the rendered SVG still preserve zone / boundary presence?
 
