@@ -26,7 +26,8 @@ export interface TestOnlyExport extends ExportDef {
 export function isTestFile(path: string): boolean {
   return (
     /\.(test|spec)\.[a-z]+$/.test(path) ||
-    /(^|\/)(test-utils|testing|__tests__|fixtures|e2e)(\/|$)/.test(path) ||
+    /(^|\/)(test-utils|testing|__tests__|fixtures|e2e|docs-snapshots)(\/|$)/.test(path) ||
+    /-test-utils\.[a-z]+$/.test(path) ||
     /\.(smoke-impl|distribution-impl|stress)\./.test(path)
   )
 }

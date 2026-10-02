@@ -34,18 +34,8 @@ import { findTestOnlyExports, isTestFile, type ScannedFile } from './test-only-e
 const NO_USE_BESIDE_TESTS: readonly string[] = [
   'apps/web/src/components/spatial-editor/gesture-trace.ts#replayNavigation',
   'apps/web/src/components/spatial-editor/navigation.ts#NAVIGATION_MEMORY_KEYS',
-  'apps/web/src/components/spatial-editor/node-editor-test-utils.ts#fillNodeEditor',
-  'apps/web/src/components/spatial-editor/node-editor-test-utils.ts#nodeEditor',
-  'apps/web/src/components/spatial-editor/node-editor-test-utils.ts#nodeEditorText',
   'apps/web/src/components/ui/dock-button.ts#dockControlSizesPx',
   'apps/web/src/components/ui/header-button.ts#headerControlSizesPx',
-  'apps/web/src/docs-snapshots/_helpers.ts#captureDocAsset',
-  'apps/web/src/docs-snapshots/_helpers.ts#makeFetchMock',
-  'apps/web/src/docs-snapshots/_helpers.ts#topBarFetchHandler',
-  'apps/web/src/docs-snapshots/_helpers.ts#waitForSnapshotContent',
-  'apps/web/src/docs-snapshots/_scenes.ts#ARCHITECTURE_SCENE',
-  'apps/web/src/docs-snapshots/_scenes.ts#AUTH_FLOW_SCENE',
-  'apps/web/src/docs-snapshots/_top-bar-frame.tsx#TopBarFrame',
   'apps/web/src/lib/document-file-store.ts#dataUrlToBlob',
   'apps/web/src/lib/local-document-summary.ts#InMemoryDefaultDocumentPointer',
   'apps/web/src/lib/png-embed.ts#extractTextFromPng',
@@ -156,7 +146,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/components/spatial-editor/navigation.ts#NavigationEffect',
   'apps/web/src/components/spatial-editor/navigation.ts#NavigationMode',
   'apps/web/src/components/spatial-editor/navigation.ts#PressContext',
-  'apps/web/src/components/spatial-editor/node-editor-test-utils.ts#nodeEditorContent',
   'apps/web/src/components/spatial-editor/selection-inspector.tsx#facetWriteCommands',
   'apps/web/src/components/spatial-editor/selection-inspector.tsx#inspectorSubject',
   'apps/web/src/components/spatial-editor/selection-inspector.tsx#tagWriteCommands',
@@ -171,7 +160,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/components/workspace-files/load-row-outline.ts#RowOutlineDeps',
   'apps/web/src/components/workspace-files/load-row-render.ts#RowRenderDeps',
   'apps/web/src/components/workspace-files/use-long-press.ts#LONG_PRESS_MS',
-  'apps/web/src/docs-snapshots/_helpers.ts#resolveDocAssetPath',
   'apps/web/src/hooks/use-agent-activity.ts#AGENT_HIGHLIGHT_MS',
   'apps/web/src/hooks/use-agent-activity.ts#AGENT_PRESENCE_MS',
   'apps/web/src/hooks/use-browser-tool-registry.ts#ModelContext',
@@ -503,7 +491,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the two debt lists hold, pinned by equality. */
-const DEBT_CEILING = 440
+const DEBT_CEILING = 428
 
 const DIRS = [
   'apps',
@@ -607,6 +595,8 @@ describe('what counts as an export only a test uses, on fixture files', () => {
       'a/testing/y.ts',
       'a/fixtures/y.ts',
       'a/startup.smoke-impl.ts',
+      'a/docs-snapshots/_helpers.ts',
+      'a/node-editor-test-utils.ts',
     ]) {
       expect(isTestFile(path), path).toBe(true)
     }
