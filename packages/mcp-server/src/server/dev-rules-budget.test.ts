@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
 // Always-on rule prose is charged to EVERY session in this repo before any
 // work starts, and almost none of it is guarded: across the five files below,
@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest'
 // them is a decision someone makes in a diff rather than drift nobody
 // measures. Growth is legitimate — a rule that earns always-on status should
 // be always-on — and so is a cut.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
+const REPO_ROOT = repoRoot()
 
 /**
  * Buckets of 1000 characters, floored.

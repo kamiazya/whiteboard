@@ -9,12 +9,13 @@
 // (`tools/checks/src/vitest-projects.mjs`), not a second hand-written list.
 
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { trackedFiles } from '../../shared/test-utils/tracked-files.js'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../../..')
+const ROOT = repoRoot()
 
 const { readVitestProjects } = (await import(
   pathToFileURL(join(ROOT, 'tools/checks/src/vitest-projects.mjs')).href

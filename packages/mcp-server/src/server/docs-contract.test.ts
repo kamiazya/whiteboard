@@ -1,10 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { serverRestoreOutputSchema, serverSupportBundleOutputSchema } from '../cli/operator-json.js'
 import { codeText } from '../shared/test-utils/markdown-code.js'
 import { bareScriptNames, declaresScript, scriptsOf } from '../shared/test-utils/pnpm-scripts.js'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 import { trackedFiles } from '../shared/test-utils/tracked-files.js'
 import { serverBackupResultSchema } from './store/backup-pass.js'
 
@@ -13,7 +14,7 @@ import { serverBackupResultSchema } from './store/backup-pass.js'
 // retirement (ADR 0001) deletes the WHITEBOARD_LEGACY_UI escape hatch along
 // with the legacy UI it toggled — this test fails the build if the flag is
 // ever documented again without the code behind it existing.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
+const REPO_ROOT = repoRoot()
 const DOCS_ROOT = join(REPO_ROOT, 'docs')
 
 // vitest-projects.mjs (tools/checks) is the single source of truth for the

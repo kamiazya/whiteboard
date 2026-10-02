@@ -5,14 +5,15 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 import { ALL_REGISTERED_TOOLS } from './mcp/mcp-smoke-coverage.js'
 
 // Same repo-root resolution as the sibling plugin-support.test.ts
 // (packages/mcp-server/src/server/plugin-support.test.ts): both files sit at
 // the same depth under the repo root.
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../../..')
-const SKILLS_ROOT = resolve(repoRoot, 'skills')
+const REPO_ROOT = repoRoot()
+const SKILLS_ROOT = resolve(REPO_ROOT, 'skills')
 
 function collectMarkdownFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -29,7 +30,7 @@ function readSkill(path: string): string {
 }
 
 function displayPath(path: string): string {
-  return relative(repoRoot, path)
+  return relative(REPO_ROOT, path)
 }
 
 // Names outside the registered tool surface that legitimately appear
@@ -218,15 +219,15 @@ describe('skills tool-surface guard', () => {
     // packaged skills/ directory, so a files-array entry for it was a
     // false claim (removed 2026-08-17), not a missing copy step.
     const readJson = (path: string) => JSON.parse(readFileSync(path, 'utf-8'))
-    const claudePlugin = readJson(resolve(repoRoot, '.claude-plugin/plugin.json'))
-    const codexPlugin = readJson(resolve(repoRoot, '.codex-plugin/plugin.json'))
+    const claudePlugin = readJson(resolve(REPO_ROOT, '.claude-plugin/plugin.json'))
+    const codexPlugin = readJson(resolve(REPO_ROOT, '.codex-plugin/plugin.json'))
     expect(claudePlugin.skills).toBe('./skills')
     expect(codexPlugin.skills).toBe('./skills')
     expect(existsSync(SKILLS_ROOT)).toBe(true)
 
     // Pin the deliberate ABSENCE: reintroducing 'skills' to the npm files
     // array without a consumer would revive the false shipped-skills claim.
-    const mcpPackage = readJson(resolve(repoRoot, 'packages/mcp-server/package.json'))
+    const mcpPackage = readJson(resolve(REPO_ROOT, 'packages/mcp-server/package.json'))
     expect(mcpPackage.files).not.toContain('skills')
 
     // And the deliberate absence of a SECOND copy. `packages/mcp-server/skills/`
@@ -234,7 +235,7 @@ describe('skills tool-surface guard', () => {
     // nothing — the guard below only scans the repo root, so a sweep that
     // fixed one copy left the other stale while every assertion stayed
     // green. Deleted 2026-08-18; this keeps it deleted.
-    expect(existsSync(resolve(repoRoot, 'packages/mcp-server/skills'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'packages/mcp-server/skills'))).toBe(false)
 
     const skillDirs = ['drawing-visuals', 'coauthoring-visuals', 'auditing-workspaces']
     expect(skillDirs).toHaveLength(3)
@@ -339,7 +340,7 @@ describe('skills tool-surface guard', () => {
   // containing `Vitest 5's: traceView`, which YAML reads as a nested
   // mapping, so its whole frontmatter failed to parse.
   it('every skill under .claude/skills/ has spec-conformant frontmatter', () => {
-    expect(frontmatterProblems(resolve(repoRoot, '.claude/skills'), 10)).toEqual([])
+    expect(frontmatterProblems(resolve(REPO_ROOT, '.claude/skills'), 10)).toEqual([])
   })
 
   // Sanity check that the walk itself has the shape the rest of this file

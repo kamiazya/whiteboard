@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 import { proseText } from '../shared/test-utils/markdown-code.js'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 import { trackedFiles } from '../shared/test-utils/tracked-files.js'
 
 function walkMd(dir: string, base: string, acc: string[] = []): string[] {
@@ -24,35 +25,35 @@ function walkMd(dir: string, base: string, acc: string[] = []): string[] {
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../../..')
+const REPO_ROOT = repoRoot()
 
 function readText(relPath: string): string {
-  return readFileSync(resolve(repoRoot, relPath), 'utf-8')
+  return readFileSync(resolve(REPO_ROOT, relPath), 'utf-8')
 }
 
 describe('docs layout contract', () => {
   it('docs/reference/configuration.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/reference/configuration.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/reference/configuration.md'))).toBe(true)
   })
 
   it('docs/how-to/self-host-with-docker.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/how-to/self-host-with-docker.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/how-to/self-host-with-docker.md'))).toBe(true)
   })
 
   it('docs/contributing/observability.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/observability.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/contributing/observability.md'))).toBe(true)
   })
 
   it('docs/explanation/architecture.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/explanation/architecture.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/explanation/architecture.md'))).toBe(true)
   })
 
   it('docs/explanation/security-model.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/explanation/security-model.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/explanation/security-model.md'))).toBe(true)
   })
 
   it('docs/contributing/architecture/wire-protocol.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/architecture/wire-protocol.md'))).toBe(
+    expect(existsSync(resolve(REPO_ROOT, 'docs/contributing/architecture/wire-protocol.md'))).toBe(
       true,
     )
   })
@@ -62,72 +63,72 @@ describe('docs layout contract', () => {
   // which are registered tools any more. Asserting its absence keeps the
   // deletion deliberate — a page describing removed tools must not reappear.
   it('docs/reference/templates.md does not exist (its tools were removed)', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/reference/templates.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/reference/templates.md'))).toBe(false)
   })
 
   it('docs/contributing/review-checklist.md exists', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/review-checklist.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/contributing/review-checklist.md'))).toBe(true)
   })
 
   it('CODE_OF_CONDUCT.md exists at repo root', () => {
-    expect(existsSync(resolve(repoRoot, 'CODE_OF_CONDUCT.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'CODE_OF_CONDUCT.md'))).toBe(true)
   })
 
   it('.github/PULL_REQUEST_TEMPLATE.md exists', () => {
-    expect(existsSync(resolve(repoRoot, '.github/PULL_REQUEST_TEMPLATE.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, '.github/PULL_REQUEST_TEMPLATE.md'))).toBe(true)
   })
 
   it('.github/ISSUE_TEMPLATE/bug_report.yml exists', () => {
-    expect(existsSync(resolve(repoRoot, '.github/ISSUE_TEMPLATE/bug_report.yml'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, '.github/ISSUE_TEMPLATE/bug_report.yml'))).toBe(true)
   })
 
   it('.github/ISSUE_TEMPLATE/feature_request.yml exists', () => {
-    expect(existsSync(resolve(repoRoot, '.github/ISSUE_TEMPLATE/feature_request.yml'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, '.github/ISSUE_TEMPLATE/feature_request.yml'))).toBe(true)
   })
 
   // Each of the 11 old stub paths must not exist after removal.
   it('docs/architecture.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/architecture.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/architecture.md'))).toBe(false)
   })
 
   it('docs/templates.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/templates.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/templates.md'))).toBe(false)
   })
 
   it('docs/pages-deploy-mvp.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/pages-deploy-mvp.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/pages-deploy-mvp.md'))).toBe(false)
   })
 
   it('docs/wire-protocol.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/wire-protocol.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/wire-protocol.md'))).toBe(false)
   })
 
   it('docs/testing.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/testing.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/testing.md'))).toBe(false)
   })
 
   it('docs/docker-server.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/docker-server.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/docker-server.md'))).toBe(false)
   })
 
   it('docs/configuration.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/configuration.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/configuration.md'))).toBe(false)
   })
 
   it('docs/observability.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/observability.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/observability.md'))).toBe(false)
   })
 
   it('docs/security-model.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/security-model.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/security-model.md'))).toBe(false)
   })
 
   it('docs/mcp-debugging.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/mcp-debugging.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/mcp-debugging.md'))).toBe(false)
   })
 
   it('docs/development.md stub does not exist', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/development.md'))).toBe(false)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/development.md'))).toBe(false)
   })
 
   // No stale refs to any of the 11 old stub paths anywhere in docs/, README.md,
@@ -136,8 +137,8 @@ describe('docs layout contract', () => {
   // flagged here because its resolution is depth-dependent; those are caught
   // by the "stub does not exist" tests above.
   it('no stale refs to moved doc paths remain across all docs and root files', () => {
-    const docsDir = resolve(repoRoot, 'docs')
-    const docFiles = existsSync(docsDir) ? walkMd(docsDir, repoRoot) : []
+    const docsDir = resolve(REPO_ROOT, 'docs')
+    const docFiles = existsSync(docsDir) ? walkMd(docsDir, REPO_ROOT) : []
     const rootFiles = ['README.md', 'CONTRIBUTING.md', 'AGENTS.md']
     const filesToCheck = [...docFiles, ...rootFiles]
 
@@ -150,7 +151,7 @@ describe('docs layout contract', () => {
       /(?:(?:\.\.\/)*|\/)docs\/(architecture|templates|pages-deploy-mvp|wire-protocol|testing|docker-server|configuration|observability|security-model|mcp-debugging|development)\.md/g
 
     for (const relPath of filesToCheck) {
-      if (!existsSync(resolve(repoRoot, relPath))) continue
+      if (!existsSync(resolve(REPO_ROOT, relPath))) continue
       const matches = readText(relPath).match(oldPathPattern)
       expect(
         matches,
@@ -161,28 +162,28 @@ describe('docs layout contract', () => {
 
   // ADR practice: docs/contributing/adr/ files must exist.
   it('docs/contributing/adr/README.md exists', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/adr/README.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/contributing/adr/README.md'))).toBe(true)
   })
 
   it('docs/contributing/adr/template.md exists', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/adr/template.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'docs/contributing/adr/template.md'))).toBe(true)
   })
 
   it('docs/contributing/adr/0001-apps-web-canonical-frontend.md exists', () => {
     expect(
-      existsSync(resolve(repoRoot, 'docs/contributing/adr/0001-apps-web-canonical-frontend.md')),
+      existsSync(resolve(REPO_ROOT, 'docs/contributing/adr/0001-apps-web-canonical-frontend.md')),
     ).toBe(true)
   })
 
   it('docs/contributing/adr/0002-browser-to-daemon-transport.md exists', () => {
     expect(
-      existsSync(resolve(repoRoot, 'docs/contributing/adr/0002-browser-to-daemon-transport.md')),
+      existsSync(resolve(REPO_ROOT, 'docs/contributing/adr/0002-browser-to-daemon-transport.md')),
     ).toBe(true)
   })
 
   it('docs/contributing/adr/0003-track-claude-dev-flow-tooling.md exists', () => {
     expect(
-      existsSync(resolve(repoRoot, 'docs/contributing/adr/0003-track-claude-dev-flow-tooling.md')),
+      existsSync(resolve(REPO_ROOT, 'docs/contributing/adr/0003-track-claude-dev-flow-tooling.md')),
     ).toBe(true)
   })
 
@@ -236,20 +237,20 @@ describe('docs anchor links', () => {
   // section. Four README links pointed at a `#bundled-skills-install` section
   // that had been deliberately deleted, and nothing noticed.
   it('every cross-file markdown anchor link resolves to a real heading', () => {
-    const docsDir = resolve(repoRoot, 'docs')
+    const docsDir = resolve(REPO_ROOT, 'docs')
     const files = [
-      ...(existsSync(docsDir) ? walkMd(docsDir, repoRoot) : []),
+      ...(existsSync(docsDir) ? walkMd(docsDir, REPO_ROOT) : []),
       'README.md',
       'CONTRIBUTING.md',
       'AGENTS.md',
-    ].filter((relPath) => existsSync(resolve(repoRoot, relPath)))
+    ].filter((relPath) => existsSync(resolve(REPO_ROOT, relPath)))
 
     const anchorsByFile = new Map<string, Set<string>>()
     const broken: string[] = []
 
     for (const relPath of files) {
       for (const link of readText(relPath).matchAll(/\]\((?!https?:)([^)\s#]+)#([^)\s]+)\)/g)) {
-        const target = resolve(repoRoot, dirname(relPath), link[1])
+        const target = resolve(REPO_ROOT, dirname(relPath), link[1])
         if (!target.endsWith('.md') || !existsSync(target)) continue
         let anchors = anchorsByFile.get(target)
         if (!anchors) {
@@ -277,7 +278,7 @@ describe('docs anchor links', () => {
       'docs/contributing/adr/template.md': ['XXXX-title.md'],
     }
 
-    const files = trackedFiles(repoRoot, '*.md')
+    const files = trackedFiles(REPO_ROOT, '*.md')
     expect(files.length).toBeGreaterThan(250)
     expect(files).toContain('docs/contributing/adr/0029-proposal-layer.md')
 
@@ -291,8 +292,8 @@ describe('docs anchor links', () => {
         if (MAY_DANGLE[relPath]?.includes(target)) continue
         checked++
         const resolved = target.startsWith('/')
-          ? resolve(repoRoot, target.slice(1))
-          : resolve(repoRoot, dirname(relPath), target)
+          ? resolve(REPO_ROOT, target.slice(1))
+          : resolve(REPO_ROOT, dirname(relPath), target)
         if (!existsSync(resolved)) broken.push(`${relPath} -> ${target}`)
       }
     }

@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it, vi } from 'vitest'
-
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import {
   assertTarballFileList,
   buildTarballSmokeChildEnv,
@@ -11,11 +11,11 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(__dirname, '../../..')
-const repoRoot = resolve(packageRoot, '../..')
+const REPO_ROOT = repoRoot()
 
 describe('packed tarball smoke', () => {
   it('npm pack → pnpm install → installed entry passes full e2e checkpoint flow', async () => {
-    await runPackedTarballSmoke({ packageRoot, repoRoot })
+    await runPackedTarballSmoke({ packageRoot, repoRoot: REPO_ROOT })
   }, 120_000)
 
   // Regression for a release-blocking failure: a CI job env block that sets
@@ -24,7 +24,7 @@ describe('packed tarball smoke', () => {
   it('succeeds even when the ambient env carries WHITEBOARD_DEV=1', async () => {
     vi.stubEnv('WHITEBOARD_DEV', '1')
     try {
-      await runPackedTarballSmoke({ packageRoot, repoRoot })
+      await runPackedTarballSmoke({ packageRoot, repoRoot: REPO_ROOT })
     } finally {
       vi.unstubAllEnvs()
     }

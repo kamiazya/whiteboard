@@ -28,9 +28,10 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..', '..')
+const REPO_ROOT = repoRoot()
 const WORKFLOWS_DIR = resolve(REPO_ROOT, '.github', 'workflows')
 const RELEASE_WORKFLOW_PATH = resolve(WORKFLOWS_DIR, 'release.yml')
 

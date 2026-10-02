@@ -8,10 +8,11 @@ import {
   computeSbomInputFingerprint,
   SBOM_FINGERPRINT_INPUT_PATHS,
 } from '../../../scripts/release/sbom-fingerprint.mjs'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { sbomFingerprintSidecarSchema } from './sbom-fingerprint-schema.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = join(__dirname, '../../../../..')
+const REPO_ROOT = repoRoot()
 
 // Builds a throwaway fixture workspace with the two declared input files, so
 // fingerprint tests never depend on this checkout's real lockfile/manifest.

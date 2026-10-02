@@ -1,14 +1,14 @@
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-
 // The script CI runs, not a copy of it: pr-title.yml executes this file.
 import {
   explainPullRequestTitleRule,
   isValidPullRequestTitle,
 } from '../../../../tools/check-pr-title.mjs'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
-const SCRIPT = join(import.meta.dirname, '../../../../tools/check-pr-title.mjs')
+const SCRIPT = join(repoRoot(), 'tools/check-pr-title.mjs')
 
 function runScript(...args: string[]) {
   return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' })

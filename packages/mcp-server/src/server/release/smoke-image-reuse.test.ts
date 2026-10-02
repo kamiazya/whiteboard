@@ -11,9 +11,10 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(__dirname, '../../../../..')
+const ROOT = repoRoot()
 
 const { resolveServerImage } = (await import(
   pathToFileURL(join(ROOT, 'tests/e2e/distribution/smoke-helpers.mjs')).href

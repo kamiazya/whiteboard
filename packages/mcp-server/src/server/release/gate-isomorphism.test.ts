@@ -19,10 +19,11 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { extractWorkflowJobs } from './workflow-jobs.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(__dirname, '../../../../..')
+const ROOT = repoRoot()
 
 function readJson(relPath: string): unknown {
   return JSON.parse(readFileSync(join(ROOT, relPath), 'utf-8'))

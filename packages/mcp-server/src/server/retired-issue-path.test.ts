@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
 // Findings used to be filed as markdown files under `tmp/issues/`. That path
 // is gitignored and retired: issues are whiteboard documents of `type: issue`
@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest'
 // reword that only searched for the slash.
 // Worktrees under `.claude/worktrees` are other checkouts of this same tree,
 // so counting them would report one stale line once per worktree.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
+const REPO_ROOT = repoRoot()
 const RETIRED = 'tmp/issues'
 const RETIRED_SPELLING = /tmp[-/_ ]issues/i
 

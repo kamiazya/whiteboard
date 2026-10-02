@@ -6,9 +6,10 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(__dirname, '../../../../..')
+const ROOT = repoRoot()
 const SCHEMA_MODULE = join(ROOT, 'tools/checks/src/release-gate-matrix-schema.mjs')
 
 async function importSchema() {

@@ -8,10 +8,11 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../src/shared/test-utils/repo-root.js'
 
-const REPO_ROOT = resolve(import.meta.dirname, '../../../')
+const REPO_ROOT = repoRoot()
 const SECRETLINT_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'secretlint')
 
 /**

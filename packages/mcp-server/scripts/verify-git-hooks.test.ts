@@ -10,11 +10,12 @@
  * lefthook itself reports the failure correctly on its way past.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../src/shared/test-utils/repo-root.js'
 import { findCommandsAfterLefthook } from './verify-git-hooks.mjs'
 
-const REPO_ROOT = resolve(import.meta.dirname, '../../../')
+const REPO_ROOT = repoRoot()
 const HOOKS_DIR = join(REPO_ROOT, '.git', 'hooks')
 
 const LEFTHOOK_TAIL = `call_lefthook run "pre-commit" "$@"\n`

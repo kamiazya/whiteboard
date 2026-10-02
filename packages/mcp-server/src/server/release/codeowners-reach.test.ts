@@ -4,12 +4,12 @@
 // while the file that replaced it sits under only the broader line above.
 
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { trackedFiles } from '../../shared/test-utils/tracked-files.js'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../../..')
+const ROOT = repoRoot()
 
 /** A CODEOWNERS pattern as an anchored regex over repo-relative paths. */
 function patternToRegExp(pattern: string): RegExp {

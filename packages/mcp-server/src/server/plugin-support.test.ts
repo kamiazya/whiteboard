@@ -3,19 +3,20 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../../..')
+const REPO_ROOT = repoRoot()
 
 function readJson(path: string): any {
   return JSON.parse(readFileSync(path, 'utf-8'))
 }
 
 describe('plugin support packaging', () => {
-  const rootPackage = readJson(resolve(repoRoot, 'package.json'))
-  const mcpPackage = readJson(resolve(repoRoot, 'packages/mcp-server/package.json'))
-  const claudePlugin = readJson(resolve(repoRoot, '.claude-plugin/plugin.json'))
-  const releasePlease = readJson(resolve(repoRoot, 'release-please-config.json'))
+  const rootPackage = readJson(resolve(REPO_ROOT, 'package.json'))
+  const mcpPackage = readJson(resolve(REPO_ROOT, 'packages/mcp-server/package.json'))
+  const claudePlugin = readJson(resolve(REPO_ROOT, '.claude-plugin/plugin.json'))
+  const releasePlease = readJson(resolve(REPO_ROOT, 'release-please-config.json'))
 
   it('ships dist but deliberately NOT skills in the npm package', () => {
     // Skills distribute through the plugin (repo-root skills/); nothing in
@@ -26,7 +27,7 @@ describe('plugin support packaging', () => {
   })
 
   it('includes a Codex plugin manifest wired to the shared skills and MCP config', () => {
-    const codexPlugin = readJson(resolve(repoRoot, '.codex-plugin/plugin.json'))
+    const codexPlugin = readJson(resolve(REPO_ROOT, '.codex-plugin/plugin.json'))
 
     expect(codexPlugin.name).toBe('whiteboard')
     expect(codexPlugin.skills).toBe('./skills')
@@ -34,7 +35,7 @@ describe('plugin support packaging', () => {
   })
 
   it('provides a plugin-local MCP config for Codex', () => {
-    const codexMcpConfig = readJson(resolve(repoRoot, '.mcp.json'))
+    const codexMcpConfig = readJson(resolve(REPO_ROOT, '.mcp.json'))
     const whiteboardServer = codexMcpConfig.mcpServers?.whiteboard
 
     expect(whiteboardServer).toBeDefined()
@@ -43,8 +44,8 @@ describe('plugin support packaging', () => {
   })
 
   it('keeps Claude, Codex, and Gemini plugin manifests on the root release version track', () => {
-    const codexPlugin = readJson(resolve(repoRoot, '.codex-plugin/plugin.json'))
-    const geminiExtension = readJson(resolve(repoRoot, 'gemini-extension.json'))
+    const codexPlugin = readJson(resolve(REPO_ROOT, '.codex-plugin/plugin.json'))
+    const geminiExtension = readJson(resolve(REPO_ROOT, 'gemini-extension.json'))
     const syncedPaths = releasePlease.packages['.']['extra-files'].map(
       (entry: { path: string }) => entry.path,
     )

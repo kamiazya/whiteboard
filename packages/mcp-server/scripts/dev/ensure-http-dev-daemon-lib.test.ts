@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 import {
   buildMcpHttpDevSpawnArgs,
   DEFAULT_READY_TIMEOUT_MS,
@@ -11,11 +12,7 @@ import {
 
 describe('HTTP dev daemon startup', () => {
   it('uses the current Codex hooks feature flag', async () => {
-    // .codex/config.toml lives at the repo root (../../../../ from packages/mcp-server/scripts/dev).
-    const config = await readFile(
-      resolve(import.meta.dirname, '../../../../.codex/config.toml'),
-      'utf8',
-    )
+    const config = await readFile(join(repoRoot(), '.codex/config.toml'), 'utf8')
 
     expect(config).toMatch(/^\s*hooks\s*=\s*true\s*$/m)
     expect(config).not.toMatch(/^\s*codex_hooks\s*=/m)

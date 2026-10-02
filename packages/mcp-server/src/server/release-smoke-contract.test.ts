@@ -3,18 +3,19 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../../..')
+const REPO_ROOT = repoRoot()
 
 function readJson(path: string): any {
   return JSON.parse(readFileSync(path, 'utf-8'))
 }
 
 describe('release smoke contract', () => {
-  const rootPackage = readJson(resolve(repoRoot, 'package.json'))
-  const mcpPackage = readJson(resolve(repoRoot, 'packages/mcp-server/package.json'))
-  const releaseWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/release.yml'), 'utf-8')
+  const rootPackage = readJson(resolve(REPO_ROOT, 'package.json'))
+  const mcpPackage = readJson(resolve(REPO_ROOT, 'packages/mcp-server/package.json'))
+  const releaseWorkflow = readFileSync(resolve(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')
 
   it('defines a packaged-artifact smoke for the MCP package and root workspace', () => {
     expect(mcpPackage.scripts['smoke:packaged']).toBe(
@@ -42,7 +43,7 @@ describe('release smoke contract', () => {
     // they are `publish`-tier gates in release-gate-matrix.json, executed in
     // matrix order by the single `pnpm publish-gate` step. That step must
     // still run after build and before `npm publish`.
-    const matrix = readJson(resolve(repoRoot, 'tests/e2e/distribution/release-gate-matrix.json'))
+    const matrix = readJson(resolve(REPO_ROOT, 'tests/e2e/distribution/release-gate-matrix.json'))
     const publishGateIds: string[] = matrix.gates
       .filter((g: { requiredFor: string[] }) => g.requiredFor.includes('publish'))
       .map((g: { id: string }) => g.id)

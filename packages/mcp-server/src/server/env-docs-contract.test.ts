@@ -8,12 +8,12 @@
 // scan is a floor, and `docs/reference/configuration.md` remains where those
 // are listed.
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 import { ENV_KEYS } from './security/server-mode-env-config.js'
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
+const REPO_ROOT = repoRoot()
 const SOURCE_ROOT = join(REPO_ROOT, 'packages/mcp-server/src')
 
 // Read by code that only a developer or a smoke harness runs, so documenting

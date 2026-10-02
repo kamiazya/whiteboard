@@ -33,12 +33,13 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../../..')
+const REPO_ROOT = repoRoot()
 
 function readText(relPath: string): string {
-  return readFileSync(resolve(repoRoot, relPath), 'utf-8')
+  return readFileSync(resolve(REPO_ROOT, relPath), 'utf-8')
 }
 
 const dockerfile = readText('Dockerfile.server')
@@ -395,7 +396,7 @@ const SCAN_DIRS = [
 function filesReachingTheImageBuild(): string[] {
   const found: string[] = []
   for (const dir of SCAN_DIRS) {
-    for (const entry of readdirSync(resolve(repoRoot, dir), { withFileTypes: true })) {
+    for (const entry of readdirSync(resolve(REPO_ROOT, dir), { withFileTypes: true })) {
       if (!entry.isFile()) continue
       if (!/\.(mjs|ts|yml|yaml|json)$/.test(entry.name)) continue
       const rel = dir === '.' ? entry.name : `${dir}/${entry.name}`
