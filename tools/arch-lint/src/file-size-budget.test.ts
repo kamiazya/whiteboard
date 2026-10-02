@@ -494,7 +494,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness
   // helpers (`smoke-helpers.mjs`). The next shrink is the support-bundle
   // scenarios as their own script.
-  'tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs': 1082,
+  'tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs': 1070,
 }
 
 describe('file-size budget: .mjs scripts, same 800-line budget, same shrink-only contract', () => {

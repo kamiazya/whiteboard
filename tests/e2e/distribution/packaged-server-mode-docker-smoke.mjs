@@ -25,9 +25,7 @@
 // available in all CI environments). Run it explicitly:
 //   node tests/e2e/distribution/packaged-server-mode-docker-smoke.mjs
 
-import { generateKeyPairSync } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,11 +33,14 @@ import {
   assertNoLeak,
   createFail,
   createSkip,
+  createSmokeJwks,
   docker,
+  dockerNetworking,
   generateTestTlsCert,
   redactForDiagnostics,
   resolveServerImage,
   signEs256Jwt,
+  startJwksServer,
   stopContainer,
   waitForContainerReadyJson,
 } from './smoke-helpers.mjs'
@@ -65,14 +66,9 @@ if (docker(['info'], { timeout: 10_000 }).status !== 0) {
 console.log('[docker-smoke] Docker available. Starting smoke.')
 
 // ── Network strategy ──────────────────────────────────────────────────────────
-const useHostNetwork = process.platform === 'linux'
-const jwksConnectHost = useHostNetwork ? '127.0.0.1' : 'host.docker.internal'
-const networkRunArgs = useHostNetwork
-  ? ['--network=host']
-  : ['--add-host=host.docker.internal:host-gateway', '-p', `${HOST_SERVER_PORT}:3099`]
-const serverBaseUrl = useHostNetwork
-  ? 'http://127.0.0.1:3099'
-  : `http://127.0.0.1:${HOST_SERVER_PORT}`
+const { jwksConnectHost, networkRunArgs, serverBaseUrl } = dockerNetworking({
+  hostServerPort: HOST_SERVER_PORT,
+})
 
 // ── Scenario 1: docker build ──────────────────────────────────────────────────
 
@@ -136,9 +132,7 @@ console.log('[docker-smoke] scenario 1 PASS: image available')
 const certsDir = mkdtempSync(join(tmpdir(), 'wb-docker-smoke-certs-'))
 const dataDir = mkdtempSync(join(tmpdir(), 'wb-docker-smoke-data-'))
 
-const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
-const jwkPublic = publicKey.export({ format: 'jwk' })
-const jwks = { keys: [{ ...jwkPublic, kid: 'smoke-key', use: 'sig', alg: 'ES256' }] }
+const { privateKey, jwks } = createSmokeJwks({ kid: 'smoke-key' })
 
 const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir, {
   commonName: 'docker-smoke-ca',
@@ -146,18 +140,11 @@ const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certs
 const tlsKey = readFileSync(tlsKeyFile)
 const tlsCert = readFileSync(tlsCertFile)
 
-const jwksServer = await new Promise((resolve, reject) => {
-  const srv = createHttpsServer({ key: tlsKey, cert: tlsCert }, (req, res) => {
-    if (req.url === '/.well-known/jwks.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(jwks))
-    } else {
-      res.writeHead(404)
-      res.end()
-    }
-  })
-  srv.listen(0, '0.0.0.0', () => resolve(srv))
-  srv.once('error', reject)
+// Bound on every interface: the container reaches it across the Docker bridge.
+const jwksServer = await startJwksServer({
+  tls: { key: tlsKey, cert: tlsCert },
+  jwks,
+  host: '0.0.0.0',
 })
 const jwksPort = jwksServer.address().port
 const jwksUri = `https://${jwksConnectHost}:${jwksPort}/.well-known/jwks.json`

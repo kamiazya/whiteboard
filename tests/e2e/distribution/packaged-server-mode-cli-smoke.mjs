@@ -32,7 +32,6 @@
 // Run: node tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs
 
 import { spawn } from 'node:child_process'
-import { generateKeyPairSync } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -45,7 +44,6 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { request } from 'node:http'
-import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -55,9 +53,11 @@ import {
   createAccessTokenMinter,
   createCliRunner,
   createFail,
+  createSmokeJwks,
   generateTestTlsCert,
   readyRecord,
   scrubDevEnv,
+  startJwksServer,
   waitForHttpReady,
 } from './smoke-helpers.mjs'
 
@@ -166,27 +166,17 @@ const SMOKE_LITERALS = [srcDataDir, backupDir, restoredDir, certsDir, SEED_TOKEN
 
 // ── JWKS mock setup (used for scenarios 2 and 5) ─────────────────────────────
 
-const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
-const jwkPublic = publicKey.export({ format: 'jwk' })
-const jwks = { keys: [{ ...jwkPublic, kid: 'cli-smoke-key', use: 'sig', alg: 'ES256' }] }
+const { privateKey, jwks } = createSmokeJwks({ kid: 'cli-smoke-key' })
 const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir, {
   commonName: 'server-cli-smoke-ca',
 })
 const tlsKey = readFileSync(tlsKeyFile)
 const tlsCert = readFileSync(tlsCertFile)
 
-const jwksServer = await new Promise((resolve, reject) => {
-  const srv = createHttpsServer({ key: tlsKey, cert: tlsCert }, (req, res) => {
-    if (req.url === '/.well-known/jwks.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(jwks))
-    } else {
-      res.writeHead(404)
-      res.end()
-    }
-  })
-  srv.listen(0, '127.0.0.1', () => resolve(srv))
-  srv.once('error', reject)
+const jwksServer = await startJwksServer({
+  tls: { key: tlsKey, cert: tlsCert },
+  jwks,
+  host: '127.0.0.1',
 })
 const jwksPort = jwksServer.address().port
 const jwksUri = `https://127.0.0.1:${jwksPort}/.well-known/jwks.json`

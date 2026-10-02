@@ -31,9 +31,7 @@
 // This smoke is NOT part of pnpm test:e2e:distribution. Run explicitly:
 //   node tests/e2e/distribution/packaged-server-mode-backup-restore-smoke.mjs
 
-import { generateKeyPairSync } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer as createHttpsServer } from 'node:https'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -43,9 +41,12 @@ import {
   createAccessTokenMinter,
   createFail,
   createSkip,
+  createSmokeJwks,
   docker,
+  dockerNetworking,
   generateTestTlsCert,
   resolveServerImage,
+  startJwksServer,
   stopContainer,
   waitForContainerReadyJson,
   waitForHttpReady,
@@ -165,14 +166,9 @@ if (!existsSync(BACKUP_RESTORE_ENTRY)) {
 console.log('[docker-br-smoke] Docker available. Starting backup/restore smoke.')
 
 // ── Network strategy ──────────────────────────────────────────────────────────
-const useHostNetwork = process.platform === 'linux'
-const jwksConnectHost = useHostNetwork ? '127.0.0.1' : 'host.docker.internal'
-const networkRunArgs = useHostNetwork
-  ? ['--network=host']
-  : ['--add-host=host.docker.internal:host-gateway', '-p', `${HOST_SERVER_PORT}:3099`]
-const serverBaseUrl = useHostNetwork
-  ? 'http://127.0.0.1:3099'
-  : `http://127.0.0.1:${HOST_SERVER_PORT}`
+const { jwksConnectHost, networkRunArgs, serverBaseUrl } = dockerNetworking({
+  hostServerPort: HOST_SERVER_PORT,
+})
 
 // ── Scenario 1: docker build ──────────────────────────────────────────────────
 
@@ -205,9 +201,7 @@ const restoredDataDir = mkdtempSync(join(TMP_BASE, 'wb-docker-br-restored-'))
 chmodSync(srcDataDir, 0o777)
 chmodSync(restoredDataDir, 0o777)
 
-const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
-const jwkPublic = publicKey.export({ format: 'jwk' })
-const jwks = { keys: [{ ...jwkPublic, kid: 'br-smoke-key', use: 'sig', alg: 'ES256' }] }
+const { privateKey, jwks } = createSmokeJwks({ kid: 'br-smoke-key' })
 
 const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir, {
   commonName: 'docker-br-smoke-ca',
@@ -244,18 +238,10 @@ const SIGN_IN_RUN_ARGS = [
 const tlsKey = readFileSync(tlsKeyFile)
 const tlsCert = readFileSync(tlsCertFile)
 
-const jwksServer = await new Promise((resolve, reject) => {
-  const srv = createHttpsServer({ key: tlsKey, cert: tlsCert }, (req, res) => {
-    if (req.url === '/.well-known/jwks.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(jwks))
-    } else {
-      res.writeHead(404)
-      res.end()
-    }
-  })
-  srv.listen(0, '0.0.0.0', () => resolve(srv))
-  srv.once('error', reject)
+const jwksServer = await startJwksServer({
+  tls: { key: tlsKey, cert: tlsCert },
+  jwks,
+  host: '0.0.0.0',
 })
 const jwksPort = jwksServer.address().port
 const jwksUri = `https://${jwksConnectHost}:${jwksPort}/.well-known/jwks.json`
