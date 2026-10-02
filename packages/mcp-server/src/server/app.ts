@@ -53,6 +53,7 @@ import { routeServerCoreLogs } from './server-core-logs.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
 import { storeScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
+import { computeStorageReport } from './tenant/storage-report.js'
 
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
 
@@ -373,6 +374,7 @@ export function createApp(options: AppOptions) {
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       credentialResolver,
       scope,
+      storageReport: () => computeStorageReport(scope.dataDir),
     }),
   )
   if (options.authMode === 'server-mode') {

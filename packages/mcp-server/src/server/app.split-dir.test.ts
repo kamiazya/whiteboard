@@ -207,6 +207,24 @@ describe('createApp over a dir the process global does not name', () => {
     )
   })
 
+  it('walks the served dir for the storage report', async () => {
+    const { app } = await bootBoth()
+    type Report = { byCategory: { other: { bytes: number; files: number } } }
+    const other = async () =>
+      ((await (await app.request('/api/runtime/storage')).json()) as Report).byCategory.other
+    const before = await other()
+
+    // A top-level file is classed `other`; written to the served dir alone, so
+    // a walk of the ambient one cannot see it.
+    await writeFile(join(served, 'stray.bin'), 'seven b')
+
+    const after = await other()
+    expect({ bytes: after.bytes - before.bytes, files: after.files - before.files }).toEqual({
+      bytes: 7,
+      files: 1,
+    })
+  })
+
   it('exports the served document, not the ambient one of the same address', async () => {
     const { app } = await bootBoth()
     const res = await app.request(`/api/w/${WS}/document/note/export-svg`, json({}))

@@ -18,9 +18,10 @@ import { mintMacaroon } from '../security/macaroon.js'
 import { testStoreScope } from './_test-helpers.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
-// data directory. Stub `../config.js` (DATA_DIR) and the helpers behind
-// /api/runtime/storage so a buggy route can not stat the user's blobs/.
-const mockComputeStorageReport = vi.fn(async (_dir: string) => ({
+// data directory. Stub `../config.js` (DATA_DIR) and the compaction read behind
+// /api/runtime/storage; the report itself is the dependency the router is
+// handed, so a buggy route can not stat the user's blobs/.
+const mockStorageReport = vi.fn(async () => ({
   totalBytes: 0,
   fileCount: 0,
   byCategory: {
@@ -38,9 +39,6 @@ vi.mock('../config.js', () => ({
   getDataDir: () => '/__test__/runtime-routes-must-not-touch-real-disk',
   WHITEBOARD_ROOT: '/__test__',
   REPO_ROOT: '/__test__',
-}))
-vi.mock('../tenant/storage-report.js', () => ({
-  computeStorageReport: (dir: string) => mockComputeStorageReport(dir),
 }))
 vi.mock('../store/document-store.js', () => ({
   readLatestCompactedAt: () => mockReadLatestCompactedAt(),
@@ -92,6 +90,7 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
     instanceId: 'test-instance-id',
     identity: testIdentity,
     scope: testStoreScope(LAYOUT_DIR),
+    storageReport: mockStorageReport,
     touch,
     getStatus: () => STATUS,
   })
@@ -100,7 +99,7 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
 }
 
 beforeEach(() => {
-  mockComputeStorageReport.mockClear()
+  mockStorageReport.mockClear()
   mockReadLatestCompactedAt.mockClear()
 })
 
@@ -162,7 +161,7 @@ describe('runtime routes', () => {
   })
 
   it('returns a storage report for an authenticated GET /api/runtime/storage', async () => {
-    mockComputeStorageReport.mockResolvedValueOnce({
+    mockStorageReport.mockResolvedValueOnce({
       totalBytes: 4096,
       fileCount: 3,
       byCategory: {
@@ -191,15 +190,14 @@ describe('runtime routes', () => {
     expect(body.byCategory.blobs).toEqual({ bytes: 4096, files: 3 })
     expect(body.lastAutoCompactedAt).toBe(1_700_000_000_000)
     expect(touch).toHaveBeenCalledTimes(1)
-    expect(mockComputeStorageReport).toHaveBeenCalledTimes(1)
-    expect(mockComputeStorageReport).toHaveBeenCalledWith(LAYOUT_DIR)
+    expect(mockStorageReport).toHaveBeenCalledTimes(1)
   })
 
   it('rejects /api/runtime/storage without a bearer token', async () => {
     const { app } = createApp()
     const res = await app.request('/api/runtime/storage')
     expect(res.status).toBe(401)
-    expect(mockComputeStorageReport).not.toHaveBeenCalled()
+    expect(mockStorageReport).not.toHaveBeenCalled()
   })
 
   // The daemon writes its records to stderr and keeps no log file, so a prune

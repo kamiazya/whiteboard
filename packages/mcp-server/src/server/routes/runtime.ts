@@ -1,3 +1,4 @@
+import type { StorageReportPayload } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   daemonPingResponseSchema,
   type RuntimeStatusResponse,
@@ -10,7 +11,6 @@ import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
 import type { StoreScope } from '../store/store-scope.js'
-import { computeStorageReport } from '../tenant/storage-report.js'
 
 export interface RuntimeRouterOptions {
   instanceId: string
@@ -26,11 +26,16 @@ export interface RuntimeRouterOptions {
    */
   credentialResolver: CredentialResolver
   /**
-   * The directory this router serves: the storage report walks `scope.dataDir`
-   * and the compaction stamp is read from the same scope's workspace records,
-   * so the two cannot name different directories.
+   * The directory this router serves: the compaction stamp is read from this
+   * scope's workspace records, and `storageReport` must walk the same
+   * directory.
    */
   scope: StoreScope
+  /**
+   * The storage usage report for `scope`'s data directory. Handed in because
+   * producing it walks the disk, which is a mechanic and not this adapter's.
+   */
+  storageReport: () => Promise<StorageReportPayload>
 }
 
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
@@ -87,13 +92,13 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     return c.json(options.getStatus())
   })
 
-  // Storage usage report. Cheap stat()-only walk of the data dir; nothing is cached.
+  // Storage usage report; nothing is cached.
   // `lastAutoCompactedAt` is the freshest auto-Optimize timestamp across
   // every canvas, so the UI can surface "Auto-optimised Ns ago" without
   // a separate round trip.
   app.get('/api/runtime/storage', async (c) => {
     options.touch()
-    const report = await computeStorageReport(options.scope.dataDir)
+    const report = await options.storageReport()
     const lastAutoCompactedAt = await readLatestCompactedAt(options.scope)
     return c.json({ ...report, lastAutoCompactedAt })
   })
