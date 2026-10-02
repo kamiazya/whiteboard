@@ -14,7 +14,7 @@ import {
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
 import { daemonSocketPath } from '../daemon/daemon-socket.js'
-import { purgeLegacyWebOriginTrustFile } from '../daemon/purge-legacy-trust-file.js'
+import { purgeLegacyWebOriginTrustFile } from '../server/purge-legacy-trust-file.js'
 import { startHttpServer } from '../server/http-server.js'
 import { getLogger } from '../server/log.js'
 import { resolveReplicaEnv } from '../server/replica-env.js'

@@ -107,6 +107,8 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   'server/daemon-actor.ts': 'mechanics',
   'server/daemon-auth-binding.ts': 'mechanics',
   'server/current-workspace.ts': 'mechanics',
+  // Startup clean-up of data-dir artifacts a retired feature left behind.
+  'server/purge-legacy-trust-file.ts': 'mechanics',
   // Translation shared between routes (`ADAPTER_HELPER_FILES` names the first).
   'server/workspace-handle.ts': 'adapters',
   'server/app-helpers.ts': 'adapters',
@@ -175,9 +177,6 @@ const FILES: readonly SourceFile[] = walk(SRC, {
  * where its importers can reach it.
  */
 const UPWARD_EDGES: Readonly<Record<string, string>> = {
-  'daemon/purge-legacy-trust-file.ts -> server/log.ts':
-    'the one daemon module that logs through the server logger; a logger seam the daemon is ' +
-    'handed, or the logger moving below `daemon/`, retires it',
   'server/mcp/tarball.distribution-impl.ts -> cli/operator-json.ts':
     'distribution-smoke support filed under the adapter tree reaches the CLI JSON sink; moving ' +
     'the smoke impls beside the smokes retires it',
@@ -187,7 +186,7 @@ const UPWARD_EDGES: Readonly<Record<string, string>> = {
 }
 
 /** How many entries {@link UPWARD_EDGES} may hold — pinned by equality, a ratchet and not a budget. */
-const UPWARD_EDGES_CEILING = 3
+const UPWARD_EDGES_CEILING = 2
 
 describe('what counts as an upward edge', () => {
   const edgesOf = (files: Record<string, string>): string[] =>

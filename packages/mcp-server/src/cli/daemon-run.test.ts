@@ -208,7 +208,7 @@ describe('runDaemonRun legacy reconnect trust-file purge', () => {
   })
 
   it('returns its normal running outcome even when the purge itself rejects unexpectedly', async () => {
-    const purgeModule = await import('../daemon/purge-legacy-trust-file.js')
+    const purgeModule = await import('../server/purge-legacy-trust-file.js')
     const spy = vi
       .spyOn(purgeModule, 'purgeLegacyWebOriginTrustFile')
       .mockRejectedValueOnce(new Error('purge exploded'))

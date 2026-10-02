@@ -12,7 +12,7 @@
 
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { getLogger } from '../server/log.js'
+import { getLogger } from './log.js'
 import { isMissingFileError } from '../shared/errno.js'
 
 // The filename/dirname literals formerly lived in web-origin-trust-store.ts,

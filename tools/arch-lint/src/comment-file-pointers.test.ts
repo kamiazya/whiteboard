@@ -130,7 +130,7 @@ const DELIBERATE: Record<string, string> = {
   'packages/canvas-render/src/theme/spatial-theme.ts#viewer-appearance.ts':
     'lists the per-surface resolvers this theme layer replaced; the sentence is the record of what they were',
   'packages/canvas-render/src/theme/spatial-theme.ts#spatial-scene-appearance.ts': 'same list',
-  'packages/mcp-server/src/daemon/purge-legacy-trust-file.ts#web-origin-trust-store.ts':
+  'packages/mcp-server/src/server/purge-legacy-trust-file.ts#web-origin-trust-store.ts':
     'names the legacy file this module exists to purge; correcting it would erase the reason',
 
   // The `.claude/**/*.md` half. Every one of these is a sentence whose
