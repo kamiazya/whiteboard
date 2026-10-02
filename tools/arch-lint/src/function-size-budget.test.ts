@@ -436,15 +436,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // That is what took the page from a cognitive complexity of 42 to under
   // the threshold; the three entries below are the pieces still over the
   // line budget, and each is one concern rather than several.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 145,
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 138,
   // One load: attempt, unlock, the remembered blob, and what each outcome
   // leaves on screen. The states are ADR-0042 decision 6's and they share
   // the same `setState`, so splitting them would split one transition.
-  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 81,
-  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 57,
+  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 70,
+  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 54,
   // The read surface: the banner, the tree and the editor. JSX, and the
   // three are what a replica IS to a reader.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 80,
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 72,
   // Presentation only — the logic is `useTransferHandshake`. Six stages, each
   // a short branch, and the offer and the report already live in their own
   // components; the page is the switch between them.

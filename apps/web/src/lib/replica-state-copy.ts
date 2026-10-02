@@ -56,3 +56,17 @@ export const REPLICA_STATE_COPY = {
 export function lockedDetail(reason: WithheldReason): string | undefined {
   return reason === 'lapsed' ? REPLICA_TIER_COPY.bounded : undefined
 }
+
+/**
+ * What the readable page says when an edit could not be written to this
+ * browser. These edits are what the daemon receives when it returns, and
+ * this browser holds the only copy, so the sentence names both halves: it is
+ * in this tab only, and it will not be sent. Worded like the Browser keeper's
+ * own "could not be written to" notice rather than a second voice for the
+ * same condition.
+ */
+export const REPLICA_SAVE_FAILED_COPY = {
+  title: 'This browser could not be written to',
+  body: 'Your latest edits are in this tab only, so they will not reach the daemon when it returns. Keep this tab open and try saving again.',
+  action: 'Try saving again',
+} as const
