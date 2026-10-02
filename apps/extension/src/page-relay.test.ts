@@ -124,6 +124,36 @@ describe('installPageRelay', () => {
     expect(page.posted.at(-1)).toEqual(toPage({ kind: 'disconnect', port: 'p2' }))
   })
 
+  // A port the page closed or the extension ended is gone: a message the page
+  // still addresses to its name must reach nothing, not a port already
+  // disconnected.
+  it.each([
+    [
+      'the page closed it',
+      (page: ReturnType<typeof fakePage>) => page.fromPageTyped({ kind: 'disconnect', port: 'p1' }),
+    ],
+    [
+      'the extension ended it',
+      (page: ReturnType<typeof fakePage>) => {
+        for (const l of page.ports[0]?.disconnectListeners ?? []) l()
+      },
+    ],
+  ])('sends nothing to a port once %s', (_who, end) => {
+    const page = fakePage()
+    page.fromPageTyped({ kind: 'connect', port: 'p1' })
+    end(page)
+
+    page.fromPageTyped({ kind: 'message', port: 'p1', message: { type: 'abort', id: 'late' } })
+    expect(page.ports[0]?.sent).toEqual([])
+
+    // The name is free again: a new connect gets a new port, and only that one
+    // carries what follows.
+    page.fromPageTyped({ kind: 'connect', port: 'p1' })
+    page.fromPageTyped({ kind: 'message', port: 'p1', message: { type: 'abort', id: 'next' } })
+    expect(page.ports[0]?.sent).toEqual([])
+    expect(page.ports[1]?.sent).toEqual([{ type: 'abort', id: 'next' }])
+  })
+
   // Only the page itself speaks on this channel: not a frame of another
   // origin, and not the relay's own replies, which arrive on the same window.
   it('ignores what the page did not post', () => {
