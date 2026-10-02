@@ -77,7 +77,7 @@ produced no new correctness signal — it only re-exposed an already-green commi
 environment flakes (three consecutive releases failed publish this way, each on a
 different flake inside the re-run, while npm sat stuck at an older version). See
 `ci-verify-coverage.test.ts` and `publish-gate-runner.test.ts` in
-`packages/mcp-server/src/server/release/` for the automated guards that keep this
+`tools/arch-lint/src/` for the automated guards that keep this
 boundary from drifting.
 
 A blocking cross-workflow dependency on verify's *reported* conclusion (rather than on

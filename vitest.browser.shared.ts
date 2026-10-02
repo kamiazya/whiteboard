@@ -1,11 +1,7 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { playwright } from '@vitest/browser-playwright'
-// Import the source file directly rather than `@kamiazya/whiteboard-mcp/test-utils`:
-// that package export resolves to the built `dist/` output, which is gitignored
-// and not produced by a plain `pnpm install` on a clean checkout (CI's browser
-// job never builds packages/mcp-server before running Vitest).
-import { resolveBrowserLaunchOptions } from './packages/mcp-server/src/server/browser-test-config.js'
+import { resolveBrowserLaunchOptions } from './vitest.browser.launch-options.js'
 
 /** Where a project's failure traces land, relative to its own root. */
 const TRACES_DIR = 'tmp/vitest-traces'

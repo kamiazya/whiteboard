@@ -1,0 +1,89 @@
+// A composite root script names other scripts by string, and pnpm only finds
+// out at the moment it runs one.
+//
+// One such name sat inside `test:e2e:distribution:only` — and so inside
+// `check:release-candidate` — long after the package script it delegated to
+// had been deleted with the feature it smoked. Running the release-candidate
+// gate answered `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT` partway down the chain, so
+// every step after it never ran either.
+//
+// Nothing could have noticed. A dangling name typechecks, lints, and is
+// invisible to every test that does not execute the whole chain — which is
+// exactly the chain nobody runs except at a release.
+
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
+
+interface PackageJson {
+  scripts?: Record<string, string>
+}
+
+function readScripts(path: string): Record<string, string> {
+  return (JSON.parse(readFileSync(resolve(REPO_ROOT, path), 'utf-8')) as PackageJson).scripts ?? {}
+}
+
+const rootScripts = readScripts('package.json')
+
+/**
+ * pnpm's own subcommands, which look exactly like a script name after `pnpm`
+ * and resolve without one.
+ *
+ * An allowlist rather than a full list of pnpm's CLI: only what these scripts
+ * actually reach for. A built-in that arrives later shows up as a dangling
+ * name and gets added here deliberately, which is the safer direction — the
+ * opposite mistake is a guard that quietly stops checking.
+ */
+const PNPM_BUILTINS = new Set(['audit', 'exec', 'run', 'install', 'dlx'])
+
+/**
+ * Every `pnpm <name>` a root script delegates to.
+ *
+ * Only the bare form: `pnpm --filter <pkg> <name>` names a script in another
+ * package, which this file cannot resolve, and guessing at it would trade a
+ * real check for a flaky one.
+ */
+function delegatedScriptNames(command: string): string[] {
+  return [...command.matchAll(/(?:^|&&|\|\|)\s*pnpm\s+([a-z][\w:-]*)/g)]
+    .map((match) => match[1])
+    .filter((name): name is string => name !== undefined && !PNPM_BUILTINS.has(name))
+}
+
+describe('root composite scripts', () => {
+  it('delegate only to scripts that exist', () => {
+    const dangling: string[] = []
+    for (const [name, command] of Object.entries(rootScripts)) {
+      for (const delegate of delegatedScriptNames(command)) {
+        if (rootScripts[delegate] === undefined) dangling.push(`${name} -> pnpm ${delegate}`)
+      }
+    }
+    expect(dangling).toEqual([])
+  })
+
+  /**
+   * The scan reached its subject. A pattern that stopped matching would
+   * report every chain as clean, which is the failure this whole file is
+   * about arriving one level up.
+   */
+  it('actually found the delegations it is checking', () => {
+    const found = Object.values(rootScripts).flatMap(delegatedScriptNames)
+    expect(found.length).toBeGreaterThan(20)
+    expect(found).toContain('typecheck')
+  })
+
+  // Two names for one command is a decision somebody has to keep making twice:
+  // `test:all` was `test` under another name and `test:node` was
+  // `test:mcp-node` under a worse one (`node` reads as the runtime, not the
+  // project), and nothing referenced either. The second name only ever adds a
+  // question — "which one is the real one?".
+  it('give no two scripts the same body', () => {
+    const namesByBody = new Map<string, string[]>()
+    for (const [name, body] of Object.entries(rootScripts)) {
+      namesByBody.set(body, [...(namesByBody.get(body) ?? []), name])
+    }
+    const duplicated = [...namesByBody.values()].filter((names) => names.length > 1)
+    expect(Object.keys(rootScripts).length).toBeGreaterThan(40)
+    expect(duplicated).toEqual([])
+  })
+})

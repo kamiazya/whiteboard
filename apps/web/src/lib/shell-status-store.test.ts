@@ -60,6 +60,55 @@ describe('shell-status-store', () => {
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'reconnecting' })
   })
 
+  // The browser keeper's whole health is its storage, so a publisher that
+  // goes ok -> failed without passing through null (the store's contract, not
+  // only what one page happens to do) must still reach the shell.
+  it('a storage-health change under the browser keeper notifies and is stored', () => {
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
+    const listener = vi.fn()
+    subscribeShellStatus(listener)
+    setShellConnection({ state: { keeper: 'browser', storage: 'failed' } })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(getShellConnection()?.state).toEqual({ keeper: 'browser', storage: 'failed' })
+  })
+
+  it('re-publishing the same browser storage health does not notify', () => {
+    setShellConnection({
+      state: { keeper: 'browser', storage: 'failed' },
+      lastWrittenAt: '2026-01-01T00:00:00.000Z',
+    })
+    const listener = vi.fn()
+    subscribeShellStatus(listener)
+    setShellConnection({
+      state: { keeper: 'browser', storage: 'failed' },
+      lastWrittenAt: '2026-01-01T00:00:00.000Z',
+    })
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('a newer landed write under the browser keeper notifies, for the popover time', () => {
+    setShellConnection({
+      state: { keeper: 'browser', storage: 'ok' },
+      lastWrittenAt: '2026-01-01T00:00:00.000Z',
+    })
+    const listener = vi.fn()
+    subscribeShellStatus(listener)
+    setShellConnection({
+      state: { keeper: 'browser', storage: 'ok' },
+      lastWrittenAt: '2026-01-01T00:00:05.000Z',
+    })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(getShellConnection()?.lastWrittenAt).toBe('2026-01-01T00:00:05.000Z')
+  })
+
+  it('switching keeper under the same address notifies', () => {
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
+    const listener = vi.fn()
+    subscribeShellStatus(listener)
+    setShellConnection({ state: { keeper: 'daemon', session: 'synced' } })
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
   it('clearing a published connection notifies', () => {
     setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     const listener = vi.fn()

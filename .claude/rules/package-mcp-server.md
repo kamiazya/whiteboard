@@ -12,6 +12,14 @@ scan says.
 
 ## Tests
 
+- **Repo-policy guards are not tests of this package.** A test that reads
+  workflows, the Dockerfile, root manifests, docs or the rule corpus and
+  imports no daemon source lives in `tools/arch-lint/src` — the project
+  pre-push runs — not under `server/` or `server/release/`. `release/` keeps
+  only what needs the daemon, the packages' fast-check prelude, this package's
+  own scripts, or the Node it runs on, and
+  `tools/arch-lint/src/repo-root-reads.test.ts` fails on a new one added here
+  without a reason.
 - **Every HTTP route the daemon registers is fuzzed from its own schema**
   (`server/app.routes.fuzz.property.test.ts`), the sibling of server-core's
   `/api/v1` lane over everything else `createApp` mounts. Routes are read

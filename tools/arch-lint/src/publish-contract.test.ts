@@ -1,0 +1,308 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
+
+function readJson(path: string): any {
+  return JSON.parse(readFileSync(path, 'utf-8'))
+}
+
+describe('publish contract', () => {
+  const rootPackage = readJson(resolve(REPO_ROOT, 'package.json'))
+  const mcpPackagePath = resolve(REPO_ROOT, 'packages/mcp-server/package.json')
+  const mcpPackage = readJson(mcpPackagePath)
+  const manifest = readJson(resolve(REPO_ROOT, '.release-please-manifest.json'))
+  const releaseWorkflow = readFileSync(resolve(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')
+  const rootReadme = readFileSync(resolve(REPO_ROOT, 'README.md'), 'utf-8')
+  const contributing = readFileSync(resolve(REPO_ROOT, 'CONTRIBUTING.md'), 'utf-8')
+  const packageReadme = readFileSync(resolve(REPO_ROOT, 'packages/mcp-server/README.md'), 'utf-8')
+  const mcpDebuggingDoc = readFileSync(
+    resolve(REPO_ROOT, 'docs/contributing/mcp-debugging.md'),
+    'utf-8',
+  )
+  const architectureDoc = readFileSync(
+    resolve(REPO_ROOT, 'docs/explanation/architecture.md'),
+    'utf-8',
+  )
+  const securityModelDoc = readFileSync(
+    resolve(REPO_ROOT, 'docs/explanation/security-model.md'),
+    'utf-8',
+  )
+  const wireProtocolDoc = readFileSync(
+    resolve(REPO_ROOT, 'docs/contributing/architecture/wire-protocol.md'),
+    'utf-8',
+  )
+  const developmentDoc = readFileSync(
+    resolve(REPO_ROOT, 'docs/contributing/development.md'),
+    'utf-8',
+  )
+  const claudeMarketplace = readJson(resolve(REPO_ROOT, '.claude-plugin/marketplace.json'))
+  const tsconfigServer = readJson(resolve(REPO_ROOT, 'packages/mcp-server/tsconfig.server.json'))
+  const vitestShared = readFileSync(
+    resolve(REPO_ROOT, 'packages/mcp-server/vitest.shared.ts'),
+    'utf-8',
+  )
+  const rootReleaseConfig = readJson(resolve(REPO_ROOT, 'release-please-config.json'))
+  const publishedMcpConfig = readJson(resolve(REPO_ROOT, '.mcp.json'))
+  const claudePlugin = readJson(resolve(REPO_ROOT, '.claude-plugin/plugin.json'))
+  const codexPlugin = readJson(resolve(REPO_ROOT, '.codex-plugin/plugin.json'))
+  const registryMetadata = readJson(resolve(REPO_ROOT, 'server.json'))
+
+  it('keeps release-please manifest versions in sync with package.json files', () => {
+    expect(rootPackage.version).toBe(manifest['.'])
+    expect(mcpPackage.version).toBe(manifest['packages/mcp-server'])
+  })
+
+  it('ships npm-facing package docs and license files from the package directory', () => {
+    expect(existsSync(resolve(REPO_ROOT, 'packages/mcp-server/README.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'packages/mcp-server/LICENSE'))).toBe(true)
+    expect(mcpPackage.files).toContain('README.md')
+    expect(mcpPackage.files).toContain('LICENSE')
+  })
+
+  it('declares the public npm publish contract in package metadata', () => {
+    // Mirrors the narrowest engines range among the published runtime deps
+    // (nanoid 6 declares '^22 || ^24 || >=26'). A plain '>=22' would advertise
+    // support for odd non-LTS releases that a dependency then rejects, so the
+    // consumer's install warns instead of the contract being honest up front.
+    expect(mcpPackage.engines).toEqual({ node: '^22 || ^24 || >=26' })
+    expect(mcpPackage.publishConfig).toMatchObject({
+      registry: 'https://registry.npmjs.org',
+      access: 'public',
+    })
+    expect(mcpPackage.main).toBe('./dist/server/mcp/index.js')
+    expect(mcpPackage.types).toBe('./dist/server/mcp/index.d.ts')
+    // The browser-safe client half lives in @kamiazya/whiteboard-daemon-client
+    // now; the published surface is the MCP server alone. A client subpath
+    // reappearing here means someone re-published the client through the
+    // server package — that split is deliberate (0.0.x, no consumers to keep).
+    expect(mcpPackage.exports).toEqual({
+      '.': {
+        types: './dist/server/mcp/index.d.ts',
+        import: './dist/server/mcp/index.js',
+      },
+      './package.json': './package.json',
+    })
+    // publishConfig.exports is the shape pnpm substitutes on npm publish.
+    expect(mcpPackage.publishConfig.exports).toEqual({
+      '.': {
+        types: './dist/server/mcp/index.d.ts',
+        import: './dist/server/mcp/index.js',
+      },
+      './package.json': './package.json',
+    })
+    expect(mcpPackage.homepage).toBeTruthy()
+    expect(mcpPackage.bugs?.url).toBeTruthy()
+    expect(rootPackage.scripts['test:coverage']).toBe(
+      'pnpm --filter @kamiazya/whiteboard-mcp test:coverage',
+    )
+    expect(mcpPackage.scripts['test:coverage']).toBe('vitest run --coverage --project mcp-node')
+  })
+
+  // The LICENSE file is not what a plugin user reads: the marketplace card and both
+  // plugin manifests declare a license of their own, and nothing derived them from the
+  // root package. All three sat on MIT for the whole life of the Apache-2.0 relicense
+  // (#304) because the existing guard above only asserts the LICENSE file EXISTS.
+  // Derived from the root package rather than pinned to a literal, so a later relicense
+  // moves one field and this follows.
+  it('declares the repo license consistently across every distribution manifest', () => {
+    const marketplaceEntry = claudeMarketplace.plugins.find(
+      (p: { name: string }) => p.name === 'whiteboard',
+    )
+    expect(marketplaceEntry).toBeDefined()
+    expect({
+      claudePlugin: claudePlugin.license,
+      codexPlugin: codexPlugin.license,
+      marketplace: marketplaceEntry.license,
+    }).toEqual({
+      claudePlugin: rootPackage.license,
+      codexPlugin: rootPackage.license,
+      marketplace: rootPackage.license,
+    })
+  })
+
+  it('declares sideEffects explicitly for bundlers', () => {
+    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/stdio.js'])
+  })
+
+  it('publishes to npm via OIDC trusted publisher (no NPM_TOKEN, with provenance)', () => {
+    expect(releaseWorkflow).toContain('Publish to npm')
+    expect(releaseWorkflow).toContain('registry-url: https://registry.npmjs.org')
+    expect(releaseWorkflow).toContain(
+      'pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium',
+    )
+    // Published via `npm publish <tarball>` (keeps npm's OIDC + provenance), where the
+    // tarball comes from `pnpm pack` so the catalog: protocol is resolved to concrete
+    // version ranges first — npm cannot resolve catalog: and would ship a broken manifest.
+    expect(releaseWorkflow).toContain('npm publish "$TARBALL" --access public --provenance')
+    expect(releaseWorkflow).toContain('TARBALL=$(pnpm pack | tail -1)')
+    // OIDC trusted publisher requires id-token: write permission and npm >= 11.5.1.
+    // Node 24 ships with npm 11.x; relying on the bundled npm avoids the
+    // `npm i -g npm@latest` self-upgrade bug.
+    expect(releaseWorkflow).toContain('id-token: write')
+    expect(releaseWorkflow).toMatch(/node-version:\s*2[4-9]/)
+    // Should not fall back to long-lived NPM_TOKEN or GitHub Packages auth.
+    expect(releaseWorkflow).not.toContain('Publish to GitHub Packages')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
+    expect(releaseWorkflow).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
+    expect(releaseWorkflow).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}')
+  })
+
+  it('emits declaration files for the published module entrypoint', () => {
+    expect(tsconfigServer.compilerOptions.declaration).toBe(true)
+  })
+
+  it('excludes test-only helper files from the production compilation', () => {
+    // _test-*.ts files live inside src/server/** but must not be compiled into
+    // dist/ because they import vitest and register lifecycle hooks at
+    // module-evaluation time. A production import in the same directory could
+    // inadvertently pull them in through bundler tree-shaking failures.
+    const excluded: string[] = tsconfigServer.exclude ?? []
+    const coversTestHelpers = excluded.some(
+      (pattern: string) => pattern.includes('_test-') || pattern.includes('_test-helpers'),
+    )
+    expect(coversTestHelpers).toBe(true)
+  })
+
+  it('documents npm install via the published CLI surface instead of deep dist paths', () => {
+    // Root README documents the three install paths (marketplace, claude mcp add, Codex TOML)
+    expect(rootReadme).toContain('/plugin marketplace add kamiazya/whiteboard')
+    expect(rootReadme).toContain('/plugin install whiteboard@whiteboard-marketplace')
+    expect(rootReadme).toContain(
+      'claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest',
+    )
+    expect(rootReadme).toContain('command = "npx"')
+    expect(rootReadme).toContain('args = ["-y", "@kamiazya/whiteboard-mcp@latest"]')
+    expect(rootReadme).not.toContain(
+      'node_modules/@kamiazya/whiteboard-mcp/dist/server/mcp/stdio.js',
+    )
+
+    // The marketplace plugin manifest points at the release-gated stable branch
+    // (advance-stable in release.yml fast-forwards it on each root release) so
+    // merging to main does not immediately ship plugin content. The marketplace
+    // name in README must match the marketplace.json declaration.
+    expect(claudeMarketplace.name).toBe('whiteboard-marketplace')
+    expect(claudeMarketplace.plugins[0].name).toBe('whiteboard')
+    expect(claudeMarketplace.plugins[0].source).toEqual({
+      source: 'github',
+      repo: 'kamiazya/whiteboard',
+      ref: 'stable',
+    })
+    // Codex ref pinning is user-side opt-in, so the README install command must
+    // carry the @stable pin to keep Codex installs release-gated too.
+    expect(rootReadme).toContain('codex plugin marketplace add kamiazya/whiteboard@stable')
+    // marketplace.json versions must stay aligned with the published mcp-server package
+    // (release-please-config.json tracks both jsonpaths in extra-files).
+    expect(claudeMarketplace.metadata.version).toBe(mcpPackage.version)
+    expect(claudeMarketplace.plugins[0].version).toBe(mcpPackage.version)
+
+    // The npm-sourced skill-symlink recipe is RETIRED: skills distribute
+    // through the Claude Code / Codex plugin (repo-root skills/) only, and
+    // the npm tarball deliberately ships none — the recipe documented an
+    // install path that never worked (the tarball never contained skills).
+    // Pin the absence so it cannot quietly return without a real consumer.
+    expect(developmentDoc).not.toContain('## Bundled skills install')
+    expect(developmentDoc).not.toContain('$PKG/skills/')
+  })
+
+  it('states that skills ship via the plugin, not the npm tarball', () => {
+    expect(packageReadme).toContain('## What is in this package')
+    expect(packageReadme).toContain('`dist/` contains the runnable MCP server')
+    expect(packageReadme).toContain('skills are NOT part of this package')
+    expect(packageReadme).not.toContain('`skills/` contains the shared skill bundles')
+
+    // The root README is the surface a new user actually reads, and it was the
+    // one left claiming the opposite after the npm-sourced recipe was retired:
+    // "packs ship inside the npm package", plus three MCP-only notes offering
+    // to "link them manually" through a section that no longer existed.
+    expect(rootReadme).not.toContain('ship inside the npm package')
+    expect(rootReadme).not.toContain('link them yourself')
+    expect(rootReadme).not.toContain('Link them manually')
+    expect(rootReadme).toContain('ship with the **plugin**')
+  })
+
+  it('keeps published wrappers on @latest so release-please does not need extra-files sync', () => {
+    expect(rootReleaseConfig.packages['packages/mcp-server']['extra-files']).toBeUndefined()
+    expect(publishedMcpConfig.mcpServers.whiteboard).toEqual({
+      command: 'npx',
+      args: ['-y', '@kamiazya/whiteboard-mcp@latest'],
+    })
+    expect(claudePlugin.mcpServers.whiteboard).toEqual({
+      command: 'npx',
+      args: ['-y', '@kamiazya/whiteboard-mcp@latest'],
+    })
+    expect(codexPlugin.mcpServers).toBe('./.mcp.json')
+    expect(contributing).toContain(
+      'Keep published MCP wrapper configs on `@latest` unless you also update release-please sync rules.',
+    )
+  })
+
+  it('keeps MCP Registry metadata present and aligned with the npm package', () => {
+    expect(registryMetadata.$schema).toContain('/server.schema.json')
+    expect(registryMetadata.name).toBe('io.github.kamiazya/whiteboard')
+    expect(registryMetadata.repository).toEqual({
+      url: 'https://github.com/kamiazya/whiteboard',
+      source: 'github',
+    })
+    expect(registryMetadata.version).toBe(mcpPackage.version)
+    expect(registryMetadata.packages).toEqual([
+      {
+        registryType: 'npm',
+        registryBaseUrl: 'https://registry.npmjs.org',
+        identifier: mcpPackage.name,
+        version: mcpPackage.version,
+        transport: {
+          type: 'stdio',
+        },
+      },
+    ])
+  })
+
+  it('documents the supported MCP protocol matrix and concrete HTTP debugging steps', () => {
+    expect(mcpDebuggingDoc).toContain('## Protocol Support')
+    expect(mcpDebuggingDoc).toContain('2025-11-25')
+    expect(mcpDebuggingDoc).toContain('2025-06-18')
+    expect(mcpDebuggingDoc).toContain('2025-03-26')
+    expect(mcpDebuggingDoc).toContain('2024-11-05')
+    expect(mcpDebuggingDoc).toContain('2024-10-07')
+    expect(mcpDebuggingDoc).toContain('pnpm mcp:http:dev')
+    expect(mcpDebuggingDoc).toContain('pnpm mcp:inspect')
+    expect(mcpDebuggingDoc).toContain('MCP_HTTP_DEBUG=1 pnpm mcp:http:dev')
+    expect(mcpDebuggingDoc).toContain('AGENTS.md')
+  })
+
+  it('ships architecture, security, and wire-protocol docs and links them from README', () => {
+    expect(rootReadme).toContain(
+      '[docs/explanation/architecture.md](docs/explanation/architecture.md)',
+    )
+    expect(rootReadme).toContain(
+      '[docs/explanation/security-model.md](docs/explanation/security-model.md)',
+    )
+    expect(rootReadme).toContain(
+      '[docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md)',
+    )
+    expect(architectureDoc).toContain('# Architecture')
+    expect(architectureDoc).toContain('stdio MCP server')
+    expect(architectureDoc).toContain('daemon')
+    expect(architectureDoc).toContain('Loro')
+    expect(securityModelDoc).toContain('# Security Model')
+    expect(securityModelDoc).toContain('loopback')
+    expect(securityModelDoc).toContain('Bearer')
+    expect(wireProtocolDoc).toContain('# Wire Protocol')
+    expect(wireProtocolDoc).toContain('doc_update')
+    expect(wireProtocolDoc).toContain('version_created')
+  })
+
+  it('configures shared Vitest coverage output for local inspection', () => {
+    expect(vitestShared).toContain("provider: 'v8'")
+    expect(vitestShared).toContain("reporter: ['text', 'html', 'lcov']")
+    expect(vitestShared).toContain("reportsDirectory: './tmp/coverage'")
+    expect(vitestShared).toContain("include: ['src/**/*.ts']")
+    expect(vitestShared).toContain("'**/*.test.*'")
+    expect(vitestShared).toContain("'**/*.smoke-impl.ts'")
+    expect(vitestShared).toContain("'**/*.distribution-impl.ts'")
+    expect(vitestShared).toContain("'dist/**'")
+  })
+})

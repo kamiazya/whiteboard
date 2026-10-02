@@ -44,6 +44,7 @@ Choose the **narrowest** layer that can prove the behavior:
 | Layer | Config | When to use |
 |---|---|---|
 | `mcp-node` | `vitest.node.config.ts` (`packages/mcp-server`) | Pure functions, stores, routes, server behavior, persistence logic, schemas, CLI helpers |
+| `arch-lint-node` | `vitest.node.config.ts` (`tools/arch-lint`) | A guard over files that belong to no one package: workflows, the Dockerfile, root manifests, docs, the rule corpus, `apps/web`'s source, and the architecture boundaries. It reads text and runs no product code, so it runs at pre-push and in CI's `test-shared` on every change. A test under `packages/*/src` that reads a repo-root file belongs here unless `repo-root-reads.test.ts` lists it with a reason |
 | `canvas-viewer-node` / `canvas-viewer-jsdom` | `vitest.node.config.ts` / `vitest.jsdom.config.ts` (`packages/canvas-viewer`) | `packages/canvas-viewer` parsing, hooks, and components when browser layout and pointer behavior are **not** the core risk |
 | apps/web jsdom | `apps/web/vitest.config.ts` | React components and hooks when real layout, focus, pointer, or browser APIs are **not** the core risk |
 | `web-browser` | `apps/web/vitest.browser.config.ts` | `apps/web` tests that need real browser APIs unavailable in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`, popovers/dialogs/focus/scroll/restore flows, and other platform APIs. File suffix: `.browser.test.tsx` |
@@ -343,7 +344,7 @@ on the run's line rather than something only the rendered SVG could show.
 | Preview-origin smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin` | Built `dist/` loaded in real Chromium with a preview `publicOrigin` renders `data-provider="invalid-config"`, not the browser keeper | Build + Playwright |
 | Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserDocumentPage.browser.test.tsx`: IndexedDB save / reload / cleanup / post-cleanup-reload, plus the network-negative gate (no `/api/*` or daemon fetch during editing) | Real browser (Playwright) |
 | Origin policy | `pnpm --filter @kamiazya/whiteboard-web test` (`pages-origin-policy.test.ts`, `headers-policy.test.ts`) | `classifyPagesOrigin` keeps preview origins a distinct rejected class — a preview origin is never `production`, so it never enters a trusted/local-daemon allowlist; `_headers` CSP shape | jsdom only |
-| Boundary + secrets drift | `pnpm test` (`web-app-boundary.test.ts`, `mcp-node`) | `apps/web` source imports no server/cli/daemon/Node-only modules; `wrangler.toml` lists no preview origins and no `account_id`; no `.github/workflows/` file deploys `apps/web` with Cloudflare secrets; `apps/` stays out of the npm tarball | none |
+| Boundary + secrets drift | `pnpm test` (`web-app-boundary.test.ts`, `arch-lint-node`) | `apps/web` source imports no server/cli/daemon/Node-only modules; `wrangler.toml` lists no preview origins and no `account_id`; no `.github/workflows/` file deploys `apps/web` with Cloudflare secrets; `apps/` stays out of the npm tarball | none |
 
 `web-app-boundary.test.ts` and the `web-browser` regression run as part of `pnpm test`. The two `smoke:*` artifact gates require a build, so they are **not** part of the default `pnpm test`.
 

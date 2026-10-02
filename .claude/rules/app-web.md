@@ -106,7 +106,7 @@ Three things a mechanical move does not see, and what catches each now:
 
 ## What the other guards already cover
 
-- `packages/mcp-server/src/server/release/web-app-boundary.test.ts` — what
+- `tools/arch-lint/src/web-app-boundary.test.ts` — what
   this app may import from `@kamiazya/whiteboard-mcp` (browser-safe
   subpaths only) and that no relative import reaches the daemon's `src/`.
 - `src/entry-graph-loro-free.test.ts` — `App.tsx`'s static closure never

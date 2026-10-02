@@ -1,0 +1,319 @@
+// Machine-checked coverage map: proves that every correctness project removed
+// from the publish gate (mcp-node, apps/web jsdom, web-browser) is still
+// exercised by verify CI on the same commit. This is what makes it safe
+// for publish-mcp to stop re-running `pnpm test` — a future edit that drops a
+// project from ci.yml's verify path fails this test red.
+
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
+
+const ROOT = REPO_ROOT
+
+interface VitestProject {
+  configPath: string
+  name: string | undefined
+  isBrowser: boolean
+}
+
+interface ElsewhereEntry {
+  job: string
+  mechanism: 'flag' | 'filter-script'
+  marker: string
+}
+
+// vitest-projects.mjs (tools/checks) is the single source of truth for the
+// project inventory AND the exclusion set (PROJECTS_RUN_ELSEWHERE) — this
+// test and run-shared-layer-tests.mjs (the CI-invoked derivation) both import
+// it rather than each holding their own copy, which is exactly the drift
+// this task exists to remove. Dynamic import + cast matches the established
+// pattern in release-gate-matrix.test.ts / verify-pack-contents.test.ts.
+const VITEST_PROJECTS_MODULE_PATH = join(ROOT, 'tools/checks/src/vitest-projects.mjs')
+const {
+  readBrowserProjectNames,
+  readVitestProjects,
+  PROJECTS_RUN_ELSEWHERE,
+  deriveSharedLayerProjectNames,
+} = (await import(pathToFileURL(VITEST_PROJECTS_MODULE_PATH).href)) as {
+  readBrowserProjectNames: (repoRoot: string) => string[]
+  readVitestProjects: (repoRoot: string) => VitestProject[]
+  PROJECTS_RUN_ELSEWHERE: Record<string, ElsewhereEntry>
+  deriveSharedLayerProjectNames: (repoRoot: string) => string[]
+}
+
+function readCiWorkflow(): string {
+  return readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf-8')
+}
+
+// Full-line comments stripped so a flag that was commented out (e.g.
+// `# --project=facet-engine-node`) cannot be counted as coverage.
+function readCiWorkflowWithoutComments(): string {
+  return readCiWorkflow()
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n')
+}
+
+/**
+ * The steps of one ci.yml job, comments stripped.
+ *
+ * A guard that only asks "does this string appear anywhere in ci.yml" cannot
+ * tell a step that RUNS from one that was commented out, nor one that sits in
+ * the job it is supposed to sit in from one that drifted to another. Both
+ * matter here: the shared-layer step is the only thing that runs nine
+ * projects, so a guard blind to either would stay green while they all
+ * stopped running — which is the very failure this file exists to prevent.
+ */
+function readCiJob(jobName: string): string {
+  const lines = readCiWorkflowWithoutComments().split('\n')
+  const start = lines.indexOf(`  ${jobName}:`)
+  if (start === -1) throw new Error(`ci.yml declares no job named ${jobName}`)
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex((line) => /^ {2}[a-z][\w-]*:$/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n')
+}
+
+function readTestBrowserScript(): string {
+  const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8')) as {
+    scripts?: Record<string, string>
+  }
+  const script = packageJson.scripts?.['test:browser']
+  expect(script, 'root package.json must declare a test:browser script').toBeDefined()
+  return script!
+}
+
+describe('ci.yml verify coverage of removed publish-gate correctness projects', () => {
+  const text = readCiWorkflow()
+
+  it('runs the mcp-node project (test-unit job)', () => {
+    expect(text).toMatch(/--project[=\s]mcp-node/)
+  })
+
+  it('runs the apps/web jsdom suite (test-jsdom job)', () => {
+    expect(text).toContain('whiteboard-web test')
+  })
+
+  it('runs the root test:browser script (test-browser job), not a hand-listed subset', () => {
+    // Hand-listing per-package vitest steps let canvas-render-browser drift
+    // out of CI silently while package.json's test:browser script (the
+    // documented local command) still listed it. Invoking the root script
+    // instead ties CI to the same single list developers already run.
+    expect(text).toMatch(/pnpm (run )?test:browser\b/)
+  })
+
+  it('the test:browser script covers every browser-enabled vitest project', () => {
+    const script = readTestBrowserScript()
+    const flaggedProjects = [...script.matchAll(/--project[=\s]([^\s]+)/g)].map((m) => m[1])
+    const browserProjectNames = readBrowserProjectNames(ROOT)
+    expect(browserProjectNames.length).toBeGreaterThan(0)
+    expect(flaggedProjects).toEqual(expect.arrayContaining(browserProjectNames))
+  })
+
+  it('dry-run-npm still rides the verify dist, the one needs edge that carries an artifact', () => {
+    // verify's `needs` on the test jobs was removed deliberately (measured
+    // 2026-09-04: that chain was the whole wall clock — see the comment in
+    // ci.yml). The "a release tag points at a commit where the tests ran"
+    // property this test used to pin moved to branch protection, which
+    // requires every test job individually and which no in-repo test can
+    // read — the Actions token cannot see it, so the settings page is the
+    // source of truth and this comment is the pointer. What remains
+    // assertable in-repo is the one dependency that is REAL: dry-run-npm
+    // downloads the dist verify built, so losing that edge would hand it a
+    // stale or absent artifact.
+    const npmIdx = text.indexOf('\n  dry-run-npm:')
+    expect(npmIdx, 'dry-run-npm job must exist').toBeGreaterThanOrEqual(0)
+    const npmSection = text.slice(npmIdx, npmIdx + 400)
+    // Anchored to a line START so a comment SAYING "needs: verify" (which
+    // dry-run-docker's why-not comment does) can never satisfy or trip it.
+    expect(npmSection).toMatch(/^\s*needs:\s*verify/m)
+    // And the inverse guard: dry-run-docker must NOT grow the edge back by
+    // reflex — it consumes no artifact, and the edge serialized the two
+    // longest jobs in the workflow.
+    const dockerIdx = text.indexOf('\n  dry-run-docker:')
+    expect(dockerIdx, 'dry-run-docker job must exist').toBeGreaterThanOrEqual(0)
+    const dockerSection = text.slice(dockerIdx, text.indexOf('steps:', dockerIdx))
+    expect(dockerSection).not.toMatch(/^\s*needs:\s*verify/m)
+  })
+
+  // Which browser CI runs is not a detail: local runs use Playwright's Chromium
+  // and CI pins the runner's system Chrome, so the browser is a variable
+  // whenever a browser test passes in one place and fails in the other. The
+  // setup doc claimed the opposite for a while, which is the worst version of
+  // this — a contributor matching their machine to the doc diverges from CI.
+  it('the setup doc names the system-Chrome pin CI actually uses', () => {
+    const chromePin = text.match(/WHITEBOARD_CHROME_PATH:\s*(\S+)/)
+    expect(chromePin, 'ci.yml must pin a browser for the browser jobs').not.toBeNull()
+    const doc = readFileSync(join(ROOT, 'docs/contributing/development.md'), 'utf-8')
+    expect(doc).toContain(chromePin![1])
+    expect(doc).not.toContain('CI and the release workflow assume Playwright-managed Chromium')
+  })
+})
+
+// The analogue of the describe block above, but for the node-mode side: a
+// whole vitest project registered in root vitest.config.ts and never run by
+// any CI step goes red on main with nothing noticing (facet-engine-node ran
+// on nobody's CI for days before this guard existed). Unlike the old
+// literal-flag check, this now tests the DERIVATION (deriveSharedLayerProjectNames)
+// rather than ci.yml text: the shared-layer step's project list is no longer
+// hand-listed in the workflow file, so "appears as --project=<name>" is no
+// longer a meaningful assertion for those projects. Coverage is modelled by
+// MECHANISM instead: a project is covered iff it is (a) picked up by the
+// derivation and ci.yml invokes the derivation script in a test-unit step, or
+// (b) exempted with mechanism 'flag' and ci.yml contains that literal flag, or
+// (c) exempted with mechanism 'filter-script' and ci.yml contains that marker.
+describe('ci.yml runs every node vitest project registered in root vitest.config.ts', () => {
+  const projectConfigs = readVitestProjects(ROOT)
+
+  it('derives a non-empty project list containing known anchors (not a vacuous scan)', () => {
+    expect(projectConfigs.length).toBeGreaterThan(0)
+    const names = projectConfigs.map((p) => p.name)
+    expect(names).toEqual(expect.arrayContaining(['mcp-node', 'model-node', 'facet-engine-node']))
+  })
+
+  it('agrees with readBrowserProjectNames on which projects are browser-mode', () => {
+    const derivedBrowserNames = projectConfigs
+      .filter((p) => p.isBrowser)
+      .map((p) => {
+        if (!p.name) {
+          throw new Error(`${p.configPath} enables browser mode but declares no test.name`)
+        }
+        return p.name
+      })
+      .sort()
+    expect(derivedBrowserNames).toEqual([...readBrowserProjectNames(ROOT)].sort())
+  })
+
+  it('every PROJECTS_RUN_ELSEWHERE exemption still names a real, non-browser root-config path', () => {
+    // Guards the allowlist from the other side: an exemption that outlives
+    // the project it names (renamed away, or removed from vitest.config.ts),
+    // or one that names a browser-mode project, must fail loudly rather than
+    // sit as silent dead config or smuggle a browser project into the
+    // node-only guard.
+    const byPath = new Map(projectConfigs.map((p) => [p.configPath, p]))
+    for (const [exemptedPath, entry] of Object.entries(PROJECTS_RUN_ELSEWHERE)) {
+      const project = byPath.get(exemptedPath)
+      expect(
+        project,
+        `${exemptedPath} is exempted in PROJECTS_RUN_ELSEWHERE but is not registered in root vitest.config.ts`,
+      ).toBeDefined()
+      expect(
+        project!.isBrowser,
+        `${exemptedPath} is exempted in PROJECTS_RUN_ELSEWHERE (job ${entry.job}) but is a browser-mode project`,
+      ).toBe(false)
+    }
+  })
+
+  it('the derivation and PROJECTS_RUN_ELSEWHERE partition the non-browser projects (no gap, no overlap)', () => {
+    const nonBrowserNames = projectConfigs
+      .filter((p) => !p.isBrowser)
+      .map((p) => {
+        if (!p.name) {
+          throw new Error(`${p.configPath} declares no test.name`)
+        }
+        return p.name
+      })
+      .sort()
+    const exemptedNames = projectConfigs
+      .filter((p) => p.configPath in PROJECTS_RUN_ELSEWHERE)
+      .map((p) => p.name!)
+    const derivedNames = deriveSharedLayerProjectNames(ROOT)
+
+    // No overlap: a project the exclusion set names must not also appear in
+    // the derivation (it would otherwise run twice — once here, once in its
+    // own CI step).
+    const overlap = derivedNames.filter((name) => exemptedNames.includes(name))
+    expect(
+      overlap,
+      `project(s) both derived AND exempted (would run twice): ${overlap.join(', ')}`,
+    ).toEqual([])
+
+    // No gap: their union must be exactly every non-browser project.
+    expect([...derivedNames, ...exemptedNames].sort()).toEqual(nonBrowserNames)
+  })
+
+  it('ci.yml invokes the derivation script in the test-shared job', () => {
+    // Scoped to the job AND read without comments, because this one step is
+    // what runs every derived project: commenting it out, or moving it to a
+    // job that does not run on a pull request, silently retires all nine.
+    // Measured against the unscoped version — it passed 14/14 with the step
+    // commented out. Its own job rather than a test-unit shard: measured on
+    // one run it was the critical path, 2m14s serial behind mcp-node's
+    // shard 2, with every other job finished a minute earlier.
+    const testShared = readCiJob('test-shared')
+    expect(testShared).toMatch(/run:\s*node tools\/checks\/src\/run-shared-layer-tests\.mjs/)
+  })
+
+  it('every PROJECTS_RUN_ELSEWHERE exemption is actually covered in ci.yml by its declared mechanism', () => {
+    const withoutComments = readCiWorkflowWithoutComments()
+
+    const missing: string[] = []
+    for (const [configPath, entry] of Object.entries(PROJECTS_RUN_ELSEWHERE)) {
+      switch (entry.mechanism) {
+        case 'flag': {
+          const flagPattern = new RegExp(
+            `--project[=\\s]${entry.marker.replace(/^--project=/, '')}(?![\\w-])`,
+          )
+          if (!flagPattern.test(withoutComments)) missing.push(configPath)
+          break
+        }
+        case 'filter-script': {
+          if (!withoutComments.includes(entry.marker)) missing.push(configPath)
+          break
+        }
+        default: {
+          // Exhaustive switch: an unknown mechanism value must fail loudly
+          // rather than silently count as covered.
+          throw new Error(`${configPath} has an unknown mechanism: ${String(entry.mechanism)}`)
+        }
+      }
+    }
+
+    expect(
+      missing,
+      `PROJECTS_RUN_ELSEWHERE entries not actually covered by their declared mechanism in ci.yml: ${missing.join(', ')}`,
+    ).toEqual([])
+  })
+
+  // The two checks above only see what PROJECTS_RUN_ELSEWHERE currently
+  // records — dropping an entry (accidentally or otherwise) makes its
+  // project derived without making the OTHER, still-real ci.yml step that
+  // covers it disappear, so the two checks above both stay green while the
+  // project silently starts running twice. These two catch that from ci.yml's
+  // actual, unconditional text instead of from the map's bookkeeping.
+  it('no derived project is also named by a literal --project=<name> flag elsewhere in ci.yml (would run twice)', () => {
+    const withoutComments = readCiWorkflowWithoutComments()
+    // run-shared-layer-tests.mjs's own step has no --project= literal (its
+    // names are computed at run time), so every match found here comes from
+    // some OTHER job's dedicated step.
+    const flaggedElsewhere = new Set(
+      [...withoutComments.matchAll(/--project[=\s]([^\s]+)/g)].map((m) => m[1]),
+    )
+    const derivedNames = deriveSharedLayerProjectNames(ROOT)
+    const doubleRun = derivedNames.filter((name) => flaggedElsewhere.has(name))
+    expect(
+      doubleRun,
+      `project(s) both derived AND named by a --project flag elsewhere in ci.yml (would run twice): ${doubleRun.join(', ')}`,
+    ).toEqual([])
+  })
+
+  it('no derived project lives under apps/web/, which always has its own dedicated test-jsdom job (would run twice)', () => {
+    const ciText = readCiWorkflowWithoutComments()
+    // This job step is unconditional YAML text, not generated from
+    // PROJECTS_RUN_ELSEWHERE — it runs regardless of what the map records, so
+    // any apps/web project reaching the derived list would run a second time
+    // here even after being (correctly or mistakenly) dropped from the map.
+    expect(ciText, 'ci.yml must run the apps/web jsdom+node suite via its own job').toContain(
+      'whiteboard-web test',
+    )
+    const derivedNames = deriveSharedLayerProjectNames(ROOT)
+    const doubleRun = projectConfigs
+      .filter((p) => derivedNames.includes(p.name ?? '') && p.configPath.startsWith('apps/web/'))
+      .map((p) => p.configPath)
+    expect(
+      doubleRun,
+      `apps/web project(s) reached the derived list but apps/web already has its own dedicated CI job: ${doubleRun.join(', ')}`,
+    ).toEqual([])
+  })
+})

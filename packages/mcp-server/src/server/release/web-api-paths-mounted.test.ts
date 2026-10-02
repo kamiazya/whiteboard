@@ -13,9 +13,10 @@
 // right thing for a component test to do and the reason this guard has to
 // live somewhere else — against the routes the daemon really mounts.
 //
-// Reading apps/web source from this package follows web-app-boundary.test.ts:
-// the daemon owns the contract, so the daemon's suite is where a client's
-// use of it is checked.
+// Reading apps/web source from this package is deliberate: the daemon owns
+// the contract, so the daemon's suite is where a client's use of it is
+// checked. It mounts the real routes, which is why it cannot sit in
+// tools/arch-lint with the other repo-wide guards.
 
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

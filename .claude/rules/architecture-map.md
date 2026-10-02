@@ -80,9 +80,9 @@ know, because the reader who trips them is elsewhere:
   pinned by equality, so adding one fails until someone raises the ceiling
   deliberately. ADR-0018 is Accepted and carries the burn-down order.
 
-`apps/web`'s own source is policed by a separate enforcer outside this tool
-(`packages/mcp-server/src/server/release/web-app-boundary.test.ts`), so "is
-this checked?" has two answers depending on the rule. `vocabulary-check.test.ts`
+`apps/web`'s own source is policed by a separate enforcer beside this tool's
+scans (`tools/arch-lint/src/web-app-boundary.test.ts`), so "is this checked?"
+has two answers depending on the rule. `vocabulary-check.test.ts`
 is the mechanical half of `.claude/rules/vocabulary.md`, failing on a retired
 word (today `slug`) under `apps/web/src` or `packages/*/src`.
 

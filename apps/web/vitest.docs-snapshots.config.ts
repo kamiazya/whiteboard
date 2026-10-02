@@ -18,7 +18,7 @@ import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
-import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
+import { resolveBrowserLaunchOptions } from '../../vitest.browser.launch-options.js'
 import { rendererBuildDefine } from './renderer-build-id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
