@@ -11,8 +11,9 @@
 // re-declaring it.
 
 import { spawnSync } from 'node:child_process'
-import { sign } from 'node:crypto'
+import { generateKeyPairSync, sign } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -454,4 +455,76 @@ export function generateTestTlsCert(dir, { commonName, subjectAltName = 'IP:127.
   )
   if (r.status !== 0) throw new Error(`openssl cert gen failed: ${r.stderr}`)
   return { keyFile, certFile }
+}
+
+/**
+ * A fresh ES256 key pair and the JWKS that publishes its public half, for a
+ * smoke that plays the identity provider.
+ *
+ * `kid` must equal the one the tokens are minted with: `createAccessTokenMinter`
+ * stamps `${name}-key`, so a smoke that mints through it passes that name here.
+ *
+ * @param {{ kid?: string }} [options]
+ * @returns {{ privateKey: import('node:crypto').KeyObject, jwks: { keys: object[] } }}
+ */
+export function createSmokeJwks({ kid = 'smoke-key' } = {}) {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid, use: 'sig', alg: 'ES256' }] }
+  return { privateKey, jwks }
+}
+
+/**
+ * The HTTPS JWKS mock a server-mode smoke points `--jwks-uri` at, listening
+ * on an OS-assigned port. The caller reads the port off `server.address()` and
+ * closes it.
+ *
+ * `host` is the bind address: the loopback for a server that runs on this
+ * machine, `0.0.0.0` for a container that reaches it across the Docker
+ * bridge, where a loopback bind would be unreachable.
+ *
+ * @param {{ tls: { key: Buffer, cert: Buffer }, jwks: object, host?: string }} options
+ * @returns {Promise<import('node:https').Server>}
+ */
+export function startJwksServer({ tls, jwks, host = '127.0.0.1' }) {
+  return new Promise((resolve, reject) => {
+    const server = createHttpsServer({ key: tls.key, cert: tls.cert }, (req, res) => {
+      if (req.url === '/.well-known/jwks.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(jwks))
+      } else {
+        res.writeHead(404)
+        res.end()
+      }
+    })
+    server.once('error', reject)
+    server.listen(0, host, () => resolve(server))
+  })
+}
+
+/**
+ * How a container reaches the host's mock services, and how the host reaches
+ * the container's server.
+ *
+ * Linux shares the host network, so the loopback is the same on both sides.
+ * Docker Desktop runs containers in a VM: the container dials the host by
+ * name and the server port has to be published to be reachable at all.
+ *
+ * @param {{ hostServerPort: number, serverPort?: number, platform?: string }} options
+ */
+export function dockerNetworking({
+  hostServerPort,
+  serverPort = 3099,
+  platform = process.platform,
+}) {
+  const useHostNetwork = platform === 'linux'
+  return {
+    useHostNetwork,
+    jwksConnectHost: useHostNetwork ? '127.0.0.1' : 'host.docker.internal',
+    networkRunArgs: useHostNetwork
+      ? ['--network=host']
+      : ['--add-host=host.docker.internal:host-gateway', '-p', `${hostServerPort}:${serverPort}`],
+    serverBaseUrl: useHostNetwork
+      ? `http://127.0.0.1:${serverPort}`
+      : `http://127.0.0.1:${hostServerPort}`,
+  }
 }

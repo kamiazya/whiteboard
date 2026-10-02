@@ -107,8 +107,8 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       idleForMs: idleTimer.getIdleForMs(),
       auth: { mode: 'local-token', hasToken: Boolean(options.token) },
       storage: {
-        dataDir: getDataDir(),
-        dataDirWritable: isDataDirWritable(getDataDir()),
+        dataDir: scope.dataDir,
+        dataDirWritable: isDataDirWritable(scope.dataDir),
       },
       mcp: { httpEnabled: true },
       clients: stats,
@@ -126,7 +126,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
 
   // ADR-0043 decision 4's root key, loaded or created once here. A composition
   // that forgets it does not fail loudly, it refuses every macaroon.
-  const macaroonRootKey = createMacaroonRootKey({ dataDir: getDataDir() }).rootKey
+  const macaroonRootKey = createMacaroonRootKey({ dataDir: scope.dataDir }).rootKey
 
   // /api/v1 document surface: same libSQL database as the MCP tools
   // (getDb memoizes per dataDir, so this container shares the connection

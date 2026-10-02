@@ -23,8 +23,10 @@ the code that serves them shares nothing:
 - `layout/nodes/` — how a node's box is drawn and filled: outline shape,
   appearance resolution, the markdown body typesetter, truncation.
 - `layout/` itself — the composer that draws on both (`spatial-canvas.ts`
-  walks a canvas, `compose-node.ts` draws one node's box), plus the
-  kind-agnostic scene transforms it uses.
+  walks a canvas, `compose-node.ts` draws one node — text, frame, link and
+  the dispatch — over the box primitives in `node-box.ts`, with a file node's
+  representations in `compose-file-node.ts`), plus the kind-agnostic scene
+  transforms it uses.
 
 **The composer's own file is not the composer's only file.** Two
 independently-featured OVERLAYS and the options vocabulary have their own

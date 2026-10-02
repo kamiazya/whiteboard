@@ -46,8 +46,8 @@ export function seedMathRandom(seed = 0xc0ffee): () => void {
   }
 }
 
-// The WorkspaceTopBar fetches its display names, dirty flag, and branch list
-// from three independent endpoints. Snapshot tests that mount the top bar
+// The WorkspaceTopBar fetches its display names and dirty flag
+// from independent endpoints. Snapshot tests that mount the top bar
 // share this handler so every card renders the same chrome; `dirty` is the
 // only detail a caller varies.
 export function topBarFetchHandler({ dirty }: { dirty: boolean }): DocFetchHandler {
@@ -60,8 +60,6 @@ export function topBarFetchHandler({ dirty }: { dirty: boolean }): DocFetchHandl
       })
     }
     if (url.endsWith('/dirty')) return jsonResponse({ dirty })
-    if (url.endsWith('/branches'))
-      return jsonResponse({ head: 'main', branches: [{ name: 'main' }] })
     // Catch-all for any unrelated TopBar fetch, so it resolves instead of
     // surfacing an error state in the captured UI.
     return jsonResponse({})

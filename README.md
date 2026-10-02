@@ -149,17 +149,21 @@ Add to `~/.gemini/settings.json`:
 
 In your agent session, ask it to call `wb_workspace_edit({ workspaceId: "default", ops: [{ op: "document.create", path: "smoke", kind: "spatial" }] })`. The call creates the document in the daemon's data directory (`~/.whiteboard` by default); with the web app connected to the daemon (below), open `smoke` in it to see it.
 
+`default` is the segment of the first workspace a data directory gets: it is created the first time anything opens the directory, and it is the workspace the web app opens first. An agent can use it as `workspaceId` without being told anything else; a workspace you create later is addressed by its own id or the segment it was given.
+
 ## Connect the web app to your local daemon
 
 Already have the browser canvas open (see [Get started](docs/tutorials/getting-started.md))
 and a local daemon running? The hosted app reaches it through the
 **whiteboard browser extension** and a native messaging host that
-`whiteboard native-host install` registers with your browser. The daemon
-listens on an owner-only local socket and no network port, so no web page
-can reach it directly, and nothing needs pasting or approving: once
+`whiteboard native-host install --json` registers with your browser (run it
+from a global install, not `npx`; see
+[Get the `whiteboard` command](docs/how-to/connect-to-local-daemon.md#get-the-whiteboard-command)).
+The daemon listens on an owner-only local socket and no network port, so no
+web page can reach it directly, and nothing needs pasting or approving: once
 connected, the tab works on the daemon's workspaces with live sync,
-automatic version checkpoints and thumbnails on top of the manual version
-history the browser keeps on its own.
+automatic version checkpoints on top of the manual version history the
+browser keeps on its own.
 
 - Chrome, Edge, Brave and Firefox are supported; Safari keeps its data in
   the browser for now.
@@ -182,7 +186,7 @@ Three opinionated `SKILL.md` packs ship with the **plugin**, which wires them up
 |---|---|
 | `/drawing-visuals` | When screen layout, structure, flow, or comparison still feels too ambiguous in text alone — start drawing on the canvas together. |
 | `/coauthoring-visuals` | A structured loop for evolving visuals with the agent: gather context, structure frame by frame, run fresh-viewer tests on what you draw. |
-| `/auditing-workspaces` | Audit existing workspaces — detect orphaned workspaces, tombstone-heavy canvases, and cache/disk mismatches; report cleanup candidates. |
+| `/auditing-workspaces` | Audit a workspace's documents — find empty spatial canvases, near-duplicate paths, and documents with no recorded kind; report cleanup candidates. |
 
 ## Example transcript
 
@@ -192,7 +196,7 @@ You    Use whiteboard to sketch the request flow for our auth service:
 
 Agent  { results: [{ documentId }] } = wb_workspace_edit({ workspaceId: "default",
          ops: [{ op: "document.create", path: "auth-flow", kind: "spatial" }] })
-       wb_canvas_edit({ workspaceId: "default", documentId, ops: [
+       wb_canvas_edit({ workspaceId: "default", documentId, mode: "apply", ops: [
          /* 4 service boxes, the arrows between them, and: */
          { op: "node.add", node: { id: "cache-note", type: "text",
                                    text: "cache lives here" } },

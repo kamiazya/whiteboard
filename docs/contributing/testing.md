@@ -296,16 +296,17 @@ node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs
 
 ### MCP Smoke Coverage Registry
 
-`src/server/mcp/mcp-smoke-coverage.ts` is the authoritative static registry that classifies all 16 registered MCP tools into four categories:
+`src/server/mcp/mcp-smoke-coverage.ts` is the authoritative static registry. `ALL_REGISTERED_TOOLS` lists every registered MCP tool and is compared against a real server's `tools/list`; the other lists partition it into three categories:
 
 | Category | Description |
 |---|---|
 | `COVERED_TOOLS` | Called in `smoke:e2e` success path; MCP SDK validates `structuredContent` against `outputSchema` at runtime |
-| `ERROR_PATH_ONLY_TOOLS` | Route wiring verified only via an expected error path (no browser client, missing canvas, etc.) — success path needs infrastructure the offline smoke cannot provide |
 | `UNIT_ONLY_TOOLS` | Unit tests cover `outputSchema`; offline smoke call not needed |
 | `DEFERRED_TOOLS` | Cannot be called in offline smoke; each entry must carry `reason` + `unblock` fields |
 
-Both `ERROR_PATH_ONLY_TOOLS` and `DEFERRED_TOOLS` are currently empty — every registered tool is either exercised end-to-end in `smoke:e2e` (`COVERED_TOOLS`) or covered by its own unit tests (`UNIT_ONLY_TOOLS`).
+`UI_LINKED_TOOLS` is a separate axis, not a fourth category: it marks the tools whose registration carries the MCP Apps `_meta.ui.resourceUri` link, and each of them also belongs to exactly one category above.
+
+Both `UNIT_ONLY_TOOLS` and `DEFERRED_TOOLS` are currently empty — every registered tool is exercised end-to-end in `smoke:e2e` (`COVERED_TOOLS`). Read the current lists from the file rather than from here.
 
 `src/server/mcp/tool-structured-content.property.test.ts` enforces classification invariants as a meta-property test (runs with `pnpm test --project mcp-node`). `mcp-e2e-checkpoint.smoke-impl.ts` enforces a SET equality guard between `tools/list` runtime results and `ALL_REGISTERED_TOOLS`.
 
@@ -363,7 +364,7 @@ pnpm check:pages-release
 
 The layering is **root command → `@whiteboard/checks` orchestrator → package-local primitives**: the `apps/web smoke:*` scripts stay as low-level primitives, and `@whiteboard/checks` only orchestrates them. The runner is **matrix-driven** — it reads the `pages-release` tier from [`release-gate-matrix.json`](../../tests/e2e/distribution/release-gate-matrix.json), which stays the single policy source (add a Pages gate there, not in runner code). The wiring (root delegation, the private package, the matrix-driven runner) is enforced by the `pages-release tier wiring drift` block in `release-gate-matrix.test.ts`.
 
-It is **release-candidate adjacent**: deliberately kept out of `check:release-candidate`, `check:release-candidate:docker`/`:local`, and the CI `verify` job, because `smoke:preview-origin` needs Playwright and a local `127.0.0.1` HTTP bind (it fails with `EPERM` in a network-restricted sandbox; runs green in a normal environment). Run it before a Cloudflare Pages deploy, not on every PR.
+It is **release-candidate adjacent**: deliberately kept out of `check:release-candidate` and `check:release-candidate:docker`/`:local`, because `smoke:preview-origin` needs Playwright and a local `127.0.0.1` HTTP bind (it fails with `EPERM` in a network-restricted sandbox; runs green in a normal environment). The orchestrating command is not a CI step, but the CI `verify` job runs the same primitives (`smoke:artifact`, `smoke:preview-origin`, `smoke:pwa-precache`) on every PR; run `check:pages-release` before a Cloudflare Pages deploy.
 
 ### Security review map
 

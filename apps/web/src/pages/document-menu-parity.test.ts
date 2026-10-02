@@ -30,6 +30,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { assertScannedLedger } from '../test-utils/coverage-ledger.js'
+import { stripComments } from '../test-utils/strip-comments.js'
 
 type MenuParity =
   /** Both keepers contribute this row. */
@@ -94,10 +95,7 @@ const PAGES: Record<Keeper, readonly string[]> = {
  * merely DESCRIBED teaches people to write entries that shut the scan up.
  */
 function code(text: string): string {
-  return text
-    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+  return stripComments(text)
 }
 
 /**

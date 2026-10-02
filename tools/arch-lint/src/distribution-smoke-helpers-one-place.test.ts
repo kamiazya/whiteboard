@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, relativeToRepo } from './scan-roots.js'
+import { stripComments } from './strip-comments.js'
 
 // The distribution smokes are plain Node scripts that run only on the
 // release path, so a helper copied into each one is copied for good: nothing
@@ -104,5 +105,36 @@ describe('distribution smokes declare each helper in one place', () => {
       'function outer() { function inner() {} }',
     ].join('\n')
     expect(topLevelFunctionNames(text, 'x.mjs')).toEqual(['a', 'b', 'c', 'd', 'outer'])
+  })
+})
+
+// What the five server-mode smokes each wrote for themselves, and not as a
+// function declaration, so the name scan above could not see it: an HTTPS
+// server answering the JWKS path, and the ES256 key pair behind it. A TLS or
+// bind-host fix then lands in one smoke and the others keep the old behaviour,
+// on a release gate that runs on a clean machine. `startJwksServer` and
+// `createSmokeJwks` are the one home.
+const HELPER_HOMES = new Set(['smoke-helpers.mjs', 'smoke-helpers.test.mjs'])
+const OWN_JWKS_MOCK = [/\bcreateHttpsServer\s*\(/, /\bgenerateKeyPairSync\s*\(/]
+
+describe('distribution smokes take their JWKS mock and key pair from the helpers', () => {
+  const scripts = smokeScripts().filter((path) => !HELPER_HOMES.has(path.split('/').pop() ?? ''))
+
+  it('reaches the four smokes that stand up a mock identity provider', () => {
+    expect(scripts.length).toBeGreaterThan(8)
+    const users = scripts.filter((path) =>
+      readFileSync(join(REPO_ROOT, path), 'utf8').includes('startJwksServer('),
+    )
+    expect(users.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('builds neither an HTTPS server nor an EC key pair of its own', () => {
+    const offenders = scripts.flatMap((path) => {
+      const code = stripComments(readFileSync(join(REPO_ROOT, path), 'utf8'))
+      return OWN_JWKS_MOCK.filter((pattern) => pattern.test(code)).map(
+        (pattern) => `${path}: ${pattern.source}`,
+      )
+    })
+    expect(offenders).toEqual([])
   })
 })

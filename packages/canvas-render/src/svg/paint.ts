@@ -24,10 +24,6 @@ export function rectAttrs(bbox: BoundingBox): SvgBoxAttrs {
   return { x: bbox.x, y: bbox.y, width: bbox.w, height: bbox.h }
 }
 
-export function isFiniteBox(box: BoundingBox): boolean {
-  return [box.x, box.y, box.w, box.h].every(Number.isFinite)
-}
-
 function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === 'string' && value.length > 0
 }

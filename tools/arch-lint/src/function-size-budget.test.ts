@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { type MeasuredFunction, measureSource } from './function-size-measure.js'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
 import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
 
@@ -25,7 +25,7 @@ import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
 // moved 834 lines of pointer handling out of `SpatialEditor.tsx` into
 // `use-editor-pointer.ts`. Both files ended under 800, `file-size-budget`
 // stayed green, and the diff read as a decomposition — but the 834 lines are
-// still ONE function (`useEditorPointer`, fourth-largest in the repo).
+// still ONE function (`useEditorPointer`, among the largest in the repo).
 // Relocating mass satisfies a file budget while the function survives whole.
 //
 // **Why it lives in `tools/arch-lint` rather than beside its sibling.** The
@@ -35,79 +35,17 @@ import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
 // project runs at pre-push. `file-size-budget.test.ts` is still named a
 // pre-push command of its own; this one needs no new line.
 //
-// **Why the list is 400-odd entries and not 17.** That is what the rule's drift
+// **Why the list runs to hundreds of entries and not 17.** That is what the rule's drift
 // actually costs — measured, not chosen. At a budget of 100 it would be 161
 // entries, at 150 it would be 86; picking one of those would be picking the
 // number that makes the debt look smaller, over the number the checklist
 // states. The list is data rather than prose for the same reason.
 const LINE_BUDGET = 50
 
-interface Measured {
-  /** `<repo-relative path>#<qualified name>` — unique, and stable under a move of lines. */
-  readonly key: string
-  readonly lines: number
-  readonly isTest: boolean
-}
+type Measured = MeasuredFunction
 
-/**
- * Every NAMED function in a file, with the chain of named functions enclosing
- * it.
- *
- * Qualified because a bare `path#name` collides — measured across the repo,
- * qualifying takes the colliding keys to zero. An anonymous callback is not
- * measured: it has no name to put in a ledger, and its lines already count
- * toward the named function that holds it, which is the one a reader would
- * shrink.
- */
 function measureFile(absolutePath: string, relativePath: string): Measured[] {
-  const isTest = /\.(test|spec)\.tsx?$/.test(relativePath)
-  const source = ts.createSourceFile(
-    absolutePath,
-    readFileSync(absolutePath, 'utf8'),
-    ts.ScriptTarget.Latest,
-    true,
-    relativePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  )
-  const found: Measured[] = []
-  const visit = (node: ts.Node, chain: readonly string[]): void => {
-    let name: string | undefined
-    if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) name = node.name?.getText()
-    else if (
-      (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
-      ts.isVariableDeclaration(node.parent)
-    )
-      name = node.parent.name.getText()
-    let inner = chain
-    if (name !== undefined && (node as ts.FunctionLikeDeclaration).body !== undefined) {
-      const qualified = [...chain, name].join('.')
-      const from = source.getLineAndCharacterOfPosition(node.getStart(source)).line
-      const to = source.getLineAndCharacterOfPosition(node.getEnd()).line
-      found.push({ key: `${relativePath}#${qualified}`, lines: to - from + 1, isTest })
-      inner = [...chain, name]
-    }
-    ts.forEachChild(node, (child) => {
-      visit(child, inner)
-    })
-  }
-  ts.forEachChild(source, (child) => {
-    visit(child, [])
-  })
-  // A qualified name can still repeat inside one file — a model-based
-  // property test gives every command its own `check`/`run`/`toString`, and
-  // 111 keys across the repo collide that way. The ones that repeat get
-  // their occurrence index in source order, so a ledger entry names one
-  // function rather than whichever the scan happened to see last: without
-  // it, a 120-line `run` and a 20-line `run` shared an entry and the guard
-  // read the short one.
-  const seen = new Map<string, number>()
-  for (const row of found) seen.set(row.key, (seen.get(row.key) ?? 0) + 1)
-  const taken = new Map<string, number>()
-  return found.map((row) => {
-    if ((seen.get(row.key) ?? 0) < 2) return row
-    const index = (taken.get(row.key) ?? 0) + 1
-    taken.set(row.key, index)
-    return { ...row, key: `${row.key}~${String(index)}` }
-  })
+  return measureSource(readFileSync(absolutePath, 'utf8'), relativePath)
 }
 
 // The same two directory exclusions `file-size-budget.test.ts` makes, from the
@@ -187,6 +125,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/SourcePane.tsx#SourcePane': 258,
   'apps/web/src/components/markdown-editor/TouchFormattingBarPanel.tsx#TouchFormattingBarPanel': 128,
   'apps/web/src/components/markdown-editor/annotation-decorations.ts#annotationDecorations': 74,
+  // The `ViewPlugin.define` callback of a module-level constant: one closure over the
+  // tap's state and the three listeners that read it.
+  'apps/web/src/components/markdown-editor/completion-popup.ts#completionTouchAccept': 98,
   'apps/web/src/components/markdown-editor/editor-verbs.ts#wrapSelectionWith': 63,
   'apps/web/src/components/markdown-editor/proposal-decorations.ts#proposalDecorations': 71,
   'apps/web/src/components/markdown-editor/verb-catalog.tsx#verbCatalogItems': 64,
@@ -251,14 +192,18 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // roughly forty values through props — a wider seam, in the app's most
   // stateful surface, for no reader benefit. The tree they build is exactly
   // the tree the inline JSX built.
+  // The component itself: a `forwardRef` function expression, the largest
+  // function in the repo. The entries below are functions inside it, so their
+  // keys carry its name.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1630,
   // 139 -> 88: its gesture and reach overlays became `gesture-overlays.tsx`.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasSpaceLayers': 88,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 88,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 100,
   // 119 -> 62: the document picker and the URL dialog became
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 62,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#runNavigation': 55,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 91,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 96,
@@ -689,6 +634,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // them. Moved, not grown — recorded at the measurement.
   'packages/server-core/src/tools/body-edit.ts#editBody': 61,
   'packages/server-core/src/tools/canvas-edit.ts#editCanvas': 72,
+  // Arrow-valued class properties: bound to the session so they can be passed as callbacks.
+  'packages/server-core/src/tools/canvas-edit-session.ts#growToHold': 59,
+  'packages/server-core/src/tools/canvas-edit-session.ts#patchNode': 69,
+  'packages/server-core/src/tools/canvas-edit-session.ts#placeAround': 56,
   'packages/server-core/src/tools/document-crud.ts#wbDocumentCreate': 130,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 147,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 135,

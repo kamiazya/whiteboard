@@ -22,7 +22,7 @@ The same variable works on the packaged daemon and on server mode:
 
 ```bash
 WHITEBOARD_OTEL=1 whiteboard daemon run
-WHITEBOARD_OTEL=1 whiteboard server run
+WHITEBOARD_OTEL=1 whiteboard server run --json   # plus the server-mode settings it already needs
 ```
 
 ## Forwarding to a collector

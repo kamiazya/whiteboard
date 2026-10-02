@@ -83,7 +83,6 @@
     "mcp:inspect:stdio": "npx @modelcontextprotocol/inspector node --import tsx/esm src/server/mcp/stdio.ts",
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
     "daemon": "node dist/server/daemon-entry.js",
-    "daemon:dev": "tsx watch src/server/daemon-entry.ts",
     "build:server": "tsdown && node scripts/prepend-cli-shebang.mjs && chmod +x dist/cli/index.js",
     "build": "pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs",
     "test": "vitest run",

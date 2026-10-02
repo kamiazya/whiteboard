@@ -1,8 +1,8 @@
 # Define your own stencils
 
-A **stencil** says what a box IS — a datastore, a gateway, a queue — and sets its colour and
-silhouette together, so a drawing carries its own vocabulary instead of a colour scheme
-invented per board.
+A **stencil** says what a box IS — a datastore, a gateway, a queue — and sets its appearance
+(the bundled ones spend silhouette alone), so a drawing carries its own vocabulary instead of
+one invented per board.
 
 Six ship with the bundled `visual` plugin:
 
@@ -10,13 +10,15 @@ Six ship with the bundled `visual` plugin:
 |---|---|---|
 | `visual.actor` | whoever the drawing is for: a person, a client, a calling system | an ellipse |
 | `visual.gateway` | where traffic enters or is routed: a gateway, a load balancer, a proxy | a hexagon |
-| `visual.service` | something that runs and answers: an API, a worker, a function | a rectangle |
+| `visual.service` | something that runs and answers: an API, a worker, a function | an octagon |
 | `visual.datastore` | anything that holds state and is read back: a database, a bucket, a cache | a cylinder |
 | `visual.queue` | something in flight rather than at rest: a queue, a topic, a stream | a parallelogram |
 | `visual.external` | something the drawing does not own: a third-party API, a vendor service | a diamond |
 
-Every pair differs on **both** channels a board draws — colour and silhouette — so the
-distinctions survive a projector, a colour-blind reader and a greyscale print.
+Every member has its own silhouette and none sets a colour, so the distinctions survive a
+projector, a colour-blind reader and a greyscale print, and colour stays free to say something
+else about the box — healthy or failing, say. That rule is
+[ADR-0036](../contributing/adr/0036-semantic-axes.md) §5.
 
 ## Wearing one
 
@@ -102,18 +104,16 @@ A stencil says what a box is, never where it goes or what it says. Position, siz
 refused by name. That is what keeps a vocabulary reusable: the same `lakehouse` dresses a box
 anywhere on any board.
 
-### Choosing colours and silhouettes
+### Choosing silhouettes and colours
 
-Two stencils a reader cannot tell apart are worth less than one. A board draws exactly two
-channels — the node's **colour** and its **silhouette** — so give each member its own of each.
-The silhouettes are `ellipse`, `diamond`, `hexagon`, `parallelogram`, `cylinder`, and the
-default rectangle when the stencil sets no shape.
+Two stencils a reader cannot tell apart are worth less than one. The silhouettes a stencil can
+set (`visual.shape/v0`) are `ellipse`, `diamond`, `hexagon`, `parallelogram`, `cylinder` and
+`octagon`; a stencil that sets none draws the default rectangle, the same as an undressed box.
 
-**Know the ceiling before you design against it.** JSON Canvas has six colours and there are
-six silhouettes, so a set where every pair differs on *both* tops out at six members — and the
-bundled six already spend all of both. Anything your library adds therefore repeats a colour
-or a silhouette with one of them. That is a real limit of what a board draws, not an oversight,
-and nothing refuses it: a library may collide deliberately.
+**Know the ceiling before you design against it.** There are six silhouettes besides that
+rectangle, and the bundled six use all of them. Anything your library adds therefore repeats
+the silhouette of a bundled stencil, or of another of your own. That is a real limit of what a
+board draws, not an oversight, and nothing refuses it: a library may collide deliberately.
 
 Two ways to live with it:
 
@@ -122,6 +122,10 @@ Two ways to live with it:
   never shows the collision.
 - **Keep the collision far apart.** A `lakehouse` that looks like the bundled `gateway` costs
   nothing on a board that has no gateway on it.
+
+A stencil may also set a `color`, as the example above does, and it is yours to spend. The
+bundled set leaves colour to whatever second axis a drawing declares, so a library that sets
+one gives that up on the boxes wearing it.
 
 ## Limits today
 

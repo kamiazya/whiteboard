@@ -37,7 +37,7 @@ export interface RunServerStopOptions {
   dataDir?: string
   isPidAlive?: (pid: number) => boolean
   /** Injection seam: confirm the running process is the managed server.
-   *  Default: HTTP GET /api/runtime/ping, compare returned pid to record.pid. */
+   *  Default: HTTP GET /api/runtime/ping, compare the returned instanceId to record.instanceId. */
   verifyIdentity?: (record: ServerModeRecord) => Promise<boolean>
   killFn?: (pid: number, signal: NodeJS.Signals | number) => void
   sleep?: (ms: number) => Promise<void>

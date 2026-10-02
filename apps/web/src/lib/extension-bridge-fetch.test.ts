@@ -184,6 +184,84 @@ describe('createBridgeFetch', () => {
     expect(ext.port.sent.at(-1)).toEqual({ type: 'abort', id })
   })
 
+  // The host and the page ship separately, so a host newer than the page can
+  // answer in a shape this page cannot read. A request whose answer is
+  // dropped waits for ever, so what cannot be read ends the request it names.
+  describe('a host message this page cannot read', () => {
+    it('ends the request instead of leaving it waiting, whatever the host calls the failure', async () => {
+      const ext = new FakeExtension()
+      const pending = createBridgeFetch(ext.connect)(at('/api/x'))
+      await sentFrom(ext)
+      ext.port.reply({
+        type: 'error',
+        id: ext.port.lastId,
+        reason: 'daemon-too-old',
+        message: 'the daemon predates this call',
+      })
+      await expect(pending).rejects.toThrow(/daemon-too-old|the daemon predates this call/)
+    })
+
+    it('rejects a head whose shape it cannot read, saying the versions may differ', async () => {
+      const ext = new FakeExtension()
+      const pending = createBridgeFetch(ext.connect)(at('/api/x'))
+      await sentFrom(ext)
+      ext.port.reply({ type: 'head', id: ext.port.lastId, status: 799, headers: {} })
+      await expect(pending).rejects.toThrow(/cannot read.*version/i)
+    })
+
+    it('errors the body of a stream a later message of unknown shape interrupts', async () => {
+      const ext = new FakeExtension()
+      const pending = createBridgeFetch(ext.connect)(at('/api/sync/stream'))
+      await sentFrom(ext)
+      const id = ext.port.lastId
+      ext.port.reply({ type: 'head', id, status: 200, headers: {} })
+      const body = (await pending).text()
+      ext.port.reply({ type: 'chunk', id, data: 7 })
+      await expect(body).rejects.toThrow(TypeError)
+      expect(ext.port.sent.at(-1)).toEqual({ type: 'abort', id })
+    })
+
+    it('leaves a message that names no request of this page alone', async () => {
+      const ext = new FakeExtension()
+      const pending = createBridgeFetch(ext.connect)(at('/api/x'))
+      await sentFrom(ext)
+      const id = ext.port.lastId
+      ext.port.reply({ type: 'unheard-of', id: 'someone-else' })
+      ext.port.reply('not an object')
+      ext.port.reply({ type: 'head', id, status: 200, headers: {} })
+      ext.port.reply({ type: 'end', id })
+      expect((await pending).status).toBe(200)
+    })
+  })
+
+  describe('an extension that speaks another protocol', () => {
+    it('refuses the request with the skew as the reason, and posts nothing', async () => {
+      const ext = new FakeExtension()
+      const bridgeFetch = createBridgeFetch(ext.connect, async () => 'update the extension')
+      await expect(bridgeFetch(at('/api/x'))).rejects.toThrow('update the extension')
+      expect(ext.ports.flatMap((p) => p.sent)).toEqual([])
+    })
+
+    it('is asked once per connection, and again after the extension loses its host', async () => {
+      const ext = new FakeExtension()
+      const skew = vi.fn(async () => null)
+      const bridgeFetch = createBridgeFetch(ext.connect, skew)
+      // Dropping the port fails these two, which is not what is asserted.
+      const inFlight = [
+        bridgeFetch(at('/api/a')).catch(() => undefined),
+        bridgeFetch(at('/api/b')).catch(() => undefined),
+      ]
+      await vi.waitFor(() => expect(ext.port.sent).toHaveLength(2))
+      expect(skew).toHaveBeenCalledTimes(1)
+
+      ext.port.drop()
+      await Promise.all(inFlight)
+      bridgeFetch(at('/api/c')).catch(() => undefined)
+      await vi.waitFor(() => expect(ext.ports).toHaveLength(2))
+      expect(skew).toHaveBeenCalledTimes(2)
+    })
+  })
+
   // Lost host, missing host, crashed host: all arrive as the port closing.
   it('fails what is in flight when the extension loses its host, and reconnects after', async () => {
     const ext = new FakeExtension()

@@ -28,9 +28,7 @@
 // Scenarios 14–16 JWKS mock uses port 0 (OS-assigned, avoids collisions).
 
 import { spawn } from 'node:child_process'
-import { generateKeyPairSync } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -39,9 +37,11 @@ import {
   assertNoLeak as assertNoLeakHelper,
   createCliRunner,
   createFail,
+  createSmokeJwks,
   generateTestTlsCert,
   scrubDevEnv,
   signEs256Jwt,
+  startJwksServer,
 } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -280,24 +280,10 @@ const REQUIRED_FLAGS = [
   const tlsKey = readFileSync(tlsKeyFile)
   const tlsCert = readFileSync(tlsCertFile)
 
-  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
-  const jwkPublic = publicKey.export({ format: 'jwk' })
-  const jwks = { keys: [{ ...jwkPublic, kid: 'smoke-key', use: 'sig', alg: 'ES256' }] }
+  const { privateKey, jwks } = createSmokeJwks({ kid: 'smoke-key' })
 
-  // Start local HTTPS JWKS mock server with the self-signed cert.
-  const jwksServer = createHttpsServer({ key: tlsKey, cert: tlsCert }, (req, res) => {
-    if (req.url === '/.well-known/jwks.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(jwks))
-    } else {
-      res.writeHead(404)
-      res.end()
-    }
-  })
-  await new Promise((resolve, reject) => {
-    jwksServer.listen(0, '127.0.0.1', () => resolve())
-    jwksServer.once('error', reject)
-  })
+  // Local HTTPS JWKS mock with the self-signed cert.
+  const jwksServer = await startJwksServer({ tls: { key: tlsKey, cert: tlsCert }, jwks })
   const jwksPort = jwksServer.address().port
   const jwksUri = `https://127.0.0.1:${jwksPort}/.well-known/jwks.json`
 
@@ -587,10 +573,7 @@ const REQUIRED_FLAGS = [
 // Scenarios 14–16: server doctor --json. Share one HTTPS JWKS mock to
 // limit TLS cert generation overhead. JWKS mock uses port 0 (OS-assigned).
 {
-  const { publicKey: drPublicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
-  const drJwks = {
-    keys: [{ ...drPublicKey.export({ format: 'jwk' }), kid: 'dr-key', use: 'sig', alg: 'ES256' }],
-  }
+  const { jwks: drJwks } = createSmokeJwks({ kid: 'dr-key' })
   const drCertsDir = mkdtempSync(join(tmpdir(), 'whiteboard-doctor-smoke-certs-'))
   const { keyFile: drKeyFile, certFile: drCertFile } = generateTestTlsCert(drCertsDir, {
     commonName: 'smoke-test-jwks-ca',
@@ -598,18 +581,9 @@ const REQUIRED_FLAGS = [
   const drTlsKey = readFileSync(drKeyFile)
   const drTlsCert = readFileSync(drCertFile)
 
-  const drJwksServer = await new Promise((resolve, reject) => {
-    const srv = createHttpsServer({ key: drTlsKey, cert: drTlsCert }, (req, res) => {
-      if (req.url === '/.well-known/jwks.json') {
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify(drJwks))
-      } else {
-        res.writeHead(404)
-        res.end()
-      }
-    })
-    srv.listen(0, '127.0.0.1', () => resolve(srv))
-    srv.once('error', reject)
+  const drJwksServer = await startJwksServer({
+    tls: { key: drTlsKey, cert: drTlsCert },
+    jwks: drJwks,
   })
   const drJwksPort = drJwksServer.address().port
   const drJwksUri = `https://127.0.0.1:${drJwksPort}/.well-known/jwks.json`

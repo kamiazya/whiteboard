@@ -86,6 +86,37 @@ describe('ci.yml has one aggregate gate that covers every job', () => {
   })
 })
 
+// `verify` -> `dry-run-npm` -> `ci-gate` is a serial chain, so a step that
+// needs nothing from `verify` and sits inside it lengthens the whole run by
+// its own duration. The three extension smokes share one prebuilt extension
+// and Playwright's Chromium, consume nothing `verify` produces, and cost
+// about two minutes together — their own job runs them beside the other jobs.
+describe('the extension smokes run beside verify, not inside it', () => {
+  const EXTENSION_SMOKES = ['smoke:bridge', 'smoke:bridge:firefox', 'smoke:read-plane']
+  const stepsRunning = (id: string, script: string) =>
+    (jobs.find((job) => job.id === id)?.steps ?? []).filter((step) =>
+      new RegExp(`${script}(\\s|$)`).test(step.run ?? ''),
+    )
+
+  it('has an extension-smokes job that runs all three, in the one job that shares their build', () => {
+    for (const script of EXTENSION_SMOKES) {
+      expect(stepsRunning('extension-smokes', script), script).toHaveLength(1)
+    }
+  })
+
+  it('keeps them out of verify, which dry-run-npm waits for', () => {
+    for (const script of EXTENSION_SMOKES) {
+      expect(stepsRunning('verify', script), script).toEqual([])
+    }
+  })
+
+  it('is gated, and nothing waits for it', () => {
+    expect(gate?.needs).toContain('extension-smokes')
+    const waiting = jobs.filter((job) => job.needs.includes('extension-smokes'))
+    expect(waiting.map((job) => job.id)).toEqual(['ci-gate'])
+  })
+})
+
 describe('the gate allows a skip only where the workflow can produce one', () => {
   it('names only real jobs', () => {
     const ids = new Set(jobs.map((job) => job.id))
@@ -129,7 +160,7 @@ describe('the gate judges the run, and refuses everything but success', () => {
   it('fails a real red run of this workflow', () => {
     // Captured from the run whose dry-run-docker job really failed. A job
     // added to the workflow after that capture is appended to it as a plain
-    // success row (today: `test-shared`, `native-host-windows`), since `needs` is read live and a
+    // success row (today: `test-shared`, `native-host-windows`, `extension-smokes`), since `needs` is read live and a
     // needed job absent from the run is one of the failures this gate
     // reports — and a red run is not something to re-capture on demand.
     // This is what settles the question the `needs` form could not: the gate

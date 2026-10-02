@@ -47,7 +47,7 @@ Absolute rules:
 
 1. Shared-layer packages (`scan-packages.ts`'s `SHARED_LAYER_PACKAGES`: model, codec, canvas-render, ports, facet-engine, loro-adapter, search, reference-graph, workspace-index, history, scene, daemon-client, server-core) must not import `node:*`, DOM globals, or `inversify`. `plugin-visual` is held to the `node:*`/`inversify` half only: its `/ui` half is React by design, while its DEFAULT entry must stay react-free because `canvas-render` imports it — a split no dependency list can see; `plugin-visual-default-entry-react-free.test.ts` holds it. `canvas-viewer` is a browser-runtime UI package, so DOM globals are its normal job — it is held only to the `node:*`/`inversify` half of this rule (plus one exempted build-time `Buffer` use in `widget/build-fonts-module.ts`; see its `exemptBoundaryFiles` entry in `architecture-map.ts`).
 2. Dependencies flow only in the table's direction. Composition roots (`mcp-server`, `apps/web`) are never imported by shared packages or by `canvas-viewer` — BOTH are registered in `architecture-map.ts` so `direction-check.ts` catches a reverse import, and both have their own manifest direction-checked via `scan-packages.ts`'s `COMPOSITION_ROOTS` (`mcp-server`'s and `apps/web`'s SOURCE stays out of the boundary scan — they are the packages allowed `node:*`/DOM/inversify; `apps/extension`'s is scanned like a shared package's, exempt from `dom-global` only, because it runs in a page and a service worker). The daemon's browser-safe client half is `daemon-client`, a shared-layer package both roots may consume — apps/web reads it directly, and `mcp-server` inlines it into its published dist via tsdown `noExternal`. Neither root depends on the other; `web-app-boundary.test.ts` pins that apps/web has no `@kamiazya/whiteboard-mcp` import at all. `apps/web` was absent from the table until this guard was added, so a shared package taking a dependency on it would have passed.
-3. Unsure where code goes → load the `package-placement` skill (planned). DI wiring → `di-container` skill (planned).
+3. Unsure where code goes → the table above and the path-scoped `.claude/rules/package-<name>.md` of the nearest package; DI wiring is `package-mcp-server.md`.
 4. What to CALL the thing you are placing is `.claude/rules/vocabulary.md` (always-on): ADR-0009's Document model, plus the standing rule that a session fixes vocabulary violations in whatever it already touches, without preserving backward compatibility for internal names.
 
 These rules are enforced by `tools/arch-lint` (vitest project `arch-lint-node`):
@@ -56,7 +56,8 @@ dependency-direction check, a per-package allowed-third-party-dependency check,
 a circular-value-import check, the adapter-mechanic check described below, a
 relative-import escape check (every relative specifier in a workspace's `src`
 resolves inside it), mcp-server's layer order (shared < daemon < mechanics <
-adapters < composition < entry, eight reversals ledgered shrink-only), and
+adapters < composition < entry, reversals ledgered shrink-only — the count is
+`UPWARD_EDGES_CEILING`), and
 `route-portability`'s transitive classification of which routes could leave Node.
 It reads this table's data-driven mirror,
 `tools/arch-lint/src/architecture-map.ts`.

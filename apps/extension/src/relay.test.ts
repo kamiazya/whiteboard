@@ -8,7 +8,10 @@ import {
   extensionHelloSchema,
   extensionToPageSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
-import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  BRIDGE_PROTOCOL_VERSION,
+  NATIVE_HOST_NAME,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { describe, expect, it } from 'vitest'
 import { type ExtensionApi, installRelay, type Port } from './relay.js'
 
@@ -126,7 +129,7 @@ describe('installRelay', () => {
     const fake = fakeApi()
     installRelay(fake.api, MATCHES)
     const reply = await fake.message({ type: 'hello' }, APP)
-    expect(reply).toEqual({ type: 'hello', version: '9.9.9' })
+    expect(reply).toEqual({ type: 'hello', version: '9.9.9', protocol: BRIDGE_PROTOCOL_VERSION })
     expect(extensionHelloReplySchema.parse(reply)).toEqual(reply)
   })
 

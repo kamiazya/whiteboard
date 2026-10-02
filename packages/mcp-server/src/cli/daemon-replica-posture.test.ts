@@ -15,15 +15,28 @@ const record = {
 }
 const running: DaemonRecordParseResult = { kind: 'valid', record }
 
-/** A daemon that answers one canned response, recording what it was asked. */
-function daemonAnswering(status: number, body: unknown) {
+/**
+ * A daemon that answers one canned response, recording what it was asked. The
+ * workspace listing it also serves is kept out of `asked`, which is what the
+ * posture request itself was.
+ */
+function daemonAnswering(
+  status: number,
+  body: unknown,
+  workspaces: readonly { workspaceId: string; segment?: string }[] = [],
+) {
   const asked: DaemonRequest[] = []
   const request = vi.fn(async (req: DaemonRequest) => {
+    if (req.method === 'GET' && req.path === '/api/workspaces') {
+      return { status: 200, body: { workspaces } }
+    }
     asked.push(req)
     return { status, body }
   })
   return { request, asked }
 }
+
+const ULID = '01M3YF14RXV2XXXXXXXXXXXXXX'
 
 const KEY_ID = 'AAAAAAAAAAAAAAAAAAAAAA'
 
@@ -138,6 +151,57 @@ describe('whiteboard daemon rotate-replica-key', () => {
     })
     expect(exitCode).toBe(1)
     expect(result).toMatchObject({ ok: false, reason: 'malformed-response', status: 200 })
+  })
+})
+
+describe('a workspace addressed by its segment', () => {
+  const held = [{ workspaceId: ULID, segment: 'default' }]
+
+  it('rotates the key of the workspace the segment names, reporting the canonical id', async () => {
+    const daemon = daemonAnswering(200, { keyId: KEY_ID }, held)
+    const { result, exitCode } = await runDaemonRotateReplicaKey({
+      dataDir: '/data',
+      workspaceId: 'default',
+      parseRecord: async () => running,
+      isPidAlive: () => true,
+      request: daemon.request,
+    })
+    expect(exitCode).toBe(0)
+    expect(result).toMatchObject({ ok: true, workspaceId: ULID, keyId: KEY_ID })
+    expect(daemon.asked.map((req) => req.path)).toEqual([
+      `/api/workspaces/${ULID}/replica-key/rotate`,
+    ])
+  })
+
+  it('sets the tier of the workspace the segment names', async () => {
+    const daemon = daemonAnswering(200, { tier: 'bounded', effectiveTier: 'bounded' }, held)
+    const { result } = await runDaemonSetReplicaTier({
+      dataDir: '/data',
+      workspaceId: 'default',
+      tier: 'bounded',
+      parseRecord: async () => running,
+      isPidAlive: () => true,
+      request: daemon.request,
+    })
+    expect(result).toMatchObject({ ok: true, workspaceId: ULID, tier: 'bounded' })
+    expect(daemon.asked.map((req) => req.path)).toEqual([`/api/workspaces/${ULID}/replica-tier`])
+  })
+
+  it('leaves a handle the daemon does not list to the daemon to refuse', async () => {
+    const daemon = daemonAnswering(
+      404,
+      { error: 'unknown_workspace', title: 'no such workspace' },
+      held,
+    )
+    const { result } = await runDaemonRotateReplicaKey({
+      dataDir: '/data',
+      workspaceId: 'nope',
+      parseRecord: async () => running,
+      isPidAlive: () => true,
+      request: daemon.request,
+    })
+    expect(result).toMatchObject({ ok: false, reason: 'refused', status: 404, workspaceId: 'nope' })
+    expect(daemon.asked.map((req) => req.path)).toEqual(['/api/workspaces/nope/replica-key/rotate'])
   })
 })
 

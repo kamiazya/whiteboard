@@ -21,6 +21,7 @@
  * sweep a package you had no reason to open.
  */
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../test-utils/strip-comments.js'
 
 /**
  * `?raw` rather than `node:fs`: apps/web is browser-only and
@@ -68,9 +69,7 @@ function source(rel: string): string {
   if (keys.length !== 1) {
     throw new Error(`${rel} matched ${keys.length} scanned paths, expected exactly 1`)
   }
-  return (sources[keys[0]] as string)
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+  return stripComments(sources[keys[0]] as string)
 }
 
 describe('the transfer names its destination a keeper', () => {

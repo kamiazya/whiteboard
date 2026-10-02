@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, walk } from './scan-roots.js'
+import { stripComments } from './strip-comments.js'
 
 /** Every place a React selection control can be written. */
 const SCAN_DIRS = [
@@ -85,9 +86,6 @@ const EXEMPT: Readonly<Record<string, string>> = {
  * anything. Found immediately: this rule's own explanation of the menu
  * shell, sitting in `ContextMenu.tsx`, was the scan's first offender.
  */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
-}
 
 /** Test files are exempt: asserting ABOUT a marker is not drawing one. */
 function isSource(path: string): boolean {

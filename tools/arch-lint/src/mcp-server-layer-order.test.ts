@@ -4,7 +4,7 @@
  * Everything else was convention: a store importing a route, or `shared/`
  * importing the server's logger, passed every test and every guard — both were
  * planted, in `store/names-store.ts` and `shared/sha256.ts`, and the whole
- * project stayed green. `apps/web/src/layer-order.test.ts` is the same guard
+ * project stayed green. `web-layer-order.test.ts` is the same guard
  * for the other root; this is its counterpart.
  *
  * The order, bottom to top. A module may import its own layer or any layer
@@ -42,6 +42,16 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import {
+  ADAPTER_ENTITLED_MECHANICS,
+  isAdapterEntitled,
+  isAdapterForbiddenMechanic,
+  isMechanicsLayerModule,
+  MECHANIC_DIRS,
+  serverModulePath,
+  TOP_LEVEL_MECHANICS,
+} from './adapter-reach.js'
+import { ADAPTER_HELPER_FILES } from './architecture-map.js'
 import { collectRelativeImportEdges } from './cycle-check.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { isTestPath } from './source-scan.js'
@@ -55,17 +65,6 @@ type Layer = (typeof LAYERS)[number]
 
 const rank = (layer: Layer): number => LAYERS.indexOf(layer)
 
-/** `server/<dir>/**` that hold mechanics. */
-const MECHANIC_DIRS: ReadonlySet<string> = new Set([
-  'store',
-  'security',
-  'tenant',
-  'export',
-  'search',
-  'observability',
-  'release',
-])
-
 /**
  * The one file under `server/mcp/` that is a process entry rather than a tool
  * registration: it starts the stdio root (`server/stdio-root.ts`), so it sits
@@ -78,42 +77,16 @@ const MCP_PROCESS_ENTRY = 'server/mcp/stdio.ts'
  * has to be placed: a file in none of these fails `belongs to no layer`.
  */
 const TOP_LEVEL: Readonly<Record<string, Layer>> = {
-  // Mechanisms: the logger, configuration and environment, atomic writes, the
-  // declared background work and what it runs, the live-audience notifier, the
-  // backup mechanics, and the identity/workspace resolution the stores and
-  // `di/` build on.
-  'server/log.ts': 'mechanics',
-  'server/server-core-logs.ts': 'mechanics',
-  'server/config.ts': 'mechanics',
-  'server/config-file.ts': 'mechanics',
-  'server/startup-env.ts': 'mechanics',
-  'server/replica-env.ts': 'mechanics',
-  'server/data-dir-writable.ts': 'mechanics',
-  'server/atomic-write.ts': 'mechanics',
-  'server/validators.ts': 'mechanics',
-  'server/output-path.ts': 'mechanics',
-  'server/backup-restore.ts': 'mechanics',
-  'server/server-mode-backup-restore.ts': 'mechanics',
-  'server/background-work.ts': 'mechanics',
-  'server/background-work-costs.ts': 'mechanics',
-  'server/shared-background-work.ts': 'mechanics',
-  'server/canvas-client-notifier.ts': 'mechanics',
-  // What is open and listening: the registry of sync streams, the audience
-  // vocabulary the daemon speaks over it, and the viewport-request cache the
-  // two share. The route that opens a stream (`routes/sync-sse.ts`) sits above.
-  'server/sync-streams.ts': 'mechanics',
-  'server/sync-audience.ts': 'mechanics',
-  'server/viewport-requests.ts': 'mechanics',
-  'server/daemon-actor.ts': 'mechanics',
-  'server/daemon-auth-binding.ts': 'mechanics',
-  'server/current-workspace.ts': 'mechanics',
-  // Startup clean-up of data-dir artifacts a retired feature left behind.
-  'server/purge-legacy-trust-file.ts': 'mechanics',
-  // Translation shared between routes (`ADAPTER_HELPER_FILES` names the first).
+  // The mechanisms are `adapter-reach.ts`'s `TOP_LEVEL_MECHANICS`, the one
+  // definition the adapter-mechanic finder also derives from.
+  ...Object.fromEntries(TOP_LEVEL_MECHANICS.map((path) => [path, 'mechanics' as const])),
+  // Translation shared between routes: exactly `ADAPTER_HELPER_FILES`, which the
+  // adapter scans read, and the last test below holds the two lists to it.
   'server/workspace-handle.ts': 'adapters',
   'server/app-helpers.ts': 'adapters',
-  'server/app-types.ts': 'adapters',
-  // The roots that wire a running server.
+  // The roots that wire a running server, and the type of what `createApp` is
+  // handed — read by `app.ts` alone.
+  'server/app-types.ts': 'composition',
   'server/app.ts': 'composition',
   'server/http-server.ts': 'composition',
   'server/server-mode-http.ts': 'composition',
@@ -295,5 +268,69 @@ describe('mcp-server layer order', () => {
 
   it('holds the ledger at its declared ceiling', () => {
     expect(Object.keys(UPWARD_EDGES).length).toBe(UPWARD_EDGES_CEILING)
+  })
+})
+
+// The adapter-mechanic finder and this guard's `mechanics` layer used to be two
+// definitions that disagreed: the finder knew five directories, the layer knew
+// the top-level `atomic-write`, `output-path` and `config` too, and an adapter
+// importing one was in neither ledger. `adapter-reach.ts` is now the one list;
+// this holds that the finder's verdict is total over it.
+describe('the mechanics layer and the adapter-mechanic finder share one definition', () => {
+  const serverFiles = FILES.filter(({ path }) => path.startsWith('server/'))
+  const modulePathOf = (path: string): string => serverModulePath(path)
+  const inLayer = serverFiles.filter(({ path }) => layerOf(path) === 'mechanics')
+
+  it('reaches the mechanics layer', () => {
+    expect(
+      inLayer.length,
+      'the layer is empty, so every assertion below is vacuous',
+    ).toBeGreaterThan(60)
+  })
+
+  it('files exactly the modules the shared definition calls mechanics', () => {
+    const disagree = serverFiles
+      .filter(
+        ({ path }) =>
+          (layerOf(path) === 'mechanics') !== isMechanicsLayerModule(modulePathOf(path)),
+      )
+      .map(({ path }) => path)
+    expect(disagree).toEqual([])
+  })
+
+  it('gives every mechanics-layer module exactly one verdict: a mechanic to ledger, or one an adapter may import', () => {
+    const neither = inLayer
+      .map(({ path }) => modulePathOf(path))
+      .filter((module) => isAdapterForbiddenMechanic(module) === isAdapterEntitled(module))
+    expect(neither).toEqual([])
+  })
+
+  it('keeps every entitlement matching a module that exists, with a reason of substance', () => {
+    const modules = inLayer.map(({ path }) => modulePathOf(path))
+    const idle = ADAPTER_ENTITLED_MECHANICS.filter(
+      ({ pattern, reason }) =>
+        reason.trim().length <= 20 || !modules.some((module) => pattern.test(module)),
+    ).map(({ pattern }) => String(pattern))
+    expect(idle, 'an entitlement that matches nothing is a permission nobody uses').toEqual([])
+  })
+
+  it('still calls every module the finder always matched a mechanic', () => {
+    const modules = inLayer.map(({ path }) => modulePathOf(path))
+    const stillMechanic = (module: string): boolean =>
+      module.startsWith('store/') ||
+      module.startsWith('export/') ||
+      /^security\/[a-z0-9-]+-store$/.test(module) ||
+      module === 'tenant/data-layout'
+    const expected = modules.filter(stillMechanic)
+    expect(expected.length).toBeGreaterThan(25)
+    expect(expected.filter((module) => !isAdapterForbiddenMechanic(module))).toEqual([])
+  })
+
+  it('scans as adapters exactly the top-level files it files in the adapters layer', () => {
+    const filed = Object.entries(TOP_LEVEL)
+      .filter(([, layer]) => layer === 'adapters')
+      .map(([path]) => path.replace(/^server\//, ''))
+      .sort()
+    expect(filed).toEqual([...ADAPTER_HELPER_FILES].sort())
   })
 })

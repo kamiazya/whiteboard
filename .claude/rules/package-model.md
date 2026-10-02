@@ -62,13 +62,13 @@ paths:
   `edgePatchFieldsSchema` IS `canvasEdgeSchema.omit({id}).partial()`, Zod v4 refuses `.partial()`
   over a refined object, so a refinement here would be paid for with a second hand-written schema
   beside this one — the exact drift this package exists to prevent.
-  Read an end through the exported helpers — `endpointNode`, `endpointNodes`, `endpointIn`,
-  `endpointSide`, `nodeAtEnd`, `isSelfLoop`, `nodeEndpoint` — never by hand. Every one of the ~50
+  Read an end through the exported helpers — `endNode`, `endNodes`, `endIn`, `endSide`,
+  `nodeAtEnd`, `isSelfLoop` — never by hand. Every one of the ~50
   sites that used to read `edge.fromNode` wants "the node, if there is one", and a `.kind` check
   written fifty times is fifty chances for one of them to treat a free end as a dangling
   reference. Two of the helpers exist because the obvious inline form is WRONG rather than merely
-  verbose: `byId.get(endpointNode(end) ?? '')` is one character from a lookup on a key that can be
-  real, and `endpointNode(from) === endpointNode(to)` answers TRUE for two free ends, which is the
+  verbose: `byId.get(endNode(end) ?? '')` is one character from a lookup on a key that can be
+  real, and `endNode(from) === endNode(to)` answers TRUE for two free ends, which is the
   opposite of a self-loop. Both were written during this slice and both were caught by reading the
   diff, not by a test.
   Its projection is `dropped`, and the WHOLE EDGE with it: JSON Canvas requires an edge to run

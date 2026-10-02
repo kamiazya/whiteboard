@@ -79,7 +79,6 @@ export type {
   Attestation,
   OperatorInfo,
   RequestOperator,
-  VersionEntry,
 } from './versions/version-entry.js'
 export { attestationSchema } from './versions/version-entry.js'
 export type {

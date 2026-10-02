@@ -24,21 +24,6 @@ beforeEach(() => {
   const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    if (url.includes('/branches')) {
-      return Promise.resolve(
-        jsonResponse({
-          head: 'main',
-          branches: [
-            {
-              name: 'main',
-              tipFrontiers: '',
-              color: '#1971c2',
-              createdAt: '2026-04-23T00:00:00Z',
-            },
-          ],
-        }),
-      )
-    }
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(jsonResponse({}))
   })

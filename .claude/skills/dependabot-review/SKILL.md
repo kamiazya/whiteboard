@@ -22,13 +22,14 @@ Read these before applying the reference playbook — they change several steps:
 - **release-please reads merged commits.** Dependabot already titles PRs `chore(deps): bump …`
   / `chore(deps-dev): …` — keep that on **squash** merge so release-please classifies them as
   no-bump chores. Do not rewrite the title to `fix:`/`feat:`.
-- **The CI gate is `verify`** (`.github/workflows/ci.yml`): `pnpm audit --prod --audit-level=high`
-  → validate-skills → noConsole → typecheck → test → stdio/template/packaged smokes → build →
-  web-app smokes. A **prod high+ vuln BLOCKS merge** via that audit step. dev-only vulns do not.
+- **The CI gate is `ci-gate`** (`.github/workflows/ci.yml`), one required check over every job.
+  Its `check` job runs `pnpm audit:prod` (high+, prod deps only) → secretlint → lint → typecheck,
+  beside the test jobs and `verify`'s smokes, build and web-app gates. A **prod high+ vuln BLOCKS
+  merge** via that audit step. dev-only vulns do not.
 - **npm-published artifact.** `@kamiazya/whiteboard-mcp` ships its **runtime** deps. Prioritize
   runtime-scope bumps/alerts (they reach users AND gate `pnpm audit --prod`) over dev-only ones.
-- **Local pre-push gate (lefthook)** runs typecheck + mcp-node + noconsole before push; CI is
-  authoritative. For the post-merge verification run, see Step 5.
+- **Local pre-push gate (lefthook)** runs typecheck, lint, the mutation-lane and arch-lint guards
+  before push (no test suite); CI is authoritative. For the post-merge verification run, see Step 5.
 
 ## Load-bearing runtime deps (extra scrutiny)
 

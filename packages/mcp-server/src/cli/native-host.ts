@@ -75,6 +75,36 @@ function portableExecArgv(execArgv: readonly string[]): string[] {
   )
 }
 
+/**
+ * `npx` unpacks a package into a cache directory it replaces on the next
+ * release, and the launcher pins the entry's absolute path, so a host
+ * installed from there stops working at the next `npx @latest`. Said on
+ * stderr, beside the JSON answer, rather than refused: the install is correct
+ * until that day.
+ */
+function transientInstallWarning(entry: string): string | undefined {
+  if (!/[\\/]_npx[\\/]/.test(entry)) return undefined
+  return `whiteboard native-host install: this launcher points into npx's cache (${entry}), which npx replaces on a new release. Install the package globally (npm install -g @kamiazya/whiteboard-mcp) and run \`whiteboard native-host install --json\` from that install.\n`
+}
+
+/** The directories the user named, else wherever each installed browser looks. */
+function chooseManifestDirs(
+  dataDir: string,
+  { manifestDir, firefoxManifestDir }: { manifestDir?: string; firefoxManifestDir?: string },
+): ManifestDir[] {
+  const explicit: ManifestDir[] = [
+    ...(manifestDir
+      ? [{ browser: 'explicit', engine: 'chromium', dir: resolve(manifestDir) } as const]
+      : []),
+    ...(firefoxManifestDir
+      ? [{ browser: 'explicit', engine: 'firefox', dir: resolve(firefoxManifestDir) } as const]
+      : []),
+  ]
+  return explicit.length > 0
+    ? explicit
+    : nativeHostManifestDirs(homedir(), process.platform, dataDir)
+}
+
 async function install(rest: readonly string[]): Promise<number> {
   const scan = scanFlags(rest, INSTALL_FLAGS)
   if (scan.kind === 'usage-error') {
@@ -88,24 +118,17 @@ async function install(rest: readonly string[]): Promise<number> {
     return 64
   }
   const dataDir = resolve(scan.values.dataDir ?? resolveDefaultDataDir(process.env))
-  const { manifestDir, firefoxManifestDir } = scan.values
-  const explicit: ManifestDir[] = [
-    ...(manifestDir
-      ? [{ browser: 'explicit', engine: 'chromium', dir: resolve(manifestDir) } as const]
-      : []),
-    ...(firefoxManifestDir
-      ? [{ browser: 'explicit', engine: 'firefox', dir: resolve(firefoxManifestDir) } as const]
-      : []),
-  ]
-  const manifestDirs =
-    explicit.length > 0 ? explicit : nativeHostManifestDirs(homedir(), process.platform, dataDir)
+  const manifestDirs = chooseManifestDirs(dataDir, scan.values)
+  const entry = realpathSync(process.argv[1] ?? '')
+  const transient = transientInstallWarning(entry)
+  if (transient !== undefined) process.stderr.write(transient)
   const result = await installNativeHost({
     dataDir,
     manifestDirs,
     launcher: {
       execPath: process.execPath,
       execArgv: portableExecArgv(process.execArgv),
-      entry: realpathSync(process.argv[1] ?? ''),
+      entry,
     },
   })
   const ok = result.manifests.length > 0

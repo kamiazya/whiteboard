@@ -72,7 +72,7 @@ describe('shell mark over a real document kept in this browser', () => {
     fireEvent.click(mark)
     expect(await screen.findByText(/other browsers cannot see them/i)).toBeInTheDocument()
     expect(
-      await screen.findByText(/Connect a daemon \(MCP\) for automatic checkpoints/i),
+      await screen.findByText(/Connect a daemon \(MCP\) so AI agents can work in this workspace/i),
     ).toBeInTheDocument()
     // ADR-0050: this browser has no whiteboard extension, and a local daemon
     // is reached through it alone — so the way on is getting it, never a

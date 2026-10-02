@@ -46,6 +46,22 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
   }
 }
 
+// SVG is the one uploadable type that is a document rather than pixels: it can
+// carry script, and a top-level navigation to its URL would run it in the
+// app's origin. The sandbox (no `allow-scripts`, no `allow-same-origin`) and
+// `default-src 'none'` stop it executing or fetching anything, and the
+// attachment disposition makes a navigation download instead of render. Neither
+// affects `<img src>` or a blob made from fetch(), which is how the editor
+// shows it. `setBaselineSecurityHeaders` leaves a CSP a route already chose.
+function fileHeaders(contentType: string, fileId: string): Record<string, string> {
+  if (contentType !== 'image/svg+xml') return { 'Content-Type': contentType }
+  return {
+    'Content-Type': contentType,
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    'Content-Disposition': `attachment; filename="${fileId}.svg"`,
+  }
+}
+
 export interface FilesRouterOptions {
   /**
    * The directory and tenant these routes serve: where a workspace's files are
@@ -156,7 +172,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
       if (found === null) {
         return c.json({ error: 'not_found', message: `No file ${fileId} on this document.` }, 404)
       }
-      return c.body(found.data.buffer as ArrayBuffer, 200, { 'Content-Type': found.contentType })
+      return c.body(found.data.buffer as ArrayBuffer, 200, fileHeaders(found.contentType, fileId))
     } catch (error) {
       const body = corruptStoredDataBody(error)
       if (body) return c.json(body, 500)

@@ -11,6 +11,7 @@ import type {
   TableRowSceneNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
+import { isFiniteBox } from '../finite-box.js'
 import type { ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
 import { collectDefs } from './defs.js'
@@ -20,7 +21,6 @@ import { type IconTable, renderIconUse } from './icon.js'
 import { renderLegend } from './legend.js'
 import {
   appearanceAttrs,
-  isFiniteBox,
   isNonNegativeLength,
   isPositiveLength,
   PRESENTATION,

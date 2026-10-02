@@ -74,7 +74,7 @@ export interface DrawingScore {
   readonly labelCovered: number
   /** Boxes whose content was cut or does not fit. */
   readonly textOverflow: number
-  /** Members closer than `GROUP_PADDING_PX` to their innermost frame. */
+  /** Members closer than `FRAME_CLEARANCE_FLOOR_PX` to their innermost frame. */
   readonly crampedMembers: number
   /**
    * Pairs of boxes that nearly line up on an axis and do not: the closest
@@ -150,7 +150,7 @@ type Flow = 'down' | 'right' | 'up' | 'left' | 'none'
  */
 export const NEAR_MISS_PX = 24
 /** The least a member should keep from its frame before it reads as cramped. */
-export const GROUP_PADDING_PX = 16
+export const FRAME_CLEARANCE_FLOOR_PX = 16
 /**
  * The least two neighbours should keep between them: under it an edge
  * between them has no room for its label or its arrowhead's runway, and a
@@ -492,7 +492,7 @@ function crampedMembersIn({ nodes, groups }: DrawingSubject): number {
       f.x + f.w - (r.x + r.w),
       f.y + f.h - (r.y + r.h),
     )
-    if (clearance < GROUP_PADDING_PX) crampedMembers++
+    if (clearance < FRAME_CLEARANCE_FLOOR_PX) crampedMembers++
   }
   return crampedMembers
 }

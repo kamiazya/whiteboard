@@ -363,6 +363,70 @@ describe('SseStreamHub', () => {
     hub.close()
   })
 
+  describe('announcing what it follows', () => {
+    /** The fake daemon, answering a subscribe naming `refusedWorkspace` with `status`. */
+    function refusing(refusedWorkspace: string, status: number) {
+      const fake = createFake()
+      const inner = fake.fetch
+      const asked: string[][] = []
+      const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input).includes('/api/sync/subscribe')) {
+          const body = JSON.parse(String(init?.body)) as { subscribe?: string[] }
+          asked.push(body.subscribe ?? [])
+          if (body.subscribe?.some((doc) => doc.startsWith(`${refusedWorkspace}/`))) {
+            return new Response('{}', { status })
+          }
+        }
+        return inner(input, init)
+      }) as typeof globalThis.fetch
+      return { fake, fetch, asked }
+    }
+
+    const quiet = { onUpdate: () => {}, onMessage: () => {} }
+
+    it('asks for one workspace per request, so a refusal reaches only its own documents', async () => {
+      const { fake, fetch, asked } = refusing('gone', 403)
+      const hub = new SseStreamHub({ fetch, baseUrl: 'http://d' })
+      const refused = { gone: vi.fn(), live: vi.fn() }
+      hub.subscribe('live/a', { ...quiet, onAuthRefused: refused.live })
+      hub.subscribe('gone/b', { ...quiet, onAuthRefused: refused.gone })
+      hub.subscribe('live/c', { ...quiet, onAuthRefused: refused.live })
+      await vi.waitFor(() => expect(refused.gone).toHaveBeenCalledTimes(1))
+
+      expect(refused.live).not.toHaveBeenCalled()
+      expect(asked).toEqual([['live/a', 'live/c'], ['gone/b']])
+      // The stream stays: it still carries the documents that were not refused.
+      expect(fake.streamOpens()).toBe(1)
+      hub.close()
+    })
+
+    it('says a document is not live when the daemon would not follow it, for a late subscriber too', async () => {
+      const { fetch } = refusing('full', 400)
+      const hub = new SseStreamHub({ fetch, baseUrl: 'http://d' })
+      const states: boolean[] = []
+      hub.subscribe('ok/a', quiet)
+      hub.subscribe('full/b', { ...quiet, onConnectionChange: (c) => states.push(c) })
+      await vi.waitFor(() => expect(states).toEqual([false, true, false]))
+
+      const late: boolean[] = []
+      hub.subscribe('full/b', { ...quiet, onConnectionChange: (c) => late.push(c) })
+      expect(late).toEqual([false])
+      hub.close()
+    })
+
+    it('never puts more than a request may carry in one subscribe', async () => {
+      const fake = createFake()
+      const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
+      for (let i = 0; i < 300; i++) hub.subscribe(`w/doc-${i}`, quiet)
+      await vi.waitFor(() => expect(fake.subscribeBodies().length).toBeGreaterThanOrEqual(2))
+
+      const sizes = fake.subscribeBodies().map((b) => JSON.parse(b).subscribe.length)
+      expect(Math.max(...sizes)).toBeLessThanOrEqual(256)
+      expect(sizes.reduce((a, b) => a + b, 0)).toBe(300)
+      hub.close()
+    })
+  })
+
   it('tells a document’s subscribers when a push for it is refused, and still rejects', async () => {
     // The stream can stay open under a credential the daemon no longer
     // accepts for WRITES (a membership revoked mid-session answers 403 on

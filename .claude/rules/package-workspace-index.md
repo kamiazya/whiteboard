@@ -26,6 +26,9 @@ for the duplication to exist.
   does not enforce on its own.
 - `WorkspaceDocs`: the seam for where a workspace's document comes from and
   where a change to it goes.
+- `firstFreeSegment`: the one suffix scheme for a workspace's address, taking
+  each keeper's "is it held" predicate so the browser and the daemon cannot
+  drift apart on it.
 
 ## What does NOT belong here
 

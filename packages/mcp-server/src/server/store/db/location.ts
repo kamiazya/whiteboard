@@ -29,9 +29,8 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
  * every guarantee it builds is about instances looking at ONE record.
  *
  * Blobs are a different question and deliberately not this one. `FsBlobStore`
- * is content-addressed (sha-256, sharded) and version thumbnails are keyed by
- * version id, so two instances writing the same blob write identical bytes to
- * the same path — a shared volume genuinely works for them, and an object
+ * is content-addressed (sha-256, sharded), so two instances writing the same
+ * blob write identical bytes to the same path — a shared volume genuinely works for them, and an object
  * store is an optimisation rather than a prerequisite.
  *
  * **Throws rather than falling back.** A misconfigured URL that quietly

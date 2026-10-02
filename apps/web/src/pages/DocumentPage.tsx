@@ -186,7 +186,7 @@ function DocumentHeader({
             )}
             workspaceId={topBar.workspaceId}
             path={topBar.path}
-            {...(topBar.dataMode === undefined ? {} : { dataMode: topBar.dataMode })}
+            {...(topBar.keeper === undefined ? {} : { keeper: topBar.keeper })}
             {...(topBar.onNavigateBack === undefined
               ? {}
               : { onNavigateBack: topBar.onNavigateBack })}

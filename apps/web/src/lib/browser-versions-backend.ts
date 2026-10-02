@@ -27,9 +27,8 @@ export interface VersionsRecordSeam {
  * business, not this module's.
  *
  * The `workspaceId` the UI passes is ignored in favour of the browser's
- * own: the top bar spells `"local"` there as a display placeholder (see its
- * `dataMode="local"`), and the store must not file rows under a name that
- * is not a workspace.
+ * own: this backend is one browser workspace's, and a caller's id must not
+ * decide which workspace's rows a read or a write lands in.
  */
 export function createBrowserVersionsBackend(deps: {
   readonly store: BrowserVersionStore

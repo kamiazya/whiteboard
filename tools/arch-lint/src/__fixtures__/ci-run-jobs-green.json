@@ -24,5 +24,6 @@
   { "conclusion": "success", "name": "test-browser (2)", "status": "completed" },
   { "conclusion": "success", "name": "dry-run-docker", "status": "completed" },
   { "conclusion": "success", "name": "dry-run-npm", "status": "completed" },
+  { "conclusion": "success", "name": "extension-smokes", "status": "completed" },
   { "conclusion": "success", "name": "ci-gate", "status": "completed" }
 ]

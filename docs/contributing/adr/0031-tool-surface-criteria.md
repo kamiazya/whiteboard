@@ -594,7 +594,8 @@ after. Rung 1: +508 visible bytes, four fewer undescribed parameters
 (edge.add and edge.patch each carry both sides); pass^k 1 both times. The
 router half of the question was measured and REJECTED first — two side-choice
 changes each raised the sweep's debt while cutting the reference's
-reversals — and `package-canvas-render.md` carries that matrix.
+reversals — and `docs/contributing/architecture/canvas-render-decisions.md`
+("The two rejected router changes: cause and matrix") carries that matrix.
 
 **The second surface reading, and what it found in the instrument
 (2026-09-10).** With the sides described, every board the lane's tasks
@@ -693,8 +694,9 @@ a frame — `within: <group>` and a scope naming a member both returned
 nothing, and an overlapping member stayed overlapping — so the
 instruction sent models to an op that could not do what it was asked.
 Tidy now tidies inside a frame and grows it to hold its members with the
-32px margin (`package-canvas-render.md` has the three rules around it and
-what each was measured on), a band that holds an immobile box aligns to
+32px margin (`docs/contributing/architecture/canvas-render-decisions.md`,
+"Tidy inside a frame", has the three rules around it and what each was
+measured on), a band that holds an immobile box aligns to
 that box rather than the grid, and the tool keeps its own gutter when it
 places a member so a placement is never flush. Read again, the three
 tasks came back debt-free three trials of three each, with no tidy op

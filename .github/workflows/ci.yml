@@ -493,37 +493,6 @@ jobs:
           WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
 
-      # ADR-0050's bridge in a real browser: a real daemon on its socket, the
-      # native host `whiteboard native-host` installs, the built extension,
-      # headless Chromium. Branded Chrome (WHITEBOARD_CHROME_PATH) ignores
-      # --load-extension, so this one runs on Playwright's own Chromium.
-      - name: Install Playwright Chromium (extension bridge smoke)
-        run: pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium
-
-      - name: Extension bridge smoke
-        run: pnpm --filter @kamiazya/whiteboard-extension smoke:bridge
-
-      # The same in Firefox, which lets no page message an extension: the
-      # page goes through the content script. The runner's Firefox is
-      # Mozilla's own build rather than the snap (whose native messaging asks
-      # a person through a desktop portal), and its geckodriver sits at
-      # $GECKOWEBDRIVER. The Chromium smoke above just built both artifacts.
-      - name: Extension bridge smoke (Firefox)
-        env:
-          BRIDGE_SMOKE_PREBUILT: '1'
-        run: GECKODRIVER="$GECKOWEBDRIVER/geckodriver" pnpm --filter @kamiazya/whiteboard-extension smoke:bridge:firefox
-
-      # The read plane (ADR-0042) crossed for real, through the extension: a
-      # sealed replica in real IndexedDB, the locked page a cold start with
-      # the daemon gone lands on, and the daemon page back on Reconnect. The
-      # browser-mode tests answer the daemon at `fetch`; this is where the
-      # built web app meets it. Here because it needs the extension build and
-      # Playwright's Chromium the bridge smokes above just made ready.
-      - name: Read-plane real-browser smoke (ADR-0042)
-        env:
-          BRIDGE_SMOKE_PREBUILT: '1'
-        run: pnpm --filter @kamiazya/whiteboard-extension smoke:read-plane
-
       - name: Build
         run: pnpm build
 
@@ -581,6 +550,54 @@ jobs:
 
       - name: Check release artifacts
         run: pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts
+
+  # ADR-0050's bridge and ADR-0042's read plane in real browsers. They run
+  # from source, build their own extension and web app (smoke-kit.mjs), and
+  # consume nothing `verify` produces. Inside `verify` they sat on the
+  # verify -> dry-run-npm -> ci-gate chain and added their ~2 minutes to the
+  # run's wall clock; as a job of their own they overlap the other jobs.
+  # ci-gate.test.ts keeps them out of `verify`.
+  extension-smokes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ADR-0050's bridge in a real browser: a real daemon on its socket, the
+      # native host `whiteboard native-host` installs, the built extension,
+      # headless Chromium. Branded Chrome (WHITEBOARD_CHROME_PATH) ignores
+      # --load-extension, so this one runs on Playwright's own Chromium.
+      - name: Install Playwright Chromium (extension bridge smoke)
+        run: pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium
+
+      - name: Extension bridge smoke
+        run: pnpm --filter @kamiazya/whiteboard-extension smoke:bridge
+
+      # The same in Firefox, which lets no page message an extension: the
+      # page goes through the content script. The runner's Firefox is
+      # Mozilla's own build rather than the snap (whose native messaging asks
+      # a person through a desktop portal), and its geckodriver sits at
+      # $GECKOWEBDRIVER. The Chromium smoke above just built both artifacts.
+      - name: Extension bridge smoke (Firefox)
+        env:
+          BRIDGE_SMOKE_PREBUILT: '1'
+        run: GECKODRIVER="$GECKOWEBDRIVER/geckodriver" pnpm --filter @kamiazya/whiteboard-extension smoke:bridge:firefox
+
+      # The read plane (ADR-0042) crossed for real, through the extension: a
+      # sealed replica in real IndexedDB, the locked page a cold start with
+      # the daemon gone lands on, and the daemon page back on Reconnect. The
+      # browser-mode tests answer the daemon at `fetch`; this is where the
+      # built web app meets it. Here because it needs the extension build and
+      # Playwright's Chromium the bridge smokes above just made ready.
+      - name: Read-plane real-browser smoke (ADR-0042)
+        env:
+          BRIDGE_SMOKE_PREBUILT: '1'
+        run: pnpm --filter @kamiazya/whiteboard-extension smoke:read-plane
 
   dry-run-npm:
     needs: verify
@@ -699,17 +716,6 @@ jobs:
           path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json
           if-no-files-found: warn
 
-  # The single required status check for this workflow — require THIS and
-  # nothing else from ci.yml, and a shard count stops being a settings change.
-  # See tools/checks/src/ci-gate.mjs for what it refuses and why it judges the
-  # run's per-leg conclusions rather than `needs.<job>.result`.
-  #
-  # `if: always()` is load-bearing: without it a failed dependency SKIPS this
-  # job, so the one check branch protection waits on never reports and the
-  # merge blocks on an absent check rather than on the real failure.
-  #
-  # Every ci.yml job must appear in `needs` — for ordering, and as the list the
-  # gate cross-checks the run against. ci-gate.test.ts fails on a missing one.
   # ADR-0050 decision 9: on Windows the daemon listens on a named pipe and the
   # native host is registered in the registry. Nothing else here runs on
   # Windows, so without this job no part of that path would ever execute.
@@ -731,6 +737,17 @@ jobs:
       - name: Native host smoke (named pipe + registry)
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:native-host
 
+  # The single required status check for this workflow — require THIS and
+  # nothing else from ci.yml, and a shard count stops being a settings change.
+  # See tools/checks/src/ci-gate.mjs for what it refuses and why it judges the
+  # run's per-leg conclusions rather than `needs.<job>.result`.
+  #
+  # `if: always()` is load-bearing: without it a failed dependency SKIPS this
+  # job, so the one check branch protection waits on never reports and the
+  # merge blocks on an absent check rather than on the real failure.
+  #
+  # Every ci.yml job must appear in `needs` — for ordering, and as the list the
+  # gate cross-checks the run against. ci-gate.test.ts fails on a missing one.
   ci-gate:
     if: always()
     needs:
@@ -744,6 +761,7 @@ jobs:
       - packaged-smoke
       - widget-smoke
       - native-host-windows
+      - extension-smokes
       - verify
       - dry-run-npm
       - dry-run-docker

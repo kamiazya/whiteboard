@@ -109,8 +109,13 @@ describe('ExtensionConnectOption', () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: /connect through the extension/i }))
 
+    // The exact command, not a substring of it: the CLI's own dispatcher
+    // judges this text in mcp-server's docs-commands guard, which a prefix
+    // match would not.
     await vi.waitFor(() =>
-      expect(screen.getByRole('status').textContent).toContain('whiteboard daemon run'),
+      expect(screen.getByRole('status').querySelector('code')?.textContent).toBe(
+        'whiteboard daemon run',
+      ),
     )
     expect(reopen).not.toHaveBeenCalled()
     expect(settingsStore.load().storage.daemonBaseUrl).toBeUndefined()

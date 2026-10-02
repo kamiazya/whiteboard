@@ -10,7 +10,6 @@ import {
   fileNodeDefaults,
   GROUP_FRAME_HEIGHT,
   GROUP_FRAME_WIDTH,
-  GROUP_PADDING_PX,
   groupEnclosure,
   groupNodeDefaults,
   IMAGE_NODE_HEIGHT,
@@ -91,8 +90,11 @@ describe('resolveSpawnPoint', () => {
 })
 
 describe('groupEnclosure', () => {
-  it('frames the union of member boxes, grown by GROUP_PADDING_PX on every side', () => {
-    expect(GROUP_PADDING_PX).toBe(24)
+  // 24px on every side is the editor's group padding; the number is pinned
+  // here rather than imported so a changed constant is a visible change.
+  const GROUP_PADDING_PX = 24
+
+  it('frames the union of member boxes, grown by the group padding on every side', () => {
     const members = [
       { x: 0, y: 0, width: 100, height: 50 },
       { x: 200, y: 100, width: 40, height: 40 },
@@ -105,7 +107,7 @@ describe('groupEnclosure', () => {
     expect(groupEnclosure([])).toBeUndefined()
   })
 
-  it('every side clearance to the nearest member equals GROUP_PADDING_PX exactly', () => {
+  it('every side clearance to the nearest member equals the group padding exactly', () => {
     const members = [{ x: 10, y: 10, width: 30, height: 20 }]
     const frame = groupEnclosure(members)
     expect(frame).toEqual({

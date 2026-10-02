@@ -95,7 +95,7 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
 // CRUD, names/pin metadata, the live-doc snapshot+update path, version
-// history (list/save/thumbnails/restore), and maintenance (compact/prune/
+// history (list/save/restore), and maintenance (compact/prune/
 // optimize). Split by concern so each is independently testable; this file
 // only wires shared dependencies (versionStore, auto-version trigger) between
 // them. Auto-compaction is armed by the composition root's background work

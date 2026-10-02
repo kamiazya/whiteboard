@@ -37,6 +37,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { assertScannedLedger } from '../test-utils/coverage-ledger.js'
+import { stripComments } from '../test-utils/strip-comments.js'
 
 type KeeperReach =
   /**
@@ -127,15 +128,13 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_VERSIONS,
     note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
   },
-  // The branch seam, in two halves. The context is which keeper answers; the
-  // backend holds the daemon's requests. They were `capability` entries while
-  // only the daemon had variations; the browser keeps its own on the
-  // workspace record now, so the difference they named is gone and the answer
-  // is the ordinary one — a browser module that answers without a daemon.
+  // The versions seam, in two halves: the context is which keeper answers, and
+  // the backend holds the daemon's requests. Both keepers answer it without a
+  // daemon, since the browser keeps its history on the workspace record.
   //
-  // `src/hooks/useBranches.ts` is deliberately absent: it stopped reaching
-  // the daemon when the transport moved out of it, and this ledger's other
-  // direction fails on an entry naming a module that no longer reaches.
+  // `src/hooks/useBranches.ts` is deliberately absent: it no longer exists,
+  // and this ledger's other direction fails on an entry naming a module that
+  // does not reach.
   'src/lib/daemon-api-client.ts': {
     reach: 'both-keepers',
     browser: BROWSER_FILES,
@@ -310,7 +309,7 @@ function reachesDaemon(text: string): boolean {
  * only MENTIONS the daemon teaches people to write an entry to shut it up.
  */
 function code(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+  return stripComments(text)
 }
 
 function daemonReachingModules(): string[] {

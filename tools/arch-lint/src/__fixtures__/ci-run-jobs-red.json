@@ -78,5 +78,10 @@
     "name": "native-host-windows",
     "status": "completed",
     "conclusion": "success"
+  },
+  {
+    "name": "extension-smokes",
+    "status": "completed",
+    "conclusion": "success"
   }
 ]

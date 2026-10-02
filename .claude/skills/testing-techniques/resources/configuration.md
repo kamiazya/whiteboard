@@ -114,8 +114,8 @@ Nothing on this tree reads them.
 
 ## Artifacts and reporters
 
-- Browser failure traces: `<package>/tmp/vitest-traces`, most recent run only
-  (`resources/browser-mode.md`).
+- Browser failure traces: `<package>/tmp/vitest-traces`, most recent run only — cleared when a
+  run that uses the project starts, not at config load (`resources/browser-mode.md`).
 ### One `.vitest/` directory for everything
 
 | Artifact | Path |

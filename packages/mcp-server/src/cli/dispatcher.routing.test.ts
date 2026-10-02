@@ -302,7 +302,7 @@ describe('dispatcher routing: whiteboard daemon rotate-replica-key', () => {
       main(['daemon', 'rotate-replica-key', '--json']),
     )
     expect(exitCode).toBe(64)
-    expect(stderr).toBe('--workspace=<id> is required\n')
+    expect(stderr).toBe('--workspace=<id|segment> is required\n')
     expect(run).not.toHaveBeenCalled()
   })
 

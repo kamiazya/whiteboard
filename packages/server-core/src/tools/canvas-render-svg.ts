@@ -12,7 +12,7 @@ import {
   readDocumentKind,
   readMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -64,7 +64,7 @@ export type CanvasRenderSvgOutput = z.infer<typeof canvasRenderSvgOutputSchema>
 
 /** A `fragment` the document does not hold. Named, so the caller can fix the address. */
 class FragmentNotFoundError extends Error {
-  constructor(documentId: string, fragment: string, kind: 'markdown' | 'spatial') {
+  constructor(documentId: string, fragment: string, kind: DocumentKind) {
     super(
       kind === 'markdown'
         ? `Document ${documentId} has no heading "${fragment}". A fragment names a heading's text; check the body with wb_document_get.`

@@ -7,14 +7,14 @@
  * `run` itself (stdin to the daemon and back) is `native-host.subprocess.test.ts`,
  * which needs a real child process; the relay is `daemon/native-host`'s own.
  */
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { main } from './dispatcher.js'
+
 // The dispatcher imports this lazily; resolving it here puts the module
 // graph's load in collection, not in the first test's timeout.
-import './native-host.js'
 
 let scratch: string
 let stdout: string
@@ -101,4 +101,51 @@ describe('whiteboard native-host install', () => {
       expect(stdout.trimEnd().split('\n')).toHaveLength(1)
     },
   )
+})
+
+describe('a native host installed from npx', () => {
+  async function installFrom(entry: string): Promise<number> {
+    mkdirSync(dirname(entry), { recursive: true })
+    writeFileSync(entry, '')
+    const argv = [...process.argv]
+    vi.spyOn(process, 'argv', 'get').mockReturnValue([argv[0] ?? '', entry])
+    return main([
+      'native-host',
+      'install',
+      '--json',
+      `--data-dir=${join(scratch, 'data')}`,
+      `--manifest-dir=${join(scratch, 'hosts')}`,
+    ])
+  }
+
+  it('is not flagged for a durable install', async () => {
+    const code = await installFrom(
+      join(
+        scratch,
+        'lib',
+        'node_modules',
+        '@kamiazya',
+        'whiteboard-mcp',
+        'dist',
+        'cli',
+        'index.js',
+      ),
+    )
+    expect(code, stderr).toBe(0)
+    expect(stderr).not.toContain('npx')
+    expect(JSON.parse(stdout)).toMatchObject({ ok: true })
+  })
+
+  it('is not flagged when _npx is only part of a directory name', async () => {
+    const code = await installFrom(join(scratch, 'my_npx_notes', 'cli.js'))
+    expect(code, stderr).toBe(0)
+    expect(stderr).not.toContain('npx')
+  })
+
+  it('says so on stderr while still answering ok on stdout', async () => {
+    const code = await installFrom(join(scratch, '_npx', 'abc', 'cli.js'))
+    expect(code, stderr).toBe(0)
+    expect(stderr).toContain('npm install -g')
+    expect(JSON.parse(stdout)).toMatchObject({ ok: true })
+  })
 })

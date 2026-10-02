@@ -93,6 +93,21 @@ describe('api-contracts: no schema the browser parses refuses an unknown key', (
   })
 })
 
+describe('api-contracts: every request refuses a key it does not declare', () => {
+  const requests = schemas.filter(([name]) => /RequestSchema$/.test(name))
+
+  it('walks a real population of requests', () => {
+    expect(requests.length).toBeGreaterThanOrEqual(12)
+  })
+
+  // A stripped key is a 200 for a value that did not take effect: a typo'd
+  // `displayname` renames nothing and says it did, and an older daemon drops a
+  // newer client's `subtree` and performs the milder restore.
+  it.each(requests)('%s is strict at its top level', (_name, schema) => {
+    expect(strictObjects(schema)).toContain('')
+  })
+})
+
 // ---------------------------------------------------------------------------
 // A new VALUE of an enum, the sibling of a new key.
 //
@@ -179,7 +194,7 @@ const LOCKSTEP: ReadonlyMap<string, string> = new Map([
     'JSON Canvas 1.0 colour presets: the document vocabulary, held in lockstep with the model package this build ships, which draws a past state it can name or refuses it',
   ],
   [
-    ['db', 'blobs', 'exports', 'files', 'other', 'versions'].sort().join('|'),
+    ['db', 'blobs', 'exports', 'files', 'other'].sort().join('|'),
     'storage report categories: exhaustive on purpose, so a category the daemon stopped counting fails loudly instead of rendering 0 B (see storageCategorySchema)',
   ],
   [

@@ -576,7 +576,6 @@ describe('SettingsPage — storage evidence wiring', () => {
             fileCount: 3,
             byCategory: {
               blobs: bucket,
-              versions: bucket,
               files: bucket,
               exports: bucket,
               db: bucket,

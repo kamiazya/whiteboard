@@ -17,6 +17,7 @@ import type { z } from 'zod'
 import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
 import type { ClientTextMessage } from './sync-frames.js'
 import {
+  MAX_DOCS_PER_STREAM,
   type SyncClientMessageRequest,
   type SyncSubscribeRequest,
   syncMessageEventSchema,
@@ -260,6 +261,13 @@ export class SseStreamHub implements SseStreamSource {
   private closed = false
   /** Set by a 401/403; the reconnect loop halts on it until `resume()`. */
   private authRefused = false
+  /**
+   * Documents the daemon refused to follow on the stream that is open — a
+   * workspace the credential no longer enters, or past the stream's limit.
+   * Kept so a subscriber joining later is told the truth rather than the
+   * stream's liveness, and forgotten with the stream it describes.
+   */
+  private readonly unfollowed = new Set<string>()
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryResolve: (() => void) | null = null
 
@@ -277,13 +285,13 @@ export class SseStreamHub implements SseStreamSource {
     if (!entry) {
       entry = { listeners: new Set(), ready: false }
       this.docs.set(doc, entry)
-      void this.send({ subscribe: [doc] })
+      void this.follow([doc])
     }
     entry.listeners.add(listener)
     // Announced on transitions alone, liveness would never reach anyone who
     // joins a stream that is already open — a second canvas in the same tab
     // would show an unknown connection for as long as nothing went wrong.
-    listener.onConnectionChange?.(this.streamId !== null)
+    listener.onConnectionChange?.(this.streamId !== null && !this.unfollowed.has(doc))
     void this.start()
 
     return () => {
@@ -295,6 +303,7 @@ export class SseStreamHub implements SseStreamSource {
       // here and keep declaring every reconnected stream ready for a canvas
       // nobody is watching.
       this.docs.delete(doc)
+      this.unfollowed.delete(doc)
       void this.send({ unsubscribe: [doc] })
     }
   }
@@ -383,27 +392,71 @@ export class SseStreamHub implements SseStreamSource {
   private async post(
     path: '/api/sync/subscribe' | '/api/sync/message',
     body: SyncSubscribeRequest | SyncClientMessageRequest,
-  ): Promise<void> {
+  ): Promise<number | null> {
     try {
-      await this.options.fetch(`${this.options.baseUrl}${path}`, {
+      const res = await this.options.fetch(`${this.options.baseUrl}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      return res.status
     } catch {
       // Best effort: a dropped control message is recovered by the next one.
+      return null
     }
   }
 
-  private async send(body: Omit<SyncSubscribeRequest, 'streamId'>): Promise<void> {
+  private async send(body: Omit<SyncSubscribeRequest, 'streamId'>): Promise<number | null> {
     // Same as sendMessage: with no stream there is nothing to address. The full
     // set is announced when one opens, so an early subscribe is not lost.
-    if (this.streamId === null) return
+    if (this.streamId === null) return null
     // Best effort: a dropped subscribe is re-sent when the stream reconnects.
-    await this.post('/api/sync/subscribe', {
+    return await this.post('/api/sync/subscribe', {
       streamId: this.streamId,
       ...body,
     } satisfies SyncSubscribeRequest)
+  }
+
+  /**
+   * Ask the daemon to route documents into the stream, one request per
+   * workspace and no more than a request may carry.
+   *
+   * The daemon decides a request as a whole — it refuses all of it for the
+   * first workspace the credential may not enter — so one request for
+   * everything the page follows lets a single revoked workspace end live
+   * sync for every unrelated document, and a count past the stream's limit
+   * ends it for all of them. Split this way a refusal costs exactly the
+   * documents it concerns, and those are told.
+   */
+  private async follow(docs: readonly string[]): Promise<void> {
+    const byWorkspace = new Map<string, string[]>()
+    for (const doc of docs) {
+      const workspaceId = workspaceIdOfDocKey(doc) ?? ''
+      byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), doc])
+    }
+    for (const group of byWorkspace.values()) {
+      for (let from = 0; from < group.length; from += MAX_DOCS_PER_STREAM) {
+        const chunk = group.slice(from, from + MAX_DOCS_PER_STREAM)
+        const status = await this.send({ subscribe: chunk })
+        if (status !== null && (status < 200 || status >= 300)) this.refuse(status, chunk)
+      }
+    }
+  }
+
+  /**
+   * Tell the subscribers of documents the daemon would not follow. A refused
+   * credential says so, as it does everywhere else; any other refusal leaves
+   * the document without a live stream, which is what "not connected" means
+   * to its subscriber. The stream itself stays: it still carries the rest.
+   */
+  private refuse(status: number, docs: readonly string[]): void {
+    for (const doc of docs) this.unfollowed.add(doc)
+    const entries = docs.map((doc) => this.docs.get(doc))
+    if (isAuthRefusal(status)) {
+      this.announceAuthRefused(entries)
+      return
+    }
+    for (const entry of entries) this.announceTo(entry, false)
   }
 
   /**
@@ -469,6 +522,7 @@ export class SseStreamHub implements SseStreamSource {
     // The id belongs to the stream that just ended; nothing may be addressed
     // to it until the next one announces its own.
     this.streamId = null
+    this.unfollowed.clear()
     this.announceConnection(false)
     return true
   }
@@ -487,7 +541,7 @@ export class SseStreamHub implements SseStreamSource {
     this.announceConnection(true)
 
     const docs = [...this.docs.keys()]
-    if (docs.length > 0) void this.send({ subscribe: docs })
+    if (docs.length > 0) void this.follow(docs)
     for (const [doc, entry] of this.docs) {
       if (!entry.ready) continue
       void this.post('/api/sync/message', {
@@ -500,13 +554,15 @@ export class SseStreamHub implements SseStreamSource {
 
   /** A subscriber that throws must not stop the others from being told. */
   private announceConnection(connected: boolean): void {
-    for (const entry of this.docs.values()) {
-      for (const listener of entry.listeners) {
-        try {
-          listener.onConnectionChange?.(connected)
-        } catch {
-          // A listener's own failure is not this hub's to propagate.
-        }
+    for (const entry of this.docs.values()) this.announceTo(entry, connected)
+  }
+
+  private announceTo(entry: { listeners: Set<DocListener> } | undefined, connected: boolean): void {
+    for (const listener of entry?.listeners ?? []) {
+      try {
+        listener.onConnectionChange?.(connected)
+      } catch {
+        // A listener's own failure is not this hub's to propagate.
       }
     }
   }

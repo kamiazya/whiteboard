@@ -133,6 +133,36 @@ describe('parseOcif reads foreign OCIF text', () => {
     expect(parseOcif('{"nodes":[]}')).toMatchObject({ ok: false, error: { stage: 'ocif-schema' } })
   })
 
+  // The wire schema is loose on purpose, so a value the model has no word for
+  // gets past it; reporting that as a parse that worked hands the caller a
+  // canvas every writer of this repo would refuse.
+  it('refuses a document that lifts to a canvas the model does not accept', () => {
+    const group = groupNode({
+      id: 'g',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      label: 'Tier',
+      backgroundStyle: 'cover',
+    })
+    const text = (style: string) =>
+      JSON.stringify(toOcif({ nodes: [group], edges: [] })).replace(
+        '"cover"',
+        JSON.stringify(style),
+      )
+
+    const control = parseOcif(text('cover'))
+    expect(control.ok).toBe(true)
+    expect(parseOcif(text('bogus'))).toMatchObject({
+      ok: false,
+      error: {
+        stage: 'ocif-schema',
+        issues: [expect.objectContaining({ path: ['nodes', 0, 'backgroundStyle'] })],
+      },
+    })
+  })
+
   it('reads a document whose extensions it has never heard of', () => {
     // OCIF conformance requires a reader to preserve what it does not
     // understand, so the wire schema is deliberately loose where the internal

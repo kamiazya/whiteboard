@@ -555,12 +555,11 @@ function useBrowserDocument(
     }),
     ...browserConnectionsSlot(connections, navigateToDocument, linkify),
     topBar: {
-      // Local mode names documents through its own store, not through the
-      // daemon's `/names`, so the identity the bar offers is unused here and
-      // `title`/`onTitleChange` stay the source.
-      workspaceId: 'local',
+      // The browser keeper names documents through its own store, not through
+      // the daemon's `/names`, so `title`/`onTitleChange` stay the source.
+      workspaceId,
       path: loadedPath,
-      dataMode: 'local',
+      keeper: 'browser',
       // The way out of the editor. This page had none until now — the
       // app-shell brand mark was the only exit, and it says nothing about
       // where it goes.

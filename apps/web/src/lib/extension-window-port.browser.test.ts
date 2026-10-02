@@ -35,13 +35,13 @@ function contentScript(answer: (data: FromPage, reply: (m: object) => void) => v
 describe('windowHello', () => {
   it('answers whether a content script is there', async () => {
     contentScript((data, reply) => {
-      if (data.kind === 'hello') reply({ kind: 'hello', version: '1.2.3' })
+      if (data.kind === 'hello') reply({ kind: 'hello', version: '1.2.3', protocol: 1 })
     })
-    expect(await windowHello(1_000)).toBe(true)
+    expect(await windowHello(1_000)).toEqual({ type: 'hello', version: '1.2.3', protocol: 1 })
   })
 
   it('answers no when nothing replies', async () => {
-    expect(await windowHello(50)).toBe(false)
+    expect(await windowHello(50)).toBeNull()
   })
 })
 

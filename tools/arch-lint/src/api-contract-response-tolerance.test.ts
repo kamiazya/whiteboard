@@ -100,6 +100,23 @@ describe('api-contracts: strict requests, tolerant answers', () => {
     expect(offenders).toEqual([])
   })
 
+  it("declares every request strict, so a typo or a newer client's field is refused rather than stripped", () => {
+    // `.strict()` is what turns "the 200 says it worked" into a refusal for a
+    // key the daemon did not read. Nothing is excused today; a request that
+    // genuinely cannot be strict (a non-object body) belongs here with its
+    // reason.
+    const EXCUSED_REQUESTS: readonly string[] = []
+    const requests = declarations().filter((d) => d.name.endsWith('RequestSchema'))
+    expect(requests.length).toBeGreaterThanOrEqual(10)
+    const lax = requests
+      .filter((d) => !d.code.includes('.strict()') && !EXCUSED_REQUESTS.includes(d.name))
+      .map((d) => `${d.file}: ${d.name}`)
+    expect(lax).toEqual([])
+    for (const name of EXCUSED_REQUESTS) {
+      expect(requests.some((d) => d.name === name && !d.code.includes('.strict()'))).toBe(true)
+    }
+  })
+
   it('re-exports no schema from another package, where a strict one would pass for an answer', () => {
     // An alias of a server-core tool output is `.strict()` and reads as
     // tolerant at the import site; the browser-facing answers are derived in

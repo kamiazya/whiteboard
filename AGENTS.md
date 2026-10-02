@@ -57,7 +57,7 @@ Passing tests alone are not sufficient.
 After manual verification, preserve the exact user flow:
 
 - Add or extend a `canvas-viewer-browser` or `web-browser` test if component mount plus mocked fetches are enough.
-- Add or extend E2E coverage if the scenario depends on real routing, websockets, persistence, daemon behavior, or page composition.
+- Add or extend E2E coverage if the scenario depends on real routing, sync frames (SSE), persistence, daemon behavior, or page composition.
 
 Do not stop at manual verification without preserving the scenario in automation.
 
@@ -102,7 +102,7 @@ more detail than a summary here could. Keep those in sync with the real workflow
 
 ## Zod Schema Discipline
 
-Use Zod as the **single source of truth** for every contract that crosses a process boundary (MCP tools, HTTP routes, persisted JSON, daemon registry, websocket messages).
+Use Zod as the **single source of truth** for every contract that crosses a process boundary (MCP tools, HTTP routes, persisted JSON, daemon registry, sync frames).
 
 Concrete rules when adding or editing an MCP tool:
 
@@ -192,7 +192,7 @@ Before closing a change:
 - Preserve the verified user scenario in `canvas-viewer-browser`/`web-browser` or E2E coverage.
 - Run the suites for the AREA you touched. **Full suites are CI's job, not a
   local step** (user decision, 2026-09-05): CI runs everything on every push
-  at ~6min wall, so a local full run is the same work twice — push, then
+  at 6-7min wall, so a local full run is the same work twice — push, then
   watch the run (Monitor / `steward`). Exceptions: `pnpm check:local` for a
   pre-release check-job answer, and `pnpm test:browser` when the
   change touches real-browser behavior.

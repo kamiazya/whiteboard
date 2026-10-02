@@ -280,8 +280,10 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
  * Why the same budget rather than a higher one, which is the question that
  * kept this exclusion silent. The case for a higher ceiling is that a test
  * file legitimately repeats setup, so it should be allowed to run larger.
- * Measured across this repo on 2026-09-19, that is not what the sizes say —
- * test files are barely larger than source files at every percentile:
+ * Measured across this repo on 2026-09-19 — a reading of that day, not one
+ * kept current; the file counts have since moved, the ratio is what held —
+ * that is not what the sizes say: test files are barely larger than source
+ * files at every percentile:
  *
  * |            | median | p90 | p95 | p99  | max  |
  * |------------|--------|-----|-----|------|------|
@@ -400,7 +402,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 964 -> 977: the `document.move` arm's row, re-pinned with why it moved
   // and why its follow report costs wire bytes and no visible ones — the
   // prose a pinned scoreboard carries instead of a changelog.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
+  // 963 -> 966: `wb_canvas_edit`'s row and the two totals say why they moved +58.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 966,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
@@ -492,7 +495,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness
   // helpers (`smoke-helpers.mjs`). The next shrink is the support-bundle
   // scenarios as their own script.
-  'tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs': 1082,
+  'tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs': 1070,
 }
 
 describe('file-size budget: .mjs scripts, same 800-line budget, same shrink-only contract', () => {

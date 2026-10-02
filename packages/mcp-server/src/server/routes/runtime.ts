@@ -10,7 +10,7 @@ import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
 import type { StoreScope } from '../store/store-scope.js'
-import { computeStorageReport } from './runtime-storage.js'
+import { computeStorageReport } from '../tenant/storage-report.js'
 
 export interface RuntimeRouterOptions {
   instanceId: string

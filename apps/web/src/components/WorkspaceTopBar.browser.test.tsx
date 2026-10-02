@@ -19,20 +19,6 @@ function mkNamesResponse(): Response {
   })
 }
 
-function mkBranchesResponse(): Response {
-  return jsonResponse({
-    head: 'main',
-    branches: [
-      {
-        name: 'main',
-        tipFrontiers: '',
-        color: '#1971c2',
-        createdAt: '2026-04-23T00:00:00Z',
-      },
-    ],
-  })
-}
-
 function mkVersionsResponse(count = 24): Response {
   const versions = Array.from({ length: count }, (_, index) => ({
     id: `v-${index}`,
@@ -70,7 +56,6 @@ beforeEach(() => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
-    if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
     if (url.includes('/versions') && url.endsWith('/restore')) {
       return Promise.resolve(jsonResponse({ ok: true }))
     }

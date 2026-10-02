@@ -29,7 +29,7 @@
  * a handed-in dependency. What is left per file is the seam it reaches or the
  * builtin that holds it, and the routers (the files that mount a Hono app) are
  * counted apart from the middleware, helpers and registries that sit in the same
- * directory — six of the twelve were never routes.
+ * directory, which are not routes.
  *
  * It does not use `adapter-mechanic-check`'s matcher: that one asks whether an
  * adapter reaches a mechanic and answers with an edge ledger, this one asks
@@ -490,5 +490,78 @@ describe('the transitive closure of the portable files', () => {
       counts,
       'the lift moved: a file was lifted or gained a Node blocker. Lower (or, on the record, raise) CLOSURE_COUNTS.',
     ).toEqual(CLOSURE_COUNTS)
+  })
+})
+
+/** Spelled the way the ADR's prose spells a count; past twenty a figure is clearer. */
+function spell(n: number): string {
+  const words = [
+    'zero',
+    'one',
+    'two',
+    'three',
+    'four',
+    'five',
+    'six',
+    'seven',
+    'eight',
+    'nine',
+    'ten',
+    'eleven',
+    'twelve',
+    'thirteen',
+    'fourteen',
+    'fifteen',
+    'sixteen',
+    'seventeen',
+    'eighteen',
+    'nineteen',
+    'twenty',
+  ]
+  return words[n] ?? String(n)
+}
+
+/** ADR-0052's correction note, from its heading to the end of the file. */
+function adrCorrectionNote(): string {
+  const adr = readFileSync(join(REPO_ROOT, 'docs/contributing/adr/0052-edge-keeper.md'), 'utf8')
+  const start = adr.indexOf('## Correction note')
+  // Prose wraps; a sentence is compared as one line.
+  return start === -1 ? '' : adr.slice(start).replace(/\s+/g, ' ')
+}
+
+describe("ADR-0052's correction note states what the ledger holds", () => {
+  const note = adrCorrectionNote()
+  const ledgered = Object.entries(PORTABLE_ROUTES_IN_MCP_SERVER)
+  const only = (entry: PortableRoute): boolean =>
+    entry.blockedBy.every((blocker) => blocker.startsWith('seam '))
+  const routers = ledgered.filter(([, entry]) => entry.role === 'router')
+
+  it('reads a note at all', () => {
+    expect(note.length, 'the correction note is missing or its heading moved').toBeGreaterThan(2000)
+  })
+
+  it('names every ledgered file', () => {
+    expect(
+      ledgered.map(([name]) => name).filter((name) => !note.includes(`\`${name}\``)),
+      "a file in PORTABLE_ROUTES_IN_MCP_SERVER is absent from the note's table",
+    ).toEqual([])
+  })
+
+  it('names every cut seam, and how many there are', () => {
+    expect(
+      Object.keys(CUT_SEAMS).filter((seam) => !note.includes(`\`${seam}\``)),
+      'a cut seam is absent from the note',
+    ).toEqual([])
+    expect(note).toContain(`${spell(Object.keys(CUT_SEAMS).length)} named cut seams`)
+  })
+
+  it('states the ledger length, the router count and the three closure counts', () => {
+    const { cleanFiles, liftableFiles, liftableRouters } = CLOSURE_COUNTS
+    const total = spell(ledgered.length)
+    expect(note).toContain(`Of the ${total} files, ${spell(routers.length)} are routers`)
+    expect(note).toContain(`**${spell(cleanFiles)}** of the ${total} are clean`)
+    expect(note).toContain(`**${spell(liftableFiles)}** are held only by the cut seams`)
+    expect(note).toContain(`**${spell(liftableRouters)}** of the ${spell(routers.length)} routers`)
+    expect(ledgered.filter(([, entry]) => only(entry)).length).toBe(liftableFiles)
   })
 })

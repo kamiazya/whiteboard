@@ -11,7 +11,7 @@ description: Monitor and triage the POST-PUSH automated-review surface for the w
 
 | Source | What it is | How to read it |
 |--------|-----------|----------------|
-| **`verify`** | GitHub Actions CI (lint:noconsole + tests/typecheck/smoke per `.github/workflows/`) | `gh pr checks <PR>`; logs: `gh run view <run-id> --log-failed` |
+| **`ci-gate`** | The one required check over every `ci.yml` job (`check` lint/typecheck, the test jobs, `verify` build + smokes, `extension-smokes`, …) | `gh pr checks <PR>`; logs: `gh run view <run-id> --log-failed` |
 | **CodeRabbit** | AI PR review (line comments + summary). **Skips while the PR title contains `WIP`/draft** | `gh pr view <PR> --json reviews,comments`; `gh api repos/{owner}/{repo}/pulls/<PR>/comments` |
 | **AccessLint** | accessibility review app | its check + PR review comments |
 | **WIP** | reports work-in-progress from the title — **informational, measured not to block a merge** (#1201: with WIP the sole non-success check, `mergeable_state` read `unstable`, never `blocked`; Draft is the one mechanical merge block) | `gh pr checks` shows it pending; remove `WIP`/`(WIP)` from the title to settle it + un-skip CodeRabbit |
@@ -38,11 +38,11 @@ done
 
 PushNotification when a check flips to `fail` — that changes what the integrator does next.
 
-**Caveat (Draft PRs): the `WIP` check stays `pending` forever while the PR is a Draft** — the WIP app flags Drafts as work-in-progress regardless of the title (removing `(WIP)` from the title is NOT enough; only `gh pr ready <PR>` settles it). `AccessLint` can also linger on Drafts. So a "wait until ALL checks settle" loop never exits on a Draft. **Watch the gating check (`verify`) specifically instead:**
+**Caveat (Draft PRs): the `WIP` check stays `pending` forever while the PR is a Draft** — the WIP app flags Drafts as work-in-progress regardless of the title (removing `(WIP)` from the title is NOT enough; only `gh pr ready <PR>` settles it). `AccessLint` can also linger on Drafts. So a "wait until ALL checks settle" loop never exits on a Draft. **Watch the gating check (`ci-gate`) specifically instead:**
 ```bash
 while true; do
-  b=$(gh pr checks <PR> --json name,bucket --jq '.[]|select(.name=="verify")|.bucket' 2>/dev/null)
-  [ -n "$b" ] && [ "$b" != "pending" ] && { echo "verify: $b"; break; }
+  b=$(gh pr checks <PR> --json name,bucket --jq '.[]|select(.name=="ci-gate")|.bucket' 2>/dev/null)
+  [ -n "$b" ] && [ "$b" != "pending" ] && { echo "ci-gate: $b"; break; }
   sleep 60
 done
 ```
@@ -53,7 +53,7 @@ done
 
 ## Triage rubric (signal vs noise)
 
-- **CI `verify` failure** → almost always REAL and blocking. Read `--log-failed`, reproduce locally, fix on the spot (it gates merge). A flaky-isolation failure (see `audit-test-fixture-dedup`) is the one exception — re-run before treating as real.
+- **CI failure (`ci-gate` or a job under it)** → almost always REAL and blocking. Read `--log-failed`, reproduce locally, fix on the spot (it gates merge). A flaky-isolation failure (see `audit-test-fixture-dedup`) is the one exception — re-run before treating as real.
 - **CodeRabbit** → high recall, variable precision. Treat each comment as a CANDIDATE: keep correctness/security/contract points; drop style nits already covered by Biome and "consider"-grade suggestions that don't apply. Verify against the actual code before filing (it hallucinates context).
 - **AccessLint** → real a11y findings on UI diffs; keep, file under the touched component.
 - **CodeQL** (`github-advanced-security[bot]` PR comments) → security; verify the data-flow is real (not an already-sanitized path). A finding on an **untrusted-input path** (a parser/regex over user/document content — ReDoS, injection) is REAL and **blocking**: fix it on the branch (red test first) before merge, don't just task-track it. Genuinely lower-severity or false-positive ones → task-track / dismiss with a recorded rationale.

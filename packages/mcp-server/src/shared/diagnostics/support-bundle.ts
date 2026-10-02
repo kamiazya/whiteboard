@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { type DaemonDoctorResult, doctorCheckStatusSchema } from '../api-contracts/daemon-doctor.js'
 import { isIsoDatetime } from './iso-datetime.js'
 import { redactDiagnosticText, scrubAuthMarkers } from './redact.js'
 
@@ -139,31 +140,20 @@ function buildStatusSection(input: SupportBundleStatusInput): SupportBundleStatu
 
 // Redacted doctor section. The doctor result has a list of checks
 // with id/status/summary/detail/remediation; everything stringy runs
-// through the redactor.
-interface SupportBundleDoctorCheckInput {
-  id: string
-  status: 'ok' | 'warning' | 'error' | 'skipped'
-  summary: string
-  detail?: string
-  remediation?: string
-}
-export interface SupportBundleDoctorInput {
-  ok: boolean
-  status: 'ok' | 'warning' | 'error' | 'skipped'
-  checks: SupportBundleDoctorCheckInput[]
-}
-const doctorStatusSchema = z.enum(['ok', 'warning', 'error', 'skipped'])
+// through the redactor. The input is the doctor result itself, so a check or a
+// status added there reaches the bundle without a second edit.
+export type SupportBundleDoctorInput = Omit<DaemonDoctorResult, 'schemaVersion'>
 
 export const supportBundleDoctorSectionSchema = z
   .object({
     schemaVersion: z.literal(1),
     ok: z.boolean(),
-    status: doctorStatusSchema,
+    status: doctorCheckStatusSchema,
     checks: z.array(
       z
         .object({
           id: z.string(),
-          status: doctorStatusSchema,
+          status: doctorCheckStatusSchema,
           summary: z.string(),
           detail: z.string().nullable(),
           remediation: z.string().nullable(),

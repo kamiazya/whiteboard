@@ -36,13 +36,16 @@ pre-push:
     # No test run here, deliberately (user decision, 2026-09-05): full suites
     # are CI's job, and running one at push time was the same work twice —
     # the dev loop already ran the nearest-layer tests for what changed, and
-    # CI (6min wall since the needs unchaining) runs everything. It was also
+    # CI (6-7min wall) runs everything. It was also
     # the gate the port-squatting flake bit, precisely because a full suite
     # under push-time load is a full suite on a saturated machine.
-    noconsole:
-      run: pnpm lint:noconsole
-    # `pnpm lint` is one `biome check` over the repo, and ~62% of its CPU is the
-    # GritQL plugins. Three interleaved with/without pairs, 3373 files, load
+    # `pnpm lint` is one `biome check` over the repo. It already holds
+    # `noConsole` at error where it applies (biome.json's overrides for
+    # mcp-server's `src/server/**` and `apps/web/src/**`, tests excepted), so
+    # a noConsole-only command beside it flagged exactly the same files and
+    # was removed.
+    #
+    # ~62% of lint's CPU is the GritQL plugins. Three interleaved with/without pairs, 3373 files, load
     # average 9-12: CPU time (user + sys) 50.2, 50.3, 49.1s with the four plugins
     # against 19.1, 18.8, 18.7s with `plugins: []` (mean 49.9 -> 18.9s); wall
     # 33.9, 27.7, 19.5s against 11.8, 13.5, 8.4s. All of it is one plugin:
@@ -52,7 +55,8 @@ pre-push:
     # grows with the suite.
     lint:
       run: pnpm lint
-    # ~1s, and it is the only check anywhere that notices the mutation lane
+    # A few seconds (4-4.5s wall, almost all of it vitest's transform), and it
+    # is the only check anywhere that notices the mutation lane
     # going stale. The lane covers a LIST of modules, so a new one is simply
     # not covered and the weekly report still looks healthy — the failure is
     # silence, which no other gate here can see. Failing at push time is the
@@ -88,23 +92,19 @@ pre-push:
     # reads files. Scoping it to the files that scan other packages would be a
     # list to keep in step, which is the defect one level up.
     #
-    # It is NOT free, and it is no longer hidden behind typecheck: the project
-    # grew with every guard, where an early reading had it at 25-29s beside
-    # typecheck's 39-43s. On a 4-core box it measures ~45s
-    # standalone when quiet and takes a quiet pre-push from 72-86s to 103-138s,
-    # so it is now the longest command and the critical path. Under the load of
-    # several concurrent sessions two runs each measured 201-290s without it
-    # and 335-400s with it — contention swings every number here by 2-4x, so the
-    # invariant is "this is the slowest command and adds tens of seconds", not
-    # any one reading. It stays because the failure it prevents is a push CI
-    # rejects, and a push is rarer than a commit.
+    # It is NOT free. It and `pnpm -r typecheck` are the two long commands of
+    # a push, and which is longer depends on the box: three interleaved quiet
+    # rounds measured arch-lint at 32-50s wall / ~53s CPU against typecheck's
+    # 42-60s wall / ~80s CPU, while under heavy load (average 18-25 on 4 CPUs)
+    # the two came in near-equal (133s against 130s). Contention swings every
+    # number here by 2-4x, so the invariant is "these are the two long
+    # commands", not any one reading — re-measure before quoting one. It stays
+    # because the failure it prevents is a push CI rejects, and a push is
+    # rarer than a commit.
     #
-    # The project now runs with `isolate: false` (its config says why that is
-    # safe here and how it was checked). Three interleaved plain/no-isolate
-    # pairs of the whole project, load average 17-27 on 4 cores: CPU time
-    # (user + sys) 102.1s -> 54.2s, wall 145.6s -> 65.8s. The ~45s quiet and
-    # 103-138s pre-push figures above predate it and were NOT re-taken, because
-    # this box never went quiet: read them as upper bounds, and re-measure
-    # before quoting any of them.
+    # The project runs with `isolate: false` (its config says why that is safe
+    # here and how it was checked). Three interleaved plain/no-isolate pairs
+    # of the whole project, load average 17-27 on 4 cores: CPU time
+    # (user + sys) 102.1s -> 54.2s, wall 145.6s -> 65.8s.
     arch-lint:
       run: pnpm vitest run --project arch-lint-node

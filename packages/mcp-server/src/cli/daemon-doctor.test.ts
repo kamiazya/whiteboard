@@ -15,8 +15,12 @@ const baseRecord = {
 }
 const validRecord = { ...baseRecord, token: 'tok' }
 
-function runDoctor(parseRecord: ParseRecord, isPidAlive: () => boolean) {
-  return runDaemonDoctor({ dataDir: '/fake', parseRecord, isPidAlive })
+function runDoctor(
+  parseRecord: ParseRecord,
+  isPidAlive: () => boolean,
+  runningVersion = baseRecord.version,
+) {
+  return runDaemonDoctor({ dataDir: '/fake', parseRecord, isPidAlive, runningVersion })
 }
 
 describe('runDaemonDoctor: record missing', () => {
@@ -117,6 +121,40 @@ describe('runDaemonDoctor: valid record, process dead', () => {
     const { result } = await runDoctor(parseValid, () => false)
     const recordCheck = result.checks.find((c) => c.id === 'daemon.record')
     expect(recordCheck?.status).toBe('ok')
+  })
+})
+
+describe('runDaemonDoctor: version skew', () => {
+  const parseValid: ParseRecord = async () => ({ kind: 'valid', record: validRecord })
+
+  it('reports a warning finding naming both versions when the daemon runs another build', async () => {
+    const { result, exitCode } = await runDoctor(parseValid, () => true, '2.0.0')
+    const versionCheck = result.checks.find((c) => c.id === 'daemon.version')
+    expect(versionCheck?.status).toBe('warning')
+    expect(versionCheck?.summary).toContain('1.0.0')
+    expect(versionCheck?.summary).toContain('2.0.0')
+    expect(versionCheck?.remediation).toMatch(/daemon stop/)
+    expect(result.status).toBe('warning')
+    // A skew is advice, not a failure: the daemon is up and answering.
+    expect(result.ok).toBe(true)
+    expect(exitCode).toBe(0)
+  })
+
+  it('adds no finding when the daemon runs this build', async () => {
+    const { result } = await runDoctor(parseValid, () => true, '1.0.0')
+    expect(result.checks.map((c) => c.id)).toEqual(['daemon.record', 'daemon.process'])
+    expect(result.status).toBe('ok')
+  })
+
+  it('keeps the error status when the process is dead, whatever the versions', async () => {
+    const { result, exitCode } = await runDoctor(parseValid, () => false, '2.0.0')
+    expect(result.status).toBe('error')
+    expect(exitCode).toBe(1)
+  })
+
+  it('round-trips the warning result through daemonDoctorResultSchema', async () => {
+    const { result } = await runDoctor(parseValid, () => true, '2.0.0')
+    expect(roundtrip(daemonDoctorResultSchema, result)).toEqual(result)
   })
 })
 

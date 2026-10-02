@@ -32,7 +32,6 @@ const log = getLogger('version-store')
 //
 // Storage:
 //   versions table        -> per-version metadata + base64 frontiers
-//   blobs/{ws}/versions/{id}.png  -> optional thumbnail blob
 //
 // load() forks the live doc from a snapshot, checks out the saved frontiers,
 // and returns an independent past-state doc without touching the live cache
@@ -461,7 +460,7 @@ export class FileVersionStore implements VersionStore {
       .execute()
 
     // Which rows go is the mechanic's call (@kamiazya/whiteboard-history);
-    // the rows, the delete and the thumbnail blobs are this store's.
+    // the rows and the delete are this store's.
     const toDelete = sandwichedAutoVersionIds(
       rows.map((row) => ({ id: row.id, branchName: row.branchName, auto: row.auto === 1 })),
     )

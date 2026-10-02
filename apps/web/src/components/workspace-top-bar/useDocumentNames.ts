@@ -15,7 +15,7 @@ interface UseDocumentNamesOptions {
    * either: the browser page names its document through its own store
    * and hands the header the result, so this hook simply stays empty there.
    */
-  isLocalMode: boolean
+  keptByBrowser: boolean
   daemonFetch: typeof globalThis.fetch
 }
 
@@ -25,7 +25,7 @@ interface UseDocumentNamesOptions {
 // writing an un-validated shape into this state.
 export function useDocumentNames({
   workspaceId,
-  isLocalMode,
+  keptByBrowser,
   daemonFetch,
 }: UseDocumentNamesOptions) {
   const [names, setNames] = useState<WorkspaceNames>(EMPTY_NAMES)
@@ -33,7 +33,7 @@ export function useDocumentNames({
   // Load display names. Guard against a stale response for a previous
   // workspaceId landing after a newer request already resolved.
   useEffect(() => {
-    if (isLocalMode) return
+    if (keptByBrowser) return
     let active = true
     ;(async () => {
       try {
@@ -50,9 +50,9 @@ export function useDocumentNames({
     // page's memoized createDaemonFetch result), so including it does not
     // refetch per render — and a genuinely new fetch identity (base URL or
     // token change) must refetch to avoid serving stale names.
-  }, [workspaceId, daemonFetch, isLocalMode])
+  }, [workspaceId, daemonFetch, keptByBrowser])
 
-  const effectiveNames = isLocalMode ? EMPTY_NAMES : names
+  const effectiveNames = keptByBrowser ? EMPTY_NAMES : names
 
   // Daemon-mode rename commit. Returns whether the PUT succeeded so the
   // caller can decide how to react; local mode never reaches it.

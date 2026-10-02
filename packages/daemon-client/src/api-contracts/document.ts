@@ -20,13 +20,17 @@ export const workspaceNamesSchema = z.object({
 })
 
 // `name: ''` deletes the stored name and falls back to the path/workspaceId.
-export const setNameRequestSchema = z.object({
-  name: z.string(),
-})
+export const setNameRequestSchema = z
+  .object({
+    name: z.string(),
+  })
+  .strict()
 
-export const setPinnedRequestSchema = z.object({
-  pinned: z.boolean(),
-})
+export const setPinnedRequestSchema = z
+  .object({
+    pinned: z.boolean(),
+  })
+  .strict()
 
 // OperatorInfo is declared in server-core beside the VersionHistory seam
 // and re-exported here so this barrel stays the one place apps/web reads a
@@ -54,10 +58,12 @@ export const versionEntryAnswerSchema = versionEntrySchema.extend({
 // `operator` here is `requestOperatorSchema`, NOT the full operator: a caller
 // may say which KIND of party asked and what to show a reader, and may not
 // name the device. See its definition in server-core for why.
-export const saveVersionRequestSchema = z.object({
-  label: z.string().optional(),
-  operator: requestOperatorSchema.optional(),
-})
+export const saveVersionRequestSchema = z
+  .object({
+    label: z.string().optional(),
+    operator: requestOperatorSchema.optional(),
+  })
+  .strict()
 
 // POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 // Body is optional. Two restore modes share the same endpoint:
@@ -69,17 +75,21 @@ export const saveVersionRequestSchema = z.object({
 //     doc (same semantics as the default mode, not a persistence swap) so
 //     any client connected to that canvas stays on the same CRDT lineage.
 //     Replaces what the now-removed `checkpoint_restore` flow did.
-export const restoreVersionRequestSchema = z.object({
-  targetPath: z.string().trim().min(1).optional(),
-  overwrite: z.boolean().optional(),
-  /**
-   * In-place mode only: roll the document AND its descendants back to this
-   * version — descendants revert, documents deleted since come back, and
-   * documents created since are deleted (evacuated through the trash).
-   * Requires a workspace-scoped version; incompatible with `targetPath`.
-   */
-  subtree: z.boolean().optional(),
-})
+export const restoreVersionRequestSchema = z
+  .object({
+    targetPath: z.string().trim().min(1).optional(),
+    overwrite: z.boolean().optional(),
+    /**
+     * In-place mode only: roll the document AND its descendants back to this
+     * version — descendants revert, documents deleted since come back, and
+     * documents created since are deleted (evacuated through the trash).
+     * Requires a workspace-scoped version; incompatible with `targetPath`.
+     * Refusing an undeclared key is what keeps an older daemon from reading a
+     * newer client's rollback as the milder in-place restore.
+     */
+    subtree: z.boolean().optional(),
+  })
+  .strict()
 
 /**
  * What a restore answers, one arm per mode: a restore INTO a target names
@@ -92,12 +102,6 @@ export const restoreVersionResponseSchema = z.union([
   z.object({ ok: z.literal(true) }),
 ])
 export type RestoreVersionResponse = z.infer<typeof restoreVersionResponseSchema>
-
-export const exportDocumentJsonRequestSchema = z.object({
-  includeCustomFields: z.boolean().optional(),
-  outputPath: z.string().optional(),
-  overwrite: z.boolean().optional(),
-})
 
 /**
  * A past state, as the History panel PREVIEWS it before deciding to restore.
@@ -160,9 +164,11 @@ export const deleteDocumentResponseSchema = z.object({
 })
 
 // PUT /api/workspaces/:workspaceId/documents/:path/path — request body.
-export const renameDocumentPathRequestSchema = z.object({
-  path: z.string().trim().min(1),
-})
+export const renameDocumentPathRequestSchema = z
+  .object({
+    path: z.string().trim().min(1),
+  })
+  .strict()
 
 // PUT /api/workspaces/:workspaceId/documents/:path/path — success body.
 export const renameDocumentPathResponseSchema = z.object({
@@ -232,9 +238,11 @@ export const listWorkspacesResponseSchema = z.object({
  * Choosing the address is what RENAME is for, one call later, where a
  * collision can be reported against a workspace that already exists.
  */
-export const createWorkspaceRequestSchema = z.object({
-  displayName: workspaceDisplayNameSchema,
-})
+export const createWorkspaceRequestSchema = z
+  .object({
+    displayName: workspaceDisplayNameSchema,
+  })
+  .strict()
 
 /**
  * PATCH /api/workspaces/:workspaceId — rename the two chosen layers.
@@ -245,10 +253,12 @@ export const createWorkspaceRequestSchema = z.object({
  * the segment — which is the one reading a caller would never intend, and the
  * reason `RenameWorkspaceInput` has no way to clear a layer at all.
  */
-export const renameWorkspaceRequestSchema = z.object({
-  segment: workspaceSegmentSchema.optional(),
-  displayName: workspaceDisplayNameSchema.optional(),
-})
+export const renameWorkspaceRequestSchema = z
+  .object({
+    segment: workspaceSegmentSchema.optional(),
+    displayName: workspaceDisplayNameSchema.optional(),
+  })
+  .strict()
 
 export const documentSummarySchema = z.object({
   path: z.string(),
@@ -305,7 +315,6 @@ export type SetPinnedRequest = z.infer<typeof setPinnedRequestSchema>
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export type SaveVersionRequest = z.infer<typeof saveVersionRequestSchema>
 export type RestoreVersionRequest = z.infer<typeof restoreVersionRequestSchema>
-export type ExportDocumentJsonRequest = z.infer<typeof exportDocumentJsonRequestSchema>
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>
 export type SaveVersionResponse = z.infer<typeof saveVersionResponseSchema>
@@ -331,7 +340,7 @@ export const storageBucketSchema = z.object({
 })
 
 /**
- * The categories the walk in `routes/runtime-storage.ts` can put a file in.
+ * The categories the walk in `tenant/storage-report.ts` can put a file in.
  *
  * Enumerated rather than left as `z.record(z.string(), …)`, because a loose
  * record makes a category the server can never emit indistinguishable from one
@@ -340,25 +349,18 @@ export const storageBucketSchema = z.object({
  * permanent 0 B instead of failing, which is what a contract with no key
  * constraint buys.
  *
- * `runtime-storage.ts` derives its report type from this, and the client
+ * `storage-report.ts` derives its report type from this, and the client
  * derives its row list from it, so all three cannot disagree.
  *
  * Note this makes the payload exhaustive at RUNTIME too, not only in the
  * types: `z.record` over an enum requires every key, so a report missing a
  * category is rejected rather than parsed with that bucket absent. Measured
- * — a payload carrying only `blobs` fails with six `invalid_type` issues.
+ * — a payload carrying only `blobs` fails with four `invalid_type` issues.
  * That is the intent. The walk initialises every bucket on every run, so
  * a missing one means the producer changed, and failing loudly beats a client
  * rendering 0 B for a category that is no longer being counted.
  */
-export const storageCategorySchema = z.enum([
-  'blobs',
-  'versions',
-  'files',
-  'exports',
-  'db',
-  'other',
-])
+export const storageCategorySchema = z.enum(['blobs', 'files', 'exports', 'db', 'other'])
 
 export const storageReportPayloadSchema = z.object({
   totalBytes: z.number(),

@@ -109,6 +109,8 @@ Once the intent is fixed, choose the node shape that fits:
 wb_workspace_edit({ workspaceId, ops: [{ op: "document.create", path: "diagrams/checkout-flow", kind: "spatial", name: "Checkout flow" }] })
 ```
 
+`workspaceId` is `default` unless the user names another workspace: it is the segment of the first workspace a data directory gets, which is also the one the web app opens first. No tool lists workspaces, so an id you were not given is an id you do not have. A workspace that does not exist yet is an error unless the call carries `createWorkspace: true`.
+
 `kind: "spatial"` is required and cannot change later — a document is either a JSON Canvas (spatial) or OKF Markdown, decided at creation.
 
 ### Step 3: Place Nodes And Edges

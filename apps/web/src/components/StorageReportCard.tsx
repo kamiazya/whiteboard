@@ -30,11 +30,6 @@ import {
 
 const CATEGORIES: CategoryDescriptor[] = [
   { key: 'blobs', label: 'Canvas snapshots', description: 'Latest Loro doc per canvas' },
-  {
-    key: 'versions',
-    label: 'Versions',
-    description: 'Saved version history (manual + auto)',
-  },
   { key: 'files', label: 'Uploaded files', description: 'Image / asset uploads' },
   { key: 'exports', label: 'Exports', description: 'PNG / JSON files you exported' },
   { key: 'db', label: 'Metadata DB', description: 'Workspaces, names, pins, version rows' },
@@ -301,15 +296,6 @@ export function StorageReportCard() {
             )}`
           : 'Never auto-optimised'),
     },
-    versions: {
-      icon: Eraser,
-      idleLabel: 'Cleanup',
-      busyLabel: 'Cleaning…',
-      ariaLabel: 'Cleanup sandwiched auto-versions',
-      busy: pruningVersions,
-      run: () => void pruneSandwichedAutoVersions(),
-      status: pruneVersionsStatus,
-    },
     files: {
       icon: Eraser,
       idleLabel: 'Cleanup',
@@ -318,6 +304,15 @@ export function StorageReportCard() {
       busy: cleaningFiles,
       run: () => void cleanupDanglingFiles(),
       status: cleanFilesStatus,
+    },
+    db: {
+      icon: Eraser,
+      idleLabel: 'Cleanup',
+      busyLabel: 'Cleaning…',
+      ariaLabel: 'Cleanup sandwiched auto-versions',
+      busy: pruningVersions,
+      run: () => void pruneSandwichedAutoVersions(),
+      status: pruneVersionsStatus,
     },
   }
 

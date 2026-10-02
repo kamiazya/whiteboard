@@ -5,14 +5,18 @@
 import assert from 'node:assert/strict'
 import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { request } from 'node:https'
 import test from 'node:test'
 import {
   base64url,
   createAccessTokenMinter,
+  createSmokeJwks,
   createTempDirs,
+  dockerNetworking,
   generateTestTlsCert,
   readyRecord,
   signEs256Jwt,
+  startJwksServer,
 } from './smoke-helpers.mjs'
 
 function verifiesAsEs256(jwt, publicKey) {
@@ -99,4 +103,88 @@ test('a ready record is a JSON line with ok:true and a numeric pid, and nothing 
   assert.equal(readyRecord('listening on 3000'), undefined)
   assert.equal(readyRecord('{"ok":true}'), undefined)
   assert.equal(readyRecord('{"ok":false,"pid":1}'), undefined)
+})
+
+test('smoke JWKS publishes the key its private half signs with, under the given kid', () => {
+  const { privateKey, jwks } = createSmokeJwks({ kid: 'unit-key' })
+  assert.equal(jwks.keys.length, 1)
+  const [jwk] = jwks.keys
+  assert.equal(jwk.kid, 'unit-key')
+  assert.equal(jwk.use, 'sig')
+  assert.equal(jwk.alg, 'ES256')
+  assert.equal(jwk.crv, 'P-256')
+  assert.equal('d' in jwk, false, 'the published key must be the public half only')
+  const jwt = signEs256Jwt(privateKey, { alg: 'ES256', kid: 'unit-key' }, { sub: 's' })
+  const { valid } = verifiesAsEs256(jwt, createPublicKey({ key: jwk, format: 'jwk' }))
+  assert.equal(valid, true)
+})
+
+test('smoke JWKS mints a fresh key pair each time', () => {
+  assert.notEqual(createSmokeJwks().jwks.keys[0].x, createSmokeJwks().jwks.keys[0].x)
+})
+
+function get(server, host, path, ca) {
+  return new Promise((resolve, reject) => {
+    const req = request({ host, port: server.address().port, path, ca, method: 'GET' }, (res) => {
+      const chunks = []
+      res.on('data', (chunk) => chunks.push(chunk))
+      res.on('end', () =>
+        resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }),
+      )
+    })
+    req.once('error', reject)
+    req.end()
+  })
+}
+
+test('a JWKS server answers the well-known path over TLS the certificate vouches for, and 404 elsewhere', async () => {
+  const dirs = createTempDirs()
+  const dir = dirs.make('smoke-helpers-jwks-')
+  const { keyFile, certFile } = generateTestTlsCert(dir, { commonName: 'unit-ca' })
+  const tls = { key: readFileSync(keyFile), cert: readFileSync(certFile) }
+  const { jwks } = createSmokeJwks()
+  const server = await startJwksServer({ tls, jwks, host: '127.0.0.1' })
+  try {
+    assert.equal(server.address().address, '127.0.0.1')
+    const found = await get(server, '127.0.0.1', '/.well-known/jwks.json', tls.cert)
+    assert.equal(found.status, 200)
+    assert.deepEqual(JSON.parse(found.body), jwks)
+    const missing = await get(server, '127.0.0.1', '/elsewhere', tls.cert)
+    assert.equal(missing.status, 404)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+    dirs.cleanup()
+  }
+})
+
+test('a JWKS server binds the loopback unless told otherwise', async () => {
+  const dirs = createTempDirs()
+  const dir = dirs.make('smoke-helpers-jwks-default-')
+  const { keyFile, certFile } = generateTestTlsCert(dir, { commonName: 'unit-ca' })
+  const tls = { key: readFileSync(keyFile), cert: readFileSync(certFile) }
+  const server = await startJwksServer({ tls, jwks: createSmokeJwks().jwks })
+  try {
+    assert.equal(server.address().address, '127.0.0.1')
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+    dirs.cleanup()
+  }
+})
+
+test('on Linux a container shares the host network and is reached on the loopback', () => {
+  assert.deepEqual(dockerNetworking({ hostServerPort: 4321, platform: 'linux' }), {
+    useHostNetwork: true,
+    jwksConnectHost: '127.0.0.1',
+    networkRunArgs: ['--network=host'],
+    serverBaseUrl: 'http://127.0.0.1:3099',
+  })
+})
+
+test('elsewhere a container reaches the host by name and publishes the server port', () => {
+  assert.deepEqual(dockerNetworking({ hostServerPort: 4321, platform: 'darwin' }), {
+    useHostNetwork: false,
+    jwksConnectHost: 'host.docker.internal',
+    networkRunArgs: ['--add-host=host.docker.internal:host-gateway', '-p', '4321:3099'],
+    serverBaseUrl: 'http://127.0.0.1:4321',
+  })
 })

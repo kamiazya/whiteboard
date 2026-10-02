@@ -2,6 +2,7 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { startBackgroundWork } from './background-work.js'
 import { getDataDir } from './config.js'
+import { warnWhenDataDirIsTempFallback } from './data-dir-fallback.js'
 import { createMcpServer } from './mcp/server.js'
 import { installStdioLifecycle } from './mcp/stdio-lifecycle.js'
 import { routeServerCoreLogs } from './server-core-logs.js'
@@ -23,7 +24,9 @@ import { stdioBackgroundWork } from './shared-background-work.js'
  * development proxy and a client with socket access use instead of this entry.
  */
 export function bootStdioRoot() {
-  return bootSelfHostDeps(getDataDir())
+  const dataDir = getDataDir()
+  warnWhenDataDirIsTempFallback(dataDir)
+  return bootSelfHostDeps(dataDir)
 }
 
 export async function main() {

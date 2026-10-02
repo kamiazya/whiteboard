@@ -14,6 +14,7 @@ import type {
   ShapeSceneNode,
 } from '@kamiazya/whiteboard-scene'
 import { edgeArrowPolygons } from '../edge-arrows.js'
+import { isFiniteBox } from '../finite-box.js'
 import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
 import { SKETCH_PASSES, sketchEdge, sketchShape } from '../layout/ink/sketch.js'
 import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
@@ -24,7 +25,6 @@ import {
   DROP_SHADOW_DEFS,
   DROP_SHADOW_ID,
   idToken,
-  isFiniteBox,
   isNonNegativeLength,
   isPositiveLength,
   PRESENTATION,

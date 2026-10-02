@@ -117,7 +117,7 @@ function VersionRow({
 
   return (
     <div data-testid="version-row" className="flex items-stretch gap-1.5">
-      <RowShell interactive current={current} onActivate={onOpen}>
+      <RowShell current={current} onActivate={onOpen}>
         <CardContent className="px-3 flex items-center justify-between gap-2">
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-medium truncate">{versionTitle(version)}</span>
@@ -219,24 +219,12 @@ function versionAuthor(operator?: OperatorInfo): string | null {
   return null
 }
 
-// Branch operations and save controls live in the header.
-// VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
-/**
- * The card a version row sits in — a button where it can be restored, a plain
- * container where it cannot.
- *
- * Split by ELEMENT rather than by a `disabled` attribute: a disabled button
- * announces "unavailable", which is the wrong story about a row that is doing
- * its job (telling you what happened on another lane). There is nothing to
- * enable here later, so there is nothing to grey out.
- */
+/** The card a version row sits in: a button that opens the version it stands for. */
 function RowShell({
-  interactive,
   current,
   onActivate,
   children,
 }: {
-  readonly interactive: boolean
   /** This row is the state currently drawn on the document. */
   readonly current: boolean
   readonly onActivate: () => void
@@ -244,9 +232,6 @@ function RowShell({
 }) {
   const shared =
     'bg-card text-card-foreground flex flex-1 min-w-0 flex-col gap-6 overflow-hidden rounded-xl border py-2 text-left shadow-sm'
-  if (!interactive) {
-    return <div className={`${shared} opacity-80`}>{children}</div>
-  }
   return (
     <button
       type="button"
@@ -506,9 +491,8 @@ export default function VersionTimeline({
       <ScrollArea className="min-h-0 flex-1 -mx-1">
         <div className="flex flex-col gap-1.5 px-1">
           {loading && versions.length === 0 ? (
-            // Until /branches resolves, `head` is the hook's 'main' default —
-            // rendering rows filtered by it would offer the wrong branch's
-            // versions as restore targets during the fetch race.
+            // Rows already on screen keep showing during a refresh (`stale`
+            // covers a failed one), so the loader is only for the first read.
             <SquiggleLoader label="Loading…" className="py-4 text-xs" />
           ) : versions.length === 0 ? (
             <div className="text-xs text-muted-foreground py-4 text-center">

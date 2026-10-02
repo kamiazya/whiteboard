@@ -29,6 +29,8 @@ For the main drawing workflow, see the drawing-visuals skill in `skills/drawing-
 wb_document_list({ workspaceId })
 ```
 
+`workspaceId` is `default` unless the user names another workspace: the segment of the first workspace a data directory gets, and the one the web app opens first.
+
 Returns `{ documents: [{ documentId, path, name?, kind?, updatedAt?, shadowed? }] }` — placement only, no content. An unknown
 `workspaceId` is an error here, not an empty list, so a typo reads as a failure rather than "nothing
 found."

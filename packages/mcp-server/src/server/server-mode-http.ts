@@ -137,8 +137,8 @@ export async function startServerModeHttp(
       idleForMs: 0,
       auth: { mode: 'oauth', hasToken: false },
       storage: {
-        dataDir: getDataDir(),
-        dataDirWritable: isDataDirWritable(getDataDir()),
+        dataDir: scope.dataDir,
+        dataDirWritable: isDataDirWritable(scope.dataDir),
       },
       // Something is always served: the web app when the image carries its
       // build (ADR-0047), the inline placeholder when it does not.
@@ -179,7 +179,7 @@ export async function startServerModeHttp(
     port: options.port,
     host: options.host,
     startedAt,
-    resolvedDataDir: getDataDir(),
+    resolvedDataDir: scope.dataDir,
     instanceId,
     close,
   }

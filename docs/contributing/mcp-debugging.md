@@ -143,32 +143,31 @@ Log format: the daemon logger writes one JSON line per record to `stderr` (never
 
 ## Database Migration Errors
 
-If the daemon fails to start with:
+If the daemon fails to start because the database's migration history does not
+match the build, the message says which of two situations it is, and the
+remedies are opposite. Both messages name the database path the daemon actually
+opened: the file under the data directory, or the one `WHITEBOARD_DATABASE_URL`
+points at (credentials removed), never an assumed `~/.whiteboard`.
 
-```
-Database migration failed: corrupted migrations: previously executed migration 0002-canvases-last-compacted-at is missing
-```
+- **The database was migrated by a newer release.** It recorded a migration
+  after the last one this build publishes, so this build is the older side.
+  Upgrade `@kamiazya/whiteboard-mcp` (or rebuild a current checkout) and keep
+  the database. The message never advises deleting it: nothing is wrong with
+  the data.
+- **A migration the database recorded no longer exists.** Its name is inside
+  the range this build publishes, usually because it was renamed. Renumbering
+  one does that to every database that already ran it, which the pre-1.0
+  policy below permits; `published-migration-names.ts` is what makes such a
+  rename land in a diff a reviewer sees rather than silently. Re-create the
+  database, as below.
 
-or with:
-
-```
-IncompatibleDatabaseError: Database is incompatible with this build — its migration
-history records a migration this version does not ship.
-```
-
-your local database is incompatible with the current codebase. Both wordings
-are the same situation from opposite sides — a migration the database recorded
-that this build no longer has, usually because it was renamed. Renumbering one
-does that to every database that already ran it, which the pre-1.0 policy below
-permits; `published-migration-names.ts` is what makes such a rename land in a
-diff a reviewer sees rather than silently.
-
-**Pre-1.0 policy**: the data dir's databases are **disposable**. On an incompatible upgrade, re-create the database. `pnpm mcp:http:dev` defaults to the repo-local `.dev-data/` dir (see [development.md](./development.md)) rather than the packaged install's `~/.whiteboard` — adjust the path below if you set `WHITEBOARD_DATA_DIR` yourself:
+**Pre-1.0 policy**: the data dir's databases are **disposable**. For a renamed or missing migration, re-create the database. `pnpm mcp:http:dev` defaults to the repo-local `.dev-data/` dir (see [development.md](./development.md)) rather than the packaged install's `~/.whiteboard` — adjust the path below if you set `WHITEBOARD_DATA_DIR` yourself:
 
 ```bash
 # 1. Stop any running daemon first
-# 2. Back up any canvas files you want to keep
-cp -r .dev-data .dev-data.bak
+# 2. Back up anything you want to keep. The copy goes under tmp/, which git
+#    ignores: it holds daemon.json (the dev token) and the macaroon root key
+cp -r .dev-data tmp/dev-data.bak
 
 # 3. Remove the database
 rm .dev-data/whiteboard.db
@@ -223,7 +222,7 @@ If MCP tools go missing mid-session with no error, check whether the daemon is s
 its socket (the `curl --unix-socket` line in the checklist above) before assuming a client bug — `mcp:http:dev` passes
 `--idle-timeout-ms=0` specifically so the dev daemon never self-terminates on idle, but a daemon
 started without that flag (a stale build, a hand-run `pnpm --filter @kamiazya/whiteboard-mcp exec
-node dist/server/index.js`) still inherits the packaged 15-minute idle-shutdown default and
+node dist/server/daemon-entry.js`, or `whiteboard daemon run`) still inherits the packaged 15-minute idle-shutdown default and
 can vanish silently, since the `SessionStart` hook only fires once per session and never re-spawns
 mid-session. A second daemon started for the same data dir finds the socket answering and exits
 with `another daemon is already listening on this socket` rather than taking it over.

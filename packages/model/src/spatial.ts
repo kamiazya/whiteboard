@@ -36,10 +36,12 @@ const facetsFieldSchema = extensionFacetsSchema.optional().catch(undefined)
  * The document a node shows inline — the one piece of content JSON Canvas 1.0
  * cannot express, and the reason its extension key exists at all.
  */
-export const nodeEmbedSchema = z.object({
-  documentId: documentIdSchema,
-  versionRef: z.string().min(1).optional(),
-})
+export const nodeEmbedSchema = z
+  .object({
+    documentId: documentIdSchema,
+    versionRef: z.string().min(1).optional(),
+  })
+  .strict()
 
 z.globalRegistry.add(nodeEmbedSchema, { id: 'NodeEmbed' })
 
@@ -597,8 +599,14 @@ export type CanvasComment = z.infer<typeof canvasCommentSchema>
  * beside the stored shape because zod refuses `.partial()` over a refined
  * object, and the one-target rule has to hold for a draft too — a draft that
  * escaped it would be stored, become a thread naming two objects, and vanish.
+ *
+ * Strict here and not on the stored shape: a draft is a WRITE, which must
+ * refuse a key it does not know, while the stored comments are read through
+ * `.catch(undefined)` — a field a newer writer added must not make every
+ * comment in the document unreadable.
  */
 export const canvasCommentDraftSchema = canvasCommentFieldsSchema
+  .strict()
   .partial({ id: true, x: true, y: true })
   .refine(namesOneTarget, ONE_TARGET)
 

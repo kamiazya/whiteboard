@@ -18,7 +18,7 @@ it('answers no after the window it listened on has gone', async () => {
   const answer = windowHello(50)
   vi.stubGlobal('window', undefined)
   vi.advanceTimersByTime(50)
-  await expect(answer).resolves.toBe(false)
+  await expect(answer).resolves.toBeNull()
 })
 
 it('an abandoned hello stops listening and answers no at once', async () => {
@@ -28,6 +28,6 @@ it('an abandoned hello stops listening and answers no at once', async () => {
   const answer = windowHello(60_000, asked.signal)
   asked.abort()
   // No timer advance: the answer must not wait for the hello's timeout.
-  await expect(answer).resolves.toBe(false)
+  await expect(answer).resolves.toBeNull()
   expect(removed).toHaveBeenCalledWith('message', expect.any(Function))
 })

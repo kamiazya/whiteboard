@@ -14,6 +14,7 @@ import {
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
 import { daemonSocketPath } from '../daemon/daemon-socket.js'
+import { warnWhenDataDirIsTempFallback } from '../server/data-dir-fallback.js'
 import { startHttpServer } from '../server/http-server.js'
 import { getLogger } from '../server/log.js'
 import { purgeLegacyWebOriginTrustFile } from '../server/purge-legacy-trust-file.js'
@@ -122,6 +123,7 @@ function startupEnvRefusal(
   env: NodeJS.ProcessEnv,
   options: DaemonRunOptions,
 ): { outcome: DaemonRunOutcome } | null {
+  warnWhenDataDirIsTempFallback(getDataDir(), env)
   const startupIssues = collectStartupEnvIssues(getDataDir(), env)
   if (startupIssues.length > 0) {
     getLogger('daemon-startup').error(

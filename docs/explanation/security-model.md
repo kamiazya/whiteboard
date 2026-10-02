@@ -124,11 +124,11 @@ all, which is an operator's call. That bar is cleared by the daemon token
   once it passes) is the browser's own responsibility.
 
 An operator sets or clears one workspace's override with
-`whiteboard daemon set-replica-tier --json --workspace=<id> --tier=<no-offline|offline|bounded|default>`;
+`whiteboard daemon set-replica-tier --json --workspace=<id|segment> --tier=<no-offline|offline|bounded|default>`;
 `default` clears it, back to `WHITEBOARD_REPLICA_TIER`, and the answer
 echoes both the override and what the workspace resolves to.
 
-**Rotation.** `whiteboard daemon rotate-replica-key --json --workspace=<id>`
+**Rotation.** `whiteboard daemon rotate-replica-key --json --workspace=<id|segment>`
 (the operator's entry point; it asks the running daemon's
 `POST /api/workspaces/:workspaceId/replica-key/rotate` over the daemon's
 socket under its token) replaces the workspace's key and salt outright with
@@ -254,16 +254,23 @@ the boundary described above.
 - Canvas identifiers are validated before they are mapped to file paths.
 - Export and upload flows stay within daemon-controlled storage paths unless explicitly extended.
 
-## Outbound requests (font installation — decided, not yet implemented)
+## Outbound requests (font installation and the search model)
 
-The daemon makes **no outbound network requests today**. Every MCP tool operates
-headlessly on persisted documents, and nothing fetches a remote resource.
+No MCP tool makes an outbound network request: every one operates headlessly
+on persisted documents, and nothing the daemon serves fetches a remote
+resource on a tool call's behalf. Two things a person does reach out:
 
-[ADR-0012](../contributing/adr/0012-user-installed-fonts.md) decides the first
-exception — installing a font the user chose — and the constraints below are
-what keep it from becoming a general-purpose request forwarder. They are
-recorded here because they are trust-boundary properties, not implementation
-detail.
+- **Installing a font** (`POST /api/fonts/:id/install`) downloads one
+  catalogued font file from `raw.githubusercontent.com` (the Google Fonts
+  repository), with a five-minute timeout and a 32 MiB cap.
+- **`whiteboard search fetch-model`** downloads the semantic-search model
+  weights from Hugging Face, once, when an operator runs it. The daemon never
+  downloads them itself ([Find documents from chat](../how-to/find-documents-from-chat.md)).
+
+[ADR-0012](../contributing/adr/0012-user-installed-fonts.md) decides the first,
+and the constraints below are what keep it from becoming a general-purpose
+request forwarder. They are recorded here because they are trust-boundary
+properties, not implementation detail.
 
 - **A family NAME is the input, never a URL.** The daemon builds the request
   from a pinned template, so the reachable hosts are a property of the code

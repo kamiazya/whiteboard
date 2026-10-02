@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../../shared/test-utils/strip-comments.js'
 
 /**
  * A tenant's bytes are isolated only while every module agrees on where they
@@ -20,6 +21,12 @@ const SRC = join(import.meta.dirname, '../..')
 // is a different thing — a log field's name, a category in a response — and
 // `data-layout.ts`'s own constants are not literals at a join either.
 const NAMES_DIRECTORY = /join\([^)]*['"](?:blobs|files)['"]/
+// The other way to name one: taking a path apart and comparing a segment, which
+// is how a report that sorts bytes by store respelled the layout (`segments[1]
+// === 'files'`) without a single join. Indexed or `head` comparisons only —
+// `category === 'files'` is a response's own vocabulary, not a path.
+const COMPARES_A_SEGMENT =
+  /(?:\[\d+\]|\bhead)\s*[!=]==\s*['"](?:tenants|workspaces|blobs|files|exports)['"]/
 
 async function sourceFiles(dir: string): Promise<string[]> {
   const out: string[] = []
@@ -34,17 +41,14 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return out
 }
 
-function withoutComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
-}
-
 describe('who may name a store directory', () => {
   it('only the files listed, and each listed file still does', async () => {
     const files = await sourceFiles(SRC)
     expect(files.length).toBeGreaterThan(150)
     const namers: string[] = []
     for (const file of files) {
-      if (NAMES_DIRECTORY.test(withoutComments(await readFile(file, 'utf8')))) {
+      const text = stripComments(await readFile(file, 'utf8'))
+      if (NAMES_DIRECTORY.test(text) || COMPARES_A_SEGMENT.test(text)) {
         namers.push(relative(SRC, file))
       }
     }

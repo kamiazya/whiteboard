@@ -26,6 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
+import { stripComments } from '../../shared/test-utils/strip-comments.js'
 import { serverModeSignIn } from '../_test-server-mode-harness.js'
 import { createApp } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
@@ -94,7 +95,7 @@ const NOT_A_REQUEST_TARGET = new Set([
  * that only MENTIONS a route in prose is not a caller of it.
  */
 function code(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+  return stripComments(text)
 }
 
 function sourceFiles(dir: string, out: string[] = []): string[] {

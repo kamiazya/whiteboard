@@ -1,8 +1,8 @@
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
+import { FakeVersionHistory } from '@kamiazya/whiteboard-server-core/test-utils/fake-version-history'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
-import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import type { ListedTool } from '../../shared/test-utils/tool-surface-metrics.js'
 import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
@@ -24,7 +24,7 @@ export async function connectDocumentTools(): Promise<{
     documentStore: new InMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
-    versions: new InMemoryVersionHistory(),
+    versions: new FakeVersionHistory(),
     // The daemon's own seam: every mutating tool takes its write lock.
     liveDocuments: liveDocuments(),
     facetRegistry: bundledFacetRegistry,

@@ -1,3 +1,4 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
@@ -45,7 +46,7 @@ export {
  * rankings; without one it is lexical search and nothing else.
  */
 type SearchCandidate = SearchableDocument & {
-  kind?: 'markdown' | 'spatial'
+  kind?: DocumentKind
   /** The nodes and edges a tag filter matched, named for the excerpt. */
   named: readonly string[]
 }

@@ -74,10 +74,10 @@ vi.mock('./pages/BrowserDocumentPage.js', () => ({
 
 // Captures the open callback so a test can drive list -> editor navigation
 // without rendering the real list (which would pull in the store's IDB path).
-let receivedIndexPageOnOpenCanvas: ((path: string) => void) | undefined
+let receivedIndexPageOnOpenDocument: ((path: string) => void) | undefined
 vi.mock('./pages/BrowserIndexPage.js', () => ({
   BrowserIndexPage: ({ onOpenDocument }: { onOpenDocument: (path: string) => void }) => {
-    receivedIndexPageOnOpenCanvas = onOpenDocument
+    receivedIndexPageOnOpenDocument = onOpenDocument
     return <div data-testid="browser-index-page" />
   },
 }))
@@ -574,8 +574,8 @@ describe('App keeper wiring', () => {
       </MemoryRouter>,
     )
     await screen.findByTestId('browser-index-page')
-    expect(receivedIndexPageOnOpenCanvas).toBeDefined()
-    act(() => receivedIndexPageOnOpenCanvas?.('notes/c9'))
+    expect(receivedIndexPageOnOpenDocument).toBeDefined()
+    act(() => receivedIndexPageOnOpenDocument?.('notes/c9'))
     expect(await screen.findByTestId('browser-document-page')).toBeTruthy()
     expect(receivedInitialPath).toBe('notes/c9')
   })
@@ -948,7 +948,7 @@ describe('App daemon provider state', () => {
     expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
     // The editor opens from the escaped list.
-    act(() => receivedIndexPageOnOpenCanvas?.('c1'))
+    act(() => receivedIndexPageOnOpenDocument?.('c1'))
     await screen.findByTestId('browser-document-page')
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })
