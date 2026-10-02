@@ -283,9 +283,10 @@ whole value is that it shrinks.
 
 **`ADAPTER_SCAN_EXEMPT_FILES`** carries by FILE what the wiring exemption —
 a directory list (`di/`, `app.ts`, `http-server.ts`) — misses: a composition
-root living inside an adapter tree. Today that is `mcp/index.ts`, the McpServer
-factory and stdio entry point, which makes the same `createContainer` /
-`resolveServerDeps` calls `http-server.ts` does. It is separate from
+root living inside an adapter tree. It is EMPTY today: `mcp/index.ts`, the
+McpServer factory and stdio entry point, stood here while it called the
+store's own boot functions, and it now boots through
+`di/boot-self-host-deps.ts` like every other root. It is separate from
 `ADAPTERS_REACHING_MECHANICS` on purpose: an exemption is a CLASSIFICATION,
 not debt, and a composition root's edges will never shrink.
 

@@ -628,21 +628,11 @@ export function allowedThirdPartyDependencies(packageName: string): readonly str
 }
 
 /**
- * The scanner's loro-crdt exemption (see `scanner.ts` / `repo-coverage.test.ts`)
- * is data-driven from this set, not an ad hoc heuristic: a package may import
- * `loro-crdt` from source iff it's declared here as an allowed third-party
- * dependency.
- */
-export function packagesAllowedToImportLoroCrdt(): readonly string[] {
-  return Object.entries(ARCHITECTURE_MAP)
-    .filter(([, entry]) => entry.allowedThirdParty.includes('loro-crdt'))
-    .map(([packageName]) => packageName)
-}
-
-/**
  * Every `BoundaryViolationKind` a package's own source is exempt from,
- * combining the automatic loro-crdt exemption above with each package's
- * explicit `exemptBoundaryViolationKinds`, and — when `fileInSrc` (the path
+ * combining the automatic loro-crdt exemption (a package may import
+ * `loro-crdt` from source iff it records it in `allowedThirdParty` — one list,
+ * read here and nowhere else) with each package's explicit
+ * `exemptBoundaryViolationKinds`, and — when `fileInSrc` (the path
  * relative to the package's `src/`, `/`-separated) is given — that file's
  * `exemptBoundaryFiles` entry. `repo-coverage.test.ts` filters
  * `scanSourceForBoundaryViolations` output through this before asserting
