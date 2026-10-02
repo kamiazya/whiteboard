@@ -186,7 +186,8 @@ try {
   const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(handle.db))
   const held = await seed(docs, 'stamp-ws')
   const store = new LibsqlDocumentStore(handle.db)
-  let stampOrder
+  // NaN until the stamp runs, so a stamp that never ran reads as failed below.
+  let stampOrder = Number.NaN
   const stamp = await timed(async () => {
     const stored = await store.readFrontier({
       docRef: { kind: 'workspace-tree', workspaceId: 'stamp-ws' },
