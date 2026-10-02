@@ -3,10 +3,9 @@
  *
  * `adapter-mechanic-check` sees an adapter IMPORT a mechanic. A route that calls
  * `writeFile` or reads `process.env` itself has welded the operation to the
- * host just the same and imports nothing under `store/`, so a planted
- * `routes/zz.ts` doing either passed every guard. This ledgers the disk, the
- * operating system, child processes and the environment in the adapter
- * population, shrink-only, with a reason per file.
+ * host just the same and imports nothing under `store/`, so that scan cannot
+ * see it. This ledgers the disk, the operating system, child processes and the
+ * environment in the adapter population, shrink-only, with a reason per file.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
