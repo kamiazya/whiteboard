@@ -13,7 +13,13 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
-import { renderSpatialCanvasToSvg } from './headless-renderer.js'
+import { renderSpatialCanvasToSvg as renderSvgIn } from './headless-renderer.js'
+import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
+
+const renderSpatialCanvasToSvg = (
+  canvas: Parameters<typeof renderSvgIn>[0],
+  options?: Parameters<typeof renderSvgIn>[2],
+) => renderSvgIn(canvas, NO_INSTALLED_FONTS, options)
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 

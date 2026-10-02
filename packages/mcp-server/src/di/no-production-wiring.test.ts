@@ -31,6 +31,11 @@ const productionSources = {
     eager: true,
     import: 'default',
   }),
+  ...import.meta.glob('../server/stdio-root.ts', {
+    query: '?raw',
+    eager: true,
+    import: 'default',
+  }),
   // The composition itself: `createContainer` takes its store module as an
   // argument, so nothing in here may name the in-memory one.
   ...import.meta.glob('./**/*.ts', { query: '?raw', eager: true, import: 'default' }),

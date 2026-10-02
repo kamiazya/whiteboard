@@ -9,7 +9,11 @@
 // it an answer instead of an internal detail.
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { undrawableCharacters } from './undrawable-characters.js'
+import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
+import { undrawableCharacters as undrawableIn } from './undrawable-characters.js'
+
+const undrawableCharacters = (canvas: Parameters<typeof undrawableIn>[0]) =>
+  undrawableIn(canvas, NO_INSTALLED_FONTS)
 
 const CANVAS = (text: string) => ({
   nodes: [textNode({ id: 'n', x: 0, y: 0, width: 200, height: 60, text })],

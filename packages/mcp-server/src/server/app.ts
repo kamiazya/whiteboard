@@ -360,7 +360,7 @@ export function createApp(options: AppOptions) {
   )
   app.route('/', createFilesRouter({ versionStore, scope }))
   app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments, scope }))
-  app.route('/', createFontsRouter())
+  app.route('/', createFontsRouter({ fontsDir: scope.layout.fontsDir }))
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ credentialResolver, scope }))
   app.route('/', createStatusRouter())

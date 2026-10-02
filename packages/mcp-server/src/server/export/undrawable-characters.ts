@@ -24,8 +24,11 @@ import { loadExportFonts } from './measure-text.js'
  * has the face reads it normally; only rasterisation is lossy. Callers that
  * report this should say which of the two they mean.
  */
-export async function undrawableCharacters(canvas: SpatialCanvas): Promise<readonly string[]> {
-  const fonts = await loadExportFonts()
+export async function undrawableCharacters(
+  canvas: SpatialCanvas,
+  fontsDir: string,
+): Promise<readonly string[]> {
+  const fonts = await loadExportFonts(fontsDir)
   // No parsed face at all means the whole render already degraded to system
   // fonts, which is logged where it happens. Claiming every character is
   // undrawable there would be a second, louder, and wrong report.

@@ -106,7 +106,7 @@ export async function exportCanvasHeadless(
 ): Promise<HeadlessExportResult> {
   const canvas = await readCanvas(args.workspaceId, args.path, args.scope)
   const tagLibrary = await libraryFor(args.workspaceId, canvas, args.scope)
-  return renderSpatialCanvasToPng(canvas, {
+  return renderSpatialCanvasToPng(canvas, args.scope.layout.fontsDir, {
     padding: args.options?.padding,
     scale: args.options?.scale,
     theme: args.options?.theme,
@@ -120,7 +120,7 @@ export async function exportCanvasHeadlessSvg(
 ): Promise<HeadlessSvgExportResult> {
   const canvas = await readCanvas(args.workspaceId, args.path, args.scope)
   const tagLibrary = await libraryFor(args.workspaceId, canvas, args.scope)
-  return renderSpatialCanvasToSvg(canvas, {
+  return renderSpatialCanvasToSvg(canvas, args.scope.layout.fontsDir, {
     padding: args.options?.padding,
     theme: args.options?.theme,
     style: args.options?.style,

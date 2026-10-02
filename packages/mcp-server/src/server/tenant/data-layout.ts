@@ -112,6 +112,12 @@ export function workspaceFilesDir(dataDir: string, tenantId: string, workspaceId
 }
 
 const EXPORTS_DIRNAME = 'exports'
+const FONTS_DIRNAME = 'fonts'
+
+/** Where an installed font lives under a data directory — see `DataLayout.fontsDir`. */
+export function fontsDir(dataDir: string): string {
+  return join(dataDir, FONTS_DIRNAME)
+}
 
 /**
  * The layout of one data directory for one tenant, as the seam adapters take.
@@ -126,6 +132,7 @@ export function createDataLayout(dataDir: string, tenantId: string): DataLayout 
     tenantId,
     workspaceFilesDir: (workspaceId) => workspaceFilesDir(dataDir, tenantId, workspaceId),
     exportsDir: (workspaceId) => join(dataDir, workspaceId, EXPORTS_DIRNAME),
+    fontsDir: fontsDir(dataDir),
   }
 }
 

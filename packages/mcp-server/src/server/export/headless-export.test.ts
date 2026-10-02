@@ -80,8 +80,10 @@ describe('exportCanvasHeadless', () => {
     })
 
     expect(renderSpy).toHaveBeenCalledTimes(1)
-    const [canvas, options] = renderSpy.mock.calls[0]!
+    const [canvas, fontsDir, options] = renderSpy.mock.calls[0]!
     expect(canvas.nodes.map((n) => n.id)).toEqual(['n1'])
+    // The renderer is keyed by the fonts directory of the scope being served.
+    expect(fontsDir).toBe(testStoreScope().layout.fontsDir)
     expect(options).toEqual({ padding: 20, scale: 2, theme: 'dark' })
   })
 
@@ -182,7 +184,7 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
     return doc
   }
   const optionsOf = (spy: { mock: { calls: unknown[][] } }) =>
-    spy.mock.calls[0]?.[1] as { tagLibrary?: unknown } | undefined
+    spy.mock.calls[0]?.[2] as { tagLibrary?: unknown } | undefined
 
   it('hands the renderer the library the document at `tags` declares, for a tagged board', async () => {
     await saveDocument('ws_lib', 'tags', libraryDoc())

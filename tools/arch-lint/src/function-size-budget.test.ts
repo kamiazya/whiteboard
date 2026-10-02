@@ -624,7 +624,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 266,
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 54,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 108,
-  'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
   // same router as POST .../replica-key — one seam for a workspace's whole
   // replica posture rather than a second router with its own mount block.

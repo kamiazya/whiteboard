@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
+  adapterFiles,
   findAdapterGlobalReads,
   findAdapterScopeDefaults,
   findCompositionGlobalReads,
@@ -29,11 +30,8 @@ const SRC_DIR = join(REPO_ROOT, 'packages/mcp-server/src')
  * Guarded from both sides, and its size is pinned: a new entry is a decision
  * somebody states, and a paid-off one has to come out.
  */
-const STILL_READ_BY_ADAPTERS: Record<string, string> = {
-  'export/installed-fonts.ts -> getDataDir':
-    'the installed-font directory is read by the headless exporter and the text measurer, both process singletons keyed by nothing, so a directory cannot reach them without keying those first (a measurer per fonts dir, an exporter per measurer)',
-}
-const LEDGER_SIZE = 1
+const STILL_READ_BY_ADAPTERS: Record<string, string> = {}
+const LEDGER_SIZE = 0
 
 const actual = findAdapterGlobalReads(SERVER_DIR)
 
@@ -65,7 +63,10 @@ describe('an adapter does not read the process data dir or the self-host tenant'
   })
 
   it('scans the adapter population, so a clean result is not an empty walk', () => {
-    expect(actual.length).toBeGreaterThan(0)
+    // With the ledger empty the finding itself proves nothing was read, so the
+    // walk is what is asserted: the routes, the MCP registrations, the export
+    // and search helpers and the top-level files that pass a directory on.
+    expect(adapterFiles(SERVER_DIR).length).toBeGreaterThan(50)
   })
 
   describe('the matcher', () => {

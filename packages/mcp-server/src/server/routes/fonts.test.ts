@@ -6,26 +6,19 @@ import {
   listFontsResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { Hono } from 'hono'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { describe, expect, it, vi } from 'vitest'
 import { FontInstallError } from '../export/install-font.js'
-import { installedFontDir } from '../export/installed-fonts.js'
+import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { withTempDataDir } from './_test-helpers.js'
 import { createFontsRouter } from './fonts.js'
 
 const temp = withTempDataDir('wb-fonts-route-')
 
-beforeEach(() => {
-  setDataDirForTests(temp.dir)
-})
+const fontsDir = () => installedFontsDir(temp.dir)
 
-afterEach(() => {
-  resetDataDirForTests()
-})
-
-function serve(install?: Parameters<typeof createFontsRouter>[0]) {
+function serve(deps: Partial<Parameters<typeof createFontsRouter>[0]> = {}) {
   const app = new Hono()
-  app.route('/', createFontsRouter(install))
+  app.route('/', createFontsRouter({ fontsDir: fontsDir(), ...deps }))
   return app
 }
 
@@ -50,8 +43,8 @@ describe('GET /api/fonts', () => {
 
   it('reports a font as installed once its file is on disk', async () => {
     const target = FONT_CATALOGUE[0]!
-    await mkdir(installedFontDir(), { recursive: true })
-    await writeFile(join(installedFontDir(), `${target.id}.ttf`), 'x')
+    await mkdir(fontsDir(), { recursive: true })
+    await writeFile(join(fontsDir(), `${target.id}.ttf`), 'x')
 
     const body = listFontsResponseSchema.parse(await (await serve().request('/api/fonts')).json())
 
@@ -78,7 +71,8 @@ describe('POST /api/fonts/:id/install', () => {
       family: target().family,
       bytes: 42,
     })
-    expect(install).toHaveBeenCalledWith(target().id)
+    // The directory the router was handed, not the process's.
+    expect(install).toHaveBeenCalledWith(target().id, { fontsDir: fontsDir() })
   })
 
   it('answers 404 for an id the catalogue does not have', async () => {
@@ -126,8 +120,8 @@ describe('POST /api/fonts/:id/install', () => {
 describe('GET /api/fonts/:id/file', () => {
   it('serves an installed font as bytes, so the browser can register the same face', async () => {
     const target = FONT_CATALOGUE[0]!
-    await mkdir(installedFontDir(), { recursive: true })
-    await writeFile(join(installedFontDir(), `${target.id}.ttf`), 'font-bytes')
+    await mkdir(fontsDir(), { recursive: true })
+    await writeFile(join(fontsDir(), `${target.id}.ttf`), 'font-bytes')
 
     const res = await serve().request(`/api/fonts/${target.id}/file`)
 

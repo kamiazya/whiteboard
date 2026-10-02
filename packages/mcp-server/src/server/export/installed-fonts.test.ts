@@ -11,57 +11,52 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
+import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { renderSpatialCanvasToPng } from './headless-renderer.js'
-import { installedFontDir, installedFontFiles } from './installed-fonts.js'
+import { installedFontFiles } from './installed-fonts.js'
 import { undrawableCharacters } from './undrawable-characters.js'
 
 let dataDir: string
+let fontsDir: string
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), 'wb-fonts-'))
-  setDataDirForTests(dataDir)
-})
-
-afterEach(() => {
-  resetDataDirForTests()
+  fontsDir = installedFontsDir(dataDir)
 })
 
 describe('installedFontFiles', () => {
   it('is empty when nothing has been installed', async () => {
-    expect(await installedFontFiles()).toEqual([])
+    expect(await installedFontFiles(fontsDir)).toEqual([])
   })
 
   it('is empty when the directory does not exist at all', async () => {
-    setDataDirForTests(join(dataDir, 'nope'))
-
     // A daemon that has never installed a font must export exactly as before,
     // not fail because a directory is missing.
-    expect(await installedFontFiles()).toEqual([])
+    expect(await installedFontFiles(join(dataDir, 'nope', 'fonts'))).toEqual([])
   })
 
   it('finds font files a user dropped in, sorted for reproducibility', async () => {
-    await mkdir(installedFontDir(), { recursive: true })
+    await mkdir(fontsDir, { recursive: true })
     for (const name of ['zeta.ttf', 'alpha.otf', 'beta.ttc']) {
-      await writeFile(join(installedFontDir(), name), 'not really a font')
+      await writeFile(join(fontsDir, name), 'not really a font')
     }
 
-    expect(await installedFontFiles()).toEqual([
-      join(installedFontDir(), 'alpha.otf'),
-      join(installedFontDir(), 'beta.ttc'),
-      join(installedFontDir(), 'zeta.ttf'),
+    expect(await installedFontFiles(fontsDir)).toEqual([
+      join(fontsDir, 'alpha.otf'),
+      join(fontsDir, 'beta.ttc'),
+      join(fontsDir, 'zeta.ttf'),
     ])
   })
 
   it('ignores anything that is not a font file', async () => {
-    await mkdir(installedFontDir(), { recursive: true })
-    await writeFile(join(installedFontDir(), 'notes.txt'), 'x')
-    await writeFile(join(installedFontDir(), '.DS_Store'), 'x')
-    await writeFile(join(installedFontDir(), 'real.ttf'), 'x')
+    await mkdir(fontsDir, { recursive: true })
+    await writeFile(join(fontsDir, 'notes.txt'), 'x')
+    await writeFile(join(fontsDir, '.DS_Store'), 'x')
+    await writeFile(join(fontsDir, 'real.ttf'), 'x')
 
-    expect(await installedFontFiles()).toEqual([join(installedFontDir(), 'real.ttf')])
+    expect(await installedFontFiles(fontsDir)).toEqual([join(fontsDir, 'real.ttf')])
   })
 })
 
@@ -88,12 +83,12 @@ describe('an installed font reaches both the renderer and the report', () => {
   }
 
   it('stops reporting characters it can now draw', async () => {
-    expect(await undrawableCharacters(CANVAS)).toEqual([COVERED])
+    expect(await undrawableCharacters(CANVAS, fontsDir)).toEqual([COVERED])
 
-    await mkdir(installedFontDir(), { recursive: true })
-    await writeSyntheticFont(join(installedFontDir(), 'covered.ttf'))
+    await mkdir(fontsDir, { recursive: true })
+    await writeSyntheticFont(join(fontsDir, 'covered.ttf'))
 
-    expect(await undrawableCharacters(CANVAS)).toEqual([])
+    expect(await undrawableCharacters(CANVAS, fontsDir)).toEqual([])
   })
 
   // The report changing is NOT evidence the picture did: they are wired
@@ -102,11 +97,11 @@ describe('an installed font reaches both the renderer and the report', () => {
   // own assertion — on the PIXELS, since that is the only place the answer
   // exists.
   it('renders glyphs the vendored face lacks', async () => {
-    const tofu = await renderSpatialCanvasToPng(CANVAS, { theme: 'light' })
+    const tofu = await renderSpatialCanvasToPng(CANVAS, fontsDir, { theme: 'light' })
 
-    await mkdir(installedFontDir(), { recursive: true })
-    await writeSyntheticFont(join(installedFontDir(), 'covered.ttf'))
-    const drawn = await renderSpatialCanvasToPng(CANVAS, { theme: 'light' })
+    await mkdir(fontsDir, { recursive: true })
+    await writeSyntheticFont(join(fontsDir, 'covered.ttf'))
+    const drawn = await renderSpatialCanvasToPng(CANVAS, fontsDir, { theme: 'light' })
 
     // Same canvas, same size, different ink. Byte equality would mean resvg
     // painted the identical tofu box — which is exactly what happens when the
