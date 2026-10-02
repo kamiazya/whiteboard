@@ -28,6 +28,7 @@ import {
   supportBundleManifestSchema,
 } from '../shared/diagnostics/support-bundle.js'
 import { isMissingFileError } from '../shared/errno.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
   OPERATOR_JSON_SCHEMA_VERSION,
   operatorJsonLine,
@@ -44,7 +45,7 @@ export interface ServerSupportBundleOptions {
   env?: NodeJS.ProcessEnv
   /** Test seam: pin createdAt for deterministic bundles. */
   now?: () => string
-  /** Test seam: substitute package version. */
+  /** Test seam: substitute package version; defaults to the one this package ships. */
   packageVersion?: string
   /** Test seam: substitute platform summary. */
   platform?: { os: string; nodeVersion: string }
@@ -219,7 +220,7 @@ export async function runServerSupportBundle(
     outputDir,
     env = process.env,
     now = () => new Date().toISOString(),
-    packageVersion = '0.0.0',
+    packageVersion = PACKAGE_VERSION,
     platform = { os: process.platform, nodeVersion: process.version },
     doRunStatus = defaultRunStatus,
     doRunDoctor = defaultRunDoctor,

@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { supportBundleStatusSectionSchema } from '../shared/diagnostics/support-bundle.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
 import { main } from './dispatcher.js'
@@ -155,6 +157,50 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
       'manifest.json',
       'status.json',
     ])
+  })
+
+  // The bundle is what gets attached to a bug report, and its version is the
+  // first thing a maintainer reads: every helper test injects one, so only the
+  // dispatcher shows what an operator's real run stamps.
+  it('stamps the version this package ships, not a placeholder', async () => {
+    const outputDir = join(root, 'cli-version-out')
+
+    await captureStdio(() =>
+      main([
+        'daemon',
+        'support-bundle',
+        '--json',
+        `--data-dir=${join(root, 'cli-version-data')}`,
+        `--output-dir=${outputDir}`,
+      ]),
+    )
+
+    const manifest = JSON.parse(await readFile(join(outputDir, 'manifest.json'), 'utf-8'))
+    expect(manifest.packageVersion).toBe(PACKAGE_VERSION)
+  })
+
+  it('writes a status section the status contract derives, nothing beside it', async () => {
+    const outputDir = join(root, 'cli-status-out')
+
+    await captureStdio(() =>
+      main([
+        'daemon',
+        'support-bundle',
+        '--json',
+        `--data-dir=${join(root, 'cli-status-data')}`,
+        `--output-dir=${outputDir}`,
+      ]),
+    )
+
+    const status = JSON.parse(await readFile(join(outputDir, 'status.json'), 'utf-8'))
+    expect(supportBundleStatusSectionSchema.parse(status)).toMatchObject({
+      schemaVersion: 1,
+      recordFound: false,
+      pidAlive: null,
+      pingOk: null,
+      statusOk: null,
+      record: null,
+    })
   })
 
   it('missing --output-dir: exit 64, stdout empty, stderr usage error', async () => {

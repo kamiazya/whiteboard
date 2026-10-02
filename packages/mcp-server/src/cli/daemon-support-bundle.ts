@@ -15,6 +15,7 @@ import {
   type SupportBundleInput,
 } from '../shared/diagnostics/support-bundle.js'
 import { writeSupportBundle } from '../shared/diagnostics/support-bundle-writer.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 import { runDaemonStatus } from './daemon-status.js'
 import {
@@ -30,9 +31,8 @@ export interface DaemonSupportBundleOptions {
   // deterministic in regression tests. Production callers leave it
   // undefined and get `new Date().toISOString()`.
   now?: () => string
-  // Test seam: substitute `package.json#version`. Production reads
-  // it through a bundler-injected constant (passed in by callers
-  // that have access; the CLI dispatcher passes a fixed string).
+  // Test seam: substitute `package.json#version`. Production callers leave it
+  // undefined and the bundle carries the version this package ships.
   packageVersion?: string
   // Test seam: substitute the platform summary so smoke + jsdom
   // tests don't depend on the host's actual `process.platform` /
@@ -69,7 +69,7 @@ export async function runDaemonSupportBundle(
 ): Promise<DaemonSupportBundleOutcome> {
   const { dataDir, outputDir } = options
   const now = options.now ?? (() => new Date().toISOString())
-  const packageVersion = options.packageVersion ?? '0.0.0'
+  const packageVersion = options.packageVersion ?? PACKAGE_VERSION
   const platform = options.platform ?? { os: process.platform, nodeVersion: process.version }
 
   // Source: daemon status + doctor. Each upstream helper
