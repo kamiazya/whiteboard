@@ -24,21 +24,21 @@ function unusableRecordCheck(
         id: 'daemon.record',
         status: 'error',
         summary: 'Daemon record not found.',
-        remediation: 'Start the daemon with: whiteboard daemon run --json',
+        remediation: 'Start the daemon with: whiteboard daemon run',
       }
     case 'malformed':
       return {
         id: 'daemon.record',
         status: 'error',
         summary: 'Daemon record is malformed.',
-        remediation: 'Remove the daemon record and restart: whiteboard daemon run --json',
+        remediation: 'Remove the daemon record and restart: whiteboard daemon run',
       }
     case 'token-missing':
       return {
         id: 'daemon.record',
         status: 'error',
         summary: 'Daemon record is present but has no token.',
-        remediation: 'Restart the daemon: whiteboard daemon run --json',
+        remediation: 'Restart the daemon: whiteboard daemon run',
       }
   }
 }
@@ -78,7 +78,7 @@ export async function runDaemonDoctor(
     id: 'daemon.process',
     status: alive ? 'ok' : 'error',
     summary: alive ? 'Daemon process is running.' : 'Daemon process is not running.',
-    remediation: alive ? undefined : 'Start the daemon: whiteboard daemon run --json',
+    remediation: alive ? undefined : 'Start the daemon: whiteboard daemon run',
   })
 
   const skew = describeDaemonVersionSkew(
