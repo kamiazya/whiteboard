@@ -288,6 +288,24 @@ properties on one PR passed over the defect they exist to catch because
 each generator had a schema it had never met, and one walk in model — the
 package every generator can reach — is the permanent answer.
 
+### The settings store reads tolerantly and writes strictly
+
+`user-settings-store` READS through `tolerantAnswer(userSettingsSchema)` and
+WRITES through the strict schema. Adding an optional field needs no version
+bump: a tab on an older build reads past a key it does not know, and its next
+write drops only that field. A type change (including a new value of an
+existing enum) or a removed/required field is breaking and needs a new key
+plus a migration. `user-settings-store.skew.test.ts` holds the skew case.
+
+### The editor refuses an image where it is picked
+
+Image intake (pick, drop, paste, group background) goes through
+`use-image-intake`, which checks the file against `lib/image-upload-policy`
+(the daemon's contract, from daemon-client's `api-contracts/files`) and
+reports every refusal in the `ImageIntake` live notice.
+`DocumentFileAdapter.storeImage` answers `{ok, ref} | {ok: false, reason}`,
+never `undefined`, so a refused upload says why.
+
 ### The settings migrations are total, and say so under a property
 
 `lib/user-settings-store.property.test.ts` draws whole v1, v2 and v3
