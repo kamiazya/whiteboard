@@ -20,6 +20,13 @@
  * predicates with a property over them rather than conditions inline at two
  * call sites.
  *
+ * `collectableFromBackup` is called by the mirror's retention pass.
+ * `sealableSnapshots` has no production caller on purpose: it presumes a
+ * mirror running behind the snapshot, which an in-pass mirror never is
+ * (ADR-0021's status note says when it becomes the right tool). Its property
+ * test, with `snapshotIsRestorable` as the invariant, is what keeps it correct
+ * meanwhile; a restore checks the filesystem instead of calling either.
+ *
  * Blob liveness in the *store* is a different question, answered by file-GC,
  * and deliberately not answered here — ADR-0021 decision 5 keeps the blob
  * store and the blob backup apart precisely so garbage collection's fencing

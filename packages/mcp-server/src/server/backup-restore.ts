@@ -388,9 +388,12 @@ const MIRROR_STORE_DIRNAMES = ['blobs', 'files']
  *
  * Checked before anything is written, not as it goes: a restore that fails
  * halfway leaves a data directory that looks restored and is missing files,
- * and the operator finds out when a document renders a hole. That check is
- * `snapshotIsRestorable`, and ADR-0021 decision 6 names a restore attempt as
- * the moment to call it.
+ * and the operator finds out when a document renders a hole. ADR-0021
+ * decision 6 names a restore attempt as the moment to check, and the check is
+ * the `pathExists` pass below over everything the manifest says the mirror
+ * must hold. `snapshotIsRestorable` states the same containment over id sets
+ * and is what the retention property tests hold; this path asks the
+ * filesystem, so it does not call it.
  */
 async function materialiseMirroredBlobs(
   backupDir: string,
