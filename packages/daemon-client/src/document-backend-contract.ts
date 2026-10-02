@@ -14,25 +14,10 @@
  * sync-frames.ts, so there is no parallel re-declaration of those shapes.
  */
 
-// ── Payload types re-exported from the Zod SoT ───────────────────────────────
-// All payload types originate from z.infer<> in sync-frames.ts.
-export type {
-  ClientTextMessage,
-  RestoreStartedMessage,
-  ServerTextMessage,
-  VersionCreatedPayload,
-  ViewportRequestMessage,
-} from './sync-frames.js'
-
-export {
-  clientReadyMessageSchema,
-  clientTextMessageSchema,
-  restoreCompleteMessageSchema,
-  restoreStartedMessageSchema,
-  serverTextMessageSchema,
-  versionCreatedMessageSchema,
-  viewportRequestMessageSchema,
-} from './sync-frames.js'
+// ── The one payload type a root reads through this contract ──────────────────
+// It originates from z.infer<> in sync-frames.ts; the frame schemas themselves
+// are read from that module, not re-exported here.
+export type { VersionCreatedPayload } from './sync-frames.js'
 
 // ── Inbound callback surface (hook receives from backend) ─────────────────────
 
@@ -43,7 +28,7 @@ import type {
   ViewportRequestMessage,
 } from './sync-frames.js'
 
-export type RestoreStartedPayload = RestoreStartedMessage
+type RestoreStartedPayload = RestoreStartedMessage
 export type ViewportRequestPayload = ViewportRequestMessage
 export type AgentActivityPayload = AgentActivityMessage
 

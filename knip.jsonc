@@ -102,15 +102,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/daemon-client": {
-      "project": ["src/**/*.ts"],
-      "ignoreIssues": {
-        // ponytail: the websocket frame schemas and their re-exports, kept
-        // exported while the module is renamed as a unit; trim them to what
-        // the roots import (as the other contracts here were) and drop these
-        // two entries together.
-        "src/ws-messages.ts": ["exports", "types"],
-        "src/document-backend-contract.ts": ["exports", "types"]
-      }
+      "project": ["src/**/*.ts"]
     },
     "packages/facet-engine": {
       "project": ["src/**/*.ts"]

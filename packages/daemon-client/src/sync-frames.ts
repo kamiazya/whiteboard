@@ -16,12 +16,12 @@ export const versionCreatedMessageSchema = z.object({
   version: versionCreatedPayloadSchema,
 })
 
-export const restoreStartedMessageSchema = z.object({
+const restoreStartedMessageSchema = z.object({
   type: z.literal('restore_started'),
   label: z.string().optional(),
 })
 
-export const restoreCompleteMessageSchema = z.object({
+const restoreCompleteMessageSchema = z.object({
   type: z.literal('restore_complete'),
 })
 
@@ -53,7 +53,7 @@ export const agentActivityMessageSchema = z.object({
 // declaration in server-core (which the tool, the port and the HTTP route
 // read too). Not strict, like every other frame here: the producer is a
 // locally-installed daemon and the consumer an auto-updating page.
-export const viewportRequestMessageSchema = z.object({
+const viewportRequestMessageSchema = z.object({
   type: z.literal('viewport_request'),
   requestId: z.string(),
   ...viewportRequestParamsSchema.shape,
@@ -73,16 +73,14 @@ export const serverTextMessageSchema = z.discriminatedUnion('type', [
 ])
 
 export type VersionCreatedPayload = z.infer<typeof versionCreatedPayloadSchema>
-export type VersionCreatedMessage = z.infer<typeof versionCreatedMessageSchema>
 export type RestoreStartedMessage = z.infer<typeof restoreStartedMessageSchema>
-export type RestoreCompleteMessage = z.infer<typeof restoreCompleteMessageSchema>
 export type ViewportRequestMessage = z.infer<typeof viewportRequestMessageSchema>
 export type AgentActivityMessage = z.infer<typeof agentActivityMessageSchema>
 export type ServerTextMessage = z.infer<typeof serverTextMessageSchema>
 
 // ── Client → Server ──────────────────────────────────────────────────────────
 
-export const clientReadyMessageSchema = z.object({
+const clientReadyMessageSchema = z.object({
   type: z.literal('client_ready'),
 })
 
@@ -95,5 +93,4 @@ export const clientReadyMessageSchema = z.object({
  */
 export const clientTextMessageSchema = z.discriminatedUnion('type', [clientReadyMessageSchema])
 
-export type ClientReadyMessage = z.infer<typeof clientReadyMessageSchema>
 export type ClientTextMessage = z.infer<typeof clientTextMessageSchema>
