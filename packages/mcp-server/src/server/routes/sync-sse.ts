@@ -20,7 +20,7 @@ import {
   syncClientMessageRequestSchema,
   syncSubscribeRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { invalidRequestBody, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
@@ -167,7 +167,7 @@ function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
 
 async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
   const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
-  if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+  if (!parsed.success) return c.json(invalidRequestBody(parsed.error), 400)
 
   // Resolved before the gate, so membership is decided for the workspace
   // a key actually reaches, whichever handle named it.
@@ -218,7 +218,7 @@ async function handleSubscribe(c: Context, admit: WorkspaceAdmit | undefined) {
 // upstream channel of its own, so its messages arrive here.
 async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
   const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
-  if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+  if (!parsed.success) return c.json(invalidRequestBody(parsed.error), 400)
 
   const doc = { key: await canonicalDocKey(parsed.data.doc), as: parsed.data.doc }
   const refusal = await firstMembershipRefusal(c, admit, [doc.key])

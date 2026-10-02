@@ -11,6 +11,7 @@ import {
   type ApiErrorBody,
   WorkspaceNotFoundForCallerError,
 } from '@kamiazya/whiteboard-server-core'
+import type { z } from 'zod'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
 import { validationErrorBody } from '../../validators.js'
 
@@ -161,6 +162,40 @@ export function refusedBy(validate: () => void): { error: string; message: strin
     throw err
   }
 }
+
+/**
+ * Why a strict request body was refused, for a route whose own sentence names
+ * the fields it wants.
+ *
+ * Request bodies are strict so a caller learns that a field it sent did not
+ * take effect — which only works if the refusal says so. A fixed sentence
+ * ("displayName is required") is right for a missing or mistyped field and
+ * wrong for a key the daemon does not know, where it accuses a field the
+ * caller DID send: a newer page posting a new field to an older daemon is
+ * sent looking in the wrong place. So an unrecognised key is named, and the
+ * route's own sentence answers everything else.
+ */
+export function refusalReason(error: z.ZodError, fallback: string): string {
+  const unknown = error.issues.filter((issue) => issue.code === 'unrecognized_keys')
+  return unknown.length === 0 ? fallback : unknown.map((issue) => issue.message).join('; ')
+}
+
+/** `refusalReason` as the Problem Details body the `{ title }` routes answer with. */
+export const titleRefusal = (error: z.ZodError, fallback: string): ApiErrorBody => ({
+  title: refusalReason(error, fallback),
+})
+
+/** `refusalReason` as the `{ error, message }` body the metadata routes answer with. */
+export const invalidBodyRefusal = (
+  error: z.ZodError,
+  fallback: string,
+): { error: 'invalid_body'; message: string } => ({
+  error: 'invalid_body',
+  message: refusalReason(error, fallback),
+})
+
+/** `refusalReason` read off the parse error, for `jsonBody`'s title hook. */
+export const titleOr = (fallback: string) => (error: z.ZodError) => refusalReason(error, fallback)
 
 /**
  * A request body parsed under `schema`, or the 400 that refuses it.

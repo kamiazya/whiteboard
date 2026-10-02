@@ -12,7 +12,7 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { validateDocumentPath, validateVersionId } from '../../validators.js'
-import { handleCorruptStoredData, refusedBy } from './_shared.js'
+import { handleCorruptStoredData, refusalReason, refusedBy } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface RestoreRouterOptions {
@@ -119,7 +119,12 @@ function restoreOptionsFrom(
   }
   const parsed = restoreVersionRequestSchema.safeParse(parsedJson)
   if (!parsed.success) {
-    return { refusal: { error: 'invalid_body', message: 'invalid restore options' } }
+    return {
+      refusal: {
+        error: 'invalid_body',
+        message: refusalReason(parsed.error, 'invalid restore options'),
+      },
+    }
   }
   return {
     targetPath: parsed.data.targetPath,
