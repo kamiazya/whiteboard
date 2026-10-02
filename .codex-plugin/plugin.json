@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Whiteboard",
     "shortDescription": "Collaborative whiteboard for AI agents",
-    "longDescription": "Runs a live whiteboard in your browser and exposes MCP tools so Codex can draw, annotate, and refine diagrams alongside you. Canvases live locally under ~/.whiteboard/ as OKF Markdown or JSON Canvas 1.0.",
+    "longDescription": "Exposes MCP tools so Codex can draw, annotate, and refine diagrams alongside you, and shows the same canvas live in the hosted web app once the whiteboard browser extension connects it to your local daemon. Canvases live locally under ~/.whiteboard/ as OKF Markdown or JSON Canvas 1.0.",
     "developerName": "kamiazya",
     "category": "Productivity",
     "capabilities": [
@@ -31,7 +31,7 @@
     "websiteURL": "https://github.com/kamiazya/whiteboard",
     "defaultPrompt": [
       "Sketch the architecture for this service on the whiteboard",
-      "Draw a request flow diagram and export it as PNG",
+      "Draw a request flow diagram and render the canvas as SVG",
       "Open the whiteboard and annotate the current design"
     ]
   }
