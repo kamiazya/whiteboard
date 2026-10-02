@@ -10,7 +10,6 @@ import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
 import type { StoreScope } from '../store/store-scope.js'
-import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { computeStorageReport } from './runtime-storage.js'
 
 export interface RuntimeRouterOptions {
@@ -26,9 +25,11 @@ export interface RuntimeRouterOptions {
    * route-scope registry had already declared, not working, with nothing red.
    */
   credentialResolver: CredentialResolver
-  /** The data directory the storage report walks. */
-  dataLayout: DataLayout
-  /** Whose workspace records the compaction stamp is read from: the same directory as `dataLayout`. */
+  /**
+   * The directory this router serves: the storage report walks `scope.dataDir`
+   * and the compaction stamp is read from the same scope's workspace records,
+   * so the two cannot name different directories.
+   */
   scope: StoreScope
 }
 
@@ -92,7 +93,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   // a separate round trip.
   app.get('/api/runtime/storage', async (c) => {
     options.touch()
-    const report = await computeStorageReport(options.dataLayout.dataDir)
+    const report = await computeStorageReport(options.scope.dataDir)
     const lastAutoCompactedAt = await readLatestCompactedAt(options.scope)
     return c.json({ ...report, lastAutoCompactedAt })
   })

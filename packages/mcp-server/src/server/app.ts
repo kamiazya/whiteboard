@@ -372,7 +372,6 @@ export function createApp(options: AppOptions) {
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       credentialResolver,
-      dataLayout: options.dataLayout,
       scope,
     }),
   )
