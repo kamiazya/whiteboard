@@ -10,13 +10,18 @@
 // checkout — mutating the checkout to force those same paths red is done
 // separately, by hand, as this task's required mutation checks.
 
-import { readdirSync, readFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { sharedBrowserTestConfig } from '../../../vitest.browser.shared.js'
+import setupTraces, {
+  claimTracesDir,
+  sharedBrowserTestConfig,
+  TRACES_DIR,
+} from '../../../vitest.browser.shared.js'
 import { REPO_ROOT } from './scan-roots.js'
 
 const ROOT = REPO_ROOT
@@ -371,6 +376,100 @@ describe('sharedBrowserTestConfig trace budget', () => {
   it('records them when the trace script asks for them', () => {
     process.env[VAR] = '1'
     expect(sharedBrowserTestConfig().trace.snapshots).toBe(true)
+  })
+})
+
+/**
+ * Who may delete a browser project's trace directory.
+ *
+ * Vitest loads every project config on every invocation, and the directory used
+ * to be cleared as the config loaded. So a run that touched no browser project
+ * wiped all four trace directories, and a browser run's directory was deleted
+ * under it by any run starting later: its `tracing.stopChunk` then failed with
+ * ENOENT and a PASSING test was reported failed. Clearing now happens in a
+ * per-project globalSetup, which vitest runs only for a project the run
+ * includes, and it leaves a directory that another live run holds.
+ */
+describe('browser traces directory ownership', () => {
+  let dir: string
+  const children: Array<{ kill: () => boolean }> = []
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'browser-traces-'))
+  })
+
+  afterEach(async () => {
+    for (const child of children.splice(0)) child.kill()
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  const marker = (pid: number) => join(dir, `.live-${pid}`)
+
+  /** A real second process that stays alive until the test ends. */
+  function liveOtherPid(): number {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      stdio: 'ignore',
+    })
+    children.push(child)
+    return child.pid as number
+  }
+
+  /** The pid of a process that has exited. */
+  function deadPid(): number {
+    return spawnSync(process.execPath, ['-e', '']).pid
+  }
+
+  it('clears what an earlier run left when no other run holds the directory', async () => {
+    await writeFile(join(dir, 'earlier.trace.zip'), 'x')
+    claimTracesDir(dir)
+    expect(readdirSync(dir)).toEqual([`.live-${process.pid}`])
+  })
+
+  it('leaves the directory alone while another live run holds it', async () => {
+    await writeFile(join(dir, 'in-flight.network'), 'x')
+    await writeFile(marker(liveOtherPid()), '')
+    claimTracesDir(dir)
+    expect(existsSync(join(dir, 'in-flight.network'))).toBe(true)
+    expect(existsSync(marker(process.pid))).toBe(true)
+  })
+
+  it('does not count a run that died without releasing', async () => {
+    await writeFile(join(dir, 'earlier.trace.zip'), 'x')
+    await writeFile(marker(deadPid()), '')
+    claimTracesDir(dir)
+    expect(readdirSync(dir)).toEqual([`.live-${process.pid}`])
+  })
+
+  it('releases only its own record, so another run keeps its hold', async () => {
+    const other = liveOtherPid()
+    await writeFile(marker(other), '')
+    const release = claimTracesDir(dir)
+    release()
+    expect(readdirSync(dir)).toEqual([`.live-${other}`])
+  })
+
+  it('takes the directory under the project root its globalSetup is given', async () => {
+    const release = setupTraces({ config: { root: dir } } as unknown as Parameters<
+      typeof setupTraces
+    >[0])
+    expect(existsSync(join(dir, TRACES_DIR, `.live-${process.pid}`))).toBe(true)
+    release()
+    expect(existsSync(join(dir, TRACES_DIR, `.live-${process.pid}`))).toBe(false)
+  })
+
+  it('is registered by every browser project, or its traces are never cleared', async () => {
+    const { readVitestProjects } = await importVitestProjects()
+    const browser = readVitestProjects(REPO_ROOT).filter((project) => project.isBrowser)
+    expect(browser.length, 'the scan reached the browser projects').toBe(4)
+    const unregistered = browser
+      .filter(
+        (project) =>
+          !readFileSync(join(REPO_ROOT, project.configPath), 'utf-8').includes(
+            'globalSetup: [browserTracesSetup]',
+          ),
+      )
+      .map((project) => project.configPath)
+    expect(unregistered).toEqual([])
   })
 })
 
