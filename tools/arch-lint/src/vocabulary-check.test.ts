@@ -55,9 +55,8 @@ const PACKAGE_SRC_DIRS: readonly string[] = readdirSync(join(REPO_ROOT, 'package
  * Production source that still says WebSocket / WS, with why. The WebSocket
  * transport is retired (ADR-0050): every page syncs over an SSE stream with
  * POSTs upstream, so a comment calling it live sends the next reader to a
- * transport that is gone. Two kinds of entry, and the second is meant to
- * shrink: files that STATE the retirement (the word is the point), and files
- * another lane owned when the guard landed, swept the wave after.
+ * transport that is gone. An entry is a file that STATES the retirement (the
+ * word is the point) or whose text is sample content.
  */
 const WEBSOCKET_WORDING: Readonly<Record<string, string>> = {
   'packages/daemon-client/src/sse-backend.ts': 'says why a page has no WebSocket path',
@@ -66,40 +65,18 @@ const WEBSOCKET_WORDING: Readonly<Record<string, string>> = {
   'apps/web/src/pages/ServerModeWorkspace.tsx': 'says server mode has no WebSocket',
   'packages/server-core/src/search/search-corpus.ts':
     'sample document text the search tests index; the word is its content',
-  // W7 lane C owns these; sweep next wave.
-  'apps/web/src/components/VersionTimeline.tsx': 'W7 lane C owns; sweep next wave',
-  'apps/web/src/hooks/use-agent-activity.ts': 'W7 lane C owns; sweep next wave',
-  'apps/web/src/hooks/use-workspace-address-sync.ts': 'W7 lane C owns; sweep next wave',
-  'apps/web/src/lib/browser-backend.ts': 'W7 lane C owns; sweep next wave',
-  'apps/web/src/pages/DaemonDocumentPage.tsx': 'W7 lane C owns; sweep next wave',
-  'packages/daemon-client/src/document-backend-contract.ts': 'W7 lane C owns; sweep next wave',
-  'packages/daemon-client/src/sync-sse-contract.ts': 'W7 lane C owns; sweep next wave',
-  // W7 lane B owns these; sweep next wave.
-  'packages/mcp-server/src/daemon/daemon-registry.ts': 'W7 lane B owns; sweep next wave',
-  // W7 lane A owns these; sweep next wave.
-  'packages/mcp-server/src/server/store/doc-cache.ts': 'W7 lane A owns; sweep next wave',
-  'packages/mcp-server/src/server/store/document-store.ts': 'W7 lane A owns; sweep next wave',
-  'packages/mcp-server/src/server/store/workspace-doc-cache.ts': 'W7 lane A owns; sweep next wave',
-  // W7 lane G owns these; sweep next wave.
-  'packages/mcp-server/src/server/backup-restore.ts': 'W7 lane G owns; sweep next wave',
-  'packages/mcp-server/src/server/routes/document.ts': 'W7 lane G owns; sweep next wave',
 }
 
 /**
  * Where `browser-local` survives under `packages/*\/src`, with why. The first
  * is a quoted assertion ABOUT the retired word; the second is sample text a
- * search test indexes; the rest belong to a lane that owned the file when the
- * guard reached `packages/`.
+ * search test indexes.
  */
 const BROWSER_LOCAL_IN_PACKAGES: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/routes/document/promote-workspace.test.ts':
     'pins that the retired keeper id gets no special pass; naming it is the assertion',
   'packages/server-core/src/search/search-corpus.ts':
     'sample document text the search tests index; the word is its content',
-  'packages/daemon-client/src/document-backend-contract.ts': 'W7 lane C owns; sweep next wave',
-  'packages/daemon-client/src/document-backend.contract.test.ts': 'W7 lane C owns; sweep next wave',
-  'packages/daemon-client/src/test-utils/document-backend-contract.ts':
-    'W7 lane C owns; sweep next wave',
 }
 
 /** Test and test-support source: a test may spell what it asserts about. */

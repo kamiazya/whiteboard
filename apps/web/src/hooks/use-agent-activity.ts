@@ -35,7 +35,7 @@ const IDLE: AgentActivityState = {
 
 /**
  * Holds the transient "an agent just did something here" state behind the
- * `agent_activity` WebSocket message.
+ * `agent_activity` sync-stream frame.
  *
  * Both timers RESTART on every report rather than accumulating, so a burst of
  * batches reads as one continuous session instead of a flicker, and the

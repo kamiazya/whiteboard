@@ -65,8 +65,8 @@ interface Props {
    * on it rather than in a panel that a narrow screen puts at the far edge.
    */
   onPreview?: (session: VersionPreviewSession | null) => void
-  // Bumped by the caller (e.g. after a manual save, or a WS
-  // version_created broadcast) to force a refetch without waiting for the
+  // Bumped by the caller (e.g. after a manual save, or a sync-stream
+  // version_created frame) to force a refetch without waiting for the
   // 15s poll. Only a value CHANGE triggers a refetch, matching
   // HeaderBranchChip's refreshSignal contract.
   refreshSignal?: number

@@ -167,7 +167,7 @@ async function workspaceTreeIndex(scope: StoreScope): Promise<LoroWorkspaceDocum
  * the path is new.
  *
  * A save that names no kind and finds none on the tree or in the doc's own
- * bytes is a lazy-create of an empty document (the WS/update path on an
+ * bytes is a lazy-create of an empty document (an update route hit on an
  * unknown path); the spatial editor is what opens those, so `'spatial'` is
  * the honest default — not a guess about someone else's data.
  *
@@ -212,7 +212,7 @@ function placeDocumentInTree({
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
 //    upserting the matching DB rows. ──
 // overwrite defaults to false so canvas_create does not destroy existing
-// data by mistake. Normal incremental saves (WS updates, live-doc and
+// data by mistake. Normal incremental saves (update-route writes, live-doc and
 // restore writes, compactDocument) must pass overwrite: true.
 /**
  * Called after every successful `saveDocument`.
@@ -319,7 +319,7 @@ export async function loadDocument(
 
 /**
  * `loadDocument` through the resident LRU (doc-cache.ts), which is what most
- * callers want: a WS frame, an export, and a version read of the same
+ * callers want: a sync update, an export, and a version read of the same
  * document within a session should share one LoroDoc rather than each
  * rebuilding several MiB of CRDT history. Reach for `loadDocument` directly
  * only when a *fresh* instance is the point.
@@ -681,7 +681,7 @@ async function moveThroughIndex(
  *
  * A SOURCE path: a caller still reading through it should lazily create a
  * fresh canvas rather than resurrect the moved doc's cached instance. A
- * DESTINATION path: a WS connect or update-route call against it before this
+ * DESTINATION path: a snapshot or update-route call against it before this
  * move can lazily cache an empty phantom doc there, and leaving that phantom
  * cached would shadow the just-moved canvas's real content.
  */

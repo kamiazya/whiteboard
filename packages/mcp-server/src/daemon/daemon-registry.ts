@@ -17,7 +17,7 @@ export type { DaemonRecord } from './daemon-record-schema.js'
 
 /**
  * Exported so `backupDataDir` can keep it OUT of a backup. The file holds the
- * Bearer token the daemon authenticates HTTP and WS with — which is why it is
+ * Bearer token the daemon authenticates its HTTP routes and sync stream with — which is why it is
  * written 0o600 below — and a backup directory is the opposite of owner-only.
  */
 export const DAEMON_RECORD_FILENAME = 'daemon.json'
@@ -78,7 +78,7 @@ export async function saveDaemonRecord(
   dataDir: string = DATA_DIR,
 ): Promise<void> {
   await mkdir(dataDir, { recursive: true })
-  // daemon.json contains the Bearer token used for HTTP / WS auth, so keep it
+  // daemon.json contains the Bearer token used to authenticate HTTP routes and the sync stream, so keep it
   // owner-only (0o600).
   await writeFileAtomic(getDaemonRecordPath(dataDir), JSON.stringify(record, null, 2), {
     mode: 0o600,

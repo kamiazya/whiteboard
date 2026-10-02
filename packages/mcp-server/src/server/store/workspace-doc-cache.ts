@@ -224,10 +224,10 @@ const workspaceDocUpdatedListeners = new Set<WorkspaceDocUpdatedListener>()
  * Announce an update this process did NOT persist — one another instance
  * wrote, brought in by the workspace tail.
  *
- * The same funnel a local save uses, deliberately: the subscribers are a
- * websocket fan-out and an SSE stream, and where the bytes came from changes
- * nothing about who needs them. A second path would be a second place for the
- * two transports to fall out of step.
+ * The same funnel a local save uses, deliberately: every subscriber is an SSE
+ * stream, and where the bytes came from changes nothing about who needs them.
+ * A second path would be a second place for local and tailed writes to fall
+ * out of step.
  */
 export function emitWorkspaceDocUpdated(workspaceId: string, update: Uint8Array): void {
   for (const listener of workspaceDocUpdatedListeners) {
@@ -266,7 +266,7 @@ export async function saveWorkspaceDoc(
   // the choke point every durable workspace-record write funnels through —
   // including the tree index's createDocument, which never touches
   // saveDocument. Without this, a workspace minted by an MCP tool has a
-  // stored record but no registry row, and the WS route refuses it (4404).
+  // stored record but no registry row, and the workspace-document route refuses it (404).
   await upsertWorkspaceRow(await scope.db(), workspaceId)
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
   let update: Uint8Array | null

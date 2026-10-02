@@ -67,7 +67,7 @@ export interface DocumentRouterOptions {
   firstMember?: FirstMember
 }
 
-// The checkpoint trigger both the HTTP and the WS update paths fire.
+// The checkpoint trigger the live-doc and workspace-document update routes fire.
 function armAutoVersionTrigger(
   options: DocumentRouterOptions,
   versionStore: VersionStore,
