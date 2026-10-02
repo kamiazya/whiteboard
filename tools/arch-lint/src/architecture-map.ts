@@ -450,12 +450,10 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   // store that mints it.
   'routes/sign-in.ts -> security/sign-in-attempt-store',
   'routes/sign-in.ts -> security/sign-in-session-store',
-  // The people-administration decisions (self-refusal, user existence,
-  // administration freshness) are written inline in the route, and the
-  // operator's CLI commands act on the same stores without them.
+  // The people-administration decisions are `security/people-administration`'s
+  // and the route holds none; what remains is the invitation store's type,
+  // handed on to `invitation-link.ts` to issue the tenant invitation.
   'routes/tenant-people.ts -> security/invitation-store',
-  'routes/tenant-people.ts -> security/member-profile-store',
-  'routes/tenant-people.ts -> security/tenant-administrator-store',
   // `POST /api/runtime/logs/prune` is daemon housekeeping with one caller;
   // no second surface asks for it, so there is no operation to share yet.
   'routes/runtime.ts -> daemon/log-rotation',
@@ -492,11 +490,14 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * It went 14 -> 24 when the scan widened past `store/` to the keeper's
  * other mechanics: ten edges that were already there, never debt anyone had
- * been asked about. Six are `security/*-store` (people, sessions, keys,
- * invitations), one is `daemon/log-rotation`, one is `tenant/data-layout`.
- * That was a measurement catching up with the code, not new debt.
+ * been asked about — eight `security/*-store` (people, sessions, keys,
+ * invitations), one `daemon/log-rotation` and one `tenant/data-layout`. Two
+ * of the eight went straight away, 24 -> 22, when
+ * `routes/tenant-people.ts` stopped holding the people-administration
+ * decisions and the stores they act on. That was a measurement catching up
+ * with the code, not new debt.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 24
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 22
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

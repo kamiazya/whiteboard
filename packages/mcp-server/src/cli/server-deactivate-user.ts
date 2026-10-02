@@ -1,8 +1,10 @@
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
+import { createPeopleAdministration } from '../server/security/people-administration.js'
+import { createTenantAdministratorStore } from '../server/security/tenant-administrator-store.js'
 import { createUserDeactivation } from '../server/security/user-deactivation.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser } from './named-user.js'
+import { findNamedUser, operatorRefusal } from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
 import {
   type DeactivateUserOutput,
@@ -23,13 +25,20 @@ export async function deactivateUser(
   db: TenantDatabase,
   { user, reactivate, now }: { user: string; reactivate: boolean; now: number },
 ): Promise<DeactivateUserOutcome> {
-  const found = await findNamedUser(createMemberProfileStore(db), user)
+  const members = createMemberProfileStore(db)
+  const found = await findNamedUser(members, user)
   if (found.kind !== 'found') return found
-  const deactivation = createUserDeactivation(db)
-  const changed = reactivate
-    ? await deactivation.reactivate(found.user.id)
-    : await deactivation.deactivate(found.user.id, now)
-  return { kind: 'ok', user: found.user, deactivated: !reactivate, changed }
+  const people = createPeopleAdministration({
+    members,
+    appointments: createTenantAdministratorStore(db),
+    deactivation: createUserDeactivation(db),
+  })
+  // The operator deactivates as nobody's user, so no self-refusal applies.
+  const outcome = reactivate
+    ? await people.reactivate(found.user.id)
+    : await people.deactivate(found.user.id, null, now)
+  if (outcome.kind === 'refused') return operatorRefusal(outcome)
+  return { kind: 'ok', user: found.user, deactivated: !reactivate, changed: outcome.changed }
 }
 
 const USAGE =

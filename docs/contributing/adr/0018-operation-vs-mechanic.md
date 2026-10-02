@@ -239,7 +239,11 @@ files, under the standing "fix what you touch" rule.
 > invisible to the guard, so the ceiling went 14 -> 24 with nothing new added —
 > a measurement catching up with the code. Policy under the same directories
 > (bearer parsing, credential resolution, the tenant id) is translation and
-> stays unscanned.
+> stays unscanned. `routes/tenant-people.ts` paid two of them at once: its
+> refusals (not oneself, only a user that exists, only on a recent sign-in)
+> moved to `security/people-administration.ts`, which the route and the
+> operator's `grant-admin` and `deactivate-user` commands now both translate,
+> 24 -> 22.
 
 **What would make raising the ceiling right.** It is a decision, not a
 failure: an operation that genuinely belongs to this deployment, or a fix
