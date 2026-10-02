@@ -45,3 +45,28 @@ describe('facet wiring guard', () => {
     })
   }
 })
+
+// The widget registrations ARE where a facet domain may be named, but by the
+// plugin's exported key constants: a second spelling of `visual.edges/v0`
+// here is one that survives the plugin renaming its key, and then registers a
+// widget for a facet that no longer exists.
+const widgetSources = import.meta.glob<string>(
+  ['./facet-widgets/*.tsx', '!./facet-widgets/*.test.tsx'],
+  {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  },
+)
+
+describe('facet widget registrations', () => {
+  it('scans the registration modules, so a clean result is not a blind one', () => {
+    expect(Object.keys(widgetSources).some((file) => file.endsWith('/index.tsx'))).toBe(true)
+  })
+
+  for (const [file, source] of Object.entries(widgetSources)) {
+    it(`${file} spells no facet key literal`, () => {
+      expect(/['"`]visual\.[a-z]+\/v\d+['"`]/.test(source)).toBe(false)
+    })
+  }
+})

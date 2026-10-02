@@ -27,11 +27,9 @@ import {
   type Point,
   panBy,
   type Viewport,
+  ZOOM_WHEEL_FACTOR,
   zoomAt,
 } from '../lib/spatial/viewport.js'
-
-/** Matches the editor's wheel step, so one notch means the same thing on both. */
-const ZOOM_WHEEL_FACTOR = 1.1
 
 /**
  * Marks a control drawn OVER the surface (the reset button): spread it onto

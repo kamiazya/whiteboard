@@ -23,7 +23,12 @@ import {
   type PluginUi,
 } from '@kamiazya/whiteboard-facet-ui'
 import type { EdgeRoutingStyle, LineJumps, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { resolveEffectiveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  resolveEffectiveCanvasEdgeStyle,
+  VISUAL_EDGES_KEY,
+  VISUAL_SYMBOL_KEY,
+  VISUAL_THEME_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -86,7 +91,6 @@ const PLUGIN_UIS: readonly PluginUi[] = [visualUi]
  * registry — the same derivation every other row is drawn from, so this
  * surface names no routing style and cannot drift from the plugin.
  */
-const EDGES_KEY = 'visual.edges/v0'
 
 /** The declared segments for one field of the edges facet, or none. */
 function edgeSegments(
@@ -95,7 +99,7 @@ function edgeSegments(
 ):
   | { label: string; options: readonly FacetSegmentedOption[]; layout: FacetOptionLayout }
   | undefined {
-  const form = registry.facetForm(EDGES_KEY)
+  const form = registry.facetForm(VISUAL_EDGES_KEY)
   if (form.kind !== 'fields') return undefined
   const found = form.fields.find((candidate) => candidate.name === field)
   if (found === undefined || found.control.kind !== 'segmented') return undefined
@@ -259,13 +263,13 @@ function derivedCanvasFacetRow(key: string, title: string): CanvasSettingsWidget
 }
 
 export const CANVAS_SETTINGS_WIDGETS: Readonly<Record<string, CanvasSettingsWidget>> = {
-  'visual.edges/v0': visualEdgesPanel,
+  [VISUAL_EDGES_KEY]: visualEdgesPanel,
   // How the canvas is DRAWN (ADR-0030): a registered theme asset by id.
-  'visual.theme/v0': derivedCanvasFacetRow('visual.theme/v0', 'Theme'),
+  [VISUAL_THEME_KEY]: derivedCanvasFacetRow(VISUAL_THEME_KEY, 'Theme'),
   // The document's own mark — what its tab, its file row and, where there is
   // room, its overview draw instead of a picture derived from its contents.
   // Through the SAME derived row the other two take, now that the picker
   // vocabulary can express it: this was the one row drawn by a plugin
   // component, and the one that looked unlike its neighbours.
-  'visual.symbol/v0': derivedCanvasFacetRow('visual.symbol/v0', 'Symbol'),
+  [VISUAL_SYMBOL_KEY]: derivedCanvasFacetRow(VISUAL_SYMBOL_KEY, 'Symbol'),
 }

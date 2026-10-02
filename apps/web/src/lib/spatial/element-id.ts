@@ -1,6 +1,7 @@
 // The one generator of ids for the elements a person draws: nodes, edges,
 // lines and comment threads. Pure, so it lives beside the other spatial
 // mechanics rather than inside the gesture reducer that used to hold it.
+import { bytesToHex } from '@kamiazya/whiteboard-model'
 
 /**
  * A fresh element id.
@@ -34,7 +35,7 @@ export const defaultCreateId = (): string => {
   if (typeof api.randomUUID === 'function') return api.randomUUID()
   if (typeof api.getRandomValues === 'function') {
     const bytes = api.getRandomValues(new Uint8Array(16))
-    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+    return bytesToHex(bytes)
   }
   return String(Math.random())
 }

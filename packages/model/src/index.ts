@@ -13,6 +13,7 @@ export {
   bytesToBase64,
   bytesToBase64Url,
 } from './encoding/base64.js'
+export { bytesToHex } from './encoding/hex.js'
 export * from './facets.js'
 export { generateDocumentId } from './generate-document-id.js'
 export * from './ids.js'

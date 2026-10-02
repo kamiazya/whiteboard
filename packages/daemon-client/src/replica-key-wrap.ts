@@ -27,13 +27,11 @@
 import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { replicaKeyResponseSchema } from './api-contracts/replica-key.js'
+import { DERIVED_KEY_BITS, PRF_OUTPUT_BYTES } from './key-widths.js'
 
 const textEncoder = new TextEncoder()
 
-/** What WebAuthn's `prf` extension produces for one `eval` input. */
-const PRF_OUTPUT_BYTES = 32
 const WRAP_IV_BYTES = 12
-const DERIVED_KEY_BITS = 256
 
 /**
  * Base64url without padding, the encoding every other stored shape here uses

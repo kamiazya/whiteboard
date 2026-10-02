@@ -21,6 +21,7 @@
  * The nonce binds a reply to this attempt, so a stale window from an earlier
  * try cannot settle a new one.
  */
+import { bytesToHex } from '@kamiazya/whiteboard-model'
 import {
   CROSS_ORIGIN_TRANSFER_PROTOCOL,
   type TransferResponse,
@@ -68,9 +69,7 @@ export interface SendTransferOptions {
 
 /** Unguessable enough that another window at the same keeper cannot answer for this attempt. */
 function freshNonce(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
-    b.toString(16).padStart(2, '0'),
-  ).join('')
+  return bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
 }
 
 export function sendTransfer(options: SendTransferOptions): Promise<SendTransferResult> {

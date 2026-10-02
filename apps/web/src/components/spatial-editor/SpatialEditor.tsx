@@ -111,6 +111,7 @@ import {
   screenToCanvas,
   viewportRevealingProposal,
   viewportTransformCss,
+  ZOOM_WHEEL_FACTOR,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
 import { editThreadMessageCommand } from '../../lib/spatial-thread-write.js'
@@ -355,10 +356,6 @@ const EDGE_HIT_TOLERANCE_PX = 6
  */
 const LONG_PRESS_MENU_MS = 500
 const DEFAULT_TEST_ID = 'spatial-editor'
-/** Screen distance between two points — how far a press travelled. */
-
-/** Breathing room kept around framed content (zoom to fit / selection). */
-const ZOOM_WHEEL_FACTOR = 1.1
 /**
  * Pointer capture is best-effort chrome, not a correctness requirement: a
  * browser can reject it (e.g. `NotFoundError` for a pointerId the platform

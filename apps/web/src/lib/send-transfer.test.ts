@@ -60,6 +60,16 @@ describe('sending a transfer through a window at the destination', () => {
     await sent
   })
 
+  it('mints a 32-digit lowercase hex nonce when none is supplied', async () => {
+    const popup = fakePopup()
+    const { nonce: _supplied, ...options } = baseOptions(popup)
+    const sent = sendTransfer(options)
+    const url = String(options.openWindow.mock.calls[0]?.[0])
+    expect(url).toMatch(/nonce=[0-9a-f]{32}$/)
+    popup.closed = true
+    await sent
+  })
+
   it('posts the offer only after the destination says it is ready, and only to that origin', async () => {
     const popup = fakePopup()
     const sent = sendTransfer(baseOptions(popup))

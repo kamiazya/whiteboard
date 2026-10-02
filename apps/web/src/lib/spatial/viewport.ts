@@ -19,6 +19,9 @@ export interface Viewport {
 export const MIN_ZOOM = 0.1
 export const MAX_ZOOM = 10
 
+/** One wheel notch's zoom step, shared by the editor and the read-only preview so a notch means the same on both. */
+export const ZOOM_WHEEL_FACTOR = 1.1
+
 export const IDENTITY_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
 
 /** Clamps to [MIN_ZOOM, MAX_ZOOM], mapping any non-finite input to 1 (identity). */

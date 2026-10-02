@@ -21,6 +21,7 @@
  */
 
 import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
+import { canvasColorSchema } from '@kamiazya/whiteboard-model'
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { cn } from '../../lib/utils.js'
@@ -148,7 +149,7 @@ function CustomColorPanel({
 }) {
   const [draft, setDraft] = useState(value)
   const commit = (hex: string) => {
-    if (/^#[0-9a-fA-F]{6}$/.test(hex) && hex !== value) onPick(hex)
+    if (canvasColorSchema.safeParse(hex).success && hex !== value) onPick(hex)
   }
   return (
     <div

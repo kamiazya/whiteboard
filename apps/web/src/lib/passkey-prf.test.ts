@@ -9,6 +9,7 @@
  * derive a wrapping key from undefined.
  */
 
+import { PRF_OUTPUT_BYTES } from '@kamiazya/whiteboard-daemon-client/key-widths'
 import { describe, expect, it } from 'vitest'
 import { prfOutputOf } from './passkey-prf.js'
 
@@ -20,7 +21,7 @@ function credentialWith(results: unknown): PublicKeyCredential {
 
 describe('prfOutputOf', () => {
   it('answers the bytes the authenticator returned', () => {
-    const first = new Uint8Array(32).fill(3)
+    const first = new Uint8Array(PRF_OUTPUT_BYTES).fill(3)
 
     // A real authenticator hands back an ArrayBuffer, not a view.
     expect(prfOutputOf(credentialWith({ prf: { results: { first: first.buffer } } }))).toEqual(
@@ -41,9 +42,13 @@ describe('prfOutputOf', () => {
     // Refused HERE rather than at `deriveWrappingKey`, which throws: a short
     // output is an authenticator quirk, not a programming error, and it must
     // degrade to "no cold start" rather than to an exception.
-    expect(
-      prfOutputOf(credentialWith({ prf: { results: { first: new Uint8Array(16).buffer } } })),
-    ).toBeNull()
+    // Either side of the width the wrapping key is derived from — the same
+    // constant the wrap side refuses on, so the two cannot drift apart.
+    for (const width of [PRF_OUTPUT_BYTES - 1, PRF_OUTPUT_BYTES + 1]) {
+      expect(
+        prfOutputOf(credentialWith({ prf: { results: { first: new Uint8Array(width).buffer } } })),
+      ).toBeNull()
+    }
   })
 
   it('answers null rather than throwing when the credential exposes no extension results', () => {

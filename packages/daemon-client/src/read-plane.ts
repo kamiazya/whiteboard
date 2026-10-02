@@ -1,5 +1,6 @@
 import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { DERIVED_KEY_BITS } from './key-widths.js'
 
 /**
  * ADR-0043 decision 3: per-document content keys, derived from a workspace
@@ -58,7 +59,6 @@ function contextBytes(tag: string, { documentId, epoch }: DocumentKeyContext) {
 }
 
 const WORKSPACE_KEY_BYTES = 32
-const DERIVED_KEY_BITS = 256
 
 export interface DeriveDocumentKeyInput extends DocumentKeyContext {
   workspaceKey: Uint8Array<ArrayBuffer>

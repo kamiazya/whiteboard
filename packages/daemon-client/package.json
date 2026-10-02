@@ -82,6 +82,10 @@
       "types": "./src/document-backend-contract.ts",
       "import": "./src/document-backend-contract.ts"
     },
+    "./key-widths": {
+      "types": "./src/key-widths.ts",
+      "import": "./src/key-widths.ts"
+    },
     "./read-plane": {
       "types": "./src/read-plane.ts",
       "import": "./src/read-plane.ts"
