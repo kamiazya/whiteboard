@@ -124,9 +124,13 @@ paths:
 
 ## What does NOT belong here
 
-- Facet KEY grammar and the `facets` bucket schemas — those are model's
-  (`extensionFacetsSchema`); this package constructs keys and a test
-  cross-checks them against model's grammar.
+- The `facets` bucket schemas — those are model's (`extensionFacetsSchema`).
+  The KEY grammar has two homes, since neither package may import the other:
+  model's `EXTENSION_FACET_KEY_PATTERN` and this package's `src/facet-grammar.ts`
+  (`FACET_KEY_PATTERN`, `FACET_SEGMENT_PATTERN`, `FACET_NAMESPACED_ID_PATTERN`).
+  `src/facet-grammar.test.ts` holds the two equal, and
+  `tools/arch-lint/src/facet-grammar-one-place.test.ts` bans a third spelling: a schema above the
+  engine imports the pattern and keeps only its own refusal message.
 - Storage, rendering, transport, UI vessels (React widgets — those live in
   the composition roots), Inversify.
 

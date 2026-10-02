@@ -3,6 +3,7 @@ import {
   createFacetRegistry,
   defineFacet,
   definePlugin,
+  FACET_KEY_PATTERN,
   namespacedIdSchema,
 } from '@kamiazya/whiteboard-facet-engine'
 import type {
@@ -109,14 +110,7 @@ export type VisualInkFacet = z.infer<typeof visualInkFacetSchema>
 export const VISUAL_INK_KEY = 'visual.ink/v0'
 
 export const visualAxesFacetSchema = z.object({
-  axes: z.array(
-    z
-      .string()
-      .regex(
-        /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/,
-        'must be a facet key like "visual.shape/v0"',
-      ),
-  ),
+  axes: z.array(z.string().regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"')),
 })
 
 export type VisualAxesFacet = z.infer<typeof visualAxesFacetSchema>

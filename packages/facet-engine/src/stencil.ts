@@ -23,19 +23,16 @@
  * supplies the vocabulary, never the sentence.
  */
 import { z } from 'zod'
+import { FACET_KEY_PATTERN } from './facet-grammar.js'
 
 /**
- * A facet key exactly as ADR-0013 decision 2 grammars it. Re-stated rather
- * than imported from the registry's own parser because this is a SCHEMA —
- * the message a stencil author sees when they typo a key is worth as much
- * as the check itself.
+ * A facet key exactly as ADR-0013 decision 2 grammars it. The expression is
+ * the engine's; the message a stencil author sees when they typo a key is
+ * this schema's, and worth as much as the check itself.
  */
 const facetKeySchema = z
   .string()
-  .regex(
-    /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/,
-    'must be a facet key like "visual.shape/v0"',
-  )
+  .regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"')
 
 export const stencilAssetSchema = z
   .object({

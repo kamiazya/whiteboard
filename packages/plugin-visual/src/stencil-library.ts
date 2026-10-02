@@ -9,19 +9,15 @@
  * day this arrived, which is the budget doing its job rather than a
  * coincidence.)
  */
-import { type StencilAssetInput, stencilAssetSchema } from '@kamiazya/whiteboard-facet-engine'
+import {
+  FACET_SEGMENT_PATTERN,
+  type StencilAssetInput,
+  stencilAssetSchema,
+} from '@kamiazya/whiteboard-facet-engine'
 import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 export const VISUAL_STENCILS_KEY = 'visual.stencils/v0'
-
-/**
- * A bare asset name, the same grammar the registry composes ids from. Spelt
- * here rather than imported because this is a SCHEMA: the message a library
- * author sees when they name a stencil "My Bucket" is worth as much as the
- * check.
- */
-const SEGMENT_PATTERN = /^[a-z][a-z0-9-]*$/
 
 /**
  * `visual.stencils/v0` — the facet that makes a DOCUMENT a workspace's
@@ -47,7 +43,9 @@ const SEGMENT_PATTERN = /^[a-z][a-z0-9-]*$/
  */
 export const visualStencilsFacetSchema = z.object({
   stencils: z.record(
-    z.string().regex(SEGMENT_PATTERN, 'a stencil name must be a lowercase segment, like "bucket"'),
+    z
+      .string()
+      .regex(FACET_SEGMENT_PATTERN, 'a stencil name must be a lowercase segment, like "bucket"'),
     stencilAssetSchema,
   ),
 })
