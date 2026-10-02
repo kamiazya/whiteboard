@@ -5,6 +5,7 @@ import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   type LoroStoreLike,
   useBrowserDocumentController,
@@ -178,6 +179,7 @@ describe('useBrowserDocumentController', () => {
       result.current.renameDocument('Renamed').catch(() => {})
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     if (result.current.persistence.kind === 'degraded') {
       expect(result.current.persistence.message).not.toMatch(/secret-key|abc123/i)
       expect(result.current.persistence.message).not.toMatch(
@@ -219,6 +221,7 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     const refusal = await refusalOf(() => result.current.deleteDocument())
     expect(refusal).not.toMatch(/secret-credential-xyz/i)
     expect(refusal).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
@@ -253,6 +256,7 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     const refusal = await refusalOf(() => result.current.deleteDocument())
     expect(refusal).toMatch(/\bnote\b/)
     expect(refusal).not.toMatch(/\bcanvas\b/i)
@@ -294,6 +298,7 @@ describe('useBrowserDocumentController', () => {
     })
     expect(caught).toBeInstanceOf(Error)
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
   })
 
   it('deleteDocument aborts when flush fails — preserves data copy', async () => {
@@ -328,6 +333,7 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     // Refused, and SAYS so: the rejection is the sentence the page shows.
     expect(await refusalOf(() => result.current.deleteDocument())).toMatch(/could not be safely/)
     expect(result.current.snapshot).not.toBeNull()
@@ -1180,6 +1186,7 @@ describe('useBrowserDocumentController', () => {
 
       expect(switchSettled).toBe(true)
       expect(result.current.persistence.kind).toBe('degraded')
+      await expectLoggedFailure('a rename could not be saved')
       // The failed flush must abort the switch: default pointer stays on the
       // original canvas instead of silently losing the rename.
       expect(await store.getDefaultDocumentId()).toBe(C1)
