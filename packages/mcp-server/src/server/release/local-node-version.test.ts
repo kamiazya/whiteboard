@@ -18,6 +18,12 @@
 // the gate command: a local result that is trusted and wrong is worse than no
 // local result.
 //
+// Node 22's ICU carries an older Unicode table than 24's, so the second family
+// is `packages/search/src/snippet.test.ts` "honours a Prepend", whose oracle is
+// the runtime's own segmenter. The root vitest.config.ts globalSetup
+// (`.claude/scripts/node-version-banner.mjs`) prints a banner for both on any
+// project, since this guard only runs inside `mcp-node`.
+//
 // `engines` in the published package is deliberately wider (`^22 || ^24 ||
 // >=26`) and is not this. That says what a CONSUMER may run the daemon on;
 // `.node-version` says what this repo develops and tests on, and CI installs
@@ -54,8 +60,9 @@ describe('the checkout runs the Node the suite is calibrated for', () => {
     expect(
       running,
       `This checkout is on Node ${process.versions.node} but .node-version pins ${pinned}, which is what CI installs. ` +
-        'Nine web-jsdom tests fail on the wrong major with a message about Blob that names neither Node nor this file — ' +
-        'so a run on the wrong major looks like nine real regressions. Switch (nvm/fnm/asdf use ' +
+        'Nine web-jsdom tests fail on the wrong major with a message about Blob that names neither Node nor this file, ' +
+        'and packages/search snippet.test.ts "honours a Prepend" fails on the ICU/Unicode table with a message that names ' +
+        'neither — so a run on the wrong major looks like real regressions. Switch (nvm/fnm/asdf use ' +
         `${pinned}) and re-run before believing any red. See this file's header for the mechanism.`,
     ).toBe(pinned)
   })

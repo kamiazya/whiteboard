@@ -14,7 +14,7 @@ order effects.
 
 | What you see | Verdict |
 |---|---|
-| 9 `web-jsdom` tests fail on `object.stream is not a function` | Wrong Node major. `.node-version` pins 24; on 22 undici's `new Response(blobLike)` reaches for `.stream()`. Not a regression, and the diff is unrelated |
+| 9 `web-jsdom` tests fail on `object.stream is not a function` | Wrong Node major. `.node-version` pins 24; on 22 undici's `new Response(blobLike)` reaches for `.stream()`. Not a regression, and the diff is unrelated. The same major also fails `packages/search`'s "honours a Prepend" (Unicode table) |
 | 2–3 failures in one browser file | Triage the **earliest** only. A timed-out browser test keeps typing into the next one — observed as one test's text shuffled into another's. Re-measure before believing the later failures |
 | a character is missing from typed text (an em dash, both spaces present) | Same overrun. Type ASCII in browser tests; a keycode-less character is synthesized separately and is the one that drops |
 | `Re-optimizing dependencies` anywhere in the log | The tree moved under the running suite. Re-run on a quiet tree |

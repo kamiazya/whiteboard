@@ -167,7 +167,16 @@ describe('snippetAround cuts between characters a reader sees as one', () => {
       const expected = joined ? `…${tail}` : `…a${tail}`
       if (out !== expected) misses.push(`U+${cp.toString(16)}: ${JSON.stringify(out)}`)
     }
-    expect(misses).toEqual([])
+    // The Unicode table comes with the Node major, and the sweep's oracle is
+    // that runtime's segmenter against this package's own cut — so on a major
+    // other than CI's the failure is the environment, and the diff list alone
+    // names neither Node nor Unicode. (The pin is not read from the repo root
+    // here: a package test reading it belongs in tools/arch-lint.)
+    expect(
+      misses,
+      `Unicode ${process.versions.unicode} on Node ${process.versions.node}. CI installs the Node in the repo's .node-version; ` +
+        'a different major carries a different Unicode table, so switch Node and re-run before believing this is a regression.',
+    ).toEqual([])
     expect(prepends, 'no Prepend found — the sweep tested nothing').toBeGreaterThan(20)
   })
 

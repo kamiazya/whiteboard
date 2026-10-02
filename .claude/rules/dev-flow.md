@@ -104,9 +104,11 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 **Run the Node in `.node-version`** (24 today, which is what CI installs).
 `local-node-version.test.ts` fails naming the consequence, and carries the
 mechanism — on the wrong major nine `web-jsdom` tests fail with a message about
-`Blob` that names neither Node nor the guard, so they read as nine real
-regressions. That guard lives in `mcp-node`, so a run scoped to `apps/web`
-alone does not get it; the symptom is also the first row of `steward`'s
+`Blob`, and `packages/search`'s "honours a Prepend" fails on the older Unicode
+table; neither names Node, so they read as real regressions. That guard lives in
+`mcp-node`, so a scoped run does not get it — the root `globalSetup`
+(`.claude/scripts/node-version-banner.mjs`) prints a banner on any project's run
+and never fails it. The first symptom is the first row of `steward`'s
 `reference/failure-modes.md`.
 
 **A test whose PREMISE this environment cannot establish skips, and says so —

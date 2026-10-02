@@ -8,9 +8,11 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
   pinned by `package.json`'s `packageManager` (pnpm@11.12.0): run `corepack enable`
   before `pnpm install`, or an older global pnpm rewrites the lockfile.
   Not a recommendation: `local-node-version.test.ts` fails on any other major,
-  because nine `web-jsdom` tests fail on 22 with a message about `Blob` that
-  names neither Node nor the cause, so a run on the wrong major looks like nine
-  real regressions. (The published package's `engines` is deliberately wider —
+  because nine `web-jsdom` tests fail on 22 with a message about `Blob`, and
+  `packages/search`'s "honours a Prepend" fails on its older ICU/Unicode table,
+  and neither message names Node or the cause, so a run on the wrong major looks
+  like real regressions. A root `globalSetup` prints a banner naming both on any
+  project's run and never fails it. (The published package's `engines` is deliberately wider —
   that is what a CONSUMER may run the daemon on, not what this checkout builds
   on.)
 - A Chromium that Playwright can drive (installed automatically below)
