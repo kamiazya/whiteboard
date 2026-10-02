@@ -1,4 +1,5 @@
-import { SAMPLE_THEME_TOKENS, themeTokensSchema } from '@kamiazya/whiteboard-facet-engine'
+import { themeTokensSchema } from '@kamiazya/whiteboard-facet-engine'
+import { SAMPLE_THEME_TOKENS } from '@kamiazya/whiteboard-facet-engine/testing'
 import { edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'

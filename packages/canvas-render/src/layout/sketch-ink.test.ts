@@ -3,7 +3,8 @@
 // translate/scale need no knowledge of it and the digest keeps reading the
 // semantic box.
 
-import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import { SAMPLE_THEME_TOKENS } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'

@@ -3,7 +3,7 @@ import * as fc from 'fast-check'
 import { describe, expect } from 'vitest'
 import { z } from 'zod'
 import { createFacetRegistry, defineFacet, definePlugin } from './registry.js'
-import { SAMPLE_THEME_TOKENS } from './theme-tokens.js'
+import { SAMPLE_THEME_TOKENS } from './testing/sample-theme-tokens.js'
 
 const segment = fc
   .stringMatching(/^[a-z][a-z0-9-]{0,7}$/)

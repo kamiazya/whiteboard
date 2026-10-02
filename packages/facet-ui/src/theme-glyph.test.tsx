@@ -3,11 +3,8 @@
 // the library a plugin builds on, and reaching for the bundled one could not
 // tell a library defect from that plugin's declaration.
 import type { ThemeTokensInput } from '@kamiazya/whiteboard-facet-engine'
-import {
-  createFacetRegistry,
-  definePlugin,
-  SAMPLE_THEME_TOKENS,
-} from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, definePlugin } from '@kamiazya/whiteboard-facet-engine'
+import { SAMPLE_THEME_TOKENS } from '@kamiazya/whiteboard-facet-engine/testing'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { glyphIcon } from './glyph.js'

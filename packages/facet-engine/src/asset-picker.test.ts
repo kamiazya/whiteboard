@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { createFacetRegistry, defineFacet, definePlugin } from './registry.js'
-import { SAMPLE_THEME_TOKENS } from './theme-tokens.js'
+import { SAMPLE_THEME_TOKENS } from './testing/sample-theme-tokens.js'
 
 const stencilFacet = defineFacet({
   name: 'stencil',
