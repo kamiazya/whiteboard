@@ -1,10 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { parseDaemonSubcommandArgs } from '../../src/cli/argv.js'
 import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 import {
   buildMcpHttpDevSpawnArgs,
   DEFAULT_READY_TIMEOUT_MS,
+  describeTokenConflict,
   resolveDevBearerToken,
   resolveReadyTimeoutMs,
   waitForDaemon,
@@ -118,5 +120,30 @@ describe('resolveReadyTimeoutMs', () => {
     expect(resolveReadyTimeoutMs({ WHITEBOARD_DEV_READY_TIMEOUT_MS: raw })).toBe(
       DEFAULT_READY_TIMEOUT_MS,
     )
+  })
+})
+
+describe('the token-conflict remedy', () => {
+  it('names a CLI command the CLI accepts as typed, with the checkout data dir', () => {
+    const message = describeTokenConflict({ pid: 4242, dataDir: '/work/repo/.dev-data' })
+    const typed = /`whiteboard daemon (stop[^`]*)`/.exec(message)?.[1]
+    expect(typed, message).toBeDefined()
+
+    const [subcommand, ...rest] = (typed as string).split(/\s+/)
+    expect(subcommand).toBe('stop')
+    expect(parseDaemonSubcommandArgs(rest as string[], 'daemon stop')).toEqual({
+      kind: 'ok',
+      json: true,
+      dataDir: '/work/repo/.dev-data',
+    })
+  })
+
+  it('names the per-checkout stop script, which exists', async () => {
+    const message = describeTokenConflict({ pid: 1, dataDir: '/d' })
+    expect(message).toContain('pnpm mcp:http:stop')
+    const manifest = JSON.parse(
+      await readFile(join(repoRoot(), 'packages/mcp-server/package.json'), 'utf8'),
+    ) as { scripts: Record<string, string> }
+    expect(manifest.scripts['mcp:http:stop']).toBeDefined()
   })
 })

@@ -23,6 +23,7 @@ import {
 } from './dev-spawn-lock-lib.mjs'
 import {
   buildMcpHttpDevSpawnArgs,
+  describeTokenConflict,
   resolveDevBearerToken,
   resolveReadyTimeoutMs,
   waitForDaemon,
@@ -97,10 +98,7 @@ async function assessDaemon() {
   if (record.token !== DEV_BEARER_TOKEN) {
     return {
       kind: 'conflict',
-      message:
-        `the daemon for this checkout's data dir (pid ${record.pid}) was started with a different token ` +
-        "than this checkout's clients send, so it would refuse their MCP requests. Stop it " +
-        "(`whiteboard daemon stop` with WHITEBOARD_DATA_DIR set to this checkout's data dir) and rerun.",
+      message: describeTokenConflict({ pid: record.pid, dataDir: EXPECTED_DATA_DIR }),
     }
   }
   return { kind: 'healthy', message: `daemon pid ${record.pid} already answering on its socket` }

@@ -153,3 +153,34 @@ describe('a gh extension a skill tells its reader to run is installed by the sam
     expect(missing).toEqual([])
   })
 })
+
+// `npx <package>` with no version runs whatever the registry calls latest on
+// the day, so a debugging script's behaviour changes under the person using it
+// — the MCP Inspector's CLI changed shape across a major version. The pin is
+// in the script, since the tool is not a dependency of the workspace.
+describe('package scripts pin what npx fetches', () => {
+  it('has a version on every `npx` package', () => {
+    const manifests = trackedFiles(REPO_ROOT, 'package.json', '*/package.json', '*/*/package.json')
+    expect(manifests).toContain('packages/mcp-server/package.json')
+    const unpinned = manifests.flatMap((file) =>
+      Object.entries(
+        (JSON.parse(read(file)) as { scripts?: Record<string, string> }).scripts ?? {},
+      ).flatMap(([name, script]) =>
+        [...script.matchAll(/\bnpx\s+(?:-\S+\s+)*(@?[\w./-]+?)(@\S+)?(?=\s|$)/g)]
+          .filter((m) => m[2] === undefined)
+          .map((m) => `${file}: script \`${name}\` runs \`npx ${m[1]}\` with no pinned version`),
+      ),
+    )
+    expect(unpinned).toEqual([])
+  })
+
+  it('pins the MCP Inspector the debugging scripts run', () => {
+    const scripts = JSON.parse(read('packages/mcp-server/package.json')).scripts as Record<
+      string,
+      string
+    >
+    for (const name of ['mcp:inspect', 'mcp:inspect:stdio']) {
+      expect(scripts[name], name).toMatch(/npx -y @modelcontextprotocol\/inspector@\d+\.\d+\.\d+ /)
+    }
+  })
+})

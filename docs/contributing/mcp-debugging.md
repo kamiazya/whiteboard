@@ -6,7 +6,7 @@ This repo uses the official MCP Inspector as the default debugging tool for MCP 
 
 References:
 
-- MCP Inspector: `https://modelcontextprotocol.io/docs/tools/inspector`
+- MCP Inspector: `https://modelcontextprotocol.io/docs/tools/inspector` (`pnpm mcp:inspect` runs a version pinned in `packages/mcp-server/package.json`, fetched by `npx`; bump the pin on purpose, not by whatever is newest)
 - MCP Debugging Guide: `https://modelcontextprotocol.io/docs/tools/debugging`
 
 ## Protocol Support
