@@ -60,7 +60,7 @@ describe('docs-snapshot aria-label selectors', () => {
       ['Menu.tsx', '<button aria-label="Open menu" />'],
       ['Plain.tsx', 'const copy = "Switch variation"'],
     ])
-    // Plain.tsx carries the words but no aria-label: prose is not a producer.
+    // The second source carries the words but no aria-label: prose is not a producer.
     expect(unproducedLabels(['Open menu', 'Switch variation'], producers)).toEqual([
       'Switch variation',
     ])

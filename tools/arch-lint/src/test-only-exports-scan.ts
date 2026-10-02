@@ -261,7 +261,7 @@ function importedNames(path: string, text: string): Set<string> {
   return names
 }
 
-/** `foo.ts` is the file whose own test is `foo.test.ts`, `foo.property.test.ts`, `foo.browser.test.tsx`. */
+/** A file's own tests sit in its directory and start with its stem and a dot, whatever the suffix after it (`.test`, `.property.test`, `.browser.test`). */
 function isSiblingTest(definer: string, test: string): boolean {
   const split = (path: string): [string, string] => {
     const slash = path.lastIndexOf('/')

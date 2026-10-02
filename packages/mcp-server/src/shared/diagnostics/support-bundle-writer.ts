@@ -54,17 +54,14 @@ export async function writeSupportBundle(
   targetDir: string,
   options: WriteSupportBundleOptions,
 ): Promise<{ outputDir: string; files: string[] }> {
-  // Canonicalise BEFORE the containment check so a symlinked ancestor
-  // (e.g. `<root>/link → /outside`) cannot pass a naive string-prefix guard.
-  // The entry the bundle is written through is refused outright when it is a
-  // symlink, matching the parent-traversal contract documented above.
+  // Canonicalise BEFORE the containment check, so a symlinked ancestor cannot
+  // pass a string-prefix guard; the entry written through must not be a symlink.
   const canonicalTarget = await canonicalizeWithMissingTail(targetDir, {
     symlinkRefusal: () =>
       new SupportBundleError('Target path traverses a symlink, which is not allowed.'),
   })
   if (!(await isWithinAllowedRoots(canonicalTarget, options.allowedRoots))) {
-    // Generic — never echo the resolved target. A future CLI surface
-    // could otherwise leak the user's local path back through stderr.
+    // Generic — never echo the resolved target back through stderr.
     throw new SupportBundleError('Target directory is not inside an allowed root.')
   }
 

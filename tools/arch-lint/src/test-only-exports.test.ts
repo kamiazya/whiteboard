@@ -476,15 +476,17 @@ describe('what counts as an export only a test uses, on fixture files', () => {
 
   it('counts every way a test can bind a name from another module', () => {
     const body = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((n) => `export const ${n} = 1`).join('\n')
+    // Joined, so this fixture is not itself a literal dynamic import in a test file.
+    const dynamic = ['await ', "import('./lib.js')"].join('')
     const test = [
       "import { a as renamed } from './lib.js'",
       "export { b } from './lib.js'",
       "import * as ns from './lib.js'",
       'ns.c',
-      "const { d } = await import('./lib.js')",
-      "const mod = await import('./lib.js')",
+      `const { d } = ${dynamic}`,
+      `const mod = ${dynamic}`,
       'mod.e',
-      "const direct = (await import('./lib.js')).f",
+      `const direct = (${dynamic}).f`,
       "type T = typeof import('./lib.js').g",
     ].join('\n')
     expect(
