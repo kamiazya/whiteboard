@@ -8,7 +8,7 @@ import { z } from 'zod'
  * schemas directly.
  */
 
-export const tenantPersonSchema = z.object({
+const tenantPersonSchema = z.object({
   userId: z.string().min(1),
   displayName: z.string().min(1),
   deactivated: z.boolean(),

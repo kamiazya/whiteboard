@@ -18,9 +18,7 @@ function injectTraceContextIntoHeaders(headers: Headers, ctx = context.active())
 
 // Validates that a URL string is a bare origin: scheme + host + optional port, no path/query/hash/credentials.
 // Downstream CORS, OAuth, and Cloudflare config all require a strict origin, not an arbitrary URL.
-// Exported so other cross-boundary contracts (e.g. apps/web's runtime-config.ts) reuse
-// the same origin-validation rules instead of redefining them.
-export const bareOriginSchema = z
+const bareOriginSchema = z
   .string()
   .url()
   .refine(
