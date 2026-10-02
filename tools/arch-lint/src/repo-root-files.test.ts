@@ -62,6 +62,9 @@ const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
   // vitest.config.ts (which registers those projects) and belongs to no
   // single package.
   'vitest.browser.shared.ts',
+  // Browser launch options, read by that file and by apps/web's docs-snapshots
+  // config — two configs with no common package to hold it.
+  'vitest.browser.launch-options.ts',
   'vitest.config.ts',
 ])
 
