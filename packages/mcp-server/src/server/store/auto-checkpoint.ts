@@ -5,19 +5,22 @@ import type { LoroDoc } from 'loro-crdt'
  * The one automatic-checkpoint scheduler, shared by every path that writes a
  * document.
  *
- * It is the router's own (`routes/document.ts` installs it), not a second
- * scheduler built here: it carries what only the root knows — the daemon's
- * actor, the broadcast on a saved row, the quiet window a test shortens — and
- * the root already flushes it at shutdown. Two schedulers over one workspace
- * would also each hold pending state for the same document.
+ * It is the keeper's own, not a second scheduler built here: the HTTP roots
+ * install the one their router signals (it carries what only the root knows
+ * — the daemon's actor, the broadcast on a saved row, the quiet window a
+ * test shortens), and the stdio root, which mounts no router, builds the
+ * same one over the same store. Both install it through the `auto-checkpoint`
+ * declaration in `shared-background-work.ts`, which also flushes it at
+ * shutdown. Two schedulers over one workspace would each hold pending state
+ * for the same document.
  *
  * Held at module scope for the reason `installAutoCompact` is: the agent
  * write path reaches this through a `documentWritten` seam with no router in
  * its call chain.
  *
- * ponytail: nothing is installed in the stdio entry, which mounts no router,
- * so a stdio-only workspace takes no automatic checkpoint. Build a default
- * scheduler here when stdio needs one; the daemon's `/mcp` is covered.
+ * ponytail: one scheduler for the process, whatever the workspace. A root
+ * that ever needs a per-workspace quiet window or actor swaps this for a
+ * lookup keyed by workspace id.
  */
 let installed: CheckpointScheduler | null = null
 

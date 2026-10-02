@@ -2,7 +2,6 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
-import { installAutoCheckpoint } from '../store/auto-checkpoint.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
@@ -76,9 +75,6 @@ function armAutoVersionTrigger(
       sendVersionCreated(workspaceId, path, entry)
     },
   })
-  // The agent write path signals this same scheduler, so an agent-only
-  // workspace gets the checkpoints (and the compaction floor) an edited one does.
-  installAutoCheckpoint(trigger)
   options.onAutoVersionTrigger?.(trigger)
   return trigger
 }

@@ -7,6 +7,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
+import type { AutoVersionTrigger } from './auto-version.js'
 
 const tmp = withTempDataDir('whiteboard-agent-checkpoint-')
 
@@ -20,6 +21,10 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { createDocumentRouter } = await import('../document.js')
+const { createSharedWorkers, sharedBackgroundWork } = await import(
+  '../../shared-background-work.js'
+)
+const { uninstallAutoCheckpoint } = await import('../../store/auto-checkpoint.js')
 const { FileVersionStore } = await import('../../store/version-store.js')
 const { compactWorkspace } = await import('../../store/document-store.js')
 const { disposeAutoCompact } = await import('../../store/auto-compact.js')
@@ -34,7 +39,7 @@ describe('an agent-only workspace', () => {
   })
 
   it('gets a checkpoint at the pause, which lets compaction proceed past no-versions', async () => {
-    let trigger: { flush(): Promise<void>; stop(): void } | undefined
+    let trigger: AutoVersionTrigger | undefined
     createDocumentRouter({
       serverDeps: deps,
       // Long enough that only the flush below can take the checkpoint.
@@ -43,6 +48,14 @@ describe('an agent-only workspace', () => {
         trigger = t
       },
     })
+    // The root arms the router's scheduler for the agent write path; the
+    // router itself installs nothing.
+    sharedBackgroundWork(createSharedWorkers('instance-a'), {
+      checkpointScheduler: () => trigger,
+      fileGc: { start: () => {}, stop: async () => {} },
+    })
+      .find((entry) => entry.name === 'auto-checkpoint')
+      ?.worker?.start()
     try {
       const edited = await createWorkspaceEditTool(deps).execute({
         workspaceId: 'agent-only',
@@ -84,6 +97,7 @@ describe('an agent-only workspace', () => {
       expect(compaction.reason).not.toBe('no-versions')
     } finally {
       trigger?.stop()
+      uninstallAutoCheckpoint()
       await disposeAutoCompact()
     }
   })

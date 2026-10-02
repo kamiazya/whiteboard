@@ -595,7 +595,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
   'packages/mcp-server/src/server/mcp/index.ts#createMcpServer': 76,
-  'packages/mcp-server/src/server/mcp/index.ts#main': 61,
   'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts#runE2eCheckpointSmoke': 101,
   'packages/mcp-server/src/server/mcp/startup.smoke-impl.ts#runStartupSmoke': 67,
   'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 115,

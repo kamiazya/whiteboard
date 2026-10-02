@@ -37,6 +37,7 @@ vi.mock('./document-tools.js', () => ({
 }))
 vi.mock('../store/db/index.js', () => ({
   getDb: vi.fn(async () => ({})),
+  registerDbDisposeHook: vi.fn(),
 }))
 vi.mock('../../di/store-local.module.js', () => ({
   createStoreLocalModule: vi.fn(() => 'fake-store-local-module'),

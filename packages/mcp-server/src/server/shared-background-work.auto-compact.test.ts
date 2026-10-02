@@ -35,7 +35,7 @@ describe('the shared set arms auto-compaction', () => {
 
   function declared() {
     const work = sharedBackgroundWork(createSharedWorkers('instance-a'), {
-      flushCheckpoints: async () => undefined,
+      checkpointScheduler: () => undefined,
       fileGc: { start: () => {}, stop: async () => {} },
     }).find((entry) => entry.name === 'auto-compact')
     if (work === undefined) throw new Error('the shared set declares no auto-compact worker')

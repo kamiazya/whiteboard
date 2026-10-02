@@ -5,7 +5,9 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { z } from 'zod'
 import { bootSelfHostDeps, prepareSelfHostDataDir } from '../../di/boot-self-host-deps.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
+import { startBackgroundWork } from '../background-work.js'
 import { getDataDir } from '../config.js'
+import { stdioBackgroundWork } from '../shared-background-work.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
@@ -158,9 +160,20 @@ export async function main() {
   // sdk.shutdown() twice concurrently on a real signal.
   await initTracing({ role: 'stdio-mcp', installSignalHandlers: false })
 
+  closeServer = await startStdioServer()
+}
+
+/**
+ * Prepares the data dir, arms the root's background work and serves the
+ * connection. Answers how to close it all: the transport first, so the
+ * shutdown flush sees every write the session made.
+ */
+async function startStdioServer(): Promise<() => Promise<void>> {
   // Prepared once at startup rather than on the first connection, so a data
   // dir that cannot be migrated fails the process here.
   await prepareSelfHostDataDir(getDataDir())
+  // Armed before the first connection can write.
+  const backgroundWork = startBackgroundWork(stdioBackgroundWork())
   // serveStdio owns the era decision for the connection: a 2025-era opening
   // (`initialize`) is served exactly as the old hand-wired transport served
   // it, and a 2026-07-28 opening pins a modern instance from the same
@@ -172,5 +185,11 @@ export async function main() {
     },
   })
 
-  closeServer = () => handle.close()
+  return async () => {
+    try {
+      await handle.close()
+    } finally {
+      await backgroundWork.stopAll()
+    }
+  }
 }

@@ -422,7 +422,6 @@ export const KNOWN_PACKAGE_CYCLES: readonly {
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
-  'routes/document.ts -> auto-checkpoint',
   'routes/document.ts -> version-store',
   'routes/document/auto-version.ts -> version-store',
   'routes/document/maintenance.ts -> document-store',
@@ -476,6 +475,10 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * are all translation-only over the LiveDocuments/WorkspaceDocuments
  * seams. The edges left are the unscheduled adapters — each still a
  * candidate for the same treatment, none yet ordered.
+ *
+ * `routes/document.ts -> auto-checkpoint` went, 21 -> 20, when the root began
+ * installing the checkpoint scheduler through its background-work
+ * declaration instead of the router doing it as a side effect of being built.
  *
  * Two of the 21 went when ADR-0029 retired the branch: `routes/branches.ts`
  * reached both `branch-merge` and `branches-store`, and the route no longer
