@@ -34,6 +34,15 @@ A document is addressed by its doc key, `${workspaceId}/${path}`, or by
 `workspace:${workspaceId}` for the workspace record as a whole. A request that
 names a stream the daemon does not hold answers `404 unknown_stream`.
 
+The daemon decides a subscribe as a whole: it answers `403` for the whole
+request when any workspace in it is one the credential may not enter, and
+`400 too_many_subscriptions` when it would take the stream past 256 documents.
+So the hub asks for one workspace per request, in batches of at most 256, and a
+refusal costs exactly the documents it names: a `403` is reported to their
+subscribers as `onAuthRefused`, any other refusal as `onConnectionChange(false)`,
+and the stream stays open for everything else. A document past the stream's
+limit is therefore reported as not live rather than as connected.
+
 ### Events on the stream
 
 | Event | Payload | Meaning |
