@@ -53,7 +53,7 @@ export interface DocumentPropertiesProps {
  * what a reader keys a View off, and constraining it to a closed enum would
  * decide other people's vocabulary for them.
  */
-const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'] as const
+const TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'] as const
 
 /**
  * The canvas row: the document's name, plus — for a document that HAS OKF
@@ -196,14 +196,11 @@ export function DocumentProperties({
 export function DocumentFacetsEditor({
   facets,
   onChange,
-  typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
   tagSuggestions,
   tagLibrary,
 }: {
   readonly facets: StoredCoreFacets
   readonly onChange?: (next: StoredCoreFacets) => void
-  /** Offered as datalist completions for `type`; the field stays free text. */
-  readonly typeSuggestions?: readonly string[]
   /** The workspace's vocabulary in use, so a note completes from what the workspace already says (ADR-0040 decision 6). */
   readonly tagSuggestions?: readonly string[]
   /** The workspace's tag library: offered under a key, and refused where it forbids (decision 5). */
@@ -252,7 +249,7 @@ export function DocumentFacetsEditor({
           className="text-foreground border-border min-w-0 flex-1 rounded border bg-transparent px-2 py-1 text-sm outline-none"
         />
         <datalist id={suggestionsId}>
-          {typeSuggestions.map((suggestion) => (
+          {TYPE_SUGGESTIONS.map((suggestion) => (
             <option key={suggestion} value={suggestion} />
           ))}
         </datalist>

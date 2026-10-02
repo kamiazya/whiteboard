@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { createRowOutlineLoader, type RowOutlineDeps } from './load-row-outline.js'
+import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
 
 const spatial = { documentId: 'c1', path: 'a/b', kind: 'spatial' as const }
 const markdown = { documentId: 'c2', path: 'notes', kind: 'markdown' as const }
@@ -75,7 +76,7 @@ describe('createRowOutlineLoader', () => {
     await expect(load(markdown)).resolves.toEqual({ rects: blocks })
     // The width is fixed rather than measured: an icon has no pane, and a
     // shape that changed with the window would differ between two screens.
-    expect(widths).toEqual([640])
+    expect(widths).toEqual([ROW_LAYOUT_WIDTH])
   })
 
   it('answers null when the layout refuses', async () => {

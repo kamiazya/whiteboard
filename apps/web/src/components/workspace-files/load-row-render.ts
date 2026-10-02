@@ -40,19 +40,13 @@ import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, renderKeyOf } from '../../lib/render-key.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { loadThemeFontFromSource, themeFacesKey } from '../../lib/theme-fonts.js'
+import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
 
 export interface DocumentRender {
   readonly svg: string
   /** What the SVG's viewBox covers, so a caller can fit it to any box. */
   readonly bounds: BoundingBox
 }
-
-/**
- * Width a row's markdown is laid out at. Fixed rather than measured: a
- * thumbnail has no pane, and a shape that changed with the window would make
- * the same document look different on two screens.
- */
-const ROW_LAYOUT_WIDTH = 640
 
 export interface RowRenderDeps {
   readonly source: WorkspaceFilesSource
