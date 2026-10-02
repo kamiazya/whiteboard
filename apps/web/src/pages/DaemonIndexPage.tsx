@@ -14,6 +14,7 @@ import {
 } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
+import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
@@ -26,6 +27,7 @@ import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-a
 import { DaemonIndexBody } from './daemon-index-body.js'
 import type { DaemonIndexPageProps } from './daemon-index-page-props.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
+import { useFollowWorkspaceWrites } from './use-follow-workspace-writes.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
 // time — the one the ADDRESS names. Choosing which is the shell switcher's,
@@ -80,6 +82,17 @@ function resolveAddress(
   }
 }
 
+// Unordered on purpose: the panel orders what it shows from the same source,
+// and these rows serve lookups (a name, a path, a kind) only.
+function listingRows(entries: readonly WorkspaceDocumentEntry[]): DocumentRow[] {
+  return entries.map((entry) => ({
+    path: entry.path,
+    displayName: entry.name ?? entry.path,
+    updatedAt: entry.updatedAt,
+    ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+  }))
+}
+
 export function DaemonIndexPage({
   daemonBaseUrl,
   token,
@@ -87,6 +100,7 @@ export function DaemonIndexPage({
   onWorkspaceResolved,
   onOpenDocument,
   serverMode = false,
+  streamSource,
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
 
@@ -369,16 +383,7 @@ export function DaemonIndexPage({
         // because the count decides whether onboarding may replace the panel.
         const { entries, trash } = await sourceFor(workspaceId).refresh()
         if (isStale()) return
-        // Unordered on purpose: the panel orders what it shows from the same
-        // source, and these rows serve lookups (a name, a path, a kind) only.
-        setRows(
-          entries.map((entry) => ({
-            path: entry.path,
-            displayName: entry.name ?? entry.path,
-            updatedAt: entry.updatedAt,
-            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-          })),
-        )
+        setRows(listingRows(entries))
         setTrashCount(trash?.length ?? 0)
         setLoaded(true)
       } catch (err) {
@@ -471,6 +476,13 @@ export function DaemonIndexPage({
       cancelled = true
     }
   }, [selectedWorkspace, loadWorkspace])
+
+  // Whoever else writes to this workspace — an agent, the CLI, another tab.
+  useFollowWorkspaceWrites(
+    { daemonFetch, daemonBaseUrl, token, streamSource },
+    selectedWorkspace,
+    loadWorkspace,
+  )
 
   // Creation is immediate — no name is collected up front (ADR-0006 point
   // 3). A path is derived from the loaded rows so it never collides with a
