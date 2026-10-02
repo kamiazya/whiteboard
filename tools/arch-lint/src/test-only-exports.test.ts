@@ -44,10 +44,6 @@ const NO_USE_BESIDE_TESTS: readonly string[] = [
   'apps/web/src/lib/render-surfaces.ts#RENDER_SURFACES',
   'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract',
   'apps/web/src/runtime-config.ts#EMPTY_RUNTIME_CONFIG',
-  'packages/canvas-render/src/layout/edges/edge-label-anchor.ts#edgeLabelAnchor',
-  'packages/canvas-render/src/layout/seed.ts#createStyleRandom',
-  'packages/canvas-render/src/scene-entry-keys.ts#sceneEntryKeys',
-  'packages/canvas-viewer/src/scene.ts#serializeViewerScene',
   'packages/daemon-client/src/api-contracts/document.ts#CreateWorkspaceRequest',
   'packages/daemon-client/src/api-contracts/document.ts#PurgeResult',
   'packages/daemon-client/src/api-contracts/document.ts#RestoreVersionRequest',
@@ -90,7 +86,6 @@ const NO_USE_BESIDE_TESTS: readonly string[] = [
   'packages/plugin-visual/src/emoji/catalog-ja.ts#EMOJI_JA_TAG',
   'packages/ports/src/delta.ts#DeltaBatch',
   'packages/ports/src/frontier.ts#protocolVersionSchema',
-  'packages/scene/src/scene-graph.ts#Dimensions',
   'packages/server-core/src/tools/errors.ts#PatchValidationError',
 ]
 
@@ -498,7 +493,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the two debt lists hold, pinned by equality. */
-const DEBT_CEILING = 409
+const DEBT_CEILING = 404
 
 const DIRS = [
   'apps',

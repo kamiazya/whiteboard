@@ -11,7 +11,6 @@ export type {
   BlockquoteNode,
   BoundingBox,
   CodeBlockNode,
-  Dimensions,
   EmbedPlaceholderNode,
   EmbedResolvedNode,
   GlyphSceneNode,
@@ -92,7 +91,7 @@ export type {
 } from './layout/nodes/spatial-appearance.js'
 export { findPassage } from './layout/passage-highlight.js'
 export { scaleScene } from './layout/scale-scene.js'
-export { createStyleRandom, seedFromId, styleRandomFromSeed } from './layout/seed.js'
+export { seedFromId, styleRandomFromSeed } from './layout/seed.js'
 export type {
   DecorationContext,
   NodeDecoration,
@@ -151,7 +150,6 @@ export {
 export { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
-export { sceneEntryKeys } from './scene-entry-keys.js'
 export type { SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
 export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'

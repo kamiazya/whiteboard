@@ -234,7 +234,7 @@ function pullEdgeOntoOutlines(
  * Composes a centered label run for an edge that carries one. Returns
  * `undefined` for no label, an empty/whitespace-only label, or a
  * degenerate path — `layoutSpatialCanvas` stays total either way. The
- * anchor comes from `edgeLabelAnchor`, the same producer the editor's
+ * anchor comes from `edgeLabelPlacement`, the same producer the editor's
  * inline label editor uses.
  */
 function composeEdgeLabel(

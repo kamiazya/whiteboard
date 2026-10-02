@@ -25,7 +25,7 @@ const MIN_GHOST_RUN_PX = 60
 /**
  * Ghosts sit at a THIRD and two thirds of a run, never at its midpoint.
  *
- * The midpoint belongs to the edge's label: it is where `edgeLabelAnchor`
+ * The midpoint belongs to the edge's label: it is where `edgeLabelPlacement`
  * draws one and where double-pressing an edge opens its editor. A ghost
  * there swallows the second press — measured, it failed every case in
  * `edge-label-edit.browser.test.tsx` while the bend tests stayed green,

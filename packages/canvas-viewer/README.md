@@ -20,10 +20,9 @@ widget, HTML export). Private workspace package — never published to npm.
   embedded-scene slot (`<script data-whiteboard-scene>` or
   `window.__WHITEBOARD_VIEWER_SCENE__`).
   Throws a `ViewerSceneError` if the scene payload fails schema validation.
-- `parseViewerScene` / `serializeViewerScene` (from `./scene`) — a total
-  parser/serializer pair delegating to codec's
-  `parseSpatial`/`serializeSpatial`; `parseViewerScene` never throws, it
-  returns a discriminated `{ ok, value | error }` result.
+- `parseViewerScene` (from `./scene`) — a total parser over codec's
+  `parseSpatial` and wire schema; it never throws, it returns a
+  discriminated `{ ok, value | error }` result.
 - `createBrowserMeasureText` (from `./measure-text`) — the browser
   implementation of canvas-render's injected `MeasureText` seam (Canvas 2D
   `measureText`, with a ratio-based fallback for environments with no real

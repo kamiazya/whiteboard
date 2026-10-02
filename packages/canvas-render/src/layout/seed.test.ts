@@ -4,7 +4,7 @@
 // edits of unrelated nodes.
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { createStyleRandom, seedFromId } from './seed.js'
+import { seedFromId, styleRandomFromSeed } from './seed.js'
 
 describe('seedFromId', () => {
   fcTest.prop([fc.string()], withDefaults())('is a pure function of the id', (id) => {
@@ -32,7 +32,9 @@ describe('seedFromId', () => {
   })
 })
 
-describe('createStyleRandom', () => {
+const createStyleRandom = (id: string) => styleRandomFromSeed(seedFromId(id))
+
+describe('a style random stream keyed by node identity', () => {
   fcTest.prop([fc.string()], withDefaults())(
     'identical ids replay identical sequences (byte-identical reruns)',
     (id) => {

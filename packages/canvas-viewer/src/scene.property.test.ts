@@ -6,10 +6,15 @@
  * locally (unique node ids, edges referencing only generated node ids).
  */
 
-import { fromJsonCanvas, strictDegrade, toJsonCanvas } from '@kamiazya/whiteboard-codec'
+import {
+  fromJsonCanvas,
+  serializeSpatial,
+  strictDegrade,
+  toJsonCanvas,
+} from '@kamiazya/whiteboard-codec'
 import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { parseViewerScene, serializeViewerScene } from './scene.js'
+import { parseViewerScene } from './scene.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 describe('scene parse/serialize properties', () => {
@@ -21,7 +26,7 @@ describe('scene parse/serialize properties', () => {
       // integer pixels and the projection rounds. Putting the canvas through
       // the projection first is what names that subset.
       const expressible = fromJsonCanvas(toJsonCanvas(canvas))
-      const json = serializeViewerScene(expressible, 'extended')
+      const json = serializeSpatial(expressible, 'extended')
       const result = parseViewerScene(json)
       expect(result).toEqual({ ok: true, value: expressible })
     },
@@ -35,7 +40,7 @@ describe('scene parse/serialize properties', () => {
       // model degraded in place. Since ADR-0037 those are different documents:
       // the projection is where `facets`, `comments` and `embed` become the
       // extension key that strict mode then drops.
-      const json = serializeViewerScene(canvas, 'strict')
+      const json = serializeSpatial(canvas, 'strict')
       const result = parseViewerScene(json)
       expect(result).toEqual({
         ok: true,

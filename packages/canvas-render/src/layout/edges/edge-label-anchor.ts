@@ -1,26 +1,18 @@
 // The single producer of "where an edge's label sits": the arc-length
-// midpoint of the DRAWN line. Both the SVG backend (composeEdgeLabel) and
-// the editor's inline label editor anchor here — two independent midpoint
-// derivations is the drift class that put exported labels on the sharp
-// corner a curved edge's ink never touches.
+// midpoint of the DRAWN line, slid clear of what it would cover. Both the SVG
+// backend (composeEdgeLabel) and the editor's inline label editor place here —
+// two independent midpoint derivations is the drift class that put exported
+// labels on the sharp corner a curved edge's ink never touches.
+//
+// `rounded` applies the same corner flattening the backend and hit-testing
+// draw with, so a label stays on the curve rather than the raw corner vertex.
+// A path that draws no line — fewer than two points, or every point at one
+// place (`routeEdge`'s missing-endpoint fallback is `[origin, origin]`) —
+// has no place for a label: a point-count check alone would miss that case
+// and leave a label floating at the canvas origin.
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Point } from './edge-geometry.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
-
-/**
- * The point halfway along the drawn edge, by arc length. `rounded` applies
- * the same corner flattening the backend and hit-testing draw with, so the
- * anchor stays on the curve rather than the raw corner vertex.
- *
- * Returns `undefined` when the path draws no line — fewer than two points,
- * or every point at the same place. `routeEdge`'s missing-endpoint fallback
- * is that second case specifically: it degrades to `[origin, origin]`, a
- * two-point path of zero length. A point-count check alone would miss it
- * and leave a label floating at the canvas origin.
- */
-export function edgeLabelAnchor(path: readonly Point[], rounded?: boolean): Point | undefined {
-  return midpointOf(path, rounded)?.point
-}
 
 /** The arc-length midpoint and the drawn segment it lies on. */
 function midpointOf(
@@ -93,7 +85,7 @@ const overlaps = (a: Rect, b: Rect): boolean =>
  * it at the midpoint, which is at least where a reader looks first.
  *
  * The one producer for the renderer's label box and the editor's inline
- * label editor alike, for the reason `edgeLabelAnchor` gives.
+ * label editor alike, for the reason the file header gives.
  */
 export function edgeLabelPlacement(
   path: readonly Point[],

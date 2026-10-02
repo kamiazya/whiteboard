@@ -4,7 +4,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, ShapeId } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
-import { sceneEntryKeys } from './scene-entry-keys.js'
+import { sceneEntries } from './scene-entry-keys.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
 import { createSpatialTheme } from './theme/spatial-theme.js'
 
@@ -86,7 +86,7 @@ const layout = (canvas: SpatialCanvas): Scene =>
  * (scene-entry-keys.ts) — one keying, so this scoreboard's counts are
  * exactly the group replacements a patch layer would perform. */
 function keyedEntries(scene: Scene): Map<string, string> {
-  const keys = sceneEntryKeys(scene)
+  const keys = sceneEntries(scene).map((entry) => entry.key)
   return new Map(
     scene.nodes.map((node, index) => [keys[index] ?? `#${index}`, JSON.stringify(node)]),
   )

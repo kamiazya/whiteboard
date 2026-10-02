@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { edgeLabelAnchor, edgeLabelPlacement } from './edge-label-anchor.js'
+import { edgeLabelPlacement } from './edge-label-anchor.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
 
-describe('edgeLabelAnchor', () => {
+// With nothing to avoid, a label sits at the arc-length midpoint of the drawn line.
+const edgeLabelAnchor = (path: readonly { x: number; y: number }[], rounded?: boolean) =>
+  edgeLabelPlacement(path, { w: 0, h: 0 }, [], rounded)
+
+describe('edge label midpoint', () => {
   it('returns the arc-length midpoint of a two-segment path', () => {
     // Segments of length 10 then 30: midpoint is 20 along, i.e. 10 into segment 2.
     const path = [

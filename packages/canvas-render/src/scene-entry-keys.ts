@@ -52,7 +52,3 @@ export function sceneEntries(scene: Scene): readonly SceneEntry[] {
   }
   return entries
 }
-
-export function sceneEntryKeys(scene: Scene): readonly string[] {
-  return sceneEntries(scene).map((entry) => entry.key)
-}

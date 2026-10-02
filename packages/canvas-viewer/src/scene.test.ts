@@ -1,13 +1,14 @@
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { parseViewerScene, serializeViewerScene, type ViewerScene } from './scene.js'
+import { parseViewerScene, type ViewerScene } from './scene.js'
 
 const emptyCanvas: ViewerScene = { nodes: [], edges: [] }
 
 /**
  * `parseViewerScene` takes the JSON Canvas WIRE shape — it IS the codec
  * parser — so every fixture in this describe spells `type` plus the kind's
- * own field. The `serializeViewerScene` describe below takes a `ViewerScene`,
+ * own field. The `serializeSpatial` describe below takes a `ViewerScene`,
  * which is the MODEL, and uses the node builders. One file, both contracts,
  * and telling them apart is the whole point of ADR-0038 decision 3 leaving
  * the wire where it was.
@@ -115,7 +116,7 @@ describe('parseViewerScene', () => {
   })
 })
 
-describe('serializeViewerScene', () => {
+describe('parseViewerScene over serializeSpatial output', () => {
   it('round-trips an extended-mode canvas through parseViewerScene', () => {
     const canvas: ViewerScene = {
       nodes: [
@@ -131,7 +132,7 @@ describe('serializeViewerScene', () => {
       ],
       edges: [],
     }
-    const json = serializeViewerScene(canvas, 'extended')
+    const json = serializeSpatial(canvas, 'extended')
     const result = parseViewerScene(json)
     expect(result).toEqual({ ok: true, value: canvas })
   })
@@ -151,7 +152,7 @@ describe('serializeViewerScene', () => {
       ],
       edges: [],
     }
-    const json = serializeViewerScene(canvas, 'strict')
+    const json = serializeSpatial(canvas, 'strict')
     const result = parseViewerScene(json)
     expect(result.ok).toBe(true)
     if (result.ok) {
