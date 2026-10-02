@@ -153,12 +153,19 @@ policy to its own frames:
 - **The extension says which protocol it speaks.** Its answer to the page's
   `hello` (and the content script's, on Firefox) carries `version` and
   `protocol`, one shape for both from `extensionHelloReplySchema`. The page
-  compares `protocol` with `BRIDGE_PROTOCOL_VERSION` before its first request
+  compares each hop's `protocol` with `BRIDGE_PROTOCOL_VERSION` before its first request
   on a connection and, on a difference, refuses every request with the words
   from `bridgeSkew` — which side to update — instead of sending frames the
   other end may misread. An extension that sends no `protocol` predates the
   check and is reported as such. Raise the constant when a frame changes in a
   way an older reader would misread rather than strip.
+- **The native host says its own.** The extension relays frames unread, so it
+  can vouch only for itself. The page sends `{ type: 'hello' }` down the port
+  once per connection and the host answers `{ type: 'hello', version, protocol }`,
+  the same identity shape. `bridgeSkew(identity, 'host')` names the native host
+  and, when it is behind, the package that updates it (`@kamiazya/whiteboard-mcp`).
+  A host that predates the question stays silent and is carried on with after a
+  bounded wait, since it relays fine.
 - **A frame the page cannot read ends the request it names.** A host newer than
   the page can answer in a shape the page has no schema for; the request the
   frame carries an `id` for fails with a message that names the version

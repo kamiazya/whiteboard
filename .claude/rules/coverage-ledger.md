@@ -128,7 +128,7 @@ different things:
 | **assert a rule** | `destructive-copy-surface`, `App.shell-workspaces-surface` | every occurrence found must satisfy one rule; no per-item entries, no vocabulary |
 
 `keeper-parity` is the classify family aimed at a gap no contract can reach.
-`versions-backend.contract.ts` runs one behavioural suite against both
+`test-utils/versions-backend.contract.ts` runs one behavioural suite against both
 keepers and catches one that answers the seam WRONGLY; a feature implemented
 in one keeper and never written in the other is an **absent test, not a
 failing one**, and every suite stays green over it — which is how the daemon

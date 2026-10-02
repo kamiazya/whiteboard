@@ -5,7 +5,7 @@ description: Audit a whiteboard workspace's documents to find likely-stale or du
 
 # auditing-workspaces
 
-List a workspace's documents, then use the spatial ones' scene digests to judge which look empty
+List a workspace's documents, then use `wb_canvas_snapshot` on the spatial ones (its `nodeCount`, and `layout: true` for how tidy it is) to judge which look empty
 or abandoned. There is no server-side audit endpoint — this skill is a recipe for composing the
 regular document tools toward that end, nothing more.
 
@@ -69,7 +69,7 @@ wb_canvas_snapshot({ workspaceId, documentId, layout: true })  // ...and whether
 ```
 
 A document with no recorded kind predates format tracking (`wb_document_get` reports it in
-`failed` rather than guessing; the digest still answers, misleadingly, from the empty spatial
+`failed` rather than guessing; a snapshot of it still answers, misleadingly, from the empty spatial
 containers). The only way to give it a kind is
 to write to it (a `wb_canvas_edit` call records `spatial`, a `document.set` op records `markdown`).
 
@@ -82,7 +82,7 @@ staleness structurally first:
 
 | Signal | How To Check | Likely Meaning |
 | --- | --- | --- |
-| empty spatial document | `kind` is `spatial` (Step 2) AND digest reports zero nodes | never drawn, or already redrawn elsewhere — candidate for a `document.delete` op. A zero-node digest ALONE proves nothing: markdown documents always digest empty |
+| empty spatial document | `kind` is `spatial` (Step 2) AND `wb_canvas_snapshot` reports `nodeCount: 0` | never drawn, or already redrawn elsewhere — candidate for a `document.delete` op. A zero `nodeCount` ALONE proves nothing for a document whose kind you have not established: the snapshot refuses a markdown document, but one with no recorded kind answers empty |
 | near-duplicate path | two `wb_document_list` entries with similar `path`/`name` | probably one abandoned in favor of the other |
 | old or missing `updatedAt` | `updatedAt` in the Step 1 listing, if present | a hint only — one replica's stamp, not a merge-proof clock; corroborate with a structural signal before proposing deletion |
 | markdown document with an empty body | `content` is blank apart from frontmatter | scaffolded but never written |

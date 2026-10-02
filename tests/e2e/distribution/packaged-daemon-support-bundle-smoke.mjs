@@ -41,7 +41,7 @@ const CLI_ENTRY = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
 if (!existsSync(CLI_ENTRY)) {
   console.error(
     `[packaged-daemon-support-bundle-smoke] FAIL: dist entrypoint missing: ${CLI_ENTRY}\n` +
-      'Run `pnpm --filter @kamiazya/whiteboard-mcp build` first.',
+      'Run `pnpm build:mcp` first.',
   )
   process.exit(1)
 }

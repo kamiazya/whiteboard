@@ -291,10 +291,9 @@ function useBrowserDocument(
     [documentId, documentKind],
   )
 
-  // The store, not the seam, is what a merge's pre-merge point needs: the
-  // seam's `save` carries a label and nothing else, while a checkpoint has to
-  // say it is automatic and which variation it belongs to. So it is built
-  // once here and handed to both.
+  // The store, not the seam, is what the auto-checkpoint needs: the seam's
+  // `save` carries a label and nothing else, while a checkpoint has to say it
+  // is automatic. So it is built once here and handed to both.
   const versionStore = useMemo(
     () => new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index: store }),
     [store],

@@ -132,7 +132,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // `package-canvas-render.md` already said. What stays is the rule a session
   // placing code needs and the NAMES (`background-work.ts`, `cycle-check.ts`,
   // `web-app-boundary.test.ts`) a doc-sync guard and a grep look for.
-  '.claude/rules/architecture-map.md': 14,
+  '.claude/rules/architecture-map.md': 15,
   // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
   // It belongs here rather than in a skill because it changes what a session
   // must do when it shards a job: nothing, where before it had to ask a human
@@ -480,7 +480,7 @@ const CANVAS_RENDER_BUDGET = 108
 // neighbour above, so an addition says in its diff that it is one. A cut
 // lowers the pin; moving measurement history to `docs/contributing/architecture/`
 // is the cut `package-canvas-render.md` took.
-const TOOL_ARCH_LINT_BUDGET = 40
+const TOOL_ARCH_LINT_BUDGET = 42
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

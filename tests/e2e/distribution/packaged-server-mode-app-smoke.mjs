@@ -31,7 +31,7 @@ const DIST_SERVER = resolve(REPO_ROOT, 'packages/mcp-server/dist/server')
 if (!existsSync(join(DIST_SERVER, 'app.js'))) {
   console.error(
     '[server-mode-smoke] FAIL: dist/server/app.js missing.\n' +
-      'Run `pnpm --filter @kamiazya/whiteboard-mcp build` before this smoke.',
+      'Run `pnpm build:mcp` before this smoke.',
   )
   process.exit(1)
 }

@@ -26,7 +26,7 @@ function dataDirWithRecord(): { dataDir: string; socketPath: string } {
   const dataDir = mkdtempSync(join(tmpdir(), 'wb-proxy-'))
   cleanups.push(() => rmSync(dataDir, { recursive: true, force: true }))
   const socketPath = join(dataDir, 'daemon.sock')
-  writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ socketPath }))
+  writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ pid: process.pid, socketPath }))
   return { dataDir, socketPath }
 }
 
@@ -116,7 +116,7 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     await new Promise((r) => setTimeout(r, 500))
     const socketPath = join(dataDir, 'daemon.sock')
     await startResponder(socketPath)
-    writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ socketPath }))
+    writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ pid: process.pid, socketPath }))
 
     expect(JSON.parse(await nextStdoutLine(proc))).toHaveProperty('result')
     expect(tcpConnections).toBe(0)

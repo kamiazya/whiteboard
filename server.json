@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "io.github.kamiazya/whiteboard",
-  "description": "Collaborative whiteboard MCP server. Lets AI agents (Claude Code / Codex) and humans co-author diagrams on a shared canvas: create canvases, patch nodes / edges, save & restore version checkpoints, and export SVG / OKF Markdown / JSON Canvas. The hosted web app reaches the local daemon through the whiteboard browser extension; the daemon serves no page of its own.",
+  "description": "Collaborative whiteboard MCP server. Lets AI agents (Claude Code / Codex) and humans co-author diagrams on a shared canvas: create and organise documents (wb_workspace_edit), edit nodes, edges and lines in one batch (wb_canvas_edit), save and restore version checkpoints (wb_version_save, wb_version_restore), and read them back as OKF Markdown, JSON Canvas or rendered SVG (wb_document_get, wb_scene_render). The hosted web app reaches the local daemon through the whiteboard browser extension; the daemon serves no page of its own.",
   "status": "active",
   "repository": {
     "url": "https://github.com/kamiazya/whiteboard",

@@ -11,7 +11,7 @@ import {
 } from '../../store/names-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import { parseWorkspaceHandle } from '../../workspace-handle.js'
-import { handleCorruptStoredData, handleDocumentNotFound } from './_shared.js'
+import { handleCorruptStoredData, handleDocumentNotFound, invalidBodyRefusal } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 // User-facing workspace / canvas names.
@@ -51,7 +51,7 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
     const { workspaceId } = address
     const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
-      return c.json({ error: 'invalid_body' }, 400)
+      return c.json(invalidBodyRefusal(parsed.error, 'name must be a string'), 400)
     }
     try {
       const updated = await setWorkspaceName(workspaceId, parsed.data.name, scope)
@@ -68,7 +68,7 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
   onDocumentsRoute(app, 'put', ['name'], async (c, workspaceId, path) => {
     const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
-      return c.json({ error: 'invalid_body' }, 400)
+      return c.json(invalidBodyRefusal(parsed.error, 'name must be a string'), 400)
     }
     try {
       const updated = await setDocumentDisplayName(workspaceId, path, parsed.data.name, scope)
@@ -86,7 +86,7 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
   onDocumentsRoute(app, 'put', ['pin'], async (c, workspaceId, path) => {
     const parsed = setPinnedRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
-      return c.json({ error: 'invalid_body', message: 'pinned must be boolean' }, 400)
+      return c.json(invalidBodyRefusal(parsed.error, 'pinned must be boolean'), 400)
     }
     try {
       const updated = await setDocumentPinned(workspaceId, path, parsed.data.pinned, scope)

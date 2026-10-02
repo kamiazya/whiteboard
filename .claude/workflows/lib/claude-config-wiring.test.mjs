@@ -246,12 +246,7 @@ function hookCommands() {
 }
 
 /** Hooks whose own test is named for their library, with the reason it has no `<name>.test.mjs`. */
-const TESTED_THROUGH_LIBRARY = {
-  '.claude/scripts/hooks/pre-merge-show-comments.mjs': {
-    test: '.claude/scripts/pre-merge-comments-lib.test.mjs',
-    reason: 'the decision logic is the library; the hook is its stdin/stdout shell',
-  },
-}
+const TESTED_THROUGH_LIBRARY = {}
 
 /** Files in `.claude/scripts/hooks/` that no settings.json entry runs, with the reason. */
 const UNREFERENCED_HOOK_FILES = {}

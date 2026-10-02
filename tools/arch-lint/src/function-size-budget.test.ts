@@ -349,7 +349,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/spatial/minimap.ts#fitMinimap': 52,
   'apps/web/src/lib/sse-shared-stream-source.ts#createSharedSseStreamSource': 139,
   'apps/web/src/lib/user-settings-store.ts#createUserSettingsStore': 53,
-  'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract': 95,
+  'apps/web/src/test-utils/versions-backend.contract.ts#versionsBackendContract': 95,
   'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 491,
   'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 153,
   // The Duplicate and Delete verbs' screen state and dialogs each live in

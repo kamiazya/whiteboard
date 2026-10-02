@@ -4,7 +4,8 @@
  * app's calls — plain requests and the SSE stream alike — keep their shape
  * and only the function they are handed changes.
  */
-import { pageToHostSchema } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
+import { bridgeSkew, pageToHostSchema } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
+import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL, isBridgeDaemon } from './bridge-address.js'
@@ -14,8 +15,13 @@ import type { BridgePort } from './extension-bridge-port.js'
 /** The extension's end of the port, answering as the native host would. */
 class FakeExtension {
   readonly ports: FakePort[] = []
+  /** What the host answers a hello with; `null` is a host that predates the check. */
+  hostHello: { version: string; protocol?: number } | null = {
+    version: '1.0.0',
+    protocol: BRIDGE_PROTOCOL_VERSION,
+  }
   connect = (): BridgePort => {
-    const port = new FakePort()
+    const port = new FakePort(this)
     this.ports.push(port)
     return port
   }
@@ -27,7 +33,10 @@ class FakeExtension {
 }
 
 class FakePort implements BridgePort {
+  constructor(private readonly extension: FakeExtension) {}
   readonly sent: Array<Record<string, unknown>> = []
+  /** Every hello the page asked the host, kept apart from the requests in `sent`. */
+  readonly hellos: Array<Record<string, unknown>> = []
   private message: Array<(m: unknown) => void> = []
   private disconnect_: Array<() => void> = []
   readonly onMessage = { addListener: (l: (m: unknown) => void) => void this.message.push(l) }
@@ -38,6 +47,13 @@ class FakePort implements BridgePort {
   postMessage(m: unknown) {
     const parsed = pageToHostSchema.parse(m)
     expect(parsed).toEqual(m)
+    if (parsed.type === 'hello') {
+      this.hellos.push(parsed)
+      if (this.extension.hostHello !== null) {
+        this.reply({ type: 'hello', ...this.extension.hostHello })
+      }
+      return
+    }
     this.sent.push(parsed)
   }
   disconnect() {}
@@ -259,6 +275,74 @@ describe('createBridgeFetch', () => {
       bridgeFetch(at('/api/c')).catch(() => undefined)
       await vi.waitFor(() => expect(ext.ports).toHaveLength(2))
       expect(skew).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  // The extension relays frames unread, so it can vouch only for itself: the
+  // host is a separate release (it ships in the npm package) and the page has
+  // to ask it, or a host skew is reported as an extension one.
+  describe('a native host that speaks another protocol', () => {
+    const extensionAtThisProtocol = async () =>
+      bridgeSkew({ version: '1.0.0', protocol: BRIDGE_PROTOCOL_VERSION })
+
+    it('is refused by name when it is ahead of an extension that matches the page', async () => {
+      const ext = new FakeExtension()
+      ext.hostHello = { version: '9.9.9', protocol: BRIDGE_PROTOCOL_VERSION + 1 }
+      const bridgeFetch = createBridgeFetch(ext.connect, extensionAtThisProtocol)
+
+      const refusal = await bridgeFetch(at('/api/x')).catch((error: unknown) => error)
+
+      expect(refusal).toBeInstanceOf(TypeError)
+      expect(String(refusal)).toMatch(/native host \(version 9\.9\.9\)/)
+      expect(String(refusal)).not.toMatch(/extension \(version/)
+      expect(ext.ports.flatMap((p) => p.sent)).toEqual([])
+    })
+
+    it('is told to update the package it ships in when it is behind', async () => {
+      const ext = new FakeExtension()
+      ext.hostHello = { version: '0.0.1', protocol: BRIDGE_PROTOCOL_VERSION - 1 }
+      const bridgeFetch = createBridgeFetch(ext.connect, extensionAtThisProtocol)
+
+      await expect(bridgeFetch(at('/api/x'))).rejects.toThrow(
+        /native host \(version 0\.0\.1\).*@kamiazya\/whiteboard-mcp/,
+      )
+    })
+
+    it('is asked once per connection, and again after the extension loses its host', async () => {
+      const ext = new FakeExtension()
+      const bridgeFetch = createBridgeFetch(ext.connect)
+      const inFlight = [
+        bridgeFetch(at('/api/a')).catch(() => undefined),
+        bridgeFetch(at('/api/b')).catch(() => undefined),
+      ]
+      await vi.waitFor(() => expect(ext.port.sent).toHaveLength(2))
+      expect(ext.port.hellos).toHaveLength(1)
+
+      ext.port.drop()
+      await Promise.all(inFlight)
+      bridgeFetch(at('/api/c')).catch(() => undefined)
+      await vi.waitFor(() => expect(ext.ports).toHaveLength(2))
+      await vi.waitFor(() => expect(ext.port.hellos).toHaveLength(1))
+    })
+
+    // A host built before the check drops the frame and never answers. It
+    // relays fine, so silence is not a verdict: waiting out the clock and
+    // carrying on is what keeps an old host usable.
+    it('is not refused for staying silent, once the answer is given up on', async () => {
+      vi.useFakeTimers()
+      try {
+        const ext = new FakeExtension()
+        ext.hostHello = null
+        const pending = createBridgeFetch(ext.connect)(at('/api/x'))
+        await vi.advanceTimersByTimeAsync(5_000)
+        expect(ext.port.sent).toEqual([expect.objectContaining({ type: 'request' })])
+        const id = ext.port.lastId
+        ext.port.reply({ type: 'head', id, status: 200, headers: {} })
+        ext.port.reply({ type: 'end', id })
+        expect((await pending).status).toBe(200)
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 

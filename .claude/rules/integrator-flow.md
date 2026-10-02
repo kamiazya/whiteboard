@@ -2,6 +2,15 @@
 
 Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, PreToolUse hooks block `gh pr create` while the branch is behind origin/main and when a diff a human can see ships with no figure in the body, block the FIRST `gh pr merge` on a head carrying inline review comments (printing their bodies, so the findings arrive before the decision), and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause rather than working around it.
 
+## Read GitHub over REST
+
+`gh pr view|checks|list|status|ready|comment` and `gh repo view` are
+GraphQL-backed and answer HTTP 403 in a Claude Code web session, where the
+`ci-triage` watch loop once read that as "settled" and the pre-merge hook
+exited 0. Read GitHub with `gh api repos/{owner}/{repo}/…` (check-runs,
+pulls, comments), and treat a failed or empty read as unknown, never as
+settled — `ci-triage` carries the loops.
+
 ## pnpm-lock.yaml conflict recipe
 
 When merging main into a feature branch conflicts on `pnpm-lock.yaml`:

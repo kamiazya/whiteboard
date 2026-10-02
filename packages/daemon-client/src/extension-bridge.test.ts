@@ -119,6 +119,15 @@ describe('the extension identity a page checks', () => {
     ).toMatchObject(same)
   })
 
+  it('is the same shape when the native host says it over the port the page opened', () => {
+    expect(hostToPageSchema.parse({ type: 'hello', ...same })).toEqual({ type: 'hello', ...same })
+    expect(pageToHostSchema.parse({ type: 'hello' })).toEqual({ type: 'hello' })
+    expect(hostToPageSchema.parse({ type: 'hello', version: '0.0.1' })).toEqual({
+      type: 'hello',
+      version: '0.0.1',
+    })
+  })
+
   it('finds no skew in an extension that speaks this protocol', () => {
     expect(bridgeSkew(same)).toBeNull()
   })
@@ -135,6 +144,18 @@ describe('the extension identity a page checks', () => {
     expect(bridgeSkew({ version: '9.9.9', protocol: BRIDGE_PROTOCOL_VERSION + 1 })).toMatch(
       /reload this page/,
     )
+  })
+
+  it('names the native host, and the package that updates it, when the host is older', () => {
+    const skew = bridgeSkew({ version: '0.0.9', protocol: BRIDGE_PROTOCOL_VERSION - 1 }, 'host')
+    expect(skew).toMatch(/native host \(version 0\.0\.9\)/)
+    expect(skew).toMatch(/@kamiazya\/whiteboard-mcp/)
+    expect(skew).not.toMatch(/update the extension/)
+  })
+
+  it('tells a page older than the native host to reload, naming the host', () => {
+    const skew = bridgeSkew({ version: '9.9.9', protocol: BRIDGE_PROTOCOL_VERSION + 1 }, 'host')
+    expect(skew).toMatch(/native host \(version 9\.9\.9\).*reload this page/)
   })
 
   it('reads an extension that sends no protocol as one that predates the check', () => {

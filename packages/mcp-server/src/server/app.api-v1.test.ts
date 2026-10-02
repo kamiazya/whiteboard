@@ -110,4 +110,32 @@ describe('createApp /api/v1 document mount', () => {
     const body = (await listRes.json()) as { documents: { path: string }[] }
     expect(body.documents.map((c) => c.path)).toEqual(['notes'])
   })
+
+  // The web app creates a markdown document with no body and reads it back
+  // through `/okf`: the type it shows must be a markdown document's own.
+  it('reads a markdown document created with no body back as a note', async () => {
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
+    const app = createApp({
+      ...createRuntimeOptions('secret'),
+      serverDeps: deps,
+      dataLayout: testDataLayout(),
+    })
+    const headers = { Authorization: 'Bearer secret', 'Content-Type': 'application/json' }
+
+    const createRes = await app.request('/api/v1/workspaces/default/documents', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ path: 'note1', kind: 'markdown', createWorkspace: true }),
+    })
+    expect(createRes.status).toBe(201)
+    const { documentId } = (await createRes.json()) as { documentId: string }
+
+    const okfRes = await app.request(`/api/v1/workspaces/default/documents/${documentId}/okf`, {
+      headers,
+    })
+    expect(okfRes.status).toBe(200)
+    const okf = (await okfRes.json()) as { markdown: string; frontmatter: { type: string } }
+    expect(okf.frontmatter.type).toBe('note')
+    expect(okf.markdown).toContain('type: note')
+  })
 })

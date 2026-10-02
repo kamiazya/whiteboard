@@ -22,6 +22,7 @@ import {
   firstOwned,
   handleCorruptStoredData,
   handleDocumentNotFound,
+  refusalReason,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -79,7 +80,8 @@ function saveVersionIssueMessage(error: z.ZodError): string {
   if (issue?.code === 'unrecognized_keys' && issue.keys.includes('actor')) {
     return 'operator.actor is stamped by the daemon and must not be sent'
   }
-  return issue?.path[0] === 'operator' ? 'operator is invalid' : 'label must be string'
+  const fallback = issue?.path[0] === 'operator' ? 'operator is invalid' : 'label must be string'
+  return refusalReason(error, fallback)
 }
 
 // GET /api/workspaces/:workspaceId/documents/:path/versions

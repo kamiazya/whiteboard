@@ -9,6 +9,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
+import { runsGh } from '../hook-command-lib.mjs'
+
 /** A few concurrent lanes are the normal working shape; a pile is debris. */
 const LANE_NOTICE_THRESHOLD = 5
 
@@ -29,7 +31,7 @@ try {
 }
 
 const command = input?.tool_input?.command ?? ''
-if (!/\bgh\s+pr\s+merge\b/.test(command)) process.exit(0)
+if (!runsGh(command, 'pr merge')) process.exit(0)
 
 /** Set by the sync block below so the lane notice can reuse it. */
 let mainCheckout

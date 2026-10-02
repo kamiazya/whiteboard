@@ -1,3 +1,5 @@
+import type { SseStreamSource } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+
 export interface DaemonIndexPageProps {
   daemonBaseUrl: string
   token?: string
@@ -24,4 +26,10 @@ export interface DaemonIndexPageProps {
   onOpenDocument: (workspaceId: string, path: string) => void
   /** Served by a server-mode keeper (ADR-0047), so the copy names a server. */
   serverMode?: boolean
+  /**
+   * The stream the list follows the workspace through. Absent, the page uses
+   * the shared one the document page syncs over, and a stream of its own
+   * where the browser has none to share.
+   */
+  streamSource?: SseStreamSource
 }

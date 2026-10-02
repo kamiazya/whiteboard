@@ -12,16 +12,16 @@ import { describe } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import {
+  type VersionsBackendHarness,
+  versionsBackendContract,
+} from '../test-utils/versions-backend.contract.js'
 import { BrowserBackend } from './browser-backend.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { createBrowserVersionsBackend } from './browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import {
-  type VersionsBackendHarness,
-  versionsBackendContract,
-} from './versions-backend.contract.js'
 import { createDaemonVersionsBackend } from './versions-backend.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;

@@ -33,7 +33,7 @@ note** — and creates one in whichever folder you are standing in. A kind
 cannot be changed later, which is why you pick it by name rather than by
 icon; everything else about a document is editable afterwards, so nothing
 else is asked for. If you already know what the document is called and where
-it goes, **Name and location…** in that menu takes both up front; leaving its
+it goes, **Name and folder…** in that menu takes both up front; leaving its
 form untouched creates exactly what the plain entries would have.
 
 Either way the new document opens straight away, ready to work in. The folder

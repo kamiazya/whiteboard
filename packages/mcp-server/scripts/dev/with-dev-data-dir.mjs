@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process'
-import { resolve } from 'node:path'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import {
+  devWrapperPidPath,
   ensureDevDataDirSecured,
-  reraiseSignalOrExit,
   resolveDevDataDirEnv,
   resolveRepoRootFromGit,
   resolveTsxWatchSpawn,
+  superviseChild,
 } from './with-dev-data-dir-lib.mjs'
 
 // Keeps dev daemons started via `pnpm mcp:http:dev` (and anything that
@@ -45,15 +47,10 @@ const child = spawn(command, args, {
   stdio: 'inherit',
 })
 
-child.on('error', (error) => {
-  process.stderr.write(`[with-dev-data-dir] failed to spawn dev server: ${error.message}\n`)
-  process.exit(1)
-})
+// `pnpm mcp:http:stop` signals this pid. Removed on every way out of the
+// wrapper, so a stale file cannot name a pid something else has since taken.
+const pidPath = devWrapperPidPath(env.WHITEBOARD_DATA_DIR)
+mkdirSync(dirname(pidPath), { recursive: true })
+writeFileSync(pidPath, String(process.pid), { mode: 0o600 })
 
-child.on('exit', (code, signal) => {
-  if (signal) {
-    reraiseSignalOrExit(signal)
-    return
-  }
-  process.exit(code ?? 1)
-})
+superviseChild(child, { cleanup: () => rmSync(pidPath, { force: true }) })

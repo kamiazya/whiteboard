@@ -80,12 +80,19 @@ export type ServerTextMessage = z.infer<typeof serverTextMessageSchema>
 
 // ── Client → Server ──────────────────────────────────────────────────────────
 
-const clientReadyMessageSchema = z.object({
-  type: z.literal('client_ready'),
-})
+// Strict, like every request: the daemon is the side that refuses an
+// undeclared key, so a field a newer client adds to a message is answered
+// rather than dropped while the client believes it took effect. The frames the
+// server sends are the opposite, tolerant on purpose, because the page is the
+// side that may be older.
+const clientReadyMessageSchema = z
+  .object({
+    type: z.literal('client_ready'),
+  })
+  .strict()
 
 /**
- * Every message a client sends upstream. One member today: the
+ * Every message a client sends upstream, each member strict. One member today: the
  * `viewport_response` that acknowledged a `viewport_request` never had a
  * sender, so the route that awaited it answered 504 to every real caller;
  * both went together. Still a discriminated union so the next client message

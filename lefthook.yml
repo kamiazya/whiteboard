@@ -36,7 +36,7 @@ pre-push:
     # No test run here, deliberately (user decision, 2026-09-05): full suites
     # are CI's job, and running one at push time was the same work twice —
     # the dev loop already ran the nearest-layer tests for what changed, and
-    # CI (6-7min wall) runs everything. It was also
+    # CI (about 5 min wall on main; a PR that touches tests adds the sharded stress job, which scales with the diff) runs everything. It was also
     # the gate the port-squatting flake bit, precisely because a full suite
     # under push-time load is a full suite on a saturated machine.
     # `pnpm lint` is one `biome check` over the repo. It already holds

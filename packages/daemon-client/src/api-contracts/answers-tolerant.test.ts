@@ -16,6 +16,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+import { clientTextMessageSchema } from '../sync-frames.js'
 import {
   listDocumentsResponseSchema,
   listVersionsResponseSchema,
@@ -105,6 +106,18 @@ describe('api-contracts: every request refuses a key it does not declare', () =>
   // newer client's `subtree` and performs the milder restore.
   it.each(requests)('%s is strict at its top level', (_name, schema) => {
     expect(strictObjects(schema)).toContain('')
+  })
+})
+
+// A message a client posts upstream is a request one level down, and the
+// top-level walk above cannot see it: it sits inside the sync envelope's
+// `message` field, in a package module the walk's glob does not reach.
+describe('sync-frames: every message a client sends refuses a key it does not declare', () => {
+  it('holds each member of the union strict, so a second message cannot arrive tolerant', () => {
+    expect(clientTextMessageSchema.options.length).toBeGreaterThan(0)
+    expect(strictObjects(clientTextMessageSchema)).toHaveLength(
+      clientTextMessageSchema.options.length,
+    )
   })
 })
 

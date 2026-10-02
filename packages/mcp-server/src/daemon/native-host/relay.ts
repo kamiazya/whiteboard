@@ -12,6 +12,8 @@ import {
   type PageToHost,
   pageToHostSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
+import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { encodeNativeMessage, readNativeMessages } from './native-messaging.js'
 
 interface DaemonEndpoint {
@@ -95,16 +97,20 @@ export async function runNativeHost(options: NativeHostOptions): Promise<void> {
       if (id !== null) send({ type: 'error', id, reason: 'bad-request', message })
       return
     }
-    if (parsed.data.type === 'abort') {
-      inFlight.get(parsed.data.id)?.abort()
-      inFlight.delete(parsed.data.id)
+    const frame = parsed.data
+    if (frame.type === 'hello') {
+      send({ type: 'hello', version: PACKAGE_VERSION, protocol: BRIDGE_PROTOCOL_VERSION })
+      return
+    }
+    if (frame.type === 'abort') {
+      inFlight.get(frame.id)?.abort()
+      inFlight.delete(frame.id)
       return
     }
     const controller = new AbortController()
-    inFlight.set(parsed.data.id, controller)
-    const settled = () =>
-      inFlight.get(parsed.data.id) === controller && inFlight.delete(parsed.data.id)
-    void relayRequest(parsed.data, { ...options, send, signal: controller.signal, settled })
+    inFlight.set(frame.id, controller)
+    const settled = () => inFlight.get(frame.id) === controller && inFlight.delete(frame.id)
+    void relayRequest(frame, { ...options, send, signal: controller.signal, settled })
   })
 
   for (const controller of inFlight.values()) controller.abort()

@@ -64,3 +64,24 @@ export function buildMcpHttpDevSpawnArgs(token) {
   }
   return base
 }
+
+/**
+ * What to tell someone whose checkout already has a daemon answering with a
+ * different token than its clients send. The first remedy is the checkout's
+ * own stop command, which works from a bare clone; the second is the CLI's
+ * form for a daemon started from a build, written so the CLI's own argument
+ * parser accepts it as typed (`whiteboard` is not on PATH in a checkout, and
+ * the CLI refuses `daemon stop` without `--json`).
+ *
+ * @param {{ pid: number, dataDir: string }} conflict
+ * @returns {string}
+ */
+export function describeTokenConflict({ pid, dataDir }) {
+  const dir = /\s/.test(dataDir) ? `"${dataDir}"` : dataDir
+  return (
+    `the daemon for this checkout's data dir (pid ${pid}) was started with a different token ` +
+    "than this checkout's clients send, so it would refuse their MCP requests. Stop it with " +
+    "`pnpm mcp:http:stop` (it acts on this checkout's data dir only), or, for a daemon started from a " +
+    `build, \`whiteboard daemon stop --json --data-dir=${dir}\`, and rerun.`
+  )
+}

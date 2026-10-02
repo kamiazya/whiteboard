@@ -344,6 +344,18 @@ async function aDocumentCarriesItsBodyFromTheCreateCall(ctx) {
     throw new Error(`a bare body did not survive as the body: ${bareBack.content}`)
   }
   console.log('[e2e] document.create → a bare body is minted as a note')
+
+  // No body at all is still a markdown document: a note, and it takes a tag.
+  const emptyBack = await readDocument(named.documentId)
+  const tagged = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [named.documentId],
+    tags: { add: ['e2e'] },
+  })
+  if (!emptyBack.content.includes('type: note') || tagged.updated[0]?.tags?.[0] !== 'e2e') {
+    throw new Error(`an empty markdown document is not a taggable note: ${emptyBack.content}`)
+  }
+  console.log('[e2e] document.create → an empty markdown document is a note and takes a tag')
   Object.assign(ctx, { documentId, named, withBody })
 }
 

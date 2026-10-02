@@ -26,7 +26,7 @@
 //  13.  Cleanup containers, JWKS server, temp dirs.
 //
 // Skip condition: `docker info` fails → Docker daemon not available.
-// Requires: `pnpm --filter @kamiazya/whiteboard-mcp build`.
+// Requires: `pnpm build:mcp`.
 //
 // This smoke is NOT part of pnpm test:e2e:distribution. Run explicitly:
 //   node tests/e2e/distribution/packaged-server-mode-backup-restore-smoke.mjs
@@ -159,7 +159,7 @@ if (docker(['info'], { timeout: 10_000 }).status !== 0) {
 
 if (!existsSync(BACKUP_RESTORE_ENTRY)) {
   console.error(`[docker-br-smoke] dist artifact missing: ${BACKUP_RESTORE_ENTRY}`)
-  console.error('Run `pnpm --filter @kamiazya/whiteboard-mcp build` first.')
+  console.error('Run `pnpm build:mcp` first.')
   process.exit(1)
 }
 

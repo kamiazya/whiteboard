@@ -40,6 +40,7 @@ vi.mock('../di/boot-self-host-deps.js', () => ({
   })),
 }))
 
+import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { createApp } from './app.js'
 import { startServerModeHttp } from './server-mode-http.js'
 
@@ -95,6 +96,19 @@ describe('startServerModeHttp', () => {
     expect(result.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
     expect(typeof result.resolvedDataDir).toBe('string')
     expect(result.close).toBeTypeOf('function')
+  })
+
+  // Its refusal for an unknown workspace is uniform so that it says nothing
+  // about which workspaces exist; naming them is for roots whose caller can
+  // already see all of them.
+  it('boots its deps without letting a refusal name the workspaces that exist', async () => {
+    const startPromise = startServerModeHttp(makeOptions())
+    const server = await serverOnceServing()
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    const bootOptions = vi.mocked(bootSelfHostDeps).mock.calls.at(-1)?.[1]
+    expect(bootOptions?.nameKnownWorkspaces).not.toBe(true)
   })
 
   it('close() calls server.close() exactly once and resolves', async () => {

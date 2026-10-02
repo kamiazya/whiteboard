@@ -42,7 +42,7 @@ const SNAKE_CASE_ALLOWLIST: ReadonlySet<string> = new Set([])
 // A legitimate future negative mention (explaining why raster export is
 // absent, say) earns a reason-commented allowlist entry here, never a
 // weakened pattern — see skills-rewrite design risk #2.
-const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
+const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string; allow?: RegExp }> = [
   {
     pattern: /Excalidraw/,
     reason: 'the product is JSON Canvas + OKF Markdown over MCP tools, not Excalidraw',
@@ -50,7 +50,7 @@ const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
   {
     pattern: /\/api\/debug/,
     reason:
-      '/api/debug is a dev-only dump (routes/debug.ts): off unless WHITEBOARD_DEBUG=1, daemon-token-only when on, and never part of the surface a skill may tell a model to use; audits use wb_document_list + wb_scene_digest',
+      '/api/debug is a dev-only dump (routes/debug.ts): off unless WHITEBOARD_DEBUG=1, daemon-token-only when on, and never part of the surface a skill may tell a model to use; audits use wb_document_list + wb_canvas_snapshot',
   },
   {
     pattern: /hasActivePort/,
@@ -104,6 +104,29 @@ const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
     pattern: /\bwb_scene_digest\b/,
     reason:
       'merged into wb_canvas_snapshot (ADR-0010) — pass layout:true for the overlap/containment/cluster/free-region analysis',
+  },
+  // Claims about what the tools can and cannot do that a tool's own schema or
+  // runtime contradicts. A name check cannot see these: every token in them is
+  // a real word, and the sentence is simply false.
+  {
+    pattern: /\bdigest\b/i,
+    reason:
+      'no tool returns a digest: wb_scene_digest was merged into wb_canvas_snapshot — say its nodeCount, or layout:true',
+  },
+  {
+    pattern: /no rich formatting/i,
+    reason:
+      'a text node is Markdown and the renderer draws headings, bold, lists, task boxes and highlighted code fences',
+  },
+  {
+    pattern: /section-level (render|export)/i,
+    reason: 'wb_scene_render takes `fragment`, which draws one group by its label or one heading',
+  },
+  {
+    pattern: /\bdash(ed|es)?\b|\bdotted\b/i,
+    reason:
+      'no tool has a dash or stroke-style field: edge.add takes color, label, bends and facets, so a convention taught in skills must be one a model can express — color and label',
+    allow: /no dash\/line-style field/,
   },
 ]
 
@@ -175,8 +198,8 @@ describe('skills tool-surface guard', () => {
     for (const path of SKILL_FILES) {
       const lines = readSkill(path).split('\n')
       lines.forEach((line, index) => {
-        for (const { pattern, reason } of BANNED_PATTERNS) {
-          if (pattern.test(line)) {
+        for (const { pattern, reason, allow } of BANNED_PATTERNS) {
+          if (pattern.test(line) && !allow?.test(line)) {
             hits.push(`${displayPath(path)}:${index + 1} matches ${pattern} (${reason})`)
           }
         }

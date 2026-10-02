@@ -1,5 +1,5 @@
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
-import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
+import { bootLocalDeps } from '../di/boot-local-deps.js'
 import { startBackgroundWork } from './background-work.js'
 import { getDataDir } from './config.js'
 import { warnWhenDataDirIsTempFallback } from './data-dir-fallback.js'
@@ -26,7 +26,7 @@ import { stdioBackgroundWork } from './shared-background-work.js'
 export function bootStdioRoot() {
   const dataDir = getDataDir()
   warnWhenDataDirIsTempFallback(dataDir)
-  return bootSelfHostDeps(dataDir)
+  return bootLocalDeps(dataDir)
 }
 
 export async function main() {

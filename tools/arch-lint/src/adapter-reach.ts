@@ -63,37 +63,73 @@ export const TOP_LEVEL_MECHANICS: readonly string[] = [
 ]
 
 /**
- * Mechanic-layer modules an adapter is ENTITLED to import, matched against the
- * module path under `server/` without its extension. Each is policy, a value or
- * live state rather than how a row or a file is kept, so importing one is
- * translation and not a weld to storage. Everything else in the mechanics
- * layer, and `daemon/`, is a mechanic an adapter reaching it must ledger.
+ * Mechanic-layer modules an adapter is ENTITLED to import, NAMED one by one
+ * (the module path under `server/`, without its extension). Each is policy, a
+ * value, an operation handed its dependencies, or live state, rather than how a
+ * row or a file is kept, so importing one is translation and not a weld to
+ * storage.
+ *
+ * The default is the other way round: everything in the mechanics layer, and
+ * `daemon/`, that is not named here is a mechanic an adapter reaching it must
+ * ledger. A directory pattern would entitle whatever is placed in the directory
+ * next, and `security/` and `tenant/` each already hold modules that keep rows
+ * or walk the data directory without being called `*-store`.
  */
 export const ADAPTER_ENTITLED_MECHANICS: readonly {
-  readonly pattern: RegExp
+  readonly modules: readonly string[]
   readonly reason: string
 }[] = [
   {
-    pattern: /^security\/(?![a-z0-9-]+-store$)/,
+    modules: [
+      'security/bearer-token',
+      'security/credential-resolver',
+      'security/auth-strategy',
+      'security/route-scope-registry',
+      'security/daemon-identity',
+      'security/mcp-caller',
+      'security/trusted-header-identity',
+    ],
     reason:
-      'bearer parsing, credential resolution and the membership decisions: what an adapter asks (who is calling, may they), never how a row is kept — the `*-store` modules are the mechanic',
+      'bearer parsing, credential resolution and who is calling: what an adapter asks of a request, never how a row is kept',
   },
   {
-    pattern: /^tenant\/(?!data-layout$)/,
+    modules: [
+      'security/membership-gate',
+      'security/workspace-access',
+      'security/administrator-check',
+      'security/people-administration',
+      'security/people-keepers',
+      'security/workspace-roles',
+    ],
     reason:
-      'the tenant id and the layout SEAM are values an adapter is handed; the layout that places files by them is the mechanic',
+      'the membership and people-administration decisions (may they, who is a member): operations and decision types the root hands an adapter, over stores it never names',
   },
   {
-    pattern: /^observability\//,
+    modules: [
+      'security/complete-sign-in',
+      'security/sign-in-config',
+      'security/sign-in-admission',
+      'security/oidc-relying-party',
+    ],
+    reason:
+      'the sign-in operation and its policy: completing a sign-in runs its own transaction over deps the root builds (`createCompleteSignInDeps`), so the route translates the callback and holds no row',
+  },
+  {
+    modules: ['tenant/id', 'tenant/data-layout-seam'],
+    reason:
+      'the tenant id and the layout SEAM are values an adapter is handed; the layout that places files by them (`tenant/data-layout`) is the mechanic',
+  },
+  {
+    modules: ['observability/tracing'],
     reason: 'the span around a request an adapter handles: how it reports, not what it stores',
   },
   {
-    pattern: /^(?:log|server-core-logs|validators)$/,
+    modules: ['log', 'server-core-logs', 'validators'],
     reason:
       'the logger and the input-shape policy every adapter uses; neither reads or writes a keeper',
   },
   {
-    pattern: /^(?:sync-streams|sync-audience|viewport-requests)$/,
+    modules: ['sync-streams', 'sync-audience', 'viewport-requests'],
     reason:
       'the in-memory registry of what is open and listening, shared by the route that opens a stream and the writers that feed it: live state, not stored state',
   },
@@ -111,7 +147,7 @@ export function isMechanicsLayerModule(modulePath: string): boolean {
 
 /** The mechanics-layer modules an adapter may import, by the entitlement that says so. */
 export function isAdapterEntitled(modulePath: string): boolean {
-  return ADAPTER_ENTITLED_MECHANICS.some(({ pattern }) => pattern.test(modulePath))
+  return ADAPTER_ENTITLED_MECHANICS.some(({ modules }) => modules.includes(modulePath))
 }
 
 /**

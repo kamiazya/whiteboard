@@ -46,6 +46,7 @@
   "sideEffects": [
     "./dist/server/mcp/stdio.js"
   ],
+  "mcpName": "io.github.kamiazya/whiteboard",
   "engines": {
     "node": "^22 || ^24 || >=26"
   },
@@ -79,8 +80,9 @@
     "mcp": "node --import tsx/esm src/server/mcp/stdio.ts",
     "mcp:http": "node scripts/dev/run-built-daemon.mjs",
     "mcp:http:dev": "node scripts/dev/with-dev-data-dir.mjs --token=whiteboard-dev --idle-timeout-ms=0",
-    "mcp:inspect": "npx @modelcontextprotocol/inspector node scripts/dev/mcp-http-stdio-proxy.mjs",
-    "mcp:inspect:stdio": "npx @modelcontextprotocol/inspector node --import tsx/esm src/server/mcp/stdio.ts",
+    "mcp:http:stop": "node scripts/dev/stop-http-dev-daemon.mjs",
+    "mcp:inspect": "npx -y @modelcontextprotocol/inspector@2.9.0 node scripts/dev/mcp-http-stdio-proxy.mjs",
+    "mcp:inspect:stdio": "npx -y @modelcontextprotocol/inspector@2.9.0 node --import tsx/esm src/server/mcp/stdio.ts",
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
     "daemon": "node dist/server/daemon-entry.js",
     "build:server": "tsdown && node scripts/prepend-cli-shebang.mjs && chmod +x dist/cli/index.js",

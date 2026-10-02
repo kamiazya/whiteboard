@@ -32,7 +32,7 @@ describe('a shipped facet that names an asset offers a picker', () => {
           .filter((field) => {
             // A facet-level PICKER satisfies this outright, and does so more
             // strongly than a per-field widget: it writes whole payloads
-            // drawn from a declared list, and `assertPickerFits` parses
+            // drawn from a declared list, and `normalizePicker` parses
             // every one against the facet's own schema at `defineFacet`
             // time. There is no field to type into at all. `visual.theme`
             // takes that form; `visual.stencil` takes the per-field one.
@@ -49,7 +49,7 @@ describe('a shipped facet that names an asset offers a picker', () => {
   /**
    * One level in from the rule above, and the gap it leaves.
    *
-   * `assertPickerFits` parses each option against the facet's SCHEMA, which
+   * `normalizePicker` parses each option against the facet's SCHEMA, which
    * for an asset ref is `namespacedIdSchema` — a shape check that knows
    * nothing about what is registered. So an option naming a theme no plugin
    * registers is declared happily, ships, and is refused only at

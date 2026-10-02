@@ -7,9 +7,15 @@
 // The squash-merge title IS the release-please changelog entry, so a stale
 // title is a release-notes bug, not cosmetics.
 //
-// Fail-open: any resolution failure exits 0 silently.
+// The PR is found over REST (`gh api …/pulls?head=`), because the GraphQL
+// `gh pr view` answers HTTP 403 in some sessions. Fail-open, but not silent about
+// it: a lookup that FAILED prints that the PR could not be checked, since "no
+// open PR" (an empty answer) and "could not look" are different facts. Only an
+// unresolvable branch exits quietly.
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+
+import { runsGitPush } from '../hook-command-lib.mjs'
 
 let input
 try {
@@ -19,7 +25,7 @@ try {
 }
 
 const command = input?.tool_input?.command ?? ''
-if (!/\bgit\s+([^\s]+\s+)*push\b/.test(command)) process.exit(0)
+if (!runsGitPush(command)) process.exit(0)
 
 const sh = (cmd, args, cwd) =>
   execFileSync(cmd, args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) }).trim()
@@ -31,10 +37,21 @@ try {
   const branch = sh('git', ['branch', '--show-current'], where)
   if (!branch || branch === 'main') process.exit(0)
 
-  const pr = JSON.parse(
-    sh('gh', ['pr', 'view', branch, '--json', 'number,title,state'], where),
-  )
-  if (pr.state !== 'OPEN') process.exit(0)
+  let pr
+  try {
+    const open = JSON.parse(
+      sh('gh', ['api', 'repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open'], where),
+    )
+    if (!Array.isArray(open)) throw new Error('unexpected answer')
+    pr = open[0]
+  } catch (err) {
+    const why = String(err?.stderr ?? err?.message ?? '').trim().split('\n')[0].slice(0, 160)
+    console.log(
+      `[post-push-pr-sync] pushed '${branch}' but could not look up its PR (${why}); check the PR title and body against the diff yourself.`,
+    )
+    process.exit(0)
+  }
+  if (!pr) process.exit(0)
 
   // PR titles and commit subjects are attacker-influenceable text (anyone who
   // can land a commit controls them). Sanitize and fence them as quoted DATA

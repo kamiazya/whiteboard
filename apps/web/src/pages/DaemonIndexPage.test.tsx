@@ -1342,7 +1342,7 @@ describe('DaemonIndexPage', () => {
   })
 
   // State that NAMES A DOCUMENT must not outlive the workspace it names.
-  // `pendingDelete` holds a path, and `handleConfirmDelete` reads
+  // the pending delete holds a path, and the confirm handler reads
   // `selectedWorkspace` at CONFIRM time rather than at open time — so a
   // switch with the dialog still open addresses the departed workspace's
   // path into the one now on screen. Paths are per-workspace and collide

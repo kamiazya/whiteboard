@@ -112,9 +112,11 @@ function matches(name: string, patterns: readonly string[]): boolean {
 }
 
 describe('the stress lane splits the realms without losing a project', () => {
-  const legPatterns = [...job('stress-changed-tests').matchAll(/projects: '([^']+)'/g)].map(
-    (m) => m[1] as string,
-  )
+  const legPatterns = [
+    ...new Set(
+      [...job('stress-changed-tests').matchAll(/projects: '([^']+)'/g)].map((m) => m[1] as string),
+    ),
+  ]
 
   it('reads two legs off the workflow, and a plausible project count', () => {
     expect(legPatterns, 'the matrix must declare a pattern per leg').toHaveLength(2)
@@ -142,6 +144,61 @@ describe('the stress lane splits the realms without losing a project', () => {
         `${config} declares '${name}': a browser project's name must end '-browser', or the ` +
           'stress lane sweeps it into the node leg and stops separating the realms',
       ).toBe(isBrowser)
+    }
+  })
+})
+
+// The node leg is the one whose cost grows with the diff, so it is split with
+// vitest's own `--shard`. Three things have to hold or the split is decoration:
+// the shards exist, they cover 1..n exactly once (a missing shard is a slice
+// of the changed files never stressed, and `--passWithNoTests` keeps every
+// other shard green), and BOTH stress commands carry the flag.
+
+interface StressLeg {
+  leg: string
+  shard: number
+  shards: number
+}
+
+function stressLegs(): StressLeg[] {
+  return [
+    ...job('stress-changed-tests').matchAll(
+      /- leg: (\w+)\n\s+projects: '[^']+'\n\s+shard: (\d+)\n\s+shards: (\d+)/g,
+    ),
+  ].map((m) => ({ leg: m[1] as string, shard: Number(m[2]), shards: Number(m[3]) }))
+}
+
+describe('the stress lane shards its node leg', () => {
+  it('runs the node leg as at least two shards, and the browser leg once', () => {
+    const legs = stressLegs()
+    expect(legs.length, 'matrix legs were not read off the workflow').toBeGreaterThan(2)
+    expect(legs.filter((l) => l.leg === 'node').length).toBeGreaterThanOrEqual(2)
+    expect(legs.filter((l) => l.leg === 'browser')).toHaveLength(1)
+  })
+
+  it('covers every shard 1..n of each leg exactly once', () => {
+    const legs = stressLegs()
+    for (const name of new Set(legs.map((l) => l.leg))) {
+      const mine = legs.filter((l) => l.leg === name)
+      const n = mine[0]?.shards ?? 0
+      expect(
+        mine.every((l) => l.shards === n),
+        `${name} legs disagree on the shard count`,
+      ).toBe(true)
+      expect(
+        mine.map((l) => l.shard).sort((a, b) => a - b),
+        `${name} must run shards 1..${n} once each`,
+      ).toEqual(Array.from({ length: n }, (_, i) => i + 1))
+    }
+  })
+
+  it('passes the shard to both stress commands', () => {
+    const commands = job('stress-changed-tests')
+      .split('\n')
+      .filter((line) => line.includes('pnpm exec vitest run'))
+    expect(commands).toHaveLength(2)
+    for (const command of commands) {
+      expect(command).toMatch(/--shard=\$\{\{ matrix\.shard \}\}\/\$\{\{ matrix\.shards \}\}/)
     }
   })
 })

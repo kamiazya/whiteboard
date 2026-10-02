@@ -1,5 +1,9 @@
 import { z } from 'zod'
 import { type DaemonDoctorResult, doctorCheckStatusSchema } from '../api-contracts/daemon-doctor.js'
+import {
+  type DaemonStatusResult,
+  daemonStatusResultSchema,
+} from '../api-contracts/daemon-status.js'
 import { isIsoDatetime } from './iso-datetime.js'
 import { redactDiagnosticText, scrubAuthMarkers } from './redact.js'
 
@@ -86,32 +90,27 @@ export const supportBundleManifestSchema = z.discriminatedUnion('mode', [
 ])
 type SupportBundleManifest = z.infer<typeof supportBundleManifestSchema>
 
-// Redacted status section. Mirrors `DaemonStatusResult` but only the
-// fields we explicitly want to expose. `record.token`,
-// `auth.hasToken`, `mcp.endpoint`, anything path-shaped goes through
-// the redactor or never copies.
-interface SupportBundleStatusInput {
-  ok: boolean
-  reason: string | null
-  recordFound: boolean
-  recordFresh: boolean
-  pidAlive?: boolean
-  pingOk?: boolean
-  statusOk?: boolean
-  record?: { pid: number; version: string; startedAt: string }
-}
+// Redacted status section. The input IS the status result, so a field added to
+// `daemon status --json` is a type error here until the bundle decides whether
+// it may leave the machine. `record.token`, `auth.hasToken`, `mcp.endpoint`,
+// anything path-shaped goes through the redactor or never copies. `pingOk` and
+// `statusOk` are the status contract's own: `daemon status` does not ping, so
+// they are null until it does, and the section carries them so that day needs
+// no second edit.
+type SupportBundleStatusInput = Omit<DaemonStatusResult, 'schemaVersion'>
 
-interface SupportBundleStatusSection {
-  schemaVersion: 1
-  ok: boolean
-  reason: string | null
-  recordFound: boolean
-  recordFresh: boolean
-  pidAlive: boolean | null
-  pingOk: boolean | null
-  statusOk: boolean | null
-  record: { pid: number; version: string; startedAt: string } | null
-}
+const absentAsNull = <T extends z.ZodTypeAny>(field: z.ZodOptional<T>) => field.unwrap().nullable()
+
+const supportBundleStatusSectionSchema = z
+  .object({
+    ...daemonStatusResultSchema.shape,
+    pidAlive: absentAsNull(daemonStatusResultSchema.shape.pidAlive),
+    pingOk: absentAsNull(daemonStatusResultSchema.shape.pingOk),
+    statusOk: absentAsNull(daemonStatusResultSchema.shape.statusOk),
+    record: absentAsNull(daemonStatusResultSchema.shape.record),
+  })
+  .strict()
+type SupportBundleStatusSection = z.infer<typeof supportBundleStatusSectionSchema>
 
 function buildStatusSection(input: SupportBundleStatusInput): SupportBundleStatusSection {
   return {

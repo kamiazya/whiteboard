@@ -8,12 +8,12 @@ paths:
 ## What belongs here
 
 - Named `z.infer` DTO schemas for every request/result payload crossing a
-  store/sync boundary: `DocRef`, `Frontier`, `protocolVersionSchema`,
-  `SnapshotChunk`, `SnapshotManifest`, `DeltaBatch`, the five sync messages
-  (`hello`/`welcome`/`resume`/`catchUp`/`update`), `PresenceState`,
-  `BlobRef`, plus every port method's input and result DTO.
+  store/sync boundary: `DocRef`, `Frontier`, `SnapshotChunk`,
+  `SnapshotManifest`, `BlobRef`, the delta batch and the document-index
+  row, plus every port method's input and result DTO — what
+  `packages/ports/src/index.ts` exports, and nothing it does not.
 - Hand-written TS port interfaces wired to those DTOs via `z.infer`:
-  `DocumentStore`, `BlobStore`, `PresenceChannel`.
+  `DocumentStore`, `BlobStore`, `DocumentIndex`.
 - The Symbol `TOKENS` aggregate (`defineToken`, `Token<T>`) for DI wiring.
 - Two canonical pure helpers, a **deliberate exception** to the
   contracts-only rule because they are model-only and loro-independent:
@@ -51,10 +51,6 @@ paths:
   (`/^[a-zA-Z0-9_-]+$/`, non-empty) — NOT a ULID. It codifies the
   workspace-ID contract already enforced at runtime by mcp-server's
   `WORKSPACE_ID_PATTERN` (`validators.ts`). Do not conflate it with a document id.
-- `PresenceChannel.publish`/`subscribe` are control-plane operations
-  (Promise-returning method, callback function, unsubscribe function) and
-  are the one documented DTO-rule exemption; the callback's *payload*
-  (`PresenceState`) is a DTO and is fully validated.
 - `reassembleSnapshot` is order-independent (chunks are sorted by `index`
   before validation) — an out-of-order but otherwise well-formed chunk set
   is a success, never a `SnapshotReassemblyError`.

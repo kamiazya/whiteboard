@@ -113,8 +113,9 @@ function describeIssuePath(path: readonly PropertyKey[]): string {
 }
 
 // Splits the raw parsed file object into known keys (validated below) and
-// unknown ones (warned about, then dropped) so a typo like `allowdWebOrigins`
-// is loud instead of silently doing nothing.
+// unknown ones (warned about, then dropped) so a typo like `logLevl` is loud
+// instead of silently doing nothing. The schema's `.strict()` is therefore not
+// what refuses an unknown key from a file: this filter runs first.
 function partitionKnownKeys(
   raw: Record<string, unknown>,
   filepath: string,

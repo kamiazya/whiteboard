@@ -37,7 +37,7 @@ Check:
   rejects a leader for this specific case) or is it a restatement of what the
   code does? `every-instance` with no argument is the default a worker gets by
   accident, and it is the finding this criterion exists for.
-- **`loop`** — `in-process` carries a MEASURED `measuredBlockMs` and a date.
+- **`loop`** — `in-process` carries a MEASURED `stallCeilingMs`, the `fixture` it was measured on, and a `measuredOn` date.
   Was it measured, or estimated? A round number with no accompanying test,
   script, or commit-message figure is a guess wearing a measurement's clothes.
   `measureLoopAvailability` (`shared/test-utils/loop-availability.ts`) is what

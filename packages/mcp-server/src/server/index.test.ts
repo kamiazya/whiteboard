@@ -36,9 +36,9 @@ vi.mock('./export/headless-renderer.js', () => ({
 
 // This module has no top-level `main()` call: starting the daemon is
 // `daemon-entry.ts`'s job. So importing it here is inert, and these tests call
-// the exported `main` directly. It used to self-start behind an
-// `isDirectEntryPoint` check that happened to be false under vitest; the split
-// makes that inertness structural rather than a property of argv.
+// the exported `main` directly. It used to self-start behind a direct-entry
+// argv check that happened to be false under vitest; the split makes that
+// inertness structural rather than a property of argv.
 const { main } = await import('./index.js')
 
 describe('server/index main() data dir startup log', () => {

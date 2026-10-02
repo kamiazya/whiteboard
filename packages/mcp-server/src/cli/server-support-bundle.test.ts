@@ -15,6 +15,7 @@ import {
   supportBundleDoctorSectionSchema,
   supportBundleManifestSchema,
 } from '../shared/diagnostics/support-bundle.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
 import type { RunServerStatusOutcome } from './server-status.js'
 import {
@@ -106,6 +107,22 @@ describe('runServerSupportBundle', () => {
 
     const onDisk = (await readdir(outputDir)).sort()
     expect(onDisk).toEqual(['doctor.json', 'manifest.json', 'record.json', 'status.json'])
+  })
+
+  it('stamps the version this package ships when the caller names none', async () => {
+    const outputDir = join(tmpRoot, 'default-version')
+
+    await runServerSupportBundle({
+      dataDir: join(tmpRoot, 'data'),
+      outputDir,
+      now: () => FIXED_TS,
+      ...defaultSeams,
+    })
+
+    const manifest = supportBundleManifestSchema.parse(
+      JSON.parse(await readFile(join(outputDir, 'manifest.json'), 'utf-8')),
+    )
+    expect(manifest.packageVersion).toBe(PACKAGE_VERSION)
   })
 
   it('success: manifest written last with correct fields', async () => {

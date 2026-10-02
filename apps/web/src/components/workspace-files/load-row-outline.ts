@@ -33,13 +33,7 @@ import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-wo
 import type { OutlineResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, outlineKeyOf } from '../../lib/render-key.js'
-
-/**
- * Width a row's markdown is laid out at. Fixed rather than measured: an icon
- * has no pane, and a shape that changed with the window would make the same
- * document look different on two screens.
- */
-const ROW_LAYOUT_WIDTH = 640
+import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
 
 /**
  * What one row's read answers with: the document's shape, plus its own mark

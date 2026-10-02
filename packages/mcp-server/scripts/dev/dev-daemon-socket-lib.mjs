@@ -8,42 +8,42 @@ import { request } from 'node:http'
 import { join } from 'node:path'
 
 /**
- * The daemon record in `dataDir`, or null while no daemon has written one.
- * Read on every use rather than once: a watch restart rewrites it, and a
- * stopped daemon deletes it.
+ * The daemon record in `dataDir`, or null while no daemon has written one — or
+ * wrote one this script cannot use. Read on every use rather than once: a watch
+ * restart rewrites it, and a stopped daemon deletes it.
+ *
+ * Only the fields these scripts act on are checked: the socket to talk to and
+ * the pid to stop. They mirror `daemonRecordSchema` (src/daemon), which these
+ * scripts cannot import because they run under bare `node` before any build;
+ * `dev-daemon-socket-lib.test.ts` holds the two together. The record has no
+ * port: the daemon listens on no port (ADR-0050).
  *
  * @param {string} dataDir
- * @returns {{ socketPath?: string, port?: number, token?: string, pid?: number } | null}
+ * @returns {{ pid: number, socketPath: string, token?: string } | null}
  */
 export function readDaemonRecord(dataDir) {
   try {
     const record = JSON.parse(readFileSync(join(dataDir, 'daemon.json'), 'utf8'))
-    return record !== null && typeof record === 'object' ? record : null
+    if (record === null || typeof record !== 'object') return null
+    if (!Number.isInteger(record.pid) || record.pid <= 0) return null
+    if (typeof record.socketPath !== 'string' || record.socketPath === '') return null
+    return record
   } catch {
     return null
   }
-}
-
-function targetOf(record) {
-  if (typeof record.socketPath === 'string' && record.socketPath !== '') {
-    return { socketPath: record.socketPath }
-  }
-  return null
 }
 
 /**
  * One HTTP exchange with the daemon a record names. `socketPath` is a Unix
  * socket, or a named pipe on Windows — `http.request` takes either.
  *
- * @param {{ socketPath?: string }} record
+ * @param {{ socketPath: string }} record
  * @param {{ method?: string, path: string, headers?: Record<string, string>, body?: string, timeoutMs?: number }} req
  * @returns {Promise<{ status: number, contentType: string, text: string }>}
  */
 export function requestDaemon(record, { method = 'GET', path, headers = {}, body, timeoutMs }) {
-  const target = targetOf(record)
-  if (target === null) return Promise.reject(new Error('the daemon record names no socket'))
   return new Promise((resolveRequest, rejectRequest) => {
-    const req = request({ ...target, path, method, headers }, (res) => {
+    const req = request({ socketPath: record.socketPath, path, method, headers }, (res) => {
       let text = ''
       res.setEncoding('utf8')
       res.on('data', (chunk) => {

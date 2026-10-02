@@ -22,7 +22,7 @@ test('asks the daemon on its recorded socket, and never connects to the dev port
   const socketPath = join(dataDir, 'daemon.sock')
   const responder = await startFakeMcpResponder({ socketPath, token: 'tok' })
   t.after(responder.close)
-  writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ socketPath }))
+  writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ pid: process.pid, socketPath }))
 
   let tcpConnections = 0
   const tcp = createServer((socket) => {

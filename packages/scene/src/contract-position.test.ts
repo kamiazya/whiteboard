@@ -44,16 +44,8 @@ describe('the contract sits below both sides', () => {
   })
 })
 
-describe('the vocabulary is types only', () => {
-  it('emits no runtime value: every export is erased at build time', () => {
-    // A const or a function here would be code both sides then SHARE, which
-    // is a different kind of package with different rules (it would need its
-    // own tests, and a change to it would be a change to the renderer). The
-    // contract is a shape; keeping it shapeless is what keeps it cheap.
-    for (const [path, source] of Object.entries(sources)) {
-      if (path.endsWith('.test.ts')) continue
-      const runtime = String(source).match(/^export (const|function|class|let|var|enum)\b/gm)
-      expect(runtime ?? [], `${path} declares a runtime export`).toEqual([])
-    }
-  })
-})
+// That the vocabulary is types only (no export emits code) is asked of the
+// compiler in `tools/arch-lint`'s `scene-types-only.test.ts`: the TypeScript
+// JS API is not a dependency of this package, and a regex over `export const`
+// here passed an `async function`, an `abstract class`, a default export and a
+// namespace.

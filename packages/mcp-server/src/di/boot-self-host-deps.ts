@@ -59,7 +59,16 @@ async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
  */
 export async function bootSelfHostDeps(
   dataDir: string,
-  options: { readonly plugins?: readonly FacetPlugin[] } = {},
+  options: {
+    readonly plugins?: readonly FacetPlugin[]
+    /**
+     * Whether a refusal for an unknown workspace may list the ones that
+     * exist. Only a root whose caller can already see every workspace sets
+     * it: the stdio entry and the local daemon. Server mode leaves it off,
+     * because its refusal is uniform on purpose.
+     */
+    readonly nameKnownWorkspaces?: boolean
+  } = {},
 ): Promise<{
   readonly db: TenantDatabase
   readonly serverDeps: ServerDeps
@@ -69,10 +78,30 @@ export async function bootSelfHostDeps(
   await prepareSelfHostDataDir(dataDir)
   const db = await getDb(dataDir)
   const scope = storeScope(dataDir)
+  const deps = resolveSelfHostServerDeps(db, dataDir, options)
   return {
     db,
-    serverDeps: resolveSelfHostServerDeps(db, dataDir, options),
+    serverDeps:
+      options.nameKnownWorkspaces === true
+        ? { ...deps, knownWorkspaceHandles: () => knownHandles(deps) }
+        : deps,
     dataLayout: scope.layout,
     scope,
   }
+}
+
+/** More than this and the list is noise; the caller is told how many it did not see. */
+const MAX_NAMED_WORKSPACES = 20
+
+/** The address that works in a tool argument: a segment when there is one. */
+async function knownHandles(deps: ServerDeps): Promise<readonly string[]> {
+  const handles = (await deps.documentIndex.listWorkspaces()).map(
+    (entry) => entry.segment ?? entry.workspaceId,
+  )
+  return handles.length <= MAX_NAMED_WORKSPACES
+    ? handles
+    : [
+        ...handles.slice(0, MAX_NAMED_WORKSPACES),
+        `…and ${handles.length - MAX_NAMED_WORKSPACES} more`,
+      ]
 }

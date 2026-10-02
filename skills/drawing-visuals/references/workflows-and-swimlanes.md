@@ -27,7 +27,7 @@ In workflow / swimlane diagrams, treat **who hands off to whom and where** as fi
 - lane: actor / role / system
 - step: action
 - gateway: condition
-- dashed path: async / message / audit
+- async / message / audit path: its own edge color, with a label that says which
 
 ## Hard Rules
 
@@ -35,7 +35,7 @@ In workflow / swimlane diagrams, treat **who hands off to whom and where** as fi
 - Do not give one step more than one responsibility
 - Push every decision NO path to the same side
 - Do not overload the mainline with trivial retries
-- Do not use dashed for both `async` and `optional`; keep one meaning per frame
+- Do not use one edge color for both `async` and `optional`; keep one meaning per frame
 - Do not force role decomposition and step flow into one frame if they fight each other
 
 ## Common Failures

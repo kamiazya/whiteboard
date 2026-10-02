@@ -16,6 +16,7 @@ import {
   wbDocumentResolve,
 } from './document-crud.js'
 import { exportOkf } from './export-okf.js'
+import { createFacetSetTool } from './facet-set.js'
 
 const WS = 'ws-1'
 
@@ -110,6 +111,31 @@ describe('wbDocumentCreate', () => {
     await expect(wbDocumentList(deps, { workspaceId: 'nope' })).rejects.toThrow(
       WorkspaceNotFoundForCallerError,
     )
+  })
+
+  // A model that guessed a handle has no other channel for the right one: no
+  // tool lists workspaces. The composition decides whether naming them is safe
+  // (a deployment many people sign in to must not say what exists), so the
+  // names come through a seam that is absent by default.
+  it('names the workspaces the deployment says may be named, on create and on read', async () => {
+    const deps: ServerDeps = {
+      ...(await makeDeps()),
+      knownWorkspaceHandles: async () => ['default', 'ws-1'],
+    }
+    await expect(
+      wbDocumentCreate(deps, { workspaceId: 'main', path: 'a', kind: 'spatial' }),
+    ).rejects.toThrow(/Workspaces here: "default", "ws-1"/)
+    await expect(wbDocumentList(deps, { workspaceId: 'main' })).rejects.toThrow(
+      /Workspaces here: "default", "ws-1"/,
+    )
+  })
+
+  it('names no workspace when the deployment supplies no way to', async () => {
+    const deps = await makeDeps()
+    const refusal = await wbDocumentList(deps, { workspaceId: 'main' }).catch((err: Error) => err)
+    expect(refusal).toBeInstanceOf(WorkspaceNotFoundForCallerError)
+    expect((refusal as Error).message).not.toContain('Workspaces here')
+    expect((refusal as Error).message).not.toContain('ws-1')
   })
 
   // The refusal is what a model reads to repair its next call, so it names
@@ -703,6 +729,30 @@ describe('wb_document_create accepts a body without frontmatter', () => {
     // `note` rather than nothing: the schema requires a `type`, this tool has
     // no parameter for one, and a caller who wants another sends full OKF.
     expect(exported.markdown).toContain('type: note')
+  })
+
+  // A document with no body is still a markdown document, and the read that
+  // follows must say so rather than invent a type from the other kind's
+  // vocabulary — and what it shows must be something the writer accepts.
+  it('records the same type when no body is sent, so the document reads and tags as a note', async () => {
+    const deps = await makeDeps()
+
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'notes/empty',
+      kind: 'markdown',
+    })
+
+    const exported = await exportOkf(deps, { workspaceId: WS, documentId: created.documentId })
+    expect(exported.frontmatter?.type).toBe('note')
+    expect(exported.markdown).not.toContain('canvas')
+
+    const tagged = await createFacetSetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [created.documentId],
+      tags: { add: ['alpha'] },
+    })
+    expect(tagged.updated[0]?.tags).toEqual(['alpha'])
   })
 
   it('leaves a full OKF string alone, frontmatter and all', async () => {

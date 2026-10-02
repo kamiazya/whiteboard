@@ -324,6 +324,19 @@ function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean
   return true
 }
 
+function writeLineInto(doc: DocumentContainers, line: CanvasLine): void {
+  doc.getMap(LINES_KEY).set(line.id, lineToFields(line))
+}
+
+/** Returns false (writing nothing) when the line id is absent. */
+function deleteLineInto(doc: DocumentContainers, lineId: string): boolean {
+  const linesMap = doc.getMap(LINES_KEY)
+  if (!linesMap.keys().includes(lineId)) return false
+  linesMap.delete(lineId)
+  dropLockInto(doc, EDGE_LOCKS_KEY, lineId)
+  return true
+}
+
 /** Returns false (writing nothing) when the edge id is absent. */
 function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
   const edgesMap = doc.getMap(EDGES_KEY)
@@ -500,6 +513,7 @@ export function reconcileSpatialCanvas(
   withSpatialBatch(doc, (writer) => {
     reconcileById(prev.nodes, next.nodes, writer.writeNode, writer.deleteNode)
     reconcileById(prev.edges, next.edges, writer.writeEdge, writer.deleteEdge)
+    reconcileById(prev.lines ?? [], next.lines ?? [], writer.writeLine, writer.deleteLine)
     reconcileById(
       prev.comments ?? [],
       next.comments ?? [],
@@ -524,6 +538,9 @@ export interface SpatialBatchWriter {
   /** Same edge-cascade as `deleteSpatialNode`; absent ids write nothing. */
   deleteNode(nodeId: string): void
   deleteEdge(edgeId: string): void
+  /** Ink counterpart of writeEdge/deleteEdge; a line's lock shares the edge plane. */
+  writeLine(line: CanvasLine): void
+  deleteLine(lineId: string): void
   /** Comment counterpart of writeNode/writeEdge — create AND update (an
    * id-keyed rewrite), matching `writeCanvasComment`. */
   writeComment(comment: CanvasComment): void
@@ -568,6 +585,13 @@ export function withSpatialBatch(
     },
     deleteEdge(edgeId) {
       if (deleteEdgeInto(doc, edgeId)) wrote = true
+    },
+    writeLine(line) {
+      writeLineInto(doc, line)
+      wrote = true
+    },
+    deleteLine(lineId) {
+      if (deleteLineInto(doc, lineId)) wrote = true
     },
     writeComment(comment) {
       writeCommentInto(doc, comment)
@@ -634,29 +658,42 @@ export function setEdgeLock(doc: DocumentContainers, edgeId: string, locked: boo
 }
 
 export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
-  const nodesMap = doc.getMap(NODES_KEY)
-  const edgesMap = doc.getMap(EDGES_KEY)
-  const linesMap = doc.getMap(LINES_KEY)
+  return readSpatialCanvasWithSkipped(doc).canvas
+}
 
-  const nodes: SpatialNode[] = []
-  for (const nodeId of nodesMap.keys()) {
-    const raw = liftStoredNode(nodesMap.get(nodeId))
-    const parsed = spatialNodeSchema.safeParse(raw)
-    if (parsed.success) nodes.push(parsed.data)
+/** Each stored record the schema accepts, and how many it refused. */
+function readStored<T>(
+  map: CanvasMap,
+  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
+  lift: (raw: unknown) => unknown,
+): { kept: T[]; skipped: number } {
+  const kept: T[] = []
+  let skipped = 0
+  for (const id of map.keys()) {
+    const parsed = schema.safeParse(lift(map.get(id)))
+    if (parsed.success) kept.push(parsed.data)
+    else skipped += 1
   }
+  return { kept, skipped }
+}
 
-  const edges: CanvasEdge[] = []
-  for (const edgeId of edgesMap.keys()) {
-    const raw = liftLegacyExtension(edgesMap.get(edgeId))
-    const parsed = canvasEdgeSchema.safeParse(raw)
-    if (parsed.success) edges.push(parsed.data)
-  }
-
-  const lines: CanvasLine[] = []
-  for (const lineId of linesMap.keys()) {
-    const parsed = canvasLineSchema.safeParse(linesMap.get(lineId))
-    if (parsed.success) lines.push(parsed.data)
-  }
+/**
+ * `readSpatialCanvas`, plus how many stored nodes, edges and lines the schema
+ * refused. A skipped record is not damage — a newer client may have written a
+ * field this build does not know — but a caller that is about to write the
+ * canvas back should be able to say that it read less than the document holds.
+ */
+export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
+  readonly canvas: SpatialCanvas
+  readonly skipped: number
+} {
+  const readNodes = readStored(doc.getMap(NODES_KEY), spatialNodeSchema, liftStoredNode)
+  const readEdges = readStored(doc.getMap(EDGES_KEY), canvasEdgeSchema, liftLegacyExtension)
+  const readLines = readStored(doc.getMap(LINES_KEY), canvasLineSchema, (raw) => raw)
+  const { kept: nodes } = readNodes
+  const { kept: edges } = readEdges
+  const { kept: lines } = readLines
+  const skipped = readNodes.skipped + readEdges.skipped + readLines.skipped
 
   const facets = readCanvasFacets(doc)
   const tags = readCanvasTags(doc)
@@ -669,7 +706,7 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   // on that node, which needs the node's corner to stand at.
   const comments = readCanvasComments(doc, (id) => nodes.find((node) => node.id === id))
 
-  return {
+  const canvas: SpatialCanvas = {
     nodes,
     edges,
     // Omitted when empty, matching what the model canonicalises to — an
@@ -679,6 +716,7 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
     ...(tags !== undefined && { tags }),
     ...(comments.length > 0 && { comments }),
   }
+  return { canvas, skipped }
 }
 
 /**

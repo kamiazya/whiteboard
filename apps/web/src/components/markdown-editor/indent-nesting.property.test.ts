@@ -53,7 +53,7 @@ const listDoc = fc
   .array(
     fc.record({
       indent: fc.nat({ max: 3 }).map((n) => ' '.repeat(n * 2)),
-      // CANONICAL markers only. `renderPrefix` rewrites every bullet to
+      // CANONICAL markers only. `renderLinePrefix` rewrites every bullet to
       // `- ` and every ordered marker to `N. `, so a `* ` item drawn here
       // would fail this property for a reason that is not about indenting
       // at all. That rewrite is real and is pinned as an example below,
@@ -94,7 +94,7 @@ describe('indent and outdent compose', () => {
 })
 
 /**
- * Any command that rewrites a prefix also CANONICALISES it: `renderPrefix`
+ * Any command that rewrites a prefix also CANONICALISES it: `renderLinePrefix`
  * emits `- ` for every bullet and `N. ` for every ordered item, whatever
  * the author typed.
  *

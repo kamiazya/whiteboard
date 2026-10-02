@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { cleanBody, gateMerge, prNumberFrom } from './pre-merge-comments-lib.mjs'
+import { cleanBody, gateMerge, gateUnreadable } from './pre-merge-comments-lib.mjs'
 
 const inline = (author, body) => ({ author, path: 'src/a.ts', line: 12, body })
 const top = (author, body) => ({ author, body })
@@ -79,13 +79,6 @@ test('a long body is truncated rather than pasted whole', () => {
   assert.doesNotMatch(result.message, /line 12/)
 })
 
-test('the PR number comes from the command when it names one', () => {
-  assert.equal(prNumberFrom('gh pr merge 1751 --squash --delete-branch'), 1751)
-  assert.equal(prNumberFrom('cd /x && gh pr merge 42 --squash'), 42)
-  assert.equal(prNumberFrom('gh pr merge --squash'), null)
-  assert.equal(prNumberFrom('gh pr create --title x'), null)
-})
-
 test("a bot's HTML badge does not crowd out its finding", () => {
   // Verbatim shape of DeepSource's comments (PR #1746): a tracking comment,
   // then a severity badge built from <picture>/<source>/<img>, then the one
@@ -114,4 +107,20 @@ test("a bot's HTML badge does not crowd out its finding", () => {
 
 test('cleanBody leaves plain prose alone', () => {
   assert.equal(cleanBody('This cast hides a null.\n\nFix it.'), 'This cast hides a null.\nFix it.')
+})
+
+test('an unreadable PR blocks once and names what failed, then gets out of the way', () => {
+  const first = gateUnreadable({ pr: 2029, reason: 'HTTP 403: GraphQL is not available', alreadySeen: false })
+  assert.equal(first.block, true)
+  assert.match(first.message, /could not read PR #2029/)
+  assert.match(first.message, /HTTP 403/)
+  assert.match(first.message, /pulls\/<n>\/comments/)
+
+  assert.deepEqual(gateUnreadable({ pr: 2029, reason: 'x', alreadySeen: true }), { block: false, message: '' })
+})
+
+test('an unresolved PR number is said as such rather than as PR #null', () => {
+  const result = gateUnreadable({ pr: null, reason: '', alreadySeen: false })
+  assert.match(result.message, /the PR being merged/)
+  assert.doesNotMatch(result.message, /null/)
 })

@@ -13,6 +13,8 @@ import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from '.
 const WORKSPACE_ID = 'ws-1'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
+const EMPTY: SpatialCanvas = { nodes: [], edges: [] }
+
 const canvasDeps = (documentStore: FakeDocumentStore) =>
   makeTestDeps({ documentStore, documentIndex: unusedDocumentIndex() })
 
@@ -25,8 +27,8 @@ describe('document-io', () => {
   })
 
   // Moved here with the loader: this used to live beside a second,
-  // byte-identical `loadSpatialCanvas`, which is what made two classes for
-  // one condition look reasonable.
+  // byte-identical copy of the canvas loader, which is what made two classes
+  // for one condition look reasonable.
   test('loadDocument returns the doc and the decoded canvas for an existing snapshot', async () => {
     const documentStore = new FakeDocumentStore()
     await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
@@ -75,7 +77,14 @@ describe('document-io', () => {
       nodes: loaded.canvas.nodes.map((node) => (node.id === 'n1' ? { ...node, x: 99 } : node)),
       edges: loaded.canvas.edges,
     }
-    await saveDocumentBodySnapshot(deps, WORKSPACE_ID, DOCUMENT_ID, loaded.doc, patched)
+    await saveDocumentBodySnapshot(
+      deps,
+      WORKSPACE_ID,
+      DOCUMENT_ID,
+      loaded.doc,
+      loaded.canvas,
+      patched,
+    )
 
     const reloaded = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(reloaded.canvas.nodes).toHaveLength(2)
@@ -110,7 +119,8 @@ describe('documentWritten', () => {
       WORKSPACE_ID,
       DOCUMENT_ID,
       new LoroDoc(),
-      { nodes: [], edges: [] } satisfies SpatialCanvas,
+      EMPTY,
+      EMPTY,
     )
 
     expect(seen).toEqual([DOCUMENT_ID])
@@ -139,7 +149,8 @@ describe('documentWritten', () => {
       WORKSPACE_ID,
       entry.documentId,
       doc,
-      { nodes: [], edges: [] } satisfies SpatialCanvas,
+      EMPTY,
+      EMPTY,
     )
 
     expect(heard).toEqual([{ doc, path: 'placed/here' }])
@@ -158,7 +169,8 @@ describe('documentWritten', () => {
       WORKSPACE_ID,
       DOCUMENT_ID,
       new LoroDoc(),
-      { nodes: [], edges: [] } satisfies SpatialCanvas,
+      EMPTY,
+      EMPTY,
     )
 
     expect(heard).toEqual([{}])
@@ -189,7 +201,8 @@ describe('documentWritten', () => {
       WORKSPACE_ID,
       DOCUMENT_ID,
       new LoroDoc(),
-      { nodes: [], edges: [] } satisfies SpatialCanvas,
+      EMPTY,
+      EMPTY,
     )
 
     expect(order).toEqual(['saved', 'observed'])
@@ -214,7 +227,8 @@ describe('documentWritten', () => {
         WORKSPACE_ID,
         DOCUMENT_ID,
         new LoroDoc(),
-        { nodes: [], edges: [] } satisfies SpatialCanvas,
+        EMPTY,
+        EMPTY,
       ),
     ).resolves.toBeUndefined()
 

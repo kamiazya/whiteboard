@@ -170,6 +170,38 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
     })
   })
 
+  // The entitlement is a NAMED list, so a module that merely sits in an
+  // entitled directory is still a mechanic: `user-deletion` and
+  // `storage-report` are neither called `*-store` nor `data-layout`, and a
+  // directory pattern waved both through.
+  describe('a module in security/ or tenant/ is a mechanic unless it is named entitled', () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'arch-lint-adapter-unnamed-'))
+    afterAll(() => rmSync(fixture, { recursive: true, force: true }))
+
+    mkdirSync(join(fixture, 'routes'), { recursive: true })
+    mkdirSync(join(fixture, 'mcp'), { recursive: true })
+    writeFileSync(
+      join(fixture, 'routes', 'plant.ts'),
+      [
+        "import { deleteUser } from '../security/user-deletion.js'",
+        "import { writeSecretFileAtomicSync } from '../security/secret-file-mode.js'",
+        "import { computeStorageReport } from '../tenant/storage-report.js'",
+        "import { workspaceRoles } from '../security/workspace-roles.js'",
+        "import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'",
+        "import { SELF_HOST_TENANT_ID } from '../tenant/id.js'",
+        'export const x = [deleteUser, writeSecretFileAtomicSync, computeStorageReport, workspaceRoles, parseBearerAuthorizationHeader, SELF_HOST_TENANT_ID]',
+      ].join('\n'),
+    )
+
+    it('reports the unnamed modules and not the named ones', () => {
+      expect(findAdapterMechanicEdges(fixture, [])).toEqual([
+        'routes/plant.ts -> security/secret-file-mode',
+        'routes/plant.ts -> security/user-deletion',
+        'routes/plant.ts -> tenant/storage-report',
+      ])
+    })
+  })
+
   // The finder reads the module specifiers the TypeScript AST walk reports —
   // the same ones the sibling di-import scan and every other import scan see —
   // rather than `from '...'` text. Text misses an import that has no `from`

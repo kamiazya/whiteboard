@@ -37,7 +37,7 @@ const CLI = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
 if (!existsSync(CLI)) {
   console.error(
     '[replica-key-smoke] FAIL: dist/cli/index.js missing.\n' +
-      'Run `pnpm --filter @kamiazya/whiteboard-mcp build` before this smoke.',
+      'Run `pnpm build:mcp` before this smoke.',
   )
   process.exit(1)
 }

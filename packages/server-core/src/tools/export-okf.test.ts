@@ -53,6 +53,21 @@ describe('exportOkf', () => {
     expect(result.markdown.endsWith('---\n')).toBe(true)
   })
 
+  // `canvas` is the other kind's word; a body that declared no type is a note.
+  test('types a document that never stored core facets as a note, not a canvas', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, { nodes: [], edges: [] })
+    })
+    const result = await exportOkf(makeDeps(store), {
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+    })
+
+    expect(result.frontmatter.type).toBe('note')
+    expect(result.markdown).not.toContain('canvas')
+  })
+
   test('rejects when the canvas has no stored snapshot', async () => {
     await expect(
       exportOkf(makeDeps(new FakeDocumentStore()), {

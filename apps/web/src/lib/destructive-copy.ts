@@ -50,29 +50,33 @@ export const DESTRUCTIVE_COPY = {
   // The delete evacuates into the trash before removing anything
   // (loro-workspace-document-index's "EVACUATE FIRST"), and the Trash
   // section restores it. Older copy said "There is no undo", which talks a
-  // reader out of tidying up. A browser workspace keeps no versions — those
-  // are a daemon feature — so the trash is the whole story here.
-  'delete-document-browser': (noun) => `The ${noun} moves to the Trash, where you can restore it.`,
+  // reader out of tidying up. A browser delete removes no version rows, and a
+  // restore brings the document back under the documentId they are keyed by
+  // (browser-version-store.trash.test.ts), so the trash is the whole story
+  // and the copy says the history returns with it.
+  'delete-document-browser': (noun) =>
+    `The ${noun} moves to the Trash, where you can restore it with its saved versions.`,
 
   // Recoverable in the same way: document-store.ts routes the delete through
   // the index, which evacuates into the trash and keeps the same
   // recoverability promise the agent-facing port makes. What genuinely does
-  // NOT come back is the versions and branches — documentTeardown deletes
-  // those rows, and the trash holds only the tree subtree — so that is the
-  // half worth warning about, rather than a blanket "no undo" that is false.
+  // NOT come back is the saved versions — documentTeardown deletes those
+  // rows, and the trash holds only the tree subtree — so that is the half
+  // worth warning about, rather than a blanket "no undo" that is false.
   'delete-document-daemon': (noun) =>
-    `The ${noun} moves to the Trash, where you can restore it. Its versions and branches are deleted, and restoring does not bring them back.`,
+    `The ${noun} moves to the Trash, where you can restore it. Its saved versions are deleted, and restoring does not bring them back.`,
 
   // The bulk pair. Separate entries rather than one number-aware sentence,
   // because English agreement ("moves"/"move", "it"/"them") would put a
-  // branch inside the one place this module exists to keep branch-free — and
-  // a selection of ONE never reaches here anyway: the panel routes it to the
-  // singular confirmation above, which can name the document.
+  // conditional inside the one place this module exists to keep
+  // conditional-free — and a selection of ONE never reaches here anyway: the
+  // panel routes it to the singular confirmation above, which can name the
+  // document.
   'delete-documents-browser': (noun) =>
-    `The selected ${noun} move to the Trash, where you can restore them.`,
+    `The selected ${noun} move to the Trash, where you can restore them with their saved versions.`,
 
   'delete-documents-daemon': (noun) =>
-    `The selected ${noun} move to the Trash, where you can restore them. Their versions and branches are deleted, and restoring does not bring them back.`,
+    `The selected ${noun} move to the Trash, where you can restore them. Their saved versions are deleted, and restoring does not bring them back.`,
 
   // The subject here is a PERSON'S NAME, not a kind noun — `DestructiveDescription`'s
   // parameter still fits, since a name is just the string it is handed.

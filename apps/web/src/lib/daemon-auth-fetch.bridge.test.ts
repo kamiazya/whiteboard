@@ -3,6 +3,7 @@
  * address to `createDaemonFetch`, so every surface that builds its own
  * daemon fetch reaches it without being told how.
  */
+import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
@@ -31,6 +32,13 @@ describe('createDaemonFetch to the extension bridge', () => {
         },
       },
       postMessage: (m: { type: string; id: string; path?: string }) => {
+        // The page asks the host its protocol once per connection; a host
+        // that answers is not what this test is about, so it is answered
+        // here and kept apart from the requests.
+        if (m.type === 'hello') {
+          answer({ type: 'hello', version: '0.0.0-test', protocol: BRIDGE_PROTOCOL_VERSION })
+          return
+        }
         sent.push(m)
         answer({ type: 'head', id: m.id, status: 200, headers: {} })
         answer({ type: 'end', id: m.id })

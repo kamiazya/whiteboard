@@ -4,9 +4,9 @@ import {
   readDocumentKind,
   readFacets,
   readSpatialCanvas,
+  reconcileSpatialCanvas,
   writeCoreFacets,
   writeFacets,
-  writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
@@ -509,7 +509,7 @@ async function setElementFacets(
     ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
     ...withTags(tags ?? found.tags),
   }
-  writeSpatialCanvas(doc, {
+  reconcileSpatialCanvas(doc, canvas, {
     ...canvas,
     [target.collection]: members.map((candidate) => (candidate.id === id ? next : candidate)),
   } as SpatialCanvas)
@@ -603,7 +603,7 @@ async function setCanvasFacets(
   // an empty bucket disappears, so a reverted canvas never carries a
   // redundant field forever. The comments beside it are untouched.
   const { facets: _replaced, tags: _tags, ...canvasRest } = canvas
-  writeSpatialCanvas(doc, {
+  reconcileSpatialCanvas(doc, canvas, {
     ...canvasRest,
     nodes: canvas.nodes.map((node) => renamed(node)),
     edges: canvas.edges.map((edge) => renamed(edge)),

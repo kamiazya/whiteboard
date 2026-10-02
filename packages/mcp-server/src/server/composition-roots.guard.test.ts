@@ -9,7 +9,8 @@ import { stripComments } from '../shared/test-utils/strip-comments.js'
  * new root cannot forget it.
  *
  * - **Boot.** A root reaches `prepareDataDir` through `bootSelfHostDeps` (or
- *   `prepareSelfHostDataDir`), never by calling the pieces: the order is the
+ *   `prepareSelfHostDataDir`, or `bootLocalDeps`, which wraps the first for
+ *   the two local roots), never by calling the pieces: the order is the
  *   contract, and a root that skipped the migration only worked because
  *   `ensureWorkspaceId` happened to run it.
  * - **Live audience.** An HTTP root mounts the sync SSE router through
@@ -79,7 +80,8 @@ function usesShared(code: string, pattern: RegExp): boolean {
  * the deps only while the process directory happens to be the served one.
  */
 function sharesBootScope(code: string): boolean {
-  const booted = /\{[^{}]*\bscope\b[^{}]*\}\s*=\s*await\s+bootSelfHostDeps\(/.test(code)
+  const booted =
+    /\{[^{}]*\bscope\b[^{}]*\}\s*=\s*await\s+(?:bootSelfHostDeps|bootLocalDeps)\(/.test(code)
   const given = /\bcreateSharedWorkers\(\s*[\w.]+\s*,\s*(\w+)\s*[,)]/.exec(code)?.[1]
   return booted && given === 'scope'
 }
@@ -99,7 +101,7 @@ const ROOT_RULES: readonly RootRule[] = [
   {
     missing: 'shared boot',
     kinds: ['http', 'stdio'],
-    satisfied: (code) => /\b(bootSelfHostDeps|prepareSelfHostDataDir)\(/.test(code),
+    satisfied: (code) => /\b(bootSelfHostDeps|bootLocalDeps|prepareSelfHostDataDir)\(/.test(code),
   },
   {
     missing: 'boot through the shared helper, not prepareDataDir/ensureWorkspaceId',

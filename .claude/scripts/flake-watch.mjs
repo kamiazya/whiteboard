@@ -77,13 +77,46 @@ function gitInspector() {
   return (path, sinceIso) => {
     const files = git(['ls-files', `*${path}`]).split('\n').filter(Boolean)
     if (files.length === 0) return { state: 'missing' }
-    const commits = git(['log', base, '--format=%cI\t%s', '--', ...files])
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => line.split('\t'))
-      .filter(([committedAt]) => committedAt > sinceIso)
-    if (commits.length === 0) return { state: 'unchanged' }
-    return { state: 'changed', commits: commits.length, newest: commits[0][1] }
+    const landedSince = (lines) =>
+      lines
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.split('\t'))
+        .filter(([committedAt]) => committedAt > sinceIso)
+    const commits = landedSince(git(['log', base, '--format=%cI\t%s', '--', ...files]))
+    // A later commit whose SUBJECT names the file, touching it or not: the
+    // shape a root-cause fix has, and "fixed in <sha>" is what the report
+    // otherwise has no way to record.
+    const name = path.split('/').pop()
+    const naming = landedSince(
+      git(['log', base, '--format=%cI\t%s', '--fixed-strings', `--grep=${name}`]),
+    )
+    const namedBy = naming[0]?.[1]
+    if (commits.length === 0) return namedBy === undefined ? { state: 'unchanged' } : { state: 'unchanged', namedBy }
+    return {
+      state: 'changed',
+      commits: commits.length,
+      newest: commits[0][1],
+      newestAt: commits[0][0],
+      ...(namedBy === undefined ? {} : { namedBy }),
+    }
+  }
+}
+
+/**
+ * Whether a main CI run created after `iso` passed, from one listing of the
+ * recent successful runs. `undefined` when the listing cannot be read, so the
+ * report keeps what it would have shown rather than dropping on a guess.
+ */
+function mainPassedAfter() {
+  try {
+    const passed = gh([
+      'run', 'list', '--branch', 'main', '--workflow', 'ci', '--status', 'success',
+      '--limit', '50', '--json', 'createdAt',
+    ])
+    return (iso) => passed.some((run) => run.createdAt > iso)
+  } catch {
+    return undefined
   }
 }
 
@@ -126,7 +159,7 @@ function main() {
     }),
   }))
 
-  const report = formatReport(clusterFailures(window), WINDOW_DAYS, gitInspector())
+  const report = formatReport(clusterFailures(window), WINDOW_DAYS, gitInspector(), mainPassedAfter())
   if (report !== '') process.stdout.write(`${report}\n`)
   else if (!QUIET) {
     process.stdout.write(

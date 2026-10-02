@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { createRowRenderLoader, type RowRenderDeps } from './load-row-render.js'
+import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
 
 // Hoisted, because the loader imports both of these modules at collection
 // time — a plain `const` would still be in its temporal dead zone when the
@@ -117,7 +118,7 @@ describe('createRowRenderLoader', () => {
     expect(d.source.loadMarkdown).toHaveBeenCalledWith(
       expect.objectContaining({ documentId: 'd1' }),
     )
-    expect(d.renderMarkdown).toHaveBeenCalledWith('# Hi', expect.any(Number), undefined)
+    expect(d.renderMarkdown).toHaveBeenCalledWith('# Hi', ROW_LAYOUT_WIDTH, undefined)
     expect(d.source.loadSpatialSnapshot).not.toHaveBeenCalled()
   })
 

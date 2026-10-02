@@ -11,7 +11,7 @@ If you need family-specific techniques:
 - Arrange actor headers horizontally
 - Do not omit lifelines
 - Keep messages horizontal
-- Default to solid for requests and dashed for responses
+- Default to one edge color for requests and another for responses, and label each
 - When placing text near an activation, push it to the side without overlap
 - Let participants read as their roles; do not flatten boundaries / controls / queues / databases into generic actors
 

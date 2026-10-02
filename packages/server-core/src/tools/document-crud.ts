@@ -32,6 +32,7 @@ import { refuseFrontmatterTags } from './tag-library.js'
  * left with a bare id and no next step.
  */
 async function rethrowWorkspaceNotFound<T>(
+  deps: ServerDeps,
   workspaceId: string,
   intent: WorkspaceNotFoundIntent,
   body: () => Promise<T>,
@@ -40,7 +41,11 @@ async function rethrowWorkspaceNotFound<T>(
     return await body()
   } catch (err) {
     if (err instanceof WorkspaceNotFoundError) {
-      throw new WorkspaceNotFoundForCallerError(workspaceId, intent)
+      throw new WorkspaceNotFoundForCallerError(
+        workspaceId,
+        intent,
+        (await deps.knownWorkspaceHandles?.()) ?? [],
+      )
     }
     throw err
   }
@@ -106,9 +111,13 @@ async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> 
  * `note` because that is what a markdown document someone wrote a body into
  * is; the repo's own ticketing already uses `note` and `issue` this way.
  */
-const BARE_BODY_TYPE = 'note'
+export const BARE_BODY_TYPE = 'note'
 
-/** A body with the minimal frontmatter that makes it a document. */
+/**
+ * A body with the minimal frontmatter that makes it a document. An empty body
+ * is wrapped too: a markdown document always has a type, so what it reads back
+ * as and what the tag writer accepts agree that it has frontmatter.
+ */
 const asOkfBody = (body: string): string => `---\ntype: ${BARE_BODY_TYPE}\n---\n\n${body}`
 
 export async function wbDocumentCreate(
@@ -149,7 +158,7 @@ export async function wbDocumentCreate(
   // Narrowed once, because the spatial arm of the union has no `markdown`
   // at all and a ternary that reaches for it in the else branch does not
   // typecheck.
-  const sent = input.kind === 'markdown' ? input.markdown : undefined
+  const sent = input.kind === 'markdown' ? (input.markdown ?? '') : undefined
   const markdown = sent !== undefined && !hasOkfFrontmatter(sent) ? asOkfBody(sent) : sent
 
   if (markdown !== undefined) {
@@ -204,7 +213,7 @@ export async function wbDocumentCreate(
   // and outranks tidiness here — naming must never gate creation — so a
   // caller sending a blank one gets a document, not an error.
   const name = input.name?.trim()
-  const entry = await rethrowWorkspaceNotFound(workspaceId, 'create', () =>
+  const entry = await rethrowWorkspaceNotFound(deps, workspaceId, 'create', () =>
     deps.documentIndex.createDocument({
       workspaceId,
       path: input.path,
@@ -274,7 +283,7 @@ export async function wbDocumentList(
   // An unknown workspace is an error, not an empty list — otherwise a typo'd
   // workspaceId is indistinguishable from a genuinely empty workspace. The
   // index enforces that; this only restates it in the tool's vocabulary.
-  const entries = await rethrowWorkspaceNotFound(input.workspaceId, 'read', () =>
+  const entries = await rethrowWorkspaceNotFound(deps, input.workspaceId, 'read', () =>
     deps.documentIndex.listDocuments({ workspaceId: input.workspaceId }),
   )
   return {

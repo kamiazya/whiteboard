@@ -203,6 +203,28 @@ describe('tool-call examples in skills, README and docs', () => {
     expect(problem(flat[0] as Example)).toContain('Unrecognized keys')
   })
 
+  // `nodes` on a region.set is a list of id strings. A skill that once taught
+  // node objects with optional geometry sent every copy to a validation error.
+  it('refuses node objects in a region.set, which names its members by id', () => {
+    const [objects, ids] = ['{ id: "a" }', '"a"'].map((member) =>
+      callExamples(
+        'inline',
+        `wb_canvas_edit({ workspaceId, documentId, ops: [{ op: "region.set", within: "g", nodes: [${member}] }] })`,
+      ),
+    )
+    expect(problem(objects?.[0] as Example)).toContain('expected string')
+    expect(problem(ids?.[0] as Example)).toBeUndefined()
+  })
+
+  it('holds a region.set example from the drawing skill', () => {
+    expect(
+      EXAMPLES.some(
+        (example) =>
+          example.file === 'skills/drawing-visuals/SKILL.md' && example.text.includes('region.set'),
+      ),
+    ).toBe(true)
+  })
+
   it('every example is accepted by the input schema its tool registers', () => {
     const failures = EXAMPLES.filter((example) => !(keyOf(example) in PARTIAL_EXAMPLES)).flatMap(
       (example) => {

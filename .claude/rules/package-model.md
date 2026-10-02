@@ -54,7 +54,7 @@ paths:
   `canvasEdgeSchema`, so it reached `wb_canvas_edit`'s edge patch for free, which is the whole
   gain: a facet payload is opaque to that tool, so a model could not place a bend at all before.
 - **An edge END is a node or a POINT**
-  ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 3). `edgeEndpointSchema`
+  ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 3). `edgeEndSchema`
   is a discriminated union on `kind` — `{ kind: 'node', node, side?, end? }` or
   `{ kind: 'point', point, end? }` — in place of the format's four flat keys
   (`fromNode`/`fromSide`/`toNode`/`toSide`), which could not say "this end is a point" at all.
@@ -79,8 +79,8 @@ paths:
   of band, on node ends that stopped being correlated, and on a corpus with no half-free edge in
   it. Mutation-checked in both directions.
 - **A schema this model repeats is NAMED in zod's global registry**, and that is a decision about
-  the MCP tool table taken here because it can be taken nowhere else. `edgeEndpointSchema` carries
-  `{ id: 'EdgeEndpoint' }`, which makes every JSON Schema emission put it in `$defs` once and
+  the MCP tool table taken here because it can be taken nowhere else. `edgeEndSchema` carries
+  `{ id: 'EdgeEnd' }`, which makes every JSON Schema emission put it in `$defs` once and
   `$ref` it at each use instead of inlining the whole union.
   Measured on the four sites `wb_canvas_edit` has (`from` and `to`, on `edge.add` and
   `edge.patch`): **4,579 bytes inlined against 1,786 referenced**. Inlined, the table read 40,315 —
@@ -222,7 +222,7 @@ paths:
   node or an edge, the text arm names the node whose text holds the passage
   (absent, a note's own body). Supporting a new document format means adding
   an arm here; a new object on an existing surface is a new reference on
-  that surface's arm, never a new arm. `ANNOTATION_ANCHOR_KINDS` is read off
+  that surface's arm, never a new arm. the annotation anchor kinds are read off
   the schema, and `annotation.test.ts` checks the generator draws every arm
   and every reference, so neither can be added without the other.
 - **The proposal layer (`proposal.ts`, ADR-0029) is the annotation layer's

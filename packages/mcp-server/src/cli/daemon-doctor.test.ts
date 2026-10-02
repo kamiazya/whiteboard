@@ -165,3 +165,29 @@ describe('runDaemonDoctor: wire drift', () => {
     expect(roundtrip(daemonDoctorResultSchema, result)).toEqual(result)
   })
 })
+
+// A person reads a remediation and types it. `--json` is the script form of
+// `daemon run`; sending a person there prints a ready object instead of the
+// one sentence that says the daemon is up.
+describe('runDaemonDoctor: remediation is the human form of the command', () => {
+  const records: readonly ParseRecord[] = [
+    async () => ({ kind: 'missing' }),
+    async () => ({ kind: 'malformed', message: 'not json' }),
+    async () => ({ kind: 'token-missing', record: baseRecord }),
+    async () => ({ kind: 'valid', record: validRecord }),
+  ]
+
+  it('names `daemon run` without `--json` in every finding that tells a person to start it', async () => {
+    const remediations: string[] = []
+    for (const parseRecord of records) {
+      const { result } = await runDoctor(parseRecord, () => false)
+      for (const check of result.checks) {
+        if (check.remediation !== undefined) remediations.push(check.remediation)
+      }
+    }
+    // Four records, each reaching a start-the-daemon finding: a count far
+    // below that means the scenarios stopped reaching the remediation.
+    expect(remediations.filter((text) => /daemon run/.test(text))).toHaveLength(4)
+    expect(remediations.filter((text) => text.includes('--json'))).toEqual([])
+  })
+})

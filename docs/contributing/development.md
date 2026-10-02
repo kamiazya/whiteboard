@@ -57,7 +57,7 @@ Do this only while no dev daemon is running — an already-running old daemon ke
 
 > **Per-worktree sockets:** every worktree reaches its own daemon, because the socket path is a hash of the data dir (`daemonSocketPath`) and every worktree has its own data dir. There is no port to derive, share or collide on.
 >
-> **The dev daemon never idles out.** `mcp:http:dev` passes `--idle-timeout-ms=0`, disabling the packaged daemon's 15-minute idle-shutdown default (`server/index.ts`'s own default, unaffected). Without this, a dev session idle past 15 minutes would silently close its own listener — the `SessionStart` hook only runs once per session, so nothing re-spawns it and the client loses its MCP tools with no error at all. Kill a dev daemon explicitly (`pkill -f mcp:http:dev`) rather than relying on it to time out.
+> **The dev daemon never idles out.** `mcp:http:dev` passes `--idle-timeout-ms=0`, disabling the packaged daemon's 15-minute idle-shutdown default (`server/index.ts`'s own default, unaffected). Without this, a dev session idle past 15 minutes would silently close its own listener — the `SessionStart` hook only runs once per session, so nothing re-spawns it and the client loses its MCP tools with no error at all. Stop it explicitly with `pnpm mcp:http:stop` rather than relying on it to time out. That command acts on this checkout's data dir only: it signals the `with-dev-data-dir.mjs` wrapper recorded in `<data dir>/dev-wrapper.pid`, which forwards the stop to `tsx watch` and the daemon, then waits for the daemon to be gone. Do not stop it by matching process names — the name is the same in every checkout and worktree, so it stops other lanes' daemons too.
 >
 > **A second daemon for the same data dir refuses to start.** The socket path is the data dir's, so a second `pnpm mcp:http:dev` alongside the `SessionStart` hook's finds the socket answering, stops the work it had already armed, and exits with `another daemon is already listening on this socket` rather than taking the socket over. This should be rare in practice — see the spawn lock below, which closes the startup race that used to cause it.
 >
@@ -208,6 +208,7 @@ Two layers close that gap:
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket)
 pnpm mcp             # MCP server only (tsx)
 pnpm build           # dist/server (apps/web's `build` ends with `copy-into-mcp-dist.mjs`, which copies dist/web-app in)
+pnpm build:mcp       # the server alone: canvas-viewer's widget first, then `@kamiazya/whiteboard-mcp`'s build (a `pnpm --filter` build does not build its workspace dependencies, so the bare filter form fails on a clean checkout with "widget build output not found")
 pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke

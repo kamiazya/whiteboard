@@ -24,7 +24,7 @@ If you skip this step, the same kind of thing will keep changing appearance thro
 - service: the main processing role; use the base rectangle family
 - queue / bus: give it a standalone box; do not bury it in arrow labels
 - database / store: make storage legible through silhouette or label
-- external: use neutral treatment, outside-boundary placement, or lighter / dashed treatment
+- external: use neutral treatment, outside-boundary placement, or a lighter color
 - security / auth: draw it as a control tied to a crossing or protected asset; avoid a generic `security` box
 - error / failure sink: move it to a side path away from the mainline
 - decision: use a diamond or an equivalent conditional node
@@ -34,11 +34,11 @@ If you skip this step, the same kind of thing will keep changing appearance thro
 
 - Within one frame, keep the same role in the same shape language
 - Prioritize role distinction over brand reproduction
-- Keep dashed to one meaning per frame
+- Keep one edge color to one meaning per frame
   - external
   - async
   - optional
-  Do not make one dashed style serve all three at once
+  Do not make one color serve all three at once
 - Do not rely on color alone; roles should also read from labels, position, and grouping
 - Even when using provider icons, keep the role legible through labels, legends, and boundaries
 - Gateway / service / security / error do not all need separate shapes. The critical distinction is semantic, not ornamental variety
@@ -66,7 +66,7 @@ If you skip this step, the same kind of thing will keep changing appearance thro
 - lane title: actor / role / system
 - rectangle step: action
 - diamond: decision
-- dashed path: async / message
+- async / message path: its own edge color, labeled
 - side sink: exception / failure handling
 
 ## Local Surgery

@@ -9,14 +9,23 @@
  * fails, because the double behaves.
  *
  * Out of scope by construction, not by allowlist: tests, benches, a
- * `test-utils/` directory and a `_test-*` helper. Whatever else a package
- * keeps for tests only, under a name that says neither, is listed below with
- * why, and the entry is checked from both sides.
+ * `test-utils/` directory and a `_test-*` helper AS THE IMPORTER. Whatever else
+ * a package keeps for tests only, under a name that says neither, is listed
+ * below with why, and the entry is checked from both sides.
+ *
+ * Two more ways a double ships. A production file importing a `_test-*` helper
+ * pulls that helper (and the `vitest` it imports) into the build, since the
+ * name exempts the helper as an importer and nothing checked it as the
+ * importee. And mcp-server and apps/web are composition roots, so the boundary
+ * scan never reads them: `vitest` or `fast-check` imported by a production file
+ * there is read here instead.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
+import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 /** An import or re-export specifier whose path has a `test-utils` segment. */
@@ -29,6 +38,21 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
   'packages/facet-engine/src/testing/facet-arbitraries.ts':
     'fast-check arbitraries a plugin author imports from facet-engine/testing to test their own facets, built over model/test-utils; the testing entry is itself test-only and not reachable from the package root',
 }
+
+/**
+ * Production files in the composition roots that import a test framework, with
+ * why. None is imported by shipped code today; the entry is checked from both
+ * sides, so it cannot outlive that.
+ */
+const TEST_FRAMEWORK_ALLOWLIST: Readonly<Record<string, string>> = {
+  'apps/web/src/docs-snapshots/_helpers.ts':
+    'shared support of the doc-screenshot vitest browser tests (`vitest/browser` locators): the directory holds only those tests and what they share, and nothing outside it imports it',
+  'apps/web/src/docs-snapshots/_setup.ts':
+    'the vitest setup file of the doc-screenshot browser tests: only that project loads it, and nothing outside docs-snapshots imports it',
+}
+
+/** Roots whose production source the boundary scan never reads. */
+const COMPOSITION_ROOT_SRC = ['packages/mcp-server/src', 'apps/web/src']
 
 function isProductionFile(path: string): boolean {
   const rel = relativeToRepo(path)
@@ -46,6 +70,20 @@ function testUtilsImports(source: string): string[] {
     .filter((line) => !/^\s*(?:\/\/|\/\*|\*)/.test(line))
     .join('\n')
   return [...code.matchAll(TEST_UTILS_SPECIFIER)].map((match) => match[1] ?? '')
+}
+
+/** Relative specifiers whose basename is a `_test-*` helper, other than a type-only (erased) edge. */
+function testHelperImports(path: string, source: string): string[] {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
+  return collectModuleSpecifiers(sourceFile)
+    .filter(({ specifier, typeOnly }) => !typeOnly && /(?:^|\/)_test-[^/]*$/.test(specifier))
+    .map(({ specifier }) => specifier)
+}
+
+function testFrameworkImports(path: string, source: string): string[] {
+  return scanSourceForBoundaryViolations(path, source)
+    .filter(({ kind }) => kind === 'test-framework-import')
+    .map(({ name }) => name)
 }
 
 const all = SCAN_ROOTS.flatMap((root) => walkSourceFiles(join(REPO_ROOT, root)))
@@ -69,6 +107,19 @@ describe('production source does not import test-utils', () => {
     expect(testUtilsImports("import { x } from './not-test-utilsy.js'")).toEqual([])
   })
 
+  it('recognises a `_test-*` helper by the specifier basename, and not a type-only edge or a look-alike', () => {
+    const helpers = (source: string): string[] => testHelperImports('x.ts', source)
+    expect(helpers("import { w } from './_test-helpers.js'")).toEqual(['./_test-helpers.js'])
+    expect(helpers("export * from '../routes/_test-route-fuzz-lane.js'")).toEqual([
+      '../routes/_test-route-fuzz-lane.js',
+    ])
+    const dynamic = ['const m = await ', "import('./_test-helpers.js')"].join('')
+    expect(helpers(dynamic)).toEqual(['./_test-helpers.js'])
+    expect(helpers("import type { W } from './_test-helpers.js'")).toEqual([])
+    expect(helpers("import { x } from './not_test-helpers.js'")).toEqual([])
+    expect(helpers("// import { w } from './_test-helpers.js'")).toEqual([])
+  })
+
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
     expect(all.length).toBeGreaterThan(1500)
@@ -85,6 +136,50 @@ describe('production source does not import test-utils', () => {
       if (found.length > 0) hits.push(`${rel}: ${found.join(', ')}`)
     }
     expect(hits).toEqual([])
+  })
+
+  it('no production file imports a `_test-*` helper', () => {
+    const hits = production.flatMap((path) => {
+      const found = testHelperImports(path, readFileSync(path, 'utf8'))
+      return found.length > 0 ? [`${relativeToRepo(path)}: ${found.join(', ')}`] : []
+    })
+    expect(hits).toEqual([])
+  })
+
+  describe('a composition root does not import a test framework from production source', () => {
+    const roots = production.filter((path) =>
+      COMPOSITION_ROOT_SRC.some((root) => relativeToRepo(path).startsWith(`${root}/`)),
+    )
+    const importing = (path: string): string[] =>
+      testFrameworkImports(path, readFileSync(path, 'utf8'))
+
+    it('recognises vitest and fast-check specifiers', () => {
+      expect(testFrameworkImports('x.ts', "import { it } from 'vitest'")).toEqual(['vitest'])
+      expect(testFrameworkImports('x.ts', "import fc from 'fast-check'")).toEqual(['fast-check'])
+      expect(testFrameworkImports('x.ts', "import { a } from './vitest-like.js'")).toEqual([])
+    })
+
+    it('reads the roots worth reading', () => {
+      expect(roots.length).toBeGreaterThan(500)
+    })
+
+    it('reports no production file outside the ledger', () => {
+      const hits = roots
+        .filter((path) => !(relativeToRepo(path) in TEST_FRAMEWORK_ALLOWLIST))
+        .flatMap((path) => {
+          const found = importing(path)
+          return found.length > 0 ? [`${relativeToRepo(path)}: ${found.join(', ')}`] : []
+        })
+      expect(hits).toEqual([])
+    })
+
+    it('keeps every ledgered file production source that still imports one', () => {
+      for (const [rel, reason] of Object.entries(TEST_FRAMEWORK_ALLOWLIST)) {
+        expect(isProductionFile(join(REPO_ROOT, rel)), `${rel} is not production source`).toBe(true)
+        expect(importing(join(REPO_ROOT, rel)), rel).not.toEqual([])
+        expect(reason.split(/\s+/).length, `${rel}'s reason is too short`).toBeGreaterThan(8)
+      }
+    })
   })
 
   it('every allowlisted file is production source and still imports one', () => {

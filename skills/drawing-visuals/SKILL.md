@@ -92,13 +92,13 @@ Examples:
 - "metric comparison matrix for previous vs current"
 
 If the intent is fuzzy, open [`visual-vocabulary.md`](./visual-vocabulary.md), look at "Choose the diagram from the question", and narrow it down to **one question this diagram answers**.
-Do not try to answer multiple questions in one document at once — there is no section-level export, so a document either reads as one story or it reads as clutter.
+Do not try to answer multiple questions in one document at once — a document either reads as one story or it reads as clutter, and although `wb_scene_render` can draw one group on its own (`fragment`), a reader opening the document still meets all of it.
 
 Once the intent is fixed, choose the node shape that fits:
 
 | Content | Node type |
 | --- | --- |
-| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting; wraps at the width; omit the height and the box is sized to its text) |
+| a labeled box, the default building block | `text` (its `text` is Markdown — a heading, bold, a bullet or `- [ ]` task, a fenced code block — and wraps at the width; omit the height and the box is sized to its text) |
 | a reference to another document, image, or file | `file` |
 | a link out to a URL | `link` |
 | a lightweight visual boundary (label + background) | `group` |
@@ -254,16 +254,24 @@ to reach for:
   its edge — someone mid-drag — is untouched.
 - An **edge is in scope only when BOTH its endpoints are.** One that leaves the
   group survives your list without being mentioned.
-- What you declare must also **land inside** the group. A node or edge that
-  would end up elsewhere is refused rather than moved, so a region edit can
-  never reach across the board.
+- `nodes` (and `edges`) are lists of id **strings**, never node objects. A node
+  you list that is already inside the group stays exactly where it is; one
+  listed that is **elsewhere** is moved in to a free spot inside it, so a region
+  edit leaves no member outside its group.
 - A **locked** node or edge in scope **refuses the whole batch before anything
   is written**, because this op deletes by omission and silently skipping a
   locked element would be the worst possible reading of that.
 
-A node you list that already exists is merged rather than replaced, so omitting
-geometry leaves it where it is. Use it when you own the whole group; use plain
-`node.patch` / `node.remove` ops when you do not.
+```js
+// The group "pipeline" keeps exactly these two nodes and the edge between them.
+wb_canvas_edit({ workspaceId, documentId, mode: "apply", ops: [
+  { op: "region.set", within: "pipeline", nodes: ["ingest", "transform"], edges: ["ingest-to-transform"] },
+] })
+```
+
+To create a new member, add it with `node.add` and `within` rather than naming
+it here. Use `region.set` when you own the whole group; use plain `node.patch` /
+`node.remove` ops when you do not.
 
 **A lock binds you too.** A `patch` or `remove` on a locked element fails the batch. Unlocking is the
 one op a locked element still accepts, so you can lift your own lock in the same call:

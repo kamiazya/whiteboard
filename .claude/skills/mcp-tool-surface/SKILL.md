@@ -110,7 +110,7 @@ with every tool call, tool-error text, token and cost figure.
   lies.** The errand corpus's `call` throws on `isError` for this reason:
   two of its four rows had measured a refused write and a crashed seam
   as one cheap call each. A harness that drives real tools supplies every
-  seam the tools reach (`InMemoryVersionHistory`), or the tool answers an
+  seam the tools reach (`FakeVersionHistory`), or the tool answers an
   error and the count reads as success.
 - **`tools` says what the surface failed to offer — read the refusal
   texts before blaming the description.** Three trials of "tag this note"

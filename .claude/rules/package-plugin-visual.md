@@ -353,7 +353,7 @@ it is the seam's only consumer BY DESIGN.
 
 What makes leaving it safe rather than merely tolerated is that the contract
 is exercised end to end: that test drives a fake plugin's router through
-`layoutSpatialCanvas` — not through `resolveRouter` directly — and pins both
+`layoutSpatialCanvas` — not through `resolveRouterTable` directly — and pins both
 fallbacks, so a break in the wiring fails a test rather than only a type.
 `pnpm knip` reports nothing here, so no mechanical rung calls it dead either.
 

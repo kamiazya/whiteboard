@@ -11,41 +11,60 @@ description: Monitor and triage the POST-PUSH automated-review surface for the w
 
 | Source | What it is | How to read it |
 |--------|-----------|----------------|
-| **`ci-gate`** | The one required check over every `ci.yml` job (`check` lint/typecheck, the test jobs, `verify` build + smokes, `extension-smokes`, …) | `gh pr checks <PR>`; logs: `gh run view <run-id> --log-failed` |
-| **CodeRabbit** | AI PR review (line comments + summary). **Skips while the PR title contains `WIP`/draft** | `gh pr view <PR> --json reviews,comments`; `gh api repos/{owner}/{repo}/pulls/<PR>/comments` |
+| **`ci-gate`** | The one required check over every `ci.yml` job (`check` lint/typecheck, the test jobs, `verify` build + smokes, `extension-smokes`, …) | the head commit's check-runs (see Monitor); logs: `gh run view <run-id> --log-failed` |
+| **CodeRabbit** | AI PR review (line comments + summary). **Skips while the PR title contains `WIP`/draft** | `gh api repos/{owner}/{repo}/pulls/<PR>/reviews`, `.../issues/<PR>/comments`, `.../pulls/<PR>/comments` |
 | **AccessLint** | accessibility review app | its check + PR review comments |
-| **WIP** | reports work-in-progress from the title — **informational, measured not to block a merge** (#1201: with WIP the sole non-success check, `mergeable_state` read `unstable`, never `blocked`; Draft is the one mechanical merge block) | `gh pr checks` shows it pending; remove `WIP`/`(WIP)` from the title to settle it + un-skip CodeRabbit |
+| **WIP** | reports work-in-progress from the title — **informational, measured not to block a merge** (#1201: with WIP the sole non-success check, `mergeable_state` read `unstable`, never `blocked`; Draft is the one mechanical merge block) | its check-run stays `queued`/`in_progress`; remove `WIP`/`(WIP)` from the title to settle it + un-skip CodeRabbit |
 | **CodeQL** | security code-scanning | **primary (scope-free):** its findings post as PR review comments by `github-advanced-security[bot]` — `gh api repos/{owner}/{repo}/pulls/<PR>/comments --jq '.[]\|select(.user.login=="github-advanced-security[bot]")'`. **enrichment (may 404 on scope / "no analysis"):** `gh api repos/{owner}/{repo}/code-scanning/alerts` (needs `security_events`/admin) for severity/state |
 | **Dependabot** | dependency-bump PRs + security alerts | **handled by its own flow** — the `dependabot-triage` workflow + `dependabot-review` skill (semver×ecosystem classify, conflict-cascade-safe merge, `pnpm audit --prod` gate). Don't triage it here. |
 
 Note: some security APIs need `gh auth refresh -s security_events` (or admin) — if a fetch 404s on scope, skip that source and note it rather than failing the triage.
 
+## Reading GitHub: REST, and "could not read" is not "settled"
+
+Everything here goes through `gh api` (REST). The GraphQL-backed subcommands — `gh pr view`, `gh pr checks`, `gh pr list`, `gh pr status`, `gh pr ready`, `gh pr comment`, `gh repo view` — answer `HTTP 403: GitHub GraphQL is not available` in a Claude Code web session, which is a normal contributor path. `gh run view`, `gh run list` and `gh api` are REST and work there. `{owner}`, `{repo}` and `{branch}` in a `gh api` endpoint fill from the local remote and branch with no network call.
+
+A watch loop must never turn a failed or empty read into a result. The shape that did — `s=$(gh pr checks … 2>/dev/null || echo '[]')`, then "no pending, stop" — exited at once on a 403 and reported a clean PR. Below, a failed read retries and, after five in a row, ends as UNKNOWN; an empty check-run list (nothing started yet) is waiting, not done.
+
 ## Monitor (live)
 
-Watch the PR's checks until they settle, emitting each terminal result (use the `Monitor` tool):
+Watch the PR head's check-runs until they settle, emitting each terminal result (use the `Monitor` tool):
 
 ```bash
-prev=""
+PR=<PR>; prev=""; fails=0
 while true; do
-  s=$(gh pr checks <PR> --json name,bucket,link 2>/dev/null || echo '[]')
-  cur=$(jq -r '.[] | select(.bucket!="pending") | "\(.name): \(.bucket)"' <<<"$s" | sort)
-  comm -13 <(echo "$prev") <(echo "$cur")    # emit only newly-settled checks
-  prev=$cur
-  [ "$(jq -r '[.[]|select(.bucket=="pending")]|length' <<<"$s")" = "0" ] && break
+  if sha=$(gh api "repos/{owner}/{repo}/pulls/$PR" --jq .head.sha) &&
+     s=$(gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
+           --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv'); then
+    fails=0
+    cur=$(awk -F'\t' '$2=="completed" {print $1": "$3}' <<<"$s" | sort)
+    comm -13 <(echo "$prev") <(echo "$cur")    # emit only newly-settled checks
+    prev=$cur
+    # No rows yet means the runs have not been created: keep waiting.
+    [ -n "$s" ] && [ -z "$(awk -F'\t' '$2!="completed"' <<<"$s")" ] && break
+  else
+    fails=$((fails+1))
+    [ "$fails" -ge 5 ] && { echo "UNKNOWN: GitHub unreadable ${fails}x — nothing is known to be settled"; exit 1; }
+  fi
   sleep 30
 done
 ```
 
-PushNotification when a check flips to `fail` — that changes what the integrator does next.
+PushNotification when a check flips to `failure` — that changes what the integrator does next.
 
-**Caveat (Draft PRs): the `WIP` check stays `pending` forever while the PR is a Draft** — the WIP app flags Drafts as work-in-progress regardless of the title (removing `(WIP)` from the title is NOT enough; only `gh pr ready <PR>` settles it). `AccessLint` can also linger on Drafts. So a "wait until ALL checks settle" loop never exits on a Draft. **Watch the gating check (`ci-gate`) specifically instead:**
+**Caveat (Draft PRs): the `WIP` check stays pending forever while the PR is a Draft** — the WIP app flags Drafts as work-in-progress regardless of the title (removing `(WIP)` from the title is NOT enough; only `gh pr ready <PR>` settles it). `AccessLint` can also linger on Drafts. So a "wait until ALL checks settle" loop never exits on a Draft. **Watch the gating check (`ci-gate`) specifically instead:**
 ```bash
+PR=<PR>
 while true; do
-  b=$(gh pr checks <PR> --json name,bucket --jq '.[]|select(.name=="ci-gate")|.bucket' 2>/dev/null)
-  [ -n "$b" ] && [ "$b" != "pending" ] && { echo "ci-gate: $b"; break; }
+  sha=$(gh api "repos/{owner}/{repo}/pulls/$PR" --jq .head.sha) || { sleep 60; continue; }
+  b=$(gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
+        --jq '.check_runs[] | select(.name=="ci-gate") | (if .status=="completed" then .conclusion else "pending" end)') || b=""
+  # An unreadable answer is "" and keeps waiting; only a real conclusion ends it.
+  case "$b" in ""|pending) ;; *) echo "ci-gate: $b"; break ;; esac
   sleep 60
 done
 ```
+`ci-gate` ends `success`, `failure` or `cancelled`; anything but `success` is the integrator's cue.
 
 ## Triage (the `ci-triage` workflow)
 
@@ -70,7 +89,7 @@ CodeRabbit does **not** auto-review a **Draft** PR or a PR whose title contains 
 - **Monitoring**: the `WIP` GitHub-App check stays *pending forever* while the title says WIP, so a "wait until all checks settle" monitor never exits. Prefer a **Draft PR** for merge-blocking (Draft blocks merge natively) and keep the title WIP-free, so every check settles cleanly.
 - **Triggering CodeRabbit on a Draft**: it must be invoked explicitly with a PR comment:
   ```bash
-  gh pr comment <PR> --body "@coderabbitai review"        # review the latest changes
+  gh api "repos/{owner}/{repo}/issues/<PR>/comments" -f body="@coderabbitai review"   # review the latest changes (REST form of `gh pr comment`)
   # other commands: "@coderabbitai full review" (re-review everything),
   #   "@coderabbitai pause" / "resume", "@coderabbitai resolve" (resolve its threads),
   #   "@coderabbitai configuration"

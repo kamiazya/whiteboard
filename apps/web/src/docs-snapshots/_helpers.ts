@@ -81,9 +81,6 @@ export async function waitForSnapshotContent(
       if (!(container.textContent ?? '').includes(topBarTitle)) {
         throw new Error('TopBar title not yet rendered')
       }
-      if (!container.querySelector('[aria-label^="Switch variation"]')) {
-        throw new Error('HeaderBranchChip not yet rendered')
-      }
     }
     const svgs = container.querySelectorAll('svg')
     // CanvasViewer's SVG is always the last one in document order — icon

@@ -40,6 +40,8 @@ import {
   pathTakenAs,
   refusedBy,
   segmentTaken,
+  titleOr,
+  titleRefusal,
   workspaceNotFoundAs,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -221,7 +223,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   app.post('/api/workspaces', async (c) => {
     const parsed = createWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
-      return c.json({ title: 'displayName is required' } satisfies ApiErrorBody, 400)
+      return c.json(titleRefusal(parsed.error, 'displayName is required'), 400)
     }
     const { displayName } = parsed.data
     // Decided before anything is created: a workspace nobody can be the
@@ -255,7 +257,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     if (malformed !== null) return malformed
     const parsed = renameWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
-      return c.json({ title: 'segment or displayName must be valid' } satisfies ApiErrorBody, 400)
+      return c.json(titleRefusal(parsed.error, 'segment or displayName must be valid'), 400)
     }
 
     try {
@@ -382,7 +384,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     'put',
     ['path'],
     async (c, workspaceId, path) => {
-      const body = await jsonBody(c, renameDocumentPathRequestSchema, 'path is required')
+      const body = await jsonBody(c, renameDocumentPathRequestSchema, titleOr('path is required'))
       if ('refusal' in body) return c.json(body.refusal, 400)
       const newPath = body.data.path
       const invalidDocumentPath = refusedBy(() => validateDocumentPath(newPath))

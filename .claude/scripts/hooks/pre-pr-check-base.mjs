@@ -9,6 +9,8 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { runsGh } from '../hook-command-lib.mjs'
+
 let input
 try {
   input = JSON.parse(readFileSync(0, 'utf8'))
@@ -17,7 +19,7 @@ try {
 }
 
 const command = input?.tool_input?.command ?? ''
-if (!/\bgh\s+pr\s+create\b/.test(command)) process.exit(0)
+if (!runsGh(command, 'pr create')) process.exit(0)
 
 const git = (args, cwd) => execFileSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) }).trim()
 

@@ -217,6 +217,19 @@ TypeScript file, 89 of them from tests that sit outside the cycle graph.
 Named blind spot: only import specifiers are read. `import.meta.glob` and a
 `new URL('../x', import.meta.url)` carry paths this does not see.
 
+## `source-direction-check.test.ts`: source imports against the map
+
+The manifest checks exempt `devDependencies`, so a shared-layer file could
+import any workspace package declared there and pass every guard (a planted
+`search -> codec` did). This scan reads each shared-layer production file's
+workspace specifiers from the AST against `allowedInternalDeps`;
+`facet-engine/testing`'s `model/test-utils` import is its one ledgered
+exemption. `scene-types-only.test.ts` asks the compiler (`ts.transpileModule`)
+whether `packages/scene` emits code, where a regex over `export const` passed
+five runtime forms. `scan-roots.ts` derives `apps/*/src` like the other groups
+(the extension's source was outside every walk), and the per-package table
+lives in `architecture-map.data.ts` beside `architecture-map.ts`'s helpers.
+
 ## The always-on table is parsed, not trusted
 
 `architecture-map.md`'s table is a second hand-kept copy of `ARCHITECTURE_MAP`,
@@ -322,6 +335,15 @@ missed a dynamic `import()` and a side-effect `import '...'` and read a
 commented-out import as an edge, and it disagreed with
 `adapter-di-import-check.test.ts` about the same trees. Type-only imports still
 count: an adapter holding a store's TYPE is the same coupling.
+
+**Adapter entitlements are a NAMED list.** `adapter-reach.ts`'s
+`ADAPTER_ENTITLED_MECHANICS` names each module an adapter may import
+(`modules: string[]`, a reason each); everything else in the mechanics layer,
+and `daemon/`, is a mechanic an adapter must ledger. A module in `security/` or
+`tenant/` is not entitled by its directory — `user-deletion` and
+`storage-report` are neither `*-store` nor `data-layout`, and the old directory
+patterns waved both through (`routes/runtime.ts -> tenant/storage-report` is
+ledgered until the report is handed to the route). Add an entitlement by name.
 
 **What counts as a mechanic is wider than `store/`**: a `security/*-store` (the
 people, session, key and invitation rows), anything under the daemon's own
@@ -518,6 +540,11 @@ No non-test, non-bench, non-`_test-*`, non-`test-utils/` file under
 built daemon bundle once carried `class InMemoryDocumentStore` because the
 production container defaulted to the in-memory module. Two allowlist entries,
 each with a reason, guarded from both sides.
+
+The same test also rejects a production import of a `_test-*` basename (a
+type-only edge is erased and allowed) and runs the `test-framework-import`
+scan over `mcp-server/src` and `apps/web/src` production files: three web
+files that import vitest are ledgered from both sides.
 
 `blob-identity-one-place.test.ts` keeps where a blob digest lives
 (`tenant/data-layout.ts`), how a ref is keyed (`ports`' `blobRefKey`) and

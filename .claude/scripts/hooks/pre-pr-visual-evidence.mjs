@@ -24,6 +24,8 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { runsGh } from '../hook-command-lib.mjs'
+
 /**
  * Paths whose diff a human can SEE the result of. Deliberately narrow: an
  * over-broad matcher fires on wiring-only changes, and a gate that cries
@@ -91,11 +93,18 @@ try {
 }
 
 const command = input?.tool_input?.command ?? ''
-// At a command POSITION — start of line, or after a separator. Matching the
-// bare text blocks `printf 'gh pr create …'`, which creates no PR, and a gate
-// that fires on something harmless is one people route around.
-if (!/(?:^|[\n;]|&&|\|\||\|)\s*(?:[A-Za-z_][\w]*=\S*\s+)*gh\s+pr\s+create\b/.test(command)) {
-  process.exit(0)
+// Matched at a command position by the shared reader: the bare text would block
+// `printf 'gh pr create …'`, which creates no PR.
+if (!runsGh(command, 'pr create')) process.exit(0)
+
+/** Whether `gh image` (a third-party extension, not part of gh) is installed. */
+function hasGhImage(cwd) {
+  try {
+    execFileSync('gh', ['image', '--help'], { cwd, stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Reads --body '<text>' / --body="<text>" / --body-file <path>. */
@@ -132,18 +141,30 @@ try {
     .filter((file) => VISUAL_PATHS.some((re) => re.test(file)))
   if (changed.length === 0) process.exit(0)
 
+  const NO_FIGURE =
+    `  • If a picture is genuinely the wrong evidence — or cannot be uploaded from here — say so in one line:\n` +
+    `    "Visual evidence: none — <reason>".`
+  const HOW_TO_MAKE_ONE =
+    `  • For a FIX, show the defect and the fix: render the same case both ways and compose with\n` +
+    `      node .claude/scripts/compose-figure.mjs --before <a.png> --after <b.png> --out tmp/screenshots/figure.png\n` +
+    `    (it refuses two identical panels, which is the trap that has produced a misleading figure before),\n` +
+    `    then upload it with \`gh image tmp/screenshots/figure.png\` and paste the markdown it prints\n` +
+    `    under a "## Visual repro" section (a local path is not uploaded by anything).\n` +
+    `    See the visual-evidence skill.\n` +
+    `  • For a new affordance, one capture of it is enough.`
+  const uploaderInstalled = hasGhImage(where)
+  // The upload step needs an extension a fresh machine lacks, so the escape that
+  // always works comes first when it is missing rather than last.
+  const remedy = uploaderInstalled
+    ? `${HOW_TO_MAKE_ONE}\n${NO_FIGURE}`
+    : `${NO_FIGURE}\n` +
+      `  • \`gh image\` is not installed here, and it is what uploads a figure: \`gh extension install drogers0/gh-image\`,\n` +
+      `    then \`gh image check-token\` (it uses a logged-in browser session; see the visual-evidence skill).\n` +
+      HOW_TO_MAKE_ONE
   console.error(
     `[pre-pr-visual-evidence] this diff changes ${changed.length} file(s) a human looks at ` +
       `(${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ', …' : ''}), and the PR body ` +
-      `carries no figure.\n` +
-      `  • For a FIX, show the defect and the fix: render the same case both ways and compose with\n` +
-      `      node .claude/scripts/compose-figure.mjs --before <a.png> --after <b.png> --out tmp/screenshots/figure.png\n` +
-      `    (it refuses two identical panels, which is the trap that has produced a misleading figure before),\n` +
-      `    then upload it with \`gh image tmp/screenshots/figure.png\` and paste the markdown it prints\n` +
-      `    under a "## Visual repro" section (a local path is not uploaded by anything).\n` +
-      `    See the visual-evidence skill.\n` +
-      `  • For a new affordance, one capture of it is enough.\n` +
-      `  • If a picture is genuinely the wrong evidence, say so in one line: "Visual evidence: none — <reason>".`,
+      `carries no figure.\n${remedy}`,
   )
   process.exit(2)
 } catch {

@@ -36,7 +36,7 @@ For security-oriented diagrams, lock down **what is being protected and where bo
 
 - Do not use danger color on every security box
 - Do not style access flow and audit flow with the same arrow treatment
-- Default to solid = access and dashed = audit / async, and do not overload meanings in one frame
+- Default to one edge color for access and another, with the edge label saying `audit` or `async`, and do not overload meanings in one frame
 - Do not hide secret / key / token handling behind a generic `security` box
 - Tie each security control to the protected asset or the crossing it governs
 - If public / private / internal boundaries appear, do not omit their names
