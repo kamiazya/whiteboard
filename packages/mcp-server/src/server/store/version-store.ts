@@ -46,8 +46,8 @@ import type {
   OperatorInfo,
   VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { type Attestation, attestationSchema } from '@kamiazya/whiteboard-server-core'
-import { errorMessage } from '../../shared/error-message.js'
 
 export type { OperatorInfo, VersionEntry }
 
@@ -391,7 +391,7 @@ export class FileVersionStore implements VersionStore {
     } catch (error) {
       throw corruptStoredData(
         `versions/${id}`,
-        `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
+        `frontiers could not be checked out against the workspace document (${messageOf(error)})`,
       )
     }
     return projectWorkspaceDocument(clone, row.documentId)
@@ -418,7 +418,7 @@ export class FileVersionStore implements VersionStore {
     } catch (error) {
       throw corruptStoredData(
         `versions/${id}`,
-        `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
+        `frontiers could not be checked out against the workspace document (${messageOf(error)})`,
       )
     }
     return clone
@@ -550,7 +550,7 @@ export class FileVersionStore implements VersionStore {
     } catch (error) {
       throw corruptStoredData(
         `versions/${workspaceId}`,
-        `frontiers could not be decoded (${errorMessage(error)})`,
+        `frontiers could not be decoded (${messageOf(error)})`,
       )
     }
   }

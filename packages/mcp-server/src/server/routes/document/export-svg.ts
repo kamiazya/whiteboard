@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import {
   type ApiErrorBody,
   invalidRequestBody,
@@ -13,7 +14,6 @@ import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
 } from '../../../shared/api-contracts/export-svg.js'
-import { errorMessage } from '../../../shared/error-message.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
 import type { DataLayout } from '../../tenant/data-layout-seam.js'
@@ -139,7 +139,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       } catch (err) {
         const errBody: ApiErrorBody = {
           error: 'headless_export_failed',
-          message: errorMessage(err),
+          message: messageOf(err),
         }
         return c.json(errBody, 500)
       }

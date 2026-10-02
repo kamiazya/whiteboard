@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import {
   type ApiErrorBody,
   invalidRequestBody,
@@ -11,7 +12,6 @@ import { nanoid } from 'nanoid'
 import type { z } from 'zod'
 import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { isErrnoCode } from '../../shared/errno.js'
-import { errorMessage } from '../../shared/error-message.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
@@ -89,7 +89,7 @@ async function renderedExport(
   try {
     return await renderHeadless(workspaceId, path, body)
   } catch (err) {
-    const message = errorMessage(err)
+    const message = messageOf(err)
     if (/target size is zero/i.test(message)) {
       return {
         error: { error: 'invalid_request', message: `invalid export options: ${message}` },

@@ -1,8 +1,8 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { Hono } from 'hono'
 import { isMissingFileError } from '../../shared/errno.js'
-import { errorMessage } from '../../shared/error-message.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
 import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
@@ -38,7 +38,7 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
     if (isMissingFileError(error)) {
       return null
     }
-    throw corruptStoredData(dir, `failed to read files directory (${errorMessage(error)})`)
+    throw corruptStoredData(dir, `failed to read files directory (${messageOf(error)})`)
   }
 }
 
@@ -72,7 +72,7 @@ async function storedFileFor(
   try {
     data = await readFile(filePath)
   } catch (error) {
-    throw corruptStoredData(filePath, `failed to read stored file (${errorMessage(error)})`)
+    throw corruptStoredData(filePath, `failed to read stored file (${messageOf(error)})`)
   }
   return { data, contentType: EXT_TO_MIME[extname(match)] ?? 'application/octet-stream' }
 }

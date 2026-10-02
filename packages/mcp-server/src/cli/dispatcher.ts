@@ -274,18 +274,16 @@ async function dispatchMcp(): Promise<number> {
     // the shared redactor so even the stderr surface — which is the
     // only diagnostic channel `whiteboard mcp` exposes — never leaks
     // those classes of strings.
-    const { redactDiagnosticText } = await import('../shared/diagnostics/redact.js')
+    const { redactDiagnosticText, scrubAuthMarkers } = await import(
+      '../shared/diagnostics/redact.js'
+    )
     const raw = err instanceof Error ? err.message : String(err)
-    // Two-pass scrub:
-    //   - shared redactor scrubs token values, paths, stack frames
-    //   - the local auth-marker pass drops the literal "Authorization"
-    //     / "Bearer" words. The shared redactor preserves those on
-    //     purpose for the doctor surface, but the MCP stderr surface
-    //     is consumed by clients tailing logs that grep for those
-    //     keywords; even the redacted marker is unwelcome there.
-    const redacted = redactDiagnosticText(raw)
-      .replace(/(?:Authorization\s*:\s*)?\bBearer\s*\[REDACTED\]/gi, '[REDACTED_AUTH]')
-      .replace(/Authorization\s*:\s*\[REDACTED\]/gi, '[REDACTED_AUTH]')
+    // Two-pass scrub: the shared redactor takes token values, paths and stack
+    // frames but keeps the `Authorization` / `Bearer` marker for the doctor
+    // surface; this stderr surface is consumed by clients tailing logs that
+    // grep for those keywords, so the marker goes too (`scrubAuthMarkers` is
+    // the one definition of what counts as one).
+    const redacted = scrubAuthMarkers(redactDiagnosticText(raw))
     process.stderr.write(`MCP server error: ${redacted}\n`)
     return 1
   }

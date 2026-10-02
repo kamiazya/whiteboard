@@ -1,10 +1,10 @@
+import { messageOf } from '@kamiazya/whiteboard-model'
 import {
   DocumentStoreWorkspaceDocs,
   type WorkspaceDocCursor,
   type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
-import { errorMessage } from '../../shared/error-message.js'
 import { getLogger } from '../log.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -45,7 +45,7 @@ function throwWorkspaceRecordCorrupt(workspaceId: string, err: unknown): never {
   if (isCorruptStoredDataError(err)) throw err
   throw corruptStoredData(
     `workspace-tree:${workspaceId}`,
-    `workspace record could not be opened (${errorMessage(err)})`,
+    `workspace record could not be opened (${messageOf(err)})`,
   )
 }
 
