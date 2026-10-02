@@ -21,7 +21,7 @@ import type { BoundaryViolationKind } from './scanner.js'
  * `node-ambient-global` is allowed, because the rest of the package ships
  * into the browser and the widget iframe, where `process` does not exist.
  */
-export interface BoundaryFileExemption {
+interface BoundaryFileExemption {
   readonly kinds: readonly BoundaryViolationKind[]
   readonly reason: string
 }
