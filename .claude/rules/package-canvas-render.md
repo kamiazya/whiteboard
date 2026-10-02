@@ -168,16 +168,6 @@ the table alone.
   every bbox-carrying node named by position — there is nothing better to
   name them by, and the alternative is answering with nothing.
 
-**The quality instruments are a subpath, not the barrel.** `scoreDrawing`,
-`scoreComposition` and `scoreFacets` (and the tolerances `scoreDrawing`
-publishes) come from `@kamiazya/whiteboard-canvas-render/scoring`
-(`src/scoring.ts`). What reads them is the eval lane and this package's
-scoreboards, so the main barrel — which the layout worker, the editor and the
-daemon import — does not carry them; `scoring-subpath.test.ts` pins that.
-`quality/rect.ts` and `quality/polyline-geometry.ts` stay where their runtime
-consumers (`scene-digest.ts`, the test routing metrics) import them, and
-`legend/canvas-legend.ts` still imports `scoreFacets` by relative path.
-
 ## What does NOT belong here
 
 - MathJax (or any math typesetting engine) invocation — composition roots
@@ -1541,8 +1531,7 @@ dissolution; until JSON Canvas gives one, containers-behind is the rule.
 
 ## The drawing score judges the board, not a mechanism
 
-`quality/drawing-score.ts` (`scoreDrawing(canvas, scene)`, exported from the
-`/scoring` subpath, not the main barrel) reads
+`quality/drawing-score.ts` (`scoreDrawing(canvas, scene)`, from `/scoring`) reads
 a laid-out board as a person would: boxes over boxes, a box across a
 frame's edge, an edge's ink through a box it does not connect, a label
 over a box or under a frame, content cut to fit, a member jammed against
