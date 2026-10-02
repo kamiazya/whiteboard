@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { oidcProviders } from './_test-helpers.js'
 import { ALL_AUTH_SCOPES } from './auth-strategy.js'
-import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import {
@@ -21,7 +20,6 @@ import {
 import { providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
 import { createSignInSessionStore, SESSION_COOKIE } from './sign-in-session-store.js'
 import { createUserDeactivation } from './user-deactivation.js'
-import { createWorkspaceRoles } from './workspace-roles.js'
 
 const ISSUER = 'https://idp.test'
 
@@ -70,8 +68,6 @@ function appFor(issuer: string) {
     createServerModeApiAuthMiddleware(strategyFor(issuer), {
       members,
       sessions,
-      roles: createWorkspaceRoles(handle.db),
-      invitations: createInvitationStore(handle.db),
       origin: 'https://wb.test',
       bearerProvisioning: { providers, members },
     }),
@@ -161,7 +157,6 @@ describe('server mode — a deactivated user', () => {
       createServerModeMcpAuthMiddleware(strategyFor(ISSUER), {
         members,
         sessions: createSignInSessionStore(handle.db),
-        roles: createWorkspaceRoles(handle.db),
         origin: 'https://wb.test',
         bearerProvisioning: { providers, members },
       }),

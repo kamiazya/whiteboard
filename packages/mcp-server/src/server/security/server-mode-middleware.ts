@@ -65,6 +65,14 @@ export interface ServerModePeople {
   readonly bearerProvisioning?: BearerProvisioning
 }
 
+// What authenticating a request reads of the people wiring; the routes behind
+// the middleware use the rest (roles, invitations, administration), so a caller
+// that only authenticates need not construct them.
+type ServerModeAuthPeople = Pick<
+  ServerModePeople,
+  'members' | 'sessions' | 'origin' | 'now' | 'bearerProvisioning'
+>
+
 type Refusal = { status: 401 | 403; code: string; wwwAuthenticate?: string }
 
 // What a browser session may do: everything a person does with their own
@@ -83,7 +91,7 @@ async function serverModeGrant(
   c: Context,
   authStrategy: AsyncAuthStrategy,
   requiredScopes: readonly AuthScope[],
-  people: ServerModePeople | undefined,
+  people: ServerModeAuthPeople | undefined,
 ): Promise<GrantOutcome> {
   const signedIn = people === undefined ? undefined : await sessionGrant(c, people, requiredScopes)
   const outcome = signedIn ?? (await bearerGrant(c, authStrategy, requiredScopes, people))
@@ -94,7 +102,7 @@ async function serverModeGrant(
 // deactivated user; refusing here says so by name, and before a route can
 // treat them as a person without a user.
 async function refuseDeactivated(
-  people: ServerModePeople,
+  people: ServerModeAuthPeople,
   outcome: GrantOutcome,
 ): Promise<GrantOutcome> {
   const person = 'grant' in outcome ? outcome.grant.person : undefined
@@ -104,7 +112,7 @@ async function refuseDeactivated(
 
 async function sessionGrant(
   c: Context,
-  people: ServerModePeople,
+  people: ServerModeAuthPeople,
   requiredScopes: readonly AuthScope[],
 ): Promise<GrantOutcome | undefined> {
   const session = getCookie(c, SESSION_COOKIE)
@@ -135,7 +143,7 @@ async function bearerGrant(
   c: Context,
   authStrategy: AsyncAuthStrategy,
   requiredScopes: readonly AuthScope[],
-  people: ServerModePeople | undefined,
+  people: ServerModeAuthPeople | undefined,
 ): Promise<GrantOutcome> {
   const decision = await authStrategy.authorize({
     method: c.req.method.toUpperCase(),
@@ -164,7 +172,7 @@ async function bearerGrant(
 // by the provider declared for the bearer's issuer. An issuer no provider
 // declares keeps its bearers user-less, which the membership gate answers.
 async function bearerBecomesUser(
-  people: ServerModePeople,
+  people: ServerModeAuthPeople,
   person: AuthenticatorBinding,
   bearer: () => BearerToken,
 ): Promise<Refusal | undefined> {
@@ -178,7 +186,7 @@ async function bearerBecomesUser(
 
 export function createServerModeApiAuthMiddleware(
   authStrategy: AsyncAuthStrategy,
-  people?: ServerModePeople,
+  people?: ServerModeAuthPeople,
 ): MiddlewareHandler {
   return async (c, next) => {
     const method = c.req.method.toUpperCase()
@@ -221,7 +229,7 @@ export function createServerModeApiAuthMiddleware(
  */
 export function createServerModeMcpAuthMiddleware(
   authStrategy: AsyncAuthStrategy,
-  people: ServerModePeople,
+  people: ServerModeAuthPeople,
 ): MiddlewareHandler {
   return async (c, next) => {
     const resolved = await bearerGrant(c, authStrategy, ['mcp:call'], people)
