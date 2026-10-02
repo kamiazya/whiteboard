@@ -1,4 +1,4 @@
-import { LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
+import { LoroMap, LoroMovableList } from 'loro-crdt'
 
 /**
  * The one way this package opens a lazily-created child container on a map.
@@ -33,13 +33,6 @@ export function openMergeableMap(map: LoroMap, key: string): LoroMap {
   return map.get(key) === undefined
     ? map.ensureMergeableMap(key)
     : map.getOrCreateContainer(key, new LoroMap())
-}
-
-/** `openMergeableMap` for a text child. See it for why this shape. */
-export function openMergeableText(map: LoroMap, key: string): LoroText {
-  return map.get(key) === undefined
-    ? map.ensureMergeableText(key)
-    : map.getOrCreateContainer(key, new LoroText())
 }
 
 /** `openMergeableMap` for a movable-list child. See it for why this shape. */
