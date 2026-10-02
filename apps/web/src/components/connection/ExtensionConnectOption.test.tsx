@@ -2,11 +2,19 @@
  * ADR-0050: with the whiteboard extension installed, connecting to the local
  * daemon is one action — no pairing page, no port to find.
  */
+
+import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from '../../lib/bridge-address.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { ExtensionConnectOption } from './ExtensionConnectOption.js'
+
+const MATCHING_HELLO = {
+  type: 'hello',
+  version: '1.0.0',
+  protocol: BRIDGE_PROTOCOL_VERSION,
+} as const
 
 afterEach(() => {
   cleanup()
@@ -18,10 +26,7 @@ describe('ExtensionConnectOption', () => {
   // else, so a browser without it is told how to get it.
   it('says how to get the extension where it is not installed', async () => {
     render(
-      <ExtensionConnectOption
-        settingsStore={createUserSettingsStore()}
-        present={async () => false}
-      />,
+      <ExtensionConnectOption settingsStore={createUserSettingsStore()} hello={async () => null} />,
     )
     const link = await screen.findByRole('link', { name: 'How to connect a daemon' })
     expect(link.getAttribute('href')).toContain('docs/how-to/connect-to-local-daemon.md')
@@ -36,7 +41,7 @@ describe('ExtensionConnectOption', () => {
     const { container } = render(
       <ExtensionConnectOption
         settingsStore={createUserSettingsStore()}
-        present={() => new Promise<boolean>(() => {})}
+        hello={() => new Promise<null>(() => {})}
       />,
     )
     expect(container.innerHTML).toBe('')
@@ -46,7 +51,7 @@ describe('ExtensionConnectOption', () => {
     render(
       <ExtensionConnectOption
         settingsStore={createUserSettingsStore()}
-        present={async () => true}
+        hello={async () => MATCHING_HELLO}
       />,
     )
     expect(
@@ -59,14 +64,14 @@ describe('ExtensionConnectOption', () => {
   // may already be gone; unmounting has to call it off.
   it('calls off the presence probe when it unmounts', async () => {
     let asked: AbortSignal | undefined
-    const present = vi.fn((signal: AbortSignal) => {
+    const hello = vi.fn((signal: AbortSignal) => {
       asked = signal
-      return new Promise<boolean>(() => {})
+      return new Promise<null>(() => {})
     })
     const { unmount } = render(
-      <ExtensionConnectOption settingsStore={createUserSettingsStore()} present={present} />,
+      <ExtensionConnectOption settingsStore={createUserSettingsStore()} hello={hello} />,
     )
-    await vi.waitFor(() => expect(present).toHaveBeenCalled())
+    await vi.waitFor(() => expect(hello).toHaveBeenCalled())
     expect(asked?.aborted).toBe(false)
     unmount()
     expect(asked?.aborted).toBe(true)
@@ -81,7 +86,7 @@ describe('ExtensionConnectOption', () => {
     render(
       <ExtensionConnectOption
         settingsStore={settingsStore}
-        present={async () => true}
+        hello={async () => MATCHING_HELLO}
         connect={async () => ({
           status: 'connected',
           daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
@@ -102,7 +107,7 @@ describe('ExtensionConnectOption', () => {
     render(
       <ExtensionConnectOption
         settingsStore={settingsStore}
-        present={async () => true}
+        hello={async () => MATCHING_HELLO}
         connect={async () => ({ status: 'none' })}
         reopen={reopen}
       />,

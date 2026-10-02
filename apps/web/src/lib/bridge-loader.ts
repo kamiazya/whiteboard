@@ -1,3 +1,5 @@
+import type { ExtensionHelloReply } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
+
 /**
  * The bridge's entry points for the pages that may never use it: the bridge
  * and its schemas are loaded on the first call rather than with the page.
@@ -8,7 +10,7 @@ const loadBridge = () => import('./extension-bridge-fetch.js')
 export const bridgeFetch: typeof globalThis.fetch = async (input, init) =>
   (await loadBridge()).extensionBridgeFetch(input, init)
 
-/** Whether the whiteboard extension is installed and admits this page. */
-export async function extensionPresent(signal?: AbortSignal): Promise<boolean> {
-  return (await loadBridge()).extensionPresent(undefined, signal)
+/** What the whiteboard extension says of itself, or `null` when it is not there to ask. */
+export async function extensionHello(signal?: AbortSignal): Promise<ExtensionHelloReply | null> {
+  return (await loadBridge()).extensionHello(undefined, signal)
 }

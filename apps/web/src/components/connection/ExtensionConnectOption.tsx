@@ -1,5 +1,9 @@
+import {
+  bridgeSkew,
+  type ExtensionHelloReply,
+} from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { useEffect, useState } from 'react'
-import { extensionPresent } from '../../lib/bridge-loader.js'
+import { extensionHello } from '../../lib/bridge-loader.js'
 import {
   connectThroughExtension,
   type ExtensionConnection,
@@ -7,7 +11,10 @@ import {
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { Button } from '../ui/button.js'
 
-type OptionState = 'checking' | 'absent' | 'ready' | 'connecting' | 'no-daemon'
+type OptionState =
+  | { status: 'checking' | 'absent' | 'ready' | 'connecting' | 'no-daemon' }
+  /** `why` is `bridgeSkew`'s diagnosis, which names the side to update. */
+  | { status: 'skewed'; why: string }
 
 interface ExtensionConnectOptionProps {
   settingsStore: UserSettingsStore
@@ -17,7 +24,8 @@ interface ExtensionConnectOptionProps {
    * nothing to lead into.
    */
   lead?: string
-  present?: (signal: AbortSignal) => Promise<boolean>
+  /** What the extension says of itself, or `null` when it is not there. */
+  hello?: (signal: AbortSignal) => Promise<ExtensionHelloReply | null>
   connect?: () => Promise<ExtensionConnection>
   reopen?: () => void
 }
@@ -35,23 +43,24 @@ interface ExtensionConnectOptionProps {
  */
 export function ExtensionConnectOption({
   settingsStore,
-  present = extensionPresent,
+  hello = extensionHello,
   connect = connectThroughExtension,
   reopen = () => window.location.assign('/'),
   lead,
 }: ExtensionConnectOptionProps) {
-  const [state, setState] = useExtensionPresence(present)
+  const [state, setState] = useExtensionPresence(hello)
 
   // Silent while asking: a present extension answers at once, and saying
   // "install it" first would flash at every person who has.
-  if (state === 'checking') return null
-  if (state === 'absent') return <GetTheExtension />
+  if (state.status === 'checking') return null
+  if (state.status === 'absent') return <GetTheExtension />
+  if (state.status === 'skewed') return <ExtensionSkew why={state.why} />
 
   const onConnect = async () => {
-    setState('connecting')
+    setState({ status: 'connecting' })
     const result = await connect()
     if (result.status !== 'connected') {
-      setState('no-daemon')
+      setState({ status: 'no-daemon' })
       return
     }
     settingsStore.update((current) => ({
@@ -64,8 +73,8 @@ export function ExtensionConnectOption({
   return (
     <ConnectButton
       lead={lead}
-      connecting={state === 'connecting'}
-      noDaemon={state === 'no-daemon'}
+      connecting={state.status === 'connecting'}
+      noDaemon={state.status === 'no-daemon'}
       onConnect={() => void onConnect()}
     />
   )
@@ -87,6 +96,19 @@ function GetTheExtension() {
       >
         How to connect a daemon
       </a>
+    </p>
+  )
+}
+
+/**
+ * An extension that speaks another bridge protocol cannot carry this page's
+ * requests, so the person is told which side to update rather than offered a
+ * button whose every use fails.
+ */
+function ExtensionSkew({ why }: { why: string }) {
+  return (
+    <p role="alert" className="text-xs text-muted-foreground">
+      {why}
     </p>
   )
 }
@@ -128,17 +150,20 @@ function ConnectButton({
   )
 }
 
-/** Starts at 'checking', then answers whether the extension is there. */
-function useExtensionPresence(present: (signal: AbortSignal) => Promise<boolean>) {
-  const [state, setState] = useState<OptionState>('checking')
+/** Starts at 'checking', then answers whether the extension is there and fit to use. */
+function useExtensionPresence(hello: (signal: AbortSignal) => Promise<ExtensionHelloReply | null>) {
+  const [state, setState] = useState<OptionState>({ status: 'checking' })
   useEffect(() => {
     // Aborted on unmount, so the probe lets go of the window's listener and
     // its timer now rather than outliving the page that asked.
     const asked = new AbortController()
-    void present(asked.signal).then((installed) => {
-      if (!asked.signal.aborted) setState(installed ? 'ready' : 'absent')
+    void hello(asked.signal).then((reply) => {
+      if (asked.signal.aborted) return
+      if (reply === null) return setState({ status: 'absent' })
+      const why = bridgeSkew(reply)
+      setState(why === null ? { status: 'ready' } : { status: 'skewed', why })
     })
     return () => asked.abort()
-  }, [present])
+  }, [hello])
   return [state, setState] as const
 }

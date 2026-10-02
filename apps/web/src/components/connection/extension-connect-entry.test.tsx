@@ -5,6 +5,7 @@
  * inside a document's workspace popover, which a person reaches only after
  * making a document they will then leave behind in the browser.
  */
+import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +16,11 @@ import { LocalStoreDouble } from '../../test-utils/local-index.js'
 // Absent-extension behaviour is ExtensionConnectOption's own test; here the
 // question is only where it is placed.
 vi.mock('../../lib/bridge-loader.js', () => ({
-  extensionPresent: async () => true,
+  extensionHello: async () => ({
+    type: 'hello',
+    version: '1.0.0',
+    protocol: BRIDGE_PROTOCOL_VERSION,
+  }),
   bridgeFetch: vi.fn(),
 }))
 

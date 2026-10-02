@@ -43,7 +43,10 @@ function extensionRuntime(): ExtensionRuntime | null {
 }
 
 /** What the extension says of itself, or `null` when it is not there to ask. */
-function helloReply(timeoutMs: number, signal?: AbortSignal): Promise<ExtensionHelloReply | null> {
+export function extensionHello(
+  timeoutMs = 1_500,
+  signal?: AbortSignal,
+): Promise<ExtensionHelloReply | null> {
   const runtime = extensionRuntime()
   if (runtime === null) return windowHello(timeoutMs, signal)
   return new Promise((resolve) => {
@@ -62,18 +65,13 @@ function helloReply(timeoutMs: number, signal?: AbortSignal): Promise<ExtensionH
   })
 }
 
-/** Whether the whiteboard extension is installed and admits this page. */
-export async function extensionPresent(timeoutMs = 1_500, signal?: AbortSignal): Promise<boolean> {
-  return (await helloReply(timeoutMs, signal)) !== null
-}
-
 /**
  * Why the extension that answers cannot carry this page's requests, or `null`
  * when it can — or when none answers, which opening the port reports in its
  * own words.
  */
 async function extensionSkew(): Promise<string | null> {
-  const reply = await helloReply(1_500)
+  const reply = await extensionHello(1_500)
   return reply === null ? null : bridgeSkew(reply)
 }
 
