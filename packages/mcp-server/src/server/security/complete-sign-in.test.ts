@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { inTenantTransaction, tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { oidcProviders } from './_test-helpers.js'
 import {
   type CompleteSignInDeps,
   completeSignIn,
@@ -24,18 +25,20 @@ const HOUR = 60 * 60 * 1000
 const T0 = 1_800_000_000_000
 
 function provider(admission: object = {}): OidcProvider {
-  const [parsed] = signInConfigSchema.parse({
-    providers: [
-      {
-        id: 'corp',
-        kind: 'oidc',
-        issuer: 'https://sso.corp.example',
-        clientId: 'wb',
-        clientSecret: { env: 'CORP_SECRET' },
-        admission,
-      },
-    ],
-  }).providers
+  const [parsed] = oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'corp',
+          kind: 'oidc',
+          issuer: 'https://sso.corp.example',
+          clientId: 'wb',
+          clientSecret: { env: 'CORP_SECRET' },
+          admission,
+        },
+      ],
+    }).providers,
+  )
   if (parsed === undefined) throw new Error('unreachable')
   return parsed
 }

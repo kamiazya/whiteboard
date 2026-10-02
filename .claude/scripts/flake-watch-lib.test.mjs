@@ -230,7 +230,7 @@ test('no inspector, or one that throws, reports exactly what it did before', () 
 })
 
 test('an unhandled error with no test name is keyed by its class and path, not dropped', () => {
-  // The tenth shape in integrator-flow.md: `EnvironmentTeardownError`
+  // The tenth shape in steward's flake-shapes.md: `EnvironmentTeardownError`
   // reports every test as PASSED and exits 1, and its annotation title is
   // the bare string "Unhandled error" — no project, no test file — so it
   // used to land in `unattributedRuns` and be counted rather than keyed.

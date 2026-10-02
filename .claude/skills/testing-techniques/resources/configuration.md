@@ -11,7 +11,7 @@ version before relying on one.
 - The root `vitest.config.ts` lists every project config file; each declares a `name:`
   (`tools/checks/src/vitest-projects.mjs` throws on one without, since CI derives the
   shared-layer step from the list). `vitest run --project <name>` runs one;
-  `pnpm test:browser` runs the three browser projects.
+  `pnpm test:browser` runs every browser project.
 - **A filter that matches nothing beside one that does is silent.** vitest errors only when
   the whole `--project` set is empty (`resources/isolation-and-state.md`). Match the local
   command to the CI job and treat a low count as a missed filter.
@@ -41,6 +41,12 @@ referenced file, so neither applies until one becomes inline.
 
 `-t` matches against `suite > test` joined by `' > '`, not by spaces: `-t adds` or
 `-t 'math.*adds'`, never `-t 'math adds'`. No script or CI job on this tree passes `-t`.
+
+### A filter that matches nothing beside one that matches is silent
+
+The long form of the hazard `.claude/rules/dev-flow.md` states in two sentences.
+
+The hazard this project name closes is narrower than it sounds, and the general shape survives: **vitest only errors when a `--project` filter set is empty; a project name that matches nothing alongside a sibling name that DOES match is silent** — `--project web-jsdom --project web-browser` used to run only the browser project (unnamed `web-jsdom` matched nothing), reported its ~540 tests, and exited 0. That reads exactly like both suites passing. It let a real regression reach CI twice in one session before anyone noticed the count was too small. Naming this one project retires that one instance; any future typo'd or renamed `--project` value reopens the same class. Match the local command to the CI job, and treat a test count far below CI's as evidence the filter missed, not as good news.
 
 ## Pools, isolation and caches
 
@@ -139,7 +145,7 @@ Inlines the UI assets, metadata and attachments — including `traceView` replay
 `index.html`, which is the shape a CI artifact wants. The multi-file form measured 1.7MB for
 20 page files with replays, of which ~0.9MB is the UI's own static assets; the report data
 itself was 774KB gzipped with replays against 177KB without (`browser-mode.md` › Traces).
-`pnpm test:browser:replay` runs the three browser projects with `traceView` and this
+`pnpm test:browser:replay` runs every browser project with `traceView` and this
 reporter.
 
 ### Merging reports across environments

@@ -18,7 +18,7 @@
 import type { Point } from './edge-geometry.js'
 import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
-/** Matches spatial-edges' COST_QUANTUM discipline (quarter-pixel integers). */
+/** Matches `edge-ink.ts`'s COST_QUANTUM discipline (quarter-pixel integers). */
 const COST_QUANTUM = 4
 
 /**

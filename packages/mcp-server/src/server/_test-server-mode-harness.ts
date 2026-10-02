@@ -4,6 +4,7 @@
 // Test support only — production composes these in `di/`.
 
 import type { SignInRoutesDeps } from './routes/sign-in.js'
+import { oidcProviders, resolvedForTest } from './security/_test-helpers.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
 import { createCompleteSignInDeps } from './security/complete-sign-in.js'
@@ -82,19 +83,21 @@ export function serverModePeople(db: TenantDb, dataDir: string) {
  */
 export function serverModeSignIn(db: TenantDb, rp: RelyingParty): SignInRoutesDeps {
   const signIn = createCompleteSignInDeps(db, 60 * 60 * 1000)
-  const { providers } = signInConfigSchema.parse({
-    providers: [
-      {
-        id: 'corp',
-        kind: 'oidc',
-        issuer: IDP,
-        clientId: 'wb',
-        clientSecret: { env: 'CORP_SECRET' },
-      },
-    ],
-  })
+  const providers = oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'corp',
+          kind: 'oidc',
+          issuer: IDP,
+          clientId: 'wb',
+          clientSecret: { env: 'CORP_SECRET' },
+        },
+      ],
+    }).providers,
+  )
   return {
-    providers: providers.map((provider) => ({ ...provider, clientSecretValue: 's3cret' })),
+    providers: providers.map(resolvedForTest),
     rp,
     attempts: createSignInAttemptStore(db),
     signIn,

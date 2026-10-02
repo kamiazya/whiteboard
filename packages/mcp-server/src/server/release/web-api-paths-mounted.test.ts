@@ -25,10 +25,12 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { serverModeSignIn } from '../_test-server-mode-harness.js'
 import { createApp } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
 import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-route.js'
+import { DENY_ALL_STRATEGY } from '../security/_test-helpers.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createInvitationStore } from '../security/invitation-store.js'
 import { createMemberProfileStore } from '../security/member-profile-store.js'
@@ -36,6 +38,7 @@ import { createRelyingParty } from '../security/oidc-relying-party.js'
 import { createSignInSessionStore } from '../security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import { createUserDeactivation } from '../security/user-deactivation.js'
+import { createUserDeletion } from '../security/user-deletion.js'
 import { createWorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
 import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
@@ -160,11 +163,10 @@ function serverModeApp(
     authMode: 'server-mode',
     publicBaseUrl: 'https://example.com',
     allowedOrigins: ['https://example.com'],
-    authStrategy: () => ({ ok: false as const, status: 401 as const, error: 'denied' }),
+    authStrategy: DENY_ALL_STRATEGY,
     touch: () => {},
     getStatus: () => ({}) as never,
-    shutdown: () => Promise.resolve(),
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     // The `/auth` routes mount only with a provider configured (ADR-0046).
     signIn: serverModeSignIn(db, createRelyingParty()),
@@ -177,6 +179,7 @@ function serverModeApp(
         check: createAdministratorCheck({ admins: appointments, members, configured: [] }),
         appointments,
         deactivation: createUserDeactivation(db),
+        deletion: createUserDeletion(db, async () => {}),
       },
       origin: 'https://example.com',
     },
@@ -189,7 +192,7 @@ function localDaemonApp(db: IsolatedDbHandle['db']) {
     token: 'test-token',
     touch: () => {},
     getStatus: () => ({}) as never,
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     replicaKeys: createWorkspaceReplicaKeyStore(db, { defaultTier: 'offline' }),
   })

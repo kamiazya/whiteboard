@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/client'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 
@@ -39,7 +40,7 @@ function createRuntimeOptions(
     token,
     mcpProtectedResourceMetadata: options?.protectedResourceMetadata,
     // The root's deps, over the memory store: nothing here reads a document.
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     touch: vi.fn(),
     getStatus: () => ({
@@ -336,7 +337,7 @@ describe('createApp daemon mutation auth', () => {
     const app = createApp(createRuntimeOptions('secret'))
     const client = new Client({ name: 'app-test-client', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const headers = new Headers(init?.headers)
         headers.set('Authorization', 'Bearer secret')
         headers.set('Origin', 'http://127.0.0.1:6274')
@@ -383,7 +384,7 @@ describe('createApp daemon mutation auth', () => {
       { versionNegotiation: { mode: { pin: '2026-07-28' } } },
     )
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const headers = new Headers(init?.headers)
         headers.set('Authorization', 'Bearer secret')
         headers.set('Origin', 'http://127.0.0.1:6274')
@@ -428,7 +429,7 @@ describe('createApp daemon mutation auth', () => {
     const app = createApp(createRuntimeOptions('secret'))
     const client = new Client({ name: 'app-help-client', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const headers = new Headers(init?.headers)
         headers.set('Authorization', 'Bearer secret')
         headers.set('Origin', 'http://127.0.0.1:6274')
@@ -478,7 +479,7 @@ describe('createApp daemon mutation auth', () => {
     const app = createApp(createRuntimeOptions())
     const client = new Client({ name: 'debug-client', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL('http://localhost/mcp'), {
-      fetch: (input, init) =>
+      fetch: async (input, init) =>
         app.request(input instanceof URL ? input.toString() : String(input), init),
     })
 

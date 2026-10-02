@@ -15,7 +15,7 @@
 
 ## Visual evidence
 
-<!-- For user-visible changes attach a before/after screenshot. Skip for invisible backend changes. -->
+<!-- For user-visible changes attach a before/after screenshot. With no figure, say so in one line: `Visual evidence: none — <reason>`. A PreToolUse hook refuses PR creation on a diff a human can see otherwise, and an invisible backend change states the line too. -->
 
 ## Checklist
 

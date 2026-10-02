@@ -20,7 +20,7 @@ mistake — strongest first:
 | **executable** | at lint / typecheck / test time, mechanically | `tools/biome-plugins/test-flake-shapes.grit` (rules read from the file by its guard), `tools/arch-lint`'s test scans (lazy imports, duplicate titles, the sleep ledger), guard tests (`browser-test-name-length`, `vitest-data-dir`, `local-node-version`) |
 | **setup guard** | at runtime, for every test in a project | `apps/web/vitest.setup.ts` (cleanup, fake-timer leak, localStorage), `browser-setup.ts` (stylesheet, async budget), `sharedBrowserTestConfig` (trace bounds) |
 | **review criteria** | when a reviewer reads the diff | `review-gate/resources/test-coverage.md` |
-| **prose** | only if someone remembers | `integrator-flow.md`'s CI-flakes section (the measurements), this skill |
+| **prose** | only if someone remembers | `steward`'s `reference/flake-shapes.md` (the measurements), this skill |
 
 A shape that costs a real defect twice earns a higher rung. How to move one up is
 `resources/executable-rungs.md`.
@@ -85,7 +85,7 @@ one upstream artefact), the test `{ signal }` (nothing in `userEvent` accepts on
 
 ```bash
 pnpm test --project <name>              # nearest layer (names: test-layer-selection)
-pnpm test:browser                       # the three real-browser projects
+pnpm test:browser                       # every real-browser project
 pnpm test:browser:replay                # + DOM replay of EVERY test in .vitest/index.html (~1MB per 100 tests)
 pnpm test:browser:trace                 # + Playwright DOM snapshots — ONE failing file only (23GB otherwise)
 for i in 1 2 3 4 5; do pnpm exec vitest run <file>; done   # what CI's stress step does

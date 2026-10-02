@@ -3,11 +3,13 @@
  * who a session or bearer names, every workspace is members-only from the
  * start, and the person who creates one is its first member.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import {
   bearerNamesItsSubject,
   ISSUER,
@@ -52,7 +54,7 @@ beforeEach(async () => {
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     people: stores.people,
     touch: () => {},

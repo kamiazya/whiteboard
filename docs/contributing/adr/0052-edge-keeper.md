@@ -240,3 +240,62 @@ In dependency order. Each slice lands on its own with its verification.
   it reintroduces the tenant-column discipline inside the object and
   multiplies the memory a single isolate must hold. That memory is exactly
   what ADR-0044 measured as the binding constraint.
+
+## Correction note (2026-10-02): the keeper protocol is not in `server-core`
+
+Context says `createServer(deps)` "holds every `/api/v1` route and every MCP
+tool" and that a new keeper "builds a `ServerDeps` rather than reimplementing
+routes". That is true of `/api/v1` and of the MCP tools, and of nothing else.
+`createServer` mounts `/api/v1` only. The routes the web app speaks to a keeper
+live in `packages/mcp-server/src/server/routes/`, and the list of what "lives
+only in `mcp-server`" above leaves every one of them out. Plan slice 3 serves
+`/api/v1` from a Durable Object, so on its own it would not serve the sync
+protocol a browser needs to talk to that object.
+
+What the web app depends on that is not in `server-core`, classified by
+`tools/arch-lint/src/route-portability.test.ts` from each file's own imports,
+as measured on 2026-10-02:
+
+| route file | what it carries | class |
+|---|---|---|
+| `sync-sse.ts` | `/api/sync/stream`, `/subscribe`, `/message` | node-bound, only by a `Buffer` global |
+| `document/workspace-document.ts` | workspace-document snapshot and update | node-bound, only by a `Buffer` global |
+| `document/workspaces.ts` | `/api/workspaces`: list, create, rename, a workspace's documents | portable |
+| `document/trash.ts` | the trash list and restore | portable |
+| `document/live-doc.ts`, `document/restore.ts`, `document/path-route.ts` | a document's snapshot, existence and update by path, its restore, and the path helper | portable |
+| `sync-audience.ts`, `viewport-requests.ts` | who has a document open and the viewport requests sent to them | portable |
+| `auth.ts`, `status.ts`, `body-limit.ts`, `document-output-path-error.ts` | the bearer gate, an operations probe no web page calls, and two small helpers | portable |
+| `workspace-people.ts` | a workspace's members | portable |
+| `document/metadata.ts` | workspace and document names | node-bound: `store/names-store` |
+| `document/maintenance.ts`, `document/versions.ts`, `document/auto-version.ts`, `document.ts` | version pruning, optimisation, history | node-bound: `store/document-store`, `store/version-store` |
+| `files.ts` | file purge and the file routes | node-bound: `node:fs`, `store/` |
+| `export.ts`, `document/export-svg.ts`, `fonts.ts` | headless export and installed fonts | node-bound: `node:fs`, `export/` |
+| `runtime-storage.ts`, `document/_shared.ts`, `runtime.ts`, `debug.ts` | daemon storage and runtime reports | node-bound: `node:*`, `store/`, `daemon/` |
+
+"Portable" is a statement about a file's OWN imports: hono, the contracts and
+the seams it is handed. It is the lower bound, not a promise. A portable route
+still reaches `../log.js` (a Node logger), the security gates and
+`workspace-handle.ts`, which reads the store's workspace registry through a
+module-level handle (a ledgered edge in `adapter-mechanic-check`), and those
+travel with it or must be replaced. The two `Buffer` files are the closest to
+portable of the node-bound: base64 through a `Uint8Array` helper would remove
+the one reason, and `Buffer` exists on Workers only behind a compatibility flag.
+
+The twelve portable files are listed in the test, which holds that list from
+both sides and pins its length so it can only fall: a portable route added to
+`mcp-server` fails the build until the ceiling is raised on the record, and one
+lifted into `server-core` fails it until the ceiling is lowered.
+
+**Whether to lift the seam-only routes into `server-core` is an OPEN DECISION
+for the maintainer, and nothing here makes it.** The alternatives are:
+
+- lift the portable routes as they are, and the `Buffer` pair after a base64
+  helper, so a Worker keeper mounts the same sync protocol through
+  `createServer(deps)` and the claim in Context becomes true of the protocol
+  too;
+- or let the edge keeper serve a protocol of its own, which makes ADR-0018's
+  divergence a deliberate property of this keeper rather than an accident.
+
+The store-bound routes need a seam before either move, which is ADR-0018's work
+and not this note's. Until this is decided, treat slice 3 as serving `/api/v1`
+only.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Local AI-dev-flow helper (lives under .claude/ = gitignored, like workflows/agents/skills).
+// Local AI-dev-flow helper (lives under .claude/, which is tracked in git and shared with every clone — ADR-0003).
 // Create a ready-to-develop git worktree: branch off a base ref, then `pnpm install`
 // (warm pnpm store ~6s) so tests/typecheck run isolated inside it. This is what makes
 // PARALLEL dev-loops possible — each runs in its own worktree, so none contends on the
@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /**
- * Auto-wires the new worktree's Claude Code session to its own derived
- * port — see wire-worktree-mcp.mjs for the mechanism (a --scope local
+ * Auto-wires the new worktree's Claude Code session to its own stdio
+ * proxy — see wire-worktree-mcp.mjs for the mechanism (a --scope local
  * `claude mcp add` under the tracked entry's own name, which cleanly
  * shadows the tracked .mcp.json entry). This step must never abort worktree
  * setup: a missing `claude` CLI, an existing conflicting registration, or

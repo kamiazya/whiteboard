@@ -2,7 +2,10 @@ import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import type { BackgroundWork, BackgroundWorker } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
-import { createAutoVersionTrigger } from './routes/document/auto-version.js'
+import {
+  type AutoVersionTrigger,
+  createAutoVersionTrigger,
+} from './routes/document/auto-version.js'
 import { subscribedWorkspaceIds } from './routes/sync-audience.js'
 import { installAutoCheckpoint } from './store/auto-checkpoint.js'
 import {
@@ -16,7 +19,7 @@ import {
   emitWorkspaceDocUpdated,
   getWorkspaceDoc,
 } from './store/document-store.js'
-import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
+import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 import { FileVersionStore } from './store/version-store.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
@@ -36,9 +39,15 @@ import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/wor
  * the type names.
  *
  * What stays in each root is what is genuinely its own: the local daemon's
- * `idle-shutdown` (server mode never idles out), and the one-line wrapper
- * that arms each worker INSIDE its `startBackgroundWork` call, which is
- * where `background-work.guard.test.ts` requires a `.start()` to be.
+ * `idle-shutdown` (server mode never idles out), and the registry call that
+ * arms the declarations. Everything a root used to hand-copy around that call
+ * — the sweeper's capped stop, the holder for the trigger `createApp` hands
+ * back — is built here and carried on `SharedWorkers`, so a third root cannot
+ * get either wrong: `composition-roots.guard.test.ts` requires it to pass
+ * `sharedBackgroundWork` nothing but what `createSharedWorkers` returned.
+ * Wrapping a worker as `start: () => x.start()` is not arming it, so
+ * `background-work.guard.test.ts` accepts that form here and still fails a
+ * direct `x.start()` anywhere outside a registry call.
  */
 
 /**
@@ -100,8 +109,46 @@ export interface SharedWorkerFactories {
   backupSchedulerFactory?: typeof createBackupScheduler
 }
 
+/**
+ * Where a root keeps the checkpoint scheduler `createApp` builds.
+ *
+ * `createApp` hands the scheduler back after the workers are built, and the
+ * declaration reads it at start and stop time, so it is passed by reference
+ * rather than captured. A root that forgot to hand `capture` to `createApp`
+ * would arm a checkpoint declaration over nothing and take no checkpoints, with
+ * no error anywhere.
+ */
+interface CheckpointHolder {
+  /** `createApp`'s `onAutoVersionTrigger`. */
+  readonly capture: (trigger: AutoVersionTrigger) => void
+  /** The captured scheduler, or `undefined` until `createApp` has run. */
+  readonly scheduler: () => AutoVersionTrigger | undefined
+  /** Takes the pending checkpoints; a no-op until a scheduler is captured. */
+  readonly flush: () => Promise<void>
+}
+
+function createCheckpointHolder(): CheckpointHolder {
+  let trigger: AutoVersionTrigger | undefined
+  return {
+    capture: (captured) => {
+      trigger = captured
+    },
+    scheduler: () => trigger,
+    flush: async () => {
+      await trigger?.flush()
+    },
+  }
+}
+
 export interface SharedWorkers {
-  readonly fileGcSweeper: FileGcSweeper
+  /**
+   * The sweeper as a registry worker. Its own `stop` takes a cap on how long
+   * shutdown waits for an in-flight pass (`FILE_GC_STOP_TIMEOUT_MS`), and a
+   * caller that wrapped the bare method and passed no options would silently
+   * take the sweeper's default instead.
+   */
+  readonly fileGc: BackgroundWorker
+  readonly checkpoints: CheckpointHolder
   readonly workspaceTail: BackgroundWorker | null
   readonly workspaceTailIntervalMs: number | null
   readonly backupScheduler: BackgroundWorker
@@ -110,25 +157,20 @@ export interface SharedWorkers {
 }
 
 /**
- * Constructs the shared workers from the environment and this instance's
- * identity. Construction only — nothing here is armed; `sharedBackgroundWork`
- * below declares them, and the root's registry call arms them.
+ * The scheduled backup, with the pieces `SharedWorkers` carries for its
+ * declaration.
+ *
+ * Off unless a destination is configured (ADR-0021 decision 4). The ADR asks
+ * for backups to be handled rather than remembered, and this is what handles
+ * them — but there is no destination worth guessing, so an operator still has
+ * to say where. `collectStorageEnvIssues` refuses an interval or a retention
+ * count set without one, so a half-configured schedule fails at startup rather
+ * than silently doing nothing.
  */
-export function createSharedWorkers(
+function createBackup(
   instanceId: string,
-  factories: SharedWorkerFactories = {},
-): SharedWorkers {
-  // Constructed once per start. There is no shared-instance hazard here (see
-  // file-gc-sweeper.ts's own comment on why it constructs its own
-  // FileVersionStore).
-  const fileGcSweeper = (factories.fileGcSweeperFactory ?? createFileGcSweeper)()
-
-  // Off unless a destination is configured (ADR-0021 decision 4). The ADR
-  // asks for backups to be handled rather than remembered, and this is what
-  // handles them — but there is no destination worth guessing, so an operator
-  // still has to say where. `collectStorageEnvIssues` refuses an interval or
-  // a retention count set without one, so a half-configured schedule fails at
-  // startup rather than silently doing nothing.
+  factories: SharedWorkerFactories,
+): Pick<SharedWorkers, 'backupScheduler' | 'backupTrigger'> {
   const backupDir = parseBackupDir(process.env)
   const backupSchedule = parseBackupSchedule(process.env)
   const backupKeep = parseBackupKeep(process.env)
@@ -146,50 +188,73 @@ export function createSharedWorkers(
     // depend on someone remembering to turn coordination on.
     runExclusively: createBackupLease({ holder: instanceId }),
   })
-
-  // Several instances share one record (ADR-0020 decision 5), and the tail is
-  // how a browser on THIS one learns what another wrote. Off unless the
-  // operator sets the interval: one instance hears all its own writes
-  // through `onWorkspaceDocUpdated` already, and polling for a second
-  // instance that does not exist is pure cost.
-  const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
-  const workspaceTail =
-    workspaceTailIntervalMs === null
-      ? null
-      : (factories.workspaceTailFactory ?? createWorkspaceTail)({
-          subscribedWorkspaces: subscribedWorkspaceIds,
-          docs: cacheBackedWorkspaceDocs(),
-          // The CACHED document, which is what every reader on this instance
-          // is served from — catching up a fresh copy would leave the one
-          // people actually read untouched.
-          liveDoc: getWorkspaceDoc,
-          emit: emitWorkspaceDocUpdated,
-          intervalMs: workspaceTailIntervalMs,
-        })
-
   return {
-    fileGcSweeper,
-    workspaceTail,
-    workspaceTailIntervalMs,
     backupScheduler,
     backupTrigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
   }
 }
 
+/**
+ * Several instances share one record (ADR-0020 decision 5), and the tail is
+ * how a browser on THIS one learns what another wrote. Off unless the operator
+ * sets the interval: one instance hears all its own writes through
+ * `onWorkspaceDocUpdated` already, and polling for a second instance that does
+ * not exist is pure cost.
+ */
+function createTail(
+  intervalMs: number | null,
+  factories: SharedWorkerFactories,
+): BackgroundWorker | null {
+  if (intervalMs === null) return null
+  return (factories.workspaceTailFactory ?? createWorkspaceTail)({
+    subscribedWorkspaces: subscribedWorkspaceIds,
+    docs: cacheBackedWorkspaceDocs(),
+    // The CACHED document, which is what every reader on this instance is
+    // served from — catching up a fresh copy would leave the one people
+    // actually read untouched.
+    liveDoc: getWorkspaceDoc,
+    emit: emitWorkspaceDocUpdated,
+    intervalMs,
+  })
+}
+
+/**
+ * Constructs the shared workers from the environment and this instance's
+ * identity. Construction only — nothing here is armed; `sharedBackgroundWork`
+ * below declares them, and the root's registry call arms them.
+ */
+export function createSharedWorkers(
+  instanceId: string,
+  factories: SharedWorkerFactories = {},
+): SharedWorkers {
+  // Constructed once per start. There is no shared-instance hazard here (see
+  // file-gc-sweeper.ts's own comment on why it constructs its own
+  // FileVersionStore).
+  const fileGcSweeper = (factories.fileGcSweeperFactory ?? createFileGcSweeper)()
+
+  const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
+
+  return {
+    fileGc: {
+      start: () => fileGcSweeper.start(),
+      stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
+    },
+    checkpoints: createCheckpointHolder(),
+    workspaceTail: createTail(workspaceTailIntervalMs, factories),
+    workspaceTailIntervalMs,
+    ...createBackup(instanceId, factories),
+  }
+}
+
+/**
+ * A seam for a test that wants to drive the declarations with its own
+ * scheduler or sweeper. A root passes none: what it needs is on
+ * `SharedWorkers`, and `composition-roots.guard.test.ts` fails a root that
+ * hand-builds either.
+ */
 export interface SharedWorkerArming {
-  /**
-   * The checkpoint scheduler `createApp` built, which the router's own update
-   * path signals directly. Read at START and STOP time rather than captured,
-   * because it is handed back by `createApp` after the workers are built.
-   */
+  /** Read at START and STOP time rather than captured; see `CheckpointHolder`. */
   checkpointScheduler: () => CheckpointScheduler | undefined
-  /**
-   * The sweeper as the root arms it — wrapped there, inside the registry
-   * call, because its own `stop` takes a cap on how long shutdown waits for
-   * an in-flight pass (`FILE_GC_STOP_TIMEOUT_MS`), and handing the bare
-   * method to a caller that passes no options would silently take the
-   * sweeper's default instead.
-   */
   fileGc: BackgroundWorker
 }
 
@@ -257,7 +322,10 @@ function autoCompactWork(): BackgroundWork {
 /** The declarations both roots run, each answering the registry's three questions once. */
 export function sharedBackgroundWork(
   workers: SharedWorkers,
-  arming: SharedWorkerArming,
+  arming: SharedWorkerArming = {
+    checkpointScheduler: workers.checkpoints.scheduler,
+    fileGc: workers.fileGc,
+  },
 ): BackgroundWork[] {
   return [
     autoCheckpointWork(arming.checkpointScheduler),

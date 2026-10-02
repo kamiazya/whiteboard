@@ -18,32 +18,27 @@ import {
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import {
-  type CreateWorkspaceInput,
   chunkSnapshot,
-  createWorkspaceInputSchema,
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   DocumentNotFoundError,
   DocumentPathTakenError,
-  type RenameWorkspaceInput,
-  renameWorkspaceInputSchema,
-  type WorkspaceEntry,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
-import {
+import type {
   LoroWorkspaceDocumentIndex,
-  type WorkspaceRegistry,
+  WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { blobsRoot } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
+import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad, peekDoc } from './doc-cache.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
-import { dbReady, documentStoreReady } from './store-handles.js'
+import { documentStoreReady } from './store-handles.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
 import {
   cacheBackedWorkspaceDocs,
@@ -56,6 +51,7 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // The cache's public surface is re-exported so callers keep one import path
 // for the document store; the cache itself lives in `workspace-doc-cache.ts`.
+export { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
 export {
   _clearWorkspaceDocCacheForTests,
   cacheBackedWorkspaceDocs,
@@ -85,16 +81,21 @@ export class ConflictError extends Error {
 export async function resolveDocumentIdAtPath(
   workspaceId: string,
   path: string,
+  scope: StoreScope = globalStoreScope,
 ): Promise<string | null> {
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
   if (workspaceDoc === null) return null
   const entry = resolveWorkspaceDocument(workspaceDoc, path)
   return entry === null ? null : entry.documentId
 }
 
 /** `resolveDocumentIdAtPath` that throws the routes' 404-mapped error instead of answering null. */
-export async function requireDocumentAtPath(workspaceId: string, path: string): Promise<string> {
-  const documentId = await resolveDocumentIdAtPath(workspaceId, path)
+export async function requireDocumentAtPath(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<string> {
+  const documentId = await resolveDocumentIdAtPath(workspaceId, path, scope)
   if (documentId === null) throw new DocumentNotFoundError(workspaceId, path)
   return documentId
 }
@@ -109,10 +110,10 @@ export async function requireDocumentAtPath(workspaceId: string, path: string): 
  * carries them — absent, never `null`/`''`, for a legacy workspace that
  * predates migration 0018 or was never given either.
  */
-export function workspaceRegistry(): WorkspaceRegistry {
+export function workspaceRegistry(scope: StoreScope = globalStoreScope): WorkspaceRegistry {
   return {
     async listWorkspaces() {
-      const db = await dbReady()
+      const db = await scope.db()
       const rows = await db
         .selectFrom('workspaces')
         .select(['id', 'segment', 'displayName'])
@@ -134,7 +135,7 @@ export function workspaceRegistry(): WorkspaceRegistry {
       // `createWorkspace`, and this registry is reached only through it. A
       // second parse would be a guard no test can reach — one was written,
       // and its mutation check stayed green.
-      const updated = await renameWorkspaceRow(await dbReady(), input.workspaceId, {
+      const updated = await renameWorkspaceRow(await scope.db(), input.workspaceId, {
         ...(input.segment === undefined ? {} : { segment: input.segment }),
         ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
       })
@@ -151,120 +152,13 @@ export function workspaceRegistry(): WorkspaceRegistry {
   }
 }
 
-/**
- * The tree index, with this composition root's doc-cache kept coherent
- * around the moves and deletes the port performs. The cache is keyed by
- * (workspaceId, path); a move leaves every touched path holding a doc filed
- * under a name that no longer means what it did — the SOURCE half merely
- * stales, while the DESTINATION half corrupts: `getDoc` lazily creates an
- * empty doc for any path, so a read that arrived before the move left a
- * phantom cached there, and the next write through it would persist the
- * phantom over the moved document's real content. The shared index cannot
- * know this cache exists, so the composition root wraps it.
- */
-export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
-  // Every mutator holds the workspace write lock, not only the two that
-  // need cache eviction: the base class's own per-instance serialiser is a
-  // DIFFERENT mutex from the one saveDocument/saveSnapshot hold, and two
-  // disjoint mutexes over the same workspace record allow the lost-update
-  // interleaving workspace-lock.ts's doc comment describes. Re-entrant, so
-  // a caller already inside the lock (routes, teardown) is unaffected.
-  /**
-   * Validated at this boundary (createWorkspaceInputSchema.parse) BEFORE any
-   * write, so a rejected segment/displayName leaves no half-created
-   * workspace. The registry identity (segment/displayName) is claimed
-   * FIRST, inside the write lock, ahead of the tree record `super` creates —
-   * a refused segment must not leave a workspace with a tree record and no
-   * registry row. `upsertWorkspaceRow` translates a segment collision into
-   * `WorkspaceSegmentTakenError`; `super.createWorkspace`'s own bare
-   * `upsertWorkspaceRow` call then no-ops on the `id` conflict, so it cannot
-   * clobber what was just claimed.
-   */
-  override async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
-    const parsed = createWorkspaceInputSchema.parse(input)
-    return withWorkspaceWriteLock(parsed.workspaceId, async () => {
-      await upsertWorkspaceRow(await dbReady(), parsed.workspaceId, {
-        ...(parsed.segment === undefined ? {} : { segment: parsed.segment }),
-        ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName }),
-      })
-      await super.createWorkspace(parsed)
-    })
-  }
-
-  /**
-   * Under the same lock every other mutator holds. A rename writes only the
-   * registry row, but `createWorkspace` writes that row too — and the two
-   * running unserialised on one workspace is the interleaving the lock
-   * exists for.
-   */
-  override async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
-    const parsed = renameWorkspaceInputSchema.parse(input)
-    return withWorkspaceWriteLock(parsed.workspaceId, () => super.renameWorkspace(parsed))
-  }
-
-  override async createDocument(
-    input: Parameters<LoroWorkspaceDocumentIndex['createDocument']>[0],
-  ): ReturnType<LoroWorkspaceDocumentIndex['createDocument']> {
-    return withWorkspaceWriteLock(input.workspaceId, () => super.createDocument(input))
-  }
-
-  override async setDocumentName(
-    input: Parameters<LoroWorkspaceDocumentIndex['setDocumentName']>[0],
-  ): Promise<void> {
-    return withWorkspaceWriteLock(input.workspaceId, () => super.setDocumentName(input))
-  }
-
-  override async restoreDocument(
-    input: Parameters<LoroWorkspaceDocumentIndex['restoreDocument']>[0],
-  ): ReturnType<LoroWorkspaceDocumentIndex['restoreDocument']> {
-    return withWorkspaceWriteLock(input.workspaceId, () => super.restoreDocument(input))
-  }
-
-  override async moveDocument(input: {
-    workspaceId: string
-    from: string
-    to: string
-  }): Promise<void> {
-    // Under the workspace write lock, like the retired SQL index's move: the
-    // route flows (WS updates, live-doc saves) load-and-save inside this
-    // lock, so a move outside it can land between an update's stalled read
-    // and its write — the update then lazily recreates the source path and a
-    // phantom duplicate survives the rename.
-    return withWorkspaceWriteLock(input.workspaceId, async () => {
-      // Collected BEFORE the move: afterwards the tree is the only record of
-      // the subtree, under its new paths.
-      const workspaceDoc = await openWorkspaceDocIfStored(input.workspaceId)
-      const movedPaths =
-        workspaceDoc === null
-          ? []
-          : readWorkspaceNodes(workspaceDoc)
-              .map((node) => node.path)
-              .filter((path) => path === input.from || path.startsWith(`${input.from}/`))
-      await super.moveDocument(input)
-      for (const from of movedPaths) {
-        evictDoc(input.workspaceId, from)
-        evictDoc(
-          input.workspaceId,
-          from === input.from ? input.to : `${input.to}${from.slice(input.from.length)}`,
-        )
-      }
-    })
-  }
-
-  override async deleteDocument(input: { workspaceId: string; path: string }): Promise<void> {
-    return withWorkspaceWriteLock(input.workspaceId, async () => {
-      await super.deleteDocument(input)
-      evictDoc(input.workspaceId, input.path)
-    })
-  }
-}
-
 /** The tree index delete/rename go through, so a daemon delete evacuates the same way a port delete does. */
-async function workspaceTreeIndex(): Promise<LoroWorkspaceDocumentIndex> {
+async function workspaceTreeIndex(scope: StoreScope): Promise<LoroWorkspaceDocumentIndex> {
   return new CacheCoherentDocumentIndex(
-    cacheBackedWorkspaceDocs(),
-    new FsBlobStore(blobsRoot(getDataDir(), SELF_HOST_TENANT_ID), getDataDir()),
-    workspaceRegistry(),
+    cacheBackedWorkspaceDocs(scope),
+    new FsBlobStore(blobsRoot(scope.dataDir, scope.layout.tenantId), scope.dataDir),
+    workspaceRegistry(scope),
+    scope,
   )
 }
 
@@ -353,6 +247,7 @@ export async function saveDocument(
   path: string,
   doc: LoroDoc,
   options: { overwrite?: boolean; kind?: DocumentKind } = {},
+  scope: StoreScope = globalStoreScope,
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
@@ -363,16 +258,15 @@ export async function saveDocument(
   // workspace lock ensures it sees this save as either fully applied or
   // not yet started.
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const overwrite = options.overwrite ?? false
-    const db = await dbReady()
+    const db = await scope.db()
     // The workspace REGISTRY row is still real (workspaceExists answers from
     // it); the documents rows are not written here anymore — the tree is the
     // whole record of what exists (S7).
     await upsertWorkspaceRow(db, workspaceId)
-    const workspaceDoc = await getWorkspaceDoc(workspaceId)
+    const workspaceDoc = await getWorkspaceDoc(workspaceId, scope)
     const existingEntry = resolveWorkspaceDocument(workspaceDoc, path)
     const existingDocumentId = existingEntry?.documentId ?? null
-    if (existingDocumentId !== null && !overwrite) {
+    if (existingDocumentId !== null && options.overwrite !== true) {
       throw new ConflictError(
         `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
@@ -391,27 +285,31 @@ export async function saveDocument(
       requestedKind: options.kind,
       doc,
     })
-    await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
     // A caller may hand this function a doc that is NOT the cached
     // projection (a fresh import, a checkout clone) — the cached one is then
     // behind the content just written, and the next getDoc would serve (and
     // a later save would diff) the stale copy. Self-heal at the funnel entry
     // instead of trusting every such caller to remember to evict.
-    const cached = peekDoc(workspaceId, path)
-    if (cached !== undefined && cached !== doc) evictDoc(workspaceId, path)
+    const cached = peekDoc(workspaceId, path, scope)
+    if (cached !== undefined && cached !== doc) evictDoc(workspaceId, path, scope)
     notifyDocumentSaved(workspaceId, path)
   })
 }
 
 // ── load LoroDoc, returning an empty document when no snapshot exists ──
-export async function loadDocument(workspaceId: string, path: string): Promise<LoroDoc> {
+export async function loadDocument(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<LoroDoc> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   // The workspace tree answers first, and resolves the PATH itself (S6):
   // the tree is the address book now, so a document lists and serves even
   // if its mirror row is skewed or gone. The projection is a VALUE copy
   // with its own oplog.
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
   if (workspaceDoc === null) return new LoroDoc()
   const entry = resolveWorkspaceDocument(workspaceDoc, path)
   if (entry === null) return new LoroDoc()
@@ -426,14 +324,18 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
  * rebuilding several MiB of CRDT history. Reach for `loadDocument` directly
  * only when a *fresh* instance is the point.
  */
-export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc> {
+export async function getDoc(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<LoroDoc> {
   // No staleness refresh: every served document is a tree projection that
   // each write path mutates in place (saveDocument diffs against the live
   // workspace doc), so a cache hit IS the current state. The legacy
   // per-document delta replay that used to run here died with the legacy
   // plane — replaying that other oplog into a projection resurrected
   // pre-fold state over current content.
-  return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path))
+  return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path, scope), scope)
 }
 
 /**
@@ -446,9 +348,12 @@ export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc
  * and lazily-created empty docs reads exactly like the user's data being
  * gone, when the truth is "not here".
  */
-export async function workspaceExists(workspaceId: string): Promise<boolean> {
+export async function workspaceExists(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<boolean> {
   validateWorkspaceId(workspaceId)
-  const db = await dbReady()
+  const db = await scope.db()
   const row = await db
     .selectFrom('workspaces')
     .select(['id'])
@@ -457,10 +362,14 @@ export async function workspaceExists(workspaceId: string): Promise<boolean> {
   return row !== undefined
 }
 
-export async function documentExists(workspaceId: string, path: string): Promise<boolean> {
+export async function documentExists(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<boolean> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  return (await resolveDocumentIdAtPath(workspaceId, path)) !== null
+  return (await resolveDocumentIdAtPath(workspaceId, path, scope)) !== null
 }
 
 // ── delete a canvas and every file it owns ──
@@ -481,34 +390,40 @@ export async function documentExists(workspaceId: string, path: string): Promise
  * ponytail: acceptable while nothing lists rows by dangling documentId;
  * a boot-time orphan sweep is the upgrade path if they ever show up.
  */
-export const documentTeardown: DocumentTeardown = {
-  around({ workspaceId, documentId, path }, deleteDocument) {
-    // The whole delete runs under this workspace's write barrier, so a
-    // version saved mid-delete cannot land after the sweep below.
-    return withWorkspaceWriteLock(workspaceId, async () => {
-      const db = await dbReady()
-      const result = await deleteDocument()
+export function createDocumentTeardown(scope: StoreScope = globalStoreScope): DocumentTeardown {
+  return {
+    around({ workspaceId, documentId, path }, deleteDocument) {
+      // The whole delete runs under this workspace's write barrier, so a
+      // version saved mid-delete cannot land after the sweep below.
+      return withWorkspaceWriteLock(workspaceId, async () => {
+        const db = await scope.db()
+        const result = await deleteDocument()
 
-      // Version rows no longer cascade from a documents row (migration 0016
-      // dropped the FK — a tree-only document has no row to cascade from), so
-      // delete-completeness for every delete path that runs through this
-      // bracket lives here.
-      await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
+        // Version rows no longer cascade from a documents row (migration 0016
+        // dropped the FK — a tree-only document has no row to cascade from), so
+        // delete-completeness for every delete path that runs through this
+        // bracket lives here.
+        await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
 
-      // Force the next getDoc() to reload from disk (there is nothing left to
-      // reload from — a fresh create should not inherit a doc instance that
-      // still holds the deleted canvas's history).
-      evictDoc(workspaceId, path)
+        // Force the next getDoc() to reload from disk (there is nothing left to
+        // reload from — a fresh create should not inherit a doc instance that
+        // still holds the deleted canvas's history).
+        evictDoc(workspaceId, path, scope)
 
-      return result
-    })
-  },
+        return result
+      })
+    },
+  }
 }
 
-export async function deleteDocument(workspaceId: string, path: string): Promise<boolean> {
+export async function deleteDocument(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<boolean> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const documentId = await resolveDocumentIdAtPath(workspaceId, path)
+  const documentId = await resolveDocumentIdAtPath(workspaceId, path, scope)
   if (documentId === null) return false
 
   // The same bracket wbDocumentDelete runs in (server-core's
@@ -516,24 +431,24 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
   // implementations and only one of them cleaned up. The bracket takes the
   // workspace write lock and deletes the versions rows after the document
   // goes (migration 0016 dropped the cascade).
-  return documentTeardown.around({ workspaceId, documentId, path }, async () => {
+  return createDocumentTeardown(scope).around({ workspaceId, documentId, path }, async () => {
     // The tree node goes through the index's delete, which EVACUATES the
     // content into the trash before removing anything — the daemon's delete
     // keeps the same recoverability promise the agent-facing port makes.
     // `documentId` came from the tree above, so the node is guaranteed to
     // still be there unless a concurrent delete already removed it.
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
     if (workspaceDoc !== null && resolveWorkspaceDocumentById(workspaceDoc, documentId) !== null) {
       // Cache-backed, so the index deletes on the same live instance every
       // other path writes through.
-      const index = await workspaceTreeIndex()
+      const index = await workspaceTreeIndex(scope)
       await index.deleteDocument({ workspaceId, path })
     }
 
     // The identity goes first, then the Libsql snapshot/delta/frontier
     // rows, so a crash between the two leaves an orphaned-but-unreachable
     // snapshot rather than a listed canvas with no content.
-    const documentStore = await documentStoreReady()
+    const documentStore = await documentStoreReady(scope)
     await documentStore.deleteDoc({ docRef: { kind: 'document', workspaceId, documentId } })
 
     return true
@@ -553,10 +468,11 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
 export async function getDocumentKind(
   workspaceId: string,
   path: string,
+  scope: StoreScope = globalStoreScope,
 ): Promise<DocumentKind | null> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
   if (workspaceDoc === null) return null
   return resolveWorkspaceDocument(workspaceDoc, path)?.kind ?? null
 }
@@ -581,10 +497,10 @@ export async function getDocumentKind(
 export async function compactWorkspace(
   workspaceId: string,
   versionStore: VersionStore,
+  scope: StoreScope = globalStoreScope,
 ): Promise<CompactWorkspaceResult> {
   validateWorkspaceId(workspaceId)
-  await dbReady()
-  const documentStore = await documentStoreReady()
+  const documentStore = await documentStoreReady(scope)
   const docRef = { kind: 'workspace-tree' as const, workspaceId }
 
   // The workspace lock is what every workspace-record writer holds, so the
@@ -597,7 +513,7 @@ export async function compactWorkspace(
     // generation fence does not cover it — a writer that merely APPENDED left
     // the generation alone, and `supersededDeltaCount` then drops the very
     // delta that carried those ops.
-    await catchUpWorkspaceDoc(workspaceId)
+    await catchUpWorkspaceDoc(workspaceId, scope)
     const header = await documentStore.readSnapshotManifest({ docRef })
     if (header === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
@@ -618,7 +534,7 @@ export async function compactWorkspace(
     // The live cached workspace document IS the current state — every write
     // path mutates it under the lock held here — so the fold exports from
     // it instead of re-reading stored bytes.
-    const doc = await getWorkspaceDoc(workspaceId)
+    const doc = await getWorkspaceDoc(workspaceId, scope)
 
     // The earliest version row is the whole cut: it is the oldest point any
     // reader can still ask to see. No version row still means no compaction
@@ -658,7 +574,7 @@ export async function compactWorkspace(
     // storage report shows describes the workspace, on the workspace meta.
     // Written after the compacted snapshot, as a small delta on top of it.
     setWorkspaceLastCompactedAt(doc, Date.now())
-    await saveWorkspaceDoc(workspaceId, doc)
+    await saveWorkspaceDoc(workspaceId, doc, scope)
     // No eviction: the live workspace document keeps its full in-memory
     // history and the frontier just written is its own current one, so both
     // it and the projections served from it stay coherent with the store.
@@ -669,12 +585,14 @@ export async function compactWorkspace(
 // ── most-recent auto-compact timestamp across all documents ───────────
 // Used by the storage report to show "Auto-optimised Ns ago" without
 // client-side aggregation. Returns null when no canvas has been compacted yet.
-export async function readLatestCompactedAt(): Promise<number | null> {
-  const db = await dbReady()
+export async function readLatestCompactedAt(
+  scope: StoreScope = globalStoreScope,
+): Promise<number | null> {
+  const db = await scope.db()
   const workspaces = await db.selectFrom('workspaces').select(['id']).execute()
   let latest: number | null = null
   for (const { id } of workspaces) {
-    const workspaceDoc = await openWorkspaceDocIfStored(id)
+    const workspaceDoc = await openWorkspaceDocIfStored(id, scope)
     if (workspaceDoc === null) continue
     const at = readWorkspaceMeta(workspaceDoc).lastCompactedAt
     if (at !== undefined && (latest === null || at > latest)) latest = at
@@ -683,8 +601,10 @@ export async function readLatestCompactedAt(): Promise<number | null> {
 }
 
 // ── list workspaces from the workspaces table ──
-export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
-  const db = await dbReady()
+export async function listWorkspaces(
+  scope: StoreScope = globalStoreScope,
+): Promise<{ workspaceId: string }[]> {
+  const db = await scope.db()
   const rows = await db.selectFrom('workspaces').select(['id', 'updatedAt']).execute()
   return rows.map((r) => ({ workspaceId: r.id }))
 }
@@ -698,12 +618,13 @@ export async function renameDocumentPath(
   workspaceId: string,
   oldPath: string,
   newPath: string,
+  scope: StoreScope = globalStoreScope,
 ): Promise<{ documentId: string } | null> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(oldPath)
   validateDocumentPath(newPath)
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
     const entry = workspaceDoc === null ? null : resolveWorkspaceDocument(workspaceDoc, oldPath)
     // A path only the rows know is a pre-fold legacy document; renaming one
     // before the boot fold has absorbed it is not a supported operation —
@@ -721,8 +642,8 @@ export async function renameDocumentPath(
             .map((node) => node.path)
             .filter((path) => path === oldPath || path.startsWith(`${oldPath}/`))
 
-    await moveThroughIndex(workspaceId, oldPath, newPath)
-    evictMovedPaths(workspaceId, movedPaths, oldPath, newPath)
+    await moveThroughIndex(workspaceId, oldPath, newPath, scope)
+    evictMovedPaths(workspaceId, movedPaths, oldPath, newPath, scope)
     return { documentId }
   })
 }
@@ -737,8 +658,9 @@ async function moveThroughIndex(
   workspaceId: string,
   oldPath: string,
   newPath: string,
+  scope: StoreScope,
 ): Promise<void> {
-  const index = await workspaceTreeIndex()
+  const index = await workspaceTreeIndex(scope)
   try {
     await index.moveDocument({ workspaceId, from: oldPath, to: newPath })
   } catch (err) {
@@ -763,21 +685,27 @@ function evictMovedPaths(
   movedPaths: readonly string[],
   oldPath: string,
   newPath: string,
+  scope: StoreScope,
 ): void {
   for (const from of movedPaths) {
-    evictDoc(workspaceId, from)
-    evictDoc(workspaceId, from === oldPath ? newPath : `${newPath}${from.slice(oldPath.length)}`)
+    evictDoc(workspaceId, from, scope)
+    evictDoc(
+      workspaceId,
+      from === oldPath ? newPath : `${newPath}${from.slice(oldPath.length)}`,
+      scope,
+    )
   }
 }
 
 // ── list documents from the workspace record ──
 export async function listDocuments(
   workspaceId: string,
+  scope: StoreScope = globalStoreScope,
 ): Promise<
   Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind' | 'contentDigest'>[]
 > {
   validateWorkspaceId(workspaceId)
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
   if (workspaceDoc === null) return []
   return readWorkspaceDocuments(workspaceDoc).map((entry) => ({
     path: entry.path,

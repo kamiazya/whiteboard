@@ -81,7 +81,7 @@ export const documentPathSchema = z
  * asymmetry; the confusion is guarded the way this codebase guards
  * everything else, with distinct Zod schemas (this one is a separate type
  * from `documentIdSchema` despite sharing a pattern) and tests, not string
- * shape. This is the only key references, versions/branches, storage rows,
+ * shape. This is the only key references, versions, storage rows,
  * and sync ever use — never shown as chrome, never typed by a human.
  */
 export const workspaceCanonicalIdSchema = z.string().regex(ULID_PATTERN, 'must be a canonical ULID')

@@ -44,10 +44,10 @@ Meaning:
 
 ### 2. Unit Tests
 
-Start with focused tests for the touched area. If broader coverage is not needed yet, leave full `pnpm test` for later.
+Start with focused tests for the touched area; full suites are CI's job.
 
 ```bash
-pnpm test
+pnpm test --project mcp-node
 ```
 
 Stop there if it fails.
@@ -64,7 +64,7 @@ pnpm typecheck
 pnpm smoke:e2e
 ```
 
-`scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and calls
+`packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and calls
 every tool in `COVERED_TOOLS`, asserting each one's `structuredContent` against
 its `outputSchema`. It also exercises the error paths in `ERROR_PATH_ONLY_TOOLS`
 and the no-browser cases — a viewport set answering `no_client`, and a scene
@@ -126,4 +126,4 @@ first passes. Do not open with a quota-consuming one.
 - After server/daemon changes, start from the `daemon:dev` path and try verification without restarting Claude
 - If you touched MCP schema or registration, explicitly state that a restart is required
 - In general, progress through `test -> typecheck -> smoke:e2e`, stopping on failures
-- When you add a new tool, add one case to `scripts/smoke/mcp-e2e-smoke.mjs` when feasible
+- When you add a new tool, add one case to `packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs` when feasible

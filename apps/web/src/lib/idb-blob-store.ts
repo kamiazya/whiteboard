@@ -34,6 +34,7 @@ import type {
   BlobRef,
   BlobStore,
 } from '@kamiazya/whiteboard-ports'
+import { blobRefKey } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { BLOBS_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
@@ -62,14 +63,6 @@ const blobRecordSchema = z
 
 type BlobRecord = z.infer<typeof blobRecordSchema>
 
-/**
- * The primary key. Includes the algorithm, so introducing a second one later
- * cannot collide with a sha-256 digest that happens to share its hex.
- */
-function refKey(ref: BlobRef): string {
-  return `${ref.algorithm}:${ref.digestHex}`
-}
-
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   // See the conformance suite: a copy rather than a cast, because a
   // `Uint8Array<ArrayBufferLike>` is not a `BufferSource` since TS 5.7.
@@ -96,14 +89,14 @@ export class IdbBlobStore implements BlobStore {
       // case, not a conflict. It overwrites with an identical payload except
       // for `contentType`, where the last writer wins — the bytes are what
       // the ref promises, and the type is a hint about them.
-      await request(tx.objectStore(BLOBS_STORE).put(record, refKey(ref)))
+      await request(tx.objectStore(BLOBS_STORE).put(record, blobRefKey(ref)))
     })
     return { ref }
   }
 
   async get(input: BlobGetInput): Promise<BlobGetResult> {
     return inTransaction(this.dbName, [BLOBS_STORE], 'readonly', async (tx) => {
-      const raw = await request(tx.objectStore(BLOBS_STORE).get(refKey(input.ref)))
+      const raw = await request(tx.objectStore(BLOBS_STORE).get(blobRefKey(input.ref)))
       if (raw === undefined) return null
       const parsed = blobRecordSchema.safeParse(raw)
       if (!parsed.success) return null
@@ -120,7 +113,7 @@ export class IdbBlobStore implements BlobStore {
 
   async has(input: BlobHasInput): Promise<BlobHasResult> {
     return inTransaction(this.dbName, [BLOBS_STORE], 'readonly', async (tx) => {
-      const key = await request(tx.objectStore(BLOBS_STORE).getKey(refKey(input.ref)))
+      const key = await request(tx.objectStore(BLOBS_STORE).getKey(blobRefKey(input.ref)))
       return { exists: key !== undefined }
     })
   }
@@ -129,7 +122,7 @@ export class IdbBlobStore implements BlobStore {
     await inTransaction(this.dbName, [BLOBS_STORE], 'readwrite', async (tx) => {
       // IndexedDB's delete is already total on a key that is not there, which
       // is what the port asks for — a caller holding a stale ref is ordinary.
-      await request(tx.objectStore(BLOBS_STORE).delete(refKey(input.ref)))
+      await request(tx.objectStore(BLOBS_STORE).delete(blobRefKey(input.ref)))
     })
   }
 }

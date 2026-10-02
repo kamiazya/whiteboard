@@ -9,7 +9,7 @@ import type { BackupBlobReferences } from './store/backup-blob-mirror.js'
 import { mirrorRootFor, readBackupBlobManifest } from './store/backup-blob-mirror.js'
 import { BACKUP_MARKER_FILENAME } from './store/backup-in-progress.js'
 import { DB_FILENAME } from './store/db/location.js'
-import { blobsRoot, isAnyTenantBlobsPath } from './tenant/data-layout.js'
+import { blobShardPath, blobsRoot, isAnyTenantBlobsPath } from './tenant/data-layout.js'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
@@ -405,13 +405,13 @@ async function materialiseMirroredBlobs(
     const into = blobsRoot(targetDataDir, tenantId)
     for (const digest of refs.blobs) {
       wanted.push({
-        from: join(mirrorRoot, 'blobs', digest.slice(0, 2), digest.slice(2)),
-        to: join(into, digest.slice(0, 2), digest.slice(2)),
+        from: blobShardPath(join(mirrorRoot, 'blobs'), digest),
+        to: blobShardPath(into, digest),
       })
     }
     for (const [relativePath, digest] of Object.entries(refs.files)) {
       wanted.push({
-        from: join(mirrorRoot, 'files', digest.slice(0, 2), digest.slice(2)),
+        from: blobShardPath(join(mirrorRoot, 'files'), digest),
         to: join(into, ...relativePath.split('/')),
       })
     }

@@ -53,7 +53,7 @@ paths:
 - Vitest project: `server-core-node` (registered in root `vitest.config.ts`).
 - Smoke: `createServer` returns an app whose `fetch` is callable.
 - **Every tool is fuzzed from its own input schema**
-  (`tools/tool-inputs.fuzz.property.test.ts`): `arbitraryForSchema` over
+  (`packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts`): `arbitraryForSchema` over
   `tool.inputSchema` for each entry of `createServer(deps).tools`, run
   against a seeded in-memory workspace (a spatial document with two text
   nodes, a group, an edge and a comment; a markdown document with
@@ -155,7 +155,7 @@ listing to both the library and the counts, which a test holds by counting
 listings.
 
 **The tag LIBRARY is data, read where it is needed** (ADR-0040 decision 5,
-increment 5a; `tools/tag-library.ts`). `workspaceTagLibrary(deps, ws,
+increment 5a; `packages/server-core/src/tools/tag-library.ts`). `workspaceTagLibrary(deps, ws,
 unknownWorkspace, listed?)` answers what the document at `TAG_LIBRARY_PATH`
 (`tags`) declares, or `{}` — the same shape and the same `'deployment' |
 'refuse'` choice as `workspaceFacetRegistry`, but it composes nothing: a

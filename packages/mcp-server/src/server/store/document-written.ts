@@ -1,6 +1,7 @@
 import type { DocumentWritten } from '@kamiazya/whiteboard-server-core'
 import { checkpointAfterWrite } from './auto-checkpoint.js'
 import { scheduleAutoCompact } from './auto-compact.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { FileVersionStore } from './version-store.js'
 
 /**
@@ -32,7 +33,9 @@ import { FileVersionStore } from './version-store.js'
  * `compactWorkspace` from there, so that would close an import cycle
  * `cycle-check.ts` rejects.
  */
-export const documentWritten: DocumentWritten = async ({ workspaceId, path, doc }) => {
-  scheduleAutoCompact(workspaceId, new FileVersionStore())
-  if (path !== undefined) checkpointAfterWrite(workspaceId, path, doc)
+export function createDocumentWritten(scope: StoreScope = globalStoreScope): DocumentWritten {
+  return async ({ workspaceId, path, doc }) => {
+    scheduleAutoCompact(workspaceId, new FileVersionStore(scope), { scope })
+    if (path !== undefined) checkpointAfterWrite(workspaceId, path, doc)
+  }
 }

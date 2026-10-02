@@ -3,12 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../server/log.js'
+import type { runDaemonRun as RealRunDaemonRun } from './daemon-run.js'
 
 // Exercises the REAL dispatcher path (`whiteboard daemon run`) with a config
 // file on disk, mocking only `daemon-run.js` so we can inspect exactly what
 // options the dispatcher resolved (dataDir / token) without booting a server.
 
-const runDaemonRun = vi.fn(async () => ({
+const runDaemonRun = vi.fn<typeof RealRunDaemonRun>(async () => ({
   kind: 'refused' as const,
   message: 'stubbed',
 }))

@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { oidcProviders } from './_test-helpers.js'
 import { type BearerToken, provisionBearerPerson } from './bearer-provisioning.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import { providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
@@ -16,18 +17,20 @@ import { providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
 const ISSUER = 'https://idp.test'
 
 function providers(admission: object) {
-  return signInConfigSchema.parse({
-    providers: [
-      {
-        id: 'corp',
-        kind: 'oidc',
-        issuer: ISSUER,
-        clientId: 'wb-web',
-        clientSecret: { env: 'CORP_SECRET' },
-        admission,
-      },
-    ],
-  }).providers
+  return oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'corp',
+          kind: 'oidc',
+          issuer: ISSUER,
+          clientId: 'wb-web',
+          clientSecret: { env: 'CORP_SECRET' },
+          admission,
+        },
+      ],
+    }).providers,
+  )
 }
 
 const person = { authenticator: providerAuthenticator({ issuer: ISSUER }), subject: 'ada-1' }

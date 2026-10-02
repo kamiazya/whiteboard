@@ -3,12 +3,15 @@
  * providers are configured, and ahead of the placeholder page that would
  * otherwise answer every path.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
+import { DENY_ALL_STRATEGY, oidcProviders } from './security/_test-helpers.js'
 import { signInConfigSchema } from './security/sign-in-config.js'
 
 let tempDir: string
@@ -41,11 +44,9 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
     // The root's deps, over the memory store: nothing here reads a document.
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
-    authStrategy: {
-      authorize: async () => ({ ok: false, status: 401, code: 'auth.required' }),
-    },
+    authStrategy: DENY_ALL_STRATEGY,
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')
@@ -55,17 +56,19 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
 }
 
 describe('app — server-mode sign-in (ADR-0046)', () => {
-  const [provider] = signInConfigSchema.parse({
-    providers: [
-      {
-        id: 'corp',
-        kind: 'oidc',
-        issuer: 'https://idp.test',
-        clientId: 'wb',
-        clientSecret: { env: 'X' },
-      },
-    ],
-  }).providers
+  const [provider] = oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'corp',
+          kind: 'oidc',
+          issuer: 'https://idp.test',
+          clientId: 'wb',
+          clientSecret: { env: 'X' },
+        },
+      ],
+    }).providers,
+  )
   if (provider === undefined) throw new Error('unreachable')
 
   const signIn = {

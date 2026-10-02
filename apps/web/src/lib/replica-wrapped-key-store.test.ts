@@ -3,7 +3,7 @@
  *
  * The record is CIPHERTEXT (`daemon-client`'s `replica-key-wrap.ts`), so the
  * thing this store must never do is lose its shape silently: a record it
- * cannot parse has to read as absent, the way `loadPasskeys` treats a
+ * cannot parse has to read as absent, the way `loadOfflinePasskey` treats a
  * corrupt pin, rather than throwing into a cold start.
  */
 

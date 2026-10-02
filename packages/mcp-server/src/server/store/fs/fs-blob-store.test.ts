@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs'
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -12,7 +13,7 @@ import { FsBlobStore } from './fs-blob-store.js'
 
 async function countFilesRecursively(dir: string): Promise<number> {
   let count = 0
-  let entries: Awaited<ReturnType<typeof readdir>>
+  let entries: Dirent[]
   try {
     entries = await readdir(dir, { withFileTypes: true })
   } catch {

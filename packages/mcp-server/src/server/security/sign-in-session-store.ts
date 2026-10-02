@@ -5,7 +5,8 @@
  * vouched for; what that person may reach is decided per request, so a
  * removed membership bites without the session being touched.
  */
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
+import { sha256Hex } from '../../shared/sha256.js'
 import type { TenantDatabase } from '../store/db/tenant-database.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
 
@@ -31,15 +32,11 @@ export interface SignInSessionStore {
   end(token: string): Promise<boolean>
 }
 
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
-}
-
 async function openSession(db: TenantDatabase, token: string, now: number) {
   const row = await db
     .selectFrom('signInSessions')
     .select(['authenticator', 'subject', 'authenticatedAt'])
-    .where('tokenHash', '=', hashToken(token))
+    .where('tokenHash', '=', sha256Hex(token))
     .where('expiresAt', '>', now)
     .executeTakeFirst()
   if (row === undefined) return null
@@ -58,7 +55,7 @@ export function createSignInSessionStore(db: TenantDatabase): SignInSessionStore
       await db
         .insertInto('signInSessions')
         .values({
-          tokenHash: hashToken(token),
+          tokenHash: sha256Hex(token),
           authenticator: person.authenticator,
           subject: person.subject,
           createdAt: now,
@@ -78,7 +75,7 @@ export function createSignInSessionStore(db: TenantDatabase): SignInSessionStore
     async end(token) {
       const deleted = await db
         .deleteFrom('signInSessions')
-        .where('tokenHash', '=', hashToken(token))
+        .where('tokenHash', '=', sha256Hex(token))
         .returning('tokenHash')
         .execute()
       return deleted.length > 0

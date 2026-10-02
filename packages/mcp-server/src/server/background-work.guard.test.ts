@@ -26,8 +26,10 @@ import { LOOP_COSTS } from './background-work-costs.js'
  * prose is the weaker rung on purpose.
  */
 // The shared set (`shared-background-work.ts`) is scanned too. It holds no
-// registry call, so every `.start()` there would be a bypass — which is the
-// point: it builds and declares the workers, and the roots arm them.
+// registry call, so a direct `.start()` there is a bypass — it builds and
+// declares the workers, and the roots arm them. What it may hold is a worker
+// WRAPPED as `start: () => x.start()`, which arms nothing until the registry
+// calls it.
 const COMPOSITION_ROOTS = [
   'http-server.ts',
   'server-mode-http.ts',
@@ -40,7 +42,10 @@ const COMPOSITION_ROOTS = [
  *
  * Arming through `startBackgroundWork` is the point, so its own argument —
  * where a worker is wrapped as `start: () => sweeper.start()` — is excluded
- * by span rather than by name.
+ * by span rather than by name. The same wrapper built ELSEWHERE (the shared
+ * set hands one to each root) is excluded by its shape: an arrow stored as
+ * `start` runs only when something calls it, and the only caller is the
+ * registry.
  */
 function bypassedStartCalls(source: string): string[] {
   // Comments first: the composition roots discuss `.start()` in prose, and so
@@ -50,6 +55,7 @@ function bypassedStartCalls(source: string): string[] {
   return [...code.matchAll(/(\w[\w.?]*)\.start\(\)/g)]
     .filter((match) => {
       const at = match.index ?? 0
+      if (/\bstart:\s*\(\)\s*=>\s*$/.test(code.slice(0, at))) return false
       return registry === null || at < registry.from || at > registry.to
     })
     .map((match) => match[0])
@@ -94,6 +100,18 @@ describe('background work is declared before it is armed', () => {
       ['startBackgroundWork([', '  { worker: { start: () => sweeper.start() } },', '])'].join('\n'),
     )
     expect(bypassed).toEqual([])
+  })
+
+  it('does not report a worker wrapped for a registry that arms it elsewhere', () => {
+    expect(bypassedStartCalls('const w = { start: () => sweeper.start(), stop })')).toEqual([])
+  })
+
+  it('still reports a call that merely sits beside a wrapper', () => {
+    expect(
+      bypassedStartCalls(
+        'const w = { start: () => a.start(), stop }\nb.start()\nconst start = c.start()',
+      ),
+    ).toEqual(['b.start()', 'c.start()'])
   })
 
   /** Prose about `.start()` is not code, and must not read as a bypass. */

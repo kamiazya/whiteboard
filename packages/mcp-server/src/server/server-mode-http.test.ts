@@ -1,6 +1,8 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ServerModeAppOptions } from './app-types.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
+import type { createWorkspaceTail } from './store/workspace-tail.js'
 
 // vi.mock is hoisted above imports, so mutable state shared with the mocks
 // must be initialised with vi.hoisted() to avoid a temporal dead-zone error.
@@ -62,6 +64,15 @@ async function serverOnceServing() {
   const server = getLastServer()
   expect(server).not.toBeNull()
   return server!
+}
+
+/** What the last `createApp` call was given, narrowed to the server-mode shape this root builds. */
+function lastServerModeOptions(): ServerModeAppOptions | undefined {
+  const options = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+  if (options !== undefined && options.authMode !== 'server-mode') {
+    throw new Error(`createApp was called in ${options.authMode} mode`)
+  }
+  return options
 }
 
 describe('startServerModeHttp', () => {
@@ -135,7 +146,7 @@ describe('startServerModeHttp', () => {
     setImmediate(() => server.emit('listening'))
     await startPromise
 
-    const passedOptions = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+    const passedOptions = lastServerModeOptions()
     expect(passedOptions?.people?.members).toBeDefined()
     expect(passedOptions?.people?.sessions).toBeDefined()
     expect(passedOptions).not.toHaveProperty('signIn')
@@ -160,7 +171,7 @@ describe('startServerModeHttp', () => {
     setImmediate(() => server.emit('listening'))
     await startPromise
 
-    const passedOptions = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+    const passedOptions = lastServerModeOptions()
     expect(passedOptions).not.toHaveProperty('signIn')
     expect(passedOptions?.people?.bearerProvisioning?.providers).toEqual([bearerOnly])
   })
@@ -181,7 +192,7 @@ describe('startServerModeHttp', () => {
     setImmediate(() => server.emit('listening'))
     await startPromise
 
-    const passedOptions = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+    const passedOptions = lastServerModeOptions()
     expect(passedOptions?.people?.bearerProvisioning?.providers).toEqual([provider])
   })
 
@@ -230,7 +241,7 @@ describe('startServerModeHttp', () => {
     else process.env.WHITEBOARD_WORKSPACE_TAIL_MS = interval
     try {
       const tail = { pollOnce: vi.fn(async () => {}), start: vi.fn(), stop: vi.fn(async () => {}) }
-      const factory = vi.fn(() => tail)
+      const factory = vi.fn((_options: Parameters<typeof createWorkspaceTail>[0]) => tail)
       const startPromise = startServerModeHttp({ ...makeOptions(), workspaceTailFactory: factory })
       const server = await serverOnceServing()
       setImmediate(() => server.emit('listening'))

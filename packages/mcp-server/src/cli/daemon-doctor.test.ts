@@ -7,13 +7,13 @@ import { runDaemonDoctor } from './daemon-doctor.js'
 
 type ParseRecord = Parameters<typeof runDaemonDoctor>[0]['parseRecord']
 
-const validRecord = {
+const baseRecord = {
   pid: 12345,
-  port: 3099,
   version: '1.0.0',
   startedAt: '2024-01-01T00:00:00.000Z',
-  token: 'tok',
+  socketPath: '/fake/daemon.sock',
 }
+const validRecord = { ...baseRecord, token: 'tok' }
 
 function runDoctor(parseRecord: ParseRecord, isPidAlive: () => boolean) {
   return runDaemonDoctor({ dataDir: '/fake', parseRecord, isPidAlive })
@@ -42,7 +42,7 @@ describe('runDaemonDoctor: record missing', () => {
 })
 
 describe('runDaemonDoctor: record malformed', () => {
-  const parseMalformed: ParseRecord = async () => ({ kind: 'malformed' })
+  const parseMalformed: ParseRecord = async () => ({ kind: 'malformed', message: 'not json' })
 
   it('returns exitCode 1 and ok=false', async () => {
     const { result, exitCode } = await runDoctor(parseMalformed, () => false)
@@ -57,7 +57,7 @@ describe('runDaemonDoctor: record malformed', () => {
 })
 
 describe('runDaemonDoctor: token missing', () => {
-  const parseTokenMissing: ParseRecord = async () => ({ kind: 'token-missing' })
+  const parseTokenMissing: ParseRecord = async () => ({ kind: 'token-missing', record: baseRecord })
 
   it('returns exitCode 1 and ok=false', async () => {
     const { result, exitCode } = await runDoctor(parseTokenMissing, () => false)

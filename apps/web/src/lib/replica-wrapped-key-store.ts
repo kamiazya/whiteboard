@@ -16,7 +16,7 @@
  * smoke already scans localStorage for key bytes — so the guard that matters
  * is pointed at it for free.
  *
- * A record that does not parse reads as ABSENT, the posture `loadPasskeys`
+ * A record that does not parse reads as ABSENT, the posture `loadOfflinePasskey`
  * takes for a corrupt pin: a cold start then asks the daemon, which is what
  * it would do anyway. Throwing from a store into an unlock path would turn a
  * recoverable state into an error nobody can act on.

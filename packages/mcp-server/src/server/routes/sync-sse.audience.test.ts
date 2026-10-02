@@ -5,12 +5,14 @@
  * request for a stream another instance holds has to be visible, because
  * it means the load balancer is not keeping a browser on one instance.
  */
+
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { createApp } from '../app.js'
 import { captureLogsForTests } from '../log.js'
 import { testDataLayout } from './_test-helpers.js'
@@ -36,7 +38,7 @@ function app() {
     getStatus: () => ({ port: 3099 }) as never,
     // The stream's update fan-out subscribes through these; the memory
     // store is enough, since every case here broadcasts directly.
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
   })
 }

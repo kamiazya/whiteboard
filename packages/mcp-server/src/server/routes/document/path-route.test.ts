@@ -22,19 +22,21 @@ describe('onDocumentAction', () => {
 
   it('falls through on a non-matching action so siblings get their turn', async () => {
     const app = new Hono()
-    onDocumentAction(app, 'get', 'exists', (c) => c.json({ hit: 'exists' }))
+    onDocumentAction(app, 'get', 'client-count', (c) => c.json({ hit: 'client-count' }))
     onDocumentAction(app, 'get', 'snapshot', (c) => c.json({ hit: 'snapshot' }))
     const res = await app.request('/api/w/ws1/document/doc/snapshot')
     expect(await res.json()).toEqual({ hit: 'snapshot' })
   })
 
   it('rejects an invalid path segment with 400, not a match failure', async () => {
-    const res = await appWith('exists').request('/api/w/ws1/document/has%20space/exists')
+    const res = await appWith('client-count').request(
+      '/api/w/ws1/document/has%20space/client-count',
+    )
     expect(res.status).toBe(400)
   })
 
   it('does not swallow a bare action with no document path', async () => {
-    const res = await appWith('exists').request('/api/w/ws1/document/exists')
+    const res = await appWith('client-count').request('/api/w/ws1/document/client-count')
     expect(res.status).toBe(404)
   })
 })

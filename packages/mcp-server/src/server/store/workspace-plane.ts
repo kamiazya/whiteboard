@@ -38,6 +38,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { getDoc, openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /**
@@ -48,7 +49,14 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  * changes.
  */
 export class WorkspaceRoutedDocumentStore implements DocumentStore {
-  constructor(private readonly inner: DocumentStore) {}
+  /**
+   * `scope` is the data directory whose live workspace documents this routes
+   * through; `inner` is expected to be over the same one.
+   */
+  constructor(
+    private readonly inner: DocumentStore,
+    private readonly scope: StoreScope = globalStoreScope,
+  ) {}
 
   /**
    * The tree entry for a document ref, resolved through the ref's OWN
@@ -60,7 +68,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
     workspaceId: string
     documentId: string
   }): Promise<{ path: string } | null> {
-    const workspaceDoc = await openWorkspaceDocIfStored(docRef.workspaceId)
+    const workspaceDoc = await openWorkspaceDocIfStored(docRef.workspaceId, this.scope)
     if (workspaceDoc === null) return null
     return resolveWorkspaceDocumentById(workspaceDoc, docRef.documentId)
   }
@@ -74,7 +82,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // round-trips through one lineage and its save is a real CRDT
         // merge (tombstones included) instead of a value diff against a
         // stranger's history.
-        const doc = await getDoc(input.docRef.workspaceId, entry.path)
+        const doc = await getDoc(input.docRef.workspaceId, entry.path, this.scope)
         const bytes = new Uint8Array(doc.export({ mode: 'snapshot' }))
         const { manifest, chunks } = chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
         return {
@@ -116,7 +124,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
       // the lock is re-entrant per async chain and nothing nests the
       // two the other way around anymore.
       const wrote = await withWorkspaceWriteLock(workspaceId, async () => {
-        const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+        const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, this.scope)
         if (workspaceDoc === null) return false
         const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
         // A document the tree does not hold has no path here — the create
@@ -133,10 +141,10 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // with it (import is a CRDT merge; ops the projection already
         // has are no-ops) instead of value-diffing the other writer's
         // edit back out.
-        const live = await getDoc(workspaceId, entry.path)
+        const live = await getDoc(workspaceId, entry.path, this.scope)
         live.import(doc.export({ mode: 'update' }))
         if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
-        await saveWorkspaceDoc(workspaceId, workspaceDoc)
+        await saveWorkspaceDoc(workspaceId, workspaceDoc, this.scope)
         return true
       })
       if (wrote) return
@@ -170,7 +178,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // record would answer null here, silently blanking the whole
         // corpus. The stamp is per-process (a re-projection mints a new
         // lineage), which can only over-invalidate, never under.
-        const doc = await getDoc(input.docRef.workspaceId, entry.path)
+        const doc = await getDoc(input.docRef.workspaceId, entry.path, this.scope)
         return { frontier: new Uint8Array(doc.oplogVersion().encode()) }
       }
     }

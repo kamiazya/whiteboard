@@ -3,8 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Kysely } from 'kysely'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DatabaseSchema } from '../schema.js'
-import { openMigrationHarness } from '../test-helpers.js'
+import { type AnyTables, openMigrationHarness } from '../test-helpers.js'
 import { migration as migration0001 } from './0001-init.js'
 import { migration as migration0002 } from './0002-canvases-last-compacted-at.js'
 import { migration as migration0003 } from './0003-canvas-doc-store.js'
@@ -22,8 +21,8 @@ const { migration } = await import('./0008-ulid-legacy-canvas-ids.js')
 
 const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 
-async function createMemoryDb(): Promise<Kysely<DatabaseSchema>> {
-  const { db } = await openMigrationHarness<DatabaseSchema>()
+async function createMemoryDb(): Promise<Kysely<AnyTables>> {
+  const { db } = await openMigrationHarness()
   await migration0001.up(db as unknown as Kysely<unknown>)
   await migration0002.up(db as unknown as Kysely<unknown>)
   await migration0003.up(db as unknown as Kysely<unknown>)
@@ -31,7 +30,7 @@ async function createMemoryDb(): Promise<Kysely<DatabaseSchema>> {
   return db
 }
 
-async function seed(db: Kysely<DatabaseSchema>, id: string, slug: string) {
+async function seed(db: Kysely<AnyTables>, id: string, slug: string) {
   await db
     .insertInto('workspaces')
     .values({ id: 'ws-1', createdAt: 0, updatedAt: 0 })

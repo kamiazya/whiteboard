@@ -16,6 +16,7 @@ import {
   saveWorkspaceDoc,
   workspaceExists,
 } from './document-store.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /**
@@ -27,27 +28,27 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  * path with its own `ConflictError`, and the seam promises ports'
  * `DocumentPathTakenError` — the one class server-core can name.
  */
-export function liveDocuments(): LiveDocuments {
+export function liveDocuments(scope: StoreScope = globalStoreScope): LiveDocuments {
   return {
-    get: getDoc,
+    get: (workspaceId, path) => getDoc(workspaceId, path, scope),
     async save(workspaceId, path, doc, options) {
       try {
-        await saveDocument(workspaceId, path, doc, options)
+        await saveDocument(workspaceId, path, doc, options, scope)
       } catch (err) {
         if (err instanceof ConflictError) throw new DocumentPathTakenError(workspaceId, path)
         throw err
       }
     },
-    exists: documentExists,
-    kind: getDocumentKind,
-    list: listDocuments,
+    exists: (workspaceId, path) => documentExists(workspaceId, path, scope),
+    kind: (workspaceId, path) => getDocumentKind(workspaceId, path, scope),
+    list: (workspaceId) => listDocuments(workspaceId, scope),
     async rename(workspaceId, oldPath, newPath) {
-      await renameDocumentPath(workspaceId, oldPath, newPath)
+      await renameDocumentPath(workspaceId, oldPath, newPath, scope)
     },
     async delete(workspaceId, path) {
-      await deleteDocument(workspaceId, path)
+      await deleteDocument(workspaceId, path, scope)
     },
-    evict: evictDoc,
+    evict: (workspaceId, path) => evictDoc(workspaceId, path, scope),
     withWriteLock: withWorkspaceWriteLock,
   }
 }
@@ -58,17 +59,17 @@ export function liveDocuments(): LiveDocuments {
  * subscriber fan-out lives inside `saveWorkspaceDoc`, which is what lets
  * the seam promise callers never broadcast separately.
  */
-export function workspaceDocuments(): WorkspaceDocuments {
+export function workspaceDocuments(scope: StoreScope = globalStoreScope): WorkspaceDocuments {
   return {
-    exists: workspaceExists,
-    get: getWorkspaceDoc,
+    exists: (workspaceId) => workspaceExists(workspaceId, scope),
+    get: (workspaceId) => getWorkspaceDoc(workspaceId, scope),
     async save(workspaceId, doc) {
       // saveWorkspaceDoc answers the update bytes it fanned out; the seam
       // promises only persistence, so the value is deliberately dropped.
-      await saveWorkspaceDoc(workspaceId, doc)
+      await saveWorkspaceDoc(workspaceId, doc, scope)
     },
-    evictProjections: evictWorkspaceDocs,
-    evict: evictWorkspaceDocCache,
+    evictProjections: (workspaceId) => evictWorkspaceDocs(workspaceId, scope),
+    evict: (workspaceId) => evictWorkspaceDocCache(workspaceId, scope),
     onUpdated: onWorkspaceDocUpdated,
   }
 }

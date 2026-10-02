@@ -5,7 +5,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 // invariant is about two loads racing, and a test that goes through
 // document-store has to stand up a database to reach it. Nothing is mocked,
 // so every import is static.
-import { clearCache, evictDoc, evictWorkspaceDocs, getOrLoad, peekDoc } from './doc-cache.js'
+import {
+  clearCache,
+  evictDoc,
+  evictWorkspaceDocs,
+  getCacheKeys,
+  getOrLoad,
+  peekDoc,
+} from './doc-cache.js'
+import { storeScope } from './store-scope.js'
 
 afterEach(() => {
   clearCache()
@@ -142,5 +150,40 @@ describe('getOrLoad is single-flight per key', () => {
     expect(await reload).toBe(fresh)
     expect(second.entered.length).toBe(1)
     expect(peekDoc('ws1', 'doc-a')).toBe(fresh)
+  })
+})
+
+describe('the cache is process-wide and a store is not', () => {
+  const [a, b] = [storeScope('/keeper-a'), storeScope('/keeper-b')]
+
+  it('serves each store its own document for the same workspace and path', async () => {
+    const [docA, docB] = [new LoroDoc(), new LoroDoc()]
+
+    expect(await getOrLoad('ws1', 'doc', async () => docA, a)).toBe(docA)
+    expect(await getOrLoad('ws1', 'doc', async () => docB, b)).toBe(docB)
+    expect(peekDoc('ws1', 'doc', a)).toBe(docA)
+    expect(peekDoc('ws1', 'doc', b)).toBe(docB)
+  })
+
+  it('evicts in the store it was asked about and leaves the other alone', async () => {
+    await getOrLoad('ws1', 'doc', async () => new LoroDoc(), a)
+    await getOrLoad('ws1', 'doc', async () => new LoroDoc(), b)
+
+    evictDoc('ws1', 'doc', a)
+    expect(peekDoc('ws1', 'doc', a)).toBeUndefined()
+    expect(peekDoc('ws1', 'doc', b)).toBeDefined()
+
+    await getOrLoad('ws1', 'doc', async () => new LoroDoc(), a)
+    evictWorkspaceDocs('ws1', b)
+    expect(peekDoc('ws1', 'doc', b)).toBeUndefined()
+    expect(peekDoc('ws1', 'doc', a)).toBeDefined()
+  })
+
+  it('lists one store keys as workspace and path, without the others', async () => {
+    await getOrLoad('ws1', 'one', async () => new LoroDoc(), a)
+    await getOrLoad('ws2', 'two', async () => new LoroDoc(), b)
+
+    expect(getCacheKeys(a)).toEqual(['ws1/one'])
+    expect(getCacheKeys(b)).toEqual(['ws2/two'])
   })
 })

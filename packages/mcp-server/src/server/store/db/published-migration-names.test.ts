@@ -18,7 +18,7 @@ import { PUBLISHED_MIGRATION_NAMES } from './published-migration-names.js'
 describe('published migration names manifest', () => {
   it('matches the runtime migration provider exactly', () => {
     const providerNames = Object.keys(migrations).sort()
-    const manifestNames = [...PUBLISHED_MIGRATION_NAMES].sort()
+    const manifestNames: string[] = [...PUBLISHED_MIGRATION_NAMES].sort()
 
     const addedInCode = providerNames.filter((n) => !manifestNames.includes(n))
     const removedFromCode = manifestNames.filter((n) => !providerNames.includes(n))

@@ -6,7 +6,7 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testDataLayout, withTempDataDir } from '../_test-helpers.js'
 import type { AutoVersionTrigger } from './auto-version.js'
 
 const tmp = withTempDataDir('whiteboard-agent-checkpoint-')
@@ -41,6 +41,7 @@ describe('an agent-only workspace', () => {
   it('gets a checkpoint at the pause, which lets compaction proceed past no-versions', async () => {
     let trigger: AutoVersionTrigger | undefined
     createDocumentRouter({
+      dataLayout: testDataLayout(),
       serverDeps: deps,
       // Long enough that only the flush below can take the checkpoint.
       autoVersionQuietMs: 60 * 60_000,

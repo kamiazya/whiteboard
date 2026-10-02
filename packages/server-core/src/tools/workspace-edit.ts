@@ -214,7 +214,7 @@ interface WorkspaceEditContext {
   readonly set: ReturnType<typeof createDocumentSetTool>
   /**
    * The workspace ops 1..n address, which op 0 may have MINTED — see the
-   * note at `applyOps`. A handler that changes it says so by returning it.
+   * note in `execute`'s loop. A handler that changes it says so by returning it.
    */
   readonly workspaceId: string
   readonly actor: WorkspaceEditInput['actor']

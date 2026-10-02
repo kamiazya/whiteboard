@@ -86,7 +86,7 @@ function registerFonts(): void {
 // When no ext-apps host is embedding this document (e.g. the widget opened
 // directly in a browser, or the widget-smoke harness), `app.connect()`
 // never resolves because no PostMessageTransport peer answers on the other
-// end — `mountFromHost` races that against `hasHostContext` timeout below
+// end — `mountFromHost` races that against `HOST_CONNECT_TIMEOUT_MS` below
 // so bootstrap always falls back to mountCanvasViewer's own embedded-scene
 // slot instead of hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000

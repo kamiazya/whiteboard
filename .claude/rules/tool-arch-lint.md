@@ -213,11 +213,23 @@ get theirs from `routes/_test-helpers.ts`'s `resolveTestServerDeps`. The one
 exemption is the stdio root (`server/mcp/index.ts`), listed by name and
 checked from both sides: it must keep importing `di/`, or the entry is stale.
 
-## `adapter-mechanic-check.ts` and its three lists
+## `adapter-mechanic-check.ts` and its lists
+
+**The finder reads import specifiers from the AST** (`collectRelativeImportEdges`,
+the walk every other import scan uses), not `from '...'` text. The text match
+missed a dynamic `import()` and a side-effect `import '...'` and read a
+commented-out import as an edge, and it disagreed with
+`adapter-di-import-check.test.ts` about the same trees. Type-only imports still
+count: an adapter holding a store's TYPE is the same coupling.
 
 **What counts as a mechanic is wider than `store/`**: a `security/*-store` (the
 people, session, key and invitation rows), anything under the daemon's own
-`daemon/` directory, and `tenant/data-layout`. Their edges are spelled with the
+`daemon/` directory, `tenant/data-layout`, and the `export/` directory.
+`export/` is the keeper rendering a stored document and keeping fonts:
+`headless-export` reads the document through the store's module-level handle and
+the font modules join the data directory, so an operation welded to storage, the
+shape ADR-0018 names. It is matched whole, so a new module there is judged; a
+pure renderer an adapter needs goes in `MECHANICS_NOT_SCANNED`. Their edges are spelled with the
 directory (`security/member-profile-store`, `daemon/log-rotation`,
 `tenant/data-layout`) so they cannot be read as a same-named `store/` module.
 Policy beside them (`bearer-token`, `credential-resolver`, the tenant id) is
@@ -233,6 +245,19 @@ widened, all under `mcp/`. The depth is unbounded on purpose: `store/db/` is
 how deep the tree happens to go today, not a property of it, and a matcher
 enumerating the depths it has seen is the same blind spot one directory
 further down.
+
+**`ADAPTER_HELPER_FILES` names top-level `server/*.ts` helpers scanned as
+adapters.** A route importing a helper that imports `store/` shows no edge, so
+the reach hides behind every caller: `workspace-handle.ts` serves nine routes
+through `workspaceRegistry()`. It is classified as an adapter, not a mechanic —
+what it holds is translation (the 400 for a malformed address, the per-request
+memo) with one registry read inside, and a mechanic classification would ledger
+nine routes for one debt. The list is NAMED, not discovered, and that is a known
+blind spot: following every `server/*.ts` an adapter imports also reaches
+`shared-background-work.ts`, whose edges are composition-root wiring, and a new
+helper that reaches a mechanic stays invisible until someone lists it. Guarded
+from one side: each entry must exist and be imported by an adapter. Deeper hops
+(a helper's helper, a re-export barrel) are not followed either.
 
 **`ADAPTERS_REACHING_MECHANICS`** records the edges that exist today.
 
@@ -269,6 +294,27 @@ exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
 
+## `route-portability.test.ts`: which routes could leave Node
+
+Classifies every non-test file under `mcp-server/src/server/routes/**` as
+`node-bound` (a Node builtin, a Node-only package, inversify, a `store/`,
+`daemon/`, `di/` or `export/` module, a `security/*-store`, the data layout,
+the stdio root, or anything `scanSourceForBoundaryViolations` flags except
+loro-crdt) or `portable`. The portable files that sit in `mcp-server` are a
+ledger held from both sides with a length pinned by equality, so it can only
+fall: a new portable route fails as unlisted, a listed route that gained Node
+(or was lifted into `server-core`) fails as stale. It exists because ADR-0052
+assumed `createServer(deps)` held the keeper protocol and it holds `/api/v1`
+only; whether to lift the portable routes is that ADR's open decision, and the
+scan states the count without deciding anything.
+
+**Direct imports only**: a portable route still reaches `../log.js`,
+the security gates and `workspace-handle.ts` (its registry read is a ledgered
+`adapter-mechanic-check` edge), so the number is the lower bound on the work. It
+owns its own matcher on purpose and shares nothing with the mechanic check, so
+each can fail alone. `NODE_ONLY_PACKAGES` is a short list; a Node-only package
+missing from it shows up as an unlisted portable route.
+
 ## `adapter-process-global-check.ts`: an adapter is handed its data layout
 
 A sibling of the mechanic check over the same adapter trees (`server/routes/**`,
@@ -289,8 +335,25 @@ Comments and string bodies are stripped before matching (`source-scan.ts`'s
 ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
 from both sides, size pinned, every entry carrying its reason. It holds one
 entry, `mcp/index.ts`, the stdio composition root that resolves the data dir
-once before booting. The store layer's own reads (`store/**`) are not
-adapters and are not in scope.
+once before booting. `findCompositionGlobalReads` covers the layers that BUILD
+stores: `di/**` (also banning `globalStoreScope`, the stores' default) and
+`server/store/**`. Its both-sided, size-pinned ledger holds the reads that are
+each the one place allowed to choose the data dir or tenant; a new
+`getDataDir()` in either tree fails until it takes the `StoreScope` instead.
+
+## `no-test-utils-in-production.test.ts` and `blob-identity-one-place.test.ts`
+
+No non-test, non-bench, non-`_test-*`, non-`test-utils/` file under
+`packages/*/src`, `apps/*/src` or `tools/*/src` imports a specifier with a
+`test-utils` segment: those barrels re-export vitest-importing suites, and the
+built daemon bundle once carried `class InMemoryDocumentStore` because the
+production container defaulted to the in-memory module. Two allowlist entries,
+each with a reason, guarded from both sides.
+
+`blob-identity-one-place.test.ts` keeps where a blob digest lives
+(`tenant/data-layout.ts`), how a ref is keyed (`ports`' `blobRefKey`) and
+sha-256-to-hex (`shared/sha256.ts`) to one spelling each in non-test
+mcp-server source; a test that hand-spells a path is the oracle and is exempt.
 
 ## The spatial-codec registry scan
 

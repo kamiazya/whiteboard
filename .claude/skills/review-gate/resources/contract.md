@@ -33,7 +33,7 @@ Check:
 
 Check:
 - If this diff adds or changes an MCP tool's `outputSchema`, was
-  `pnpm smoke:e2e` (`scripts/smoke/mcp-e2e-smoke.mjs`) extended to call it at
+  `pnpm smoke:e2e` (`packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs`) extended to call it at
   least once? The MCP SDK validates `structuredContent` against
   `outputSchema` at runtime — the smoke is the last line of defense against
   drift the type system can't see.

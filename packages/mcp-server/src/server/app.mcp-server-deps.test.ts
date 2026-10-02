@@ -5,12 +5,14 @@
 // built-but-unwired class `di/facet-registry-wiring.test.ts` describes, one
 // transport over. This pins that the deps a root composed are the deps a
 // tool answers with, over the real endpoint rather than a hand-called tool.
+
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import { visualPlugin } from '@kamiazya/whiteboard-plugin-visual'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-app-mcp-deps-')
@@ -51,7 +53,9 @@ describe('/mcp serves the ServerDeps the root composed', () => {
     ['a legacy-era client', undefined],
     ['a modern-pinned client', { versionNegotiation: { mode: { pin: '2026-07-28' } } }],
   ] as const)('lists a stencil only the root registered, for %s', async (_era, clientOptions) => {
-    const serverDeps = resolveServerDeps(createContainer(), { plugins: [visualPlugin, pack] })
+    const serverDeps = resolveServerDeps(createContainer(storeMemoryModule), {
+      plugins: [visualPlugin, pack],
+    })
     const app = createApp({
       authMode: 'local-daemon',
       token: 'secret',
@@ -74,7 +78,7 @@ describe('/mcp serves the ServerDeps the root composed', () => {
     })
     const client = new Client({ name: 'mcp-deps-test', version: '1.0.0' }, clientOptions)
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const headers = new Headers(init?.headers)
         headers.set('Authorization', 'Bearer secret')
         headers.set('Origin', 'http://127.0.0.1:6274')

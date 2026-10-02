@@ -6,16 +6,14 @@ import {
   setWorkspaceDocumentName,
   setWorkspacePinned,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { getDataDir } from '../config.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
-import { getDb } from './db/index.js'
-import { prepareDataDir } from './db/prepare.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import {
   openWorkspaceDocIfStored,
   requireDocumentAtPath,
   saveWorkspaceDoc,
 } from './document-store.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 export type { WorkspaceNames }
@@ -29,14 +27,12 @@ export type { WorkspaceNames }
 // previous filesystem implementation also returned an empty state when
 // .names.json was missing, so the contract is unchanged for callers.
 
-async function dbReady() {
-  await prepareDataDir(getDataDir())
-  return getDb(getDataDir())
-}
-
-export async function loadWorkspaceNames(workspaceId: string): Promise<WorkspaceNames> {
+export async function loadWorkspaceNames(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
-  const db = await dbReady()
+  const db = await scope.db()
   // The WORKSPACE's own name stays in the workspaces table — it names the
   // container, not any document, and the registry row is its home.
   const wsRow = await db
@@ -49,7 +45,7 @@ export async function loadWorkspaceNames(workspaceId: string): Promise<Workspace
   // pre-fold row-only state into it before this can be asked.
   const documents: Record<string, string> = {}
   const pinned: string[] = []
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
   if (workspaceDoc !== null) {
     const entries = readWorkspaceDocuments(workspaceDoc)
     const pathById = new Map<string, string>()
@@ -69,10 +65,14 @@ export async function loadWorkspaceNames(workspaceId: string): Promise<Workspace
   return out
 }
 
-export async function setWorkspaceName(workspaceId: string, name: string): Promise<WorkspaceNames> {
+export async function setWorkspaceName(
+  workspaceId: string,
+  name: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
   const trimmed = name.trim()
-  const db = await dbReady()
+  const db = await scope.db()
   await upsertWorkspaceRow(db, workspaceId)
   const now = Date.now()
   await db
@@ -83,33 +83,34 @@ export async function setWorkspaceName(workspaceId: string, name: string): Promi
     })
     .where('id', '=', workspaceId)
     .execute()
-  return loadWorkspaceNames(workspaceId)
+  return loadWorkspaceNames(workspaceId, scope)
 }
 
 export async function setDocumentDisplayName(
   workspaceId: string,
   path: string,
   name: string,
+  scope: StoreScope = globalStoreScope,
 ): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const trimmed = name.trim()
-  const documentId = await requireDocumentAtPath(workspaceId, path)
+  const documentId = await requireDocumentAtPath(workspaceId, path, scope)
   // The workspace record is the only home this write has (S7): the rows are
   // no longer maintained, so a failure here surfaces to the caller. Under
   // the workspace write lock like every other read-modify-write of the
   // record — the open and the save must see no concurrent tree write.
   await withWorkspaceWriteLock(workspaceId, async () => {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
     if (workspaceDoc !== null && resolveWorkspaceDocument(workspaceDoc, path) !== null) {
       setWorkspaceDocumentName(workspaceDoc, {
         documentId,
         ...(trimmed.length > 0 ? { name: trimmed } : {}),
       })
-      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+      await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
     }
   })
-  return loadWorkspaceNames(workspaceId)
+  return loadWorkspaceNames(workspaceId, scope)
 }
 
 // Pin / unpin a document. Idempotent: re-pinning keeps the position it
@@ -118,19 +119,20 @@ export async function setDocumentPinned(
   workspaceId: string,
   path: string,
   pinned: boolean,
+  scope: StoreScope = globalStoreScope,
 ): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const documentId = await requireDocumentAtPath(workspaceId, path)
+  const documentId = await requireDocumentAtPath(workspaceId, path, scope)
   // The workspace record's pinned list is the only home this write has
   // (S7): the rows are no longer maintained, so a failure surfaces. Locked
   // for the same reason as setDocumentDisplayName above.
   await withWorkspaceWriteLock(workspaceId, async () => {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
     if (workspaceDoc !== null) {
       setWorkspacePinned(workspaceDoc, documentId, pinned)
-      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+      await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
     }
   })
-  return loadWorkspaceNames(workspaceId)
+  return loadWorkspaceNames(workspaceId, scope)
 }

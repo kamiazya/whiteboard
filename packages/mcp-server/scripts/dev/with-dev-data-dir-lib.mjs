@@ -43,6 +43,22 @@ export function resolveRepoRootFromGit(cwd) {
 }
 
 /**
+ * The checkout a Claude Code hook is about. The hook inherits the session's
+ * working directory, which may be a package directory — or, for a session
+ * started elsewhere, not this repository at all — while `CLAUDE_PROJECT_DIR`
+ * always names the project the session was opened on. Either is resolved
+ * through git, so a subdirectory answers with its checkout (worktree) root.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {string} cwd
+ * @returns {string}
+ */
+export function resolveHookProjectRoot(env, cwd) {
+  const projectDir = env.CLAUDE_PROJECT_DIR
+  return resolveRepoRootFromGit(projectDir ? projectDir : cwd)
+}
+
+/**
  * Returns a new env object with WHITEBOARD_DATA_DIR pointed at
  * <repoRoot>/.dev-data, unless the caller already set it — an explicit
  * env override always wins over the repo-local dev default.

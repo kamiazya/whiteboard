@@ -31,6 +31,8 @@ pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chrom
 
 This installs Playwright's own Chromium, which is what a local browser-mode run uses. **CI does not**: every browser job in `.github/workflows/ci.yml` sets `WHITEBOARD_CHROME_PATH=/usr/bin/google-chrome-stable`, so CI drives the runner's system Chrome. Local and CI therefore execute browser tests in *different* browser builds — worth remembering when a browser test disagrees between them, since the browser itself is one of the variables. Set `WHITEBOARD_CHROME_PATH` locally to match CI when you are chasing exactly that kind of divergence.
 
+A first `pnpm install` in a fresh checkout prints two `ENOENT` warnings for `dist/cli/index.js`: the `whiteboard` bin of `@kamiazya/whiteboard-mcp` points at a build output that does not exist yet. They are harmless and go away after `pnpm build`; `node .claude/scripts/new-worktree.mjs` seeds `dist` from the main checkout first, so a worktree does not print them.
+
 ## Recommended: develop against the dev daemon's `/mcp`
 
 For active MCP development, connect Claude Code or Codex to the dev daemon's `/mcp` endpoint through the development stdio proxy rather than wiring the client to the packaged `stdio` entry directly. A `tsx watch` daemon restart does not force the MCP client to reconnect: the proxy retries each request across it.
@@ -204,7 +206,7 @@ Two layers close that gap:
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket)
 pnpm mcp             # MCP server only (tsx)
 pnpm build           # dist/server (apps/web build copies dist/web-app in via its postbuild step)
-pnpm test            # Vitest (all projects)
+pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke
 pnpm smoke:e2e       # version / route / no_client wiring smoke
@@ -219,15 +221,18 @@ pnpm eval:tool-surface # LLM-driven tool-surface eval on a seeded fixture (uses 
 pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 ```
 
-Default regression triple after a change:
+Default local pass after a change. CI runs the full matrix on every push, so a local full run is the same work twice; run the area you touched, then the gates:
 
 ```bash
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower)
-pnpm typecheck   # tsc --noEmit in every workspace package that defines a typecheck script
-pnpm smoke:e2e   # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
+pnpm test --project <area>   # the nearest project(s) for what you touched; CONTRIBUTING.md's table names them
+pnpm typecheck               # tsc --noEmit in every workspace package that defines a typecheck script (mcp-server also checks its test files, which its build config excludes: tsconfig.test.json)
+pnpm smoke:e2e               # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
+pnpm check:local             # every gate CI's check job runs
+pnpm test:browser            # when the change touches real-browser behavior
+pnpm test                    # optional: every project at once, not required; full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower)
 ```
 
-For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-eight configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, extension node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all four browser projects (canvas-render-browser, canvas-viewer-browser, web-browser, web-browser-window-state)):
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-eight configured in root `vitest.config.ts`; the table in [CONTRIBUTING.md](../../CONTRIBUTING.md) lists what each project covers, so everything it does not cover is not run):
 
 ```bash
 pnpm test --project mcp-node

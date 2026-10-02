@@ -208,7 +208,7 @@ export interface ServerDeps {
    * Four methods, not the eleven the daemon's own version store has. A
    * seam states what the operation needs; the implementation is free to be
    * larger, and structural typing lets it satisfy this without a wrapper.
-   * Thumbnails, pruning and branch rewriting are not read by any operation
+   * Thumbnails and pruning are not read by any operation
    * here, and publishing them would make this a second name for a mechanic
    * rather than a seam.
    *

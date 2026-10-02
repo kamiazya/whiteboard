@@ -42,7 +42,7 @@ that run is never the isolated one.
 - `Re-optimizing dependencies` anywhere in the log means the tree moved under the suite.
   Re-run on a quiet tree and believe only the second result.
 - The symptom → verdict index is `steward`'s `reference/failure-modes.md`; the measurements
-  behind each verdict are `integrator-flow.md`'s CI-flakes section.
+  behind each verdict are `steward`'s `reference/flake-shapes.md`.
 - Before publishing a cause, a "not a regression", or a by-hand verification: the
   `diagnosis-evidence` skill — choose an observation that could REFUTE the claim.
 

@@ -9,6 +9,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { IDP, PUBLIC_URL, serverModeSignIn } from './_test-server-mode-harness.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
@@ -48,7 +49,6 @@ interface Sample {
 // new action cannot be added without saying here how it is requested.
 const DOCUMENT_ACTION_METHODS: Record<DocumentApiAction, Method> = {
   snapshot: 'GET',
-  exists: 'GET',
   update: 'POST',
   export: 'POST',
   'export-svg': 'POST',
@@ -172,7 +172,7 @@ describe('daemon client URLs reach a route', () => {
     const app = createApp({
       authMode: 'local-daemon',
       token: TOKEN,
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
       touch: vi.fn(),
       getStatus: () => ({
@@ -230,7 +230,7 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
       authMode: 'server-mode',
       publicBaseUrl: PUBLIC_URL,
       allowedOrigins: [PUBLIC_URL],
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
       authStrategy: () => ({ ok: false as const, status: 401 as const, error: 'denied' }),
       touch: () => {},

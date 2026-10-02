@@ -111,7 +111,7 @@ export async function createIsolatedDb(
 // A table-agnostic handle: a migration test reads rows in the shape a schema
 // had BEFORE the migration under test, which `DatabaseSchema` (the head) no
 // longer describes.
-type AnyTables = Record<string, Record<string, unknown>>
+export type AnyTables = Record<string, Record<string, unknown>>
 
 /** The migrator over the real migration log, for a database a test already holds. */
 export function migratorFor<DB>(db: Kysely<DB>): Migrator {

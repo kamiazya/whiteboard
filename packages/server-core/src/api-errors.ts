@@ -19,11 +19,10 @@ import { z } from 'zod'
  *
  * - `{ title }` — RFC 9457-flavoured Problem Details, used by the canvas
  *   CRUD routes. `title` is static, display-intended copy.
- * - `{ error, message? }` — the code+reason family used everywhere else
- *   (branches, runtime, validation). `message`, when present
- *   beside an `error` code, is daemon-authored display copy: the branch
- *   routes put the human-readable reason ("A variation named X already
- *   exists") there and nowhere else.
+ * - `{ error, message? }` — the code+reason family used everywhere else.
+ *   `message`, when present beside an `error` code, is daemon-authored
+ *   display copy: a route puts the human-readable reason there and nowhere
+ *   else.
  *
  * Each arm REQUIRES its discriminating field, so an out-of-contract body
  * fails to parse instead of vacuously succeeding — the previous
@@ -46,8 +45,8 @@ export const apiErrorCodeSchema = z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+
 // NOT strict, and the asymmetry is the RFC's: 9457 defines `type`,
 // `status`, `detail` and `instance` beside `title`, and explicitly allows
 // extension members. Refusing them would discard the title of a real
-// Problem Details body — measured, `{type, title, status}` from the branch
-// routes stopped reaching the UI's error copy the moment this arm was closed.
+// Problem Details body — measured, a `{type, title, status}` body
+// stopped reaching the UI's error copy the moment this arm was closed.
 const problemDetailsArm = z.object({ title: z.string().min(1) })
 
 const codeArmShape = {
@@ -93,7 +92,7 @@ export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>
  * The human-readable reason carried by an error body, or `undefined` when
  * the body carries none (a bare `{ error: code }`, or something outside
  * the contract). The single reader every client-side error surface goes
- * through — three hand-rolled readers is how the branch routes' reasons
+ * through — three hand-rolled readers is how a route's reasons
  * got discarded for months.
  */
 export function apiErrorReason(body: unknown): string | undefined {

@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { oidcProviders } from './_test-helpers.js'
 import { ALL_AUTH_SCOPES } from './auth-strategy.js'
 import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
@@ -42,18 +43,20 @@ function strategyFor(issuer: string): AsyncAuthStrategy {
   }
 }
 
-const providers = signInConfigSchema.parse({
-  providers: [
-    {
-      id: 'corp',
-      kind: 'oidc',
-      issuer: ISSUER,
-      clientId: 'wb-web',
-      clientSecret: { env: 'CORP_SECRET' },
-      admission: { createAccounts: true, bearerClients: ['claude-code'] },
-    },
-  ],
-}).providers
+const providers = oidcProviders(
+  signInConfigSchema.parse({
+    providers: [
+      {
+        id: 'corp',
+        kind: 'oidc',
+        issuer: ISSUER,
+        clientId: 'wb-web',
+        clientSecret: { env: 'CORP_SECRET' },
+        admission: { createAccounts: true, bearerClients: ['claude-code'] },
+      },
+    ],
+  }).providers,
+)
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>

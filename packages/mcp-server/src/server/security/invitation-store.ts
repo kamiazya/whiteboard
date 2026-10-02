@@ -11,9 +11,10 @@
  * WHERE clause), so two concurrent redemptions of one link cannot both win:
  * the database answers which update touched the row.
  */
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { sha256Hex } from '../../shared/sha256.js'
 import type { TenantScoped } from '../store/db/tenant-database.js'
 
 const invitationSchema = z
@@ -56,10 +57,6 @@ export interface InvitationStore {
 
 const emailSchema = z.string().email()
 
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
-}
-
 async function insert(
   db: TenantScoped,
   input: IssueInput,
@@ -89,7 +86,7 @@ async function openLink(db: TenantScoped, token: string, now: number) {
   const row = await db
     .selectFrom('invitations')
     .selectAll()
-    .where('tokenHash', '=', hashToken(token))
+    .where('tokenHash', '=', sha256Hex(token))
     .executeTakeFirst()
   if (row === undefined) return { ok: false as const, reason: 'unknown' as const }
   if (row.redeemedAt !== null) return { ok: false as const, reason: 'redeemed' as const }
@@ -134,7 +131,7 @@ export function createInvitationStore(db: TenantScoped): InvitationStore {
   return {
     async createLink(input) {
       const token = randomBytes(32).toString('base64url')
-      return { token, invitation: await insert(db, input, { tokenHash: hashToken(token) }) }
+      return { token, invitation: await insert(db, input, { tokenHash: sha256Hex(token) }) }
     },
     // async, so a malformed address rejects like every other failure here
     // rather than throwing before a promise exists.

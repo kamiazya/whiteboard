@@ -29,15 +29,15 @@ const DOC_REFS: readonly DocRef[] = [
 type SaveSnapshotOp = {
   type: 'saveSnapshot'
   docRefIndex: number
-  chunkByteArrays: Uint8Array[]
-  frontier: Uint8Array
+  chunkByteArrays: Uint8Array<ArrayBuffer>[]
+  frontier: Uint8Array<ArrayBuffer>
 }
 
 type AppendDeltasOp = {
   type: 'appendDeltas'
   docRefIndex: number
-  updates: Uint8Array[]
-  newFrontier: Uint8Array
+  updates: Uint8Array<ArrayBuffer>[]
+  newFrontier: Uint8Array<ArrayBuffer>
 }
 
 type DeleteDocOp = {
@@ -47,7 +47,7 @@ type DeleteDocOp = {
 
 type Op = SaveSnapshotOp | AppendDeltasOp | DeleteDocOp
 
-function buildSnapshotArgs(chunkByteArrays: Uint8Array[]): {
+function buildSnapshotArgs(chunkByteArrays: Uint8Array<ArrayBuffer>[]): {
   manifest: SnapshotManifest
   chunks: SnapshotChunk[]
 } {

@@ -3,8 +3,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
+import type { ServerBackupOutcome } from './backup-pass.js'
 import { createBackupLease, createBackupScheduler } from './backup-scheduler.js'
 import { createIsolatedDb } from './db/test-helpers.js'
+
+// The scheduler only reads the outcome's kind; the result is what a real pass
+// reports, so the double stays assignable to the port it stands in for.
+const BACKED_UP: ServerBackupOutcome = {
+  kind: 'ok',
+  result: {
+    schemaVersion: 2,
+    ok: true,
+    operation: 'backup',
+    stores: { database: { captured: true }, blobs: { captured: true } },
+  },
+}
 
 let root: string
 beforeEach(async () => {
@@ -31,7 +44,7 @@ describe('createBackupScheduler', () => {
   it('does nothing at all when no destination is configured', async () => {
     const capture = captureLogsForTests()
     try {
-      const runBackup = vi.fn(async () => ({ kind: 'ok' as const }))
+      const runBackup = vi.fn(async () => BACKED_UP)
       const scheduler = createBackupScheduler({
         dataDir: join(root, 'data'),
         backupDir: null,
@@ -67,7 +80,7 @@ describe('createBackupScheduler', () => {
         backupDir: join(root, 'backups'),
         schedule: { expression: '0 3 * * *', timezone: 'Asia/Tokyo' },
         now: () => new Date('2026-03-04T05:06:07.000Z'),
-        runBackup: async () => ({ kind: 'ok' as const }),
+        runBackup: async () => BACKED_UP,
       })
       scheduler.start()
       await scheduler.stop()
@@ -99,7 +112,7 @@ describe('createBackupScheduler', () => {
       runBackup: async (_dataDir, outputDir) => {
         taken.push(outputDir)
         await mkdir(outputDir, { recursive: true })
-        return { kind: 'ok' as const }
+        return BACKED_UP
       },
     })
     await scheduler.runOnceForTests()
@@ -134,7 +147,7 @@ describe('createBackupScheduler', () => {
       now: () => new Date('2026-01-04T00:00:00.000Z'),
       runBackup: async (_dataDir, outputDir) => {
         await mkdir(outputDir, { recursive: true })
-        return { kind: 'ok' as const }
+        return BACKED_UP
       },
     })
     await scheduler.runOnceForTests()
@@ -200,7 +213,7 @@ describe('createBackupScheduler', () => {
       now: () => new Date('2026-01-02T00:00:00.000Z'),
       runBackup: async (_dataDir, outputDir) => {
         await mkdir(outputDir, { recursive: true })
-        return { kind: 'ok' as const }
+        return BACKED_UP
       },
     })
     await scheduler.runOnceForTests()
@@ -224,7 +237,7 @@ describe('createBackupScheduler', () => {
         await mkdir(outputDir, { recursive: true })
         await new Promise((r) => setTimeout(r, 20))
         running -= 1
-        return { kind: 'ok' as const }
+        return BACKED_UP
       },
     })
 
@@ -256,7 +269,7 @@ describe('createBackupScheduler cron scheduling', () => {
       // Just after 3am, so the next fire is nearly a whole day away — which
       // an interval-based scheduler started now could not express.
       now: () => new Date('2026-03-04T03:00:01.000Z'),
-      runBackup: async () => ({ kind: 'ok' as const }),
+      runBackup: async () => BACKED_UP,
     })
 
     expect(scheduler.nextRunForTests()?.toISOString()).toBe('2026-03-05T03:00:00.000Z')
@@ -273,7 +286,7 @@ describe('createBackupScheduler cron scheduling', () => {
       backupDir: join(root, 'backups'),
       schedule: { expression: '0 3 * * *', timezone: 'Asia/Tokyo' },
       now: () => new Date('2026-03-04T18:30:00.000Z'),
-      runBackup: async () => ({ kind: 'ok' as const }),
+      runBackup: async () => BACKED_UP,
     })
 
     // 03:00 JST on the 5th is 18:00 UTC on the 4th.
@@ -287,7 +300,7 @@ describe('createBackupScheduler cron scheduling', () => {
    * wake early, notice the target is still ahead, re-arm.
    */
   it('re-arms instead of firing early when the next run is beyond the timer maximum', async () => {
-    const runBackup = vi.fn(async () => ({ kind: 'ok' as const }))
+    const runBackup = vi.fn(async () => BACKED_UP)
     let clock = new Date('2026-03-04T00:00:00.000Z')
     const scheduler = createBackupScheduler({
       dataDir: join(root, 'data'),
@@ -326,7 +339,7 @@ describe('createBackupScheduler leader lease', () => {
     const capture = captureLogsForTests()
     try {
       const backupDir = join(root, 'backups')
-      const runBackup = vi.fn(async () => ({ kind: 'ok' as const }))
+      const runBackup = vi.fn(async () => BACKED_UP)
       const scheduler = createBackupScheduler({
         dataDir: join(root, 'data'),
         backupDir,
@@ -362,7 +375,7 @@ describe('createBackupScheduler leader lease', () => {
       dataDir: join(root, 'data'),
       backupDir,
       keep: 1,
-      runBackup: async () => ({ kind: 'ok' as const }),
+      runBackup: async () => BACKED_UP,
       runExclusively: async () => ({ ok: false, reason: 'not-leader' }),
     })
     await scheduler.runOnceForTests()
@@ -383,7 +396,7 @@ describe('createBackupScheduler leader lease', () => {
   it('skips the pass when the lease cannot be reached', async () => {
     const capture = captureLogsForTests()
     try {
-      const runBackup = vi.fn(async () => ({ kind: 'ok' as const }))
+      const runBackup = vi.fn(async () => BACKED_UP)
       const scheduler = createBackupScheduler({
         dataDir: join(root, 'data'),
         backupDir: join(root, 'backups'),
@@ -426,7 +439,7 @@ describe('createBackupScheduler leader lease', () => {
             taken.push(holder)
             await mkdir(outputDir, { recursive: true })
             await new Promise((r) => setTimeout(r, 20))
-            return { kind: 'ok' as const }
+            return BACKED_UP
           },
         })
 
@@ -460,7 +473,7 @@ describe('createBackupScheduler leader lease', () => {
           runBackup: async (_dataDir, outputDir) => {
             taken.push(holder)
             await mkdir(outputDir, { recursive: true })
-            return { kind: 'ok' as const }
+            return BACKED_UP
           },
         })
 

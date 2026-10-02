@@ -79,6 +79,12 @@ know, because the reader who trips them is elsewhere:
   mechanics is its job. The existing edges are allowlisted AND their count is
   pinned by equality, so adding one fails until someone raises the ceiling
   deliberately. ADR-0018 is Accepted and carries the burn-down order.
+- **`createServer(deps)` mounts `/api/v1` and the MCP tools only.** The keeper
+  protocol the web app syncs through (`/api/sync/*`, workspace-document,
+  workspaces, trash, names, files) lives in `mcp-server/src/server/routes/`;
+  `route-portability.test.ts` counts which of those files could run off Node
+  (shrink-only), and ADR-0052's correction note records that lifting them is
+  an open decision.
 
 `apps/web`'s own source is policed by a separate enforcer beside this tool's
 scans (`tools/arch-lint/src/web-app-boundary.test.ts`), so "is this checked?"
@@ -101,58 +107,12 @@ path-scoped. Note: `./skills/` (product MCP skills) is unrelated to
 `.claude/skills/` (dev workflow skills).
 
 **Work the daemon does on its own is declared before it is armed.**
-`packages/mcp-server/src/server/background-work.ts` is the registry, and the
-composition roots start and stop everything through it. Adding a scheduler, a
-sweeper, a poller, or a dispatcher means editing that file and answering three
-questions the diff would otherwise never ask:
-
-- **who runs it** when several instances share one record — `leader-only`
-  (naming the lease) or `every-instance` (saying why that is right, since it
-  is also what a worker gets by accident);
-- **what it costs the serving loop** — `subprocess`, or `in-process` with a
-  `stallCeilingMs` **a test asserts on every run**, taken with
-  `shared/test-utils/loop-availability.ts` rather than by hand;
-- **what triggers it**.
-
-Both of the first two were got wrong on one worker, invisibly. The backup pass
-ran on every instance (N backups a night, and N retention passes each deleting
-from a set the others were changing) and inside the serving process, where
-`VACUUM INTO` blocks the event loop for its whole duration — 1242ms at a 103MB
-database, 4767ms at 421MB, and rising with the data. Nothing in the source says
-a call blocks: an `await` on a native binding reads exactly like an `await` on a
-socket. `snapshot-blocking.test.ts` pins that one so the decision that put a
-subprocess in the way fails loudly if the call ever stops blocking.
-
-A ceiling rather than a reading, because a reading goes stale in silence. The
-field first held `0` on three declarations, each with a date and no
-measurement behind it. Naming the source test in a `fixture` string was meant
-to fix that and did not: the workspace tail then declared 283ms while citing a
-test that measures 20-29ms — the number came from a scratch script at a larger
-fixture, and the citation was written from memory. **A number with a source
-named beside it is still unbacked if nothing reads the source.** So the
-declarations live in `background-work-costs.ts` where a test can import them,
-each loop-availability test asserts its own measurement stays under its
-ceiling, and `background-work-costs.test.ts` fails on a declared ceiling no
-test asserts — with an exemption list guarded from both sides, for the one
-worker (`idle-shutdown`) that compares two timestamps and has no call to
-measure. Larger hand-measured points stay in `fixture`, said plainly to be
-hand measurements: they are what a reader sizing a deployment needs and
-exactly what a test on a small fixture cannot check.
-
-The instrument itself is calibrated against known truths in
-`loop-availability.test.ts`, which is not ceremony — it was written, trusted
-for three declarations, and only calibrated after the fact, at which point
-`worstStallMs` turned out to report **0.3ms for a 200ms stall** whenever the
-stall ran to the end of the body.
-
-The registry is load-bearing rather than advisory — an undeclared worker does
-not typecheck, and `background-work.guard.test.ts` fails on a `.start()` in a
-composition root that goes around it. What it does NOT catch is a worker that
-arms itself at module load or from somewhere else; that is what this paragraph
-is for, and prose is the weaker rung on purpose. The registry earned its keep
-on the first read: `server-mode-http.ts` — the MULTI-INSTANCE root, the one the
-backup lease was built for — was starting no background work at all, so
-scheduled backups reached only the local daemon.
+`packages/mcp-server/src/server/background-work.ts` is the registry — who runs
+it, what it costs the serving loop, what triggers it — and an undeclared worker
+does not typecheck. The declared ceilings are `background-work-costs.ts`,
+measured by `shared/test-utils/loop-availability.ts` and held by
+`background-work.guard.test.ts`. The three questions and the measurements behind
+them are `package-mcp-server.md`.
 
 **A cross-package cycle is caught at the MANIFEST level, and there are none
 left.** `package-cycle-check.ts` reads every workspace manifest's
@@ -160,59 +120,28 @@ left.** `package-cycle-check.ts` reads every workspace manifest's
 inspects) and fails on any package loop not in `KNOWN_PACKAGE_CYCLES` —
 which is now EMPTY.
 
-It carried one entry: `plugin-visual` imported `canvas-render`'s scene-node
-vocabulary to build what `canvas-render` then used as its default, a
-source-level loop closed only by every import back being TYPE-ONLY. That
-property is invisible to a manifest, so it needed a hand guard, and measured,
-turning the import into a value import left the rest of arch-lint green.
+It carried one entry: a source-level loop between `plugin-visual` and `canvas-render` closed only by type-only imports, which no manifest can see. The dissolution landed as `packages/scene`; the history, with a correction, is `package-scene.md`. The guard did not retire with the cycle: `plugin-visual/src/renderer-independence.test.ts` pins that there is no import of the renderer AT ALL, type-only or otherwise.
 
-The dissolution this file predicted — a package below both holding the scene
-vocabulary, since it is a contract between the renderer and every plugin
-rather than the renderer's private type — landed as `packages/scene`. The
-second caller that made it worth doing was a plugin-contributed edge ROUTER.
 
-*Correction: the extraction's commit said a router "returns a scene node and
-so cannot be a type-only edge at all". The contract returns a ROUTE (points,
-and whether they curve) instead, since the renderer owns silhouettes,
-arrowheads, paint and ink for every edge. What made the extraction right was
-the second caller of the contract, and a loop no manifest could see that only
-a hand guard kept honest.*
+`lowlight` is a DEFAULT, not an opt-in: `layoutSpatialCanvas` supplies this
+package's own tokeniser the way it supplies codec's markdown parser, because
+every surface that lays a body out wants it. It shipped opt-in first, behind a
+subpath, and a step repeated at four call sites got missed — export drew every
+fence plain while the editor coloured it. `highlightCode` remains an option, so a
+caller can substitute a tokeniser or pass a no-op.
 
-The guard did not retire with the cycle; it got stronger. `plugin-visual/src/
-renderer-independence.test.ts` now pins that there is no import of the
-renderer AT ALL, type-only or otherwise.
-
-`lowlight` is a DEFAULT, not an opt-in. `layoutSpatialCanvas` supplies this
-package's own tokeniser the way it already supplies codec's markdown parser,
-because every surface that lays a markdown body out wants it — the editor,
-`canvas-viewer` (and the MCP Apps widget through it), and
-`server-core`/`mcp-server`'s export — and the one that forgets it does not
-fall back to the same picture, it draws code plain while the others colour it.
-
-It was shipped opt-in first, behind a subpath, and that is why this paragraph
-exists: an opt-in step in four call sites is a step that gets missed, and it
-was — wired at one, leaving export drawing every fence plain. `highlightCode`
-remains an option, so a caller can substitute a tokeniser or pass a no-op; only
-the direction of the default changed.
 
 **What a document points at is resolved in ONE place, and passed as a
-bundle.** `canvas-render/src/references/` holds what a keeper loads a
-reference into (`LoadedReference`), the one definition of what counts as one
-(`referenceTargets`), and the one builder of the four seams a layout reads
-(`referenceSeams`: `resolveAlias`/`resolveTitle`/`resolveEmbed`/
-`resolveReference`). A composition root supplies I/O and passes the bundle as
-`references`; it never writes a seam's body. Why: the layout is total, so a
-seam a root forgot never failed — the web preview drew a canvas behind
-`![[path]]` while `wb_scene_render` refused the document, all green.
-`tools/arch-lint`'s `reference-seams-check.test.ts` fails on a seam defined
-by hand outside that module (passing one along, `overlayReferences`, or
-handing the builder an alias table is fine). The bundle also has a DATA
-form, `ReferenceWire` / `referenceSeamsFromWire`, for the layout worker: a
-function cannot cross `postMessage`, so the graph and its tables cross,
-and both threads build the same seams from the same bytes. A keeper's wire
-can outgrow one canvas — the editor grows it for a body being drafted, so
-the overlay's preview resolves a link before the commit — and
-`referenceWireFor` cuts it to what a canvas can read before anything keys
-on it.
+bundle.** `canvas-render/src/references/` holds what a keeper loads a reference
+into (`LoadedReference`), the one definition of what counts as one
+(`referenceTargets`) and the one builder of the four seams a layout reads
+(`referenceSeams`). A composition root supplies I/O and passes the bundle as
+`references`; it never writes a seam's body — the layout is total, so a seam a
+root forgot never failed (the web preview drew a canvas behind `![[path]]` while
+`wb_scene_render` refused the document, all green). `tools/arch-lint`'s
+`reference-seams-check.test.ts` fails on a seam defined by hand outside that
+module; the data form (`ReferenceWire`) for the layout worker and the rest are
+`package-canvas-render.md`.
+
 
 The LoroDoc<->model bridge originally scoped for `codec` is DEFERRED to `crdt` — a single-document codec has no need for CRDT merge semantics, and pulling `loro-crdt` into this package would violate its own "model + remark only" dependency rule.

@@ -124,6 +124,15 @@ function checkStartupConfig(): void {
  * Warm the headless renderer in the background so the first export does not
  * pay the font-parse + resvg-import startup cost. Best-effort by design.
  *
+ * This is the dev entry's alone, deliberately: it is a one-shot warm-up with
+ * no stop and no schedule, so it is not background work in the registry's
+ * sense, and the HTTP roots do not run it. Measured on this tree, the build
+ * is one in-process stall of about 40-60ms (150-220ms wall) after a module
+ * import that costs seconds under a test transform. A root that armed it would
+ * charge that to every start, to every server-mode instance that may never
+ * export, and to every test that starts a root, to save the first export one
+ * build.
+ *
  * The dynamic import is inside the try, not just the call: a module
  * resolution or load failure would reject before the daemon binds, and an
  * unguarded `await import(...)` would take the whole process down — the
@@ -174,13 +183,6 @@ export async function main() {
   // Only the discovery metadata travels from here. The strategy that checks
   // the credential is built inside `createApp`, over the one resolver.
   const mcpProtectedResourceMetadata = resolveMcpProtectedResourceMetadataFromEnv(process.env)
-
-  // Initialise OpenTelemetry before any HTTP / store wiring so the very
-  // first request on a freshly started daemon already carries a span. The
-  // SDK is a no-op unless WHITEBOARD_OTEL=1 or OTEL_EXPORTER_OTLP_ENDPOINT
-  // is set, so this costs nothing in the default path.
-  const { initTracing } = await import('./observability/tracing.js')
-  await initTracing({ role: 'daemon' })
 
   // Block startup until the schema is migrated so route handlers never see
   // a half-initialized data directory.

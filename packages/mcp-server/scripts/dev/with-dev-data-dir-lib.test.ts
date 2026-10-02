@@ -6,6 +6,7 @@ import {
   ensureDevDataDirSecured,
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
+  resolveHookProjectRoot,
   resolveRepoRootFromGit,
   resolveTsxWatchSpawn,
 } from './with-dev-data-dir-lib.mjs'
@@ -115,6 +116,37 @@ describe('resolveRepoRootFromGit', () => {
 
     // The resolved root must be an ancestor of (or equal to) the cwd.
     expect(resolve(process.cwd()).startsWith(resolve(result))).toBe(true)
+  })
+})
+
+describe('resolveHookProjectRoot', () => {
+  // A hook runs in whatever directory the session is in, which can be a
+  // package directory or not a repository at all; `CLAUDE_PROJECT_DIR` is the
+  // one answer to "which checkout is this session about".
+  it('prefers CLAUDE_PROJECT_DIR over the working directory', () => {
+    const outsideAnyRepo = mkdtempSync(join(tmpdir(), 'hook-root-'))
+    try {
+      const repoRoot = resolveRepoRootFromGit(process.cwd())
+
+      expect(resolveHookProjectRoot({ CLAUDE_PROJECT_DIR: repoRoot }, outsideAnyRepo)).toBe(
+        repoRoot,
+      )
+    } finally {
+      rmSync(outsideAnyRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves a CLAUDE_PROJECT_DIR that is a subdirectory to the checkout root', () => {
+    const repoRoot = resolveRepoRootFromGit(process.cwd())
+
+    expect(resolveHookProjectRoot({ CLAUDE_PROJECT_DIR: process.cwd() }, '/')).toBe(repoRoot)
+  })
+
+  it('falls back to the working directory when CLAUDE_PROJECT_DIR is unset or empty', () => {
+    const repoRoot = resolveRepoRootFromGit(process.cwd())
+
+    expect(resolveHookProjectRoot({}, process.cwd())).toBe(repoRoot)
+    expect(resolveHookProjectRoot({ CLAUDE_PROJECT_DIR: '' }, process.cwd())).toBe(repoRoot)
   })
 })
 

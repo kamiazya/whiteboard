@@ -12,7 +12,7 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
+import { type BlobStore, blobRefKey } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
@@ -29,7 +29,7 @@ const WS = 'ws-trash'
 
 function inMemoryBlobStore(): BlobStore & { size: () => number } {
   const blobs = new Map<string, Uint8Array>()
-  const key = (ref: BlobRef) => `${ref.algorithm}:${ref.digestHex}`
+  const key = blobRefKey
   let next = 0
   return {
     async put({ bytes }) {

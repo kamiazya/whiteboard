@@ -97,7 +97,7 @@ with every tool call, tool-error text, token and cost figure.
   Two of the baseline's failures looked like model mistakes and were the
   product's: a tag-filtered search that cannot stand alone, and a comment
   thread that does not survive a restart. Reproduce what the model saw
-  with `connectWhiteboard` from `scripts/eval/lib/whiteboard-client.mjs`
+  with `connectWhiteboard` from `packages/mcp-server/scripts/eval/lib/whiteboard-client.mjs`
   against a seeded directory before concluding anything about the model.
 - **`toolErrorTexts` is the C11 evidence, and sometimes the C5 evidence.**
   It is what the model was told when a call was refused. A refusal that
@@ -167,14 +167,14 @@ with every tool call, tool-error text, token and cost figure.
 
 ## Adding a task to the lane
 
-`scripts/eval/tasks.mjs`, following the rules in its header, which are
+`packages/mcp-server/scripts/eval/tasks.mjs`, following the rules in its header, which are
 Anthropic's mcp-builder rules:
 
 - **Read tasks** carry a single stable `answer` compared as a string.
   Phrase the question so it does not carry the target document's words
   or any tool's name — a task that can be answered by matching a word in
   a description measures the description, not the surface. The fixture
-  (`scripts/eval/fixture.mjs`) is owned data, so every answer is true by
+  (`packages/mcp-server/scripts/eval/fixture.mjs`) is owned data, so every answer is true by
   construction; add what the task needs there.
 - **Write tasks** carry a `verify(wb, ids)` that reads the state back
   through the real tools. Run `--dry-run` after adding one: the verifier

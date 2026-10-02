@@ -781,7 +781,7 @@ The other three call sites had the same defect and nobody had reported it:
 the scroll sync, the seek, and the minimap rail's viewport box were all
 wrong on any document with a comment. Scoped by the pane's own class rather
 than by DOM order, so the next element added to this column cannot bring it
-back, and a source scan in `preview-marker-placement.browser.test.ts`
+back, and a source scan in `preview-marker-placement.browser.test.tsx`
 refuses a bare query returning.
 
 **Resolving a conversation MOVES it, rather than making it disappear.** The

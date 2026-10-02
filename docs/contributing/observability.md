@@ -18,6 +18,13 @@ Each tool call / HTTP request prints a single span line on stderr:
 {"time":"2026-05-02T03:00:00.000Z","level":"trace","scope":"otel","traceId":"…","spanId":"…","name":"mcp.tool.call wb_workspace_edit","attributes":{"mcp.tool.name":"wb_workspace_edit",…}}
 ```
 
+The same variable works on the packaged daemon and on server mode:
+
+```bash
+WHITEBOARD_OTEL=1 whiteboard daemon run
+WHITEBOARD_OTEL=1 whiteboard server run
+```
+
 ## Forwarding to a collector
 
 ```bash
@@ -41,9 +48,15 @@ SigNoz, Grafana Cloud, etc.
 sets it for a process whose entrypoint does not name its own (it falls back
 to `unknown` when neither is given):
 
-- `http` — HTTP-only mode (`pnpm mcp:http`)
-- `daemon` — same binary in `--daemon` mode
+- `daemon` — the local daemon, both the packaged `whiteboard daemon run` and
+  the dev entry (`pnpm mcp:http:dev`)
+- `server` — server mode (`whiteboard server run`)
 - `stdio-mcp` — stdio MCP entry (`packages/mcp-server/src/server/mcp/index.ts`)
+
+Each HTTP root starts tracing itself (`startHttpRootTracing`), so the env vars
+above work on a packaged daemon and on server mode, not only on the dev entry.
+They are listed for operators in
+[Configuration](../reference/configuration.md#environment-variables).
 
 The MCP attribute names follow the in-flight semantic convention at
 <https://opentelemetry.io/docs/specs/semconv/registry/attributes/mcp/>.

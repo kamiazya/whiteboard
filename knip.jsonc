@@ -110,7 +110,12 @@
         "src/lib/commands/index.ts",
         "scripts/*.mjs"
       ],
-      "project": ["src/**/*.tsx", "src/**/*.ts", "scripts/**/*.mjs"]
+      // `src/**/*.css` is in the project so knip follows `@import "tailwindcss"` /
+      // `@import "tw-animate-css"` in src/index.css: without it the `.css`
+      // compiler is enabled but its imports are never followed, and both packages
+      // needed an ignoreDependencies entry that hid a real unused-dependency
+      // answer.
+      "project": ["src/**/*.tsx", "src/**/*.ts", "src/**/*.css", "scripts/**/*.mjs"]
     }
   },
   "ignoreDependencies": [
@@ -133,11 +138,6 @@
     // docs/assets/, not an npm package.
     "@docs-assets/architecture.canvas",
     "@docs-assets/canvas-auth-flow.canvas",
-    // Tailwind v4 is loaded from CSS (`@import "tailwindcss"` /
-    // `@import "tw-animate-css"` in src/index.css); knip does not parse CSS
-    // imports, only JS/TS module graphs.
-    "tailwindcss",
-    "tw-animate-css",
     // Loaded via .secretlintrc.json's "rules" list, not a JS/TS import.
     "@secretlint/secretlint-rule-pattern",
     "@secretlint/secretlint-rule-preset-recommend",
@@ -149,7 +149,6 @@
     // Optional local tooling probed by smoke scripts / distribution tests;
     // present in CI and on release-builder machines but not a project
     // dependency knip can resolve.
-    "claude",
     "codex",
     "openssl",
     // Windows' own registry tool: the native host registers itself with it

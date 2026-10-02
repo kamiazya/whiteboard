@@ -13,7 +13,10 @@ import { opentypeApi } from '../opentype.js'
  * result differs in PIXELS, which is the only place "did resvg actually use
  * this face" can be observed.
  */
-export function syntheticFont(covered: string, familyName = 'WhiteboardTestFont'): Buffer {
+export function syntheticFont(
+  covered: string,
+  familyName = 'WhiteboardTestFont',
+): Buffer<ArrayBuffer> {
   const square = new opentypeApi.Path()
   square.moveTo(100, 0)
   square.lineTo(100, 700)

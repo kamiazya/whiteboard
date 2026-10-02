@@ -14,7 +14,7 @@ import { startBackgroundWork } from './background-work.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { isDataDirWritable } from './data-dir-writable.js'
-import type { AutoVersionTrigger } from './routes/document.js'
+import { startHttpRootTracing } from './observability/root-tracing.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
 import { syncStreamStats } from './routes/sync-sse.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
@@ -37,7 +37,6 @@ import { serverModeUiStatus } from './server-mode-web-app.js'
 import {
   createRootShutdown,
   createSharedWorkers,
-  FILE_GC_STOP_TIMEOUT_MS,
   sharedBackgroundWork,
 } from './shared-background-work.js'
 import { accountRetirementFor } from './store/db/account-retirement.js'
@@ -85,16 +84,16 @@ export interface ServerModeRunning {
 export async function startServerModeHttp(
   options: StartServerModeHttpOptions,
 ): Promise<ServerModeRunning> {
+  await startHttpRootTracing('server')
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
   const instanceId = randomUUID()
   const baseUrl = `https://${options.host}:${options.port}`
+  const shared = createSharedWorkers(instanceId, options)
   const close = createRootShutdown({
     stopBackgroundWork: () => backgroundWork.stopAll(),
     closeListener: () => closeListener(server),
-    flushCheckpoints: async () => {
-      await autoVersionTrigger?.flush()
-    },
+    flushCheckpoints: shared.checkpoints.flush,
   })
 
   // The same wiring the local daemon builds (http-server.ts), through the
@@ -115,16 +114,11 @@ export async function startServerModeHttp(
   const { serverDeps: bootedDeps, dataLayout } = await bootSelfHostDeps(dataDir)
   const serverDeps = attachLiveAudience(bootedDeps)
 
-  // Filled synchronously by createApp below, and read only by the
-  // auto-checkpoint declaration's start() and stop() — which run after createApp returns.
-  let autoVersionTrigger: AutoVersionTrigger | undefined
   const app = createApp({
     authMode: 'server-mode',
     serverDeps,
     dataLayout,
-    onAutoVersionTrigger: (trigger) => {
-      autoVersionTrigger = trigger
-    },
+    onAutoVersionTrigger: shared.checkpoints.capture,
     publicBaseUrl: options.publicBaseUrl,
     allowedOrigins: options.allowedOrigins,
     authStrategy: options.authStrategy,
@@ -160,16 +154,7 @@ export async function startServerModeHttp(
   // deployment taking no scheduled backups at all, because this composition
   // root started no background work whatsoever. The shared set is what makes
   // that impossible to repeat: both roots declare it from one place.
-  const shared = createSharedWorkers(instanceId, options)
-  const backgroundWork = startBackgroundWork(
-    sharedBackgroundWork(shared, {
-      checkpointScheduler: () => autoVersionTrigger,
-      fileGc: {
-        start: () => shared.fileGcSweeper.start(),
-        stop: () => shared.fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
-      },
-    }),
-  )
+  const backgroundWork = startBackgroundWork(sharedBackgroundWork(shared))
 
   const server = serve({ fetch: app.fetch, port: options.port, hostname: options.host })
 

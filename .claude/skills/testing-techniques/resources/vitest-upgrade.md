@@ -41,7 +41,7 @@ Vite ≥ 6.4 and Node ≥ 22.12; the catalog holds Vite 8.2 and `.node-version` 
 |---|---|---|
 | module-scope `bench` import removed; bench mode runs a `<project> (bench)` sibling | 3 files; `pnpm bench` filtered on the bare name | rewritten to the context fixture with `{ timeout: 0 }` and `bench.compare`; `pnpm bench` filters on `"canvas-render-node (bench)"`; getter warning suppressed with the reason (`configuration.md` › Benchmarks) |
 | `toHaveTextContent(RegExp)` exact-only | 2 (`CommentsPanel.browser.test.tsx`) | `toMatchTextContent` |
-| locators strict by default (`exact ??= true` at runtime); `toHaveTextContent` exact | ~1389 `getBy*` sites | all three browser projects re-run on Node 24: ONE failure in 1085 browser tests, a `toHaveTextContent('2')` on an element reading `2 messages` — made exact (`'2 messages'`, which is what the test's own comment says it checks) |
+| locators strict by default (`exact ??= true` at runtime); `toHaveTextContent` exact | ~1389 `getBy*` sites | every browser project (three at the time) re-run on Node 24: ONE failure in 1085 browser tests, a `toHaveTextContent('2')` on an element reading `2 messages` — made exact (`'2 messages'`, which is what the test's own comment says it checks) |
 | un-awaited `.resolves` / `.rejects` / `toMatchFileSnapshot` fail | 0 (lint rule) | — |
 | `expect.poll` rejects on timeout | 14 sites | green |
 | `clearMocks` default `true` | — | green without pre-adoption |

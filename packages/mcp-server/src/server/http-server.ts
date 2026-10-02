@@ -11,8 +11,8 @@ import { LOOP_COSTS } from './background-work-costs.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { getDataDir } from './config.js'
 import { isDataDirWritable } from './data-dir-writable.js'
+import { startHttpRootTracing } from './observability/root-tracing.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
-import type { AutoVersionTrigger } from './routes/document.js'
 import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
@@ -20,7 +20,6 @@ import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key
 import {
   createRootShutdown,
   createSharedWorkers,
-  FILE_GC_STOP_TIMEOUT_MS,
   sharedBackgroundWork,
 } from './shared-background-work.js'
 import type { createBackupScheduler } from './store/backup-scheduler.js'
@@ -74,6 +73,7 @@ export interface RunningServer {
 }
 
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
+  await startHttpRootTracing('daemon')
   const instanceId = randomUUID()
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
@@ -119,9 +119,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       await socketListener?.close()
     },
     afterListenerClosed: () => options.onClose?.(),
-    flushCheckpoints: async () => {
-      await autoVersionTrigger?.flush()
-    },
+    flushCheckpoints: shared.checkpoints.flush,
   })
 
   // ADR-0043 decision 4's root key, loaded or created once here. A composition
@@ -143,14 +141,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   })
   const serverDeps = attachLiveAudience(bootedDeps)
 
-  // Filled synchronously by createApp below, and read only by the
-  // auto-checkpoint declaration's start() and stop() — which run after createApp returns.
-  let autoVersionTrigger: AutoVersionTrigger | undefined
   const app = createApp({
     authMode: 'local-daemon',
-    onAutoVersionTrigger: (trigger) => {
-      autoVersionTrigger = trigger
-    },
+    onAutoVersionTrigger: shared.checkpoints.capture,
     token: options.token,
     mcpProtectedResourceMetadata: options.mcpProtectedResourceMetadata,
     instanceId,
@@ -167,13 +160,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // where each one answers who runs it and what it costs the serving loop.
   // See background-work.ts for why that is a registry rather than four calls.
   const backgroundWork = startBackgroundWork([
-    ...sharedBackgroundWork(shared, {
-      checkpointScheduler: () => autoVersionTrigger,
-      fileGc: {
-        start: () => shared.fileGcSweeper.start(),
-        stop: () => shared.fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
-      },
-    }),
+    ...sharedBackgroundWork(shared),
     {
       name: 'idle-shutdown',
       trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms and no sync stream open`,

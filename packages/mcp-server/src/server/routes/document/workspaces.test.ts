@@ -14,6 +14,7 @@ import {
   createTestDocument,
   resolveTestServerDeps,
   seedWorkspaceRow,
+  testDataLayout,
   withTempDataDir,
 } from '../_test-helpers.js'
 
@@ -64,7 +65,7 @@ const { createSelfHostStoreLocalModule } = await import('../../../di/store-local
 // the route no longer calls. `Object.create` rather than a spread: the index
 // is a class instance, and spreading one drops every method it inherits from
 // its prototype.
-async function depsWithFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
+async function routerFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   // A Proxy that binds every untouched method to the REAL instance:
@@ -80,7 +81,10 @@ async function depsWithFailing(method: 'deleteDocument' | 'moveDocument', err: u
         : value
     },
   }) as typeof deps.documentIndex
-  return { ...deps, documentIndex: index }
+  return createDocumentRouter({
+    dataLayout: testDataLayout(),
+    serverDeps: { ...deps, documentIndex: index },
+  })
 }
 
 beforeEach(() => {
@@ -100,7 +104,7 @@ describe('workspaces router', () => {
 describe('GET /api/workspaces', () => {
   it('returns the canonical workspace list with workspaceId entries', async () => {
     await saveDocument('workspace-a', 'a', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces')
 
     expect(res.status).toBe(200)
@@ -126,7 +130,7 @@ describe('GET /api/workspaces', () => {
     })
     await deps.documentIndex.createWorkspace({ workspaceId: 'workspace-bare' })
 
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces')
     expect(res.status).toBe(200)
     const json = await res.json()
@@ -235,7 +239,7 @@ describe('GET /api/workspaces', () => {
 // their own validation and error wording over one operation.
 describe('POST /api/workspaces/:workspaceId/documents', () => {
   it('is not a route any more: creation goes through /api/v1', async () => {
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -250,9 +254,9 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
   })
 
-  it('returns 200 { ok: true }, parses with deleteDocumentResponseSchema, and the canvas is gone from list/exists/snapshot', async () => {
+  it('returns 200 { ok: true }, parses with deleteDocumentResponseSchema, and the canvas is gone from list/snapshot', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/canvas-a', {
       method: 'DELETE',
@@ -265,9 +269,6 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     const listJson = (await listRes.json()) as { documents: { path: string }[] }
     expect(listJson.documents.map((c) => c.path)).not.toContain('canvas-a')
 
-    const existsRes = await app.request('/api/w/session1/document/canvas-a/exists')
-    expect(await existsRes.json()).toEqual({ exists: false })
-
     const snapshotRes = await app.request('/api/w/session1/document/canvas-a/snapshot')
     expect(snapshotRes.status).toBe(404)
   })
@@ -277,7 +278,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   it('returns 409 naming a descendant rather than stranding it', async () => {
     await saveDocument('session1', 'design', new LoroDoc())
     await saveDocument('session1', 'design/login', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/design', {
       method: 'DELETE',
@@ -289,7 +290,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   })
 
   it('returns 404 with Problem Details { title } for a missing canvas', async () => {
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/session1/documents/never-created', {
       method: 'DELETE',
     })
@@ -301,7 +302,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   })
 
   it('returns 400 with Problem Details { title } for an invalid workspaceId or path', async () => {
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
 
     const badWs = await app.request('/api/workspaces/bad.workspace/documents/canvas-a', {
       method: 'DELETE',
@@ -318,12 +319,10 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const corrupt = createDocumentRouter({
-      serverDeps: await depsWithFailing(
-        'deleteDocument',
-        corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
-      ),
-    })
+    const corrupt = await routerFailing(
+      'deleteDocument',
+      corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
+    )
     const res = await corrupt.request('/api/workspaces/session1/documents/canvas-a', {
       method: 'DELETE',
     })
@@ -335,9 +334,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 
     // Mutation guard: a non-corruption throw must NOT hit the same branch —
     // proves the mapping checks the error type, not "any throw".
-    const plain = createDocumentRouter({
-      serverDeps: await depsWithFailing('deleteDocument', new Error('disk exploded')),
-    })
+    const plain = await routerFailing('deleteDocument', new Error('disk exploded'))
     const res2 = await plain.request('/api/workspaces/session1/documents/canvas-a', {
       method: 'DELETE',
     })
@@ -353,7 +350,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     // `session1` as its segment — leaving the store reads further down
     // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'cached' })
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
@@ -361,7 +358,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     const m = list.insertContainer(0, new LoroMap())
     m.set('id', 'old-element')
     clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: prevVV })
+    const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
     // Warm the doc-cache via the update path, matching real client traffic.
     await app.request('/api/w/session1/document/cached/update', {
       method: 'POST',
@@ -398,7 +395,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'a/x', new LoroDoc())
     await saveDocument('session1', 'c/x', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -414,7 +411,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   it('refuses a move into the document’s own subtree with 400, not a generic 500', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'a/x', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -427,7 +424,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('returns 200 { path }, the list shows the new path and not the old one, the old snapshot URL 404s, and re-creating the old path afterward succeeds as a fresh canvas', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
 
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -451,7 +448,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   })
 
   it('returns 404 with Problem Details { title } for a missing source canvas', async () => {
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/session1/documents/never-created/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -467,7 +464,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   it('returns 409 with Problem Details { title } when the target path is already taken', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'b', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -485,7 +482,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   })
 
   it('does not fork a phantom duplicate canvas when a rename races an in-flight /update that already resolved a doc reference through the old path', async () => {
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const baseDoc = new LoroDoc()
     baseDoc.getText('content').insert(0, 'original')
     baseDoc.commit()
@@ -496,7 +493,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     const fromVV = clientDoc.version()
     clientDoc.getText('content').insert('original'.length, ' + edit')
     clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: fromVV })
+    const update = clientDoc.export({ mode: 'update', from: fromVV }) as Uint8Array<ArrayBuffer>
 
     // Stall the /update route's getDoc() call so a rename can be fired
     // while the request is paused mid-flight, matching the real race: the
@@ -549,7 +546,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('returns 400 with Problem Details { title } for invalid input shapes', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
 
     const noBody = await app.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
@@ -598,7 +595,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     // `session1` as its segment — leaving the store reads further down
     // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'a' })
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
@@ -606,7 +603,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     const m = list.insertContainer(0, new LoroMap())
     m.set('id', 'old-element')
     clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: prevVV })
+    const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
     // Warm the doc-cache via the update path, matching real client traffic.
     await app.request('/api/w/session1/document/a/update', {
       method: 'POST',
@@ -639,7 +636,10 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     const anotherM = anotherList.insertContainer(0, new LoroMap())
     anotherM.set('id', 'fresh-element')
     anotherClientDoc.commit()
-    const anotherUpdate = anotherClientDoc.export({ mode: 'update', from: anotherPrevVV })
+    const anotherUpdate = anotherClientDoc.export({
+      mode: 'update',
+      from: anotherPrevVV,
+    }) as Uint8Array<ArrayBuffer>
     await app.request('/api/w/session1/document/a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -661,12 +661,10 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     await saveDocument('session1', 'a', new LoroDoc())
     const body = JSON.stringify({ path: 'b' })
     const headers = { 'Content-Type': 'application/json' }
-    const corrupt = createDocumentRouter({
-      serverDeps: await depsWithFailing(
-        'moveDocument',
-        corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
-      ),
-    })
+    const corrupt = await routerFailing(
+      'moveDocument',
+      corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
+    )
     const res = await corrupt.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
       headers,
@@ -680,9 +678,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
     // Mutation guard: a non-corruption throw must NOT hit the same branch —
     // proves the mapping checks the error type, not "any throw".
-    const plain = createDocumentRouter({
-      serverDeps: await depsWithFailing('moveDocument', new Error('disk exploded')),
-    })
+    const plain = await routerFailing('moveDocument', new Error('disk exploded'))
     const res2 = await plain.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
       headers,
@@ -703,7 +699,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     await saveDocument('session1', 'canvas-b', new LoroDoc())
 
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/session1/documents')
     expect(res.status).toBe(200)
     const json = (await res.json()) as { documents: { path: string }[] }
@@ -713,7 +709,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('returns 400 for an invalid workspaceId', async () => {
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/bad.sid/documents')
     expect(res.status).toBe(400)
   })
@@ -727,7 +723,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     // in the browser's localStorage) then looks exactly like data loss.
     // The v1 document routes already 404 an unknown workspace; this brings
     // the legacy list route into agreement.
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/never-registered/documents')
     expect(res.status).toBe(404)
   })
@@ -744,7 +740,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   it('also returns the canvas list from the canonical workspace route', async () => {
     await saveDocument('workspace1', 'canvas-a', new LoroDoc())
 
-    const app = createDocumentRouter({ serverDeps })
+    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
     const res = await app.request('/api/workspaces/workspace1/documents')
 
     expect(res.status).toBe(200)

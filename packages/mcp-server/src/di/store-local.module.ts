@@ -8,9 +8,11 @@ import {
 } from '../server/store/document-store.js'
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
+import { storeScope } from '../server/store/store-scope.js'
 import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
 import { blobsRoot } from '../server/tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../server/tenant/id.js'
+import { STORE_SCOPE } from './store-scope-token.js'
 
 export interface StoreLocalModuleOptions {
   db: TenantDatabase
@@ -37,7 +39,11 @@ export function createSelfHostStoreLocalModule(
 }
 
 export function createStoreLocalModule(opts: StoreLocalModuleOptions): ContainerModule {
+  // One scope for everything this module binds AND for the seams the container
+  // builds beside it, so the directory is chosen once.
+  const scope = storeScope(opts.dataDir, opts.tenantId)
   return new ContainerModule(({ bind }) => {
+    bind(STORE_SCOPE).toConstantValue(scope)
     // Content reads/writes land on the document's workspace-tree node (see
     // workspace-plane.ts), and the index IS the tree — the dual-plane
     // wrapper and its rows mirror retired with the documents table's
@@ -45,7 +51,9 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
     // index operates on the same live workspace doc every other path
     // writes through.
     bind(TOKENS.DocumentStore)
-      .toDynamicValue(() => new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(opts.db)))
+      .toDynamicValue(
+        () => new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(opts.db), scope),
+      )
       .inSingletonScope()
     bind(TOKENS.BlobStore)
       .toDynamicValue(() => tenantBlobStore(opts))
@@ -54,9 +62,10 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
       .toDynamicValue(
         () =>
           new CacheCoherentDocumentIndex(
-            cacheBackedWorkspaceDocs(),
+            cacheBackedWorkspaceDocs(scope),
             tenantBlobStore(opts),
-            workspaceRegistry(),
+            workspaceRegistry(scope),
+            scope,
           ),
       )
       .inSingletonScope()

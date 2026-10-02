@@ -1,10 +1,12 @@
 /**
  * `DocumentIndex` over IndexedDB — the browser's twin of the daemon's
- * `SqliteDocumentIndex`, held to the same conformance suite.
+ * `LoroWorkspaceDocumentIndex` (wrapped by `CacheCoherentDocumentIndex`), held
+ * to the same conformance suite.
  *
  * The port's heavy invariant is that a mutating operation "takes effect as one
  * indivisible operation or has no effect at all". The daemon buys that with an
- * in-process write lock around a SQL transaction; here a single IndexedDB
+ * in-process per-workspace write lock (`withWorkspaceWriteLock`) around a
+ * mutation of the workspace's Loro tree; here a single IndexedDB
  * `readwrite` transaction gives it directly, and more cheaply — nothing else
  * can interleave inside one, including another tab. What that costs is
  * discipline about SCOPE: the check and the write have to name the same

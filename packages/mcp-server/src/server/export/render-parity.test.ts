@@ -12,6 +12,7 @@ import { createCanvasRenderSvgTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
+import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { renderSpatialCanvasToSvg } from './headless-renderer.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -54,7 +55,7 @@ function textRuns(svg: string): string[] {
 
 describe('wb_scene_render / export parity', () => {
   it('wraps text at the same points as the exporter, because both measure with the real font', async () => {
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, canvas)
     const snapshot = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1 << 20)

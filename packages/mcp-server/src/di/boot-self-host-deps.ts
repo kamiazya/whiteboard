@@ -33,6 +33,23 @@ export async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
  * for its own stores (people, replica keys) so they see the same
  * post-migration handle the ports do, and the data layout for `createApp`, so
  * the routes serve the directory and tenant these deps were built over.
+ *
+ * Everything the deps do follows `dataDir`: the stores, and the seams beside
+ * them (live documents, versions, teardown, the write signal, the caches under
+ * them), which take the one `StoreScope` the store module binds. What does NOT
+ * follow it, so `dataDir` must equal `getDataDir()` for these:
+ *
+ * - the search embedder's model cache and the installed-font directory the
+ *   export measurer reads (`server/search`, `server/export`);
+ * - the debounced auto-compaction a root installs from a document-saved
+ *   listener (`installAutoCompact` in `shared-background-work.ts`), and the
+ *   periodic file sweep it starts — both default to the process's directory;
+ * - handle resolution in the routes (`workspace-handle.ts`), which reads the
+ *   process's workspace registry rather than the injected index.
+ *
+ * The workspace write lock and the workspace-update subscribers are keyed by
+ * workspace id alone: two keepers sharing an id share a queue, which costs
+ * latency and not correctness.
  */
 export async function bootSelfHostDeps(
   dataDir: string,

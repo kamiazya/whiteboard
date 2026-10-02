@@ -1,7 +1,4 @@
-import type {
-  DocumentExistsResponse,
-  UpdateDocumentResponse,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
@@ -22,7 +19,6 @@ export interface LiveDocRouterOptions {
 }
 
 // GET /api/w/:workspaceId/document/*/snapshot
-// GET /api/w/:workspaceId/document/*/exists
 // POST /api/w/:workspaceId/document/*/update
 //
 // Translation-only adapters (ADR-0018): the reads go through the
@@ -31,13 +27,6 @@ export interface LiveDocRouterOptions {
 export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
   const deps = options.serverDeps
-
-  onDocumentAction(app, 'get', 'exists', async (c, workspaceId, path) => {
-    const response: DocumentExistsResponse = {
-      exists: await deps.liveDocuments.exists(workspaceId, path),
-    }
-    return c.json(response)
-  })
 
   onDocumentAction(app, 'get', 'snapshot', async (c, workspaceId, path) => {
     // get()'s lazy-create would otherwise silently hand back an empty

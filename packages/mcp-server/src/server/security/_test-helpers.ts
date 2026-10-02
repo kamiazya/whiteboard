@@ -6,6 +6,8 @@
 import type { MiddlewareHandler } from 'hono'
 import type { AuthScope } from './auth-strategy.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
+import type { ResolvedProvider } from './oidc-relying-party.js'
+import type { OidcProvider, SignInProvider } from './sign-in-config.js'
 
 export function createAsyncAuthStrategyMiddleware(options: {
   strategy: AsyncAuthStrategy
@@ -30,4 +32,33 @@ export function createAsyncAuthStrategyMiddleware(options: {
       headers,
     })
   }
+}
+
+/**
+ * The OIDC providers of a parsed sign-in config. The config's provider list is
+ * a union with the reverse-proxy kind; a test that builds only OIDC providers
+ * narrows it here and fails by name if that stops being true.
+ */
+export function oidcProviders(providers: readonly SignInProvider[]): OidcProvider[] {
+  return providers.map((provider) => {
+    if (provider.kind !== 'oidc') throw new Error(`expected an oidc provider, got ${provider.kind}`)
+    return provider
+  })
+}
+
+/** An OIDC provider as the sign-in routes hold it once its secret is resolved at startup. */
+export function resolvedForTest(provider: OidcProvider): ResolvedProvider {
+  if (provider.clientId === undefined)
+    throw new Error(`provider ${provider.id} declares no clientId`)
+  return { ...provider, clientId: provider.clientId, clientSecretValue: 's3cret' }
+}
+
+/** A strategy that refuses every request, for tests that never reach an authenticated route. */
+export const DENY_ALL_STRATEGY: AsyncAuthStrategy = {
+  authorize: async () => ({
+    ok: false,
+    status: 401,
+    code: 'auth.required',
+    wwwAuthenticate: 'Bearer',
+  }),
 }

@@ -24,7 +24,6 @@ export function encodeDocumentPath(path: string): string {
  */
 export const DOCUMENT_API_ACTIONS = [
   'snapshot',
-  'exists',
   'update',
   'export',
   'export-svg',

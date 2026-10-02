@@ -125,13 +125,13 @@ Concrete rules when adding or editing an MCP tool:
 
 - Declare each tool's `outputSchema` (and `inputSchema`) once. Tools are registered through `registerToolWithAnnotations`, which is generic over `O extends z.ZodTypeAny | undefined` and constrains the handler's return to `Promise<ToolHandlerReturn<O>>`. Never widen `outputSchema` to `unknown` or cast around the type binding to silence the compiler.
 - Annotate the matching `tools/*.ts` `execute` return type as `Promise<z.infer<typeof xxxOutputSchema>>` (or import the inferred type from the schema). A separately-written TypeScript interface alongside a Zod schema is the recipe that shipped the `create_frame` `assignedMembers: number` vs `string[]` bug — use `z.infer<>` instead.
-- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/smoke/mcp-e2e-smoke.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
+- When you add a new tool, extend `pnpm smoke:e2e` (`packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
 - When you fix a schema-vs-runtime drift, also commit the test or smoke step that would have caught it. Mutation-check the regression: revert the production fix, confirm `pnpm build` (compile-time guard) **or** `pnpm smoke:e2e` (runtime guard) fails, then restore.
 
 The same discipline applies elsewhere where a schema and a runtime payload travel separately:
 
 - Persisted JSON (`palette`, `manifestJson`, `frontiers`, etc.) → declare a Zod schema next to the parser, hydrate through `schema.parse(...)` instead of casting the JSON.
-- Hono routes whose response shape is consumed by typed clients (`packages/mcp-server/src/app/...`) → declare the response schema once and let both server and client import `z.infer<typeof responseSchema>`.
+- Hono routes whose response shape is consumed by typed clients (contracts in `packages/daemon-client/src/api-contracts/`, routes in `packages/server-core` and `packages/mcp-server/src/server/routes`) → declare the response schema once and let both server and client import `z.infer<typeof responseSchema>`.
 
 If a contract is so loose that Zod would always be `z.unknown()` or `z.any()`, mark that intent in a comment so reviewers know it's deliberate, not an oversight.
 
@@ -191,25 +191,7 @@ against them rather than spying on `console`; `restore()` in `afterEach`.
 
 ### Redaction
 
-The root pino instance in `log.ts` redacts a fixed list of field names —
-top-level (`token`, `daemonToken`, `bootstrapToken`, `accessToken`,
-`authorization`, `cookie`, `password`, `secret`, `apiKey`) and one level of
-nesting under any key (`*.token`, `*.daemonToken`, …) — replacing the value
-with `[redacted]` before the record reaches stderr, an MCP
-`notifications/message` subscriber, or a test capture sink. This is what
-stops a call site that carelessly logs a whole request/client/config object
-(e.g. `log.error({ client }, 'request failed')`) from leaking the daemon
-bearer token or an OAuth access token.
-
-Adding a new secret-bearing field anywhere in the server means adding both
-its top-level and its `*.<name>` path to `REDACTED_PATHS` in `log.ts` — pino
-redaction does not infer field names, and `fast-redact` has no
-arbitrary-depth wildcard, so a secret nested two or more levels deep under
-an unlisted key is not caught. The safer habit is still to never log a
-secret-bearing object wholesale in the first place; redaction is the net,
-not the plan. Redaction also cannot help when a secret is interpolated
-directly into a message *string* (e.g. `` log.info(`token=${token}`) ``)
-rather than passed as a structured field — do not do that.
+The root pino instance in `log.ts` redacts a fixed list of secret-bearing field names. Never log a secret-bearing object wholesale or interpolate a secret into a message string; the list and how to extend it are in `.claude/rules/package-mcp-server.md`.
 
 ## Doc Screenshots
 

@@ -40,5 +40,5 @@ Check:
 
 Check:
 - When an MCP tool's `outputSchema` changed, was `pnpm smoke:e2e`
-  (`scripts/smoke/mcp-e2e-smoke.mjs`) extended to exercise it, so a runtime
+  (`packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs`) extended to exercise it, so a runtime
   drift the type system can't see gets caught?

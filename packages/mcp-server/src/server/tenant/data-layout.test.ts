@@ -1,13 +1,16 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { FsBlobStore } from '../store/fs/fs-blob-store.js'
 import {
+  blobShardDir,
+  blobShardPath,
   blobsRoot,
   isAnyTenantBlobsPath,
   listTenants,
   moveLegacyDataDirUnderTenant,
+  parseBlobShard,
   tenantRoot,
   workspaceFilesDir,
 } from './data-layout.js'
@@ -129,5 +132,35 @@ describe('what a keeper-wide pass has to walk', () => {
     expect(
       isAnyTenantBlobsPath(dataDir, join(workspaceFilesDir(dataDir, SELF, 'ws-1'), 'a.png')),
     ).toBe(false)
+  })
+})
+
+describe('where a content digest sits under a blob root', () => {
+  const digest = `ab${'0'.repeat(62)}`
+
+  it('shards on the first two hex characters and names the file by the other sixty-two', () => {
+    expect(blobShardDir('/root', digest)).toBe(join('/root', 'ab'))
+    expect(blobShardPath('/root', digest)).toBe(join('/root', 'ab', '0'.repeat(62)))
+  })
+
+  it('reads back as the digest it was written from', () => {
+    const [shard, entry] = [digest.slice(0, 2), digest.slice(2)]
+    expect(parseBlobShard(shard, entry)).toBe(digest)
+  })
+
+  it('refuses anything not named as a shard wrote it', () => {
+    expect(parseBlobShard('ab', `${'0'.repeat(62)}.partial`)).toBeNull()
+    expect(parseBlobShard('ab', '0'.repeat(61))).toBeNull()
+    expect(parseBlobShard('AB', '0'.repeat(62))).toBeNull()
+    expect(parseBlobShard('abc', '0'.repeat(62))).toBeNull()
+  })
+
+  it('is where FsBlobStore puts a blob, so a mirror and a restore read what the store wrote', async () => {
+    const root = blobsRoot(dataDir, SELF)
+    const { ref } = await new FsBlobStore(root, dataDir).put({ bytes: new Uint8Array([1, 2, 3]) })
+    const shards = await readdir(root)
+    expect(shards).toEqual([ref.digestHex.slice(0, 2)])
+    expect(await readdir(blobShardDir(root, ref.digestHex))).toEqual([ref.digestHex.slice(2)])
+    expect((await stat(blobShardPath(root, ref.digestHex))).isFile()).toBe(true)
   })
 })

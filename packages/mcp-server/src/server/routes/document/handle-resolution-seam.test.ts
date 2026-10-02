@@ -6,25 +6,22 @@
  * `options.serverDeps` — so a router given deps of its own reads like it could
  * resolve a segment against one store and mutate another.
  *
- * It cannot, and the reason is in `store-local.module.ts`: `DocumentIndex` is
- * bound to `cacheBackedWorkspaceDocs()` and `workspaceRegistry()`, both
- * module-level. `opts.db` reaches `DocumentStore` and NOT the index. That is
- * deliberate — cache coherence is the point, every path operating on one live
- * workspace doc — but it makes "the same registry" a property of the wiring
- * rather than of anything the seam states, and wiring changes.
+ * It cannot while both read one directory, and that is a property of the
+ * wiring: `store-local.module.ts` builds the index over its module's
+ * `StoreScope`, and `workspaceRegistry()` with no argument follows the
+ * process's data dir. They agree because every root passes `getDataDir()` to
+ * `bootSelfHostDeps`.
  *
  * So this pins the invariant rather than the mechanism: whatever registry
- * resolution reads, it is the one the route's own index answers from. Give
- * `DocumentIndex` a store of its own and this fails, which is the moment the
- * seam becomes real and every call site would need the deps threaded through.
+ * resolution reads, it is the one the route's own index answers from. A module
+ * built over a DIFFERENT directory breaks it, and the fix then is for
+ * `workspaceIdFromHandle` to take the deps' registry — which is why the
+ * fixture below shares one directory instead of pretending to two.
  *
  * Addressed BY SEGMENT deliberately: a canonical id passes through
  * `resolveWorkspaceHandle` unchanged whichever registry answers, so a test
  * using one would be green against either and assert nothing.
  */
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { withTempDataDir } from '../_test-helpers.js'
@@ -55,17 +52,17 @@ describe('handle resolution and the request that follows it', () => {
   })
 
   it('reaches the route with the id the injected index knows the segment by', async () => {
-    // Built from a SECOND data dir, so the deps are as independent as the DI
-    // module lets them be. Today that changes only the blob store; if the
-    // index ever follows `db` too, this fixture is what makes the divergence
-    // show up here rather than in production.
-    const otherDir = await mkdtemp(join(tmpdir(), 'whiteboard-handle-seam-other-'))
-    await prepareDataDir(otherDir)
+    // Over the same directory the process registry reads, on purpose. The
+    // index follows its module's directory, and the route resolves a handle
+    // through `workspaceRegistry()` of the process (`workspace-handle.ts`)
+    // rather than through the injected index — so a module built over another
+    // directory would answer 404 here for that reason, which is not what this
+    // test is about.
     const deps = resolveServerDeps(
       createContainer(
         createStoreLocalModule({
-          db: await getDb(otherDir),
-          dataDir: otherDir,
+          db: await getDb(tmp.dir),
+          dataDir: tmp.dir,
           tenantId: SELF_HOST_TENANT_ID,
         }),
       ),

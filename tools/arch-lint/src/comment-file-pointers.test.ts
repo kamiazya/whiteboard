@@ -195,3 +195,81 @@ describe('a filename in a comment, backticked or a bare test file, names a file 
     expect(obsolete).toEqual([])
   })
 })
+
+// The pointer scan above resolves a backticked FILE NAME by basename, which is
+// all a bare name carries. A repo-rooted path carries more, and that is the
+// shape the rules and skills write when they send a session somewhere to work:
+// `scripts/smoke/mcp-e2e-smoke.mjs` read as a root path, and the file lives at
+// `packages/mcp-server/scripts/smoke/…`; a rooted path into an mcp-server
+// directory that never existed was named as where response contracts live.
+// Both resolved by basename or by nothing, so
+// no rung noticed, and the next session searched the root for a file that is
+// not there. Here a path starting at a top-level directory must resolve EXACTLY
+// — a tracked file, or a directory some tracked file sits under.
+//
+// A package-relative shorthand is not accepted by rule: the rule files are
+// path-scoped, but a skill is read from anywhere, and a path that only means
+// something from inside one package is what produced the defect. The few
+// entries below are not shorthand at all — an MCP method, a per-machine file,
+// an illustrative name.
+const REPO_ROOTED_PATH =
+  /`((?:packages|apps|tools|docs|\.claude|scripts|tests)\/[A-Za-z0-9._/@-]+)`/g
+
+/** Matches that name no tracked path and are meant to. Guarded from both sides. */
+const NOT_A_TRACKED_PATH: Record<string, string> = {
+  'tools/list': 'the MCP method name, not a directory',
+  '.claude/settings.local.json': 'per-machine and gitignored by design (.gitignore)',
+  '.claude/worktrees/':
+    'per-machine and gitignored by design — where `new-worktree.mjs` puts a lane',
+  '.claude/agents/foo.md':
+    'an illustration of an agent file a session might add, from the workflow-authoring skill',
+}
+
+interface RootedPath {
+  readonly file: string
+  readonly path: string
+}
+
+function repoRootedPaths(): RootedPath[] {
+  const found: RootedPath[] = []
+  for (const file of trackedFiles()) {
+    const inScope =
+      file === 'AGENTS.md' || (/^\.claude\/(rules|skills)\//.test(file) && file.endsWith('.md'))
+    if (!inScope) continue
+    for (const match of readFileSync(join(REPO_ROOT, file), 'utf8').matchAll(REPO_ROOTED_PATH)) {
+      found.push({ file, path: match[1] ?? '' })
+    }
+  }
+  return found
+}
+
+function resolvesExactly(path: string, tracked: readonly string[]): boolean {
+  const bare = path.replace(/\/$/, '')
+  return tracked.some((entry) => entry === bare || entry.startsWith(`${bare}/`))
+}
+
+describe('a repo-rooted path in AGENTS.md, a rule or a skill names something tracked', () => {
+  const tracked = trackedFiles()
+  const rooted = repoRootedPaths()
+
+  it('read a plausible number of rooted paths', () => {
+    // 301 when written. A scan whose regex or scope silently matched nothing
+    // reports every path as resolving, which reads like a clean tree.
+    expect(rooted.length).toBeGreaterThan(250)
+  })
+
+  it('has no path that resolves to nothing', () => {
+    const stale = rooted
+      .filter(({ path }) => !resolvesExactly(path, tracked) && !(path in NOT_A_TRACKED_PATH))
+      .map(({ file, path }) => `${file}: \`${path}\` is not a tracked file or directory`)
+    expect(stale).toEqual([])
+  })
+
+  it('holds no exemption for a path that resolves now or is no longer written', () => {
+    const written = new Set(rooted.map(({ path }) => path))
+    const obsolete = Object.keys(NOT_A_TRACKED_PATH).filter(
+      (path) => !written.has(path) || resolvesExactly(path, tracked),
+    )
+    expect(obsolete).toEqual([])
+  })
+})

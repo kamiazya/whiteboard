@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { AppOptions, ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
 import type { AuthScope } from './security/auth-strategy.js'
@@ -88,12 +89,11 @@ function makeServerModeOptions(
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: ALLOWED_ORIGINS,
     // The root's deps, over the memory store: nothing here reads a document.
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     authStrategy: makeScopeStrategy(grantedScopes),
     touch: () => {},
     getStatus: makeInternalStatus,
-    shutdown: () => Promise.resolve(),
     ...overrides,
   }
 }
@@ -106,12 +106,11 @@ describe('app — server-mode composition', () => {
     expect(() =>
       createApp({
         authMode: 'local-daemon',
-        serverDeps: resolveServerDeps(createContainer()),
+        serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
         dataLayout: testDataLayout(),
         token: 'local-token',
         touch: () => {},
         getStatus: () => makeInternalStatus(),
-        shutdown: () => Promise.resolve(),
       }),
     ).not.toThrow()
   })
@@ -122,12 +121,11 @@ describe('app — server-mode composition', () => {
     // credential at all. The client already sends the bearer on every read.
     const app = createApp({
       authMode: 'local-daemon',
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
-      shutdown: () => Promise.resolve(),
     })
     const unauthedRes = await app.request('/api/workspaces')
     expect(unauthedRes.status).toBe(401)
@@ -206,14 +204,13 @@ describe('app — server-mode composition', () => {
       expect(() =>
         createApp({
           authMode: 'server-mode',
-          serverDeps: resolveServerDeps(createContainer()),
+          serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
           dataLayout: testDataLayout(),
           publicBaseUrl: 'http://example.com',
           allowedOrigins: ['https://example.com'],
           authStrategy: makeScopeStrategy(['canvas:read']),
           touch: () => {},
           getStatus: () => makeInternalStatus(),
-          shutdown: () => Promise.resolve(),
         }),
       ).toThrow('invalid server-mode config')
     })
@@ -222,14 +219,13 @@ describe('app — server-mode composition', () => {
       expect(() =>
         createApp({
           authMode: 'server-mode',
-          serverDeps: resolveServerDeps(createContainer()),
+          serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
           dataLayout: testDataLayout(),
           publicBaseUrl: 'https://example.com',
           allowedOrigins: ['*'],
           authStrategy: makeScopeStrategy(['canvas:read']),
           touch: () => {},
           getStatus: () => makeInternalStatus(),
-          shutdown: () => Promise.resolve(),
         }),
       ).toThrow('invalid server-mode config')
     })
@@ -650,7 +646,7 @@ describe('app — server-mode composition', () => {
     expect(() =>
       createApp({
         authMode: 'local-daemon',
-        serverDeps: resolveServerDeps(createContainer()),
+        serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
         dataLayout: testDataLayout(),
         authStrategy: makeScopeStrategy(['canvas:read']),
       } as unknown as AppOptions),
@@ -670,12 +666,11 @@ describe('app — server-mode composition', () => {
     // per-scope enforcement — presenting the daemon token is sufficient.
     const localApp = createApp({
       authMode: 'local-daemon',
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
-      shutdown: () => Promise.resolve(),
     })
     const localRes = await localApp.request('/api/workspaces', {
       headers: { Authorization: 'Bearer local-token' },
@@ -693,14 +688,13 @@ describe('app — server-mode composition', () => {
     }
     const app = createApp({
       authMode: 'server-mode',
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
       publicBaseUrl: 'https://example.com',
       allowedOrigins: ['https://example.com'],
       authStrategy: alwaysDeny,
       touch: () => {},
       getStatus: () => makeInternalStatus(),
-      shutdown: () => Promise.resolve(),
     })
     const res = await app.request('/api/workspaces', {
       headers: { authorization: `Bearer ${SECRET}` },

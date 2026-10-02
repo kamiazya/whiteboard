@@ -1,9 +1,10 @@
 /**
  * Async pre-rendering for math blocks and diagram fences, the fragment
- * sibling of `useMarkdownEmbedContent`: canvas-render's `renderMath` /
- * `renderDiagram` seams are SYNCHRONOUS by contract, and the real engines
- * (MathJax, mermaid) are async dynamic imports — so this hook renders each
- * source string ahead of layout and hands the preview cache lookups.
+ * sibling of `useReferenceSeams` (which loads what a document points at):
+ * canvas-render's `renderMath` / `renderDiagram` seams are SYNCHRONOUS by
+ * contract, and the real engines (MathJax, mermaid) are async dynamic
+ * imports — so this hook renders each source string ahead of layout and
+ * hands the preview cache lookups.
  * Totality mirrors the seams: a render failure caches as "missing" (the
  * layout keeps its documented fallback) and is never re-attempted in a
  * retry storm.

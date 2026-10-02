@@ -52,6 +52,46 @@ export function blobsRoot(dataDir: string, tenantId: string): string {
   return join(tenantRoot(dataDir, tenantId), BLOBS_DIRNAME)
 }
 
+/**
+ * Where a content digest sits under a blob root: `<root>/<first2Hex>/<rest>`.
+ * One function for the live store (`root` is a tenant's `blobsRoot`) and for
+ * the backup mirror and its restore (`root` is the mirror's flat `blobs/` or
+ * `files/`), because the three must agree byte for byte — a sharding change
+ * made in one of them is a restore that reads from a path the live store no
+ * longer writes, and nothing says so until somebody restores.
+ */
+const SHARD_LENGTH = 2
+
+/** The shard directory a digest lives in under `root`. */
+export function blobShardDir(root: string, digest: string): string {
+  return join(root, digest.slice(0, SHARD_LENGTH))
+}
+
+/** The file a digest is stored at under `root`. */
+export function blobShardPath(root: string, digest: string): string {
+  return join(blobShardDir(root, digest), digest.slice(SHARD_LENGTH))
+}
+
+// 64 hex characters in all (a SHA-256 digest), split at SHARD_LENGTH. The
+// remainder's pattern is what keeps anything not named like a digest out of a
+// walk of the sharded half — a `*.partial` left by an interrupted copy is not
+// content.
+const SHARD_NAME = /^[0-9a-f]{2}$/
+const SHARD_ENTRY_NAME = /^[0-9a-f]{62}$/
+
+/** Whether a directory name under a blob root is a shard. */
+export function isBlobShardName(name: string): boolean {
+  return SHARD_NAME.test(name)
+}
+
+/**
+ * The digest a shard directory and an entry name inside it spell together, or
+ * `null` when either is not named as `blobShardPath` would have written it.
+ */
+export function parseBlobShard(shard: string, entry: string): string | null {
+  return isBlobShardName(shard) && SHARD_ENTRY_NAME.test(entry) ? `${shard}${entry}` : null
+}
+
 export function workspacesRoot(dataDir: string, tenantId: string): string {
   return join(tenantRoot(dataDir, tenantId), WORKSPACES_DIRNAME)
 }

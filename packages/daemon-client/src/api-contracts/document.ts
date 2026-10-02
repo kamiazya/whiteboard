@@ -157,13 +157,6 @@ export const renameDocumentPathResponseSchema = z.object({
   path: z.string(),
 })
 
-// GET /api/w/:workspaceId/document/<path>/exists — success body. Read-only lookup
-// so callers can distinguish "canvas not yet created" from a live doc,
-// without the snapshot/update routes' silent lazy-create side effect.
-export const canvasExistsResponseSchema = z.object({
-  exists: z.boolean(),
-})
-
 // Workspace + canvas listings consumed by IndexPage to render the
 // "open workspaces" grid.
 //
@@ -315,7 +308,6 @@ export type ListTrashResponse = z.infer<typeof listTrashResponseSchema>
 export type RestoreTrashResponse = z.infer<typeof restoreTrashResponseSchema>
 export type RenameDocumentPathRequest = z.infer<typeof renameDocumentPathRequestSchema>
 export type RenameDocumentPathResponse = z.infer<typeof renameDocumentPathResponseSchema>
-export type DocumentExistsResponse = z.infer<typeof canvasExistsResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>
 
 // GET /api/runtime/storage — response body.

@@ -53,7 +53,7 @@ export interface FileSeamSceneInputs {
  * copies is how a seam ends up wired into the committed render and missing
  * from the drag overlay, which reads as content vanishing mid-gesture.
  *
- * `resolveReferenceContent` rides along UNCOMPOSED so the worker gate can
+ * The host's `resolveReference` rides along UNCOMPOSED so the worker gate can
  * still tell content (which cannot be serialized) from label/missing
  * (which already cross as data). `missingFileRefs` is the plain-data twin
  * of the seam's `missing` field for the same reason: the worker path

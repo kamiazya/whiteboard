@@ -12,11 +12,13 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
+import type { CustomFetch } from 'openid-client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   type FakeOidcProvider,
   fakeOidcProvider,
 } from '../../shared/test-utils/fake-oidc-provider.js'
+import { oidcProviders, resolvedForTest } from '../security/_test-helpers.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createCompleteSignInDeps } from '../security/complete-sign-in.js'
 import { createRelyingParty } from '../security/oidc-relying-party.js'
@@ -32,32 +34,34 @@ const BASE = 'https://board.example'
 const HOUR = 60 * 60 * 1000
 
 function providerConfig(admission: object) {
-  return signInConfigSchema.parse({
-    providers: [
-      {
-        id: 'corp',
-        kind: 'oidc',
-        issuer: ISSUER,
-        clientId: 'wb',
-        clientSecret: { env: 'CORP_SECRET' },
-        admission,
-      },
-    ],
-  }).providers
+  return oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'corp',
+          kind: 'oidc',
+          issuer: ISSUER,
+          clientId: 'wb',
+          clientSecret: { env: 'CORP_SECRET' },
+          admission,
+        },
+      ],
+    }).providers,
+  )
 }
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let idp: FakeOidcProvider
 
-function appFor(admission: object, fetchFn: typeof fetch = idp.fetch) {
+function appFor(admission: object, fetchFn: CustomFetch = idp.fetch) {
   const db = handle.db
   const signIn = createCompleteSignInDeps(db, HOUR)
   const app = new Hono()
   app.route(
     '/',
     createSignInRoutes({
-      providers: providerConfig(admission).map((p) => ({ ...p, clientSecretValue: 's3cret' })),
+      providers: providerConfig(admission).map(resolvedForTest),
       rp: createRelyingParty({ fetch: fetchFn }),
       attempts: createSignInAttemptStore(db),
       signIn,

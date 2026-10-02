@@ -1,24 +1,23 @@
 import { type Kysely, sql } from 'kysely'
 import { describe, expect, it } from 'vitest'
-import type { DatabaseSchema } from '../schema.js'
-import { migratorFor, openMigrationHarness } from '../test-helpers.js'
+import { type AnyTables, migratorFor, openMigrationHarness } from '../test-helpers.js'
 
 /** The migration this one renames on top of. */
 const BEFORE = '0008-ulid-legacy-canvas-ids'
 const THIS_ONE = '0009-document-vocabulary'
 
-async function memoryDb(): Promise<Kysely<DatabaseSchema>> {
-  return (await openMigrationHarness<DatabaseSchema>()).db
+async function memoryDb(): Promise<Kysely<AnyTables>> {
+  return (await openMigrationHarness()).db
 }
 
-async function tableNames(db: Kysely<DatabaseSchema>): Promise<string[]> {
+async function tableNames(db: Kysely<AnyTables>): Promise<string[]> {
   const { rows } = await sql<{ name: string }>`
     select name from sqlite_master where type = 'table' order by name
   `.execute(db)
   return rows.map((r) => r.name)
 }
 
-async function indexNames(db: Kysely<DatabaseSchema>): Promise<string[]> {
+async function indexNames(db: Kysely<AnyTables>): Promise<string[]> {
   const { rows } = await sql<{ name: string }>`
     select name from sqlite_master where type = 'index' and name not like 'sqlite_%' order by name
   `.execute(db)

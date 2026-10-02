@@ -329,7 +329,7 @@ function sideSpanEntersRect(rect: Rect, side: EdgeSide, other: Rect): boolean {
  * Always total (returns all four, only reordered) and placed LAST among
  * the 'candidates' rules: `gap-valid-opposing-before-invalid` above it
  * already guarantees a non-empty ranking, so this rule can never become
- * `pairs[0]` — it only refines the tail `candidatesFor` (spatial-edges.ts)
+ * `pairs[0]` — it only refines the tail `sideCandidatesFor` (spatial-edges.ts)
  * tries once every ranked-vocabulary pair has been exhausted.
  */
 const uHookSpanExposedFirst = {

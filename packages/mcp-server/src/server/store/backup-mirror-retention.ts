@@ -15,6 +15,7 @@
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getLogger } from '../log.js'
+import { blobShardPath, isBlobShardName, parseBlobShard } from '../tenant/data-layout.js'
 import { BackupManifestUnusableError, readBackupBlobManifest } from './backup-blob-mirror.js'
 import { isBackupDirName } from './backup-dir-name.js'
 import { collectableFromBackup } from './backup-retention.js'
@@ -93,7 +94,7 @@ export async function collectMirroredBlobs(backupRoot: string): Promise<number> 
       refs: store.of(refs) ?? new Set<string>(),
     }))
     for (const digest of collectableFromBackup(present, offered)) {
-      const path = join(backupRoot, store.dir, digest.slice(0, 2), digest.slice(2))
+      const path = blobShardPath(join(backupRoot, store.dir), digest)
       try {
         await rm(path, { force: true })
         collected += 1
@@ -116,7 +117,7 @@ async function listMirrored(backupRoot: string, store: string): Promise<Set<stri
     return found
   }
   for (const shard of shards) {
-    if (!/^[0-9a-f]{2}$/.test(shard)) continue
+    if (!isBlobShardName(shard)) continue
     let rest: string[]
     try {
       rest = await readdir(join(backupRoot, store, shard))
@@ -126,7 +127,10 @@ async function listMirrored(backupRoot: string, store: string): Promise<Set<stri
     // A `*.partial` left by an interrupted copy is not an entry; it fails
     // this test and is left where it is rather than being counted as
     // unreferenced content and deleted.
-    for (const name of rest) if (/^[0-9a-f]{62}$/.test(name)) found.add(`${shard}${name}`)
+    for (const name of rest) {
+      const digest = parseBlobShard(shard, name)
+      if (digest !== null) found.add(digest)
+    }
   }
   return found
 }

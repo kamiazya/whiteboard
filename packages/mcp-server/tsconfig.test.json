@@ -1,0 +1,36 @@
+{
+  // What `pnpm typecheck` checks that tsconfig.server.json cannot: the test
+  // files, which that config excludes so they never reach `dist`. vitest only
+  // strips types, so without this program a test that no longer compiles
+  // against a changed production type passes locally and fails at runtime
+  // with a message about the symptom, not the signature.
+  //
+  // Run through scripts/typecheck-tests.mjs, which tolerates the errors a
+  // known file still carries (scripts/typecheck-tests-debt.json) and fails on
+  // anything else. Not extended by the build: nothing here is emitted.
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The tests run on the Node in `.node-version`, which has ES2024's
+    // `Promise.withResolvers`; the production config's ES2022 lib stays what
+    // the shipped code is held to.
+    "lib": ["ES2024"],
+    // Unset the server config's `rootDir`/`outDir`: tests import across the
+    // package (scripts/, the repo's arch-lint helpers) and nothing is emitted.
+    "rootDir": null,
+    "outDir": null,
+    "declaration": false,
+    "sourceMap": false,
+    // The tests import `scripts/*.mjs` and `canvas-viewer`'s sources; without
+    // `allowJs` every such import is an implicit-any error, and without `jsx`
+    // and vite's asset-suffix types the viewer's own files do not compile.
+    "allowJs": true,
+    "checkJs": false,
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "vitest*.ts"],
+  // Explicit and empty: the server config's exclude list is exactly what this
+  // program exists to reverse, and `extends` would otherwise inherit it.
+  "exclude": []
+}

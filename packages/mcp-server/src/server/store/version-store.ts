@@ -17,14 +17,13 @@ import { sql } from 'kysely'
 import type { Frontiers } from 'loro-crdt'
 import { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
-import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
-import { getDb } from './db/index.js'
-import { prepareDataDir } from './db/prepare.js'
 import type { DatabaseSchema } from './db/schema.js'
+import type { TenantDatabase } from './db/tenant-database.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 const log = getLogger('version-store')
@@ -106,11 +105,6 @@ export interface VersionStore {
     workspaceId: string,
     path: string,
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
-}
-
-async function dbReady() {
-  await prepareDataDir(getDataDir())
-  return getDb(getDataDir())
 }
 
 interface VersionRow {
@@ -275,6 +269,13 @@ function savedVersion({
 }
 
 export class FileVersionStore implements VersionStore {
+  /**
+   * `scope` is which data directory these versions live in. Omitted, it
+   * follows the process's — what a router that was handed no composition
+   * uses; a composition builds its own over the directory it serves.
+   */
+  constructor(private readonly scope: StoreScope = globalStoreScope) {}
+
   async save(
     workspaceId: string,
     path: string,
@@ -315,7 +316,7 @@ export class FileVersionStore implements VersionStore {
       const createdAt = Date.now()
       const operator = opts.operator
 
-      const db = await dbReady()
+      const db = await this.scope.db()
       // A document's checkpoint lives in the WORKSPACE document's oplog:
       // that lineage is durable across restarts, while a projection's is
       // reborn per process — frontiers recorded against it would break on
@@ -362,7 +363,7 @@ export class FileVersionStore implements VersionStore {
   async load(workspaceId: string, id: string): Promise<LoroDoc | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
-    const db = await dbReady()
+    const db = await this.scope.db()
     const row = await db
       .selectFrom('versions')
       .select(['frontiers', 'documentId'])
@@ -399,7 +400,7 @@ export class FileVersionStore implements VersionStore {
   async loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
-    const db = await dbReady()
+    const db = await this.scope.db()
     const row = await db
       .selectFrom('versions')
       .select(['frontiers'])
@@ -426,7 +427,7 @@ export class FileVersionStore implements VersionStore {
   async list(workspaceId: string, path: string): Promise<VersionEntry[]> {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
-    const db = await dbReady()
+    const db = await this.scope.db()
     const documentId = await this.resolveDocumentId(db, workspaceId, path)
     if (!documentId) return []
     const rows = await db
@@ -447,7 +448,7 @@ export class FileVersionStore implements VersionStore {
   ): Promise<{ deletedCount: number; deletedIds: string[] }> {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
-    const db = await dbReady()
+    const db = await this.scope.db()
     const documentId = await this.resolveDocumentId(db, workspaceId, path)
     if (!documentId) return { deletedCount: 0, deletedIds: [] }
     const rows = await db
@@ -476,7 +477,7 @@ export class FileVersionStore implements VersionStore {
   async getFrontiersBase64(workspaceId: string, id: string): Promise<string | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
-    const db = await dbReady()
+    const db = await this.scope.db()
     const row = await db
       .selectFrom('versions')
       .select(['frontiers'])
@@ -510,7 +511,7 @@ export class FileVersionStore implements VersionStore {
   async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
-    const db = await dbReady()
+    const db = await this.scope.db()
     const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
       workspaceId,
     )
@@ -534,7 +535,7 @@ export class FileVersionStore implements VersionStore {
 
   async earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null> {
     validateWorkspaceId(workspaceId)
-    const db = await dbReady()
+    const db = await this.scope.db()
     const row = await db
       .selectFrom('versions')
       .select(['frontiers'])
@@ -558,7 +559,7 @@ export class FileVersionStore implements VersionStore {
   // record per call; route frequency is low, cache when a measured
   // workspace makes it slow.
   private async resolveDocumentId(
-    db: Awaited<ReturnType<typeof dbReady>>,
+    db: TenantDatabase,
     workspaceId: string,
     path: string,
   ): Promise<string | null> {
@@ -570,7 +571,7 @@ export class FileVersionStore implements VersionStore {
   }
 
   private async prune(documentId: string): Promise<void> {
-    const db = await dbReady()
+    const db = await this.scope.db()
     const autos = await db
       .selectFrom('versions')
       .select(['id', 'restoredFrom'])
