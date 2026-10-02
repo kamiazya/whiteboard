@@ -7,10 +7,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
-import { trackedFiles } from '../../shared/test-utils/tracked-files.js'
+import { REPO_ROOT } from './scan-roots.js'
+import { trackedFiles } from './tracked-files.js'
 
-const ROOT = repoRoot()
+const ROOT = REPO_ROOT
 
 const MAY_NAME_TSUP: Record<string, string> = {
   'pnpm-workspace.yaml':

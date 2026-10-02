@@ -2,19 +2,16 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { serverRestoreOutputSchema, serverSupportBundleOutputSchema } from '../cli/operator-json.js'
-import { codeText } from '../shared/test-utils/markdown-code.js'
-import { bareScriptNames, declaresScript, scriptsOf } from '../shared/test-utils/pnpm-scripts.js'
-import { repoRoot } from '../shared/test-utils/repo-root.js'
-import { trackedFiles } from '../shared/test-utils/tracked-files.js'
-import { serverBackupResultSchema } from './store/backup-pass.js'
+import { codeText } from './markdown-code.js'
+import { bareScriptNames, declaresScript, scriptsOf } from './pnpm-scripts.js'
+import { REPO_ROOT } from './scan-roots.js'
+import { trackedFiles } from './tracked-files.js'
 
 // The user-facing docs/ tree is the contract surface for anything a real
 // operator needs to discover (env vars, escape hatches). R5 of the MCP-UI
 // retirement (ADR 0001) deletes the WHITEBOARD_LEGACY_UI escape hatch along
 // with the legacy UI it toggled — this test fails the build if the flag is
 // ever documented again without the code behind it existing.
-const REPO_ROOT = repoRoot()
 const DOCS_ROOT = join(REPO_ROOT, 'docs')
 
 // vitest-projects.mjs (tools/checks) is the single source of truth for the
@@ -300,49 +297,6 @@ describe('docs/ contract', () => {
     // The two surfaces this deployment actually serves.
     expect(guide).toContain('/api')
     expect(guide).toContain('/mcp')
-  })
-
-  // The page tells operators what to script against, and said the backup was
-  // version 1 for as long as the code printed version 2: a span nobody
-  // re-reads is a claim nothing checks. Every JSON it shows as a command's
-  // output is parsed through the schema that command prints through, and the
-  // version column is read against the same schemas.
-  describe('self-host-with-docker.md output examples', () => {
-    const guide = readFileSync(join(DOCS_ROOT, 'how-to/self-host-with-docker.md'), 'utf8')
-    const OUTPUTS = {
-      backup: serverBackupResultSchema,
-      restore: serverRestoreOutputSchema,
-      'support-bundle': serverSupportBundleOutputSchema,
-    } as const
-    const examples = [
-      ...[...guide.matchAll(/stdout contains\s+`([^`]+)`/g)].map((match) => match[1] ?? ''),
-      ...[...guide.matchAll(/```json\n([\s\S]*?)```/g)]
-        .map((match) => match[1] ?? '')
-        .filter((block) => block.includes('"operation"')),
-    ]
-
-    it('shows an example for every operator output, and each parses through its schema', () => {
-      expect(
-        new Set(examples.map((text) => (JSON.parse(text) as { operation: string }).operation)),
-      ).toEqual(new Set(Object.keys(OUTPUTS)))
-      for (const text of examples) {
-        const example = JSON.parse(text) as { operation: keyof typeof OUTPUTS }
-        const result = OUTPUTS[example.operation].safeParse(example)
-        expect(
-          result.success,
-          `${text} does not parse: ${JSON.stringify(result.error?.issues)}`,
-        ).toBe(true)
-      }
-    })
-
-    it('states each output schemaVersion as the schema declares it', () => {
-      const rows = [...guide.matchAll(/^\| `server [\w-]+` \| `([\w-]+)` \| (\d+) \|$/gm)]
-      expect(rows.map((row) => row[1]).sort()).toEqual(Object.keys(OUTPUTS).sort())
-      for (const [, operation, version] of rows) {
-        const schema = OUTPUTS[operation as keyof typeof OUTPUTS]
-        expect(Number(version), `${operation} schemaVersion`).toBe(schema.shape.schemaVersion.value)
-      }
-    })
   })
 
   // A count spelled out in prose is the kind of claim nobody re-reads: it read

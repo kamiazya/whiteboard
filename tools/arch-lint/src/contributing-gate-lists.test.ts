@@ -18,16 +18,15 @@
 // first.
 
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { codeText } from '../../shared/test-utils/markdown-code.js'
-import { bareScriptNames, declaresScript, scriptsOf } from '../../shared/test-utils/pnpm-scripts.js'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { jobSection } from './job-section.js'
+import { codeText } from './markdown-code.js'
+import { bareScriptNames, declaresScript, scriptsOf } from './pnpm-scripts.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = repoRoot()
+const ROOT = REPO_ROOT
 
 function contributing(): string {
   return readFileSync(join(ROOT, 'CONTRIBUTING.md'), 'utf-8')

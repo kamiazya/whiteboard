@@ -5,12 +5,11 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
-import { proseText } from '../shared/test-utils/markdown-code.js'
-import { repoRoot } from '../shared/test-utils/repo-root.js'
-import { trackedFiles } from '../shared/test-utils/tracked-files.js'
+import { proseText } from './markdown-code.js'
+import { REPO_ROOT } from './scan-roots.js'
+import { trackedFiles } from './tracked-files.js'
 
 function walkMd(dir: string, base: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -23,9 +22,6 @@ function walkMd(dir: string, base: string, acc: string[] = []): string[] {
   }
   return acc
 }
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = repoRoot()
 
 function readText(relPath: string): string {
   return readFileSync(resolve(REPO_ROOT, relPath), 'utf-8')

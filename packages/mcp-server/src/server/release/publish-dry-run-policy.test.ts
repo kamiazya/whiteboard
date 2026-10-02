@@ -10,9 +10,9 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { jobSection } from '../../../../../tools/arch-lint/src/job-section.js'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
-import { jobSection } from './job-section.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = repoRoot()

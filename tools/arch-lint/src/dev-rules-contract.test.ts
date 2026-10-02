@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
 // apps/web's jsdom vitest project used to run unnamed, so `--project
 // web-jsdom` matched nothing while a sibling `--project web-browser` in the
@@ -15,7 +15,6 @@ import { repoRoot } from '../shared/test-utils/repo-root.js'
 // NOT, as this said until the pre-push block was read: "part of the lefthook
 // pre-push gate". That gate runs no vitest PROJECT — only two named single-
 // file guards, and this is not one of them.
-const REPO_ROOT = repoRoot()
 
 const RULE_AND_SKILL_FILES = [
   '.claude/rules/dev-flow.md',
