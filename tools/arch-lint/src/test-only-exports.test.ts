@@ -46,8 +46,7 @@ import {
 } from './test-only-exports-scan.js'
 
 /** Dead outright: not even used inside their own file, only imported by a test. */
-const NO_USE_BESIDE_TESTS: readonly string[] = [
-]
+const NO_USE_BESIDE_TESTS: readonly string[] = []
 
 /**
  * Exported so a test can reach an internal: used in their own file, and
