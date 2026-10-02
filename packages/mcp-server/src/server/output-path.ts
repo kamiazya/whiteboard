@@ -1,5 +1,6 @@
 import { realpath, stat } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve, sep } from 'node:path'
+import { isMissingFileError } from '../shared/errno.js'
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: rejection-class regex
 const CONTROL_CHAR_PATTERN = /[\x00-\x1f\x7f-\x9f]/
@@ -25,7 +26,7 @@ async function realpathNearestExisting(p: string): Promise<string> {
     try {
       return await realpath(current)
     } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error
+      if (!isMissingFileError(error)) throw error
       const parent = dirname(current)
       if (parent === current) return current
       current = parent
@@ -41,7 +42,7 @@ async function fileExistsOrThrow(path: string): Promise<boolean> {
     await stat(path)
     return true
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+    if (isMissingFileError(error)) {
       return false
     }
     throw error

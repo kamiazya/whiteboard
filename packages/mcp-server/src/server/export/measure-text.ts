@@ -3,10 +3,12 @@
 // imports a font itself — this module supplies the real opentype.js-backed
 // measurer. When the vendored asset is unavailable it degrades to
 // canvas-render's shared constant-ratio measurer rather than a local copy.
+
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type * as opentype from 'opentype.js'
+import { errnoCode } from '../../shared/errno.js'
 
 import { opentypeApi } from '../../shared/opentype.js'
 import { getLogger } from '../log.js'
@@ -163,7 +165,7 @@ let hasLoggedFallback = false
  */
 function describeLoadFailure(err: unknown): string {
   if (!(err instanceof Error)) return 'unknown'
-  const code = (err as NodeJS.ErrnoException).code
+  const code = errnoCode(err)
   return code ? `${err.name}(${code})` : err.name
 }
 

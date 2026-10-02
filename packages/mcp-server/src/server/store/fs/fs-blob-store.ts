@@ -13,10 +13,11 @@ import type {
   BlobStore,
 } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
+import { isMissingFileError } from '../../../shared/errno.js'
 import { errorMessage } from '../../../shared/error-message.js'
 import { writeFileAtomicStaged } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
-import { corruptStoredData, isMissingFileError } from '../corrupt-stored-data.js'
+import { corruptStoredData } from '../corrupt-stored-data.js'
 import { assertPathWithinDir } from '../path-guard.js'
 
 const log = getLogger('fs-blob-store')

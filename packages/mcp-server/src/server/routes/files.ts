@@ -1,13 +1,10 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { Hono } from 'hono'
+import { isMissingFileError } from '../../shared/errno.js'
 import { errorMessage } from '../../shared/error-message.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
-import {
-  corruptStoredData,
-  corruptStoredDataBody,
-  isMissingFileError,
-} from '../store/corrupt-stored-data.js'
+import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
 import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'

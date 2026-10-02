@@ -14,8 +14,10 @@
  * JUDGEMENT — "is this secret owner-only, and if not, stop" — not merely
  * because both touch the filesystem.
  */
+
 import { chmodSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { isMissingFileError } from '../../shared/errno.js'
 
 const OWNER_ONLY_FILE = 0o600
 const OWNER_ONLY_DIR = 0o700
@@ -79,7 +81,7 @@ export function readSecretFileIfPresentSync(filepath: string): string | null {
   try {
     return readFileSync(filepath, 'utf8')
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    if (isMissingFileError(err)) return null
     throw err
   }
 }

@@ -13,6 +13,7 @@
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getLogger } from '../server/log.js'
+import { isMissingFileError } from '../shared/errno.js'
 
 // The filename/dirname literals formerly lived in web-origin-trust-store.ts,
 // which owned the reconnect trust store. That module is gone; this is now
@@ -28,8 +29,7 @@ async function removeBestEffort(path: string, removeFn: typeof rm): Promise<void
   try {
     await removeFn(path, { recursive: true })
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code
-    if (code === 'ENOENT') return
+    if (isMissingFileError(err)) return
     getLogger('daemon-startup').warning(
       { path, err: err as Error },
       'failed to remove stale reconnect trust artifact',

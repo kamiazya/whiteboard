@@ -2,6 +2,7 @@ import { accessSync, chmodSync, constants as fsConstants, mkdirSync, statSync } 
 import { open } from 'node:fs/promises'
 import { homedir, platform, tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
+import { isErrnoCode, isMissingFileError } from './errno.js'
 import { findPackageRoot } from './package-root.js'
 
 // The package root (holds package.json + dist/). Resolved by walking up to
@@ -75,7 +76,7 @@ export function assertDataDirOwnedByUser(
   try {
     stat = statSync(dir)
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    if (!isMissingFileError(err)) throw err
     if (!mustExist) return
     throw new Error(`the data directory ${dir} no longer exists while a file in it is open.`)
   }
@@ -139,9 +140,8 @@ export async function readFileOwnedByUser(
     // O_NOFOLLOW is undefined on Windows, where the flag is simply absent.
     handle = await open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0))
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    if (code === 'ENOENT') return { kind: 'missing' }
-    if (code === 'ELOOP')
+    if (isMissingFileError(err)) return { kind: 'missing' }
+    if (isErrnoCode(err, 'ELOOP'))
       return { kind: 'not-owned', message: `${path} is a symlink; refusing to follow it.` }
     throw err
   }

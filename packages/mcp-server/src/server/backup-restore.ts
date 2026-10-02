@@ -1,6 +1,7 @@
 import { cp, lstat, mkdir, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
+import { isMissingFileError } from '../shared/errno.js'
 import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
 import { DAEMON_IDENTITY_FILENAME } from './security/daemon-identity.js'
 import { MACAROON_ROOT_KEY_FILENAME } from './security/macaroon-root-key.js'
@@ -73,7 +74,7 @@ async function canonicalizePath(p: string): Promise<string> {
       await lstat(candidate)
       break
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+      if (!isMissingFileError(err)) throw err
       existingLen--
     }
   }
@@ -97,7 +98,7 @@ export async function hasAncestorSymlink(p: string): Promise<boolean> {
       const st = await lstat(current)
       if (st.isSymbolicLink()) return true
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+      if (!isMissingFileError(err)) throw err
       // Component does not exist yet; check its parent.
     }
     current = parent
@@ -126,7 +127,7 @@ async function isEmptyDirOrMissing(dir: string): Promise<boolean> {
     const entries = await readdir(dir)
     return entries.length === 0
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return true
+    if (isMissingFileError(err)) return true
     throw err
   }
 }
@@ -136,7 +137,7 @@ async function dirExists(dir: string): Promise<boolean> {
     const s = await lstat(dir)
     return s.isDirectory()
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false
+    if (isMissingFileError(err)) return false
     throw err
   }
 }

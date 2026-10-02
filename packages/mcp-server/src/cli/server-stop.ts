@@ -24,6 +24,7 @@ import {
   type ServerStopResult,
   serverStopResultSchema,
 } from '../shared/api-contracts/server-stop.js'
+import { isErrnoCode } from '../shared/errno.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
@@ -219,7 +220,7 @@ async function sendStopSignal(
     killFn(record.pid, 'SIGTERM')
     return null
   } catch (err) {
-    if ((err as NodeJS.ErrnoException | undefined)?.code !== 'ESRCH') {
+    if (!isErrnoCode(err, 'ESRCH')) {
       return outcome(1, {
         action: 'refused',
         reason: 'server-stop-signal-failed',

@@ -11,6 +11,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { isErrnoCode } from './errno.js'
 import { isPidAlive } from './process-alive.js'
 
 const LOCK_OWNER_FILENAME = 'owner.json'
@@ -53,7 +54,7 @@ async function reclaimDeadLock(lockDirPath: string): Promise<void> {
   try {
     await mkdir(breakLockPath, { recursive: false })
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+    if (isErrnoCode(err, 'EEXIST')) {
       const breaker = await loadOwnerMetadata(breakLockPath)
       if (breaker && !isPidAlive(breaker.pid)) {
         await rm(breakLockPath, { recursive: true, force: true })
@@ -92,7 +93,7 @@ async function tryAcquire(lockDirPath: string): Promise<boolean> {
     await writeOwnerMetadata(lockDirPath)
     return true
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    if (!isErrnoCode(err, 'EEXIST')) throw err
     return false
   }
 }

@@ -27,6 +27,7 @@ import {
   daemonDoctorResultSchema,
 } from '../shared/api-contracts/daemon-doctor.js'
 import { redactDiagnosticText } from '../shared/diagnostics/redact.js'
+import { isMissingFileError } from '../shared/errno.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './daemon-ping-client.js'
 import { mergeCliFlagsIntoEnv, type ServerRunArgs } from './server-run-args.js'
@@ -88,7 +89,7 @@ function defaultCheckDataDir(dataDir: string): 'ok' | 'not-writable' | 'not-exis
     accessSync(dataDir, fsConstants.W_OK)
     return 'ok'
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+    if (isMissingFileError(err)) {
       return 'not-exists'
     }
     return 'not-writable'

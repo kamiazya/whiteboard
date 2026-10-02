@@ -1,5 +1,6 @@
 import { messageOf } from '@kamiazya/whiteboard-model'
 import type { Embedder } from '@kamiazya/whiteboard-server-core'
+import { errnoCode } from '../../shared/errno.js'
 import { getLogger } from '../log.js'
 
 const log = getLogger('search-embedder')
@@ -97,7 +98,7 @@ export async function loadEmbeddingPipeline(
 export type EmbedderLoadFailure = 'runtime-missing' | 'weights-missing' | 'load-failed'
 
 export function classifyEmbedderLoadFailure(err: unknown): EmbedderLoadFailure {
-  const code = (err as NodeJS.ErrnoException | undefined)?.code
+  const code = errnoCode(err)
   if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') return 'runtime-missing'
   const message = messageOf(err, String(err))
   // transformers.js reports a cache miss under `allowRemoteModels = false`
