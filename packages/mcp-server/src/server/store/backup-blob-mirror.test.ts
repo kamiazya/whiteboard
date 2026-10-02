@@ -199,6 +199,24 @@ describe('the backup blob mirror', () => {
     expect(shards).toEqual([createHash('sha256').update('real blob').digest('hex').slice(0, 2)])
   })
 
+  it('leaves a stray entry inside a shard alone, and does not record it as a blob', async () => {
+    const digest = await putBlob('real blob')
+    // What an interrupted write leaves beside real content.
+    await writeFile(
+      join(
+        blobsRoot(dataDir, SELF_HOST_TENANT_ID),
+        digest.slice(0, 2),
+        `${digest.slice(2)}.partial`,
+      ),
+      'half',
+    )
+
+    const references = await mirrorBlobsIntoBackup(dataDir, backupRoot)
+
+    expect([...selfBlobs(references)]).toEqual([digest])
+    expect(await readdir(join(backupRoot, 'blobs', digest.slice(0, 2)))).toEqual([digest.slice(2)])
+  })
+
   it('is content, not just a name: a mirrored blob reads back byte for byte', async () => {
     const digest = await putBlob('the actual bytes')
     await mirrorBlobsIntoBackup(dataDir, backupRoot)
@@ -423,6 +441,24 @@ describe('the backup blob mirror', () => {
           BackupManifestUnusableError,
         )
       })
+    })
+
+    it('throws on a manifest of a version this build does not know, rather than answering null', async () => {
+      const unknown = join(backupRoot, '2026-01-06T00-00-00.000Z')
+      await mkdir(unknown, { recursive: true })
+      await writeFile(
+        join(unknown, 'blobs.json'),
+        JSON.stringify({ schemaVersion: 4, mirror: 'self', tenants: {} }),
+      )
+      await expect(readBackupBlobManifest(unknown)).rejects.toBeInstanceOf(
+        BackupManifestUnusableError,
+      )
+    })
+
+    it('throws on a manifest path that is not a readable file, whoever is reading it', async () => {
+      const odd = join(backupRoot, '2026-01-07T00-00-00.000Z')
+      await mkdir(join(odd, 'blobs.json'), { recursive: true })
+      await expect(readBackupBlobManifest(odd)).rejects.toBeInstanceOf(BackupManifestUnusableError)
     })
 
     it('throws on a manifest that is there but cannot be read', async () => {
