@@ -2,9 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
-import { repoRoot } from './test-utils/repo-root.js'
-
-const REPO_ROOT = repoRoot()
+import { REPO_ROOT } from './scan-roots.js'
 
 // A full 40-character hex commit SHA — the only form that is immutable.
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/
