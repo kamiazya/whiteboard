@@ -28,7 +28,7 @@ Check:
 Check, per surface touched:
 - **MCP tool**: registered through `registerToolWithAnnotations`, exported
   from the tools index, and called at least once by `pnpm smoke:e2e`
-  (`scripts/smoke/mcp-e2e-smoke.mjs`) — AGENTS.md requires the smoke step for
+  (`packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs`) — AGENTS.md requires the smoke step for
   every new tool, and it is what proves the tool is actually reachable over
   the wire rather than merely defined.
 - **HTTP route**: mounted on the Hono app returned by `createServer`, not

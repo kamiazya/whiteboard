@@ -114,7 +114,7 @@ split is the test-level form of the dependency rule above.
 ## The generated emoji catalog
 
 `src/emoji/catalog-data.ts` is GENERATED from Unicode's own `emoji-test.txt`
-(`scripts/generate-emoji-catalog.mjs`) and committed, the way the vendored
+(`packages/plugin-visual/scripts/generate-emoji-catalog.mjs`) and committed, the way the vendored
 lucide geometry is — a clone builds offline, and regenerating is a deliberate
 step at a Unicode release. 1914 fully-qualified sequences in CLDR order,
 skin-tone variants dropped (they are 2030 of 3944 and add no distinct meaning

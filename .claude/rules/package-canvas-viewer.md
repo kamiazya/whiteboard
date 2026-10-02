@@ -128,7 +128,7 @@ paths:
 - `measure-text.ts` has a jsdom-project fallback-measurer test and a
   `.browser.test.tsx` real-Canvas2D contract test (linear scaling with
   `sizePx`, `advanceWidth('') === 0`).
-- `smoke:widget` (`scripts/smoke-widget.mjs`) exercises the built
+- `smoke:widget` (`packages/canvas-viewer/scripts/smoke-widget.mjs`) exercises the built
   single-file widget in a real browser.
 
 ## Render style (ADR-0030)
