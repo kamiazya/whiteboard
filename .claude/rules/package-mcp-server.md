@@ -171,6 +171,26 @@ on the first read: `server-mode-http.ts` — the MULTI-INSTANCE root, the one th
 backup lease was built for — was starting no background work at all, so
 scheduled backups reached only the local daemon.
 
+## How the HTTP roots arm their work, trace, and document their env
+
+Each HTTP root takes its workers from `createSharedWorkers` whole: `fileGc` (the
+sweeper with its capped stop) and `checkpoints` (the holder for the scheduler
+`createApp` hands back) are carried on `SharedWorkers`, and
+`composition-roots.guard.test.ts` fails a root that hand-builds either.
+`background-work.guard.test.ts` accepts a worker wrapped as
+`start: () => x.start()` in the shared set, since it arms nothing until the
+registry calls it, and still fails a direct `x.start()` outside a registry call.
+
+Tracing is started by each HTTP root (`startHttpRootTracing`, in the
+observability directory's root-tracing module), not by a process entry:
+`whiteboard daemon run` and `whiteboard server run` never reach the dev entry's
+`main()`. The headless-exporter pre-warm is dev-entry only on purpose: it is
+one-shot (~40-60ms stall, 150-220ms wall) and is not registry work.
+
+`env-docs-contract.test.ts` reads `envFlag('…')` and `env.OTEL_*` as well as
+`env.WHITEBOARD_*` and `env.MCP_*`, so a new variable of any of those shapes
+needs its documentation in the same increment.
+
 ## Log redaction
 
 The root pino instance in `log.ts` redacts a fixed list of field names —
