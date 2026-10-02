@@ -18,7 +18,7 @@ import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { blobsRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
@@ -149,4 +149,53 @@ it('names-store setDocumentPinned waits for the workspace write lock', async () 
   await expect(raceAgainstHeldLock(WS, () => setDocumentPinned(WS, 'doc', true))).resolves.toBe(
     'blocked',
   )
+})
+
+// The writers are read off the class rather than listed here: an override
+// added to the tree index is a writer of the same record, and one written
+// without the lock is the lost update the header describes. A method named in
+// neither table fails below, so the next one is classified when it is added.
+type TreeIndex = InstanceType<typeof CacheCoherentDocumentIndex>
+
+const WRITER_CASES: Record<string, (index: TreeIndex, workspaceId: string) => Promise<unknown>> = {
+  createWorkspace: (index, workspaceId) => index.createWorkspace({ workspaceId }),
+  renameWorkspace: (index, workspaceId) =>
+    index.renameWorkspace({ workspaceId, displayName: 'Renamed' }),
+  createDocument: (index, workspaceId) =>
+    index.createDocument({ workspaceId, path: 'second', kind: 'spatial' }),
+  setDocumentName: (index, workspaceId) =>
+    index.setDocumentName({ workspaceId, path: 'doc', name: 'renamed' }),
+  restoreDocument: (index, workspaceId) =>
+    index.restoreDocument({ workspaceId, documentId: 'not-in-the-trash' }),
+  moveDocument: (index, workspaceId) =>
+    index.moveDocument({ workspaceId, from: 'doc', to: 'moved' }),
+  deleteDocument: (index, workspaceId) => index.deleteDocument({ workspaceId, path: 'doc' }),
+}
+
+/** Methods of the class that do not write the record, each with the reason. */
+const NOT_WRITERS: Record<string, string> = {}
+
+function ownMethods(): string[] {
+  return Object.getOwnPropertyNames(CacheCoherentDocumentIndex.prototype).filter(
+    (name) => name !== 'constructor',
+  )
+}
+
+describe('every override of the tree index holds the workspace write lock', () => {
+  it('classifies every method the class defines as a writer or a non-writer', () => {
+    const methods = ownMethods()
+    // The subject is present: the class overrides seven writers today.
+    expect(methods.length).toBeGreaterThanOrEqual(7)
+    expect(Object.keys(WRITER_CASES).filter((name) => name in NOT_WRITERS)).toEqual([])
+    expect([...Object.keys(WRITER_CASES), ...Object.keys(NOT_WRITERS)].sort()).toEqual(
+      [...methods].sort(),
+    )
+  })
+
+  it.each(Object.entries(WRITER_CASES))('index.%s waits for the lock', async (name, write) => {
+    const WS = `ws-lock-each-${name}`
+    await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
+    const index = treeIndex()
+    await expect(raceAgainstHeldLock(WS, () => write(index, WS))).resolves.toBe('blocked')
+  })
 })
