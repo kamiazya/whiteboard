@@ -249,6 +249,25 @@ async function exerciseVersionRoundTrip(callTool: CallTool, documentId: string):
   console.log(`[e2e] wb_version_restore → ${restored.restoredVersionId}`)
 }
 
+/**
+ * The child still holds its database open when SIGTERM lands; removing the
+ * data dir under it races its own close and fails ENOTEMPTY. Wait for the
+ * exit, bounded so a child that ignores the signal cannot hang the smoke.
+ */
+function exited(child: ChildProcess, ceilingMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve()
+      return
+    }
+    const timer = setTimeout(resolve, ceilingMs)
+    child.once('exit', () => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+}
+
 export async function runE2eCheckpointSmoke({
   entry,
   root,
@@ -338,21 +357,7 @@ export async function runE2eCheckpointSmoke({
     try {
       child.kill('SIGTERM')
     } catch {}
-    // The child still holds its database open when SIGTERM lands; removing
-    // the data dir under it races its own close and fails ENOTEMPTY. Wait
-    // for the exit (bounded, so a child that ignores the signal cannot hang
-    // the smoke) and let rmSync retry what is left.
-    await new Promise<void>((resolve) => {
-      if (child.exitCode !== null || child.signalCode !== null) {
-        resolve()
-        return
-      }
-      const timer = setTimeout(resolve, 2000)
-      child.once('exit', () => {
-        clearTimeout(timer)
-        resolve()
-      })
-    })
+    await exited(child, 2000)
     rmSync(tmpDataDir, { recursive: true, force: true, maxRetries: 3 })
   }
 }
