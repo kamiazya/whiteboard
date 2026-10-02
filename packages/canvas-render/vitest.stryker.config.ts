@@ -28,6 +28,7 @@ export default defineConfig({
   test: {
     name: 'canvas-render-node',
     environment: 'node',
+    setupFiles: ['./vitest.stryker-setup.ts'],
     include: ['src/**/*.test.ts'],
     exclude: [
       'src/**/*.browser.test.ts',
