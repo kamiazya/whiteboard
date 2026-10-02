@@ -58,7 +58,7 @@ export const COMPOSITION_ROOTS = ['apps/extension', 'apps/web', 'packages/mcp-se
  * dependency list stay with the composition-root checks, and its DOM globals
  * are exempt in `architecture-map.ts`.
  */
-export const BOUNDARY_SCANNED_ROOTS = ['apps/extension']
+const BOUNDARY_SCANNED_ROOTS = ['apps/extension']
 
 /** Every package whose own source `repo-coverage.test.ts` scans for boundary violations. */
 export const BOUNDARY_SCAN_PACKAGES = [...SHARED_LAYER_PACKAGES, ...BOUNDARY_SCANNED_ROOTS]

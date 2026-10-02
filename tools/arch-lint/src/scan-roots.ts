@@ -25,7 +25,7 @@ export const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 export const WORKTREES_PATH = '.claude/worktrees'
 
 /** The three top-level groups `pnpm-workspace.yaml` globs: `packages/*`, `apps/*`, `tools/*`. */
-export const WORKSPACE_GROUPS = ['packages', 'apps', 'tools'] as const
+const WORKSPACE_GROUPS = ['packages', 'apps', 'tools'] as const
 
 /**
  * Every workspace directory (`<group>/<name>`, repo-relative, `/`-separated)

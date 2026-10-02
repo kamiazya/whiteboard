@@ -16,7 +16,7 @@ import { walk } from './scan-roots.js'
  * not something a request reaches, so what it imports says nothing about an
  * adapter.
  */
-export const ADAPTER_DIRS = ['routes', 'mcp'] as const
+const ADAPTER_DIRS = ['routes', 'mcp'] as const
 
 export function isAdapterSource(file: string): boolean {
   return file.endsWith('.ts') && !file.endsWith('.test.ts') && !/(^|[\\/])_test-/.test(file)
