@@ -40,6 +40,7 @@ import {
   segmentArb,
   type Target,
 } from './_test-route-fuzz-lane.js'
+import { testDataLayout } from './routes/_test-helpers.js'
 
 let tempDir = ''
 // One data dir per seeded app: the legacy document store and its db handle
@@ -125,7 +126,7 @@ async function seededApp(): Promise<Seeded> {
   // default container is an in-memory store the legacy routes never see.
   const db = await getDb(dataDir)
   const serverDeps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, dataDir)))
-  const app = createApp({ ...runtimeOptions(), serverDeps })
+  const app = createApp({ ...runtimeOptions(), serverDeps, dataLayout: testDataLayout() })
   const auth = { Authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }
   const create = async (body: unknown) => {
     const res = await app.request(`/api/v1/workspaces/${workspace}/documents`, {

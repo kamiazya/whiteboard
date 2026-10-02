@@ -59,6 +59,7 @@ import {
   serverModePeople,
 } from './_test-server-mode-harness.js'
 import type { ServerModeAppOptions } from './app.js'
+import { testDataLayout } from './routes/_test-helpers.js'
 import { createCompleteSignInDeps } from './security/complete-sign-in.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
@@ -197,6 +198,7 @@ function composedApp(
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     people: stores.people,
     signIn: {
       providers,

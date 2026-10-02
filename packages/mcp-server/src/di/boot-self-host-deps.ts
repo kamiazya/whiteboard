@@ -4,6 +4,9 @@ import { ensureWorkspaceId } from '../server/current-workspace.js'
 import { getDb } from '../server/store/db/index.js'
 import { prepareDataDir } from '../server/store/db/prepare.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
+import { createDataLayout } from '../server/tenant/data-layout.js'
+import type { DataLayout } from '../server/tenant/data-layout-seam.js'
+import { SELF_HOST_TENANT_ID } from '../server/tenant/id.js'
 import { resolveSelfHostServerDeps } from './self-host-server-deps.js'
 
 /**
@@ -28,13 +31,22 @@ export async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
  * daemon, server mode and the stdio entry: prepare the data dir, open the
  * database, build `ServerDeps` over it. A root takes the database from here
  * for its own stores (people, replica keys) so they see the same
- * post-migration handle the ports do.
+ * post-migration handle the ports do, and the data layout for `createApp`, so
+ * the routes serve the directory and tenant these deps were built over.
  */
 export async function bootSelfHostDeps(
   dataDir: string,
   options: { readonly plugins?: readonly FacetPlugin[] } = {},
-): Promise<{ readonly db: TenantDatabase; readonly serverDeps: ServerDeps }> {
+): Promise<{
+  readonly db: TenantDatabase
+  readonly serverDeps: ServerDeps
+  readonly dataLayout: DataLayout
+}> {
   await prepareSelfHostDataDir(dataDir)
   const db = await getDb(dataDir)
-  return { db, serverDeps: resolveSelfHostServerDeps(db, dataDir, options) }
+  return {
+    db,
+    serverDeps: resolveSelfHostServerDeps(db, dataDir, options),
+    dataLayout: createDataLayout(dataDir, SELF_HOST_TENANT_ID),
+  }
 }

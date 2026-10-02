@@ -6,7 +6,6 @@
 // cleanly so the dispatcher's SIGTERM handler can await it.
 
 import { randomUUID } from 'node:crypto'
-import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
 import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
@@ -14,6 +13,7 @@ import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
+import { isDataDirWritable } from './data-dir-writable.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
 import { syncStreamStats } from './routes/sync-sse.js'
@@ -82,15 +82,6 @@ export interface ServerModeRunning {
   close: () => Promise<void>
 }
 
-function isDataDirWritable(dir: string): boolean {
-  try {
-    accessSync(dir, fsConstants.W_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
 export async function startServerModeHttp(
   options: StartServerModeHttpOptions,
 ): Promise<ServerModeRunning> {
@@ -121,7 +112,7 @@ export async function startServerModeHttp(
   // the migration, the current workspace and the live audience are not
   // optional here.
   const dataDir = getDataDir()
-  const { serverDeps: bootedDeps } = await bootSelfHostDeps(dataDir)
+  const { serverDeps: bootedDeps, dataLayout } = await bootSelfHostDeps(dataDir)
   const serverDeps = attachLiveAudience(bootedDeps)
 
   // Filled synchronously by createApp below, and read only by the
@@ -130,6 +121,7 @@ export async function startServerModeHttp(
   const app = createApp({
     authMode: 'server-mode',
     serverDeps,
+    dataLayout,
     onAutoVersionTrigger: (trigger) => {
       autoVersionTrigger = trigger
     },

@@ -590,7 +590,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
   // 435 -> 182: the four workers both HTTP roots run are built and declared
   // in shared-background-work.ts; what is left here is the daemon's own.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 139,
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 133,
   'packages/mcp-server/src/server/index.ts#main': 81,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
@@ -620,7 +620,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // address translation it owes — path to id, absent to 404 — is three lines
   // the port call did not need.
   'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 267,
-  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 67,
+  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 64,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 127,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the

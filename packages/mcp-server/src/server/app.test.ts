@@ -8,7 +8,7 @@ import {
 } from '@modelcontextprotocol/client'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from './routes/_test-helpers.js'
+import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 
 const tmp = withTempDataDir('whiteboard-app-test-')
@@ -40,6 +40,7 @@ function createRuntimeOptions(
     mcpProtectedResourceMetadata: options?.protectedResourceMetadata,
     // The root's deps, over the memory store: nothing here reads a document.
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     touch: vi.fn(),
     getStatus: () => ({
       ok: true,

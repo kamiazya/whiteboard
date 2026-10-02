@@ -13,6 +13,7 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
 import { captureLogsForTests } from '../log.js'
+import { testDataLayout } from './_test-helpers.js'
 import { subscribedWorkspaceIds } from './sync-audience.js'
 import { resetSyncStreamsForTests } from './sync-sse.js'
 
@@ -36,6 +37,7 @@ function app() {
     // The stream's update fan-out subscribes through these; the memory
     // store is enough, since every case here broadcasts directly.
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
   })
 }
 

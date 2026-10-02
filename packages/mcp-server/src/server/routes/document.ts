@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
 import { installAutoCheckpoint } from '../store/auto-checkpoint.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
+import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
@@ -35,6 +36,8 @@ export interface DocumentRouterOptions {
   // composition path, and the one it built carried none of what the root
   // attaches.
   serverDeps: ServerDeps
+  /** Where exports are written; threaded to the SVG export router. */
+  dataLayout: DataLayout
   /**
    * Hands the caller the checkpoint trigger this router created, so a
    * composition root can flush it when the process is going away.
@@ -80,6 +83,15 @@ function armAutoVersionTrigger(
   return trigger
 }
 
+function workspacesRouterOptions(options: DocumentRouterOptions) {
+  return {
+    serverDeps: options.serverDeps,
+    ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
+    ...(options.admit === undefined ? {} : { admit: options.admit }),
+    ...(options.firstMember === undefined ? {} : { firstMember: options.firstMember }),
+  }
+}
+
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
 // CRUD, names/pin metadata, the live-doc snapshot+update path, version
 // history (list/save/thumbnails/restore), and maintenance (compact/prune/
@@ -92,15 +104,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
   const versionStore = options.versionStore ?? new FileVersionStore()
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
 
-  app.route(
-    '/',
-    createWorkspacesRouter({
-      serverDeps: options.serverDeps,
-      ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
-      ...(options.admit === undefined ? {} : { admit: options.admit }),
-      ...(options.firstMember === undefined ? {} : { firstMember: options.firstMember }),
-    }),
-  )
+  app.route('/', createWorkspacesRouter(workspacesRouterOptions(options)))
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter())
   app.route('/', createLiveDocRouter({ triggerAutoVersion, serverDeps: options.serverDeps }))
@@ -120,7 +124,13 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     }),
   )
   app.route('/', createMaintenanceRouter({ versionStore }))
-  app.route('/', createDocumentSvgExportRouter({ liveDocuments: options.serverDeps.liveDocuments }))
+  app.route(
+    '/',
+    createDocumentSvgExportRouter({
+      liveDocuments: options.serverDeps.liveDocuments,
+      dataLayout: options.dataLayout,
+    }),
+  )
   const restoreProgress: RestoreProgress = async (event) => {
     sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
   }

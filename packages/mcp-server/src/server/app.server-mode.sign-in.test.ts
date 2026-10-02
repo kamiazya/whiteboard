@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ServerModeAppOptions } from './app.js'
+import { testDataLayout } from './routes/_test-helpers.js'
 import { signInConfigSchema } from './security/sign-in-config.js'
 
 let tempDir: string
@@ -41,6 +42,7 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
     allowedOrigins: [PUBLIC_URL],
     // The root's deps, over the memory store: nothing here reads a document.
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     authStrategy: {
       authorize: async () => ({ ok: false, status: 401, code: 'auth.required' }),
     },

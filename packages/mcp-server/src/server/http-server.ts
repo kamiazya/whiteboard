@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { accessSync, constants as fsConstants } from 'node:fs'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { listenOnSocket } from '../daemon/daemon-socket.js'
@@ -11,6 +10,7 @@ import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { getDataDir } from './config.js'
+import { isDataDirWritable } from './data-dir-writable.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
@@ -106,14 +106,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       auth: { mode: 'local-token', hasToken: Boolean(options.token) },
       storage: {
         dataDir: getDataDir(),
-        dataDirWritable: (() => {
-          try {
-            accessSync(getDataDir(), fsConstants.W_OK)
-            return true
-          } catch {
-            return false
-          }
-        })(),
+        dataDirWritable: isDataDirWritable(getDataDir()),
       },
       mcp: { httpEnabled: true },
       clients: stats,
@@ -142,7 +135,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // Prepared and migrated before the ports get a handle, and the daemon holds
   // its current workspace before anything reads the list — see
   // `prepareSelfHostDataDir` for what each one's absence produced.
-  const { db, serverDeps: bootedDeps } = await bootSelfHostDeps(dataDir)
+  const { db, serverDeps: bootedDeps, dataLayout } = await bootSelfHostDeps(dataDir)
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
   // from the same post-migration handle as the container above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {
@@ -167,6 +160,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     replicaLeaseTtlMs: options.replicaLeaseTtlMs,
     macaroonRootKey,
     serverDeps,
+    dataLayout,
   })
 
   // Everything the daemon runs on its own goes through the registry, which is

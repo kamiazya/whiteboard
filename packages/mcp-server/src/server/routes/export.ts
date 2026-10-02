@@ -12,9 +12,9 @@ import { nanoid } from 'nanoid'
 import type { z } from 'zod'
 import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { errorMessage } from '../../shared/error-message.js'
-import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
+import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { onDocumentAction } from './document/path-route.js'
 import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
 
@@ -55,6 +55,7 @@ function parseExportBody(
 async function resolveExportOutputPath(
   body: { outputPath?: string; overwrite?: boolean },
   workspaceId: string,
+  layout: DataLayout,
 ): Promise<
   { outputPath: string | undefined } | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
@@ -65,7 +66,7 @@ async function resolveExportOutputPath(
     await validateOutputPath(
       body.outputPath,
       body.overwrite === true,
-      join(getDataDir(), workspaceId, 'exports'),
+      layout.exportsDir(workspaceId),
     )
   } catch (err) {
     if (err instanceof OutputPathError) {
@@ -109,9 +110,13 @@ async function renderedExport(
  * (ADR-0018: an adapter translates, it does not reach a mechanic). The
  * daemon passes its own; a router built without one — a route test, an
  * ad-hoc caller — falls back to the same production wiring.
+ *
+ * Default exports are written under the layout's exports directory, which
+ * the composition root hands down with the deps it booted.
  */
 export interface ExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
+  dataLayout: DataLayout
 }
 
 export function createExportRouter(options: ExportRouterOptions) {
@@ -131,7 +136,7 @@ export function createExportRouter(options: ExportRouterOptions) {
 
       // Validated up front, before rendering, so the caller does not waste a
       // render on a write that will fail.
-      const resolved = await resolveExportOutputPath(body, workspaceId)
+      const resolved = await resolveExportOutputPath(body, workspaceId, options.dataLayout)
       if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
 
@@ -155,7 +160,7 @@ export function createExportRouter(options: ExportRouterOptions) {
       const filePath =
         outputPath !== undefined
           ? await writeExplicitOutput(outputPath, pngBuffer)
-          : await writeDefaultOutput(workspaceId, path, pngBuffer)
+          : await writeDefaultOutput(options.dataLayout, workspaceId, path, pngBuffer)
       const response: ExportResponse = {
         filePath,
         undrawable: [...undrawable],
@@ -208,10 +213,10 @@ async function renderHeadless(
 // A plain PNG: the headless renderer no longer embeds scene JSON, so a
 // `.excalidraw.png` suffix would falsely claim the file is re-importable as
 // a scene.
-function defaultExportPath(workspaceId: string, path: string): string {
+function defaultExportPath(exportsDir: string, path: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const fileName = `${path}-${timestamp}-${nanoid(6)}.png`
-  return join(getDataDir(), workspaceId, 'exports', fileName)
+  return join(exportsDir, fileName)
 }
 
 // The millisecond timestamp + nanoid(6) suffix is only probabilistically
@@ -223,13 +228,14 @@ function defaultExportPath(workspaceId: string, path: string): string {
 const MAX_DEFAULT_PATH_ATTEMPTS = 5
 
 async function writeDefaultOutput(
+  layout: DataLayout,
   workspaceId: string,
   path: string,
   pngBuffer: Buffer,
 ): Promise<string> {
   let lastFilePath: string | undefined
   for (let attempt = 0; attempt < MAX_DEFAULT_PATH_ATTEMPTS; attempt++) {
-    const filePath = defaultExportPath(workspaceId, path)
+    const filePath = defaultExportPath(layout.exportsDir(workspaceId), path)
     lastFilePath = filePath
     await mkdir(dirname(filePath), { recursive: true })
     try {

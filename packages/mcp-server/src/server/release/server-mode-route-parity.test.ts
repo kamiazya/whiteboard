@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createApp } from '../app.js'
+import { testDataLayout } from '../routes/_test-helpers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -44,6 +45,7 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
       getStatus: () => ({}) as never,
       shutdown: () => Promise.resolve(),
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
     })
 
     const localDaemon = createApp({
@@ -52,6 +54,7 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
       touch: () => {},
       getStatus: () => ({}) as never,
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
     })
 
     const apiRoutes = (app: ReturnType<typeof createApp>): Set<string> =>

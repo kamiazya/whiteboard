@@ -457,9 +457,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   // `POST /api/runtime/logs/prune` is daemon housekeeping with one caller;
   // no second surface asks for it, so there is no operation to share yet.
   'routes/runtime.ts -> daemon/log-rotation',
-  // Where a workspace's files sit on disk: the route joins the layout itself,
-  // from a data directory and tenant id it fetches on its own.
-  'routes/files.ts -> tenant/data-layout',
 ]
 
 /**
@@ -494,10 +491,12 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * invitations), one `daemon/log-rotation` and one `tenant/data-layout`. Two
  * of the eight went straight away, 24 -> 22, when
  * `routes/tenant-people.ts` stopped holding the people-administration
- * decisions and the stores they act on. That was a measurement catching up
- * with the code, not new debt.
+ * decisions and the stores they act on, and one more, 22 -> 21, when
+ * `routes/files.ts` took the data layout `createApp` is handed instead of
+ * joining `tenant/data-layout`'s paths from the process data dir itself. That
+ * was a measurement catching up with the code, not new debt.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 22
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 21
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

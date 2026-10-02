@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach } from 'vitest'
+import { getDataDir } from '../config.js'
+import { createDataLayout } from '../tenant/data-layout.js'
+import type { DataLayout } from '../tenant/data-layout-seam.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 /**
  * Registers per-test temp-dir lifecycle (beforeEach create, afterEach rm).
@@ -95,4 +99,12 @@ export async function createTestDocument(
     createWorkspace: true,
     ...(input.name === undefined ? {} : { name: input.name }),
   })
+}
+
+/**
+ * The data layout a root hands `createApp`, over `dataDir` or, by default, the
+ * data dir the test's own setup redirected the process to.
+ */
+export function testDataLayout(dataDir: string = getDataDir()): DataLayout {
+  return createDataLayout(dataDir, SELF_HOST_TENANT_ID)
 }

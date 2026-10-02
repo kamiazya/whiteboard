@@ -177,6 +177,29 @@ exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
 
+## `adapter-process-global-check.ts`: an adapter is handed its data layout
+
+A sibling of the mechanic check over the same adapter trees (`server/routes/**`,
+`server/mcp/**`, tests and `_test-*` scaffolding skipped): it bans `getDataDir(`
+and `SELF_HOST_TENANT_ID`. The first is a process global and the second the one
+tenant a self-hosted keeper has, so a route reading either decides inside
+itself which directory and which tenant it serves. `createApp` takes a
+`dataLayout` (`tenant/data-layout-seam.ts`, built by `bootSelfHostDeps` for all
+three roots) carrying `dataDir`, `tenantId` and the files and exports
+directories, and the routes read that.
+
+The seam is its OWN module, apart from `tenant/data-layout.ts` that implements
+it, so an adapter can hold the contract without importing the mechanic that
+joins directory names — which the mechanic scan would count.
+
+Comments and string bodies are stripped before matching (`source-scan.ts`'s
+`stripCommentsAndStrings`), so prose naming `getDataDir()` is not a read. The
+ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
+from both sides, size pinned, every entry carrying its reason. It holds one
+entry, `mcp/index.ts`, the stdio composition root that resolves the data dir
+once before booting. The store layer's own reads (`store/**`) are not
+adapters and are not in scope.
+
 ## The spatial-codec registry scan
 
 `repo-coverage.test.ts` checks one thing that is not a boundary: every

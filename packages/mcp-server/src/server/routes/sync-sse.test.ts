@@ -15,7 +15,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
-import { resolveTestServerDeps } from './_test-helpers.js'
+import { resolveTestServerDeps, testDataLayout } from './_test-helpers.js'
 import {
   getClientCount,
   getReadyClientCount,
@@ -54,6 +54,7 @@ function createRuntimeOptions() {
     touch: () => {},
     getStatus: () => ({ port: 3099 }) as never,
     serverDeps,
+    dataLayout: testDataLayout(),
   }
 }
 

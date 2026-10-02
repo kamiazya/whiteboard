@@ -15,9 +15,9 @@ import {
   exportSvgRequestSchema,
 } from '../../../shared/api-contracts/export-svg.js'
 import { errorMessage } from '../../../shared/error-message.js'
-import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
+import type { DataLayout } from '../../tenant/data-layout-seam.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
 
@@ -55,6 +55,7 @@ function parseExportSvgBody(rawText: string): { body: ExportSvgRequest } | { err
 async function resolveSvgOutputPath(
   body: ExportSvgRequest,
   workspaceId: string,
+  exportsDir: string,
 ): Promise<
   { outputPath: string | undefined } | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
@@ -62,11 +63,7 @@ async function resolveSvgOutputPath(
     return { outputPath: undefined }
   }
   try {
-    await validateOutputPath(
-      body.outputPath,
-      body.overwrite === true,
-      join(getDataDir(), workspaceId, 'exports'),
-    )
+    await validateOutputPath(body.outputPath, body.overwrite === true, exportsDir)
   } catch (err) {
     if (err instanceof OutputPathError) {
       const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
@@ -89,9 +86,13 @@ async function resolveSvgOutputPath(
  * (ADR-0018: an adapter translates, it does not reach a mechanic). The
  * daemon passes its own; a router built without one — a route test, an
  * ad-hoc caller — falls back to the same production wiring.
+ *
+ * Default exports are written under the layout's exports directory, which
+ * the composition root hands down with the deps it booted.
  */
 export interface DocumentSvgExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
+  dataLayout: DataLayout
 }
 
 export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions) {
@@ -120,7 +121,8 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       if ('error' in parsedBody) return c.json(parsedBody.error, 400)
       const body = parsedBody.body
 
-      const resolved = await resolveSvgOutputPath(body, workspaceId)
+      const exportsDir = options.dataLayout.exportsDir(workspaceId)
+      const resolved = await resolveSvgOutputPath(body, workspaceId, exportsDir)
       if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
 
@@ -148,7 +150,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         return c.json(errBody, 500)
       }
 
-      const filePath = outputPath ?? defaultSvgExportPath(workspaceId, path)
+      const filePath = outputPath ?? defaultSvgExportPath(exportsDir, path)
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, svg, 'utf-8')
       // Typed rather than a bare literal so the contract, not this handler,
@@ -177,7 +179,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
   return app
 }
 
-function defaultSvgExportPath(workspaceId: string, path: string): string {
+function defaultSvgExportPath(exportsDir: string, path: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   // The millisecond timestamp alone is not unique: two exports issued fast
   // enough to land in the same millisecond would collide and the second
@@ -185,5 +187,5 @@ function defaultSvgExportPath(workspaceId: string, path: string): string {
   // uniqueness regardless of call timing, matching the PNG and JSON export
   // routes' default-path convention.
   const fileName = `${path}-${timestamp}-${nanoid(6)}.svg`
-  return join(getDataDir(), workspaceId, 'exports', fileName)
+  return join(exportsDir, fileName)
 }

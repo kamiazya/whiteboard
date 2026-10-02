@@ -11,6 +11,7 @@ import { type CryptoKey, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import type { ServerModeAppOptions } from './app.js'
+import { testDataLayout } from './routes/_test-helpers.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { createInvitationStore } from './security/invitation-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
@@ -90,6 +91,7 @@ beforeEach(async () => {
       }),
     }),
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     people: {
       members,
       sessions: createSignInSessionStore(handle.db),

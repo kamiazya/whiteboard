@@ -243,7 +243,11 @@ files, under the standing "fix what you touch" rule.
 > refusals (not oneself, only a user that exists, only on a recent sign-in)
 > moved to `security/people-administration.ts`, which the route and the
 > operator's `grant-admin` and `deactivate-user` commands now both translate,
-> 24 -> 22.
+> 24 -> 22. `routes/files.ts` paid a third, 22 -> 21, and the export and runtime
+> routes stopped reading the process data directory: `createApp` is handed a
+> `dataLayout` (data dir, tenant, files and exports directories), built beside
+> the deps it was booted over, and a sibling scan keeps `getDataDir()` and the
+> self-host tenant id out of every route and MCP adapter.
 
 **What would make raising the ceiling right.** It is a decision, not a
 failure: an operation that genuinely belongs to this deployment, or a fix
