@@ -46,6 +46,10 @@
       "types": "./src/api-contracts/tenant-people.ts",
       "import": "./src/api-contracts/tenant-people.ts"
     },
+    "./api-contracts/tolerant-answer": {
+      "types": "./src/api-contracts/tolerant-answer.ts",
+      "import": "./src/api-contracts/tolerant-answer.ts"
+    },
     "./api-contracts/workspace-people": {
       "types": "./src/api-contracts/workspace-people.ts",
       "import": "./src/api-contracts/workspace-people.ts"

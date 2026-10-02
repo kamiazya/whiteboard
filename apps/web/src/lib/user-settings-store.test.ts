@@ -113,7 +113,7 @@ describe('createUserSettingsStore', () => {
     expect(store.load()).toEqual(defaultUserSettings())
   })
 
-  it('rejects a stored payload carrying a daemonToken-shaped key and falls back to defaults', () => {
+  it('never loads a daemonToken-shaped key, and the next write purges it from storage', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -124,7 +124,12 @@ describe('createUserSettingsStore', () => {
       }),
     )
     const store = createUserSettingsStore()
-    expect(store.load()).toEqual(defaultUserSettings())
+    expect(JSON.stringify(store.load())).not.toContain('super-secret')
+    expect(store.load().storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
+
+    store.update((current) => current)
+
+    expect(localStorage.getItem(STORAGE_KEY)).not.toContain('super-secret')
   })
 
   it('does not persist an update() result that injects an unknown token-shaped key', () => {
@@ -497,7 +502,7 @@ describe('v2 -> v3 migration', () => {
   // The stored shape is a discriminated union now: an ok record cannot claim
   // a failure reason, and a failure cannot carry promoted counts. Such a
   // payload is tampered/corrupt, and invalid means defaults.
-  it('rejects a stored record mixing the two arms', () => {
+  it('reads a failure record that also carries success-arm fields as the failure it is', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -511,6 +516,26 @@ describe('v2 -> v3 migration', () => {
             reason: 'x',
             promotedCount: 3,
           },
+        },
+        capabilities: {},
+      }),
+    )
+    expect(createUserSettingsStore().load().migration.promotion).toEqual({
+      at: '2026-08-01T00:00:00.000Z',
+      workspaceId: 'ws-a',
+      ok: false,
+      reason: 'x',
+    })
+  })
+
+  it('rejects a success record missing what its writer always writes', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 5,
+        storage: {},
+        migration: {
+          promotion: { at: '2026-08-01T00:00:00.000Z', workspaceId: 'ws-a', ok: true },
         },
         capabilities: {},
       }),
@@ -612,7 +637,7 @@ describe('v3 -> v4 migration', () => {
     expect(store.load()).toEqual(defaultUserSettings())
   })
 
-  it('a live payload still carrying a retired field is invalid, and falls back to defaults', () => {
+  it('a live payload still carrying a retired field loads without it', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -622,7 +647,7 @@ describe('v3 -> v4 migration', () => {
         capabilities: {},
       }),
     )
-    expect(createUserSettingsStore().load()).toEqual(defaultUserSettings())
+    expect(createUserSettingsStore().load().storage).toEqual({})
   })
 })
 
@@ -724,7 +749,7 @@ describe('v4 -> v5 migration', () => {
     expect(store.load()).toEqual(defaultUserSettings())
   })
 
-  it('a live payload still carrying a dismissal stamp is invalid, and falls back to defaults', () => {
+  it('a live payload still carrying a dismissal stamp loads without it', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -734,6 +759,6 @@ describe('v4 -> v5 migration', () => {
         capabilities: {},
       }),
     )
-    expect(createUserSettingsStore().load()).toEqual(defaultUserSettings())
+    expect(createUserSettingsStore().load().storage).toEqual({})
   })
 })
