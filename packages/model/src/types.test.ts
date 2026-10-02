@@ -18,8 +18,6 @@ import type {
   workspaceIdSchema,
 } from './ids.js'
 import type { MarkdownDocument, markdownDocumentSchema } from './markdown.js'
-import type { MdastNode } from './mdast/index.js'
-import { mdastNodeSchema } from './mdast/index.js'
 import type {
   CanvasColor,
   CanvasEdge,
@@ -51,9 +49,4 @@ it('type-source invariant: exported types equal z.infer of their schema', () => 
   expectTypeOf<SpatialCanvas>().toEqualTypeOf<z.infer<typeof spatialCanvasSchema>>()
   expectTypeOf<NodeEmbed>().toEqualTypeOf<z.infer<typeof nodeEmbedSchema>>()
   expectTypeOf<MarkdownDocument>().toEqualTypeOf<z.infer<typeof markdownDocumentSchema>>()
-})
-
-it('mdast: the lazy recursive schema stays typed as MdastNode, not any', () => {
-  expectTypeOf(mdastNodeSchema).toEqualTypeOf<z.ZodType<MdastNode>>()
-  expectTypeOf<z.infer<typeof mdastNodeSchema>>().not.toBeAny()
 })

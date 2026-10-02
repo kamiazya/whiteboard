@@ -6,8 +6,8 @@
 import { compareCodeUnit, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**
- * A tag list is a SET (model's `tagsWriteSchema` refuses a duplicate), and
- * an empty one is spelled as the absence it means — so an object that was
+ * A tag list is a SET, and an empty one is spelled as the absence it means —
+ * so an object that was
  * tagged and untagged serializes like one never tagged, the same
  * canonical-emptiness rule a cleared facet bucket follows.
  */

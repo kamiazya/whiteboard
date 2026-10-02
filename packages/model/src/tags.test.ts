@@ -4,10 +4,9 @@ import {
   SCOPED_TAG_RULE,
   TAG_IDENTIFIER_PATTERN,
   tagsInUse,
-  tagsWriteSchema,
   tagWriteSchema,
 } from './tags.js'
-import { fc, fcTest, withDefaults } from './test-utils/index.js'
+import { fc } from './test-utils/index.js'
 
 describe('parseScopedTag', () => {
   it('reads key:value when both halves are lowercase identifiers', () => {
@@ -70,28 +69,6 @@ describe('tagWriteSchema — the grammar is checked on WRITE, for scoped tags on
 
   it('refuses an empty tag', () => {
     expect(tagWriteSchema.safeParse('').success).toBe(false)
-  })
-})
-
-describe('tagsWriteSchema — a tag set is a SET', () => {
-  it('refuses a duplicate, naming it', () => {
-    const result = tagsWriteSchema.safeParse(['a', 'health:ok', 'a'])
-    expect(result.success).toBe(false)
-    if (result.success) return
-    expect(result.error.issues[0]?.message).toContain('"a"')
-  })
-
-  it('accepts several values under one key — hoge:foo and hoge:bar together', () => {
-    expect(tagsWriteSchema.safeParse(['hoge:foo', 'hoge:bar']).success).toBe(true)
-  })
-
-  fcTest.prop(
-    [fc.uniqueArray(fc.stringMatching(/^[a-z][a-z0-9-]{0,5}$/), { maxLength: 6 })],
-    withDefaults(),
-  )('accepts any set of plain identifiers, and refuses the same set with one repeated', (tags) => {
-    expect(tagsWriteSchema.safeParse(tags).success).toBe(true)
-    if (tags.length === 0) return
-    expect(tagsWriteSchema.safeParse([...tags, tags[0] as string]).success).toBe(false)
   })
 })
 

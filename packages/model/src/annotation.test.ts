@@ -6,7 +6,6 @@
 // positional fallback", and that today's flat comment is a one-message thread.
 import { describe, expect, it } from 'vitest'
 import {
-  ANNOTATION_ANCHOR_KINDS,
   type AnnotationAnchor,
   annotationAnchorSchema,
   type CommentThread,
@@ -249,7 +248,9 @@ describe('the generator covers every arm the schema declares', () => {
       }),
       { numRuns: 300 },
     )
-    for (const kind of ANNOTATION_ANCHOR_KINDS) expect(seen).toContain(kind)
+    // Read off the schema so a new arm cannot be missed.
+    for (const option of annotationAnchorSchema.options)
+      expect(seen).toContain(option.shape.kind.value)
     expect([...seen].sort()).toEqual([
       'document',
       'spatial',

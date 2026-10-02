@@ -95,15 +95,6 @@ const NO_USE_BESIDE_TESTS: readonly string[] = [
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#SqlType',
   'packages/mcp-server/src/server/store/doc-cache.ts#clearCache',
   'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts#InMemoryBlobStore',
-  'packages/model/src/annotation.ts#ANNOTATION_ANCHOR_KINDS',
-  'packages/model/src/facets.ts#CoreFacets',
-  'packages/model/src/facets.ts#FacetsRaw',
-  'packages/model/src/ids.ts#NodeId',
-  'packages/model/src/markdown.ts#MarkdownDocument',
-  'packages/model/src/mdast/index.ts#mdastNodeSchema',
-  'packages/model/src/spatial.ts#NodeEmbed',
-  'packages/model/src/tags.ts#tagsWriteSchema',
-  'packages/model/src/trust.ts#trustTier',
   'packages/plugin-visual/src/emoji/catalog-data.ts#EMOJI_VERSION',
   'packages/plugin-visual/src/emoji/catalog-ja.ts#EMOJI_JA_TAG',
   'packages/ports/src/delta.ts#DeltaBatch',
@@ -399,7 +390,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/mcp-server/src/shared/diagnostics/redact.ts#redactDiagnosticValue',
   'packages/model/src/annotation.ts#SpatialAnchor',
   'packages/model/src/markdown.ts#markdownDocumentSchema',
-  'packages/model/src/mdast/index.ts#MdastNode',
   'packages/model/src/mdast/index.ts#mdastFlowContentSchema',
   'packages/model/src/mdast/index.ts#mdastPhrasingContentSchema',
   'packages/model/src/mdast/index.ts#mdastTableRowSchema',
@@ -470,10 +460,10 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
 const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/canvas-render/src/quality/drawing-score.ts#FRAME_CLEARANCE_FLOOR_PX':
     'part of the `scoring` subpath’s published surface, whose name list scoring-subpath.test.ts pins',
-  'packages/mcp-server/src/server/security/macaroon.ts#mintMacaroon':
-    'the tested core of the ADR-0043 act-plane token, kept until a surface mints one',
   'packages/mcp-server/src/server/security/macaroon.ts#attenuateMacaroon':
     'the other half of that core: attenuation by arithmetic is the property the file exists for',
+  'packages/mcp-server/src/server/security/macaroon.ts#mintMacaroon':
+    'the tested core of the ADR-0043 act-plane token, kept until a surface mints one',
   'packages/mcp-server/src/server/security/route-scope-registry.ts#API_ROUTE_RULE_NAMES':
     'the rule names the shadowing walk and the partition test are asserted over, kept beside the rules',
   'packages/mcp-server/src/server/security/route-scope-registry.ts#GATED_RULE_NAMES':
@@ -484,6 +474,18 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the schema the migrations are held to, read by the schema-ledger test',
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#NULLABLE_IN_DATABASE':
     'deliberate NOT-NULL gaps, each with its reason and checked from the other side by the schema-ledger test',
+  'packages/model/src/facets.ts#CoreFacets':
+    'the published type of coreFacetsSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
+  'packages/model/src/facets.ts#FacetsRaw':
+    'the published type of facetsRawSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
+  'packages/model/src/ids.ts#NodeId':
+    'the published type of nodeIdSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
+  'packages/model/src/markdown.ts#MarkdownDocument':
+    'the published type of markdownDocumentSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
+  'packages/model/src/spatial.ts#NodeEmbed':
+    'the published type of nodeEmbedSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
+  'packages/model/src/trust.ts#trustTier':
+    'the OKF §5.3 tier rule, kept ahead of its first surface; ADR-0039 and package-model.md name it as a model contract its tests spec',
   'packages/server-core/src/search/search-corpus.ts#CORPUS_DOCUMENTS':
     'the judged corpus kept beside the search it measures; the ranking tests are its reader',
   'packages/server-core/src/search/search-corpus.ts#JUDGED_QUERIES':
@@ -491,7 +493,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the two debt lists hold, pinned by equality. */
-const DEBT_CEILING = 428
+const DEBT_CEILING = 418
 
 const DIRS = [
   'apps',

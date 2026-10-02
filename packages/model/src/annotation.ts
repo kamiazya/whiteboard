@@ -370,7 +370,3 @@ export function canvasCommentFromThread(
     ...(thread.status === 'resolved' ? { resolved: true } : {}),
   }
 }
-
-/** The surfaces the anchor union carries — one per arm, read off the schema so a new arm cannot be missed. */
-export const ANNOTATION_ANCHOR_KINDS: readonly AnnotationAnchor['kind'][] =
-  annotationAnchorSchema.options.map((option) => option.shape.kind.value)

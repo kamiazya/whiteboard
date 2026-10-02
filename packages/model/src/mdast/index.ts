@@ -36,12 +36,9 @@ import { documentIdSchema } from '../ids.js'
  * produces for a parsed markdown file. This is a deliberate narrowing, not
  * a claim of full content-model conformance.
  *
- * `mdastNodeSchema` remains the union of every supported node kind with
- * per-kind structurally-valid children (so a single, unparented node —
- * e.g. a standalone `listItem` — still validates on its own); it does NOT
- * enforce where a node kind is allowed to appear. Contextual placement
- * (e.g. "a listItem must be inside a list") is only enforced when parsing
- * through a parent category schema or `mdastRootSchema`.
+ * Contextual placement (e.g. "a listItem must be inside a list") is enforced
+ * by parsing through a parent category schema or `mdastRootSchema`; no schema
+ * here validates a node out of its place.
  *
  * mdast is inherently recursive (e.g. a paragraph's children can contain a
  * link whose own children are more phrasing content). Zod's `z.lazy()`
@@ -152,14 +149,6 @@ export type MdastTableCell = { type: 'tableCell'; children: MdastCellPhrasingCon
 
 /** Document root. See the doc comment above re: the flow-only application subset. */
 export type MdastRoot = { type: 'root'; children: MdastFlowContent[] }
-
-export type MdastNode =
-  | MdastRoot
-  | MdastFlowContent
-  | MdastPhrasingContent
-  | MdastListItem
-  | MdastTableRow
-  | MdastTableCell
 
 const referenceTypeSchema = z.enum(['shortcut', 'collapsed', 'full'])
 const headingDepthSchema = z.union([
@@ -390,40 +379,3 @@ const rootNodeSchema = z.object({
 })
 
 export const mdastRootSchema: z.ZodType<MdastRoot> = rootNodeSchema
-
-/**
- * Union of every supported node kind, each with per-kind structurally-valid
- * children — but NOT contextual placement (see the module doc comment).
- * Useful for validating a single node in isolation.
- */
-export const mdastNodeSchema: z.ZodType<MdastNode> = z.lazy(() =>
-  z.discriminatedUnion('type', [
-    rootNodeSchema,
-    paragraphNodeSchema,
-    headingNodeSchema,
-    textNodeSchema,
-    emphasisNodeSchema,
-    strongNodeSchema,
-    inlineCodeNodeSchema,
-    codeNodeSchema,
-    blockquoteNodeSchema,
-    listNodeSchema,
-    listItemNodeSchema,
-    thematicBreakNodeSchema,
-    breakNodeSchema,
-    linkNodeSchema,
-    imageNodeSchema,
-    htmlNodeSchema,
-    definitionNodeSchema,
-    linkReferenceNodeSchema,
-    imageReferenceNodeSchema,
-    tableNodeSchema,
-    tableRowNodeSchema,
-    tableCellNodeSchema,
-    deleteNodeSchema,
-    mathNodeSchema,
-    inlineMathNodeSchema,
-    wikiLinkNodeSchema,
-    embedNodeSchema,
-  ]),
-)

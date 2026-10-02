@@ -50,23 +50,6 @@ export const tagWriteSchema = z
   })
 
 /**
- * A tag SET as a writer states one: no duplicates, since order carries no
- * meaning and a second copy says nothing the first did not. Several values
- * under one key (`hoge:foo` beside `hoge:bar`) are allowed — decision 3 says
- * what each consumer does with them.
- */
-export const tagsWriteSchema = z.array(tagWriteSchema).superRefine((tags, ctx) => {
-  const seen = new Set<string>()
-  for (const tag of tags) {
-    if (seen.has(tag)) {
-      ctx.addIssue({ code: 'custom', message: `duplicate tag "${tag}"` })
-      return
-    }
-    seen.add(tag)
-  }
-})
-
-/**
  * The STORED shape at every site that carries tags: a list of strings, read
  * verbatim. Lenient on purpose — the grammar above is the write side's — and
  * `.catch(undefined)` so a malformed value costs the tags, never the element
