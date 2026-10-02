@@ -99,4 +99,16 @@ describe('loadSignInConfig', () => {
     await writeFile(path, yaml('hunter2'))
     expect(() => loadSignInConfig(path, {})).toThrow(/sign-in configuration/)
   })
+
+  it('names the issuer setting when it is a placeholder left unfilled, not a bare Invalid URL', async () => {
+    const path = join(dir, 'sign-in.yaml')
+    await writeFile(
+      path,
+      yaml('{ env: GOOGLE_SECRET }').replace(
+        'https://accounts.google.com',
+        'https://<team>.example',
+      ),
+    )
+    expect(() => loadSignInConfig(path, { GOOGLE_SECRET: 'abc' })).toThrow(/providers\.0\.issuer/)
+  })
 })

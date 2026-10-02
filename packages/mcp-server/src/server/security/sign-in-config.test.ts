@@ -221,3 +221,43 @@ describe('a trusted-header provider', () => {
     ).toBe(3)
   })
 })
+
+// zod 4 runs a refinement after a failed `.url()`, so a refinement that called
+// `new URL` itself threw out of `safeParse` instead of reporting the setting.
+describe('a URL setting that is not a URL', () => {
+  const signed = {
+    id: 'access',
+    kind: 'trusted-header',
+    trustedAddresses: ['127.0.0.1'],
+    assertion: {
+      header: 'Cf-Access-Jwt-Assertion',
+      issuer: 'https://team.cloudflareaccess.com',
+      audience: 'aud-1',
+      jwksUri: 'https://team.cloudflareaccess.com/cdn-cgi/access/certs',
+    },
+  }
+  const oidcIssuer = (issuer: string) => ({ ...google, issuer })
+  const assertionIssuer = (issuer: string) => ({
+    ...signed,
+    assertion: { ...signed.assertion, issuer },
+  })
+  const assertionJwks = (jwksUri: string) => ({
+    ...signed,
+    assertion: { ...signed.assertion, jwksUri },
+  })
+
+  it.for([
+    ['an OIDC issuer', oidcIssuer, ['providers', 0, 'issuer']],
+    ['an assertion issuer', assertionIssuer, ['providers', 0, 'assertion', 'issuer']],
+    ['an assertion JWKS URI', assertionJwks, ['providers', 0, 'assertion', 'jwksUri']],
+  ] as const)('names the setting when %s is not a URL', ([, build, path]) => {
+    for (const value of ['not a url', 'https://<team>.example.com', '']) {
+      const result = signInConfigSchema.safeParse({ providers: [build(value)] })
+      expect(result.success, value).toBe(false)
+      expect(
+        result.error?.issues.some((issue) => issue.path.join('.') === path.join('.')),
+        `${value} -> ${JSON.stringify(result.error?.issues)}`,
+      ).toBe(true)
+    }
+  })
+})

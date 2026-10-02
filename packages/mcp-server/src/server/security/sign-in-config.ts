@@ -43,6 +43,12 @@ const secretReferenceSchema = z.union([
   z.object({ file: z.string().min(1) }).strict(),
 ])
 
+// One total check rather than `.url()` plus a refinement that calls `new URL`:
+// zod 4 runs a refinement after a failed `.url()`, so the second would throw
+// out of `safeParse` instead of reporting the setting.
+const httpsUrl = (what: string) =>
+  z.string().refine((value) => URL.canParse(value) && new URL(value).protocol === 'https:', what)
+
 const oidcProviderSchema = z
   .object({
     // What a sign-in names ("sign in with google"). Not the authenticator:
@@ -51,10 +57,7 @@ const oidcProviderSchema = z
     kind: z.literal('oidc'),
     // The issuer as its discovery document states it; the relying party
     // compares the ID token's `iss` against this exact string.
-    issuer: z
-      .string()
-      .url()
-      .refine((value) => new URL(value).protocol === 'https:', 'an https:// issuer'),
+    issuer: httpsUrl('an https:// issuer'),
     // The keeper's own client at the provider, for browser sign-in. Both or
     // neither: a provider without one signs nobody in through a browser and
     // exists to admit bearers, so it must name `admission.bearerClients`.
@@ -85,11 +88,6 @@ const oidcProviderSchema = z
       })
     }
   })
-
-const httpsUrl = z
-  .string()
-  .url()
-  .refine((value) => new URL(value).protocol === 'https:', 'an https:// URL')
 
 // An address or a CIDR range, and never every address: `0.0.0.0/0` would
 // trust the header from anyone who can reach the keeper, which is exactly
@@ -145,9 +143,9 @@ const trustedHeaderProviderSchema = z
     assertion: z
       .object({
         header: headerNameSchema,
-        issuer: httpsUrl,
+        issuer: httpsUrl('an https:// issuer'),
         audience: z.string().min(1),
-        jwksUri: httpsUrl,
+        jwksUri: httpsUrl('an https:// URL'),
       })
       .strict()
       .optional(),
