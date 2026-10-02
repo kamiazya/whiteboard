@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 
 // loadDaemonRecord is a hard import in daemon-stop.ts and is not injectable
 // via options. Mock the registry module so each test controls what record
@@ -234,5 +235,36 @@ describe('runDaemonStop: process survives SIGTERM → SIGKILL', () => {
     )
 
     expect(removeRecord).toHaveBeenCalledWith('/fake')
+  })
+})
+
+// The close the daemon runs on SIGTERM can wait the whole file-sweeper cap
+// before the rest of shutdown (listener, flush) even starts. A default window
+// of exactly that cap SIGKILLs a daemon that is still stopping cleanly, so the
+// window is read off the default path — nothing here passes `stopTimeoutMs`.
+describe('runDaemonStop: the default SIGTERM window', () => {
+  it('outlasts the file sweeper stop cap before it escalates to SIGKILL', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    vi.useFakeTimers()
+    try {
+      const startedAt = Date.now()
+      let killedAfterMs: number | null = null
+      await runDaemonStop({
+        dataDir: '/fake',
+        isPidAlive: () => true,
+        killFn: (_pid, signal) => {
+          if (signal === 'SIGKILL') killedAfterMs = Date.now() - startedAt
+        },
+        sleep: async (ms) => {
+          vi.advanceTimersByTime(ms)
+        },
+        killWaitMs: 0,
+        removeRecord: async () => undefined,
+      })
+      expect(killedAfterMs).not.toBeNull()
+      expect(killedAfterMs as unknown as number).toBeGreaterThan(FILE_GC_STOP_TIMEOUT_MS)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

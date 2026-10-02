@@ -17,11 +17,8 @@ vi.mock('./config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-import {
-  createSharedWorkers,
-  FILE_GC_STOP_TIMEOUT_MS,
-  sharedBackgroundWork,
-} from './shared-background-work.js'
+import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
+import { createSharedWorkers, sharedBackgroundWork } from './shared-background-work.js'
 import { checkpointAfterWrite, uninstallAutoCheckpoint } from './store/auto-checkpoint.js'
 import type { FileGcSweeper } from './store/file-gc-sweeper.js'
 

@@ -4,6 +4,7 @@ import {
   daemonStopResultSchema,
 } from '../shared/api-contracts/daemon-stop.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
+import { STOP_SIGTERM_WINDOW_MS } from '../shared/stop-timeouts.js'
 import { terminateAndWait } from '../shared/terminate-and-wait.js'
 
 export interface DaemonStopOptions {
@@ -16,12 +17,11 @@ export interface DaemonStopOptions {
   removeRecord?: (dataDir: string) => Promise<void>
 }
 
-// SIGTERM's window and the poll inside it. Unlike `server stop`'s 10s, this
-// 5s has no recorded reason, and both closes can wait on the file sweeper for
-// FILE_GC_STOP_TIMEOUT_MS (5s), so it leaves no margin over that wait alone.
-// Kept as it was: what an operator waits is its own decision, not a rider on
-// extracting the sequence.
-const DEFAULT_STOP_TIMEOUT_MS = 5000
+// SIGTERM's window and the poll inside it. The window is the file sweeper's
+// stop cap plus the margin the rest of the close needs (`stop-timeouts.ts`),
+// not a number of its own: a window equal to the cap SIGKILLs a daemon that
+// is still stopping cleanly.
+const DEFAULT_STOP_TIMEOUT_MS = STOP_SIGTERM_WINDOW_MS
 const POLL_INTERVAL_MS = 100
 // After SIGKILL the process only has to be reaped; polling ends the wait the
 // moment it is gone.

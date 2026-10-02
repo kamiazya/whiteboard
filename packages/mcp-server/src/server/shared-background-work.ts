@@ -1,4 +1,5 @@
 import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
+import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 import type { BackgroundWork, BackgroundWorker } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
@@ -49,14 +50,6 @@ import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/wor
  * `background-work.guard.test.ts` accepts that form here and still fails a
  * direct `x.start()` anywhere outside a registry call.
  */
-
-/**
- * Caps how long close() waits for an in-flight file-gc pass before the rest
- * of shutdown proceeds. A full pass can be expensive, and a shutdown that
- * appears to hang is worse than one that leaves a pass to finish in the
- * background.
- */
-export const FILE_GC_STOP_TIMEOUT_MS = 5_000
 
 export interface RootShutdownSteps {
   /** The registry's `stopAll`; read at close time because the registry is armed after this is built. */
