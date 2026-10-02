@@ -24,10 +24,10 @@ import { movesForPathChange, scanReferences } from '@kamiazya/whiteboard-codec'
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
 import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect } from 'vitest'
 import { DocumentVectorCache } from '../search/document-vector-cache.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
@@ -261,7 +261,7 @@ describe('reference semantics under command sequences', () => {
   fcTest.prop([fc.array(cmdArb, { minLength: 1, maxLength: 12 })], withDefaults({ numRuns: 40 }))(
     'the real pipeline agrees with an independent model after every command',
     async (cmds) => {
-      const deps = makeTestDeps({ documentStore: createInMemoryDocumentStore() })
+      const deps = makeTestDeps({ documentStore: new InMemoryDocumentStore() })
       // The workspace exists because this run says so, not as a side effect of
       // whichever command happens to create first: creating one is ADR-0019's
       // MINT boundary, which keys it by a fresh ULID — and here that would

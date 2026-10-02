@@ -12,6 +12,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, SqliteDialect, sql } from 'kysely'
+import { type MigrationProvider, Migrator } from 'kysely/migration'
 // libsql ships a native better-sqlite3-shaped binding next to @libsql/client.
 // We bypass @libsql/client here because its `:memory:` path nulls the cached
 // connection after every transaction, so subsequent non-transaction queries
@@ -19,6 +20,7 @@ import { Kysely, SqliteDialect, sql } from 'kysely'
 // for the lifetime of the instance, which is what `:memory:` needs.
 import LibsqlNativeDatabase from 'libsql'
 import { DB_FILENAME, getDb, injectCachedDb, removeCachedDb, runDbDisposeHooks } from './index.js'
+import { migrations } from './migrations/index.js'
 import { runMigrations } from './migrator.js'
 import { clearPrepareCache } from './prepare.js'
 import type { Database, DatabaseSchema } from './schema.js'
@@ -43,22 +45,24 @@ export interface IsolatedDbHandle {
   dispose(): Promise<void>
 }
 
+// The Database class libsql exports is better-sqlite3-shaped; SqliteDialect
+// accepts any object that conforms to that surface even if the type system
+// disagrees, so the cast lives here once for every helper in this file.
+function nativeSqliteDialect(location: string): SqliteDialect {
+  return new SqliteDialect({
+    database: new LibsqlNativeDatabase(location) as unknown as ConstructorParameters<
+      typeof SqliteDialect
+    >[0]['database'],
+  })
+}
+
 // For file-backed mode keep the production dialect so we exercise the same
 // adapter / driver path. For memory mode swap to Kysely's SqliteDialect on
 // the libsql native binding — single Database instance, single connection,
 // `:memory:` actually retains state.
 function openIsolated(dataDir: string, memory: boolean): Database {
   return memory
-    ? new Kysely<DatabaseSchema>({
-        dialect: new SqliteDialect({
-          // The Database class libsql exports is better-sqlite3-shaped; the
-          // SqliteDialect constructor accepts any object that conforms to
-          // that surface even if the type system disagrees.
-          database: new LibsqlNativeDatabase(':memory:') as unknown as ConstructorParameters<
-            typeof SqliteDialect
-          >[0]['database'],
-        }),
-      })
+    ? new Kysely<DatabaseSchema>({ dialect: nativeSqliteDialect(':memory:') })
     : new Kysely<DatabaseSchema>({
         dialect: new LibsqlDialect({ url: `file:${join(dataDir, DB_FILENAME)}` }),
       })
@@ -100,6 +104,62 @@ export async function createIsolatedDb(
       // to call prepareDataDir again without picking up the disposed promise.
       clearPrepareCache()
       await db.destroy()
+    },
+  }
+}
+
+// A table-agnostic handle: a migration test reads rows in the shape a schema
+// had BEFORE the migration under test, which `DatabaseSchema` (the head) no
+// longer describes.
+type AnyTables = Record<string, Record<string, unknown>>
+
+/** The migrator over the real migration log, for a database a test already holds. */
+export function migratorFor<DB>(db: Kysely<DB>): Migrator {
+  const provider: MigrationProvider = { getMigrations: async () => migrations }
+  return new Migrator({ db: db as never, provider })
+}
+
+export interface MigrationHarness<DB = AnyTables> {
+  db: Kysely<DB>
+  /** Applies the log up to and including `name`; throws the migration's own error. */
+  migrateTo(name: string): Promise<void>
+  migrateToHead(): Promise<void>
+  /** Runs to head and hands back the error instead of throwing it, for a test about failing. */
+  migrateToHeadRaw(): Promise<unknown>
+}
+
+/**
+ * A database a migration test walks the log over one step at a time, unlike
+ * `createIsolatedDb`, which hands back a fully migrated one.
+ *
+ * With a `dataDir` the database is the `whiteboard.db` file production opens
+ * (the log's FILE behaviour — renames, blob moves — is what those tests are
+ * about); without one it is `:memory:`, for a test that calls a single
+ * migration's `up`/`down` directly. Foreign keys are on either way, as in
+ * production's `buildDb`, because a migration that only works with them off
+ * is not one an install can run.
+ */
+export async function openMigrationHarness<DB = AnyTables>(
+  dataDir?: string,
+): Promise<MigrationHarness<DB>> {
+  const db = new Kysely<DB>({
+    dialect: nativeSqliteDialect(dataDir === undefined ? ':memory:' : join(dataDir, DB_FILENAME)),
+  })
+  await sql`PRAGMA foreign_keys = ON`.execute(db)
+  const migrator = migratorFor(db)
+  const unwrap = (error: unknown): void => {
+    if (error !== undefined) throw error
+  }
+  return {
+    db,
+    async migrateTo(name) {
+      unwrap((await migrator.migrateTo(name)).error)
+    },
+    async migrateToHead() {
+      unwrap((await migrator.migrateToLatest()).error)
+    },
+    async migrateToHeadRaw() {
+      return (await migrator.migrateToLatest()).error
     },
   }
 }

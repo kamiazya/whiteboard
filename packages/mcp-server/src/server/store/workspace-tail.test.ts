@@ -1,8 +1,8 @@
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
-import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
 import {
   createWorkspaceTail,
   resolveWorkspaceTailIntervalMs,

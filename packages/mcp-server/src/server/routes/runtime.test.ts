@@ -12,6 +12,7 @@ import {
   createCredentialResolver,
 } from '../security/credential-resolver.js'
 import { mintMacaroon } from '../security/macaroon.js'
+import { testDataLayout } from './_test-helpers.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR) and the helpers behind
@@ -50,6 +51,10 @@ vi.mock('../../daemon/log-rotation.js', () => ({
   purgeOldDaemonLogs: (dir: string) => mockPurgeOldDaemonLogs(dir),
 }))
 
+// Not the directory the mocked config names, so a route that read the process
+// data dir instead of the layout it was handed answers with the wrong one.
+const LAYOUT_DIR = '/__test__/runtime-layout-handed-to-the-router'
+
 const { createRuntimeRouter } = await import('./runtime.js')
 const { createDaemonIdentity } = await import('../security/daemon-identity.js')
 
@@ -75,6 +80,7 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
     credentialResolver: createCredentialResolver({ daemonToken: 'secret', ...credentials }),
     instanceId: 'test-instance-id',
     identity: testIdentity,
+    dataLayout: testDataLayout(LAYOUT_DIR),
     touch,
     getStatus: () => ({
       pid: 10,
@@ -192,6 +198,7 @@ describe('runtime routes', () => {
     expect(body.lastAutoCompactedAt).toBe(1_700_000_000_000)
     expect(touch).toHaveBeenCalledTimes(1)
     expect(mockComputeStorageReport).toHaveBeenCalledTimes(1)
+    expect(mockComputeStorageReport).toHaveBeenCalledWith(LAYOUT_DIR)
   })
 
   it('rejects /api/runtime/storage without a bearer token', async () => {
@@ -228,6 +235,7 @@ describe('runtime routes', () => {
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toMatchObject({ removed: 2, retained: 5 })
     expect(mockPurgeOldDaemonLogs).toHaveBeenCalledTimes(1)
+    expect(mockPurgeOldDaemonLogs).toHaveBeenCalledWith(LAYOUT_DIR)
   })
 })
 

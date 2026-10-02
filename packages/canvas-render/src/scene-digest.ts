@@ -1,6 +1,7 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
+import { area, contains, overlapArea } from './quality/rect.js'
 
 /**
  * `sceneDigest`'s output crosses a process boundary as AI-facing JSON, which
@@ -91,31 +92,17 @@ interface DigestEntry {
   readonly overflows?: true
 }
 
-function overlapArea(a: BoundingBox, b: BoundingBox): number {
-  const width = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
-  const height = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
-  return width > 0 && height > 0 ? width * height : 0
-}
-
-function area(box: BoundingBox): number {
-  return box.w * box.h
-}
-
 /**
  * A parent must be strictly larger in area than its child — an identical
  * bbox on two distinct nodes is overlap, not containment. Without this,
  * two equal-area boxes each qualify as the other's unique smallest
  * containing candidate, and computeContainment emits both directions,
  * a contradictory (non-antisymmetric) relation in the AI-facing digest.
+ * The quality instruments' edge-inclusive `contains` (`quality/rect.ts`)
+ * answers a different question and is not interchangeable with this one.
  */
-function contains(parent: BoundingBox, child: BoundingBox): boolean {
-  return (
-    child.x >= parent.x &&
-    child.y >= parent.y &&
-    child.x + child.w <= parent.x + parent.w &&
-    child.y + child.h <= parent.y + parent.h &&
-    area(parent) > area(child)
-  )
+function strictlyContains(parent: BoundingBox, child: BoundingBox): boolean {
+  return contains(parent, child) && area(parent) > area(child)
 }
 
 function gapBetween(a: BoundingBox, b: BoundingBox): number {
@@ -145,7 +132,7 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
   const result: { parent: string; child: string }[] = []
   for (const child of entries) {
     const candidates = entries.filter(
-      (parent) => parent.id !== child.id && contains(parent.bbox, child.bbox),
+      (parent) => parent.id !== child.id && strictlyContains(parent.bbox, child.bbox),
     )
     if (candidates.length === 0) continue
     const smallest = [...candidates].sort((a, b) => {

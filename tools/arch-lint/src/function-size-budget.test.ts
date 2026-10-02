@@ -436,15 +436,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // That is what took the page from a cognitive complexity of 42 to under
   // the threshold; the three entries below are the pieces still over the
   // line budget, and each is one concern rather than several.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 145,
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 138,
   // One load: attempt, unlock, the remembered blob, and what each outcome
   // leaves on screen. The states are ADR-0042 decision 6's and they share
   // the same `setState`, so splitting them would split one transition.
-  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 81,
-  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 57,
+  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 70,
+  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 54,
   // The read surface: the banner, the tree and the editor. JSX, and the
   // three are what a replica IS to a reader.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 80,
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 72,
   // Presentation only — the logic is `useTransferHandshake`. Six stages, each
   // a short branch, and the offer and the report already live in their own
   // components; the page is the switch between them.
@@ -590,7 +590,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
   // 435 -> 182: the four workers both HTTP roots run are built and declared
   // in shared-background-work.ts; what is left here is the daemon's own.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 139,
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 133,
   'packages/mcp-server/src/server/index.ts#main': 81,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
@@ -620,7 +620,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // address translation it owes — path to id, absent to 404 — is three lines
   // the port call did not need.
   'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 267,
-  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 67,
+  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 64,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 127,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
@@ -681,7 +681,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 73,
   'packages/ports/src/test-utils/blob-store-conformance.ts#describeBlobStoreConformance': 127,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 673,
-  'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 662,
+  'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 639,
   // +4: the two v1 POST routes refuse a body that names the URL's own
   // workspace or document before parsing — two lines each, the refusal
   // itself being a helper above the function.

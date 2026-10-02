@@ -17,7 +17,7 @@
 // page, which already imports daemon-api-client itself — while a dynamic
 // import here charges the whole schema graph's first load to whatever
 // timeout happens to be waiting (the in-body-await-import flake shape).
-import { bytesToBase64 } from '@kamiazya/whiteboard-model'
+import { bytesToBase64, messageOf } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { listWorkspaces } from './daemon-api-client.js'
 import { findReplicaForHandle, withReplicaEntry } from './replicas.js'
@@ -71,7 +71,7 @@ function reportRefreshFailure(deps: ReplicaRefreshDeps, err: unknown): void {
     daemonBaseUrl: deps.daemonBaseUrl,
     workspaceId: deps.workspaceId,
     name: err instanceof Error ? err.name : typeof err,
-    message: err instanceof Error ? err.message : String(err),
+    message: messageOf(err, String(err)),
   })
 }
 

@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 
 /** Workspace path used for every canvas the smoke creates. */
@@ -329,7 +330,7 @@ export async function runE2eCheckpointSmoke({
 
     console.log('\n[e2e] ALL OK')
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = messageOf(err, String(err))
     const detail = stderrBuf ? `\n--- MCP stderr ---\n${stderrBuf}\n--- end ---` : ''
     throw new Error(`${msg}${detail}`)
   } finally {

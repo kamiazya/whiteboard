@@ -4,13 +4,13 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
-import { getDataDir } from '../config.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
+import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { computeStorageReport } from './runtime-storage.js'
 
 export interface RuntimeRouterOptions {
@@ -26,6 +26,8 @@ export interface RuntimeRouterOptions {
    * route-scope registry had already declared, not working, with nothing red.
    */
   credentialResolver: CredentialResolver
+  /** The data directory the storage report walks and the log cleanup prunes. */
+  dataLayout: DataLayout
 }
 
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
@@ -82,13 +84,13 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     return c.json(options.getStatus())
   })
 
-  // Storage usage report. Cheap stat()-only walk of getDataDir(); nothing is cached.
+  // Storage usage report. Cheap stat()-only walk of the data dir; nothing is cached.
   // `lastAutoCompactedAt` is the freshest auto-Optimize timestamp across
   // every canvas, so the UI can surface "Auto-optimised Ns ago" without
   // a separate round trip.
   app.get('/api/runtime/storage', async (c) => {
     options.touch()
-    const report = await computeStorageReport(getDataDir())
+    const report = await computeStorageReport(options.dataLayout.dataDir)
     const lastAutoCompactedAt = await readLatestCompactedAt()
     return c.json({ ...report, lastAutoCompactedAt })
   })
@@ -114,7 +116,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
       return c.json({ error: 'unauthorized' }, 401)
     }
     options.touch()
-    const result = await purgeOldDaemonLogs(getDataDir())
+    const result = await purgeOldDaemonLogs(options.dataLayout.dataDir)
     return c.json(result)
   })
 

@@ -36,10 +36,11 @@
  *
  * WHY THE BYTES ARE NOT VALIDATED WITH `instanceof`. A structured clone
  * arrives as a `Uint8Array` from the SENDING realm, and `instanceof` against
- * this realm's constructor answers false for it. The tag check below is the
- * only reliable test, and a `z.instanceof(Uint8Array)` here would refuse
- * every real message while passing every test that builds one in-realm.
+ * this realm's constructor answers false for it. `uint8ArrayAnyRealmSchema` is
+ * the realm-independent test, and a `z.instanceof(Uint8Array)` here would
+ * refuse every real message while passing every test that builds one in-realm.
  */
+import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -50,12 +51,6 @@ import { z } from 'zod'
  * they WILL be different versions in the field.
  */
 export const CROSS_ORIGIN_TRANSFER_PROTOCOL = 1
-
-/** Cross-realm-safe: see the header's note on `instanceof`. */
-const transferBytes = z.custom<Uint8Array>(
-  (value) => Object.prototype.toString.call(value) === '[object Uint8Array]',
-  { message: 'expected the snapshot as a Uint8Array' },
-)
 
 /**
  * A nonce the SENDER mints per attempt. It is not a secret and does not
@@ -89,7 +84,7 @@ export const transferRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('transfer-offer'),
     protocol: z.number().int().positive(),
     nonce: transferNonceSchema,
-    snapshot: transferBytes,
+    snapshot: uint8ArrayAnyRealmSchema,
     documentCount: z.number().int().nonnegative(),
     sourceWorkspaceId: z.string().min(1),
   }),

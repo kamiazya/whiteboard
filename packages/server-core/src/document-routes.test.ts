@@ -1,8 +1,7 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { apiErrorReason } from './api-errors.js'
 import { createServer } from './create-server.js'
-import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.js'
 import {
@@ -13,7 +12,7 @@ import {
 function makeServer() {
   return createServer(
     makeTestDeps({
-      documentStore: createInMemoryDocumentStore(),
+      documentStore: new InMemoryDocumentStore(),
       documentTeardown: inMemoryDocumentTeardown(),
     }),
   )
@@ -269,7 +268,7 @@ describe('canvas OKF read route', () => {
     // alone. It is still worth guarding: a document whose bytes were deleted,
     // or one written by an older build that created placements lazily, lands
     // here.
-    const store = createInMemoryDocumentStore()
+    const store = new InMemoryDocumentStore()
     const documentIndex = new InMemoryDocumentIndex()
     const { app } = createServer(makeTestDeps({ documentStore: store, documentIndex }))
     await documentIndex.createWorkspace({ workspaceId: 'ws-1' })

@@ -1,7 +1,7 @@
 import { TOKENS } from '@kamiazya/whiteboard-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { ContainerModule } from 'inversify'
-import { InMemoryBlobStore, InMemoryDocumentStore } from '../server/store/inmemory/index.js'
+import { InMemoryBlobStore } from '../server/store/inmemory/index.js'
 
 /**
  * Binds the storage ports to their in-memory test doubles. Test-level

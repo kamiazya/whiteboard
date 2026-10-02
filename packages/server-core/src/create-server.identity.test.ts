@@ -7,15 +7,16 @@
  * member of A who knew B's id could create documents in B, and rewrite B's
  * through linkify-mentions.
  */
+
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
-import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.js'
 
 async function twoWorkspaces() {
   const deps = makeTestDeps({
-    documentStore: createInMemoryDocumentStore(),
+    documentStore: new InMemoryDocumentStore(),
     documentTeardown: inMemoryDocumentTeardown(),
   })
   const { app } = createServer(deps)

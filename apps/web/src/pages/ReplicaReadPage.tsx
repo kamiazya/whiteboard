@@ -11,30 +11,29 @@
  * only the record. The record is opened with `open`, never `create`, so a
  * missing replica stays missing instead of being minted.
  *
- * A lazy page like the others: it imports loro-adapter and the canvas
- * viewer, which must stay out of the entry closure
- * (entry-graph-loro-free.test.ts).
+ * A lazy page like the others: it reaches loro through `lib/replica-record`
+ * and the canvas viewer through its editors, which must stay out of the
+ * entry closure (entry-graph-loro-free.test.ts). No module under `pages/`
+ * names the CRDT itself (pages-loro-free.test.ts).
+ *
+ * ponytail: this is a document-editing surface outside the keeper seam
+ * (ADR-0004: one page, a keeper per mode) — it mounts the editors itself and
+ * saves through its own queue. Routing it through the shared page needs a
+ * replica keeper whose backend (a) opens with `open` and never places a
+ * node: `BrowserBackend` runs the startup fold and creates a missing node,
+ * both index writes this page must not make; (b) addresses the record by the
+ * daemon's workspace id, where `BrowserBackend` calls
+ * `getBrowserWorkspaceId()`; and (c) answers the page model with every
+ * control-plane action ABSENT rather than refused, over a model that has
+ * dozens of members. Upgrade path: a replica backend and keeper, then the
+ * replica fixture in `test-utils/document-page.contract.tsx`; until then
+ * this page's own tests are the only run of the shared scenarios.
  */
 
-import {
-  type LoadedReference,
-  type ReferenceWire,
-  referenceSeamsFromWire,
-  referenceTargets,
-  referenceWire,
-} from '@kamiazya/whiteboard-canvas-render'
+import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import {
-  documentContainers,
-  readMarkdownBody,
-  readSpatialCanvas,
-  readWorkspaceDocuments,
-  reconcileSpatialCanvas,
-  writeMarkdownBody,
-} from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
@@ -46,7 +45,21 @@ import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
 import type { ReplicaKeyInput } from '../lib/replica-page-state.js'
 import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-state.js'
-import { lockedDetail, REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
+import {
+  type ReplicaContent,
+  type ReplicaRecord,
+  readReplicaContent,
+  replicaEntries,
+  replicaReferenceWire,
+  writeReplicaMarkdown,
+  writeReplicaSpatial,
+} from '../lib/replica-record.js'
+import { createReplicaSaveQueue, type ReplicaSaveHealth } from '../lib/replica-save-queue.js'
+import {
+  lockedDetail,
+  REPLICA_SAVE_FAILED_COPY,
+  REPLICA_STATE_COPY,
+} from '../lib/replica-state-copy.js'
 import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
 import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
@@ -77,7 +90,7 @@ type LoadState =
   | { kind: 'loading' }
   | { kind: 'missing' }
   | { kind: 'withheld'; reason: WithheldReason }
-  | { kind: 'ready'; record: LoroDoc; entries: WorkspaceDocumentEntry[] }
+  | { kind: 'ready'; record: ReplicaRecord; entries: WorkspaceDocumentEntry[] }
 
 function keyInputFor(state: LoadState): ReplicaKeyInput {
   if (state.kind === 'withheld') return { withheld: state.reason }
@@ -132,51 +145,25 @@ function ReplicaActionPanel({
 }
 
 /**
- * The replica's save queue: one trailing debounce and a sequential chain.
- *
- * ponytail: no persistence-state reporting, since this page shows no save
- * indicator. Report it from here when one arrives.
+ * The replica's save queue (`lib/replica-save-queue.ts`) over React state:
+ * whether the last save landed, and the two actions a page takes on it.
  *
  * The unmount FLUSHES rather than cancels — the daemon returning is exactly
  * what unmounts this page, and that moment must not eat the last debounce
  * window of typing.
  */
 function useReplicaSaveQueue(workspaceId: string) {
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const saveChain = useRef<Promise<void>>(Promise.resolve())
-  const latestRecord = useRef<LoroDoc | null>(null)
-  const saveNow = useCallback(
-    (record: LoroDoc) => {
-      saveChain.current = saveChain.current
-        .then(() => new BrowserWorkspaceDocs().save(workspaceId, record))
-        .then(() => undefined)
-        .catch(() => {
-          // A failed append leaves the previous stored state; the ops are
-          // still in the in-memory record and the next save retries them.
-        })
-    },
+  const [health, setHealth] = useState<ReplicaSaveHealth>('ok')
+  const queue = useMemo(
+    () =>
+      createReplicaSaveQueue<ReplicaRecord>({
+        save: (record) => new BrowserWorkspaceDocs().save(workspaceId, record),
+        onHealth: setHealth,
+      }),
     [workspaceId],
   )
-  const scheduleSave = useCallback(
-    (record: LoroDoc) => {
-      if (saveTimer.current !== null) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => {
-        saveTimer.current = null
-        saveNow(record)
-      }, 500)
-    },
-    [saveNow],
-  )
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current !== null) {
-        clearTimeout(saveTimer.current)
-        saveTimer.current = null
-        if (latestRecord.current !== null) saveNow(latestRecord.current)
-      }
-    }
-  }, [saveNow])
-  return { scheduleSave, latestRecord }
+  useEffect(() => () => queue.flush(), [queue])
+  return { scheduleSave: queue.schedule, retrySave: queue.retry, saveFailed: health === 'failed' }
 }
 
 /**
@@ -229,18 +216,7 @@ function useReplicaRecord({
           setState({ kind: 'missing' })
           return
         }
-        // Re-shaped into the web entry type: the two agree except that
-        // loro-adapter's updatedAt is a number, and this page has no use
-        // for a timestamp the banner already states better.
-        const entries = readWorkspaceDocuments(record).map(
-          ({ documentId, path, kind, name, shadowed }): WorkspaceDocumentEntry => ({
-            documentId,
-            path,
-            ...(kind === undefined ? {} : { kind }),
-            ...(name === undefined ? {} : { name }),
-            ...(shadowed === undefined ? {} : { shadowed }),
-          }),
-        )
+        const entries = replicaEntries(record)
         setState({ kind: 'ready', record, entries })
       })
       .catch((error: unknown) => {
@@ -265,58 +241,6 @@ function useReplicaRecord({
       cancelled = true
     }
   }, [workspaceId, daemonBaseUrl, attempt, withheld])
-}
-
-/**
- * What the selected document points at, resolved out of the replica itself.
- *
- * Seeded from what the SELECTED document says, then walked the way every
- * other keeper walks it — `referenceTargets` re-reads the graph as it grows,
- * so a referenced body's own links load too, under its own caps.
- */
-function replicaReferenceWire({
-  record,
-  entries,
-  selected,
-  resolveAlias,
-  resolveTitle,
-}: {
-  record: LoroDoc
-  entries: readonly WorkspaceDocumentEntry[]
-  selected: WorkspaceDocumentEntry
-  resolveAlias: ReturnType<typeof createUniqueNameResolver>
-  resolveTitle: ReturnType<typeof linkTitles>
-}): ReferenceWire {
-  const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
-  const load = (target: string): LoadedReference | null => {
-    const entry = byId.get(resolveAlias(target) ?? target) ?? byId.get(target)
-    if (entry === undefined) return null
-    const containers = documentContainers(record, entry.documentId)
-    return {
-      documentId: entry.documentId,
-      ...(entry.name === undefined ? {} : { name: entry.name }),
-      ...(entry.kind === 'spatial'
-        ? { canvas: readSpatialCanvas(containers) }
-        : { body: readMarkdownBody(containers) }),
-    }
-  }
-  // Seeded from what the SELECTED document says, then walked the way every
-  // other keeper walks it — `referenceTargets` re-reads the graph as it
-  // grows, so a referenced body's own links load too, under its own caps.
-  const containers = documentContainers(record, selected.documentId)
-  const seeds =
-    selected.kind === 'spatial'
-      ? { canvases: [readSpatialCanvas(containers)] }
-      : { bodies: [readMarkdownBody(containers)] }
-  const graph = new Map<string, LoadedReference | null>()
-  for (;;) {
-    const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
-      (target) => !graph.has(target),
-    )
-    if (wanted.length === 0) break
-    for (const target of wanted) graph.set(target, load(target))
-  }
-  return referenceWire(graph, { resolveAlias, resolveTitle })
 }
 
 /** The link table and reference seams the editor draws this replica with. */
@@ -369,16 +293,16 @@ function useReplicaEditing({
 }: {
   state: LoadState
   selected: WorkspaceDocumentEntry | undefined
-  scheduleSave: (record: LoroDoc) => void
+  scheduleSave: (record: ReplicaRecord) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
-  const content = useMemo(() => {
-    if (state.kind !== 'ready' || selected === undefined) return null
-    const containers = documentContainers(state.record, selected.documentId)
-    return selected.kind === 'spatial'
-      ? { kind: 'spatial' as const, canvas: readSpatialCanvas(containers) }
-      : { kind: 'markdown' as const, body: readMarkdownBody(containers) }
-  }, [state, selected])
+  const content = useMemo(
+    () =>
+      state.kind !== 'ready' || selected === undefined
+        ? null
+        : readReplicaContent(state.record, selected),
+    [state, selected],
+  )
 
   // Selection decides the draft; the record is the source on every switch.
   useEffect(() => {
@@ -397,10 +321,7 @@ function useReplicaEditing({
       setSpatialDraft(next)
       const prev = spatialPrev.current
       if (prev !== null) {
-        // A visible diff, never a whole-canvas resync: a resync's silent
-        // deletion of an unknown-version record would become an op that
-        // SHIPS, erasing a newer client's node on the keeper.
-        reconcileSpatialCanvas(documentContainers(state.record, selected.documentId), prev, next)
+        writeReplicaSpatial(state.record, selected.documentId, prev, next)
       }
       spatialPrev.current = next
       scheduleSave(state.record)
@@ -412,7 +333,7 @@ function useReplicaEditing({
     (next: string) => {
       if (state.kind !== 'ready' || selected === undefined || selected.kind === 'spatial') return
       setDraft(next)
-      writeMarkdownBody(documentContainers(state.record, selected.documentId), next)
+      writeReplicaMarkdown(state.record, selected.documentId, next)
       scheduleSave(state.record)
     },
     [state, selected, scheduleSave],
@@ -428,13 +349,61 @@ interface ReplicaReaderProps {
   selected: WorkspaceDocumentEntry | undefined
   selectedPath: string | null
   setSelectedPath: (path: string) => void
-  content: { kind: 'spatial'; canvas: SpatialCanvas } | { kind: 'markdown'; body: string } | null
+  content: ReplicaContent | null
   draft: string | null
   spatialDraft: SpatialCanvas | null
   onDraftChange: (next: string) => void
   onSpatialChange: (next: SpatialCanvas) => void
   seams: ReturnType<typeof referenceSeamsFromWire> | undefined
   references: ReferenceWire | undefined
+  saveFailed: boolean
+  onRetrySave: () => void
+}
+
+/**
+ * A persistent notice, not a toast: the condition is "these edits exist only
+ * in this tab", and it holds until a save lands. `role="alert"` because it
+ * arrives carrying its message, which is the widely-supported shape for a
+ * failure someone must hear about (polite-live-region.test.ts).
+ */
+function ReplicaSaveFailedNotice({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      data-testid="replica-save-failed"
+      className="flex items-center gap-3 border-b bg-destructive/10 px-4 py-2 text-sm"
+    >
+      <p className="min-w-0 flex-1">
+        <span className="font-medium">{REPLICA_SAVE_FAILED_COPY.title}.</span>{' '}
+        {REPLICA_SAVE_FAILED_COPY.body}
+      </p>
+      <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+        {REPLICA_SAVE_FAILED_COPY.action}
+      </Button>
+    </div>
+  )
+}
+
+/** Where the person is: the daemon is away and this is the copy cached here. */
+function ReplicaOfflineBanner({
+  name,
+  syncedAt,
+}: {
+  name: string
+  syncedAt: ReplicaReadPageProps['syncedAt']
+}) {
+  return (
+    <div
+      data-testid="replica-offline-banner"
+      className="border-b bg-amber-500/10 px-4 py-2 text-sm"
+    >
+      <span className="font-medium">{name}</span>
+      {' — the daemon that keeps this workspace is unreachable. '}
+      This is the copy cached in this browser
+      {syncedAt !== undefined && <> (synced {formatRelative(syncedAt, { pastDay: 'absolute' })})</>}
+      . Edits save here and ship to the daemon when it returns.
+    </div>
+  )
 }
 
 /** The replica as a document surface: the banner, the tree, and the editor. */
@@ -453,21 +422,13 @@ function ReplicaReader({
   onSpatialChange,
   seams,
   references,
+  saveFailed,
+  onRetrySave,
 }: ReplicaReaderProps) {
   return (
     <div className="flex h-full flex-col" data-testid="replica-state-readable">
-      <div
-        data-testid="replica-offline-banner"
-        className="border-b bg-amber-500/10 px-4 py-2 text-sm"
-      >
-        <span className="font-medium">{displayName ?? workspaceId}</span>
-        {' — the daemon that keeps this workspace is unreachable. '}
-        This is the copy cached in this browser
-        {syncedAt !== undefined && (
-          <> (synced {formatRelative(syncedAt, { pastDay: 'absolute' })})</>
-        )}
-        . Edits save here and ship to the daemon when it returns.
-      </div>
+      <ReplicaOfflineBanner name={displayName ?? workspaceId} syncedAt={syncedAt} />
+      {saveFailed && <ReplicaSaveFailedNotice onRetry={onRetrySave} />}
       <div className="flex min-h-0 flex-1">
         <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
           <WorkspaceFileTree
@@ -569,7 +530,7 @@ export function ReplicaReadPage({
   const [reconnecting, setReconnecting] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
-  const { scheduleSave, latestRecord } = useReplicaSaveQueue(workspaceId)
+  const { scheduleSave, retrySave, saveFailed } = useReplicaSaveQueue(workspaceId)
 
   useReplicaRecord({ workspaceId, daemonBaseUrl, attempt, withheld, setState })
 
@@ -620,18 +581,9 @@ export function ReplicaReadPage({
       ? state.entries.find((entry) => entry.path === selectedPath)
       : undefined
 
-  useEffect(() => {
-    latestRecord.current = state.kind === 'ready' ? state.record : null
-  }, [state])
-
-  // What the selected document points at, answered from the replica record
-  // itself. Nothing here reaches a keeper: the alias table is the record's
-  // own entries, and every target's body or canvas is read from the same
-  // record through `documentContainers`. That is what makes references work
-  // on the one page that exists BECAUSE the daemon is unreachable — and it
-  // stays inside the page's own rule, since reading a container is not an
-  // index write.
-  // The same two tables both keeper pages build, over this record's own
+  // What the selected document points at is answered from the replica record
+  // itself (`replicaReferenceWire`), so references work on the one page that
+  // exists BECAUSE the daemon is unreachable. The same two tables both keeper pages build, over this record's own
   // entries — so a `[[...]]` written here resolves by the rules the rest of
   // the app already applies (path or id; a display name is a label, never a
   // target) rather than by a lookup this page invented for itself.
@@ -668,6 +620,8 @@ export function ReplicaReadPage({
           onSpatialChange={onSpatialChange}
           seams={seams}
           references={references}
+          saveFailed={saveFailed}
+          onRetrySave={retrySave}
         />
       )}
       {(pageState === 'needs-connection' || pageState === 'locked') && (

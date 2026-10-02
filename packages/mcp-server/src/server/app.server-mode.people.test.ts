@@ -15,6 +15,7 @@ import {
   serverModePeople,
 } from './_test-server-mode-harness.js'
 import type { ServerModeAppOptions } from './app.js'
+import { testDataLayout } from './routes/_test-helpers.js'
 import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './routes/sync-sse.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './security/sign-in-session-store.js'
@@ -52,6 +53,7 @@ beforeEach(async () => {
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     people: stores.people,
     touch: () => {},
     getStatus: () => {

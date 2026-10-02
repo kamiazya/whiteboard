@@ -1,12 +1,9 @@
 import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
 import { expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../log.js'
-import { migrations } from './migrations/index.js'
+import { openMigrationHarness } from './test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../config.js', () => ({
@@ -30,19 +27,8 @@ const PRE_0008 = '0007-adopt-workspace-tree'
 
 it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob follows', async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-boot-verify-'))
-  const dbPath = join(dataDir, 'whiteboard.db')
-  const db = new Kysely<Record<string, Record<string, unknown>>>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(dbPath) as unknown as ConstructorParameters<
-        typeof SqliteDialect
-      >[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  const { error } = await new Migrator({ db: db as never, provider }).migrateTo(PRE_0008)
-  expect(error).toBeUndefined()
+  const { db, migrateTo } = await openMigrationHarness(dataDir)
+  await migrateTo(PRE_0008)
 
   // The legacy state, written against the schema as it stood at 0007: the
   // documents table was still `canvases`, its path column was still `slug`,
@@ -69,10 +55,7 @@ it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob fol
   // table (0017 drops it): read back through the CURRENT name, so this also
   // pins that 0009 carried the row across the rename rather than leaving it
   // behind.
-  const { error: toPreDropError } = await new Migrator({ db: db as never, provider }).migrateTo(
-    '0016-drop-documents-fk',
-  )
-  expect(toPreDropError).toBeUndefined()
+  await migrateTo('0016-drop-documents-fk')
   const row = (await db.selectFrom('documents').selectAll().executeTakeFirstOrThrow()) as {
     id: string
   }
@@ -113,19 +96,8 @@ const PRE_0012 = '0011-import-fs-blobs'
 
 it('the REAL migrator upgrades a third-site nanoid row that postdates 0008: zero non-ULID ids remain', async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-boot-verify-third-site-'))
-  const dbPath = join(dataDir, 'whiteboard.db')
-  const db = new Kysely<Record<string, Record<string, unknown>>>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(dbPath) as unknown as ConstructorParameters<
-        typeof SqliteDialect
-      >[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  const { error } = await new Migrator({ db: db as never, provider }).migrateTo(PRE_0012)
-  expect(error).toBeUndefined()
+  const { db, migrateTo } = await openMigrationHarness(dataDir)
+  await migrateTo(PRE_0012)
 
   // Shaped exactly like `upsertCanvasRow`'s insert (documents/versions/branches
   // plus the four docKey tables a version save's document content would have
@@ -204,10 +176,7 @@ it('the REAL migrator upgrades a third-site nanoid row that postdates 0008: zero
 
   // Historical pins first, at the last stage that still has a documents
   // table (0017 drops it).
-  const { error: toPreDropError } = await new Migrator({ db: db as never, provider }).migrateTo(
-    '0016-drop-documents-fk',
-  )
-  expect(toPreDropError).toBeUndefined()
+  await migrateTo('0016-drop-documents-fk')
 
   const documentRows = (await db.selectFrom('documents').selectAll().execute()) as { id: string }[]
   for (const documentRow of documentRows) {

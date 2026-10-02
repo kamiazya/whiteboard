@@ -7,11 +7,9 @@
 import { mkdir, mkdtemp, readdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
+import { type Kysely, sql } from 'kysely'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { migrations } from './index.js'
+import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../../config.js', () => ({
@@ -31,30 +29,7 @@ interface Handle {
 }
 
 async function openDb(): Promise<Handle> {
-  const db = new Kysely<Record<string, Record<string, unknown>>>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(
-        join(dataDir, 'whiteboard.db'),
-      ) as unknown as ConstructorParameters<typeof SqliteDialect>[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  const migrator = new Migrator({ db: db as never, provider })
-  return {
-    db,
-    async migrateTo(name: string) {
-      const { error } = await migrator.migrateTo(name)
-      expect(error).toBeUndefined()
-    },
-    async migrateToHead() {
-      const { error } = await migrator.migrateToLatest()
-      expect(error).toBeUndefined()
-    },
-    async migrateToHeadRaw() {
-      return (await migrator.migrateToLatest()).error
-    },
-  }
+  return openMigrationHarness(dataDir)
 }
 
 async function versionColumns(db: Handle['db']): Promise<string[]> {

@@ -3,6 +3,41 @@ import type { DocRef, DocumentStore, SaveCompactedSnapshotInput, SnapshotChunk }
 import { isStoredDocumentUnreadableError } from '../index.js'
 
 /**
+ * The arrays a caller passes in stay theirs, and the ones they get back are
+ * theirs too. A store that shares either reference lets one caller's edit
+ * rewrite what the next one reads — through `loadSnapshot` and through
+ * `readFrontier`, which copy separately.
+ */
+async function expectBuffersAreIndependent(store: DocumentStore, docRef: DocRef): Promise<void> {
+  const buffer = (...values: number[]): Uint8Array<ArrayBuffer> => new Uint8Array(values)
+  const mine = buffer(1, 2, 3, 4)
+  const frontier = buffer(8)
+  await store.saveSnapshot({
+    docRef,
+    manifest: { chunkCount: 1, totalBytes: 4, maxChunkBytes: 4 },
+    chunks: [{ index: 0, of: 1, bytes: mine }],
+    frontier,
+  })
+  mine[0] = 99
+  frontier[0] = 99
+
+  const first = await store.loadSnapshot({ docRef })
+  expect([...(first?.chunks[0]?.bytes ?? [])]).toEqual([1, 2, 3, 4])
+  expect([...(first?.frontier ?? [])]).toEqual([8])
+
+  const chunk = first?.chunks[0]?.bytes
+  if (chunk) chunk[0] = 42
+  if (first?.frontier) first.frontier[0] = 42
+  const second = await store.loadSnapshot({ docRef })
+  expect([...(second?.chunks[0]?.bytes ?? [])]).toEqual([1, 2, 3, 4])
+  expect([...(second?.frontier ?? [])]).toEqual([8])
+
+  const read = await store.readFrontier({ docRef })
+  if (read) read.frontier[0] = 42
+  expect([...((await store.readFrontier({ docRef }))?.frontier ?? [])]).toEqual([8])
+}
+
+/**
  * The `DocumentStore` guarantees a TypeScript signature cannot carry, as
  * tests every implementation has to pass.
  *
@@ -660,30 +695,7 @@ export function describeDocumentStoreConformance(
     })
 
     it('hands back independent buffers, in both directions', async () => {
-      // The arrays a caller passes in stay theirs, and the ones they get back
-      // are theirs too. A store that shares either reference lets one caller's
-      // edit rewrite what the next one reads.
-      await withStore(async (store) => {
-        const mine = bytes(1, 2, 3, 4)
-        const frontier = bytes(8)
-        await store.saveSnapshot({
-          docRef: DOC,
-          manifest: { chunkCount: 1, totalBytes: 4, maxChunkBytes: 4 },
-          chunks: [{ index: 0, of: 1, bytes: mine }],
-          frontier,
-        })
-        mine[0] = 99
-        frontier[0] = 99
-
-        const first = await store.loadSnapshot({ docRef: DOC })
-        expect([...(first?.chunks[0]?.bytes ?? [])]).toEqual([1, 2, 3, 4])
-        expect([...(first?.frontier ?? [])]).toEqual([8])
-
-        const chunk = first?.chunks[0]?.bytes
-        if (chunk) chunk[0] = 42
-        const second = await store.loadSnapshot({ docRef: DOC })
-        expect([...(second?.chunks[0]?.bytes ?? [])]).toEqual([1, 2, 3, 4])
-      })
+      await withStore((store) => expectBuffersAreIndependent(store, DOC))
     })
   })
 }

@@ -14,7 +14,7 @@ import type {
 } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { errorMessage } from '../../../shared/error-message.js'
-import { writeFileAtomic } from '../../atomic-write.js'
+import { writeFileAtomicStaged } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
 import { corruptStoredData, isMissingFileError } from '../corrupt-stored-data.js'
 import { assertPathWithinDir } from '../path-guard.js'
@@ -49,7 +49,7 @@ export class FsBlobStore implements BlobStore {
   /**
    * `blobsDir` is where this store's shards live — one tenant's, chosen by
    * `data-layout.ts`, never joined here. `stagingDir` is the root
-   * `writeFileAtomic` stages under: the data directory, so a staged file is on
+   * `writeFileAtomicStaged` stages under: the data directory, so a staged file is on
    * the same filesystem as its target and inside the one `.pending-writes`
    * directory a backup already excludes.
    */
@@ -82,7 +82,7 @@ export class FsBlobStore implements BlobStore {
     // write leaves it short for the duration, and `get` correctly refuses a
     // truncated envelope. Measured on a 6 MiB blob: 8 reads during 8
     // re-puts, every one threw.
-    await writeFileAtomic(this.baseDir, filePath, JSON.stringify(envelope))
+    await writeFileAtomicStaged(this.baseDir, filePath, JSON.stringify(envelope))
     return { ref }
   }
 

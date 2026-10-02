@@ -1,9 +1,11 @@
+import { messageOf } from '@kamiazya/whiteboard-model'
+
 /**
- * The one spelling of "what do we call this thrown thing" — previously
- * copy-pasted verbatim into five files, where a behavior change (an
- * `AggregateError`, a `cause` chain, a non-Error throw) would have had to
- * find every copy by hand.
+ * `messageOf` with this package's fixed fallback, for the call sites that have
+ * nothing better to say about a thrown non-Error. Sites that do (a user-facing
+ * sentence, or `String(err)`) call `messageOf` from model directly — the one
+ * implementation, shared with the browser app, which cannot import this file.
  */
 export function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
+  return messageOf(error)
 }

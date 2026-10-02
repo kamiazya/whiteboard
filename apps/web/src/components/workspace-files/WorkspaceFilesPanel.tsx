@@ -1,4 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -404,8 +405,7 @@ export function WorkspaceFilesPanel({
         } catch (err) {
           outcome.reportCreateRefusal({
             kind,
-            reason:
-              err instanceof Error ? err.message : `Could not create a ${kind} document here.`,
+            reason: messageOf(err, `Could not create a ${kind} document here.`),
           })
           // Re-thrown so the caller can tell a refusal from a success — the
           // dialog stays open on one and closes on the other, and swallowing
@@ -492,7 +492,7 @@ export function WorkspaceFilesPanel({
         outcome.reportPinRefusal({
           pinning,
           path: entry.path,
-          reason: err instanceof Error ? err.message : 'The store gave no reason.',
+          reason: messageOf(err, 'The store gave no reason.'),
         })
         // Not re-thrown, unlike a refused create: nothing is waiting on this
         // one. The menu entry that calls it has already closed, and the

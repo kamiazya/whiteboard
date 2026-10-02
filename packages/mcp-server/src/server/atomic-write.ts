@@ -29,8 +29,13 @@ export const PENDING_WRITES_DIRNAME = '.pending-writes'
  * `rename` within one filesystem is atomic, so a reader sees either the
  * previous complete file or the new one. The staging directory is under the
  * same data dir as every target, which is what makes that hold.
+ *
+ * Distinct from `shared/write-file-atomic.ts`'s `writeFileAtomic`, which
+ * stages beside the target (so the target need not live under a data dir) and
+ * can set a file mode. Use this one for content inside the data dir that a
+ * backup copies, so the staged name never appears in what the backup walks.
  */
-export async function writeFileAtomic(
+export async function writeFileAtomicStaged(
   dataDir: string,
   targetPath: string,
   bytes: Uint8Array | string,

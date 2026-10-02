@@ -1,19 +1,9 @@
 import { z } from 'zod'
 import { type DaemonLogEntryInput, formatDaemonLogEntriesAsJsonLines } from './log-jsonl.js'
-import { redactDiagnosticText } from './redact.js'
+import { redactDiagnosticText, scrubAuthMarkers } from './redact.js'
 
-// Same auth-marker scrub the JSONL surface applies. The shared
-// redactor keeps the `Authorization: Bearer [REDACTED]` marker on
-// purpose for the doctor diagnostic surface, but the support bundle
-// is consumed by maintainers grepping for "Bearer" / "Authorization"
-// across files — even the marker word is unwelcome there.
-const AUTH_MARKER_RE = /(?:Authorization\s*:\s*)?\bBearer\s*\[REDACTED\]/gi
-const BARE_AUTH_HEADER_MARKER_RE = /Authorization\s*:\s*\[REDACTED\]/gi
-function scrubAuthMarkers(text: string): string {
-  return text
-    .replace(AUTH_MARKER_RE, '[REDACTED_AUTH]')
-    .replace(BARE_AUTH_HEADER_MARKER_RE, '[REDACTED_AUTH]')
-}
+// The shared redactor keeps the `Authorization: Bearer [REDACTED]` marker, which
+// the support bundle must not carry: see `scrubAuthMarkers`.
 function redactStrict(text: string): string {
   return scrubAuthMarkers(redactDiagnosticText(text))
 }

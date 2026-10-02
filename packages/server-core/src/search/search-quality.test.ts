@@ -20,10 +20,10 @@
 //     evidence, not a hunch. If the debt is small, the 120MB is not worth
 //     paying and stage 0 is the whole feature.
 
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { tokenize, tokenizeForIndex } from '@kamiazya/whiteboard-search'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -50,7 +50,7 @@ let deps: ServerDeps
 let search: ReturnType<typeof createDocumentSearchTool>
 
 beforeAll(async () => {
-  deps = makeTestDeps({ documentStore: createInMemoryDocumentStore() })
+  deps = makeTestDeps({ documentStore: new InMemoryDocumentStore() })
   const set = createDocumentSetTool(deps)
   const edit = createCanvasEditTool(deps)
   // The workspace exists because this fixture says so, not as a side effect

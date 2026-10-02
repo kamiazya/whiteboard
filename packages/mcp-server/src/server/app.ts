@@ -6,7 +6,7 @@ import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
-import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
+import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/index.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
@@ -252,7 +252,7 @@ function appWiring(options: AppOptions) {
   const instanceId = options.instanceId ?? randomUUID()
 
   // The signing identity behind /api/runtime/ping's `identity`.
-  const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
+  const identity = options.identity ?? createDaemonIdentity({ dataDir: options.dataLayout.dataDir })
   const token = options.authMode === 'local-daemon' ? options.token : undefined
 
   let serverModeGetStatus: (() => RuntimeStatusResponse) | undefined
@@ -349,6 +349,7 @@ export function createApp(options: AppOptions) {
       // place that answer is known without threading it through the DI graph.
       daemonActor: identity.did,
       serverDeps: options.serverDeps,
+      dataLayout: options.dataLayout,
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
@@ -362,8 +363,17 @@ export function createApp(options: AppOptions) {
   // and the branches router can resolve frontiers — they would each
   // instantiate their own otherwise.
   const sharedVersionStore = new FileVersionStore()
-  app.route('/', createFilesRouter({ versionStore: sharedVersionStore }))
-  app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments }))
+  app.route(
+    '/',
+    createFilesRouter({ versionStore: sharedVersionStore, dataLayout: options.dataLayout }),
+  )
+  app.route(
+    '/',
+    createExportRouter({
+      liveDocuments: options.serverDeps.liveDocuments,
+      dataLayout: options.dataLayout,
+    }),
+  )
   app.route('/', createFontsRouter())
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ credentialResolver }))
@@ -376,6 +386,7 @@ export function createApp(options: AppOptions) {
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       credentialResolver,
+      dataLayout: options.dataLayout,
     }),
   )
   if (options.authMode === 'server-mode') {

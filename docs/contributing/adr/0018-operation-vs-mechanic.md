@@ -231,6 +231,24 @@ files, under the standing "fix what you touch" rule.
 > load-modify-save, which every surface goes through, and the per-document
 > lock mechanic is deleted rather than relocated.
 
+> **2026-10-02 — the scan learned that `store/` is not the only place a
+> mechanic lives.** The invariant is about what an adapter reaches, and the
+> keeper keeps rows and lays out disk elsewhere too: a `security/*-store`
+> (people, sessions, keys, invitations), the daemon's own `daemon/` housekeeping
+> and `tenant/data-layout`. Ten edges to those were already in the routes and
+> invisible to the guard, so the ceiling went 14 -> 24 with nothing new added —
+> a measurement catching up with the code. Policy under the same directories
+> (bearer parsing, credential resolution, the tenant id) is translation and
+> stays unscanned. `routes/tenant-people.ts` paid two of them at once: its
+> refusals (not oneself, only a user that exists, only on a recent sign-in)
+> moved to `security/people-administration.ts`, which the route and the
+> operator's `grant-admin` and `deactivate-user` commands now both translate,
+> 24 -> 22. `routes/files.ts` paid a third, 22 -> 21, and the export and runtime
+> routes stopped reading the process data directory: `createApp` is handed a
+> `dataLayout` (data dir, tenant, files and exports directories), built beside
+> the deps it was booted over, and a sibling scan keeps `getDataDir()` and the
+> self-host tenant id out of every route and MCP adapter.
+
 **What would make raising the ceiling right.** It is a decision, not a
 failure: an operation that genuinely belongs to this deployment, or a fix
 that cannot wait for the move. The requirement is only that the PR says which

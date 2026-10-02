@@ -1,19 +1,11 @@
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import LibsqlNativeDatabase from 'libsql'
+import { type Kysely, sql } from 'kysely'
 import { describe, expect, it } from 'vitest'
 import type { DatabaseSchema } from '../schema.js'
+import { openMigrationHarness } from '../test-helpers.js'
 import { migration } from './0004-workspace-index.js'
 
 async function createMemoryDb(): Promise<Kysely<DatabaseSchema>> {
-  const db = new Kysely<DatabaseSchema>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(':memory:') as unknown as ConstructorParameters<
-        typeof SqliteDialect
-      >[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  return db
+  return (await openMigrationHarness<DatabaseSchema>()).db
 }
 
 async function tableExists(db: Kysely<DatabaseSchema>, name: string): Promise<boolean> {

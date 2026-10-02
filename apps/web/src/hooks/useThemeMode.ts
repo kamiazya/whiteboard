@@ -1,30 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
+import { safeGetItem, safeSetItem } from '../lib/safe-local-storage.js'
 import type { ResolvedTheme, ThemeMode } from '../lib/theme.js'
 
 export const THEME_STORAGE_KEY = 'whiteboard:theme'
 
 const SYSTEM_QUERY = '(prefers-color-scheme: dark)'
 
-// localStorage access itself can throw (SecurityError when the browser blocks
-// storage via privacy settings or embedded/sandboxed contexts). Theme
-// persistence is a nice-to-have, not a correctness requirement, so a throwing
-// storage degrades to an in-memory-only "system" default rather than crashing
-// render.
-function safeGetItem(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-function safeSetItem(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value)
-  } catch {
-    // Contract: never throws; an unwritable storage just loses persistence.
-  }
-}
+// Theme persistence is a nice-to-have, not a correctness requirement, so a
+// throwing storage (see safe-local-storage.ts) degrades to an in-memory-only
+// "system" default rather than crashing render.
 
 // Read the persisted preference without triggering a render. Safe to call from
 // module init (main.tsx) so we set <html class="dark"> before React mounts and

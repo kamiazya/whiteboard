@@ -6,6 +6,7 @@ import type {
   SaveCompactedSnapshotInput,
   SaveCompactedSnapshotResult,
 } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import {
   DocumentStoreWorkspaceDocs,
   type WorkspaceDocCursor,
@@ -14,7 +15,6 @@ import { LoroDoc } from 'loro-crdt'
 import { afterAll, describe, expect } from 'vitest'
 import { fc, fcTest } from '../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from './db/test-helpers.js'
-import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 
 /**

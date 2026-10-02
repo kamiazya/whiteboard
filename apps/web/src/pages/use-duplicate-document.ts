@@ -12,7 +12,9 @@
  * scoped-screen-state.test.ts, whose BrowserDocumentPage scan reads this
  * file too: the state moved HERE, not away.
  */
+
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { type RefObject, useEffect, useState } from 'react'
 import { kindNoun } from '../lib/kind-noun.js'
 
@@ -62,9 +64,7 @@ export function useDuplicateDocument({
       // left prints its error under a document that has nothing wrong with
       // it. Same residual the save indicator had, same shape of fix.
       if (currentDocumentIdRef.current !== startedOn) return
-      setDuplicateError(
-        err instanceof Error ? err.message : `Failed to duplicate ${kindNoun(documentKind)}.`,
-      )
+      setDuplicateError(messageOf(err, `Failed to duplicate ${kindNoun(documentKind)}.`))
     } finally {
       if (currentDocumentIdRef.current === startedOn) setIsDuplicating(false)
     }

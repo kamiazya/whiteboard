@@ -1,4 +1,5 @@
 import type { MemberProfileStore } from '../server/security/member-profile-store.js'
+import type { AnyRefusal } from '../server/security/people-administration.js'
 import type { NamedUser } from './operator-json.js'
 
 export type NamedUserLookup =
@@ -21,4 +22,17 @@ export async function findNamedUser(
   if (only === undefined) return { kind: 'unknown-user', users }
   if (matches.length > 1) return { kind: 'ambiguous-user', users: matches }
   return { kind: 'found', user: only }
+}
+
+/**
+ * The operator's outcome for a refusal from the people operation. The user was
+ * found a moment ago, so `unknown_user` here means they were deleted in
+ * between. The operator is nobody's user, so a refusal about acting on oneself
+ * cannot be reached from the command line.
+ */
+export function operatorRefusal(refusal: AnyRefusal): { kind: 'unknown-user'; users: [] } {
+  if (refusal.reason !== 'unknown_user') {
+    throw new Error(`the operator cannot be refused as acting on themselves: ${refusal.reason}`)
+  }
+  return { kind: 'unknown-user', users: [] }
 }

@@ -1,11 +1,15 @@
-import { DOCUMENT_PATH_SEGMENT_PATTERN } from '@kamiazya/whiteboard-model'
+import { DOCUMENT_PATH_SEGMENT_PATTERN, WORKSPACE_ID_PATTERN } from '@kamiazya/whiteboard-model'
 
-// The path-segment rule itself is imported from model so the shared
-// layer and this validator cannot drift apart; what stays here is only how a
-// rejection is explained, which the schema's single message cannot do per
-// cause.
-const SAFE_WORKSPACE_ID = /^[a-zA-Z0-9_-]+$/
-const SAFE_IDENTIFIER = /^[a-zA-Z0-9_-]+$/
+// The path-segment and workspace-id rules themselves are imported from model so
+// the shared layer and this validator cannot drift apart; what stays here is
+// only how a rejection is explained, which the schema's single message cannot
+// do per cause.
+//
+// Version and file ids are not workspace ids, but they are used the same way
+// (directly as path segments and keys), so they take the same character class
+// by choice rather than by sharing a concept; the alias names that choice so
+// loosening one is a decision, not an accident.
+const SAFE_IDENTIFIER = WORKSPACE_ID_PATTERN
 export class ValidationError extends Error {
   constructor(
     readonly error: string,
@@ -36,7 +40,7 @@ function validateSafeIdentifier(value: string, kind: string, maxLength = 64): st
   if (!SAFE_IDENTIFIER.test(value)) {
     throw new ValidationError(
       `invalid_${kind.replace(/\s+/g, '_')}`,
-      `Invalid ${kind} "${value}": must match /^[a-zA-Z0-9_-]+$/`,
+      `Invalid ${kind} "${value}": must match ${SAFE_IDENTIFIER}`,
     )
   }
   if (value.length > maxLength) {
@@ -52,7 +56,7 @@ export function validateWorkspaceId(workspaceId: string): string {
   if (workspaceId === '') {
     throw new ValidationError('invalid_workspace_id', 'Invalid workspaceId: workspaceId is empty')
   }
-  if (!SAFE_WORKSPACE_ID.test(workspaceId)) {
+  if (!WORKSPACE_ID_PATTERN.test(workspaceId)) {
     throw new ValidationError(
       'invalid_workspace_id',
       `Invalid workspaceId "${workspaceId}": only ASCII letters, digits, "_" and "-" are allowed`,

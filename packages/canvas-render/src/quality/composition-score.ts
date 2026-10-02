@@ -27,6 +27,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { contains, type Rect, rectOf, round2 } from './rect.js'
 
 export interface CompositionScore {
   /**
@@ -85,9 +86,6 @@ export interface CompositionScore {
   readonly roles: number
 }
 
-type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
-const rectOf = (n: SpatialNode): Rect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
-
 /** One grid step: two measurements within it read as the same measurement. */
 const SAME_PX = 8
 /** Anchors are compared to the half pixel — two boxes of different parity cannot share a centre on whole pixels. */
@@ -106,12 +104,6 @@ function gapBetween(a: Rect, b: Rect): number {
 
 const nearestGap = (from: Rect, others: readonly Rect[]): number =>
   others.reduce((best, other) => Math.min(best, gapBetween(from, other)), Number.POSITIVE_INFINITY)
-
-const contains = (outer: Rect, inner: Rect): boolean =>
-  inner.x >= outer.x &&
-  inner.y >= outer.y &&
-  inner.x + inner.w <= outer.x + outer.w &&
-  inner.y + inner.h <= outer.y + outer.h
 
 /**
  * The groups a drawing DECLARES — a FRAME and the boxes it holds, and
@@ -138,8 +130,6 @@ function declaredGroups(canvas: SpatialCanvas, boxes: readonly SpatialNode[]): S
   }
   return out
 }
-
-const round2 = (n: number) => Math.round(n * 100) / 100
 
 /** Distinct values to `SAME_PX`, counted by their rounded bucket. */
 const distinct = (values: readonly number[]): number =>

@@ -1,8 +1,7 @@
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from './ignored-document-writes.js'
-import { createInMemoryDocumentStore } from './in-memory-document-store.js'
 import { unusedDocumentTeardown } from './unused-document-teardown.js'
 import { unusedLiveDocuments } from './unused-live-documents.js'
 import { unusedVersionHistory } from './unused-version-history.js'
@@ -42,7 +41,7 @@ import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
  */
 export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
   return {
-    documentStore: createInMemoryDocumentStore(),
+    documentStore: new InMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
     documentTeardown: unusedDocumentTeardown(),

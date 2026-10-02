@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AppOptions, ServerModeAppOptions } from './app.js'
+import { testDataLayout } from './routes/_test-helpers.js'
 import type { AuthScope } from './security/auth-strategy.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 
@@ -88,6 +89,7 @@ function makeServerModeOptions(
     allowedOrigins: ALLOWED_ORIGINS,
     // The root's deps, over the memory store: nothing here reads a document.
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     authStrategy: makeScopeStrategy(grantedScopes),
     touch: () => {},
     getStatus: makeInternalStatus,
@@ -105,6 +107,7 @@ describe('app — server-mode composition', () => {
       createApp({
         authMode: 'local-daemon',
         serverDeps: resolveServerDeps(createContainer()),
+        dataLayout: testDataLayout(),
         token: 'local-token',
         touch: () => {},
         getStatus: () => makeInternalStatus(),
@@ -120,6 +123,7 @@ describe('app — server-mode composition', () => {
     const app = createApp({
       authMode: 'local-daemon',
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
@@ -203,6 +207,7 @@ describe('app — server-mode composition', () => {
         createApp({
           authMode: 'server-mode',
           serverDeps: resolveServerDeps(createContainer()),
+          dataLayout: testDataLayout(),
           publicBaseUrl: 'http://example.com',
           allowedOrigins: ['https://example.com'],
           authStrategy: makeScopeStrategy(['canvas:read']),
@@ -218,6 +223,7 @@ describe('app — server-mode composition', () => {
         createApp({
           authMode: 'server-mode',
           serverDeps: resolveServerDeps(createContainer()),
+          dataLayout: testDataLayout(),
           publicBaseUrl: 'https://example.com',
           allowedOrigins: ['*'],
           authStrategy: makeScopeStrategy(['canvas:read']),
@@ -645,6 +651,7 @@ describe('app — server-mode composition', () => {
       createApp({
         authMode: 'local-daemon',
         serverDeps: resolveServerDeps(createContainer()),
+        dataLayout: testDataLayout(),
         authStrategy: makeScopeStrategy(['canvas:read']),
       } as unknown as AppOptions),
     ).toThrow('local-daemon mode must not receive authStrategy')
@@ -664,6 +671,7 @@ describe('app — server-mode composition', () => {
     const localApp = createApp({
       authMode: 'local-daemon',
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
@@ -686,6 +694,7 @@ describe('app — server-mode composition', () => {
     const app = createApp({
       authMode: 'server-mode',
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
       publicBaseUrl: 'https://example.com',
       allowedOrigins: ['https://example.com'],
       authStrategy: alwaysDeny,

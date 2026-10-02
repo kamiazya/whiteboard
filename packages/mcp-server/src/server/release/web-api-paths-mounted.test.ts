@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createApp } from '../app.js'
+import { testDataLayout } from '../routes/_test-helpers.js'
 import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-route.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createInvitationStore } from '../security/invitation-store.js'
@@ -154,6 +155,7 @@ function serverModeApp(
     getStatus: () => ({}) as never,
     shutdown: () => Promise.resolve(),
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     people: {
       members,
       sessions: createSignInSessionStore(db),
@@ -176,6 +178,7 @@ function localDaemonApp(db: IsolatedDbHandle['db']) {
     touch: () => {},
     getStatus: () => ({}) as never,
     serverDeps: resolveServerDeps(createContainer()),
+    dataLayout: testDataLayout(),
     replicaKeys: createWorkspaceReplicaKeyStore(db, { defaultTier: 'offline' }),
   })
 }

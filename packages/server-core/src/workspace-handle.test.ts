@@ -7,10 +7,9 @@
  * not APPLIED reads identically to one that is, and the applying is the part
  * that has to hold across fourteen tools and every route.
  */
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
-import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.js'
 
@@ -19,7 +18,7 @@ const CANONICAL = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 function makeServer(index: InMemoryDocumentIndex) {
   return createServer(
     makeTestDeps({
-      documentStore: createInMemoryDocumentStore(),
+      documentStore: new InMemoryDocumentStore(),
       documentIndex: index,
       documentTeardown: inMemoryDocumentTeardown(),
     }),

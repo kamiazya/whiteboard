@@ -38,7 +38,7 @@ function makeMarkdownDoc(): LoroDoc {
   return doc
 }
 
-import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
 

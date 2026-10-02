@@ -31,16 +31,25 @@
 // This smoke is NOT part of pnpm test:e2e:distribution. Run explicitly:
 //   node tests/e2e/distribution/packaged-server-mode-backup-restore-smoke.mjs
 
-import { spawnSync } from 'node:child_process'
-import { createSign, generateKeyPairSync } from 'node:crypto'
+import { generateKeyPairSync } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer as createHttpsServer } from 'node:https'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { assertNoLeak, resolveServerImage } from './smoke-helpers.mjs'
+import {
+  assertNoLeak,
+  createAccessTokenMinter,
+  createFail,
+  createSkip,
+  docker,
+  generateTestTlsCert,
+  resolveServerImage,
+  stopContainer,
+  waitForContainerReadyJson,
+  waitForHttpReady,
+} from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -51,7 +60,6 @@ const SMOKE_AUDIENCE = 'https://whiteboard.docker-br-smoke.example'
 // 4294/4295 are off the ports claimed by other distribution smokes and the
 // main server-mode docker smoke (4293), so the full chain can run back-to-back.
 const HOST_SERVER_PORT = 4294
-const READINESS_TIMEOUT_MS = 60_000
 // Assigned when scenario 3 creates the workspace: on a members-only keeper
 // (ADR-0046 decision 10) the creator becomes its first member, which is what
 // lets the same bearer read it back on the restored server.
@@ -125,159 +133,16 @@ const MINIMAL_PNG = Buffer.from([
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fail(msg, ctx = {}) {
-  console.error(`[docker-br-smoke] FAIL: ${msg}`)
-  for (const [k, v] of Object.entries(ctx)) {
-    if (v !== undefined && v !== '') {
-      console.error(`  ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-    }
-  }
-  process.exit(1)
-}
-
-function skip(reason) {
-  console.log(`[docker-br-smoke] SKIP: ${reason}`)
-  process.exit(0)
-}
-
-function docker(args, opts = {}) {
-  return spawnSync('docker', args, { encoding: 'utf8', timeout: opts.timeout ?? 120_000, ...opts })
-}
+const fail = createFail('docker-br-smoke')
+const skip = createSkip('docker-br-smoke')
 
 // assertNoLeak (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
 
-function generateTestTlsCert(dir) {
-  const keyFile = join(dir, 'server.key')
-  const certFile = join(dir, 'server.crt')
-  const cnfFile = join(dir, 'openssl.cnf')
-  writeFileSync(
-    cnfFile,
-    [
-      '[req]',
-      'distinguished_name = req_dn',
-      'x509_extensions = san_ext',
-      'prompt = no',
-      '[req_dn]',
-      'CN = docker-br-smoke-ca',
-      '[san_ext]',
-      'subjectAltName = IP:127.0.0.1,DNS:host.docker.internal',
-      'basicConstraints = critical,CA:true',
-    ].join('\n'),
-  )
-  const r = spawnSync(
-    'openssl',
-    [
-      'req',
-      '-x509',
-      '-newkey',
-      'rsa:2048',
-      '-keyout',
-      keyFile,
-      '-out',
-      certFile,
-      '-days',
-      '1',
-      '-nodes',
-      '-config',
-      cnfFile,
-    ],
-    { stdio: 'pipe', encoding: 'utf8' },
-  )
-  if (r.status !== 0) throw new Error(`openssl cert gen failed: ${r.stderr}`)
-  return { keyFile, certFile }
-}
-
-function base64url(data) {
-  return Buffer.from(data).toString('base64url')
-}
-
-function derToRawEs256(derSig) {
-  let offset = 2
-  const rLen = derSig[offset + 1]
-  let r = derSig.slice(offset + 2, offset + 2 + rLen)
-  if (r[0] === 0x00) r = r.slice(1)
-  offset += 2 + rLen
-  const sLen = derSig[offset + 1]
-  let s = derSig.slice(offset + 2, offset + 2 + sLen)
-  if (s[0] === 0x00) s = s.slice(1)
-  const rPad = Buffer.alloc(32)
-  r.copy(rPad, 32 - r.length)
-  const sPad = Buffer.alloc(32)
-  s.copy(sPad, 32 - s.length)
-  return Buffer.concat([rPad, sPad])
-}
-
-function signEs256Jwt(privateKey, header, payload) {
-  const h = base64url(JSON.stringify(header))
-  const p = base64url(JSON.stringify(payload))
-  const signer = createSign('SHA256')
-  signer.update(`${h}.${p}`)
-  const raw = derToRawEs256(signer.sign({ key: privateKey, dsaEncoding: 'der' }))
-  return `${h}.${p}.${base64url(raw)}`
-}
-
-async function waitForReadyJson(containerName) {
-  const deadline = Date.now() + READINESS_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    await delay(1000)
-    const logs = docker(['logs', containerName], { timeout: 5_000 })
-    for (const line of logs.stdout.split('\n')) {
-      try {
-        const obj = JSON.parse(line)
-        if (obj.ok === true && typeof obj.pid === 'number') return obj
-      } catch {
-        /* not JSON */
-      }
-    }
-    const inspect = docker(['inspect', '--format={{.State.Running}}', containerName], {
-      timeout: 5_000,
-    })
-    if (inspect.stdout.trim() !== 'true') {
-      // Container stopped — capture logs now before they disappear.
-      const exitLogs = docker(['logs', containerName], { timeout: 5_000 })
-      return { _stopped: true, stdout: exitLogs.stdout, stderr: exitLogs.stderr }
-    }
-  }
-  return null
-}
-
-function stopContainer(name) {
-  docker(['stop', '-t', '10', name], { timeout: 20_000 })
-}
-
-// Poll the HTTP ping endpoint until it responds or the deadline passes.
-// The container may emit the ready JSON before Docker's host-side port mapping
-// is fully established, so the first HTTP request may arrive too early.
-async function waitForHttpReady(baseUrl, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${baseUrl}/api/runtime/ping`)
-      if (r.ok) return true
-    } catch {
-      /* port not yet reachable */
-    }
-    await delay(500)
-  }
-  return false
-}
-
-function makeJwt(privateKey, scope) {
-  const now = Math.floor(Date.now() / 1000)
-  return signEs256Jwt(
-    privateKey,
-    { alg: 'ES256', typ: 'at+jwt', kid: 'br-smoke-key' },
-    {
-      sub: 'br-smoke-user',
-      azp: 'br-smoke-client',
-      scope,
-      iss: SMOKE_ISSUER,
-      aud: SMOKE_AUDIENCE,
-      iat: now,
-      exp: now + 3600,
-    },
-  )
-}
+const makeJwt = createAccessTokenMinter({
+  name: 'br-smoke',
+  issuer: SMOKE_ISSUER,
+  audience: SMOKE_AUDIENCE,
+})
 
 async function authedFetch(baseUrl, path, jwt, init = {}) {
   const headers = new Headers(init.headers)
@@ -344,7 +209,10 @@ const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256
 const jwkPublic = publicKey.export({ format: 'jwk' })
 const jwks = { keys: [{ ...jwkPublic, kid: 'br-smoke-key', use: 'sig', alg: 'ES256' }] }
 
-const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir)
+const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir, {
+  commonName: 'docker-br-smoke-ca',
+  subjectAltName: 'IP:127.0.0.1,DNS:host.docker.internal',
+})
 
 // The JWT issuer declared as a sign-in provider whose `bearerClients` names
 // this client, so the seeding bearer becomes a user (ADR-0046 decision 5).
@@ -437,7 +305,7 @@ try {
       fail('scenario 2: container A start failed', { stderrBytes: r.stderr?.length ?? 0 })
     activeContainer = 'wb-br-smoke-src'
 
-    const ready = await waitForReadyJson('wb-br-smoke-src')
+    const ready = await waitForContainerReadyJson('wb-br-smoke-src', { reportExit: true })
     if (!ready || ready._stopped) {
       fail('scenario 2: server A did not emit ready JSON', {
         stdoutBytes: (ready?.stdout ?? '').length,
@@ -445,7 +313,7 @@ try {
       })
     }
     assertNoLeak('scenario 2 ready JSON', JSON.stringify(ready))
-    if (!(await waitForHttpReady(serverBaseUrl))) {
+    if (!(await waitForHttpReady(`${serverBaseUrl}/api/runtime/ping`, { intervalMs: 500 }))) {
       fail('scenario 2: HTTP ping did not respond after port mapping delay')
     }
     console.log('[docker-br-smoke] scenario 2 PASS: container A started')
@@ -641,7 +509,7 @@ try {
       fail('scenario 6: container B start failed', { stderrBytes: r.stderr?.length ?? 0 })
     activeContainer = 'wb-br-smoke-restored'
 
-    const ready = await waitForReadyJson('wb-br-smoke-restored')
+    const ready = await waitForContainerReadyJson('wb-br-smoke-restored', { reportExit: true })
     if (!ready || ready._stopped) {
       fail('scenario 6: server B did not emit ready JSON — stale record may have blocked startup', {
         stdoutBytes: (ready?.stdout ?? '').length,
@@ -649,7 +517,7 @@ try {
       })
     }
     assertNoLeak('scenario 6 ready JSON', JSON.stringify(ready))
-    if (!(await waitForHttpReady(serverBaseUrl))) {
+    if (!(await waitForHttpReady(`${serverBaseUrl}/api/runtime/ping`, { intervalMs: 500 }))) {
       fail('scenario 6: HTTP ping did not respond after port mapping delay')
     }
     console.log('[docker-br-smoke] scenario 6 PASS: server B started on restored volume')
@@ -775,11 +643,12 @@ try {
     const _jwt = makeJwt(privateKey, SEED_SCOPES)
 
     // No auth → 401.
-    const noAuthRes = await fetch(
+    const anonymousRes = await fetch(
       `${serverBaseUrl}/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
     )
-    if (noAuthRes.status !== 401) fail(`scenario 8: no-auth expected 401, got ${noAuthRes.status}`)
-    assertNoLeak('scenario 8 no-auth body', await noAuthRes.text(), SMOKE_PATH_LITERALS)
+    if (anonymousRes.status !== 401)
+      fail(`scenario 8: no-auth expected 401, got ${anonymousRes.status}`)
+    assertNoLeak('scenario 8 no-auth body', await anonymousRes.text(), SMOKE_PATH_LITERALS)
 
     // Wrong scope → 403.
     const wrongJwt = makeJwt(privateKey, 'workspace:read')

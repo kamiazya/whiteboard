@@ -10,11 +10,10 @@ import { writeSpatialCanvas as _w, readSpatialCanvas } from '@kamiazya/whiteboar
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerDocumentTools } from '../mcp/document-tools.js'
-import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
 import { liveDocuments } from './live-documents.js'
 import { _resetWorkspaceLocksForTests } from './workspace-lock.js'
 

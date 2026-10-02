@@ -9,7 +9,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from './routes/_test-helpers.js'
+import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-app-v1-test-')
 
@@ -69,7 +69,11 @@ describe('createApp /api/v1 document mount', () => {
 
   it('serves the v1 canvas list behind daemon auth when serverDeps are provided', async () => {
     const deps = resolveServerDeps(createContainer())
-    const app = createApp({ ...createRuntimeOptions('secret'), serverDeps: deps })
+    const app = createApp({
+      ...createRuntimeOptions('secret'),
+      serverDeps: deps,
+      dataLayout: testDataLayout(),
+    })
 
     const unauthed = await app.request('/api/v1/workspaces/default/documents')
     expect(unauthed.status).toBe(401)
@@ -85,7 +89,11 @@ describe('createApp /api/v1 document mount', () => {
 
   it('round-trips create → list with the document path', async () => {
     const deps = resolveServerDeps(createContainer())
-    const app = createApp({ ...createRuntimeOptions('secret'), serverDeps: deps })
+    const app = createApp({
+      ...createRuntimeOptions('secret'),
+      serverDeps: deps,
+      dataLayout: testDataLayout(),
+    })
 
     const createRes = await app.request('/api/v1/workspaces/default/documents', {
       method: 'POST',

@@ -11,13 +11,12 @@
 // client reading the table is hurt. Nothing else in the suite looks.
 
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it } from 'vitest'
 import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import type { ListedTool } from '../../shared/test-utils/tool-surface-metrics.js'
-import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
 

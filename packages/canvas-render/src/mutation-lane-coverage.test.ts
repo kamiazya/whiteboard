@@ -263,9 +263,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // answers, moved out of the layout modules so the seams' producer does
     // not import the layout. Outside the lane — interfaces only, nothing for
     // a mutant to change.
+    //
+    // 97 and 20 with `quality/rect.ts`: the overlap and containment
+    // arithmetic `scene-digest.ts` (in the lane) shares with the quality
+    // instruments, so it is in the lane too — taking it out would have shrunk
+    // what the lane sees of the digest.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 19,
-      production: 96,
+      mutated: 20,
+      production: 97,
     })
   })
 

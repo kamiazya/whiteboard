@@ -87,8 +87,8 @@ export interface VersionStore {
   // Null when the workspace has no scoped versions (compacting would then
   // risk history nothing has measured the need for).
   earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null>
-  // Public API used when creating branches from a version id.
-  // Returns null only when the version is missing.
+  // A saved version's frontiers as base64, taken in the workspace record's
+  // history. Returns null only when the version is missing.
   getFrontiersBase64(workspaceId: string, id: string): Promise<string | null>
   // Does the newest checkpoint of this document already hold the state the
   // record is in? The scheduler asks the keeper rather than comparing
@@ -97,8 +97,8 @@ export interface VersionStore {
   // document's own projection — compared across that boundary they are
   // never equal. False where there is no version yet, or no such document.
   isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean>
-  // Drop auto-saved versions strictly between two manual versions, per
-  // branch. Manual versions are explicit user save-points so sandwiched
+  // Drop auto-saved versions strictly between two manual versions of the
+  // document. Manual versions are explicit user save-points so sandwiched
   // autos add no rollback value beyond what the bracketing manuals
   // already give. Autos before the first manual or after the last manual
   // stay (they are the only rollback target outside the bracketed range).

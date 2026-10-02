@@ -1,3 +1,4 @@
+import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -11,22 +12,12 @@ import { z } from 'zod'
  * plane's macaroon attenuation does) would be a second, redundant HKDF.
  */
 
-// Judged by tag rather than `instanceof`: a value that crossed a structured
-// clone (IndexedDB, postMessage) can be a Uint8Array built by another
-// realm's constructor, which `instanceof` silently rejects.
-//
-// Pinned to Uint8Array<ArrayBuffer> (narrower than the default
-// Uint8Array<ArrayBufferLike>, which also admits a SharedArrayBuffer-backed
-// view): WebCrypto's BufferSource parameters require it, and every byte
-// field here either comes from `crypto.getRandomValues`/`subtle.*` or an
-// IndexedDB record, neither of which is ever SharedArrayBuffer-backed.
+// Realm-independent and `Uint8Array<ArrayBuffer>`-typed (WebCrypto's BufferSource
+// parameters require it): see `uint8ArrayAnyRealmSchema`.
 function uint8ArraySchema(exactLength?: number) {
-  return z.custom<Uint8Array<ArrayBuffer>>((v) => {
-    if (!(ArrayBuffer.isView(v) && Object.prototype.toString.call(v) === '[object Uint8Array]')) {
-      return false
-    }
-    return exactLength === undefined || (v as Uint8Array).length === exactLength
-  })
+  return exactLength === undefined
+    ? uint8ArrayAnyRealmSchema
+    : uint8ArrayAnyRealmSchema.refine((v) => v.length === exactLength)
 }
 
 export const epochSchema = z.number().int().nonnegative()

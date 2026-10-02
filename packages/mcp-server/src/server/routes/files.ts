@@ -3,8 +3,7 @@ import { basename, extname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { errorMessage } from '../../shared/error-message.js'
-import { writeFileAtomic } from '../atomic-write.js'
-import { getDataDir } from '../config.js'
+import { writeFileAtomicStaged } from '../atomic-write.js'
 import {
   corruptStoredData,
   corruptStoredDataBody,
@@ -13,8 +12,7 @@ import {
 import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
 import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
-import { workspaceFilesDir } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
+import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { validateFileId, validateWorkspaceId, validationErrorBody } from '../validators.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
 import { onDocumentFile } from './document/path-route.js'
@@ -48,6 +46,8 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
 }
 
 export interface FilesRouterOptions {
+  /** Where a workspace's files are stored, and the data dir uploads are written atomically under. */
+  dataLayout: DataLayout
   // Provide a versionStore for version-aware purge. Without one, the
   // purge endpoint walks only the live state of each canvas and leaves
   // files referenced exclusively by saved versions untouched.
@@ -80,7 +80,7 @@ async function storedFileFor(
   return { data, contentType: EXT_TO_MIME[extname(match)] ?? 'application/octet-stream' }
 }
 
-export function createFilesRouter(options: FilesRouterOptions = {}) {
+export function createFilesRouter(options: FilesRouterOptions) {
   const app = new Hono()
 
   // PUT /api/w/:workspaceId/document/<path>/file/:fileId
@@ -107,7 +107,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
           415,
         )
       }
-      const dir = workspaceFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId)
+      const dir = options.dataLayout.workspaceFilesDir(workspaceId)
       const filePath = join(dir, `${fileId}${ext}`)
       const bytes = new Uint8Array(await c.req.arrayBuffer())
       if (bytes.length === 0) {
@@ -126,7 +126,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
         // overlapping an in-flight 8 MiB upload captured a torn file 2 times
         // out of 10, which is worse than always, because a backup then holds
         // a corrupt image only sometimes.
-        await writeFileAtomic(getDataDir(), filePath, bytes)
+        await writeFileAtomicStaged(options.dataLayout.dataDir, filePath, bytes)
       })
       return c.body(null, 204)
     },
@@ -154,10 +154,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
       throw err
     }
     try {
-      const found = await storedFileFor(
-        workspaceFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId),
-        fileId,
-      )
+      const found = await storedFileFor(options.dataLayout.workspaceFilesDir(workspaceId), fileId)
       // JSON like every other refusal here: `c.notFound()` is plain text,
       // which the browser client cannot read.
       if (found === null) {

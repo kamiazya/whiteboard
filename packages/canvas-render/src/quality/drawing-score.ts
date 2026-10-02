@@ -1,6 +1,6 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame, nodeAtEnd } from '@kamiazya/whiteboard-model'
-import type { BoundingBox, ResolvedEdgeNode, Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
+import type { ResolvedEdgeNode, Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { sceneBounds } from '../scene-bounds.js'
 import {
   bends,
@@ -10,6 +10,7 @@ import {
   reversals,
   sharedInk,
 } from './polyline-geometry.js'
+import { area, contains, overlapArea, type Rect, rectOf, round2 } from './rect.js'
 
 /**
  * How well a drawing reads, as numbers a person can check against the
@@ -165,21 +166,8 @@ export const READABLE_GAP_PX = 32
 /** One grid step; two gaps within it read as equal. */
 export const EVEN_GAP_TOLERANCE_PX = 8
 
-type Rect = BoundingBox
 type Point = { readonly x: number; readonly y: number }
 
-const rectOf = (n: SpatialNode): Rect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
-const area = (r: Rect) => r.w * r.h
-const overlapArea = (a: Rect, b: Rect): number => {
-  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
-  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
-  return w > 0 && h > 0 ? w * h : 0
-}
-const contains = (outer: Rect, inner: Rect): boolean =>
-  inner.x >= outer.x &&
-  inner.y >= outer.y &&
-  inner.x + inner.w <= outer.x + outer.w &&
-  inner.y + inner.h <= outer.y + outer.h
 const strictlyInside = (r: Rect, p: Point): boolean =>
   p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h
 const centre = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
@@ -243,7 +231,6 @@ function flowOf(displacements: readonly Point[]): { flow: Flow; against: number 
   return { flow, against }
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100
 const rate = (count: number, denominator: number) =>
   denominator === 0 ? 0 : round2(count / denominator)
 

@@ -1,3 +1,4 @@
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
@@ -70,7 +71,7 @@ export function useRenameDocument({
       } catch (err) {
         // The server names the PRODUCED path that collided, which on a
         // subtree move is often not the one typed here.
-        setError(err instanceof Error ? err.message : 'Could not rename it.')
+        setError(messageOf(err, 'Could not rename it.'))
         // A rename applies two writes; the first may have landed before the
         // second was refused. Re-reading here is what stops the panel from
         // showing a name the store no longer holds — the refusal is about

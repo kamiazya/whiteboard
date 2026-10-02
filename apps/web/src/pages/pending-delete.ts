@@ -9,7 +9,9 @@
  * against the daemon; an index call plus a pointer check in the browser).
  * Only the shape that is the same either way lives here.
  */
+
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { messageOf } from '@kamiazya/whiteboard-model'
 
 /**
  * A LIST, so one confirmation and one handler serve both the single delete
@@ -60,7 +62,7 @@ export function partialDeleteMessage(
   fallback: string,
 ): string {
   if (failed < attempted) return `${failed} of ${attempted} could not be deleted.`
-  return lastError instanceof Error ? lastError.message : fallback
+  return messageOf(lastError, fallback)
 }
 
 /**

@@ -21,14 +21,14 @@
 //   6. Token must never reach daemon stdout/stderr, runtime status
 //      body, or CLI output.
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
+import { assertNoLeak, createCliRunner, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -193,7 +193,7 @@ function socketFetch(socketPath, path, init = {}) {
   })
 }
 
-async function authedFetch(daemon, path, init = {}) {
+async function authedDaemonFetch(daemon, path, init = {}) {
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${daemon.token}`)
   return socketFetch(daemon.socketPath, path, { ...init, headers })
@@ -213,12 +213,7 @@ async function shutdownDaemon(daemon) {
   }
 }
 
-function runCli(args) {
-  return spawnSync(process.execPath, [CLI_ENTRY, ...args], {
-    encoding: 'utf-8',
-    env: scrubDevEnv(process.env),
-  })
-}
+const runCli = createCliRunner(CLI_ENTRY)
 
 // assertNoLeak (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
 // Call sites pass the per-daemon token as extraLiterals: assertNoLeak(label, text, [token]).
@@ -240,7 +235,7 @@ try {
   // Seed a canvas under a known workspaceId through the live daemon
   // — this writes the workspace row, canvas row, and Loro snapshot
   // through the real DB + filesystem stores, NOT via fixture writes.
-  const createRes = await authedFetch(
+  const createRes = await authedDaemonFetch(
     daemonA,
     `/api/v1/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
     {
@@ -265,7 +260,7 @@ try {
   // below are about the ROW surviving, which is an id-level claim — while
   // every request in this smoke keeps addressing the workspace by the same
   // segment, which is the half that must not change.
-  const wsListA = await (await authedFetch(daemonA, '/api/workspaces')).json()
+  const wsListA = await (await authedDaemonFetch(daemonA, '/api/workspaces')).json()
   const seededA = (wsListA?.workspaces ?? []).find((w) => w.segment === WORKSPACE_ID)
   if (seededA === undefined) {
     throw new Error(
@@ -275,7 +270,10 @@ try {
   const seededWorkspaceId = seededA.workspaceId
 
   const seededList = await (
-    await authedFetch(daemonA, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`)
+    await authedDaemonFetch(
+      daemonA,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
+    )
   ).json()
   const seededPaths = (seededList?.documents ?? []).map((c) => c.path)
   if (!seededPaths.includes(SEED_CANVAS_PATH)) {
@@ -294,7 +292,7 @@ try {
   // backup or restore copy: even if the DB row survived, the file
   // body would either be missing or a fresh empty doc and the bytes
   // would no longer match.
-  const snapshotARes = await authedFetch(
+  const snapshotARes = await authedDaemonFetch(
     daemonA,
     `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
   )
@@ -402,7 +400,7 @@ try {
   await pollPing(daemonB)
   console.log(`[packaged-daemon-backup-restore-smoke] daemon B ready (pid=${daemonB.child.pid})`)
 
-  const statusBRes = await authedFetch(daemonB, '/api/runtime/status')
+  const statusBRes = await authedDaemonFetch(daemonB, '/api/runtime/status')
   if (!statusBRes.ok) throw new Error(`daemon B /status: ${statusBRes.status}`)
   const statusBText = await statusBRes.text()
   const statusB = JSON.parse(statusBText)
@@ -435,7 +433,7 @@ try {
   // that re-created the workspace under a fresh id would satisfy a
   // segment-only check while having lost the row this smoke exists to
   // round-trip.
-  const wsListB = await (await authedFetch(daemonB, '/api/workspaces')).json()
+  const wsListB = await (await authedDaemonFetch(daemonB, '/api/workspaces')).json()
   const workspaceIdsB = (wsListB?.workspaces ?? []).map((w) => w.workspaceId)
   if (!workspaceIdsB.includes(seededWorkspaceId)) {
     throw new Error(
@@ -443,7 +441,10 @@ try {
     )
   }
   const restoredCanvases = await (
-    await authedFetch(daemonB, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`)
+    await authedDaemonFetch(
+      daemonB,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
+    )
   ).json()
   const restoredPaths = (restoredCanvases?.documents ?? []).map((c) => c.path)
   if (!restoredPaths.includes(SEED_CANVAS_PATH)) {
@@ -458,7 +459,7 @@ try {
   // snapshot rows could still pass the workspace + canvas list checks
   // above. Reading the snapshot through the route forces daemon B to
   // actually load and project the restored record.
-  const snapshotBRes = await authedFetch(
+  const snapshotBRes = await authedDaemonFetch(
     daemonB,
     `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
   )

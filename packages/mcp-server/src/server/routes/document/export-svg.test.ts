@@ -5,6 +5,7 @@ import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportResponseSchema } from '../../../shared/api-contracts/export.js'
+import { testDataLayout } from '../_test-helpers.js'
 
 let tempDir: string
 
@@ -55,7 +56,13 @@ const { createDocumentSvgExportRouter } = await import('./export-svg.js')
 
 function makeApp() {
   const app = new Hono()
-  app.route('/', createDocumentSvgExportRouter({ liveDocuments: { exists: mockDocumentExists } }))
+  app.route(
+    '/',
+    createDocumentSvgExportRouter({
+      liveDocuments: { exists: mockDocumentExists },
+      dataLayout: testDataLayout(tempDir),
+    }),
+  )
   return app
 }
 
@@ -96,6 +103,29 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   // characters as `<text>`, so a viewer whose system has the face reads them
   // — only rasterising is lossy. A caller relaying this to a person owes them
   // that distinction.
+  it('writes the default export under the layout it is handed, not the process data dir', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-svg-layout-'))
+    try {
+      const app = new Hono()
+      app.route(
+        '/',
+        createDocumentSvgExportRouter({
+          liveDocuments: { exists: mockDocumentExists },
+          dataLayout: testDataLayout(elsewhere),
+        }),
+      )
+
+      const res = await app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' })
+
+      expect(res.status).toBe(200)
+      const { filePath } = (await res.json()) as { filePath: string }
+      expect(filePath.startsWith(join(elsewhere, 's1', 'exports'))).toBe(true)
+      expect(filePath.startsWith(tempDir)).toBe(false)
+    } finally {
+      await rm(elsewhere, { recursive: true, force: true })
+    }
+  })
+
   it('answers 404 for a path that does not exist, rather than an empty SVG', async () => {
     mockDocumentExists.mockResolvedValue(false)
 

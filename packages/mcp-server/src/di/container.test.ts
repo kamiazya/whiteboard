@@ -1,12 +1,12 @@
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { TOKENS } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { Container, ContainerModule } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { EXPORT_FONT_FAMILY } from '../server/export/export-font.js'
 import { documentTeardown } from '../server/store/document-store.js'
 import { documentWritten } from '../server/store/document-written.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
-import { InMemoryDocumentStore } from '../server/store/inmemory/in-memory-document-store.js'
 import { createContainer, resolveServerDeps } from './container.js'
 
 describe('createContainer', () => {

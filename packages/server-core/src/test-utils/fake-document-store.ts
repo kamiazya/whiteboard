@@ -1,91 +1,19 @@
 import type { DocumentId, WorkspaceId } from '@kamiazya/whiteboard-model'
-import type {
-  AppendDeltasInput,
-  AppendDeltasResult,
-  DeleteDocInput,
-  DocRef,
-  DocumentStore,
-  LoadDeltasInput,
-  LoadDeltasResult,
-  LoadSnapshotInput,
-  LoadSnapshotResult,
-  ReadFrontierInput,
-  ReadFrontierResult,
-  ReadSnapshotManifestInput,
-  ReadSnapshotManifestResult,
-  SaveCompactedSnapshotResult,
-  SaveSnapshotInput,
-} from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 
-function docRefKey(docRef: DocRef): string {
-  return docRef.kind === 'document'
-    ? `document:${docRef.documentId}`
-    : `workspace-tree:${docRef.workspaceId}`
-}
-
 /**
- * An in-memory DocumentStore fake shared across server-core tool tests.
- * Keyed by `docRef` (canvas OR workspace-tree) so a single fake instance
- * backs both a mutation tool's canvas doc and the workspace-tree reindex
- * reads that a mutation now triggers, matching how a real store scopes
- * storage by DocRef rather than by store instance.
+ * The shared `InMemoryDocumentStore` plus the placement index that belongs
+ * with its documents. A single instance backs both a mutation tool's canvas
+ * doc and the workspace-tree reindex reads that a mutation triggers, matching
+ * how a real store scopes storage by DocRef rather than by store instance.
+ *
+ * The index is carried here rather than constructed per test so a test cannot
+ * register a document in one index and have the tool read another.
  */
-export class FakeDocumentStore implements DocumentStore {
-  private readonly saved = new Map<string, SaveSnapshotInput>()
-
-  /**
-   * The placement index that belongs with this store's documents. Carried
-   * here rather than constructed per test so a test cannot register a
-   * document in one index and have the tool read another — which is the
-   * only way these two doubles can disagree.
-   */
+export class FakeDocumentStore extends InMemoryDocumentStore {
   readonly documentIndex = new InMemoryDocumentIndex()
-
-  async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
-    const entry = this.saved.get(docRefKey(input.docRef))
-    if (entry === undefined) return null
-    return { manifest: entry.manifest, chunks: entry.chunks, frontier: entry.frontier }
-  }
-
-  async readSnapshotManifest(
-    input: ReadSnapshotManifestInput,
-  ): Promise<ReadSnapshotManifestResult> {
-    const stored = this.saved.get(docRefKey(input.docRef))
-    return stored === undefined ? null : { manifest: stored.manifest, generation: 1 }
-  }
-
-  async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
-    this.saved.set(docRefKey(input.docRef), input)
-  }
-
-  /** No delta log here, so compacting one is the save. */
-  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<SaveCompactedSnapshotResult> {
-    this.saved.set(docRefKey(input.docRef), input)
-    // Unconditional: this double has one writer by construction, so the fence
-    // has nothing to arbitrate. Reporting `ok` keeps a route under test on the
-    // path it takes in production rather than the refusal branch.
-    return { ok: true, generation: 1 }
-  }
-
-  async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
-    throw new Error('not implemented')
-  }
-
-  async loadDeltas(_input: LoadDeltasInput): Promise<LoadDeltasResult> {
-    throw new Error('not implemented')
-  }
-
-  async readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult> {
-    const stored = this.saved.get(docRefKey(input.docRef))
-    return stored === undefined ? null : ({ frontier: stored.frontier } as ReadFrontierResult)
-  }
-
-  async deleteDoc(input: DeleteDocInput): Promise<void> {
-    this.saved.delete(docRefKey(input.docRef))
-  }
 }
 
 /**

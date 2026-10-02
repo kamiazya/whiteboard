@@ -1,4 +1,5 @@
 import type { FontCatalogueItem } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { Check, Download, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
@@ -60,7 +61,7 @@ export function FontsCard() {
       if (mounted.current) setState({ kind: 'loaded', fonts })
     } catch (err) {
       if (mounted.current) {
-        setState({ kind: 'error', message: err instanceof Error ? err.message : 'Request failed.' })
+        setState({ kind: 'error', message: messageOf(err, 'Request failed.') })
       }
     }
   }, [fetchApi])
@@ -96,7 +97,7 @@ export function FontsCard() {
         if (!mounted.current) return
         setFailures((prev) => ({
           ...prev,
-          [font.id]: err instanceof Error ? err.message : 'Install failed.',
+          [font.id]: messageOf(err, 'Install failed.'),
         }))
       } finally {
         if (mounted.current) setBusyId(null)

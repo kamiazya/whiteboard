@@ -19,10 +19,11 @@ export default defineConfig({
     // been reached.
     'server/server-mode-backup-restore': 'src/server/server-mode-backup-restore.ts',
     'server/security/server-mode-auth-plan': 'src/server/security/server-mode-auth-plan.ts',
-    // The composition seam the packaged server-mode smoke builds its apps'
-    // deps with: `createApp` requires `serverDeps` (no router composes its
-    // own), so a smoke that drives the built app needs the built container.
-    'di/container': 'src/di/container.ts',
+    // The boot sequence the packaged server-mode smoke builds its apps with:
+    // `createApp` requires `serverDeps` and a `dataLayout` (no router composes
+    // its own, and none reads the process's data directory), and this is the
+    // one place every self-hosting root gets both from.
+    'di/boot-self-host-deps': 'src/di/boot-self-host-deps.ts',
     'shared/data-dir-secure': 'src/shared/data-dir-secure.ts',
     'shared/package-version': 'src/shared/package-version.ts',
     'server/export/headless-renderer': 'src/server/export/headless-renderer.ts',

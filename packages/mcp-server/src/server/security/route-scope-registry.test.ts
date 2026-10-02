@@ -19,6 +19,7 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 // minutes). The test's own work is milliseconds; only the load was slow, so
 // it belongs in the collection phase, which no per-test timeout bounds.
 import { createApp } from '../app.js'
+import { testDataLayout } from '../routes/_test-helpers.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import {
   API_ROUTE_RULE_NAMES,
@@ -74,6 +75,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       // accident. The in-memory container is enough: this test inspects
       // `app.routes` and never issues a request.
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
     })
 
     // `app.routes` conflates middleware mounts (`app.use('/api/*', ...)`,
@@ -136,6 +138,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       // accident. The in-memory container is enough: this test inspects
       // `app.routes` and never issues a request.
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
     })
 
     const apiRoutes = app.routes.filter(

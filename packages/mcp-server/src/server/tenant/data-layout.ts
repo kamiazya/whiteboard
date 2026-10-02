@@ -2,6 +2,7 @@ import { mkdir, readdir, rename, stat } from 'node:fs/promises'
 import { dirname, join, sep } from 'node:path'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { getLogger } from '../log.js'
+import type { DataLayout } from './data-layout-seam.js'
 
 const log = getLogger('data-layout')
 
@@ -61,6 +62,24 @@ export function workspaceDir(dataDir: string, tenantId: string, workspaceId: str
 
 export function workspaceFilesDir(dataDir: string, tenantId: string, workspaceId: string): string {
   return join(workspaceDir(dataDir, tenantId, workspaceId), FILES_DIRNAME)
+}
+
+const EXPORTS_DIRNAME = 'exports'
+
+/**
+ * The layout of one data directory for one tenant, as the seam adapters take.
+ * Exports sit under the workspace id at the top of the data directory rather
+ * than under the tenant: they are files a person asked to have written out,
+ * not a tenant's stored bytes, and moving them would move where an existing
+ * install's exports are found.
+ */
+export function createDataLayout(dataDir: string, tenantId: string): DataLayout {
+  return {
+    dataDir,
+    tenantId,
+    workspaceFilesDir: (workspaceId) => workspaceFilesDir(dataDir, tenantId, workspaceId),
+    exportsDir: (workspaceId) => join(dataDir, workspaceId, EXPORTS_DIRNAME),
+  }
 }
 
 /**

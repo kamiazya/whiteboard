@@ -11,10 +11,10 @@ import type {
   SnapshotChunk,
   SnapshotManifest,
 } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest } from '../../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from '../db/test-helpers.js'
-import { InMemoryDocumentStore } from '../inmemory/in-memory-document-store.js'
 import { LibsqlDocumentStore } from './libsql-document-store.js'
 
 // Fixed pool of docRefs, including a canvas/workspace-tree pair that share an

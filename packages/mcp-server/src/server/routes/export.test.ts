@@ -5,6 +5,7 @@ import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportResponseSchema } from '../../shared/api-contracts/export.js'
+import { testDataLayout } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -77,7 +78,13 @@ const { createExportRouter } = await import('./export.js')
 
 function makeApp() {
   const app = new Hono()
-  app.route('/', createExportRouter({ liveDocuments: { exists: mockDocumentExists } }))
+  app.route(
+    '/',
+    createExportRouter({
+      liveDocuments: { exists: mockDocumentExists },
+      dataLayout: testDataLayout(tempDir),
+    }),
+  )
   return app
 }
 
@@ -121,6 +128,36 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
     const written = await readFile(body.filePath)
     expect(written.equals(fakePng)).toBe(true)
+  })
+
+  it('writes the default export under the layout it is handed, not the process data dir', async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-export-layout-'))
+    try {
+      mockExportCanvasHeadless.mockResolvedValue({
+        png: Buffer.from('png'),
+        width: 1,
+        height: 1,
+        undrawable: [],
+        unresolvedFamilies: [],
+      })
+      const app = new Hono()
+      app.route(
+        '/',
+        createExportRouter({
+          liveDocuments: { exists: mockDocumentExists },
+          dataLayout: testDataLayout(elsewhere),
+        }),
+      )
+
+      const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+
+      expect(res.status).toBe(200)
+      const { filePath } = (await res.json()) as { filePath: string }
+      expect(filePath.startsWith(join(elsewhere, 's1', 'exports'))).toBe(true)
+      expect(filePath.startsWith(tempDir)).toBe(false)
+    } finally {
+      await rm(elsewhere, { recursive: true, force: true })
+    }
   })
 
   // Metamorphic: client count must not be an input to export behavior at all.

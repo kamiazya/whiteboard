@@ -1,5 +1,5 @@
+import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from './document-crud.js'
 
@@ -12,7 +12,7 @@ describe('a create that cannot finish leaves nothing behind', () => {
     // left an empty document holding the path while the caller held an
     // error saying the create had not happened. The retry then collided
     // with the ghost.
-    const deps = makeTestDeps({ documentStore: createInMemoryDocumentStore() })
+    const deps = makeTestDeps({ documentStore: new InMemoryDocumentStore() })
     // The workspace exists up front, so this case is only about the DOCUMENT.
     // It used to arrive via `createWorkspace: true` and the comment claimed
     // the refusal left no workspace either — which was not true then (the

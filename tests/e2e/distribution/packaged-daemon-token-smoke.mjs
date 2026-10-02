@@ -17,14 +17,14 @@
 // The daemon listens on its owner-only socket and no TCP port (ADR-0050),
 // so each real run gets its own data dir and nothing here can collide.
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
+import { assertNoLeak, createCliRunner, createFail, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -46,22 +46,9 @@ const SHUTDOWN_TIMEOUT_MS = 10_000
 // record.token) are checked with explicit includes() below each scenario —
 // they cannot be expressed as static patterns.
 
-function fail(msg, ctx = {}) {
-  console.error(`[token-smoke] FAIL: ${msg}`)
-  for (const [k, v] of Object.entries(ctx)) {
-    if (v !== undefined && v !== '') console.error(`  ${k}: ${v}`)
-  }
-  process.exit(1)
-}
+const fail = createFail('token-smoke')
 
-function runCli(args, opts = {}) {
-  return spawnSync(process.execPath, [CLI, ...args], {
-    env: scrubDevEnv(process.env),
-    ...opts,
-    encoding: 'utf8',
-    timeout: 10_000,
-  })
-}
+const runCli = createCliRunner(CLI, { timeout: 10_000 })
 
 // --- Scenario 1: --token= removed (argv secrets) -------------------------
 {
@@ -82,7 +69,7 @@ function runCli(args, opts = {}) {
   try {
     const r = runCli(['daemon', 'run', '--json', '--token-stdin', `--data-dir=${dataDir}`], {
       input: 'stdin-conflict-token\n',
-      env: { ...scrubDevEnv(process.env), WHITEBOARD_DAEMON_TOKEN: ENV_TOKEN },
+      env: { WHITEBOARD_DAEMON_TOKEN: ENV_TOKEN },
     })
     if (r.status !== 1) fail(`scenario 2: expected exit 1, got ${r.status}`, { stderr: r.stderr })
     if (r.stdout.trim() !== '') fail('scenario 2: stdout must be empty', { stdout: r.stdout })

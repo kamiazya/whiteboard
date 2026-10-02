@@ -1,6 +1,7 @@
 import {
   documentIdSchema,
   documentPathSchema,
+  messageOf,
   okfActorSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -306,7 +307,7 @@ const WORKSPACE_EDIT_HANDLERS: {
 function followOf(moved: WbDocumentMoveResult): Pick<ResultRow, 'follow'> {
   if ('error' in moved.follow) {
     const { error } = moved.follow
-    return { follow: { error: error instanceof Error ? error.message : String(error) } }
+    return { follow: { error: messageOf(error, String(error)) } }
   }
   const { updatedDocumentIds, failedDocumentIds } = moved.follow
   if (updatedDocumentIds.length === 0 && failedDocumentIds.length === 0) return {}
@@ -362,12 +363,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
           if (outcome.workspaceId !== undefined) workspaceId = outcome.workspaceId
           results.push(outcome.result)
         } catch (err) {
-          throw new WorkspaceEditError(
-            index,
-            op.op,
-            results.length,
-            err instanceof Error ? err.message : String(err),
-          )
+          throw new WorkspaceEditError(index, op.op, results.length, messageOf(err, String(err)))
         }
       }
 

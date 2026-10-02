@@ -5,6 +5,7 @@ import {
   type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
@@ -95,7 +96,7 @@ function readEmbeddedScene(): unknown {
     try {
       return JSON.parse(script.textContent)
     } catch (err) {
-      throw new ViewerSceneError(`json-syntax: ${err instanceof Error ? err.message : String(err)}`)
+      throw new ViewerSceneError(`json-syntax: ${messageOf(err, String(err))}`)
     }
   }
   return window.__WHITEBOARD_VIEWER_SCENE__

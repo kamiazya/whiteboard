@@ -1,8 +1,10 @@
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
+import { createPeopleAdministration } from '../server/security/people-administration.js'
 import { createTenantAdministratorStore } from '../server/security/tenant-administrator-store.js'
+import { createUserDeactivation } from '../server/security/user-deactivation.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser } from './named-user.js'
+import { findNamedUser, operatorRefusal } from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
 import {
   type GrantAdminOutput,
@@ -25,11 +27,19 @@ export async function grantAdmin(
   db: TenantDatabase,
   { user, remove }: { user: string; remove: boolean },
 ): Promise<GrantAdminOutcome> {
-  const found = await findNamedUser(createMemberProfileStore(db), user)
+  const members = createMemberProfileStore(db)
+  const found = await findNamedUser(members, user)
   if (found.kind !== 'found') return found
-  const admins = createTenantAdministratorStore(db)
-  if (remove) await admins.dismiss(found.user.id)
-  else await admins.appoint(found.user.id, null)
+  const people = createPeopleAdministration({
+    members,
+    appointments: createTenantAdministratorStore(db),
+    deactivation: createUserDeactivation(db),
+  })
+  // The operator appoints and dismisses as nobody's user.
+  const outcome = remove
+    ? await people.dismiss(found.user.id, null)
+    : await people.appoint(found.user.id, null)
+  if (outcome.kind === 'refused') return operatorRefusal(outcome)
   return { kind: 'ok', user: found.user, administrator: !remove }
 }
 

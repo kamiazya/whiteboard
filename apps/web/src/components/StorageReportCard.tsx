@@ -11,6 +11,7 @@ import {
   storageReportApiUrl,
   storageReportPayloadSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button.js'
@@ -91,7 +92,7 @@ async function readStorageReport(
     if (!res.ok) return { error: `HTTP ${res.status}` }
     return { report: storageReportPayloadSchema.parse(await res.json()) }
   } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) }
+    return { error: messageOf(err, String(err)) }
   }
 }
 

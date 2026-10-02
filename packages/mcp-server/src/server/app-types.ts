@@ -7,6 +7,7 @@ import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import type { WorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
+import type { DataLayout } from './tenant/data-layout-seam.js'
 
 interface LocalDaemonAppOptions {
   authMode: 'local-daemon'
@@ -15,6 +16,10 @@ interface LocalDaemonAppOptions {
    *  /api/v1 surface is mounted over the same deps behind the same /api/*
    *  auth as every other API route. */
   serverDeps: ServerDeps
+  /** Where this keeper's bytes live and which tenant the routes serve, handed
+   *  down by the root that booted `serverDeps` over the same directory — so no
+   *  route reads the process's data dir or names the tenant itself. */
+  dataLayout: DataLayout
   token?: string
   /**
    * RFC 9728 metadata for `/mcp`'s protected-resource discovery. The strategy
@@ -39,7 +44,7 @@ interface LocalDaemonAppOptions {
    *  too. */
   replicaLeaseTtlMs?: number
   /** Daemon signing identity (security/daemon-identity.ts). Injectable for
-   *  tests; when omitted, createApp loads-or-creates it from the data dir. */
+   *  tests; when omitted, createApp loads-or-creates it in the layout's data dir. */
   identity?: DaemonIdentity
   /** The macaroon chain's root key (ADR-0043 decision 4). When absent the
    *  `/api` guard carries no macaroon branch at all, so a daemon that mints
@@ -65,6 +70,10 @@ export interface ServerModeAppOptions {
    *  /api/v1 surface is mounted over the same deps behind the same /api/*
    *  auth as every other API route. */
   serverDeps: ServerDeps
+  /** Where this keeper's bytes live and which tenant the routes serve, handed
+   *  down by the root that booted `serverDeps` over the same directory — so no
+   *  route reads the process's data dir or names the tenant itself. */
+  dataLayout: DataLayout
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy

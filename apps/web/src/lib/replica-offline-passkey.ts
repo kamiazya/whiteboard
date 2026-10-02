@@ -20,6 +20,7 @@ import { BASE64URL } from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
 import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { prfOutputOf } from './passkey-prf.js'
+import { safeGetItem, safeSetItem } from './safe-local-storage.js'
 import { readStoredRecord } from './stored-record.js'
 
 const STORE_KEY = 'whiteboard:replica-offline-passkeys'
@@ -42,20 +43,13 @@ const entryKey = (daemonBaseUrl: string, workspaceId: string): string =>
   `${daemonBaseUrl.replace(/\/+$/, '')}\u0000${workspaceId}`
 
 function load(): Record<string, OfflinePasskey> {
-  try {
-    return readStoredRecord(localStorage.getItem(STORE_KEY), offlinePasskeySchema)
-  } catch {
-    return {}
-  }
+  return readStoredRecord(safeGetItem(STORE_KEY), offlinePasskeySchema)
 }
 
 function save(records: Record<string, OfflinePasskey>): void {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(records))
-  } catch {
-    // A browser refusing storage keeps nothing, which the caller reads back
-    // as "not readable offline" — the truth.
-  }
+  // A browser refusing storage keeps nothing, which the caller reads back as
+  // "not readable offline" — the truth.
+  safeSetItem(STORE_KEY, JSON.stringify(records))
 }
 
 export function loadOfflinePasskey(

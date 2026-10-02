@@ -33,7 +33,7 @@ vi.mock('../atomic-write.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../atomic-write.js')>()
   return {
     ...actual,
-    writeFileAtomic: async (dataDir: string, path: string, contents: string) => {
+    writeFileAtomicStaged: async (dataDir: string, path: string, contents: string) => {
       const index = writes.length
       let release = (): void => {}
       const gate =
@@ -49,7 +49,7 @@ vi.mock('../atomic-write.js', async (importOriginal) => {
       writes.push({ release, finished })
       await gate
       try {
-        return await actual.writeFileAtomic(dataDir, path, contents)
+        return await actual.writeFileAtomicStaged(dataDir, path, contents)
       } finally {
         done()
       }

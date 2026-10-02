@@ -19,9 +19,18 @@ import type {
   SnapshotChunk,
   SnapshotManifest,
   StoredDocumentUnreadableCode,
-} from '@kamiazya/whiteboard-ports'
-import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
-import { cloneBytes } from './clone-bytes.js'
+} from '../index.js'
+import { docRefKey, StoredDocumentUnreadableError } from '../index.js'
+
+/**
+ * Defensive copy of a byte buffer into a fresh `ArrayBuffer`-backed
+ * `Uint8Array`. `new Uint8Array(bytes)` (the array-like overload) always
+ * allocates a fresh `ArrayBuffer` — unlike `Uint8Array.from`, whose return
+ * type widens to `ArrayBufferLike` and no longer matches the port's DTOs.
+ */
+function cloneBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(bytes)
+}
 
 /**
  * What a stored record can be. The `unreadable` arm exists so this double can
@@ -55,11 +64,14 @@ function cloneChunk(chunk: SnapshotChunk): SnapshotChunk {
 }
 
 /**
- * In-memory `DocumentStore` test double. Every stored/returned byte buffer
- * is defensively copied so a caller mutating its own input/output array can
- * never corrupt or observe the store's internal state — this is the
- * canonical double the later libSQL-backed implementation's tests reuse for
- * behavioral parity checks.
+ * The one in-memory `DocumentStore` every test double is built on. Every
+ * stored/returned byte buffer is defensively copied so a caller mutating its
+ * own input/output array can never corrupt or observe the store's internal
+ * state — a double that handed out its own buffers would hide an aliasing bug
+ * from every test that runs through it.
+ *
+ * It runs the port's conformance suite in `in-memory-document-store.test.ts`
+ * and is the reference the libSQL store's parity property compares against.
  */
 export class InMemoryDocumentStore implements DocumentStore {
   private readonly docs = new Map<string, DocRecord>()

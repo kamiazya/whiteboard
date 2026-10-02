@@ -46,6 +46,11 @@ export const MUTATED = [
   // Pure geometry and derivation with properties of their own.
   'src/scene-bounds.ts',
   'src/scene-digest.ts',
+  // The rectangle arithmetic `scene-digest.ts`'s overlap and containment moved
+  // into when the quality instruments stopped redeclaring it. In the lane for
+  // the reason `tidy-units.ts` is: leaving it out would shrink what the lane
+  // sees of the digest while the report kept looking the same.
+  'src/quality/rect.ts',
   'src/layout/nodes/truncate.ts',
   'src/tidy.ts',
   // Split out of `tidy.ts` and covered for that reason: `buildUnits` is

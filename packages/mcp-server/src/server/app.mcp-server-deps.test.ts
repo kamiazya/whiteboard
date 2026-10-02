@@ -11,7 +11,7 @@ import { definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import { visualPlugin } from '@kamiazya/whiteboard-plugin-visual'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from './routes/_test-helpers.js'
+import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-app-mcp-deps-')
 
@@ -70,6 +70,7 @@ describe('/mcp serves the ServerDeps the root composed', () => {
         clients: { connected: 0, ready: 0 },
       }),
       serverDeps,
+      dataLayout: testDataLayout(),
     })
     const client = new Client({ name: 'mcp-deps-test', version: '1.0.0' }, clientOptions)
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {

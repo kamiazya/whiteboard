@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
+import { assertNoLeak, createFail, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -45,11 +45,7 @@ if (!existsSync(CLI)) {
 const READINESS_TIMEOUT_MS = 30_000
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
-function fail(msg, ctx = {}) {
-  console.error(`[replica-key-smoke] FAIL: ${msg}`)
-  if (Object.keys(ctx).length > 0) console.error(JSON.stringify(ctx, null, 2))
-  process.exit(1)
-}
+const fail = createFail('replica-key-smoke')
 
 /** One JSON request over the daemon's socket under its token. */
 function socketJson(record, method, path, body) {
@@ -90,7 +86,7 @@ function socketJson(record, method, path, body) {
 }
 
 /** The built CLI, one JSON object on stdout. */
-function cli(args, env) {
+function runCliJson(args, env) {
   const run = spawnSync(process.execPath, [CLI, ...args], {
     cwd: REPO_ROOT,
     env,
@@ -162,7 +158,7 @@ async function withDaemon(run) {
 
 /** Scenario 1: rotate, and the key route agrees about which pair it is now. */
 async function rotateScenario({ record, dataDirArg, env }, workspaceId, keyBefore) {
-  const rotated = cli(
+  const rotated = runCliJson(
     ['daemon', 'rotate-replica-key', '--json', `--workspace=${workspaceId}`, dataDirArg],
     env,
   )
@@ -206,7 +202,7 @@ async function tierScenario({ record, dataDirArg, env }, workspaceId) {
     `--tier=${tier}`,
     dataDirArg,
   ]
-  const bounded = cli(tierArgs('bounded'), env)
+  const bounded = runCliJson(tierArgs('bounded'), env)
   if (bounded.status !== 0 || bounded.json?.effectiveTier !== 'bounded') {
     fail('set-replica-tier bounded did not take', bounded)
   }
@@ -214,7 +210,7 @@ async function tierScenario({ record, dataDirArg, env }, workspaceId) {
   if (leased.body?.tier !== 'bounded' || typeof leased.body.leaseExpiresAt !== 'string') {
     fail('the key route does not lease after set-replica-tier bounded', leased)
   }
-  const cleared = cli(tierArgs('default'), env)
+  const cleared = runCliJson(tierArgs('default'), env)
   if (cleared.status !== 0 || cleared.json?.tier !== null) {
     fail('set-replica-tier default did not clear the override', cleared)
   }
@@ -225,7 +221,7 @@ async function tierScenario({ record, dataDirArg, env }, workspaceId) {
 
 /** Scenario 3: a workspace the daemon does not hold is the daemon's refusal. */
 function unknownWorkspaceScenario({ dataDirArg, env }) {
-  const absent = cli(
+  const absent = runCliJson(
     ['daemon', 'rotate-replica-key', '--json', '--workspace=nope', dataDirArg],
     env,
   )
@@ -257,7 +253,7 @@ await withDaemon(async ({ record, dataDir, env }) => {
 {
   const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-replica-key-smoke-nodaemon-'))
   try {
-    const down = cli(
+    const down = runCliJson(
       ['daemon', 'rotate-replica-key', '--json', '--workspace=ws', `--data-dir=${dataDir}`],
       scrubDevEnv(process.env),
     )

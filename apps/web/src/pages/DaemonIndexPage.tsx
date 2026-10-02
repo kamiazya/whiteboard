@@ -1,5 +1,6 @@
 import type { WorkspaceSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
@@ -43,7 +44,7 @@ const WORKSPACE_GONE = 'This workspace is not on the daemon any more.'
 // names a tool parameter.
 function createFailureMessage(err: unknown, kind: DocumentKind): string {
   if (err instanceof DaemonApiError && err.status === 404) return WORKSPACE_GONE
-  return err instanceof Error ? err.message : `Failed to create ${kindNoun(kind)}.`
+  return messageOf(err, `Failed to create ${kindNoun(kind)}.`)
 }
 
 /**
@@ -521,7 +522,7 @@ export function DaemonIndexPage({
         await loadWorkspace(workspaceAtStart, isStale)
       } catch (err) {
         if (selectedWorkspaceRef.current !== workspaceAtStart) return
-        setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate document.')
+        setDuplicateError(messageOf(err, 'Failed to duplicate document.'))
       } finally {
         setDuplicatingPath((current) => (current === sourcePath ? null : current))
       }

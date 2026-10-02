@@ -16,12 +16,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
+import { type Kysely, sql } from 'kysely'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { migrations } from './index.js'
+import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../../config.js', () => ({
@@ -41,27 +39,7 @@ interface Handle {
 }
 
 async function openDb(): Promise<Handle> {
-  const db = new Kysely<Record<string, Record<string, unknown>>>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(
-        join(dataDir, 'whiteboard.db'),
-      ) as unknown as ConstructorParameters<typeof SqliteDialect>[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  const migrator = new Migrator({ db: db as never, provider })
-  return {
-    db,
-    async migrateTo(name: string) {
-      const { error } = await migrator.migrateTo(name)
-      expect(error).toBeUndefined()
-    },
-    async migrateToHead() {
-      const { error } = await migrator.migrateToLatest()
-      expect(error).toBeUndefined()
-    },
-  }
+  return openMigrationHarness(dataDir)
 }
 
 /** A workspace as a pre-0019 writer left it: the handle IS the id. */
