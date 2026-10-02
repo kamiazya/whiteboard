@@ -118,6 +118,19 @@ boundary exemptions` fails an entry whose file is gone or no longer contains
 that kind. It is file-granular, not line-granular: a second `process` use in
 the exempt file passes, which is the cost of not scanning for the line.
 
+## `port-conformance-ledger.test.ts`: every store implementer runs its suite
+
+The three `describe*Conformance` suites make the browser's and the daemon's
+stores readings of one contract, and nothing tied `implements DocumentStore |
+DocumentIndex | BlobStore` to a call of the matching one — two of the twelve
+production implementers were added after the suites, each by someone
+remembering. The population is derived from the AST (every `implements` under
+`packages/*/src` and `apps/*/src`, tests included) and each member is ledgered
+to the test file that calls its suite AND constructs it with `new`. Both sides
+fail; `FakeDocumentStore`, a test double, is exempted with its reason. Blind
+spot: only `implements` clauses are read, so an object literal typed as a port
+is not a member.
+
 ## The always-on table is parsed, not trusted
 
 `architecture-map.md`'s table is a second hand-kept copy of `ARCHITECTURE_MAP`,
