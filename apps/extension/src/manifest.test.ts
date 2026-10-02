@@ -56,6 +56,15 @@ describe('firefoxManifestFor', () => {
     )
   })
 
+  // The content script's hosts are granted at install only from the ESR that
+  // introduced it, so an older minimum would install an extension that cannot
+  // reach the page.
+  it('requires a Firefox that grants a content script its hosts at install', () => {
+    const minimum =
+      firefoxManifestFor('production').browser_specific_settings.gecko.strict_min_version
+    expect(Number.parseInt(minimum, 10)).toBeGreaterThanOrEqual(128)
+  })
+
   it('relays through a content script on the pages the Chromium build admits', () => {
     for (const mode of ['production', 'development'] as const) {
       const manifest = firefoxManifestFor(mode)

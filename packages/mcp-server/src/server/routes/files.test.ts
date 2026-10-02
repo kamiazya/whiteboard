@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -106,6 +106,28 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     } finally {
       await rm(elsewhere, { recursive: true, force: true })
     }
+  })
+
+  // The id becomes a file name under the workspace's files directory, so an
+  // upload must refuse whatever would name a path outside it. The GET twin
+  // is pinned separately; each handler validates for itself.
+  it.each([
+    ['a path-climbing id', '..%2F..%2Fescaped'],
+    ['a dotted id', 'bad.id'],
+    ['an encoded NUL', 'file%00id'],
+    ['an id past the length limit', 'x'.repeat(129)],
+  ])('refuses an upload under %s and stores no image', async (_name, fileId) => {
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const res = await app.request(`/api/w/session1/document/canvas-a/file/${fileId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    })
+
+    expect(res.status).toBe(400)
+    // Opening the store leaves its own files; an upload would leave the image.
+    const stored = (await readdir(tempDir, { recursive: true })).filter((p) => p.endsWith('.png'))
+    expect(stored).toEqual([])
   })
 
   it('refuses an empty upload with 400 rather than storing a zero-byte file', async () => {

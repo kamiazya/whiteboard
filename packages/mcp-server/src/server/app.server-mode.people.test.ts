@@ -94,16 +94,29 @@ async function listed(headers: Record<string, string>): Promise<string[]> {
   return body.workspaces.map((w) => w.displayName ?? '')
 }
 
-/** A sync stream opened as `headers`, subscribed to one workspace's record. */
-async function followed(headers: Record<string, string>, workspaceId: string) {
+/** A sync stream opened as `headers`: its reader and the id its first frame carried. */
+async function opened(headers: Record<string, string>) {
   const res = await app.request(`${PUBLIC_URL}/api/sync/stream`, { headers })
   const reader = (res.body as ReadableStream<Uint8Array>).getReader()
   const ready = new TextDecoder().decode((await reader.read()).value)
   const { streamId } = JSON.parse(ready.split('data:')[1] ?? '{}') as { streamId: string }
-  const subscribed = await app.request(`${PUBLIC_URL}/api/sync/subscribe`, {
+  return { reader, streamId }
+}
+
+function syncPost(headers: Record<string, string>, route: 'subscribe' | 'message', body: unknown) {
+  return app.request(`${PUBLIC_URL}/api/sync/${route}`, {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
-    body: JSON.stringify({ streamId, subscribe: [`workspace:${workspaceId}`] }),
+    body: JSON.stringify(body),
+  })
+}
+
+/** A sync stream opened as `headers`, subscribed to one workspace's record. */
+async function followed(headers: Record<string, string>, workspaceId: string) {
+  const { reader, streamId } = await opened(headers)
+  const subscribed = await syncPost(headers, 'subscribe', {
+    streamId,
+    subscribe: [`workspace:${workspaceId}`],
   })
   expect(subscribed.status).toBe(200)
   return reader
@@ -157,6 +170,41 @@ describe('server mode — a stream open before someone loses access ends with it
     expect(await next(stream)).toBe('closed')
     // Only the person who lost access: the owner still following it is not.
     expect(await next(bystander)).toMatch(/^event: update/)
+  })
+})
+
+// The workspace id travels in the body of both sync POSTs, so no path
+// middleware can gate them: the refusal in the handler is the only check.
+describe('server mode — the sync transport is members-only', () => {
+  it('refuses a non-member who subscribes to a workspace record', async () => {
+    const ada = await signedIn('ada')
+    const eve = await signedIn('eve')
+    const { workspaceId } = (await (await create(ada, 'Plans')).json()) as { workspaceId: string }
+    const { streamId } = await opened(eve)
+
+    const res = await syncPost(eve, 'subscribe', {
+      streamId,
+      subscribe: [`workspace:${workspaceId}`],
+    })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'not_a_member' })
+  })
+
+  it('refuses a non-member’s client_ready for a document of that workspace', async () => {
+    const ada = await signedIn('ada')
+    const eve = await signedIn('eve')
+    const { workspaceId } = (await (await create(ada, 'Plans')).json()) as { workspaceId: string }
+    const { streamId } = await opened(eve)
+
+    const res = await syncPost(eve, 'message', {
+      streamId,
+      doc: `${workspaceId}/plan`,
+      message: { type: 'client_ready' },
+    })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'not_a_member' })
   })
 })
 

@@ -260,8 +260,11 @@ describe('createOAuthJwtValidator — claim validation', () => {
     if (!result.ok) expect(result.reason).toBe('malformed')
   })
 
-  it('missing sub → malformed', async () => {
-    const token = await buildToken({ sub: null })
+  it.each([
+    ['missing', null],
+    ['empty', ''],
+  ])('%s sub → malformed', async (_name, sub) => {
+    const token = await buildToken({ sub })
     const result = await makeValidator().validate({ token, requiredScopes: [] })
 
     expect(result.ok).toBe(false)

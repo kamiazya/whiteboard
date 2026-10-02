@@ -55,13 +55,14 @@ const usesEmail = (a: ProviderAdmission) =>
 // Each property only asserts inside an `if`; these count how often the `if`
 // was actually entered, so a generator that stopped reaching it fails here
 // instead of passing vacuously.
-const reached = { emailRuleAdmitted: 0, uninvited: 0, looserChecked: 0 }
+const reached = { emailRuleAdmitted: 0, uninvited: 0, looserChecked: 0, addressless: 0 }
 
 describe('admit — invariants', () => {
   afterAll(() => {
     expect(reached.emailRuleAdmitted).toBeGreaterThan(0)
     expect(reached.uninvited).toBeGreaterThan(0)
     expect(reached.looserChecked).toBeGreaterThan(0)
+    expect(reached.addressless).toBeGreaterThan(0)
   })
 
   fcTest.prop([inputArb], withDefaults())(
@@ -70,6 +71,20 @@ describe('admit — invariants', () => {
       if (admit(input).admitted && usesEmail(input.admission)) {
         reached.emailRuleAdmitted++
         expect(input.claims.email_verified).toBe(true)
+      }
+    },
+  )
+
+  // A verified claim set with no address at all is in no domain: the rule
+  // that names domains cannot be met by failing to read one.
+  fcTest.prop([inputArb], withDefaults())(
+    'never admits a verified claim set that carries no email against a domain allowlist',
+    (input) => {
+      const { email: _email, ...addressless } = input.claims
+      const claims = { ...addressless, email_verified: true }
+      if (input.admission.allowedEmailDomains !== undefined) {
+        reached.addressless++
+        expect(admit({ ...input, claims, account: 'exists' }).admitted).toBe(false)
       }
     },
   )

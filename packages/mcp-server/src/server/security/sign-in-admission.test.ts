@@ -36,6 +36,21 @@ describe('admit — who may sign in at all', () => {
     expect(refused).toEqual({ admitted: false, reason: 'email_domain_not_allowed' })
   })
 
+  // A verified claim set with no usable address is not a member of any domain
+  // an allowlist names; failing to read a domain must never read as a match.
+  it.each([
+    ['no email claim', { sub: 's-1', email_verified: true }],
+    ['an email with no domain', { sub: 's-1', email: 'ada', email_verified: true }],
+    ['an email that begins at the @', { sub: 's-1', email: '@corp.example', email_verified: true }],
+    ['an email that is not a string', { sub: 's-1', email: 7, email_verified: true }],
+  ])('refuses a verified claim set with %s against a domain allowlist', (_name, claims) => {
+    const rules = { allowedEmailDomains: ['corp.example'] }
+    expect(admit(input({ rules, claims }))).toEqual({
+      admitted: false,
+      reason: 'email_domain_not_allowed',
+    })
+  })
+
   it('matches the domain case-insensitively and exactly — a subdomain is not the domain', () => {
     const rules = { allowedEmailDomains: ['corp.example'] }
     expect(admit(input({ rules, claims: { ...verified, email: 'Ada@CORP.example' } }))).toEqual({
