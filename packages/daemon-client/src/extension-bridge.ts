@@ -11,7 +11,7 @@
  * `pageToHostSchema` and attaches the daemon's credentials itself.
  */
 import { z } from 'zod'
-import { WINDOW_BRIDGE_CHANNEL } from './extension-names.js'
+import { BRIDGE_PROTOCOL_VERSION, WINDOW_BRIDGE_CHANNEL } from './extension-names.js'
 
 /**
  * Bytes of body one host message carries. Chromium refuses a message from
@@ -64,7 +64,9 @@ export const hostToPageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('error'),
     id: idSchema,
-    reason: z.enum(['bad-request', 'daemon-unreachable', 'stream-failed']),
+    // Only displayed, so a reason a newer host invents reads as the generic
+    // one and its `message` still reaches the person.
+    reason: z.enum(['bad-request', 'daemon-unreachable', 'stream-failed']).catch('stream-failed'),
     message: z.string(),
   }),
 ])
@@ -84,11 +86,38 @@ export type ExtensionToPage = z.infer<typeof extensionToPageSchema>
 /** A one-off message the page sends to learn whether the extension is there. */
 export const extensionHelloSchema = z.object({ type: z.literal('hello') })
 export type ExtensionHello = z.infer<typeof extensionHelloSchema>
+/**
+ * What the extension says of itself: its release, and the bridge protocol it
+ * speaks. `protocol` is optional only to read an extension built before the
+ * field existed — which `bridgeSkew` then reports as the skew it is.
+ */
+const extensionIdentity = { version: z.string(), protocol: z.number().int().optional() }
 export const extensionHelloReplySchema = z.object({
   type: z.literal('hello'),
-  version: z.string(),
+  ...extensionIdentity,
 })
 export type ExtensionHelloReply = z.infer<typeof extensionHelloReplySchema>
+
+/**
+ * Why a page must not use the extension that answered, or `null` when it
+ * speaks the protocol this page does. The words are the whole diagnosis: a
+ * skew otherwise shows as requests that fail or never answer.
+ */
+export function bridgeSkew(identity: {
+  version: string
+  protocol?: number | undefined
+}): string | null {
+  if (identity.protocol === BRIDGE_PROTOCOL_VERSION) return null
+  const speaks =
+    identity.protocol === undefined
+      ? 'predates the bridge protocol check'
+      : `speaks bridge protocol ${identity.protocol}`
+  const remedy =
+    identity.protocol !== undefined && identity.protocol > BRIDGE_PROTOCOL_VERSION
+      ? 'reload this page to get the matching one'
+      : 'update the extension'
+  return `the whiteboard extension (version ${identity.version}) ${speaks}, but this page speaks protocol ${BRIDGE_PROTOCOL_VERSION}: ${remedy}`
+}
 
 /**
  * Firefox lets no page message an extension, so the extension's content
@@ -99,7 +128,7 @@ export type ExtensionHelloReply = z.infer<typeof extensionHelloReplySchema>
  */
 const fromExtension = { channel: z.literal(WINDOW_BRIDGE_CHANNEL), from: z.literal('extension') }
 export const windowFromExtensionSchema = z.discriminatedUnion('kind', [
-  z.object({ ...fromExtension, kind: z.literal('hello'), version: z.string() }),
+  z.object({ ...fromExtension, kind: z.literal('hello'), ...extensionIdentity }),
   z.object({ ...fromExtension, kind: z.literal('connected'), port: idSchema }),
   z.object({ ...fromExtension, kind: z.literal('message'), port: idSchema, message: z.unknown() }),
   z.object({ ...fromExtension, kind: z.literal('disconnect'), port: idSchema }),

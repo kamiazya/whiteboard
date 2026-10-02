@@ -18,8 +18,6 @@ import {
   createWorkspaceRequestSchema,
   type DocumentSummary,
   documentSummarySchema,
-  type ExportDocumentJsonRequest,
-  exportDocumentJsonRequestSchema,
   type ListDocumentsResponse,
   type ListVersionsResponse,
   type ListWorkspacesResponse,
@@ -192,23 +190,6 @@ describe('restoreVersionRequestSchema', () => {
   it('rejects empty targetPath', () => {
     expect(restoreVersionRequestSchema.safeParse({ targetPath: '' }).success).toBe(false)
     expect(restoreVersionRequestSchema.safeParse({ targetPath: '   ' }).success).toBe(false)
-  })
-})
-
-describe('exportDocumentJsonRequestSchema', () => {
-  it('parses an empty body', () => {
-    const result: ExportDocumentJsonRequest = exportDocumentJsonRequestSchema.parse({})
-    expect(result.includeCustomFields).toBeUndefined()
-  })
-
-  it('roundtrip with all optional fields', () => {
-    const valid: ExportDocumentJsonRequest = {
-      includeCustomFields: true,
-      outputPath: '/tmp/out.json',
-      overwrite: false,
-    }
-    const result: ExportDocumentJsonRequest = roundtrip(exportDocumentJsonRequestSchema, valid)
-    expect(result).toEqual(valid)
   })
 })
 
@@ -586,18 +567,19 @@ describe('createWorkspaceRequestSchema', () => {
     )
   })
 
-  it('does not accept a caller-chosen segment or id', () => {
+  it('refuses a caller-chosen segment or id rather than dropping it', () => {
     // Both are the server's to decide (ADR-0019): the id is minted, and the
     // segment is derived so the two keepers' create surfaces agree. A body
-    // naming either parses, but the field is dropped rather than honoured —
-    // pinned so a later widening is a deliberate act.
-    const parsed = createWorkspaceRequestSchema.parse({
-      displayName: 'Marketing',
-      segment: 'chosen-by-me',
-      workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-    })
-    expect('segment' in parsed).toBe(false)
-    expect('workspaceId' in parsed).toBe(false)
+    // naming either is refused, so a caller is told the value did not take
+    // effect instead of reading a 200 as honoured.
+    for (const extra of [
+      { segment: 'chosen-by-me' },
+      { workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+    ]) {
+      expect(
+        createWorkspaceRequestSchema.safeParse({ displayName: 'Marketing', ...extra }).success,
+      ).toBe(false)
+    }
   })
 })
 

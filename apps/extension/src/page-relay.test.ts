@@ -8,7 +8,10 @@ import {
   windowFromPageEnvelopeSchema,
   windowFromPageSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
-import { WINDOW_BRIDGE_CHANNEL } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  BRIDGE_PROTOCOL_VERSION,
+  WINDOW_BRIDGE_CHANNEL,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { describe, expect, it } from 'vitest'
 import { installPageRelay, type PageWindow, readPageEnvelope } from './page-relay.js'
 import type { Port } from './relay.js'
@@ -76,7 +79,9 @@ describe('installPageRelay', () => {
   it('answers a page that asks whether it is there', () => {
     const page = fakePage()
     page.fromPageTyped({ kind: 'hello' })
-    expect(page.posted).toEqual([toPage({ kind: 'hello', version: '9.9.9' })])
+    expect(page.posted).toEqual([
+      toPage({ kind: 'hello', version: '9.9.9', protocol: BRIDGE_PROTOCOL_VERSION }),
+    ])
   })
 
   it('opens a port for the page, and carries messages both ways under its name', () => {

@@ -11,7 +11,10 @@ import type {
   WindowFromExtensionBody,
   WindowFromPageEnvelope,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
-import { WINDOW_BRIDGE_CHANNEL } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  BRIDGE_PROTOCOL_VERSION,
+  WINDOW_BRIDGE_CHANNEL,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import type { Port } from './relay.js'
 
 /** The part of the page's `window` the content script uses. */
@@ -87,7 +90,11 @@ export function installPageRelay(win: PageWindow, api: ContentScriptApi): void {
     const data = fromPage(event, win)
     if (data === null) return
     if (data.kind === 'hello') {
-      post({ kind: 'hello', version: api.runtime.getManifest().version })
+      post({
+        kind: 'hello',
+        version: api.runtime.getManifest().version,
+        protocol: BRIDGE_PROTOCOL_VERSION,
+      })
       return
     }
     if (data.kind === 'connect') open(data.port)

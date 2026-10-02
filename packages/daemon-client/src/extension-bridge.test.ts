@@ -5,7 +5,15 @@
  * the host must not trust.
  */
 import { afterAll, describe, expect, it } from 'vitest'
-import { extensionToPageSchema, hostToPageSchema, pageToHostSchema } from './extension-bridge.js'
+import {
+  bridgeSkew,
+  extensionHelloReplySchema,
+  extensionToPageSchema,
+  hostToPageSchema,
+  pageToHostSchema,
+  windowFromExtensionSchema,
+} from './extension-bridge.js'
+import { BRIDGE_PROTOCOL_VERSION, WINDOW_BRIDGE_CHANNEL } from './extension-names.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const request = (path: string) => ({
@@ -80,5 +88,57 @@ describe('extensionToPageSchema', () => {
     })
     const closed = { type: 'disconnected', message: 'Specified native messaging host not found.' }
     expect(extensionToPageSchema.parse(closed)).toEqual(closed)
+  })
+})
+
+describe('hostToPageSchema.error', () => {
+  // The reason is only displayed, so a host that names a failure this page has
+  // no word for must not make the whole message unreadable.
+  it('reads a reason it has no word for as the generic one, keeping the message', () => {
+    expect(
+      hostToPageSchema.parse({ type: 'error', id: 'r1', reason: 'daemon-too-old', message: 'm' }),
+    ).toEqual({ type: 'error', id: 'r1', reason: 'stream-failed', message: 'm' })
+  })
+})
+
+describe('the extension identity a page checks', () => {
+  const same = { version: '1.2.3', protocol: BRIDGE_PROTOCOL_VERSION }
+
+  it('is one shape in the hello reply and in the Firefox window relay', () => {
+    expect(extensionHelloReplySchema.parse({ type: 'hello', ...same })).toEqual({
+      type: 'hello',
+      ...same,
+    })
+    expect(
+      windowFromExtensionSchema.parse({
+        channel: WINDOW_BRIDGE_CHANNEL,
+        from: 'extension',
+        kind: 'hello',
+        ...same,
+      }),
+    ).toMatchObject(same)
+  })
+
+  it('finds no skew in an extension that speaks this protocol', () => {
+    expect(bridgeSkew(same)).toBeNull()
+  })
+
+  it('names both protocols and the remedy when the extension is older', () => {
+    expect(bridgeSkew({ version: '0.0.1', protocol: BRIDGE_PROTOCOL_VERSION - 1 })).toMatch(
+      new RegExp(
+        `0\\.0\\.1.*protocol ${BRIDGE_PROTOCOL_VERSION - 1}.*protocol ${BRIDGE_PROTOCOL_VERSION}.*update the extension`,
+      ),
+    )
+  })
+
+  it('tells a page older than the extension to reload', () => {
+    expect(bridgeSkew({ version: '9.9.9', protocol: BRIDGE_PROTOCOL_VERSION + 1 })).toMatch(
+      /reload this page/,
+    )
+  })
+
+  it('reads an extension that sends no protocol as one that predates the check', () => {
+    const reply = extensionHelloReplySchema.parse({ type: 'hello', version: '0.0.1' })
+    expect(bridgeSkew(reply)).toMatch(/predates the bridge protocol check.*update the extension/)
   })
 })

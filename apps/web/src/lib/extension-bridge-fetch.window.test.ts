@@ -12,8 +12,13 @@ import { connectThroughWindow, windowHello } from './extension-window-port.js'
 // opens is closed after it, so the next test (or repeat) opens its own.
 const dropPort = vi.hoisted(() => ({ current: () => {} }))
 
-vi.mock('./extension-window-port.js', () => ({
-  windowHello: vi.fn(async () => true),
+vi.mock('./extension-window-port.js', async () => ({
+  windowHello: vi.fn(async () => ({
+    type: 'hello',
+    version: '1.0.0',
+    protocol: (await import('@kamiazya/whiteboard-daemon-client/extension-names'))
+      .BRIDGE_PROTOCOL_VERSION,
+  })),
   connectThroughWindow: vi.fn(() => ({
     onMessage: { addListener: () => {} },
     onDisconnect: {
@@ -45,5 +50,13 @@ describe('the bridge without chrome.runtime', () => {
     giveUp.abort()
     await expect(pending).rejects.toThrow()
     expect(connectThroughWindow).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to carry a request through a content script that speaks another protocol', async () => {
+    vi.mocked(windowHello).mockResolvedValueOnce({ type: 'hello', version: '0.0.1' })
+    await expect(
+      extensionBridgeFetch(`${BRIDGE_DAEMON_BASE_URL}/api/runtime/ping`),
+    ).rejects.toThrow(/version 0\.0\.1.*predates the bridge protocol check.*update the extension/)
+    expect(connectThroughWindow).not.toHaveBeenCalled()
   })
 })

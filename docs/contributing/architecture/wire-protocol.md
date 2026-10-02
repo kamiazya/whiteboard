@@ -124,14 +124,38 @@ more fails too. The list is keyed by an enum's members, so a degraded and a
 strict use of the same members share an entry; the per-site cases beside it
 parse an unknown member through each degraded schema to hold the other half.
 
-The split is made by declaration name — `*RequestSchema` may be strict, nothing
-else in `api-contracts/` may. Two guards hold it: `tools/arch-lint`'s
-`api-contract-response-tolerance.test.ts` reads the declarations (and the
-barrel's re-exports), and daemon-client's `answers-tolerant.test.ts` walks the
-live schema graph of everything the package publishes and fails on any strict
-object that is not a request (and, above, on an unlisted strict enum). What no
-test yet covers is a recorded response from an older and a newer daemon parsed
-by the other side's schemas.
+The split is made by declaration name — every `*RequestSchema` is strict and
+nothing else in `api-contracts/` may be. Two guards hold both halves:
+`tools/arch-lint`'s `api-contract-response-tolerance.test.ts` reads the
+declarations (and the barrel's re-exports) and fails on a request without
+`.strict()` as readily as on an answer with it, and daemon-client's
+`answers-tolerant.test.ts` walks the live schema graph of everything the
+package publishes: it fails on any strict object that is not a request, on a
+request that is not strict at its top level, and (above) on an unlisted strict
+enum. What no test yet covers is a recorded response from an older and a newer
+daemon parsed by the other side's schemas.
+
+## The extension bridge across versions
+
+The page, the extension and the native host are released separately, so the
+bridge (`packages/daemon-client/src/extension-bridge.ts`) applies the same
+policy to its own frames:
+
+- **The extension says which protocol it speaks.** Its answer to the page's
+  `hello` (and the content script's, on Firefox) carries `version` and
+  `protocol`, one shape for both from `extensionHelloReplySchema`. The page
+  compares `protocol` with `BRIDGE_PROTOCOL_VERSION` before its first request
+  on a connection and, on a difference, refuses every request with the words
+  from `bridgeSkew` — which side to update — instead of sending frames the
+  other end may misread. An extension that sends no `protocol` predates the
+  check and is reported as such. Raise the constant when a frame changes in a
+  way an older reader would misread rather than strip.
+- **A frame the page cannot read ends the request it names.** A host newer than
+  the page can answer in a shape the page has no schema for; the request the
+  frame carries an `id` for fails with a message that names the version
+  difference and is cancelled at the host, rather than waiting for ever. An
+  `error` frame's `reason` is only displayed, so an unknown reason reads as
+  `stream-failed` and the host's own `message` still reaches the person.
 
 ## Why this matters
 

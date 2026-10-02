@@ -5,6 +5,7 @@
  * bridge already speaks through.
  */
 import {
+  type ExtensionHelloReply,
   type WindowFromExtension,
   type WindowFromPage,
   type WindowFromPageBody,
@@ -35,23 +36,28 @@ function listen(on: (message: WindowFromExtension) => void): () => void {
 }
 
 /**
- * Whether the extension's content script is on this page. A caller that stops
- * caring aborts `signal`, which answers no and lets go of the window now
- * rather than when the timer fires.
+ * What the extension's content script says of itself, or `null` when it is
+ * not on this page. A caller that stops caring aborts `signal`, which answers
+ * `null` and lets go of the window now rather than when the timer fires.
  */
-export function windowHello(timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
+export function windowHello(
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<ExtensionHelloReply | null> {
   return new Promise((resolve) => {
-    const finish = (present: boolean) => {
+    const finish = (reply: ExtensionHelloReply | null) => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', abandon)
       stop()
-      resolve(present)
+      resolve(reply)
     }
-    const abandon = () => finish(false)
+    const abandon = () => finish(null)
     const stop = listen((message) => {
-      if (message.kind === 'hello') finish(true)
+      if (message.kind === 'hello') {
+        finish({ type: 'hello', version: message.version, protocol: message.protocol })
+      }
     })
-    const timer = setTimeout(() => finish(false), timeoutMs)
+    const timer = setTimeout(() => finish(null), timeoutMs)
     if (signal?.aborted) return abandon()
     signal?.addEventListener('abort', abandon, { once: true })
     post({ kind: 'hello' })

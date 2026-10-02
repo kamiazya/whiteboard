@@ -20,13 +20,17 @@ export const workspaceNamesSchema = z.object({
 })
 
 // `name: ''` deletes the stored name and falls back to the path/workspaceId.
-export const setNameRequestSchema = z.object({
-  name: z.string(),
-})
+export const setNameRequestSchema = z
+  .object({
+    name: z.string(),
+  })
+  .strict()
 
-export const setPinnedRequestSchema = z.object({
-  pinned: z.boolean(),
-})
+export const setPinnedRequestSchema = z
+  .object({
+    pinned: z.boolean(),
+  })
+  .strict()
 
 // OperatorInfo is declared in server-core beside the VersionHistory seam
 // and re-exported here so this barrel stays the one place apps/web reads a
@@ -54,10 +58,12 @@ export const versionEntryAnswerSchema = versionEntrySchema.extend({
 // `operator` here is `requestOperatorSchema`, NOT the full operator: a caller
 // may say which KIND of party asked and what to show a reader, and may not
 // name the device. See its definition in server-core for why.
-export const saveVersionRequestSchema = z.object({
-  label: z.string().optional(),
-  operator: requestOperatorSchema.optional(),
-})
+export const saveVersionRequestSchema = z
+  .object({
+    label: z.string().optional(),
+    operator: requestOperatorSchema.optional(),
+  })
+  .strict()
 
 // POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 // Body is optional. Two restore modes share the same endpoint:
@@ -69,17 +75,21 @@ export const saveVersionRequestSchema = z.object({
 //     doc (same semantics as the default mode, not a persistence swap) so
 //     any client connected to that canvas stays on the same CRDT lineage.
 //     Replaces what the now-removed `checkpoint_restore` flow did.
-export const restoreVersionRequestSchema = z.object({
-  targetPath: z.string().trim().min(1).optional(),
-  overwrite: z.boolean().optional(),
-  /**
-   * In-place mode only: roll the document AND its descendants back to this
-   * version — descendants revert, documents deleted since come back, and
-   * documents created since are deleted (evacuated through the trash).
-   * Requires a workspace-scoped version; incompatible with `targetPath`.
-   */
-  subtree: z.boolean().optional(),
-})
+export const restoreVersionRequestSchema = z
+  .object({
+    targetPath: z.string().trim().min(1).optional(),
+    overwrite: z.boolean().optional(),
+    /**
+     * In-place mode only: roll the document AND its descendants back to this
+     * version — descendants revert, documents deleted since come back, and
+     * documents created since are deleted (evacuated through the trash).
+     * Requires a workspace-scoped version; incompatible with `targetPath`.
+     * Refusing an undeclared key is what keeps an older daemon from reading a
+     * newer client's rollback as the milder in-place restore.
+     */
+    subtree: z.boolean().optional(),
+  })
+  .strict()
 
 /**
  * What a restore answers, one arm per mode: a restore INTO a target names
@@ -92,12 +102,6 @@ export const restoreVersionResponseSchema = z.union([
   z.object({ ok: z.literal(true) }),
 ])
 export type RestoreVersionResponse = z.infer<typeof restoreVersionResponseSchema>
-
-export const exportDocumentJsonRequestSchema = z.object({
-  includeCustomFields: z.boolean().optional(),
-  outputPath: z.string().optional(),
-  overwrite: z.boolean().optional(),
-})
 
 /**
  * A past state, as the History panel PREVIEWS it before deciding to restore.
@@ -160,9 +164,11 @@ export const deleteDocumentResponseSchema = z.object({
 })
 
 // PUT /api/workspaces/:workspaceId/documents/:path/path — request body.
-export const renameDocumentPathRequestSchema = z.object({
-  path: z.string().trim().min(1),
-})
+export const renameDocumentPathRequestSchema = z
+  .object({
+    path: z.string().trim().min(1),
+  })
+  .strict()
 
 // PUT /api/workspaces/:workspaceId/documents/:path/path — success body.
 export const renameDocumentPathResponseSchema = z.object({
@@ -232,9 +238,11 @@ export const listWorkspacesResponseSchema = z.object({
  * Choosing the address is what RENAME is for, one call later, where a
  * collision can be reported against a workspace that already exists.
  */
-export const createWorkspaceRequestSchema = z.object({
-  displayName: workspaceDisplayNameSchema,
-})
+export const createWorkspaceRequestSchema = z
+  .object({
+    displayName: workspaceDisplayNameSchema,
+  })
+  .strict()
 
 /**
  * PATCH /api/workspaces/:workspaceId — rename the two chosen layers.
@@ -245,10 +253,12 @@ export const createWorkspaceRequestSchema = z.object({
  * the segment — which is the one reading a caller would never intend, and the
  * reason `RenameWorkspaceInput` has no way to clear a layer at all.
  */
-export const renameWorkspaceRequestSchema = z.object({
-  segment: workspaceSegmentSchema.optional(),
-  displayName: workspaceDisplayNameSchema.optional(),
-})
+export const renameWorkspaceRequestSchema = z
+  .object({
+    segment: workspaceSegmentSchema.optional(),
+    displayName: workspaceDisplayNameSchema.optional(),
+  })
+  .strict()
 
 export const documentSummarySchema = z.object({
   path: z.string(),
@@ -305,7 +315,6 @@ export type SetPinnedRequest = z.infer<typeof setPinnedRequestSchema>
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export type SaveVersionRequest = z.infer<typeof saveVersionRequestSchema>
 export type RestoreVersionRequest = z.infer<typeof restoreVersionRequestSchema>
-export type ExportDocumentJsonRequest = z.infer<typeof exportDocumentJsonRequestSchema>
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>
 export type SaveVersionResponse = z.infer<typeof saveVersionResponseSchema>

@@ -10,7 +10,10 @@ import type {
   ExtensionHelloReply,
   ExtensionToPage,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
-import { NATIVE_HOST_NAME } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import {
+  BRIDGE_PROTOCOL_VERSION,
+  NATIVE_HOST_NAME,
+} from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { type AdmittingManifest, admitsOrigin } from './manifest.js'
 
 /** The part of a `runtime.Port` the relay uses. */
@@ -92,6 +95,7 @@ export function installRelay(api: ExtensionApi, matches: readonly string[]): voi
       sendResponse({
         type: 'hello',
         version: api.runtime.getManifest().version,
+        protocol: BRIDGE_PROTOCOL_VERSION,
       } satisfies ExtensionHelloReply)
     }
   })

@@ -10,7 +10,9 @@
 import {
   type BridgeMethod,
   bridgeMethodSchema,
+  bridgeSkew,
   type ExtensionHello,
+  type ExtensionHelloReply,
   type ExtensionToPage,
   extensionHelloReplySchema,
   extensionToPageSchema,
@@ -40,23 +42,39 @@ function extensionRuntime(): ExtensionRuntime | null {
     : null
 }
 
-/** Whether the whiteboard extension is installed and admits this page. */
-export function extensionPresent(timeoutMs = 1_500, signal?: AbortSignal): Promise<boolean> {
+/** What the extension says of itself, or `null` when it is not there to ask. */
+function helloReply(timeoutMs: number, signal?: AbortSignal): Promise<ExtensionHelloReply | null> {
   const runtime = extensionRuntime()
   if (runtime === null) return windowHello(timeoutMs, signal)
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(false), timeoutMs)
+    const timer = setTimeout(() => resolve(null), timeoutMs)
     try {
       const hello: ExtensionHello = { type: 'hello' }
       runtime.sendMessage(WHITEBOARD_EXTENSION_ID, hello, (reply) => {
         clearTimeout(timer)
-        resolve(extensionHelloReplySchema.safeParse(reply).success)
+        const parsed = extensionHelloReplySchema.safeParse(reply)
+        resolve(parsed.success ? parsed.data : null)
       })
     } catch {
       clearTimeout(timer)
-      resolve(false)
+      resolve(null)
     }
   })
+}
+
+/** Whether the whiteboard extension is installed and admits this page. */
+export async function extensionPresent(timeoutMs = 1_500, signal?: AbortSignal): Promise<boolean> {
+  return (await helloReply(timeoutMs, signal)) !== null
+}
+
+/**
+ * Why the extension that answers cannot carry this page's requests, or `null`
+ * when it can — or when none answers, which opening the port reports in its
+ * own words.
+ */
+async function extensionSkew(): Promise<string | null> {
+  const reply = await helloReply(1_500)
+  return reply === null ? null : bridgeSkew(reply)
 }
 
 /** Response statuses the Fetch spec gives no body. */
@@ -75,11 +93,18 @@ interface Pending {
  * A `fetch` that speaks through one extension port, opened on first use and
  * reopened after the extension loses its host.
  */
-export function createBridgeFetch(connect: () => BridgePort | null): typeof globalThis.fetch {
+export function createBridgeFetch(
+  connect: () => BridgePort | null,
+  skew: () => Promise<string | null> = async () => null,
+): typeof globalThis.fetch {
   const pending = new Map<string, Pending>()
   let port: BridgePort | null = null
+  // Asked once per connection: the extension's protocol cannot change under
+  // an open port, and a replaced extension drops it.
+  let skewed: Promise<string | null> | null = null
 
   const failAll = (reason: Error) => {
+    skewed = null
     for (const request of pending.values()) {
       request.reject(reason)
       request.body?.error(reason)
@@ -90,7 +115,10 @@ export function createBridgeFetch(connect: () => BridgePort | null): typeof glob
 
   const onMessage = (raw: unknown) => {
     const parsed = extensionToPageSchema.safeParse(raw)
-    if (!parsed.success) return
+    if (!parsed.success) {
+      abandonUnreadable(pending, raw)
+      return
+    }
     const message = parsed.data
     if (message.type === 'disconnected') {
       failAll(new TypeError(`the whiteboard extension lost its host: ${message.message}`))
@@ -120,6 +148,8 @@ export function createBridgeFetch(connect: () => BridgePort | null): typeof glob
     const method = carriedMethod(request)
     request.signal.throwIfAborted()
     const body = await requestBody(request)
+    const incompatible = await (skewed ??= skew())
+    if (incompatible !== null) throw new TypeError(incompatible)
     return await sendRequest(open(), pending, request, method, body)
   }
 }
@@ -179,6 +209,26 @@ async function requestBody(request: Request): Promise<string | undefined> {
   return bytes.length === 0 ? undefined : bytesToBase64(bytes)
 }
 
+/**
+ * A host newer than this page can answer in a shape the page has no schema
+ * for. Dropping it leaves the request it names waiting for ever, so the
+ * request ends instead, and says why: the cause is a version difference,
+ * which nothing else on the page can show.
+ */
+function abandonUnreadable(pending: Map<string, Pending>, raw: unknown): void {
+  const id = typeof raw === 'object' && raw !== null && 'id' in raw ? raw.id : undefined
+  const request = typeof id === 'string' ? pending.get(id) : undefined
+  if (request === undefined) return
+  const reason = new TypeError(
+    'the whiteboard extension sent a message this page cannot read — the extension and this page are probably different versions',
+  )
+  request.reject(reason)
+  request.body?.error(reason)
+  // Forgets the request, and tells the host to stop working on an answer
+  // nothing here will read.
+  request.cancel?.()
+}
+
 /** Lands one host message on the request it belongs to. */
 function settle(
   pending: Map<string, Pending>,
@@ -232,4 +282,5 @@ function settle(
  */
 export const extensionBridgeFetch = createBridgeFetch(
   () => extensionRuntime()?.connect(WHITEBOARD_EXTENSION_ID) ?? connectThroughWindow(),
+  extensionSkew,
 )

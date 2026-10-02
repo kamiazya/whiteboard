@@ -14,6 +14,16 @@ export const WHITEBOARD_EXTENSION_ID = 'ckgipndlpblkhiplhnbbdnpnibflplje'
 export const WHITEBOARD_GECKO_ID = 'whiteboard@kamiazya.github.io'
 
 /**
+ * The version of the frames the page, the extension and the native host
+ * exchange. The three are released separately, so a page cannot assume the
+ * extension beside it was built from the same schemas; the extension says
+ * which it speaks when asked whether it is installed, and the page refuses to
+ * use one it does not match. Raise it when a frame changes in a way an
+ * older reader would misread rather than strip.
+ */
+export const BRIDGE_PROTOCOL_VERSION = 1
+
+/**
  * Firefox lets no page message an extension directly, so a content script
  * relays between the page's window and the extension; this names the
  * messages that belong to that relay.
