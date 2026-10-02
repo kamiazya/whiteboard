@@ -30,10 +30,7 @@ import {
   createCredentialResolver,
 } from './security/credential-resolver.js'
 import { createDaemonIdentity } from './security/daemon-identity.js'
-import {
-  buildMcpProtectedResourceMetadata,
-  createLocalTokenMcpHttpAuthStrategy,
-} from './security/mcp-auth.js'
+import { createLocalTokenMcpHttpAuthStrategy } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware } from './security/mcp-http.js'
 import {
   callerUserId,
@@ -239,10 +236,7 @@ function credentialWiring(options: AppOptions, token: string | undefined) {
   })
   const mcpAuth =
     localDaemon !== undefined
-      ? createLocalTokenMcpHttpAuthStrategy({
-          resolver: credentialResolver,
-          protectedResourceMetadata: localDaemon.mcpProtectedResourceMetadata,
-        })
+      ? createLocalTokenMcpHttpAuthStrategy({ resolver: credentialResolver })
       : undefined
   return { credentialResolver, mcpAuth }
 }
@@ -306,19 +300,6 @@ export function createApp(options: AppOptions) {
   })
 
   mountApiAuth(app, options, credentialResolver)
-
-  if (mcpAuth) {
-    app.get('/.well-known/oauth-protected-resource', (c) => {
-      const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
-      if (!metadata) return c.notFound()
-      return c.json(metadata)
-    })
-    app.get('/.well-known/oauth-protected-resource/mcp', (c) => {
-      const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
-      if (!metadata) return c.notFound()
-      return c.json(metadata)
-    })
-  }
 
   mountMcpMiddleware(app, options, mcpAuth)
 

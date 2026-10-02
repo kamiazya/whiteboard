@@ -9,7 +9,6 @@ import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
-import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 
 const tmp = withTempDataDir('whiteboard-app-test-')
 
@@ -30,14 +29,10 @@ const { clearCache } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
-function createRuntimeOptions(
-  token?: string,
-  options?: { protectedResourceMetadata?: McpProtectedResourceMetadataConfig },
-) {
+function createRuntimeOptions(token?: string) {
   return {
     authMode: 'local-daemon' as const,
     token,
-    mcpProtectedResourceMetadata: options?.protectedResourceMetadata,
     // The root's deps, over the memory store: nothing here reads a document.
     serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
@@ -182,47 +177,16 @@ describe('createApp daemon mutation auth', () => {
     })
   })
 
-  it('serves protected resource metadata and advertises it in WWW-Authenticate when configured', async () => {
-    const app = createApp(
-      createRuntimeOptions('secret', {
-        protectedResourceMetadata: {
-          authorizationServers: ['https://auth.example.com'],
-          scopesSupported: ['canvas:read', 'canvas:write'],
-        },
-      }),
-    )
+  it('publishes no RFC 9728 metadata: the daemon authorizes /mcp with its own token', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
 
-    const metadataRes = await app.request(
-      'http://127.0.0.1/.well-known/oauth-protected-resource/mcp',
-    )
-    expect(metadataRes.status).toBe(200)
-    await expect(metadataRes.json()).resolves.toEqual({
-      resource: 'http://127.0.0.1/mcp',
-      authorization_servers: ['https://auth.example.com'],
-      scopes_supported: ['canvas:read', 'canvas:write'],
-    })
-
-    const unauthorizedRes = await app.request('http://127.0.0.1/mcp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'unauthed-test', version: '1.0.0' },
-        },
-      }),
-    })
-
-    expect(unauthorizedRes.status).toBe(401)
-    expect(unauthorizedRes.headers.get('WWW-Authenticate')).toBe(
-      'Bearer resource_metadata="http://127.0.0.1/.well-known/oauth-protected-resource/mcp"',
-    )
+    for (const path of [
+      '/.well-known/oauth-protected-resource',
+      '/.well-known/oauth-protected-resource/mcp',
+    ]) {
+      const res = await app.request(`http://127.0.0.1${path}`)
+      expect(res.status, path).toBe(404)
+    }
   })
 
   it('returns package-synced server metadata and tool capabilities on initialize', async () => {

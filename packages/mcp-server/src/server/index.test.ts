@@ -134,31 +134,6 @@ describe('server/index main() listens on its socket alone', () => {
   })
 })
 
-// The local daemon is not an OAuth resource: no root passes discovery metadata
-// to the server, and a `WHITEBOARD_MCP_*` variable set in its environment is
-// not a setting anyone documents or honours.
-describe('server/index main() reads no MCP discovery settings from the environment', () => {
-  afterEach(() => {
-    vi.clearAllMocks()
-    vi.unstubAllEnvs()
-    delete process.env.WHITEBOARD_TOKEN
-  })
-
-  it('hands startHttpServer no protected-resource metadata even when the variables are set', async () => {
-    process.env.WHITEBOARD_TOKEN = 'test-token'
-    vi.stubEnv('WHITEBOARD_MCP_AUTHORIZATION_SERVERS', 'https://auth.example.com')
-    vi.stubEnv('WHITEBOARD_MCP_RESOURCE', 'https://mcp.example.com/mcp')
-    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    try {
-      await main()
-      const [options] = startHttpServerMock.mock.calls[0] as unknown as [Record<string, unknown>]
-      expect(options).not.toHaveProperty('mcpProtectedResourceMetadata')
-    } finally {
-      stdoutSpy.mockRestore()
-    }
-  })
-})
-
 describe('server/index main() storage settings startup gate', () => {
   afterEach(() => {
     vi.clearAllMocks()

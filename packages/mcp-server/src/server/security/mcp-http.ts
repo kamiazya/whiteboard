@@ -17,7 +17,6 @@ export function createMcpHttpAuthMiddleware(strategy: McpHttpAuthStrategy): Midd
     const decision = await strategy.authorize({
       method: c.req.method,
       authorizationHeader: c.req.header('authorization'),
-      requestUrl: c.req.url,
     })
     if (!decision.ok) {
       return mcpHttpError(decision.status, decision.message, decision.headers)

@@ -173,13 +173,4 @@ export const RULES: Record<string, Rule> = {
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },
   'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },
-  // RFC 9728 discovery: with no OAuth resource metadata the answer is a
-  // bare 404, which is what a discovery client expects and not a refusal
-  // this lane's JSON contract covers.
-  'GET /.well-known/oauth-protected-resource': {
-    skip: 'RFC 9728 discovery answers a bare 404 when no OAuth metadata exists',
-  },
-  'GET /.well-known/oauth-protected-resource/mcp': {
-    skip: 'RFC 9728 discovery answers a bare 404 when no OAuth metadata exists',
-  },
 }
