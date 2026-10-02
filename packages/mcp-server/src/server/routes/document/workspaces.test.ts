@@ -250,7 +250,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
   })
 
-  it('returns 200 { ok: true }, parses with deleteDocumentResponseSchema, and the canvas is gone from list/exists/snapshot', async () => {
+  it('returns 200 { ok: true }, parses with deleteDocumentResponseSchema, and the canvas is gone from list/snapshot', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const app = createDocumentRouter({ serverDeps })
 
@@ -264,9 +264,6 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     const listRes = await app.request('/api/workspaces/session1/documents')
     const listJson = (await listRes.json()) as { documents: { path: string }[] }
     expect(listJson.documents.map((c) => c.path)).not.toContain('canvas-a')
-
-    const existsRes = await app.request('/api/w/session1/document/canvas-a/exists')
-    expect(await existsRes.json()).toEqual({ exists: false })
 
     const snapshotRes = await app.request('/api/w/session1/document/canvas-a/snapshot')
     expect(snapshotRes.status).toBe(404)

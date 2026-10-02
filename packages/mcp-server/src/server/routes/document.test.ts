@@ -51,10 +51,6 @@ describe('createDocumentRouter composition', () => {
       kind: 'spatial',
     })
 
-    const exists = await app.request('/api/w/ws1/document/notes/2026/plan/exists')
-    expect(exists.status).toBe(200)
-    expect(await exists.json()).toEqual({ exists: true })
-
     const snapshot = await app.request('/api/w/ws1/document/notes/2026/plan/snapshot')
     expect(snapshot.status).toBe(200)
 

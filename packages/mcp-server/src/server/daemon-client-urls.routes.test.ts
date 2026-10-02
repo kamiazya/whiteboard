@@ -48,7 +48,6 @@ interface Sample {
 // new action cannot be added without saying here how it is requested.
 const DOCUMENT_ACTION_METHODS: Record<DocumentApiAction, Method> = {
   snapshot: 'GET',
-  exists: 'GET',
   update: 'POST',
   export: 'POST',
   'export-svg': 'POST',

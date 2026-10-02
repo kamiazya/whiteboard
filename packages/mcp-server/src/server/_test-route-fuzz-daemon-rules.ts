@@ -3,7 +3,6 @@
 // which reads the keys to tell the routes only server mode mounts from the
 // ones both compositions serve.
 import {
-  canvasExistsResponseSchema,
   compactWorkspaceResultSchema,
   createWorkspaceRequestSchema,
   deleteDocumentResponseSchema,
@@ -119,10 +118,6 @@ export const RULES: Record<string, Rule> = {
   'DELETE /api/workspaces/:workspaceId/documents/*': {
     answers: 'json',
     response: deleteDocumentResponseSchema,
-  },
-  'GET /api/w/:workspaceId/document/*/exists': {
-    answers: 'json',
-    response: canvasExistsResponseSchema,
   },
   'GET /api/w/:workspaceId/document/*/snapshot': { answers: 'bytes' },
   'GET /api/w/:workspaceId/document/*/client-count': {

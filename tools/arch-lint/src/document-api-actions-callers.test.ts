@@ -40,12 +40,10 @@ const LEDGER: Readonly<Record<string, string>> = {
     'only the extension bridge smoke (apps/extension/scripts/smoke-kit.mjs) calls it, to observe that a page attached its stream; no product caller, so it stays a diagnostic until one reads it',
   export: NO_CALLER_REASON_EXPORT,
   'export-svg': NO_CALLER_REASON_EXPORT,
-  exists:
-    'no first-party caller; the route is deleted end to end by the commit that follows this one',
 }
 
 /** The ledger may shrink; raising it is a decision made in a diff. */
-const LEDGER_CEILING = 4
+const LEDGER_CEILING = 3
 
 const SCAN_DIRS: readonly string[] = [
   ...SCAN_ROOTS.filter((root) => !root.startsWith('tools/')),

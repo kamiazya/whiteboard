@@ -99,36 +99,6 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
   })
 })
 
-describe('GET /api/w/:workspaceId/document/:path/exists', () => {
-  it('returns exists:true for a canvas that was actually saved', async () => {
-    const doc = new LoroDoc()
-    await saveDocument('session1', 'canvas-a', doc)
-
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/w/session1/document/canvas-a/exists')
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ exists: true })
-  })
-
-  it('returns exists:false for an unregistered canvas without creating it', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/w/session1/document/never-created/exists')
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ exists: false })
-
-    // GET /exists must never have the getDoc/loadDocument side effect that
-    // /snapshot has: the canvas should still be absent afterward.
-    const followUp = await app.request('/api/w/session1/document/never-created/exists')
-    expect(await followUp.json()).toEqual({ exists: false })
-  })
-
-  it('returns 400 for an invalid path', async () => {
-    const app = createDocumentRouter({ serverDeps })
-    const res = await app.request('/api/w/session1/document/bad.path/exists')
-    expect(res.status).toBe(400)
-  })
-})
-
 describe('POST /api/w/:workspaceId/document/:path/update', () => {
   it('applies a Loro update to the document', async () => {
     // Create the change in the client-side doc.
