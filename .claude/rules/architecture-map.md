@@ -82,7 +82,7 @@ know, because the reader who trips them is elsewhere:
 - **`createServer(deps)` mounts `/api/v1` and the MCP tools only.** The keeper
   protocol the web app syncs through (`/api/sync/*`, workspace-document,
   workspaces, trash, names, files) lives in `mcp-server/src/server/routes/`;
-  an arch-lint portability scan counts which of those files could run off Node
+  `route-portability.test.ts` counts which of those files could run off Node
   (shrink-only), and ADR-0052's correction note records that lifting them is
   an open decision.
 
