@@ -66,6 +66,13 @@ mode (save paths emitting upsert/remove events into one long-lived
 instance) reuses the same class, so the two modes cannot drift. Switching
 is a wiring change gated on measurement, not a redesign.
 
+> **2026-10-02 note.** The `seq`/tombstone API described above is deleted.
+> `ReferenceAggregate` lives in `reference-graph` and is fed one
+> `upsert(id, facts)` per listed document by `backlinksIn`; decision 5's
+> cache superseded the event feed, so no caller ever sent a `remove` or a
+> stale `seq`, and the property below is now order-independence over a
+> listing plus an independent inverse-of-forward-references oracle.
+
 ### 4. Command-based PBT pins the semantics structurally
 
 Two property suites in `server-core/src/references/` are the enforcement:
