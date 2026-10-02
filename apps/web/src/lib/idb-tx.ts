@@ -7,7 +7,7 @@
  * slightly differently.
  */
 
-import { z } from 'zod'
+import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { openWhiteboardDb } from './browser-idb.js'
 
 /** One IndexedDB request as a promise. */
@@ -70,12 +70,10 @@ export async function inTransaction<T>(
  * rejects a perfectly good record as corrupt, and every document in the
  * database reads as damaged.
  *
- * `Object.prototype.toString` asks the internal brand instead, which crosses
+ * `uint8ArrayAnyRealmSchema` asks the internal brand instead, which crosses
  * realms. The value is COPIED rather than passed through, so everything
  * downstream — `loro.import` included — gets an array from this realm.
  */
-export const storedBytesSchema = z
-  .custom<Uint8Array>((value) => Object.prototype.toString.call(value) === '[object Uint8Array]', {
-    message: 'expected stored bytes',
-  })
-  .transform((value) => new Uint8Array(value as Uint8Array))
+export const storedBytesSchema = uint8ArrayAnyRealmSchema.transform(
+  (value) => new Uint8Array(value),
+)
