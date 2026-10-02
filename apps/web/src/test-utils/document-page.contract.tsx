@@ -7,7 +7,7 @@
  * exists to name: the daemon page shipped the editor's file seams while the
  * same page in browser mode passed none of them, and every suite stayed
  * green, because the missing test is an ABSENT test rather than a failing
- * one. Same shape as `lib/versions-backend.contract.ts`, one level up.
+ * one. Same shape as `versions-backend.contract.ts` beside this file.
  *
  * Each keeper supplies a fixture: how to mount the page open on a set of
  * documents, what label its picker gives a document (the browser carries a

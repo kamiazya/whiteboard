@@ -1,6 +1,6 @@
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
-import type { PastDocument, VersionsBackend } from './versions-backend.js'
+import type { PastDocument, VersionsBackend } from '../lib/versions-backend.js'
 
 /**
  * The behavioural contract every `VersionsBackend` must satisfy, written once

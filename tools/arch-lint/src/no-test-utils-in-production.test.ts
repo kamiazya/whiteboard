@@ -45,8 +45,6 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
  * sides, so it cannot outlive that.
  */
 const TEST_FRAMEWORK_ALLOWLIST: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/versions-backend.contract.ts':
-    'a backend conformance suite: the contract tests of each versions backend run it, and no production module imports it, so it is test scaffolding under a name that says neither',
   'apps/web/src/docs-snapshots/_helpers.ts':
     'shared support of the doc-screenshot vitest browser tests (`vitest/browser` locators): the directory holds only those tests and what they share, and nothing outside it imports it',
   'apps/web/src/docs-snapshots/_setup.ts':

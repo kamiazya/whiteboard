@@ -47,7 +47,6 @@ import {
 
 /** Dead outright: not even used inside their own file, only imported by a test. */
 const NO_USE_BESIDE_TESTS: readonly string[] = [
-  'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract',
 ]
 
 /**
@@ -342,7 +341,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 158
+const DEBT_CEILING = 157
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 26
