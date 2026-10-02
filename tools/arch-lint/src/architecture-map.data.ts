@@ -26,7 +26,7 @@ interface BoundaryFileExemption {
   readonly reason: string
 }
 
-export interface PackageArchEntry {
+interface PackageArchEntry {
   readonly allowedInternalDeps: readonly string[]
   readonly allowedThirdParty: readonly string[]
   readonly exemptBoundaryViolationKinds?: readonly BoundaryViolationKind[]

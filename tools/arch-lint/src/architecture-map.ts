@@ -3,7 +3,7 @@ import type { BoundaryViolationKind } from './scanner.js'
 
 // The per-package table lives in `architecture-map.data.ts` (so this file stays
 // under its size budget); every consumer keeps importing it from here.
-export { ARCHITECTURE_MAP, type PackageArchEntry } from './architecture-map.data.js'
+export { ARCHITECTURE_MAP } from './architecture-map.data.js'
 
 /**
  * Cycles `cycle-check.ts`'s value-import graph detects today that are NOT
