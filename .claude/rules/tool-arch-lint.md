@@ -123,7 +123,16 @@ checked from both sides: it must keep importing `di/`, or the entry is stale.
 
 ## `adapter-mechanic-check.ts` and its three lists
 
-**A mechanic is named by its FULL path under `store/`, at whatever depth**, so
+**What counts as a mechanic is wider than `store/`**: a `security/*-store` (the
+people, session, key and invitation rows), anything under the daemon's own
+`daemon/` directory, and `tenant/data-layout`. Their edges are spelled with the
+directory (`security/member-profile-store`, `daemon/log-rotation`,
+`tenant/data-layout`) so they cannot be read as a same-named `store/` module.
+Policy beside them (`bearer-token`, `credential-resolver`, the tenant id) is
+translation an adapter is entitled to, and is not matched. A `_test-*` helper
+under an adapter tree is scaffolding, not an adapter, and is skipped.
+
+**A mechanic under `store/` is named by its FULL path, at whatever depth**, so
 the database layer reads as `db/<module>`. It used to be invisible: the matcher
 read a single path segment, so every `store/db/**` import from an adapter
 passed silently. That was a blind spot rather than a decision, and it read as
@@ -135,7 +144,7 @@ further down.
 
 **`ADAPTERS_REACHING_MECHANICS`** records the edges that exist today.
 
-**`ADAPTERS_REACHING_MECHANICS_CEILING` pins the count by equality — 21 today.**
+**`ADAPTERS_REACHING_MECHANICS_CEILING` pins the count by equality — see the constant.**
 It exists because the two both-sides guards reject a fabricated entry and a
 stale one and have nothing to say about a real new edge added along with its
 allowlist line, which is the ordinary way a list grows. Measured: a genuine
@@ -147,7 +156,7 @@ fails until someone lowers it. ADR-0018 is **Accepted** (2026-08-31) and
 carried the burn-down order, and that scheduled burn-down is **COMPLETE**
 (2026-09-02): `restore.ts`, `live-doc.ts`, `workspace-document.ts` and
 the since-deleted websocket route were all translation-only over the `LiveDocuments` /
-`WorkspaceDocuments` seams. The 21 edges left belong to the unscheduled
+`WorkspaceDocuments` seams. The edges left belong to the unscheduled
 adapters; paying one off still lowers the ceiling the same way.
 
 `corrupt-stored-data` is excluded and says why: an error taxonomy an adapter

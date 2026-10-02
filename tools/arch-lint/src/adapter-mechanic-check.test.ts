@@ -115,6 +115,58 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
     })
   })
 
+  // `store/` is where the original mechanics live, and it is not the only place
+  // this root keeps something that persists, schedules or lays out disk. The
+  // people stores under `security/`, the daemon's own housekeeping and the
+  // tenant data layout are the same kind of thing, so a route reaching one is
+  // the same defect with a different directory name.
+  describe('the matcher sees mechanics that live outside store/', () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'arch-lint-adapter-outside-store-'))
+    afterAll(() => rmSync(fixture, { recursive: true, force: true }))
+
+    mkdirSync(join(fixture, 'routes', 'document'), { recursive: true })
+    mkdirSync(join(fixture, 'mcp'), { recursive: true })
+    writeFileSync(
+      join(fixture, 'routes', 'people.ts'),
+      [
+        "import type { MemberProfileStore } from '../security/member-profile-store.js'",
+        "import { SESSION_COOKIE } from '../security/sign-in-session-store.js'",
+        "import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'",
+        "import { workspaceFilesDir } from '../tenant/data-layout.js'",
+        // Policy, parsing and contracts under security/ are not storage: an
+        // adapter reading a bearer header or a credential type is translating.
+        "import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'",
+        "import type { DaemonIdentity } from '../security/daemon-identity.js'",
+        // A tenant id is a value, not the layout that places files by it.
+        "import { SELF_HOST_TENANT_ID } from '../tenant/id.js'",
+        'export const x = [purgeOldDaemonLogs, workspaceFilesDir]',
+      ].join('\n'),
+    )
+    writeFileSync(
+      join(fixture, 'routes', 'document', 'nested.ts'),
+      "import { tenantRoot } from '../../tenant/data-layout.js'\nexport const y = tenantRoot\n",
+    )
+    writeFileSync(
+      join(fixture, 'routes', '_test-helper.ts'),
+      "import { createWorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'\n",
+    )
+    writeFileSync(
+      join(fixture, 'mcp', 'tools.ts'),
+      "import { createInvitationStore } from '../security/invitation-store.js'\n",
+    )
+
+    it('names each by its directory, so security/x cannot be read as store/x', () => {
+      expect(findAdapterMechanicEdges(fixture, [])).toEqual([
+        'mcp/tools.ts -> security/invitation-store',
+        'routes/document/nested.ts -> tenant/data-layout',
+        'routes/people.ts -> daemon/log-rotation',
+        'routes/people.ts -> security/member-profile-store',
+        'routes/people.ts -> security/sign-in-session-store',
+        'routes/people.ts -> tenant/data-layout',
+      ])
+    })
+  })
+
   // Guarded from both sides too. An exemption is a CLASSIFICATION — "this
   // file is not an adapter" — so it has to keep being true of a file that
   // still exists and still has edges to suppress. One that suppresses nothing

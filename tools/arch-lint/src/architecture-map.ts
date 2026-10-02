@@ -434,6 +434,34 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/files.ts -> version-store',
   'routes/files.ts -> workspace-lock',
   'routes/runtime.ts -> document-store',
+  // Mechanics kept outside `store/`, counted since the scan learned to look
+  // for them. Each is a row-keeping store or a disk layout a route holds by
+  // type or by value; none is an operation a second surface would re-write
+  // yet, so they are ledgered rather than moved.
+  //
+  // The route takes the store as an injected dependency and calls it for a
+  // single read or write with no rule of its own around it.
+  'routes/invitation-link.ts -> security/invitation-store',
+  'routes/replica-key.ts -> security/workspace-replica-key-store',
+  'routes/workspace-people.ts -> security/member-profile-store',
+  // The sign-in routes drive the attempt and session stores around a
+  // provider redirect: the attempt row carries the state/nonce across it, and
+  // the session cookie name is the one constant the route shares with the
+  // store that mints it.
+  'routes/sign-in.ts -> security/sign-in-attempt-store',
+  'routes/sign-in.ts -> security/sign-in-session-store',
+  // The people-administration decisions (self-refusal, user existence,
+  // administration freshness) are written inline in the route, and the
+  // operator's CLI commands act on the same stores without them.
+  'routes/tenant-people.ts -> security/invitation-store',
+  'routes/tenant-people.ts -> security/member-profile-store',
+  'routes/tenant-people.ts -> security/tenant-administrator-store',
+  // `POST /api/runtime/logs/prune` is daemon housekeeping with one caller;
+  // no second surface asks for it, so there is no operation to share yet.
+  'routes/runtime.ts -> daemon/log-rotation',
+  // Where a workspace's files sit on disk: the route joins the layout itself,
+  // from a data directory and tenant id it fetches on its own.
+  'routes/files.ts -> tenant/data-layout',
 ]
 
 /**
@@ -461,8 +489,14 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * `routes/document/thumbnails.ts` reached `version-store`, and the route is
  * gone with the feature. Debt paid by deletion rather than by relocation,
  * which is the cheapest way this number ever comes down.
+ *
+ * It went 14 -> 24 when the scan widened past `store/` to the keeper's
+ * other mechanics: ten edges that were already there, never debt anyone had
+ * been asked about. Six are `security/*-store` (people, sessions, keys,
+ * invitations), one is `daemon/log-rotation`, one is `tenant/data-layout`.
+ * That was a measurement catching up with the code, not new debt.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 14
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 24
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

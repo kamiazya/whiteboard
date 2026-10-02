@@ -19,8 +19,38 @@ import { walk } from './scan-roots.js'
  */
 const ADAPTER_DIRS = ['routes', 'mcp'] as const
 
+// A `_test-*` helper is scaffolding a test builds an app from, not a route a
+// request reaches, so what it imports says nothing about an adapter.
 function isAdapterSource(file: string): boolean {
-  return file.endsWith('.ts') && !file.endsWith('.test.ts')
+  return file.endsWith('.ts') && !file.endsWith('.test.ts') && !/(^|[\\/])_test-/.test(file)
+}
+
+/**
+ * Where a mechanic lives, and how its edge is spelled.
+ *
+ * `store/` holds most of them and is named by its path beneath it, unprefixed,
+ * which is how the allowlist has always read. The others are the same kind of
+ * thing kept elsewhere: a `*-store` under `security/` (people, sessions, keys
+ * and invitations are rows in the keeper's database), the daemon's own
+ * housekeeping under `daemon/`, and the tenant data layout that places every
+ * file on disk. They are prefixed with their directory so `security/x-store`
+ * cannot be read as a same-named `store/` module.
+ *
+ * What the others under `security/` and `tenant/` hold — bearer parsing,
+ * credential resolution, the tenant id — is policy or a value an adapter is
+ * entitled to read, and is deliberately not matched.
+ */
+const MECHANIC_SPECIFIERS: readonly { readonly pattern: RegExp; readonly prefix: string }[] = [
+  { pattern: /from '[^']*store\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\.js'/g, prefix: '' },
+  { pattern: /from '[^']*security\/([a-z0-9-]+-store)\.js'/g, prefix: 'security/' },
+  { pattern: /from '(?:[^']*\/)?daemon\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\.js'/g, prefix: 'daemon/' },
+  { pattern: /from '[^']*tenant\/(data-layout)\.js'/g, prefix: 'tenant/' },
+]
+
+function* mechanicsImportedBy(source: string): Generator<string> {
+  for (const { pattern, prefix } of MECHANIC_SPECIFIERS) {
+    for (const match of source.matchAll(pattern)) yield `${prefix}${match[1] as string}`
+  }
 }
 
 /**
@@ -59,12 +89,8 @@ export function findAdapterMechanicEdges(
     for (const file of walk(dir, { include: isAdapterSource })) {
       const from = relative(serverDir, file).split('\\').join('/')
       if (exempt.has(from)) continue
-      for (const match of readFileSync(file, 'utf8').matchAll(
-        /from '[^']*store\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\.js'/g,
-      )) {
-        const mechanic = match[1] as string
-        if (excluded.has(mechanic)) continue
-        edges.add(`${from} -> ${mechanic}`)
+      for (const mechanic of mechanicsImportedBy(readFileSync(file, 'utf8'))) {
+        if (!excluded.has(mechanic)) edges.add(`${from} -> ${mechanic}`)
       }
     }
   }
