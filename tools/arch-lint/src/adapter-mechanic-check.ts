@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { adapterFiles } from './adapter-files.js'
 import { collectRelativeImportEdges } from './cycle-check.js'
-import { walk } from './scan-roots.js'
 
 /**
  * ADR-0018's invariant, made mechanical: an ADAPTER may not reach a
@@ -18,14 +18,6 @@ import { walk } from './scan-roots.js'
  * NOT an adapter and is deliberately out of scope: knowing the mechanics is
  * exactly its job.
  */
-const ADAPTER_DIRS = ['routes', 'mcp'] as const
-
-// A `_test-*` helper is scaffolding a test builds an app from, not a route a
-// request reaches, so what it imports says nothing about an adapter.
-function isAdapterSource(file: string): boolean {
-  return file.endsWith('.ts') && !file.endsWith('.test.ts') && !/(^|[\\/])_test-/.test(file)
-}
-
 /**
  * Where a mechanic lives, and how its edge is spelled.
  *
@@ -112,7 +104,7 @@ export function findAdapterMechanicEdges(
   const exempt = new Set(exemptFiles)
   const edges = new Set<string>()
   const files = [
-    ...ADAPTER_DIRS.flatMap((base) => walk(join(serverDir, base), { include: isAdapterSource })),
+    ...adapterFiles(serverDir),
     ...helperFiles.map((helper) => join(serverDir, helper)),
   ]
   for (const file of files) {

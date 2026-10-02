@@ -32,6 +32,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { isAdapterSource } from './adapter-files.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 
@@ -69,13 +70,10 @@ function nodeBoundReasons(fileName: string, source: string): string[] {
   return [...reasons].sort()
 }
 
-const isRouteSource = (file: string): boolean =>
-  file.endsWith('.ts') && !file.endsWith('.test.ts') && !/(^|[\\/])_test-/.test(file)
-
 function classifyAll(dir: string): { portable: string[]; nodeBound: string[] } {
   const portable: string[] = []
   const nodeBound: string[] = []
-  for (const file of walk(dir, { include: isRouteSource })) {
+  for (const file of walk(dir, { include: isAdapterSource })) {
     const name = relative(dir, file).split('\\').join('/')
     const reasons = nodeBoundReasons(file, readFileSync(file, 'utf8'))
     ;(reasons.length === 0 ? portable : nodeBound).push(name)

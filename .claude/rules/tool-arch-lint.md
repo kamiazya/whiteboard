@@ -272,6 +272,19 @@ get theirs from `routes/_test-helpers.ts`'s `resolveTestServerDeps`. The one
 exemption is the stdio root (`server/mcp/index.ts`), listed by name and
 checked from both sides: it must keep importing `di/`, or the entry is stale.
 
+It reads import specifiers from the AST (`collectRelativeImportEdges`) and
+judges them by where they RESOLVE, not by how they are spelled. It was the last
+text-regex scan of the adapter trees: `from '../../di/'` missed a side-effect
+`import '../../di/x.js'`, a double-quoted or template `import()` and a
+`require`, and read a commented-out import as a violation — each planted and
+measured before the rewrite.
+
+**What an adapter file IS is `adapter-files.ts`, once.** The mechanic check, the
+process-global check, the route-portability ledger and this check each carried
+a copy of `ADAPTER_DIRS` and the predicate, and the copies had diverged (this one
+skipped `_test-helpers.ts` only, the rest every `_test-*`). A directory added to
+one was a blind spot in the other three.
+
 ## `adapter-mechanic-check.ts` and its lists
 
 **The finder reads import specifiers from the AST** (`collectRelativeImportEdges`,
