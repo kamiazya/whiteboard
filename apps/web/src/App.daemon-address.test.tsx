@@ -328,9 +328,10 @@ it('settles an address that named no workspace once, instead of trading it', asy
 
   expect(navigations).toBeGreaterThanOrEqual(1)
   expect(navigations).toBeLessThanOrEqual(NAVIGATION_CEILING)
-  // First-listed, because nothing in the address asked for the other one —
-  // the standing fallback, and the workspace whose handle is its raw id.
-  expect(router.state.location.pathname).toBe(`/w/${NO_SEGMENT_ID}`)
+  // The `default` workspace, because nothing in the address asked for
+  // another one: it is the one the daemon bootstraps, so the first-listed
+  // fallback yields to it.
+  expect(router.state.location.pathname).toBe('/w/default')
   await settleRequests()
   expectWithinBudget(counts, COLD_LOAD_BUDGET.settled)
 })
