@@ -124,7 +124,7 @@ wb_canvas_edit({
   ops: [
     { op: "node.add", node: { id: "client", type: "text", text: "Client", color: "#1971c2" } },
     { op: "node.add", node: { id: "server", type: "text", text: "Server" } },
-    { op: "edge.add", edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" } },
+    { op: "edge.add", edge: { id: "req", from: { node: "client" }, to: { node: "server", end: "arrow" }, label: "request" } },
   ],
 })
 ```
@@ -142,8 +142,9 @@ holds the text, or leave it out.
 
 Edges reference node ids, not coordinates — an `edge.add` fails if either endpoint is not on the
 canvas by the time that op runs. A node added EARLIER IN THE SAME CALL counts, which is why ids are
-worth naming yourself. `fromEnd`/`toEnd` (`none`/`arrow`) set the arrowheads. `fromSide`/`toSide`
-(`top`/`right`/`bottom`/`left`) exist but are best left out: the router picks the side that keeps
+worth naming yourself. An edge's two ends are the objects `from` and `to`, each `{ node, side?, end? }`:
+`end` (`none`/`arrow`) sets the arrowhead at that end, and `side`
+(`top`/`right`/`bottom`/`left`) exists but is best left out: the router picks the side that keeps
 the line clear of the other boxes, and a side you name is kept even when it runs the line through
 one — a `bottom`/`top` pair on an edge between two boxes on the SAME row loops under both and
 tunnels back through its own source. `wb_scene_render` computes the actual drawn path.
@@ -291,7 +292,7 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - **Every write is a remote change.** MCP tool calls apply directly to the document; there is no
   separate "commit" step and no local undo. One `wb_canvas_edit` call is atomic — a rejected batch
   leaves nothing behind — but a batch that SUCCEEDS is not undoable, so save a
-  `wb_version_save({ workspaceId, documentIds, label })` before a risky one and call
+  `wb_version_save({ workspaceId, documentIds: [documentId], label })` before a risky one and call
   `wb_version_restore({ workspaceId, documentId, versionId: saved[0].version.id })` to roll back if
   it goes wrong. `documentIds` is plural and the label is shared, so a change spanning several
   documents gets ONE checkpoint across all of them in one call. The version lands in the same history the person's History panel shows, so they can see

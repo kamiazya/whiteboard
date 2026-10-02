@@ -192,13 +192,13 @@ You    Use whiteboard to sketch the request flow for our auth service:
 
 Agent  { results: [{ documentId }] } = wb_workspace_edit({ workspaceId: "default",
          ops: [{ op: "document.create", path: "auth-flow", kind: "spatial" }] })
-       wb_canvas_edit({ canvasId, ops: [
+       wb_canvas_edit({ workspaceId: "default", documentId, ops: [
          /* 4 service boxes, the arrows between them, and: */
          { op: "node.add", node: { id: "cache-note", type: "text",
                                    text: "cache lives here" } },
          { op: "tidy" },
        ] })
-       wb_scene_render({ canvasId })
+       wb_scene_render({ workspaceId: "default", documentId })
 
        Drew a 4-stage flow on the auth-flow canvas. Cache callout placed
        between API gateway and token service. SVG attached.
