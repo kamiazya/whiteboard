@@ -742,7 +742,7 @@ function layoutBlock(
   cursor: Cursor,
   options: ResolvedMdastOptions,
   depth: number,
-  // canvasIds of the embeds currently being laid out on THIS recursion
+  // document ids of the embeds currently being laid out on THIS recursion
   // path — the cycle/cap contract (decision 4), threaded rather than
   // stored on options so sibling embeds never see each other.
   embedPath: readonly string[] = [],

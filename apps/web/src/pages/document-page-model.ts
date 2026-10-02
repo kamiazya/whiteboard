@@ -121,7 +121,7 @@ export interface DocumentPageModel {
   readonly topBar: {
     readonly workspaceId: string
     readonly path: string
-    readonly dataMode?: 'daemon' | 'local'
+    readonly keeper?: 'daemon' | 'browser'
     readonly onNavigateBack?: () => void
   } | null
   readonly spatial: Pick<SpatialEditorPaneProps, 'editorRef' | 'agentTouchedNodeIds' | 'children'>

@@ -14,7 +14,8 @@
  */
 import { type LucideIconElement, VISUAL_ICONS } from '@kamiazya/whiteboard-plugin-visual'
 import type { Appearance, BoundingBox } from '@kamiazya/whiteboard-scene'
-import { appearanceAttrs, idToken, isFiniteBox } from './paint.js'
+import { isFiniteBox } from '../finite-box.js'
+import { appearanceAttrs, idToken } from './paint.js'
 import { el, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
 /**

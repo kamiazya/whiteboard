@@ -17,7 +17,7 @@ describe('useDocumentNames', () => {
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
-        isLocalMode: false,
+        keptByBrowser: false,
         daemonFetch,
       }),
     )
@@ -32,7 +32,7 @@ describe('useDocumentNames', () => {
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
-        isLocalMode: false,
+        keptByBrowser: false,
         daemonFetch,
       }),
     )
@@ -47,7 +47,7 @@ describe('useDocumentNames', () => {
   it('answers empty names in local mode without ever fetching', () => {
     const daemonFetch = vi.fn()
     const { result } = renderHook(() =>
-      useDocumentNames({ workspaceId: 'ws', isLocalMode: true, daemonFetch }),
+      useDocumentNames({ workspaceId: 'ws', keptByBrowser: true, daemonFetch }),
     )
     expect(result.current.effectiveNames).toEqual({ documents: {}, pinned: [] })
     expect(daemonFetch).not.toHaveBeenCalled()
@@ -61,7 +61,7 @@ describe('useDocumentNames', () => {
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
-        isLocalMode: false,
+        keptByBrowser: false,
         daemonFetch,
       }),
     )

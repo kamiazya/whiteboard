@@ -15,7 +15,7 @@ import * as scoring from './scoring.js'
 
 const SCORING_EXPORTS = [
   'EVEN_GAP_TOLERANCE_PX',
-  'GROUP_PADDING_PX',
+  'FRAME_CLEARANCE_FLOOR_PX',
   'NEAR_MISS_PX',
   'scoreComposition',
   'scoreDrawing',

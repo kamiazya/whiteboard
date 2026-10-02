@@ -30,6 +30,7 @@
  */
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
@@ -136,7 +137,7 @@ async function renderSpatialInPool(
  * document would drop the theme axis, and one entry would then serve a light
  * and a dark render of the same board.
  */
-function renderedKind(document: WorkspaceDocumentEntry): 'spatial' | 'markdown' {
+function renderedKind(document: WorkspaceDocumentEntry): DocumentKind {
   // A row that does not say its kind is read as spatial, which is what the
   // pipeline below does with it. The switch is what makes a NEW kind a
   // compile error here rather than another silent spatial: being drawn by

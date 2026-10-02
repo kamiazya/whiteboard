@@ -19,12 +19,13 @@
  * with its judged document's path or name.
  */
 
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { Judgments } from './eval.js'
 
 export interface CorpusDocument {
   readonly path: string
   readonly name: string
-  readonly kind: 'markdown' | 'spatial'
+  readonly kind: DocumentKind
   /** Markdown body, or the text/label content of a canvas. */
   readonly body?: string
   readonly nodes?: readonly { id: string; text: string }[]

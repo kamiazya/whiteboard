@@ -41,11 +41,11 @@ interface Props {
    */
   onNavigateBack?: () => void
   /**
-   * 'local' is for hosts with no daemon data layer (the browser keeper): the
-   * `/names` fetch never fires and the page's title segment owns naming.
-   * Defaults to 'daemon' so every existing caller keeps fetching `/names`.
+   * Who keeps the workspace. `'browser'` is for hosts with no daemon data
+   * layer: the `/names` fetch never fires and the page's title segment owns
+   * naming. Defaults to `'daemon'` so every caller keeps fetching `/names`.
    */
-  dataMode?: 'daemon' | 'local'
+  keeper?: 'daemon' | 'browser'
   /**
    * Opens and closes the document's history. The PAGE owns both the state and
    * the panel: history is a column of the editor row, not a popover hanging
@@ -101,16 +101,16 @@ export default function WorkspaceTopBar({
   workspaceId,
   path,
   onNavigateBack,
-  dataMode = 'daemon',
+  keeper = 'daemon',
   preview,
   titleSlot,
 }: Props) {
-  const isLocalMode = dataMode === 'local'
+  const keptByBrowser = keeper === 'browser'
   const daemonFetch = useDaemonApi()
 
   const { effectiveNames, renameDocument } = useDocumentNames({
     workspaceId,
-    isLocalMode,
+    keptByBrowser,
     daemonFetch,
   })
 
@@ -193,7 +193,7 @@ export default function WorkspaceTopBar({
 
         {titleSlot?.({
           name: canvasCustomName ?? path,
-          ...(isLocalMode ? {} : { onRename: (next: string) => void renameDocument(path, next) }),
+          ...(keptByBrowser ? {} : { onRename: (next: string) => void renameDocument(path, next) }),
         })}
       </div>
     </header>

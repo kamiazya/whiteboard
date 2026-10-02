@@ -11,7 +11,7 @@ export { scoreComposition } from './quality/composition-score.js'
 export type { DrawingScore } from './quality/drawing-score.js'
 export {
   EVEN_GAP_TOLERANCE_PX,
-  GROUP_PADDING_PX,
+  FRAME_CLEARANCE_FLOOR_PX,
   NEAR_MISS_PX,
   scoreDrawing,
 } from './quality/drawing-score.js'

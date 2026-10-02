@@ -23,6 +23,7 @@
  * the SVG family's answer for the same document.
  */
 
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { resolveDocumentSymbol, type VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
@@ -99,7 +100,7 @@ const outlineSpatialInPool = (snapshot: Uint8Array, cacheKey?: string) =>
  * here is not tidiness: a key disagreeing with the branch is how one entry
  * ends up answering for a document it is not a picture of.
  */
-function outlinedKind(document: WorkspaceDocumentEntry): 'spatial' | 'markdown' {
+function outlinedKind(document: WorkspaceDocumentEntry): DocumentKind {
   // A row that does not say its kind is read as spatial, which is what the
   // pipeline below does with it. The switch is what makes a NEW kind a
   // compile error here rather than another silent spatial: being drawn by

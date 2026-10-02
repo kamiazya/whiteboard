@@ -31,6 +31,7 @@
 
 import type { BoundingBox, EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
 import type { ArrowPolygon } from '../../edge-arrows.js'
+import { isFiniteBox } from '../../finite-box.js'
 import { flattenDrawnEdgePath } from '../edges/edge-flatten.js'
 import type { Point } from '../edges/edge-geometry.js'
 import type { NodeOutline } from '../nodes/node-outline.js'
@@ -90,12 +91,6 @@ const num = (value: number): string => {
   const rounded = Math.round(value * 100) / 100
   return String(rounded === 0 ? 0 : rounded)
 }
-
-const isFiniteBox = (box: BoundingBox): boolean =>
-  Number.isFinite(box.x) &&
-  Number.isFinite(box.y) &&
-  Number.isFinite(box.w) &&
-  Number.isFinite(box.h)
 
 /** One jittered stroke from `a` to `b`: displaced ends, a bowed quadratic between. */
 function jittered(rng: Rng, a: Point, b: Point, jitter: number, bow: number): string {

@@ -20,6 +20,7 @@ import type {
   ShapeContribution,
   ShapeTable,
 } from '@kamiazya/whiteboard-scene'
+import { isFiniteBox } from '../../finite-box.js'
 
 export type { NodeOutline, ShapeContribution, ShapeTable }
 
@@ -32,12 +33,6 @@ export type { NodeOutline, ShapeContribution, ShapeTable }
  */
 const lookup = (shapes: ShapeTable, shapeId: string): ShapeContribution | undefined =>
   shapes[shapeId] ?? BUNDLED_SHAPE_TABLE[shapeId]
-
-const isFiniteBox = (box: BoundingBox): boolean =>
-  Number.isFinite(box.x) &&
-  Number.isFinite(box.y) &&
-  Number.isFinite(box.w) &&
-  Number.isFinite(box.h)
 
 /**
  * The composed shape table a contribution set resolves to — what the SVG
