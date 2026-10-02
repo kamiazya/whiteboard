@@ -16,7 +16,8 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { HistoryCluster } from '../../components/history-cluster/HistoryCluster.js'
-import { dockControlSizesPx } from '../../components/ui/dock-button.js'
+import { DOCK_BUTTON_CLASS } from '../../components/ui/dock-button.js'
+import { controlHeightsPx } from '../../test-utils/control-heights-px.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -102,7 +103,7 @@ function collectChrome(root: HTMLElement): Chrome[] {
  * so it grows symmetrically about its own midpoint.
  */
 function asTouchDock(rect: DOMRect, controlCount: number): DOMRect {
-  const { fine, coarse } = dockControlSizesPx()
+  const { fine, coarse } = controlHeightsPx(DOCK_BUTTON_CLASS)
   const delta = coarse - fine
   const width = rect.width + delta * controlCount
   const height = rect.height + delta
@@ -201,7 +202,7 @@ describe('the assumptions this grid rests on', () => {
   })
 
   it('reads both dock sizes out of the class the dock actually uses', () => {
-    const { fine, coarse } = dockControlSizesPx()
+    const { fine, coarse } = controlHeightsPx(DOCK_BUTTON_CLASS)
     expect(fine).toBe(36)
     expect(coarse).toBe(44)
   })

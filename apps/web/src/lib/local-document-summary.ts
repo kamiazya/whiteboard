@@ -196,20 +196,3 @@ export class IdbDefaultDocumentPointer implements DefaultDocumentPointer {
     await this.withDb('readwrite', (store) => store.delete(DEFAULT_POINTER_KEY))
   }
 }
-
-/** The pointer a test gets when it is testing a page, not persistence. */
-export class InMemoryDefaultDocumentPointer implements DefaultDocumentPointer {
-  private documentId: string | null = null
-
-  async get(): Promise<string | null> {
-    return this.documentId
-  }
-
-  async set(documentId: string): Promise<void> {
-    this.documentId = documentId
-  }
-
-  async clear(): Promise<void> {
-    this.documentId = null
-  }
-}

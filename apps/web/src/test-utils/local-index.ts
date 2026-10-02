@@ -2,13 +2,30 @@ import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import {
   type ContentClock,
-  InMemoryDefaultDocumentPointer,
+  type DefaultDocumentPointer,
   listLocalDocuments,
   loadLocalDocument,
 } from '../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import type { LoroStoreLike } from '../pages/use-browser-document-controller.js'
+
+/** The pointer a test gets when it is testing a page, not persistence. */
+export class InMemoryDefaultDocumentPointer implements DefaultDocumentPointer {
+  private documentId: string | null = null
+
+  async get(): Promise<string | null> {
+    return this.documentId
+  }
+
+  async set(documentId: string): Promise<void> {
+    this.documentId = documentId
+  }
+
+  async clear(): Promise<void> {
+    this.documentId = null
+  }
+}
 
 /**
  * Content bytes in a Map.

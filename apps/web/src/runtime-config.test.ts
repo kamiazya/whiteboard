@@ -2,10 +2,8 @@ import { runtimeConfigSchema as sharedRuntimeConfigSchema } from '@kamiazya/whit
 import { describe, expect, it } from 'vitest'
 import { classifyPagesOrigin } from './lib/pages-origin-policy.js'
 import {
-  EMPTY_RUNTIME_CONFIG,
   RuntimeConfigPolicyError,
   resolveHostedRuntimeConfig,
-  resolveRuntimeConfig,
   runtimeConfigSchema,
 } from './runtime-config.js'
 
@@ -21,53 +19,59 @@ describe('single-owner schema (Zod discipline)', () => {
 
 describe('runtimeConfigSchema', () => {
   it('parses an empty object as a valid config', () => {
-    expect(() => resolveRuntimeConfig({})).not.toThrow()
+    expect(() => runtimeConfigSchema.parse({})).not.toThrow()
   })
 
   it('parses config with a valid publicOrigin', () => {
-    const config = resolveRuntimeConfig({ publicOrigin: 'https://app.example.com' })
+    const config = runtimeConfigSchema.parse({ publicOrigin: 'https://app.example.com' })
     expect(config.publicOrigin).toBe('https://app.example.com')
   })
 
   it('parses config with a valid daemonBaseUrl including explicit port', () => {
-    const config = resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099' })
+    const config = runtimeConfigSchema.parse({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(config.daemonBaseUrl).toBe('http://127.0.0.1:3099')
   })
 
   it('rejects a non-URL string', () => {
-    expect(() => resolveRuntimeConfig({ publicOrigin: 'not-a-url' })).toThrow()
+    expect(() => runtimeConfigSchema.parse({ publicOrigin: 'not-a-url' })).toThrow()
   })
 
   it('rejects publicOrigin with a path component', () => {
-    expect(() => resolveRuntimeConfig({ publicOrigin: 'https://app.example.com/path' })).toThrow()
+    expect(() =>
+      runtimeConfigSchema.parse({ publicOrigin: 'https://app.example.com/path' }),
+    ).toThrow()
   })
 
   it('rejects publicOrigin with a query string', () => {
     expect(() =>
-      resolveRuntimeConfig({ publicOrigin: 'https://app.example.com?token=x' }),
+      runtimeConfigSchema.parse({ publicOrigin: 'https://app.example.com?token=x' }),
     ).toThrow()
   })
 
   it('rejects publicOrigin with a fragment', () => {
-    expect(() => resolveRuntimeConfig({ publicOrigin: 'https://app.example.com#frag' })).toThrow()
+    expect(() =>
+      runtimeConfigSchema.parse({ publicOrigin: 'https://app.example.com#frag' }),
+    ).toThrow()
   })
 
   it('rejects publicOrigin with credentials', () => {
-    expect(() => resolveRuntimeConfig({ publicOrigin: 'https://user:pass@example.com' })).toThrow()
+    expect(() =>
+      runtimeConfigSchema.parse({ publicOrigin: 'https://user:pass@example.com' }),
+    ).toThrow()
   })
 
   it('rejects wildcard hostname', () => {
-    expect(() => resolveRuntimeConfig({ publicOrigin: 'https://*.example.com' })).toThrow()
+    expect(() => runtimeConfigSchema.parse({ publicOrigin: 'https://*.example.com' })).toThrow()
   })
 
   it('rejects unknown keys (credential-bearing config is fail-closed)', () => {
     expect(() =>
-      resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099', token: 'secret' }),
+      runtimeConfigSchema.parse({ daemonBaseUrl: 'http://127.0.0.1:3099', token: 'secret' }),
     ).toThrow()
   })
 
   it('rejects config with Authorization key', () => {
-    expect(() => resolveRuntimeConfig({ Authorization: 'Bearer tok' })).toThrow()
+    expect(() => runtimeConfigSchema.parse({ Authorization: 'Bearer tok' })).toThrow()
   })
 
   // Mutation-check target: the daemon auth token travels via its own global
@@ -77,26 +81,24 @@ describe('runtimeConfigSchema', () => {
   it('rejects a payload containing daemonToken (.strict() rejection of the token channel)', () => {
     expect(runtimeConfigSchema.safeParse({ daemonToken: 'secret' }).success).toBe(false)
     expect(() =>
-      resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099', daemonToken: 'secret' }),
+      runtimeConfigSchema.parse({ daemonBaseUrl: 'http://127.0.0.1:3099', daemonToken: 'secret' }),
     ).toThrow()
   })
 
   it('parses the split shape: a token-free config with daemonBaseUrl only', () => {
-    const config = resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099' })
+    const config = runtimeConfigSchema.parse({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(config).toEqual({ daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
   it('explicit default port 443 is rejected (URL.origin normalizes it away)', () => {
-    expect(() => resolveRuntimeConfig({ publicOrigin: 'https://app.example.com:443' })).toThrow()
+    expect(() =>
+      runtimeConfigSchema.parse({ publicOrigin: 'https://app.example.com:443' }),
+    ).toThrow()
   })
 
   it('type is derived from runtimeConfigSchema via z.infer<>', () => {
     const config = runtimeConfigSchema.parse({ publicOrigin: 'https://app.example.com' })
     expect(config.publicOrigin).toBe('https://app.example.com')
-  })
-
-  it('EMPTY_RUNTIME_CONFIG satisfies the schema', () => {
-    expect(() => runtimeConfigSchema.parse(EMPTY_RUNTIME_CONFIG)).not.toThrow()
   })
 })
 
@@ -172,7 +174,7 @@ describe('runtimeConfigSchema + pages origin policy cross-reference', () => {
   it('preview origin passes structural bare-origin schema', () => {
     // The schema validates shape only (bare origin, https, no wildcards).
     // A preview deploy URL is structurally valid but must NOT be used as publicOrigin.
-    const config = resolveRuntimeConfig({
+    const config = runtimeConfigSchema.parse({
       publicOrigin: 'https://abc123.kamiazya-whiteboard.pages.dev',
     })
     expect(config.publicOrigin).toBe('https://abc123.kamiazya-whiteboard.pages.dev')
@@ -183,7 +185,9 @@ describe('runtimeConfigSchema + pages origin policy cross-reference', () => {
   })
 
   it('production origin passes both schema and pages policy', () => {
-    const config = resolveRuntimeConfig({ publicOrigin: 'https://kamiazya-whiteboard.pages.dev' })
+    const config = runtimeConfigSchema.parse({
+      publicOrigin: 'https://kamiazya-whiteboard.pages.dev',
+    })
     expect(config.publicOrigin).toBe('https://kamiazya-whiteboard.pages.dev')
     expect(classifyPagesOrigin('https://kamiazya-whiteboard.pages.dev')).toBe('production')
   })

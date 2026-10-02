@@ -1,4 +1,3 @@
-import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { blobRefSchema } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
@@ -46,31 +45,6 @@ export const documentFileRecordSchema = z.union([
 ])
 
 type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
-
-/**
- * Decode a data: URL into a Blob. Prefers the MIME type embedded in the
- * dataURL prefix (the authoritative source for what was actually encoded)
- * and falls back to `fallbackMimeType` only when the prefix itself is
- * missing/malformed.
- *
- * Throws on a structurally invalid dataURL (no comma separator) or invalid
- * base64 payload — callers must not swallow this into a silently-empty Blob.
- */
-export function dataUrlToBlob(dataURL: string, fallbackMimeType: string): Blob {
-  const commaIndex = dataURL.indexOf(',')
-  if (commaIndex === -1) {
-    throw new Error('dataUrlToBlob: malformed dataURL (no comma separator)')
-  }
-  const header = dataURL.slice(0, commaIndex)
-  const base64 = dataURL.slice(commaIndex + 1)
-
-  const prefixMatch = /^data:([^;,]+)/.exec(header)
-  const mimeType = prefixMatch?.[1] ?? fallbackMimeType
-
-  const bytes = base64ToBytes(base64)
-  if (bytes === null) throw new Error('dataUrlToBlob: invalid base64 payload')
-  return new Blob([bytes], { type: mimeType })
-}
 
 /**
  * The document's file references: a fileId -> `BlobRef` mapping over the
