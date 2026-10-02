@@ -48,7 +48,12 @@ jobs:
     # run. Skip the job outright rather than spend ~10 minutes to fail.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Measured on main: 1059-1781s, recently 1652-1682s, so 30 minutes left one
+    # to two minutes of headroom on a suite that grows every wave. A run that
+    # hits the limit is cancelled, not failed — no check goes red and the
+    # dashboard keeps answering from the last analysis that finished. Keep this
+    # at 1.5x the newest measured duration or more.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,18 +65,33 @@ jobs:
           # from it.
           persist-credentials: false
 
+      # A pull request that touches only what SonarQube does not analyse
+      # (docs, Markdown, build output) cannot move its numbers, and the
+      # analysis costs ~28 minutes. Gated per STEP, like ci.yml's docker
+      # detect, so the job still reports rather than never appearing. The
+      # default branch is never skipped: its analysis is the record. What
+      # counts as reaching the analysis is derived from sonar-project.properties
+      # — see tools/checks/src/sonar-analysis-inputs.mjs.
+      - name: Detect analysis inputs
+        id: detect
+        run: node tools/checks/src/sonar-analysis-inputs.mjs "${{ github.event_name == 'pull_request' && 'HEAD^1' || 'always' }}"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.detect.outputs.analyze == 'true'
 
       - name: Install dependencies
+        if: steps.detect.outputs.analyze == 'true'
         run: pnpm install --frozen-lockfile
 
       # Every non-browser vitest project in one run, so v8 writes a single
       # merged tmp/coverage/lcov.info. Report-only means report-only: a failing
       # test here must not hide the analysis, which is still worth having.
       - name: Collect coverage
+        if: steps.detect.outputs.analyze == 'true'
         continue-on-error: true
         run: pnpm coverage
 
-      - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+      - if: steps.detect.outputs.analyze == 'true'
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
