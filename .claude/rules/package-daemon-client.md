@@ -36,8 +36,8 @@ paths:
 - The one document backend the browser drives a daemon with (ADR-0050
   retired the WebSocket): `sse-backend` over `sse-stream-hub`, and the
   `document-backend-contract` types it implements. The SSE wire itself is
-  `sync-sse-contract`, and `ws-messages` / `ws-text-message` are the text
-  frames that stream carries (the name predates the transport).
+  `sync-sse-contract`, and `sync-frames` / `sync-frame-text` are the text
+  frames that stream carries inside its `message` events.
 - `api-client` (same-origin fetch wrapper — injects a `traceparent` header
   through @opentelemetry/api's no-op surface, no SDK shipped), the extension
   bridge the hosted page reaches a daemon through, the read plane and the
@@ -86,7 +86,7 @@ Vitest project `daemon-client-node`. Contract round-trips use the package's
 own `test-utils/fast-check.ts` (per-package numRuns default, the repo norm).
 
 **The live-sync text messages are guarded from the emitting side, not
-only the parsing side.** `ws-messages.property.test.ts` here draws every
+only the parsing side.** `sync-frames.property.test.ts` here draws every
 arm of `serverTextMessageSchema` and round-trips it through
 `parseServerTextMessage`, which says only that what the schema admits is
 what JSON carries — its generator is built from the parser's own schema,
