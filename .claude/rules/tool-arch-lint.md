@@ -395,6 +395,34 @@ exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
 
+## `mcp-server-layer-order.test.ts`: the layers inside the Node root
+
+`apps/web/src/layer-order.test.ts` pins that root's layers and has an emptied
+ledger. `packages/mcp-server/src` had only ADR-0018's one-way scan, so a store
+importing a route and `shared/` importing the server logger were both planted
+(`store/names-store.ts`, `shared/sha256.ts`) and passed the whole project. The
+order, bottom to top, is stated in the test's header and derived from how the
+code is used: `shared` < `daemon` < `mechanics` (`server/{store,security,tenant,
+export,search,observability,release}/**` plus the top-level `server/*.ts` that
+are mechanisms) < `adapters` (`routes/`, `mcp/`, the helpers routes share) <
+`composition` (`app.ts`, the HTTP roots, `di/`) < `entry` (`cli/`, the process
+entries and the MCP stdio root). A module may import its own layer or any below.
+
+Top-level `server/*.ts` files are each NAMED in `TOP_LEVEL`, not guessed, so a
+new one fails `belongs to no layer` until someone places it. The classifier is a
+pure function over file contents, so the two planted cases are also fixture
+tests that keep their teeth without planting.
+
+Eight upward edges exist and are ledgered with the move that retires each,
+count pinned by equality: the stdio root living inside the library the HTTP app
+composes (`mcp/index.ts`, two edges), the audience registry and the auto-version
+scheduler filed under `routes/` (three), a distribution-smoke impl under the
+adapter tree reaching the CLI, the membership gate reaching an adapter helper,
+and a daemon module logging through the server logger. None is a design that
+wants the edge; each is a module in the wrong directory. They were measured
+against an independent directory-level matrix (every one of the six the audit
+named is in it) and are not moved here. Type-only edges count, as in the web guard.
+
 ## `route-portability.test.ts`: which routes could leave Node
 
 Classifies every non-test file under `mcp-server/src/server/routes/**` as
