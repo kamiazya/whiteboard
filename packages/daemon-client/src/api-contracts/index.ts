@@ -42,12 +42,11 @@ export * from './daemon-urls.js'
 export * from './document.js'
 export * from './document-url.js'
 export * from './fonts.js'
-export type { Attestation, PromoteWorkspaceRequest, PromoteWorkspaceResponse } from './promotion.js'
+export type { Attestation, PromoteWorkspaceResponse } from './promotion.js'
 export {
   base64urlSchema,
   promoteWorkspaceRequestSchema,
   promoteWorkspaceResponseSchema,
-  promotionChallengeInput,
 } from './promotion.js'
 export type { DaemonPingResponse } from './runtime.js'
 export { daemonPingResponseSchema } from './runtime.js'

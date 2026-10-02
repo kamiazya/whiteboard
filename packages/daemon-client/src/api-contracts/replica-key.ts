@@ -84,7 +84,6 @@ export type RotateReplicaKeyResponse = z.infer<typeof rotateReplicaKeyResponseSc
  * the daemon applies the same refusal to what it emits.
  */
 export const setReplicaTierRequestSchema = z.object({ tier: replicaTierSchema.nullable() }).strict()
-export type SetReplicaTierRequest = z.infer<typeof setReplicaTierRequestSchema>
 
 /** Echoes both the raw override (`null` once cleared) and what it resolves
  *  to — an operator reads "cleared -> falls back to the default" from one

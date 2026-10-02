@@ -310,17 +310,12 @@ export const listDocumentsResponseSchema = z.object({
   documents: z.array(documentSummarySchema),
 })
 
-export type SetNameRequest = z.infer<typeof setNameRequestSchema>
-export type SetPinnedRequest = z.infer<typeof setPinnedRequestSchema>
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
-export type SaveVersionRequest = z.infer<typeof saveVersionRequestSchema>
-export type RestoreVersionRequest = z.infer<typeof restoreVersionRequestSchema>
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>
 export type SaveVersionResponse = z.infer<typeof saveVersionResponseSchema>
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>
 export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>
-export type CreateWorkspaceRequest = z.infer<typeof createWorkspaceRequestSchema>
 export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>
 export type DocumentSummary = z.infer<typeof documentSummarySchema>
 export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
@@ -429,5 +424,3 @@ export const purgeResultSchema = z.object({
    */
   skippedReason: unknownIsAbsent(z.enum(['record-moved', 'backup-in-progress'])),
 })
-
-export type PurgeResult = z.infer<typeof purgeResultSchema>

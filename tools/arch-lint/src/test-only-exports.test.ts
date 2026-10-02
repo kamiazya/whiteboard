@@ -44,15 +44,6 @@ const NO_USE_BESIDE_TESTS: readonly string[] = [
   'apps/web/src/lib/render-surfaces.ts#RENDER_SURFACES',
   'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract',
   'apps/web/src/runtime-config.ts#EMPTY_RUNTIME_CONFIG',
-  'packages/daemon-client/src/api-contracts/document.ts#CreateWorkspaceRequest',
-  'packages/daemon-client/src/api-contracts/document.ts#PurgeResult',
-  'packages/daemon-client/src/api-contracts/document.ts#RestoreVersionRequest',
-  'packages/daemon-client/src/api-contracts/document.ts#SaveVersionRequest',
-  'packages/daemon-client/src/api-contracts/document.ts#SetNameRequest',
-  'packages/daemon-client/src/api-contracts/document.ts#SetPinnedRequest',
-  'packages/daemon-client/src/api-contracts/promotion.ts#PromoteWorkspaceRequest',
-  'packages/daemon-client/src/api-contracts/promotion.ts#promotionChallengeInput',
-  'packages/daemon-client/src/api-contracts/replica-key.ts#SetReplicaTierRequest',
   'packages/daemon-client/src/replica-session-key.ts#forgetAll',
   'packages/facet-engine/src/theme-tokens.ts#SAMPLE_THEME_TOKENS',
   'packages/facet-ui/src/plugin-ui.ts#createFacetWriter',
@@ -493,7 +484,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the two debt lists hold, pinned by equality. */
-const DEBT_CEILING = 404
+const DEBT_CEILING = 395
 
 const DIRS = [
   'apps',

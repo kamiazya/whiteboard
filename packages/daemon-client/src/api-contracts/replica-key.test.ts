@@ -9,7 +9,6 @@ import {
   replicaKeyResponseSchema,
   replicaTierSchema,
   rotateReplicaKeyResponseSchema,
-  type SetReplicaTierRequest,
   type SetReplicaTierResponse,
   setReplicaTierRequestSchema,
   setReplicaTierResponseSchema,
@@ -146,7 +145,7 @@ describe('rotateReplicaKeyResponseSchema', () => {
 describe('setReplicaTierRequestSchema', () => {
   it('accepts every declared tier and the explicit clear', () => {
     for (const tier of ['no-offline', 'offline', 'bounded', null] as const) {
-      const request: SetReplicaTierRequest = { tier }
+      const request = { tier }
       expect(roundtrip(setReplicaTierRequestSchema, request)).toEqual(request)
     }
   })

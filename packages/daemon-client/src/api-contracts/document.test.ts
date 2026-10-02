@@ -13,7 +13,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   type CompactWorkspaceResult,
-  type CreateWorkspaceRequest,
   compactWorkspaceResultSchema,
   createWorkspaceRequestSchema,
   type DocumentSummary,
@@ -27,16 +26,11 @@ import {
   type OperatorInfo,
   operatorInfoSchema,
   type PruneSandwichedVersionsResponse,
-  type PurgeResult,
   pruneSandwichedVersionsResponseSchema,
   purgeResultSchema,
-  type RestoreVersionRequest,
   renameWorkspaceRequestSchema,
   restoreVersionRequestSchema,
-  type SaveVersionRequest,
   type SaveVersionResponse,
-  type SetNameRequest,
-  type SetPinnedRequest,
   saveVersionRequestSchema,
   saveVersionResponseSchema,
   setNameRequestSchema,
@@ -50,18 +44,18 @@ import { roundtrip } from './roundtrip.test-helper.js'
 
 describe('setNameRequestSchema', () => {
   it('parses a non-empty name', () => {
-    const result: SetNameRequest = setNameRequestSchema.parse({ name: 'My Canvas' })
+    const result = setNameRequestSchema.parse({ name: 'My Canvas' })
     expect(result.name).toBe('My Canvas')
   })
 
   it('parses an empty string (delete-name semantics)', () => {
-    const result: SetNameRequest = setNameRequestSchema.parse({ name: '' })
+    const result = setNameRequestSchema.parse({ name: '' })
     expect(result.name).toBe('')
   })
 
   it('roundtrip preserves name', () => {
-    const valid: SetNameRequest = { name: 'My Canvas' }
-    const result: SetNameRequest = roundtrip(setNameRequestSchema, valid)
+    const valid = { name: 'My Canvas' }
+    const result = roundtrip(setNameRequestSchema, valid)
     expect(result).toEqual(valid)
   })
 
@@ -72,13 +66,13 @@ describe('setNameRequestSchema', () => {
 
 describe('setPinnedRequestSchema', () => {
   it('parses pinned: true', () => {
-    const result: SetPinnedRequest = setPinnedRequestSchema.parse({ pinned: true })
+    const result = setPinnedRequestSchema.parse({ pinned: true })
     expect(result.pinned).toBe(true)
   })
 
   it('roundtrip preserves pinned: false', () => {
-    const valid: SetPinnedRequest = { pinned: false }
-    const result: SetPinnedRequest = roundtrip(setPinnedRequestSchema, valid)
+    const valid = { pinned: false }
+    const result = roundtrip(setPinnedRequestSchema, valid)
     expect(result).toEqual(valid)
   })
 
@@ -161,29 +155,29 @@ describe('saveVersionRequestSchema', () => {
   })
 
   it('parses an empty body', () => {
-    const result: SaveVersionRequest = saveVersionRequestSchema.parse({})
+    const result = saveVersionRequestSchema.parse({})
     expect(result.label).toBeUndefined()
   })
 
   it('roundtrip with label and operator', () => {
-    const valid: SaveVersionRequest = {
+    const valid = {
       label: 'v1.0',
-      operator: { kind: 'human', displayName: 'Alice' },
+      operator: { kind: 'human' as const, displayName: 'Alice' },
     }
-    const result: SaveVersionRequest = roundtrip(saveVersionRequestSchema, valid)
+    const result = roundtrip(saveVersionRequestSchema, valid)
     expect(result).toEqual(valid)
   })
 })
 
 describe('restoreVersionRequestSchema', () => {
   it('parses an empty body', () => {
-    const result: RestoreVersionRequest = restoreVersionRequestSchema.parse({})
+    const result = restoreVersionRequestSchema.parse({})
     expect(result.targetPath).toBeUndefined()
   })
 
   it('roundtrip with targetPath and overwrite', () => {
-    const valid: RestoreVersionRequest = { targetPath: 'new-canvas', overwrite: true }
-    const result: RestoreVersionRequest = roundtrip(restoreVersionRequestSchema, valid)
+    const valid = { targetPath: 'new-canvas', overwrite: true }
+    const result = roundtrip(restoreVersionRequestSchema, valid)
     expect(result).toEqual(valid)
   })
 
@@ -515,15 +509,15 @@ describe('pruneSandwichedVersionsResponseSchema', () => {
 })
 
 describe('purgeResultSchema', () => {
-  const valid: PurgeResult = { purgedCount: 2, purgedBytes: 4096 }
+  const valid = { purgedCount: 2, purgedBytes: 4096 }
 
   it('parses a well-formed value', () => {
-    const result: PurgeResult = purgeResultSchema.parse(valid)
+    const result = purgeResultSchema.parse(valid)
     expect(result.purgedCount).toBe(2)
   })
 
   it('roundtrip preserves fields', () => {
-    const result: PurgeResult = roundtrip(purgeResultSchema, valid)
+    const result = roundtrip(purgeResultSchema, valid)
     expect(result).toEqual(valid)
   })
 
@@ -548,14 +542,14 @@ describe('purgeResultSchema', () => {
 
 describe('createWorkspaceRequestSchema', () => {
   it('parses a well-formed value', () => {
-    const result: CreateWorkspaceRequest = createWorkspaceRequestSchema.parse({
+    const result = createWorkspaceRequestSchema.parse({
       displayName: 'Marketing',
     })
     expect(result.displayName).toBe('Marketing')
   })
 
   it('roundtrip preserves fields', () => {
-    const valid: CreateWorkspaceRequest = { displayName: 'Marketing' }
+    const valid = { displayName: 'Marketing' }
     expect(roundtrip(createWorkspaceRequestSchema, valid)).toEqual(valid)
   })
 
