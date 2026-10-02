@@ -101,12 +101,48 @@ the BOUNDARY scan (banned imports/globals) — they are the packages allowed
 `node:*`, DOM and inversify — and their third-party surface is open by design,
 so neither carries an allowed-third-party list.
 
-`apps/web`'s own source is policed by a separate enforcer OUTSIDE this tool:
-`packages/mcp-server/src/server/release/web-app-boundary.test.ts` fails the
-build when it imports a Node builtin or reaches into `src/server` / `src/cli` /
-`src/daemon`. The split is deliberate — that boundary is the daemon package's
-own published surface — but it means "is this checked?" has two answers
-depending on the rule.
+`apps/web`'s own source is policed by a separate enforcer BESIDE this tool's
+scans: `web-app-boundary.test.ts` fails the build when it imports a Node
+builtin or reaches into `src/server` / `src/cli` / `src/daemon`. It runs in this
+project but reads source text rather than `architecture-map.ts`, so "is this
+checked?" still has two answers depending on the rule.
+
+## Repo-policy guards live here, not under the package they were written beside
+
+Guards over files that belong to no package — workflows, the Dockerfile, root
+manifests, docs, the always-on rule corpus, `apps/web`'s source — used to sit
+in `packages/mcp-server/src/server/` (and its `release/`), because that is
+where the first one was written. They ran only when `mcp-node` did, so a change
+to anything else never ran them, and they were absent from the pre-push hook.
+This project is what pre-push and CI's `test-shared` run on every change;
+`file-size-budget.test.ts` records the same argument for the size ledgers.
+
+**The rule for where one goes**: it reads repo-root files or other packages'
+text, runs no product code, and imports nothing from a package — arch-lint takes
+no package dependency and finds the root through `scan-roots.ts`'s `REPO_ROOT`,
+never a package's `repoRoot()` helper. It stays in its package, with a reason,
+only when it cannot meet that: it imports the daemon's source (a docs example
+parsed through the daemon's own output schema, the env vars the server reads),
+it is a property test through the packages' fast-check prelude, it runs or
+inspects the built artifact, or it asserts an ENVIRONMENT premise rather than
+scanning (`local-node-version.test.ts` — a wrong Node major should be explained
+where the failures it causes are, not newly block a push). A test that is part
+policy and part daemon is split along that seam rather than kept whole.
+
+**`repo-root-reads.test.ts` pins it**: a `*.test.ts` under `packages/*/src`
+that imports the repo-root helper, names `.github/`, `.claude/`, a Dockerfile,
+`lefthook.yml` or `pnpm-workspace.yaml`, or counts `../` up to the root or one
+of its entries, fails unless it is in `STAYS_IN_PACKAGE` with a reason. That
+list is guarded from both sides (a gone file or one that stopped reading the
+root is stale) and the scan asserts it reached its tests. The detector is
+textual and has two named blind spots: a root reached through a variable plus
+`'..'` arguments (`canvas-viewer`'s `docs-guard.test.ts` is one) and a bare
+`'docs/…'` literal. Comments are stripped first, because four files named a rule
+in prose.
+
+Some guards left behind a daemon-side twin that cannot move: three of the
+fast-check policy files still import `job-section.ts` from here by relative
+path, the one place a package test reaches into this tool.
 
 ## `adapter-di-import-check.test.ts`: an adapter composes nothing
 

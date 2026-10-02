@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 // Vite's import.meta.glob (not node:fs) enumerates and reads every source
 // file: apps/web/src ships to the browser, and a repo-wide boundary guard
-// (packages/mcp-server's web-app-boundary test) fails the build if any file
+// (tools/arch-lint's web-app-boundary test) fails the build if any file
 // under this tree imports a Node-only builtin — even from a test file, since
 // that guard scans every .ts/.tsx here unconditionally.
 const rawModules = import.meta.glob('/src/**/*.{ts,tsx}', {

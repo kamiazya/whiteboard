@@ -115,7 +115,7 @@ describe('token / secret leak guard', () => {
 })
 
 // Deploy-workflow guard: apps/web config files must not contain production secrets.
-// Broader .github/workflows/ scanning lives in packages/mcp-server web-app-boundary.test.ts.
+// Broader .github/workflows/ scanning lives in tools/arch-lint's web-app-boundary.test.ts.
 describe('apps/web config secrets guard', () => {
   it('package.json does not contain Cloudflare production secrets', () => {
     expect(appsWebPkgRaw).not.toContain('CLOUDFLARE_API_TOKEN')
