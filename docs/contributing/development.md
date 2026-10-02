@@ -208,6 +208,7 @@ Two layers close that gap:
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket)
 pnpm mcp             # MCP server only (tsx)
 pnpm build           # dist/server (apps/web's `build` ends with `copy-into-mcp-dist.mjs`, which copies dist/web-app in)
+pnpm build:mcp       # the server alone: canvas-viewer's widget first, then `@kamiazya/whiteboard-mcp`'s build (a `pnpm --filter` build does not build its workspace dependencies, so the bare filter form fails on a clean checkout with "widget build output not found")
 pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke

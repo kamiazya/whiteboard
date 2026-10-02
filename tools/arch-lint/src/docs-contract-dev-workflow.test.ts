@@ -184,3 +184,33 @@ describe('package scripts pin what npx fetches', () => {
     }
   })
 })
+
+// `pnpm --filter @kamiazya/whiteboard-mcp build` builds that package alone, and
+// its last steps copy canvas-viewer's widget out of a sibling package's dist:
+// on a clean checkout it stops at "widget build output not found". The root
+// `pnpm build` is topologically ordered and works; `build:mcp` is the same
+// answer for the server alone. mcp-server's own `build` stays what
+// package-shape.test.ts pins, so the order lives in the root script.
+describe('the documented server-only build works on a clean checkout', () => {
+  const scripts = (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts
+
+  it('builds the widget before the server', () => {
+    const steps = (scripts['build:mcp'] ?? '').split('&&').map((step) => step.trim())
+    expect(steps).toEqual([
+      'pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget',
+      'pnpm --filter @kamiazya/whiteboard-mcp build',
+    ])
+  })
+
+  it('names a widget script that canvas-viewer really has, and one mcp-server copies from', () => {
+    const viewer = JSON.parse(read('packages/canvas-viewer/package.json')) as {
+      scripts: Record<string, string>
+    }
+    expect(viewer.scripts['build:widget']).toBeDefined()
+    expect(read('packages/mcp-server/package.json')).toContain('copy-widget-into-dist.mjs')
+  })
+
+  it('is the server-only build the contributor docs list', () => {
+    expect(read('docs/contributing/development.md')).toContain('pnpm build:mcp')
+  })
+})

@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "pnpm -r build",
+    "build:mcp": "pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget && pnpm --filter @kamiazya/whiteboard-mcp build",
     "test": "vitest run",
     "test:coverage": "pnpm --filter @kamiazya/whiteboard-mcp test:coverage",
     "coverage": "node tools/checks/src/run-coverage.mjs",
