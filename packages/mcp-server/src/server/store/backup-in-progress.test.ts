@@ -124,7 +124,7 @@ describe('the backup-in-progress marker', () => {
         await withBackupMarker(
           runDir,
           async () => {
-            // Return while a refresh is provably MID-WRITE. `writeFileAtomic`
+            // Return while a refresh is provably MID-WRITE. `writeFileAtomicStaged`
             // stages into `.pending-writes` and then renames, so a non-empty
             // staging directory IS the condition "a write is in flight" —
             // which is the state the straggler needs and the one a fixed

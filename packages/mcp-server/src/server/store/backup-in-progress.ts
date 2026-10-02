@@ -1,7 +1,7 @@
 import { readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { writeFileAtomic } from '../atomic-write.js'
+import { writeFileAtomicStaged } from '../atomic-write.js'
 
 /** Exported so `backupDataDir` can keep this command's own bookkeeping out
  *  of its own output. */
@@ -156,7 +156,7 @@ export async function withBackupMarker<T>(
     // target truncated for the whole write and GC resumed underneath a
     // running backup once per refresh; it now falls back to the mtime, and
     // the atomic write keeps it from having to.
-    await writeFileAtomic(
+    await writeFileAtomicStaged(
       dataDir,
       markerPath(dataDir),
       `${JSON.stringify(marker, null, 2)}\n`,

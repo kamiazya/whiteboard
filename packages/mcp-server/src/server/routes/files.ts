@@ -3,7 +3,7 @@ import { basename, extname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { errorMessage } from '../../shared/error-message.js'
-import { writeFileAtomic } from '../atomic-write.js'
+import { writeFileAtomicStaged } from '../atomic-write.js'
 import { getDataDir } from '../config.js'
 import {
   corruptStoredData,
@@ -126,7 +126,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
         // overlapping an in-flight 8 MiB upload captured a torn file 2 times
         // out of 10, which is worse than always, because a backup then holds
         // a corrupt image only sometimes.
-        await writeFileAtomic(getDataDir(), filePath, bytes)
+        await writeFileAtomicStaged(getDataDir(), filePath, bytes)
       })
       return c.body(null, 204)
     },

@@ -10,7 +10,7 @@ import { platform } from 'node:os'
  * of the same target cannot interleave into one buffer, and it never matches
  * a content address, so a directory scan that keys on those ignores a
  * leftover. For a write that must stage under a data dir's excluded
- * directory instead, see `server/atomic-write.ts`.
+ * directory instead, see `writeFileAtomicStaged` in `server/atomic-write.ts`.
  *
  * `mode` is applied to the staged file before the rename, so the target never
  * appears with a looser one; `writeFile`'s own mode is masked by the umask and
