@@ -9,16 +9,6 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**
- * What this widget ACCEPTS is a JSON Canvas document — a file another tool may
- * have written — so the published input contract is codec's wire schema,
- * re-exported and never redeclared. It deliberately does not follow the
- * product's own model: ADR-0037 moves that away from the format, and an input
- * contract that tracked it would break every third-party document the moment
- * it did.
- */
-export const viewerSceneSchema = jsonCanvasDocumentSchema
-
-/**
  * What the viewer HOLDS once a scene is parsed: the model, because that is
  * what the renderer draws. Accepting the format and holding the model is the
  * whole shape of the seam — `parseViewerScene` is where the lift happens, and
@@ -32,6 +22,12 @@ export type ViewerScene = SpatialCanvas
  * parseSpatial (JSON-syntax stage included); an already-parsed value (e.g.
  * an embedded <script> JSON.parse() result, or an MCP structuredContent
  * payload) is validated directly against the schema.
+ *
+ * What this widget ACCEPTS is a JSON Canvas document — a file another tool may
+ * have written — so the input contract is codec's wire schema, never
+ * redeclared here. It deliberately does not follow the product's own model:
+ * ADR-0037 moves that away from the format, and an input contract that
+ * tracked it would break every third-party document the moment it did.
  */
 export function parseViewerScene(input: unknown): CodecParseResult<ViewerScene> {
   if (typeof input === 'string') return parseSpatial(input)
