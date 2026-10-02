@@ -496,6 +496,19 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   // `POST /api/runtime/logs/prune` is daemon housekeeping with one caller;
   // no second surface asks for it, so there is no operation to share yet.
   'routes/runtime.ts -> daemon/log-rotation',
+  // `export/` counted since the scan learned to look for it. `headless-export`
+  // reads the stored document through the store's module-level handle and
+  // renders it, so "export a document" cannot be asked of it without the
+  // keeper's storage coming along — the shape ADR-0018 names, in two routes.
+  // The font modules keep files under the data directory themselves.
+  'routes/document/export-svg.ts -> export/headless-export',
+  'routes/export.ts -> export/headless-export',
+  'routes/fonts.ts -> export/install-font',
+  'routes/fonts.ts -> export/installed-fonts',
+  // The one helper every address-parsing route shares. Its own reach is the
+  // workspace registry the store holds at module level; handing it the registry
+  // the way `createApp` hands routes everything else retires the entry.
+  'workspace-handle.ts -> document-store',
 ]
 
 /**
@@ -541,8 +554,18 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * `routes/document.ts -> auto-checkpoint` went: the root installs the
  * checkpoint scheduler through its background-work declaration instead of
  * the router doing it as a side effect of being built.
+ *
+ * Then 19 -> 24, and that is measurement catching up with the code, not new
+ * debt: the finder now reads import specifiers from the AST (a dynamic
+ * `import()` and a side-effect import count, a commented-out one does not —
+ * on the real tree that found nothing the text match had not), and it counts
+ * two things the old matcher could not see. Four are `export/` edges: two
+ * routes hold `export/headless-export` and `routes/fonts.ts` holds the two
+ * font modules. One is `workspace-handle.ts`, the helper nine routes share,
+ * whose own reach into the store's registry no route showed. All five already
+ * existed.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 19
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 24
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
@@ -573,6 +596,26 @@ export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
   // `di/boot-self-host-deps.ts` like every other root, so nothing needs the
   // exemption. A file that does must be added with its reason.
 ]
+
+/**
+ * Top-level `server/*.ts` modules that routes import and that are translation
+ * shared between them, scanned as adapters.
+ *
+ * A route importing `store/` shows an edge. A route importing a helper that
+ * imports `store/` shows none, so the reach hides one hop away behind every
+ * caller: `workspace-handle.ts` turns an address's handle into a workspace id
+ * for nine routes through `workspaceRegistry()`, and until it was named here no
+ * guard saw that. It is classified as an adapter rather than as a mechanic
+ * because what it holds is the 400 for a malformed address and the per-request
+ * memo — translation — with the one registry read inside it; calling it a
+ * mechanic would ledger nine routes for a single debt.
+ *
+ * Named, not discovered: following every `server/*.ts` an adapter imports also
+ * reaches `shared-background-work.ts`, a composition root's wiring whose edges
+ * are not debt, and a guess at which helpers count would hide the decision. A
+ * new helper that reaches a mechanic is a blind spot until it is listed here.
+ */
+export const ADAPTER_HELPER_FILES: readonly string[] = ['workspace-handle.ts']
 
 export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
 

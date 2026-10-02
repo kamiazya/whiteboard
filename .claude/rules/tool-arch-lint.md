@@ -213,11 +213,23 @@ get theirs from `routes/_test-helpers.ts`'s `resolveTestServerDeps`. The one
 exemption is the stdio root (`server/mcp/index.ts`), listed by name and
 checked from both sides: it must keep importing `di/`, or the entry is stale.
 
-## `adapter-mechanic-check.ts` and its three lists
+## `adapter-mechanic-check.ts` and its lists
+
+**The finder reads import specifiers from the AST** (`collectRelativeImportEdges`,
+the walk every other import scan uses), not `from '...'` text. The text match
+missed a dynamic `import()` and a side-effect `import '...'` and read a
+commented-out import as an edge, and it disagreed with
+`adapter-di-import-check.test.ts` about the same trees. Type-only imports still
+count: an adapter holding a store's TYPE is the same coupling.
 
 **What counts as a mechanic is wider than `store/`**: a `security/*-store` (the
 people, session, key and invitation rows), anything under the daemon's own
-`daemon/` directory, and `tenant/data-layout`. Their edges are spelled with the
+`daemon/` directory, `tenant/data-layout`, and the `export/` directory.
+`export/` is the keeper rendering a stored document and keeping fonts:
+`headless-export` reads the document through the store's module-level handle and
+the font modules join the data directory, so an operation welded to storage, the
+shape ADR-0018 names. It is matched whole, so a new module there is judged; a
+pure renderer an adapter needs goes in `MECHANICS_NOT_SCANNED`. Their edges are spelled with the
 directory (`security/member-profile-store`, `daemon/log-rotation`,
 `tenant/data-layout`) so they cannot be read as a same-named `store/` module.
 Policy beside them (`bearer-token`, `credential-resolver`, the tenant id) is
@@ -233,6 +245,19 @@ widened, all under `mcp/`. The depth is unbounded on purpose: `store/db/` is
 how deep the tree happens to go today, not a property of it, and a matcher
 enumerating the depths it has seen is the same blind spot one directory
 further down.
+
+**`ADAPTER_HELPER_FILES` names top-level `server/*.ts` helpers scanned as
+adapters.** A route importing a helper that imports `store/` shows no edge, so
+the reach hides behind every caller: `workspace-handle.ts` serves nine routes
+through `workspaceRegistry()`. It is classified as an adapter, not a mechanic —
+what it holds is translation (the 400 for a malformed address, the per-request
+memo) with one registry read inside, and a mechanic classification would ledger
+nine routes for one debt. The list is NAMED, not discovered, and that is a known
+blind spot: following every `server/*.ts` an adapter imports also reaches
+`shared-background-work.ts`, whose edges are composition-root wiring, and a new
+helper that reaches a mechanic stays invisible until someone lists it. Guarded
+from one side: each entry must exist and be imported by an adapter. Deeper hops
+(a helper's helper, a re-export barrel) are not followed either.
 
 **`ADAPTERS_REACHING_MECHANICS`** records the edges that exist today.
 
