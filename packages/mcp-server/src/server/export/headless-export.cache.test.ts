@@ -19,6 +19,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { testStoreScope } from '../routes/_test-helpers.js'
 
 let tempDir: string
 
@@ -95,7 +96,11 @@ describe('an export after an agent edit', () => {
 
     await writeThroughToolPath('日本語のテキスト')
 
-    const { svg } = await exportCanvasHeadlessSvg({ workspaceId: WORKSPACE, path: PATH })
+    const { svg } = await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: WORKSPACE,
+      path: PATH,
+    })
 
     expect(svg).toContain('日本語のテキスト')
   })
@@ -119,7 +124,11 @@ describe('an export after an agent edit', () => {
 
     await writeThroughToolPath('from the agent')
 
-    const { svg } = await exportCanvasHeadlessSvg({ workspaceId: WORKSPACE, path: PATH })
+    const { svg } = await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: WORKSPACE,
+      path: PATH,
+    })
 
     expect(svg).toContain('from the editor')
     expect(svg).toContain('from the agent')
@@ -130,7 +139,11 @@ describe('an export after an agent edit', () => {
     await getDoc(WORKSPACE, PATH)
     await writeThroughToolPath('hello')
 
-    const { svg } = await exportCanvasHeadlessSvg({ workspaceId: WORKSPACE, path: PATH })
+    const { svg } = await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: WORKSPACE,
+      path: PATH,
+    })
 
     // The observed failure was `<svg width="21" height="21" …><rect/></svg>`:
     // a well-formed 200 that a caller cannot tell from an empty canvas. Pin

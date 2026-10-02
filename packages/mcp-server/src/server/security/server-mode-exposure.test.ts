@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
 import {
-  isOriginAllowedForServerMode,
   resolveServerModeExposure,
   type ServerModeExposureDecision,
 } from './server-mode-exposure.js'
+
+// The per-request check as server-mode-middleware composes it: the resolved
+// entries parsed into patterns, then matched against the request's origin.
+const isAllowed = (requestOrigin: string, allowedOrigins: readonly string[]): boolean =>
+  matchOrigin(parseOriginPatterns(allowedOrigins), requestOrigin)
 
 // ── local-daemon: loopback-only policy ──────────────────────────────────────
 
@@ -171,9 +176,7 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
     expect(d.ok).toBe(true)
     if (d.ok) {
       expect(d.allowedOrigins).toEqual(['https://*.example.com'])
-      expect(isOriginAllowedForServerMode('https://preview.example.com', d.allowedOrigins)).toBe(
-        true,
-      )
+      expect(isAllowed('https://preview.example.com', d.allowedOrigins)).toBe(true)
     }
   })
 
@@ -200,7 +203,7 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
     expect(d.ok).toBe(true)
     if (d.ok) {
       expect(d.allowedOrigins).toEqual(['https://app.example.com'])
-      expect(isOriginAllowedForServerMode('https://app.example.com', d.allowedOrigins)).toBe(true)
+      expect(isAllowed('https://app.example.com', d.allowedOrigins)).toBe(true)
     }
   })
 
@@ -328,27 +331,21 @@ describe('resolveServerModeExposure — non-leak guard on failure decisions', ()
 
 // ── per-request origin allowlist check ──────────────────────────────────────
 
-describe('isOriginAllowedForServerMode', () => {
+describe('per-request origin allowlist (parseOriginPatterns + matchOrigin)', () => {
   it('listed https origin → allowed', () => {
-    expect(
-      isOriginAllowedForServerMode('https://app.example.com', ['https://app.example.com']),
-    ).toBe(true)
+    expect(isAllowed('https://app.example.com', ['https://app.example.com'])).toBe(true)
   })
 
   it('unlisted origin → not allowed', () => {
-    expect(
-      isOriginAllowedForServerMode('https://evil.example.com', ['https://app.example.com']),
-    ).toBe(false)
+    expect(isAllowed('https://evil.example.com', ['https://app.example.com'])).toBe(false)
   })
 
   it('empty allowedOrigins → not allowed', () => {
-    expect(isOriginAllowedForServerMode('https://app.example.com', [])).toBe(false)
+    expect(isAllowed('https://app.example.com', [])).toBe(false)
   })
 
   it('exact match required — subdomain mismatch is rejected', () => {
-    expect(
-      isOriginAllowedForServerMode('https://sub.app.example.com', ['https://app.example.com']),
-    ).toBe(false)
+    expect(isAllowed('https://sub.app.example.com', ['https://app.example.com'])).toBe(false)
   })
 
   it('wildcard subdomain pattern admits a matching origin', () => {
@@ -356,13 +353,11 @@ describe('isOriginAllowedForServerMode', () => {
     // pattern string must actually admit real subdomains, not silently
     // never-match the way a naive new URL(entry).origin + exact-Set lookup
     // would (new URL('https://*.example.com') parses without throwing).
-    expect(
-      isOriginAllowedForServerMode('https://preview.example.com', ['https://*.example.com']),
-    ).toBe(true)
+    expect(isAllowed('https://preview.example.com', ['https://*.example.com'])).toBe(true)
   })
 
   it('wildcard subdomain pattern rejects a non-matching origin', () => {
-    expect(isOriginAllowedForServerMode('https://evil.com', ['https://*.example.com'])).toBe(false)
+    expect(isAllowed('https://evil.com', ['https://*.example.com'])).toBe(false)
   })
 })
 

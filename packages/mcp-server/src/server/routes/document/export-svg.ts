@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import {
   type ApiErrorBody,
   invalidRequestBody,
@@ -13,10 +14,9 @@ import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
 } from '../../../shared/api-contracts/export-svg.js'
-import { errorMessage } from '../../../shared/error-message.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
-import type { DataLayout } from '../../tenant/data-layout-seam.js'
+import type { StoreScope } from '../../store/store-scope.js'
 import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
@@ -73,8 +73,8 @@ async function resolveSvgOutputPath(
 // Unlike PNG export, this always renders headless straight from the
 // persisted LoroDoc — unlike export.ts (PNG, which prefers the browser). SVG
 // requests are typically automation / doc-generation use cases, not "match
-// what's on the connected browser's screen right now", so there is no WS
-// round-trip and no browser-connection requirement to plumb through.
+// what's on the connected browser's screen right now", so there is no
+// browser round-trip and no browser-connection requirement to plumb through.
 /**
  * The SVG route's `exists`, like the PNG route's in `routes/export.ts`, is asked of the LiveDocuments seam rather than the store
  * (ADR-0018: an adapter translates, it does not reach a mechanic). The
@@ -86,7 +86,7 @@ async function resolveSvgOutputPath(
  */
 export interface DocumentSvgExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
-  dataLayout: DataLayout
+  scope: StoreScope
 }
 
 export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions) {
@@ -115,7 +115,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       if ('error' in parsedBody) return c.json(parsedBody.error, 400)
       const body = parsedBody.body
 
-      const exportsDir = options.dataLayout.exportsDir(workspaceId)
+      const exportsDir = options.scope.layout.exportsDir(workspaceId)
       const resolved = await resolveSvgOutputPath(body, workspaceId, exportsDir)
       if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
@@ -127,11 +127,8 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
           path,
-          options: {
-            padding: body.padding,
-            theme: body.theme,
-            style: body.style,
-          },
+          scope: options.scope,
+          options: { padding: body.padding, theme: body.theme, style: body.style },
         })
         svg = result.svg
         undrawable = result.undrawable
@@ -139,7 +136,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       } catch (err) {
         const errBody: ApiErrorBody = {
           error: 'headless_export_failed',
-          message: errorMessage(err),
+          message: messageOf(err),
         }
         return c.json(errBody, 500)
       }

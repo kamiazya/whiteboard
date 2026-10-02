@@ -52,6 +52,7 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
 import { DocumentFileStore } from './document-file-store.js'
+import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
 
 export interface PromoteWorkspaceOptions {
   fetch: typeof globalThis.fetch
@@ -101,10 +102,16 @@ export type PromoteWorkspaceResult =
        * must not fail — or silently hollow out — the whole promotion:
        * `missing` are references whose bytes are already gone in the browser
        * (the promoted document was equally broken before), `failed` are
-       * uploads the daemon refused or the network dropped — safe to re-run,
-       * the whole promotion is an idempotent merge.
+       * uploads the daemon refused or the network dropped, each with the
+       * reason — a type or size the daemon will never store stays failed on
+       * every re-run, while a dropped connection is cured by one (the whole
+       * promotion is an idempotent merge).
        */
-      blobs: { transferred: string[]; missing: string[]; failed: string[] }
+      blobs: {
+        transferred: string[]
+        missing: string[]
+        failed: Array<{ fileId: string; reason: string }>
+      }
     }
   | { kind: 'failed'; reason: string }
 
@@ -145,6 +152,44 @@ function collectImageRefs(
     }
   }
   return refs
+}
+
+type PromotedBlobs = Extract<PromoteWorkspaceResult, { kind: 'ok' }>['blobs']
+
+/** Sends each referenced image through the daemon's file route, one outcome per file. */
+async function transferImages(
+  fetch: typeof globalThis.fetch,
+  keeperBaseUrl: string,
+  workspaceId: string,
+  fileStore: DocumentFileStore,
+  refs: ReadonlyArray<readonly [fileId: string, path: string]>,
+): Promise<PromotedBlobs> {
+  const blobs: PromotedBlobs = { transferred: [], missing: [], failed: [] }
+  for (const [fileId, path] of refs) {
+    const blob = await fileStore.get(fileId)
+    if (blob === null) {
+      blobs.missing.push(fileId)
+      continue
+    }
+    const contentType = blob.type || 'image/png'
+    // A type or size the daemon is certain to refuse is not attempted: the
+    // upload would only come back 415 or 413, and would cost the bytes first.
+    const refusal = imageRefusal({ type: contentType, size: blob.size })
+    if (refusal !== null) {
+      blobs.failed.push({ fileId, reason: refusal })
+      continue
+    }
+    const res = await fetch(`${keeperBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: blob,
+    }).catch(() => null)
+    if (res === null) {
+      blobs.failed.push({ fileId, reason: 'Could not reach the daemon to store that image.' })
+    } else if (res.ok) blobs.transferred.push(fileId)
+    else blobs.failed.push({ fileId, reason: uploadRefusalReason(res.status) })
+  }
+  return blobs
 }
 
 async function promoteWorkspaceUnsafe(
@@ -199,21 +244,9 @@ async function promoteWorkspaceUnsafe(
   // upload lands in the report instead of failing the merge that already
   // happened.
   onProgress?.('blobs')
-  const blobs = { transferred: [] as string[], missing: [] as string[], failed: [] as string[] }
-  for (const [fileId, path] of collectImageRefs(record, entries)) {
-    const blob = await fileStore.get(fileId)
-    if (blob === null) {
-      blobs.missing.push(fileId)
-      continue
-    }
-    const res = await fetch(`${keeperBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': blob.type || 'image/png' },
-      body: blob,
-    }).catch(() => null)
-    if (res?.ok) blobs.transferred.push(fileId)
-    else blobs.failed.push(fileId)
-  }
+  const blobs = await transferImages(fetch, keeperBaseUrl, workspaceId, fileStore, [
+    ...collectImageRefs(record, entries),
+  ])
 
   return {
     kind: 'ok',

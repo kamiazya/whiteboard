@@ -35,6 +35,8 @@ vi.mock('../di/boot-self-host-deps.js', () => ({
   bootSelfHostDeps: vi.fn(async () => ({
     db: {},
     serverDeps: { documentIndex: {} },
+    // What the shared workers are built over; nothing here touches a database.
+    scope: { dataDir: '/tmp/wb-server-mode-unused', layout: {}, db: async () => ({}) },
   })),
 }))
 

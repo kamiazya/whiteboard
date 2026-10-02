@@ -1,7 +1,7 @@
 import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
+import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 import type { BackgroundWork, BackgroundWorker } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
-import { getDataDir } from './config.js'
 import {
   type AutoVersionTrigger,
   createAutoVersionTrigger,
@@ -21,6 +21,7 @@ import {
 } from './store/document-store.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
+import { globalStoreScope, type StoreScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 
@@ -49,14 +50,6 @@ import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/wor
  * `background-work.guard.test.ts` accepts that form here and still fails a
  * direct `x.start()` anywhere outside a registry call.
  */
-
-/**
- * Caps how long close() waits for an in-flight file-gc pass before the rest
- * of shutdown proceeds. A full pass can be expensive, and a shutdown that
- * appears to hang is worse than one that leaves a pass to finish in the
- * background.
- */
-export const FILE_GC_STOP_TIMEOUT_MS = 5_000
 
 export interface RootShutdownSteps {
   /** The registry's `stopAll`; read at close time because the registry is armed after this is built. */
@@ -142,6 +135,13 @@ function createCheckpointHolder(): CheckpointHolder {
 
 export interface SharedWorkers {
   /**
+   * The data directory and tenant every worker below serves — the scope the
+   * root booted its deps over. Carried so the declarations that need it
+   * (`auto-compact`'s version store) read it from the workers the root built,
+   * and a root cannot arm the shared set over one directory and serve another.
+   */
+  readonly scope: StoreScope
+  /**
    * The sweeper as a registry worker. Its own `stop` takes a cap on how long
    * shutdown waits for an in-flight pass (`FILE_GC_STOP_TIMEOUT_MS`), and a
    * caller that wrapped the bare method and passed no options would silently
@@ -169,13 +169,14 @@ export interface SharedWorkers {
  */
 function createBackup(
   instanceId: string,
+  scope: StoreScope,
   factories: SharedWorkerFactories,
 ): Pick<SharedWorkers, 'backupScheduler' | 'backupTrigger'> {
   const backupDir = parseBackupDir(process.env)
   const backupSchedule = parseBackupSchedule(process.env)
   const backupKeep = parseBackupKeep(process.env)
   const backupScheduler = (factories.backupSchedulerFactory ?? createBackupScheduler)({
-    dataDir: getDataDir(),
+    dataDir: scope.dataDir,
     backupDir: backupDir.ok ? backupDir.value : null,
     ...(backupSchedule.ok ? { schedule: backupSchedule.value } : {}),
     ...(backupKeep.ok && backupKeep.value !== null ? { keep: backupKeep.value } : {}),
@@ -186,7 +187,10 @@ function createBackup(
     // this is not conditional on being multi-instance: nothing here knows
     // whether it is, and a deployment that grows a second instance must not
     // depend on someone remembering to turn coordination on.
-    runExclusively: createBackupLease({ holder: instanceId }),
+    // In the SERVED directory's database: a lease taken in another one would
+    // be contended by nobody, and two instances over this directory would
+    // each take the backup.
+    runExclusively: createBackupLease({ holder: instanceId, getDb: () => scope.db() }),
   })
   return {
     backupScheduler,
@@ -196,53 +200,63 @@ function createBackup(
 
 /**
  * Several instances share one record (ADR-0020 decision 5), and the tail is
- * how a browser on THIS one learns what another wrote. Off unless the operator
- * sets the interval: one instance hears all its own writes through
- * `onWorkspaceDocUpdated` already, and polling for a second instance that does
- * not exist is pure cost.
+ * how a browser on THIS instance learns what another PROCESS wrote: a second
+ * server-mode instance, or the stdio entry beside the local daemon. One
+ * instance hears all its own writes through `onWorkspaceDocUpdated` already,
+ * so the local daemon arms it by default (`armLocalDaemonTail`) and server
+ * mode follows only when the operator sets the interval, since polling for a
+ * second instance that does not exist is pure cost.
  */
 function createTail(
   intervalMs: number | null,
+  scope: StoreScope,
   factories: SharedWorkerFactories,
 ): BackgroundWorker | null {
   if (intervalMs === null) return null
   return (factories.workspaceTailFactory ?? createWorkspaceTail)({
     subscribedWorkspaces: subscribedWorkspaceIds,
-    docs: cacheBackedWorkspaceDocs(),
+    docs: cacheBackedWorkspaceDocs(scope),
     // The CACHED document, which is what every reader on this instance is
     // served from — catching up a fresh copy would leave the one people
     // actually read untouched.
-    liveDoc: getWorkspaceDoc,
+    liveDoc: (workspaceId) => getWorkspaceDoc(workspaceId, scope),
     emit: emitWorkspaceDocUpdated,
     intervalMs,
   })
 }
 
 /**
- * Constructs the shared workers from the environment and this instance's
- * identity. Construction only — nothing here is armed; `sharedBackgroundWork`
- * below declares them, and the root's registry call arms them.
+ * Constructs the shared workers from the environment, this instance's
+ * identity and the `StoreScope` the root booted its deps over. Construction
+ * only — nothing here is armed; `sharedBackgroundWork` below declares them,
+ * and the root's registry call arms them.
+ *
+ * The scope is required rather than defaulted to the process's directory: a
+ * worker that took the default backed up, swept and compacted the process's
+ * data dir while the routes beside it served another.
  */
 export function createSharedWorkers(
   instanceId: string,
+  scope: StoreScope,
   factories: SharedWorkerFactories = {},
 ): SharedWorkers {
   // Constructed once per start. There is no shared-instance hazard here (see
   // file-gc-sweeper.ts's own comment on why it constructs its own
   // FileVersionStore).
-  const fileGcSweeper = (factories.fileGcSweeperFactory ?? createFileGcSweeper)()
+  const fileGcSweeper = (factories.fileGcSweeperFactory ?? createFileGcSweeper)({ scope })
 
   const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
 
   return {
+    scope,
     fileGc: {
       start: () => fileGcSweeper.start(),
       stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
     },
     checkpoints: createCheckpointHolder(),
-    workspaceTail: createTail(workspaceTailIntervalMs, factories),
+    workspaceTail: createTail(workspaceTailIntervalMs, scope, factories),
     workspaceTailIntervalMs,
-    ...createBackup(instanceId, factories),
+    ...createBackup(instanceId, scope, factories),
   }
 }
 
@@ -293,7 +307,7 @@ function autoCheckpointWork(scheduler: () => CheckpointScheduler | undefined): B
   }
 }
 
-function autoCompactWork(): BackgroundWork {
+function autoCompactWork(scope: StoreScope): BackgroundWork {
   return {
     name: 'auto-compact',
     trigger: 'a document write, folded once that workspace has been quiet for thirty seconds',
@@ -310,7 +324,7 @@ function autoCompactWork(): BackgroundWork {
     // depend on it. `stop` cancels the pending debounces and waits for a fold
     // already running, so shutdown never closes the database under one.
     worker: {
-      start: () => installAutoCompact(new FileVersionStore()),
+      start: () => installAutoCompact(new FileVersionStore(scope), scope),
       stop: async () => {
         uninstallAutoCompact()
         await disposeAutoCompact()
@@ -329,7 +343,7 @@ export function sharedBackgroundWork(
 ): BackgroundWork[] {
   return [
     autoCheckpointWork(arming.checkpointScheduler),
-    autoCompactWork(),
+    autoCompactWork(workers.scope),
     {
       name: 'file-gc-sweeper',
       trigger: 'every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it',
@@ -383,7 +397,7 @@ export function sharedBackgroundWork(
  * schedules folds under stdio, and what that left unanswered was waiting out
  * a fold in flight before the process closes the database under it.
  */
-export function stdioBackgroundWork(): BackgroundWork[] {
-  const scheduler = createAutoVersionTrigger(new FileVersionStore())
-  return [autoCheckpointWork(() => scheduler), autoCompactWork()]
+export function stdioBackgroundWork(scope: StoreScope = globalStoreScope): BackgroundWork[] {
+  const scheduler = createAutoVersionTrigger(new FileVersionStore(scope))
+  return [autoCheckpointWork(() => scheduler), autoCompactWork(scope)]
 }

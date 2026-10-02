@@ -352,10 +352,9 @@ describe('workspaceSummarySchema', () => {
     ).toBe(true)
   })
 
-  it('rejects an unknown tier string', () => {
-    expect(
-      workspaceSummarySchema.safeParse({ workspaceId: 'ws-abc', tier: 'full-offline' }).success,
-    ).toBe(false)
+  it('reads an unknown tier string as not stated, so the row and its siblings stay listed', () => {
+    const parsed = workspaceSummarySchema.parse({ workspaceId: 'ws-abc', tier: 'full-offline' })
+    expect(parsed).toEqual({ workspaceId: 'ws-abc' })
   })
 })
 
@@ -430,8 +429,10 @@ describe('documentSummarySchema', () => {
     expect(documentSummarySchema.safeParse(withoutKind).success).toBe(true)
   })
 
-  it('rejects an unknown kind', () => {
-    expect(documentSummarySchema.safeParse({ ...valid, kind: 'bogus' }).success).toBe(false)
+  it('reads an unknown kind as absent, the same as a row the port gave none', () => {
+    const parsed = documentSummarySchema.parse({ ...valid, kind: 'bogus' })
+    expect(parsed.kind).toBeUndefined()
+    expect(parsed.path).toBe(valid.path)
   })
 })
 
@@ -480,17 +481,15 @@ describe('compactWorkspaceResultSchema', () => {
     expect(result).toEqual(valid)
   })
 
-  it('rejects a result that says nothing about why', () => {
-    expect(
-      compactWorkspaceResultSchema.safeParse({
-        compacted: false,
-        beforeBytes: 4096,
-        afterBytes: 4096,
-      }).success,
-    ).toBe(false)
-    expect(compactWorkspaceResultSchema.safeParse({ ...valid, reason: 'because' }).success).toBe(
-      false,
+  it('reads a reason it cannot place as the one that claims least, not as a failed pass', () => {
+    // A newer daemon's new reason must not turn a pass that ran into an error.
+    expect(compactWorkspaceResultSchema.parse({ ...valid, reason: 'because' }).reason).toBe(
+      'no-gain',
     )
+    expect(
+      compactWorkspaceResultSchema.parse({ compacted: false, beforeBytes: 4096, afterBytes: 4096 })
+        .reason,
+    ).toBe('no-gain')
   })
 
   it('rejects negative or fractional byte counts', () => {
@@ -545,6 +544,15 @@ describe('purgeResultSchema', () => {
   it('roundtrip preserves fields', () => {
     const result: PurgeResult = roundtrip(purgeResultSchema, valid)
     expect(result).toEqual(valid)
+  })
+
+  it('reads a skipped reason it does not know as absent, keeping the counts', () => {
+    const result = purgeResultSchema.parse({ ...valid, skippedReason: 'a-newer-reason' })
+    expect(result.skippedReason).toBeUndefined()
+    expect(result.purgedCount).toBe(2)
+    expect(
+      purgeResultSchema.parse({ ...valid, skippedReason: 'backup-in-progress' }),
+    ).toMatchObject({ skippedReason: 'backup-in-progress' })
   })
 
   it('rejects missing purgedBytes', () => {

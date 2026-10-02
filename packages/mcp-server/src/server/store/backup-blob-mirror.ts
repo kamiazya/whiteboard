@@ -23,9 +23,11 @@ import { sha256Hex } from '../../shared/sha256.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
 import {
+  BLOBS_DIRNAME,
   blobShardDir,
   blobShardPath,
   blobsRoot,
+  FILES_DIRNAME,
   isBlobShardName,
   listTenants,
   parseBlobShard,
@@ -218,9 +220,9 @@ async function mirrorShard(
     const digest = parseBlobShard(shard, rest)
     if (digest === null) continue
     into.add(digest)
-    const destination = blobShardPath(join(backupRoot, 'blobs'), digest)
+    const destination = blobShardPath(join(backupRoot, BLOBS_DIRNAME), digest)
     if (await exists(destination)) continue
-    await mkdir(blobShardDir(join(backupRoot, 'blobs'), digest), { recursive: true })
+    await mkdir(blobShardDir(join(backupRoot, BLOBS_DIRNAME), digest), { recursive: true })
     await copyAtomically(blobShardPath(sourceRoot, digest), destination)
   }
 }
@@ -263,9 +265,9 @@ async function mirrorNamedTree(
     }
     const digest = sha256Hex(bytes)
     into[file.relative] = digest
-    const destination = blobShardPath(join(backupRoot, 'files'), digest)
+    const destination = blobShardPath(join(backupRoot, FILES_DIRNAME), digest)
     if (await exists(destination)) continue
-    await mkdir(blobShardDir(join(backupRoot, 'files'), digest), { recursive: true })
+    await mkdir(blobShardDir(join(backupRoot, FILES_DIRNAME), digest), { recursive: true })
     await copyAtomically(file.absolute, destination)
   }
 }

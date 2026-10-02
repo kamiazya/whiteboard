@@ -19,7 +19,7 @@
  * the bug lives in is "the chunk has not landed yet", which is a condition,
  * and a fixed sleep is a window that can close before the Back — under the
  * full parallel run a web-browser test measures many times its isolated
- * time (.claude/rules/integrator-flow.md), so the test would pass over a
+ * time (flake-shapes.md's `browser-project-in-flight`), so the test would pass over a
  * case it never reached. The gate also lets the chunk land INSIDE the test,
  * so no module request outlives it.
  */

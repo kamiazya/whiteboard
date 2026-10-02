@@ -861,8 +861,6 @@ try {
     const manifest = JSON.parse(readFileSync(join(bundleOutDir, 'manifest.json'), 'utf-8'))
     if (manifest.mode !== 'server-mode') fail('scenario 15: manifest.mode must be server-mode')
     if (!Array.isArray(manifest.sections)) fail('scenario 15: manifest.sections missing')
-    if (manifest.sections.includes('logs.jsonl'))
-      fail('scenario 15: logs.jsonl must not appear in server-mode manifest')
 
     const scenario15Literals = [...SMOKE_LITERALS, bundleDataDir, bundleOutDir]
     assertNoLeak('scenario 15 stdout', r.stdout, scenario15Literals)

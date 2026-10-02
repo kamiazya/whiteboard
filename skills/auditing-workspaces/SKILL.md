@@ -73,13 +73,16 @@ to write to it (a `wb_canvas_edit` call records `spatial`, a `document.set` op r
 
 ### Step 3: Judge Staleness
 
-There is no last-modified or last-accessed timestamp exposed through these tools. Judge staleness
-structurally instead:
+There is no true last-modified or last-accessed time exposed through these tools. The listing's
+`updatedAt` is one replica's register stamp: it moves on a real content change here, but a merge
+does not consult it (ADR-0027), so it is a hint and never proof a document is untouched. Judge
+staleness structurally first:
 
 | Signal | How To Check | Likely Meaning |
 | --- | --- | --- |
 | empty spatial document | `kind` is `spatial` (Step 2) AND digest reports zero nodes | never drawn, or already redrawn elsewhere — candidate for a `document.delete` op. A zero-node digest ALONE proves nothing: markdown documents always digest empty |
 | near-duplicate path | two `wb_document_list` entries with similar `path`/`name` | probably one abandoned in favor of the other |
+| old or missing `updatedAt` | `updatedAt` in the Step 1 listing, if present | a hint only — one replica's stamp, not a merge-proof clock; corroborate with a structural signal before proposing deletion |
 | markdown document with an empty body | `content` is blank apart from frontmatter | scaffolded but never written |
 | document with no recorded kind | no `kind` in the Step 1 listing, and a `failed` entry from `wb_document_get` | predates format tracking; needs deciding, not deleting on sight |
 

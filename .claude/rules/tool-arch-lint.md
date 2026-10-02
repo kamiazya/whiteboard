@@ -35,7 +35,7 @@ static-analysis-only, which is why it cannot see a cross-package cycle at all.
 
 It runs over the `src` of every entry in `repo-coverage.test.ts`'s
 `CYCLE_SCAN_PACKAGES` — every package the `SHARED_LAYER_PACKAGES` list names,
-plus both composition roots — over `.ts` and `.tsx` alike. Test files and
+plus `mcp-server`, `apps/web` and `apps/extension` — over `.ts` and `.tsx` alike. Test files and
 `test-utils/` are out, the same line the boundary scans draw.
 
 **Which packages those scans run on is `scan-packages.ts`'s
@@ -43,13 +43,30 @@ plus both composition roots — over `.ts` and `.tsx` alike. Test files and
 `ARCHITECTURE_MAP` and rule 1 for months while no per-package scan ran on
 either (a `node:fs` import in `reference-graph` passed).
 `workspace-scan-coverage.test.ts` (`every workspace is in a per-package scan
-list`) now fails on any `packages/*` or `apps/*` manifest in
+list`) now fails on any `packages/*`, `apps/*` or `tools/*` manifest in
 neither that list nor `COMPOSITION_ROOTS`, unless `NOT_BOUNDARY_SCANNED` gives
-it a reason (empty today, guarded from both sides). The boundary scan also reads
-`.tsx`, for the `node-builtin-import` and `inversify-import` kinds only — a
-component may touch the DOM, but not `node:*`. Scanning `.tsx` for every kind
-would be clean today too (measured: only `dom-global` hits, all exempt), so
-`.ts`-only was never what protected `plugin-visual`'s react-free data half.
+it a reason (`tools/arch-lint` and `tools/checks`: Node programs whose job is
+the filesystem and the GitHub API; guarded from both sides). `tools/*` is a
+workspace glob in `pnpm-workspace.yaml` and the manifest cycle check reads it,
+so a list that stopped at `packages` and `apps` left a new tool in no scan and
+no guard that said so.
+
+`apps/extension` is the one composition root whose SOURCE is boundary-scanned
+(`BOUNDARY_SCANNED_ROOTS`, which `BOUNDARY_SCAN_PACKAGES` adds to the shared
+layer): it runs only in a page and a service worker, so a `node:*` import in
+its relay is a defect as much as in `model`, and a planted one passed every
+guard while the root was unread. It is exempt from `dom-global` (a page script
+touching `window` is its job) and not from anything else; its direction and
+dependency list stay with the composition-root checks.
+
+The boundary scan reads `.ts` and `.tsx` for EVERY kind. It used to read
+`.tsx` for the two import kinds only, on the premise that a component may touch
+the DOM, and that premise is what left `facet-ui` and `plugin-visual` exempt
+from `dom-global` package-wide: a `document.title` planted in `plugin-visual`'s
+data half passed. A DOM use is now excused where it lives — `facet-ui`'s
+`catalog-popover.tsx` and `daemon-client`'s `api-client.ts` by per-file entry,
+`canvas-viewer` (seven files) still package-wide — and `plugin-visual`, whose
+default entry runs in Node and the layout worker, has none.
 
 **It follows path aliases, and had to before `apps/web` could join**: that
 package wrote 115 of its 554 intra-package value edges as `@/...`, a fifth of
@@ -108,8 +125,8 @@ import of the renderer of ANY kind.
 ## An exemption is per FILE when only one file needs it
 
 `exemptBoundaryViolationKinds` exempts a kind for a whole package, which is
-right for `dom-global` in a UI package and wrong for a use that lives in one
-build-time module. `canvas-viewer` carried `node-ambient-global` package-wide
+right for `dom-global` in a package that is DOM code throughout (`canvas-viewer`,
+`apps/extension`) and wrong for a use that lives in one file. `canvas-viewer` carried `node-ambient-global` package-wide
 for a single `Buffer` in `widget/build-fonts-module.ts`, while the rule said
 one file: `process.env.X` or `__dirname` in `mount.ts` or `widget-entry.ts` —
 which ship into the browser and the widget iframe — passed (measured, both).
@@ -117,6 +134,47 @@ which ship into the browser and the widget iframe — passed (measured, both).
 boundary exemptions` fails an entry whose file is gone or no longer contains
 that kind. It is file-granular, not line-granular: a second `process` use in
 the exempt file passes, which is the cost of not scanning for the line.
+
+The `test-framework-import` kind (`vitest`, `vitest/*`, `@vitest/*`,
+`fast-check`, `@fast-check/*` from a file that ships) is the same mechanism:
+five files import one on purpose today — three `canvas-render` benches, a
+`search` bench and `facet-engine`'s `./testing` entry — and each is a per-file
+entry with its reason, so a sixth fails instead of arriving unannounced. A
+`test-utils/` directory and a `.test.ts` are never walked, which is why the
+kind has nothing to say about them.
+
+## Named blind spots in the scanner and the resolver
+
+Each of these has zero instances today, was probed by planting one, and is
+recorded rather than closed because closing it costs more than it catches.
+They are named so a clean result is not read as covering them.
+
+- **A computed specifier.** `import(\`node:${name}\`)`, `import(name)` and
+  `createRequire(...)('x')` name no module statically; only a string or a
+  template with NO substitution is read (`collectModuleSpecifiers`).
+- **`import.meta.glob` and path-built reads.** A glob's pattern and a
+  `new URL('../x', import.meta.url)` carry a path no specifier scan sees; the
+  relative-import escape guard reads import specifiers only.
+- **The DOM list is a deny-list of thirteen names.** `location` and `Image` are
+  left out on purpose: the scan matches identifiers without scope analysis, and
+  `daemon-client`'s `WindowLike` declares a `location` property. A read of
+  either in a shared package passes. `globalThis['document']` (element access)
+  and `const { document } = globalThis` are not read either, only
+  `globalThis.document`.
+- **Type-only is syntactic.** An un-annotated named import of an interface reads
+  as a value edge, so the value cycle scan can over-report, never under-report.
+- **The test-framework kind names two frameworks.** `@testing-library/*`,
+  `msw` and `playwright` from shipped source are not a kind.
+- **The cycle resolver is intra-package.** It follows relative specifiers and
+  declared aliases and drops anything else, so a cross-package cycle through a
+  subpath is `package-cycle-check.ts`'s job and only at manifest level.
+
+What WAS closed in the same pass: a template-literal dynamic import, `require()`
+and `import x = require()`, `globalThis.<banned name>`, `inversify/…` and
+`@inversifyjs/*`, `from '.'` / `'..'` / `'../'` and an explicit `.ts` in the
+cycle resolver, and `peerDependencies` / `optionalDependencies` in the direction
+and allowed-dependency checks (neither field was read, so a reversing edge
+declared in one passed).
 
 ## `port-conformance-ledger.test.ts`: every store implementer runs its suite
 
@@ -130,6 +188,34 @@ to the test file that calls its suite AND constructs it with `new`. Both sides
 fail; `FakeDocumentStore`, a test double, is exempted with its reason. Blind
 spot: only `implements` clauses are read, so an object literal typed as a port
 is not a member.
+
+## `relative-import-escape.test.ts`: the door the manifest checks cannot see
+
+Direction, allowed dependencies and package cycles all read MANIFESTS, and a
+relative specifier walks past every one: `export * from
+'../../codec/src/index.js'` planted in `packages/model/src` is an upward edge and
+a package cycle, and left the whole project green with `tsc` passing in `model`.
+Every relative specifier in every workspace's `src` (`packages/*`, `apps/*`,
+`tools/*`, tests and `test-utils` included) must now resolve inside that
+workspace. No shipped file may escape; the six tests that do, on purpose, are
+`ESCAPES` entries with reasons (three `mcp-server` release-policy tests reading
+`tools/arch-lint/src/job-section.ts` through its `.js` specifier, and three tests that read the root manifest
+or the root vitest config they police), both-sided like every ledger here. The
+workspace list is `scan-roots.ts`'s `workspaceDirs()`, enumerated from the three
+`pnpm-workspace.yaml` groups, so a new one joins without being listed.
+
+Its second half pins the cycle scan's own blind spot: `cycle-check.ts` resolves
+against TypeScript files and DROPS what it cannot, which reads as "no edge".
+From shipped source that is eight edges today, all assets (two font `?url`
+imports, four SVGR `?react` components, one JSON schema, one stylesheet),
+ledgered in `UNRESOLVED_IN_SHIPPED_SOURCE`. A relative import that names no file
+at all fails as dangling — a `?raw` or `?url` query would otherwise hide it from
+`tsc` — and a new dropped edge fails as unlisted until someone says what it is.
+Measured when written: 3087 files, 8558 relative edges, 97 resolving to no
+TypeScript file, 89 of them from tests that sit outside the cycle graph.
+
+Named blind spot: only import specifiers are read. `import.meta.glob` and a
+`new URL('../x', import.meta.url)` carry paths this does not see.
 
 ## The always-on table is parsed, not trusted
 
@@ -152,10 +238,11 @@ check ignores. `mcp-server` declares all twelve workspace packages it uses there
 (tsdown's `noExternal` inlines them), so a `dependencies`-only read passed
 `@kamiazya/whiteboard-web` added to it: measured. Each root's allowed set must
 equal what its manifest declares (an unused allowance fails) and no root may
-depend on another. `mcp-server` and `apps/web` also have their `src` in the
-cycle scan. What stays unscanned for any of them is the BOUNDARY scan (banned imports/globals) — they are the packages allowed
-`node:*`, DOM and inversify — and their third-party surface is open by design,
-so none carries an allowed-third-party list.
+depend on another. `mcp-server`, `apps/web` and `apps/extension` also have their
+`src` in the cycle scan. What stays unscanned for `mcp-server` and `apps/web` is
+the BOUNDARY scan (banned imports/globals) — they are the packages allowed
+`node:*`, DOM and inversify — while `apps/extension` is scanned (see above). Their
+third-party surface is open by design, so none carries an allowed-third-party list.
 
 `apps/web`'s own source is policed by a separate enforcer BESIDE this tool's
 scans: `web-app-boundary.test.ts` fails the build when it imports a Node
@@ -213,6 +300,19 @@ get theirs from `routes/_test-helpers.ts`'s `resolveTestServerDeps`. The one
 exemption is the stdio root (`server/mcp/index.ts`), listed by name and
 checked from both sides: it must keep importing `di/`, or the entry is stale.
 
+It reads import specifiers from the AST (`collectRelativeImportEdges`) and
+judges them by where they RESOLVE, not by how they are spelled. It was the last
+text-regex scan of the adapter trees: `from '../../di/'` missed a side-effect
+`import '../../di/x.js'`, a double-quoted or template `import()` and a
+`require`, and read a commented-out import as a violation — each planted and
+measured before the rewrite.
+
+**What an adapter file IS is `adapter-files.ts`, once.** The mechanic check, the
+process-global check, the route-portability ledger and this check each carried
+a copy of `ADAPTER_DIRS` and the predicate, and the copies had diverged (this one
+skipped `_test-helpers.ts` only, the rest every `_test-*`). A directory added to
+one was a blind spot in the other three.
+
 ## `adapter-mechanic-check.ts` and its lists
 
 **The finder reads import specifiers from the AST** (`collectRelativeImportEdges`,
@@ -230,7 +330,7 @@ people, session, key and invitation rows), anything under the daemon's own
 the font modules join the data directory, so an operation welded to storage, the
 shape ADR-0018 names. It is matched whole, so a new module there is judged; a
 pure renderer an adapter needs goes in `MECHANICS_NOT_SCANNED`. Their edges are spelled with the
-directory (`security/member-profile-store`, `daemon/log-rotation`,
+directory (`security/member-profile-store`, `daemon/<module>`,
 `tenant/data-layout`) so they cannot be read as a same-named `store/` module.
 Policy beside them (`bearer-token`, `credential-resolver`, the tenant id) is
 translation an adapter is entitled to, and is not matched. A `_test-*` helper
@@ -283,9 +383,10 @@ whole value is that it shrinks.
 
 **`ADAPTER_SCAN_EXEMPT_FILES`** carries by FILE what the wiring exemption —
 a directory list (`di/`, `app.ts`, `http-server.ts`) — misses: a composition
-root living inside an adapter tree. Today that is `mcp/index.ts`, the McpServer
-factory and stdio entry point, which makes the same `createContainer` /
-`resolveServerDeps` calls `http-server.ts` does. It is separate from
+root living inside an adapter tree. It is EMPTY today: `mcp/index.ts`, the
+McpServer factory and stdio entry point, stood here while it called the
+store's own boot functions, and it now boots through
+`di/boot-self-host-deps.ts` like every other root. It is separate from
 `ADAPTERS_REACHING_MECHANICS` on purpose: an exemption is a CLASSIFICATION,
 not debt, and a composition root's edges will never shrink.
 
@@ -293,6 +394,34 @@ The other file that reached `store/db` from under `mcp/` was moved instead of
 exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
+
+## `mcp-server-layer-order.test.ts`: the layers inside the Node root
+
+`apps/web/src/layer-order.test.ts` pins that root's layers and has an emptied
+ledger. `packages/mcp-server/src` had only ADR-0018's one-way scan, so a store
+importing a route and `shared/` importing the server logger were both planted
+(`store/names-store.ts`, `shared/sha256.ts`) and passed the whole project. The
+order, bottom to top, is stated in the test's header and derived from how the
+code is used: `shared` < `daemon` < `mechanics` (`server/{store,security,tenant,
+export,search,observability,release}/**` plus the top-level `server/*.ts` that
+are mechanisms) < `adapters` (`routes/`, `mcp/`, the helpers routes share) <
+`composition` (`app.ts`, the HTTP roots, `di/`) < `entry` (`cli/`, the process
+entries and the MCP stdio root). A module may import its own layer or any below.
+
+Top-level `server/*.ts` files are each NAMED in `TOP_LEVEL`, not guessed, so a
+new one fails `belongs to no layer` until someone places it. The classifier is a
+pure function over file contents, so the two planted cases are also fixture
+tests that keep their teeth without planting.
+
+Eight upward edges exist and are ledgered with the move that retires each,
+count pinned by equality: the stdio root living inside the library the HTTP app
+composes (`mcp/index.ts`, two edges), the audience registry and the auto-version
+scheduler filed under `routes/` (three), a distribution-smoke impl under the
+adapter tree reaching the CLI, the membership gate reaching an adapter helper,
+and a daemon module logging through the server logger. None is a design that
+wants the edge; each is a module in the wrong directory. They were
+cross-checked against an independent directory-level import matrix and are not
+moved here. Type-only edges count, as in the web guard.
 
 ## `route-portability.test.ts`: which routes could leave Node
 
@@ -308,17 +437,36 @@ assumed `createServer(deps)` held the keeper protocol and it holds `/api/v1`
 only; whether to lift the portable routes is that ADR's open decision, and the
 scan states the count without deciding anything.
 
-**Direct imports only**: a portable route still reaches `../log.js`,
-the security gates and `workspace-handle.ts` (its registry read is a ledgered
-`adapter-mechanic-check` edge), so the number is the lower bound on the work. It
-owns its own matcher on purpose and shares nothing with the mechanic check, so
-each can fail alone. `NODE_ONLY_PACKAGES` is a short list; a Node-only package
-missing from it shows up as an unlisted portable route.
+**Two readings.** The class above is judged on a file's OWN imports, which is a
+lower bound and was once the whole guard: `import 'node:fs'` planted in
+`server/validators.ts`, imported by three of the "portable" routes, left it
+18/18 green. Each ledgered file is therefore also classified over the
+transitive closure of its VALUE imports (`route-closure.ts`, on
+`value-import-closure.ts`'s walk; type-only edges are erased and not followed),
+with two named cut seams — `log.ts`, `workspace-handle.ts` — that a lift would
+replace with a handed-in dependency. A seam must itself be Node-bound and be
+reached by a ledgered file, or it is a fake cut. Each ledger entry states its
+`role` (a `router` is a file that mounts `new Hono(`; six of the twelve were
+middleware, helpers and registries) and its `blockedBy`, which is checked
+against the closure, so Node arriving through a helper edits an entry instead of
+passing. Three counts are pinned by equality in `CLOSURE_COUNTS` (clean files,
+files held only by the seams, routers among those), measured 3 / 6 / 2.
+
+A closure over import specifiers alone says nine of twelve once the seams are
+cut; this says six because it counts an ambient `Buffer` (in `routes/sync-sse.ts`,
+reached through the audience registry, and in `security/timing-safe.ts`) the way
+the direct class always has. `store/corrupt-stored-data` is entered, not called a
+mechanic, for the reason `MECHANICS_NOT_SCANNED` gives. It owns its own matcher
+on purpose and shares nothing with the mechanic check, so each can fail alone.
+`NODE_ONLY_PACKAGES` is a short list; a Node-only package missing from it shows
+up as an unlisted portable route.
 
 ## `adapter-process-global-check.ts`: an adapter is handed its data layout
 
-A sibling of the mechanic check over the same adapter trees (`server/routes/**`,
-`server/mcp/**`, tests and `_test-*` scaffolding skipped): it bans `getDataDir(`
+A sibling of the mechanic check over the adapter trees and the wiring beside
+them (`server/routes/**`, `mcp/**`, `export/**`, `search/**`, plus `app.ts`,
+`shared-background-work.ts` and `workspace-handle.ts`; tests and `_test-*`
+scaffolding skipped): it bans `getDataDir(`
 and `SELF_HOST_TENANT_ID`. The first is a process global and the second the one
 tenant a self-hosted keeper has, so a route reading either decides inside
 itself which directory and which tenant it serves. `createApp` takes a
@@ -333,13 +481,30 @@ joins directory names — which the mechanic scan would count.
 Comments and string bodies are stripped before matching (`source-scan.ts`'s
 `stripCommentsAndStrings`), so prose naming `getDataDir()` is not a read. The
 ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
-from both sides, size pinned, every entry carrying its reason. It holds one
-entry, `mcp/index.ts`, the stdio composition root that resolves the data dir
-once before booting. `findCompositionGlobalReads` covers the layers that BUILD
+from both sides, size pinned, every entry carrying its reason. It holds two
+entries: `mcp/index.ts`, the stdio composition root that resolves the data dir
+once before booting, and `export/installed-fonts.ts` until the export
+singletons are keyed by directory. `findCompositionGlobalReads` covers the layers that BUILD
 stores: `di/**` (also banning `globalStoreScope`, the stores' default) and
 `server/store/**`. Its both-sided, size-pinned ledger holds the reads that are
 each the one place allowed to choose the data dir or tenant; a new
 `getDataDir()` in either tree fails until it takes the `StoreScope` instead.
+
+A second scan, `scope-default-calls.ts`, closes what name-matching cannot
+see: the process directory also enters through a default parameter (`new
+FileVersionStore()`, `getDoc(id, path)`). It derives, from the AST of
+`store/`, every export with a trailing `scope = globalStoreScope` parameter
+(constructors too) or an `options.scope ?? globalStoreScope` read, then
+reports a call in that population or in the two HTTP roots that omits the
+scope, an `undefined` passed for it, a bare reference to such a function, and
+any naming of `globalStoreScope` or `storeScope(`. It matches by imported
+NAME, so a local function of the same name is not read as one, and it does
+not follow a function handed on by reference to code elsewhere. Its ledger is
+both-sided with a pinned size: `app.ts -> storeScope` (the one derivation),
+`shared-background-work.ts -> globalStoreScope` (the stdio default) and
+`workspace-handle.ts -> workspaceRegistry`. `store-scope` is in
+`MECHANICS_NOT_SCANNED`: a router holding the `StoreScope` it is HANDED is
+not reaching for a mechanic.
 
 ## `no-test-utils-in-production.test.ts` and `blob-identity-one-place.test.ts`
 
@@ -446,8 +611,8 @@ under the full parallel suite it measured 6315ms and timed out, reporting
 `no source file says "slug"` and a five-second budget in one message — which
 reads as a violation that is not there. Module evaluation is not bounded by a
 per-test timeout, so the cost now lands in the collection phase, the same move
-`.claude/rules/integrator-flow.md` prescribes for a heavy in-body
-`await import()`. The read count is pinned by its own assertion rather than
+`.claude/skills/steward/reference/flake-shapes.md` prescribes under "A third
+shape: `await import()` of a heavy module INSIDE a test body". The read count is pinned by its own assertion rather than
 left to a reader, because the redundancy was invisible in the source and
 visible only as a timeout somewhere else. Directory WALKS are still repeated
 per word and deliberately so: deduping them saves 9ms of the 255, which does
@@ -472,8 +637,10 @@ ways, the fourth being the one that matters: reverting
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 
-`scan-roots.ts` owns `REPO_ROOT`, the size ledgers' `SCAN_ROOTS`, their
-`EXCLUDED_DIR_SEGMENTS` and the one `walk(dir, { include, skip })`; a scan
+`scan-roots.ts` owns `REPO_ROOT`, `workspaceDirs()` (every `packages/*`, `apps/*`
+and `tools/*` directory with a manifest — three guards kept their own copy), the
+size ledgers' `SCAN_ROOTS`, their `EXCLUDED_DIR_SEGMENTS` and the one
+`walk(dir, { include, skip })`; a scan
 passes its FILTER and gets the traversal. Two of its choices are measured, not
 tidy: `skip` is judged before the entry is stat'ed, so it reaches FILES (a
 nested worktree's `.git` is a file), and `isExcludedPath` matches the path

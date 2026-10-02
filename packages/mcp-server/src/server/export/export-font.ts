@@ -1,5 +1,5 @@
 // The canonical export font: vendored static TTFs (four faces) used by
-// createOpentypeMeasureText (measure-text.ts) and, later, the headless SVG
+// createExportTextMeasurer (measure-text.ts) and, later, the headless SVG
 // export renderer. canvas-viewer vendors a byte-identical copy of this same
 // file and loads it as a real webfont (its own font-loading.ts, wired in at
 // apps/web's bootstrap) under the matching VIEWER_FONT_FAMILY, so Node and

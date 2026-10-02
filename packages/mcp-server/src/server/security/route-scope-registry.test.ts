@@ -295,7 +295,6 @@ const CLAIMED_BY = {
   'workspace replica-tier': ['PUT', '/api/workspaces/ws1/replica-tier'],
   'workspaces (rest)': ['GET', '/api/workspaces/ws1'],
   'tenant people': ['PUT', '/api/people/u1/administrator'],
-  'runtime/logs/prune': ['POST', '/api/runtime/logs/prune'],
   'runtime (rest)': ['GET', '/api/runtime/status'],
   debug: ['GET', '/api/debug'],
   fonts: ['GET', '/api/fonts'],
@@ -350,7 +349,6 @@ const ORIGIN_TRUSTED = [
   // It addresses no workspace: the router answers administrators alone, a
   // role checked per request rather than a gate over a workspace handle.
   'tenant people',
-  'runtime/logs/prune',
   'runtime (rest)',
   'debug',
   'fonts',

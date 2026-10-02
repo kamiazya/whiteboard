@@ -41,7 +41,7 @@ function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
     isImageRef: (file) => file.startsWith('asset:'),
     loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
     loadImageUrl: vi.fn(async (ref: string) => `blob:${ref}`),
-    storeImage: vi.fn(async () => 'asset:new'),
+    storeImage: vi.fn(async () => ({ ok: true as const, ref: 'asset:new' })),
     ...overrides,
   }
   return adapter
@@ -197,7 +197,7 @@ describe('useDocumentFileSeams', () => {
     const ref = await result.current.onAddImage(file)
 
     expect(adapter.storeImage).toHaveBeenCalledWith(file)
-    expect(ref).toBe('asset:new')
+    expect(ref).toEqual({ ok: true, ref: 'asset:new' })
   })
 
   it('exposes the adapter image-ref predicate to the editor', () => {

@@ -1,4 +1,5 @@
 import { mkdir, readFile, rm } from 'node:fs/promises'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import type {
   BlobDeleteInput,
   BlobGetInput,
@@ -12,7 +13,6 @@ import type {
 } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { isMissingFileError } from '../../../shared/errno.js'
-import { errorMessage } from '../../../shared/error-message.js'
 import { sha256Hex } from '../../../shared/sha256.js'
 import { writeFileAtomicStaged } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
@@ -104,7 +104,7 @@ export class FsBlobStore implements BlobStore {
     try {
       envelope = blobEnvelopeSchema.parse(JSON.parse(raw))
     } catch (err) {
-      throw corruptStoredData(filePath, `invalid blob envelope (${errorMessage(err)})`)
+      throw corruptStoredData(filePath, `invalid blob envelope (${messageOf(err)})`)
     }
     return {
       bytes: new Uint8Array(Buffer.from(envelope.bytesBase64, 'base64')),

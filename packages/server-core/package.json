@@ -32,6 +32,10 @@
       "types": "./src/test-utils/embedder-contract.ts",
       "import": "./src/test-utils/embedder-contract.ts"
     },
+    "./log-levels": {
+      "types": "./src/log-levels.ts",
+      "import": "./src/log-levels.ts"
+    },
     "./viewport-request": {
       "types": "./src/viewport-request.ts",
       "import": "./src/viewport-request.ts"

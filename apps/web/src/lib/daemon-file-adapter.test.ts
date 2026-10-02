@@ -112,7 +112,7 @@ describe('createDaemonFileAdapter', () => {
     const file = new File(['xy'], 'x.png', { type: 'image/png' })
     const ref = await adapter.storeImage(file)
 
-    expect(ref).toBe(`asset:${FAKE_UUID}`)
+    expect(ref).toEqual({ ok: true, ref: `asset:${FAKE_UUID}` })
     const [url, init] = daemonFetch.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe(`${BASE}/api/w/${WS}/document/${path}/file/${FAKE_UUID}`)
     expect(init.method).toBe('PUT')
@@ -121,8 +121,12 @@ describe('createDaemonFileAdapter', () => {
     expect(new Headers(init.headers).get('Content-Type')).toBe('image/png')
   })
 
-  it('reports a rejected upload as undefined rather than minting a dangling reference', async () => {
-    const daemonFetch = vi.fn(async () => new Response(null, { status: 413 }))
+  it.each([
+    [413, '16 MiB'],
+    [415, 'PNG'],
+    [500, 'HTTP 500'],
+  ])('answers a %i upload as a refusal naming why, never a dangling reference', async (status, named) => {
+    const daemonFetch = vi.fn(async () => new Response(null, { status }))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
@@ -130,12 +134,30 @@ describe('createDaemonFileAdapter', () => {
       path: path,
     })
 
-    // Returning the ref anyway would put a node on the canvas pointing at
-    // bytes the daemon never stored.
-    await expect(
-      adapter.storeImage(new File(['x'], 'x.png', { type: 'image/png' })),
-    ).resolves.toBeUndefined()
+    // Returning a ref anyway would put a node on the canvas pointing at bytes
+    // the daemon never stored, and answering nothing leaves the person with a
+    // click that did nothing.
+    const result = await adapter.storeImage(new File(['x'], 'x.png', { type: 'image/png' }))
+    expect(result.ok).toBe(false)
+    expect(result.ok ? '' : result.reason).toContain(named)
     await expectLoggedFailure('image upload rejected')
+  })
+
+  it('answers an unreachable daemon as a refusal too', async () => {
+    const daemonFetch = vi.fn(async () => {
+      throw new TypeError('fetch failed')
+    })
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    const result = await adapter.storeImage(new File(['x'], 'x.png', { type: 'image/png' }))
+    expect(result.ok).toBe(false)
+    expect(result.ok ? '' : result.reason).toContain('daemon')
+    await expectLoggedFailure('image upload failed')
   })
 
   it('loads a referenced canvas from its snapshot', async () => {

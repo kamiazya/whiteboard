@@ -59,7 +59,12 @@ export const LOOP_COSTS = {
       'commits of history with a 10-commit gain, 105ms at 100/50, 283ms at 300/50. 300 ' +
       'commits is a small workspace, so treat that as a floor. Without the yield the same ' +
       'pass stalls 2927ms unbroken. An import is one call, so batching what catchUp ' +
-      'imports is the only way lower.',
+      'imports is the only way lower. The local daemon arms it by default (500ms), so ' +
+      'the pass nobody wrote to is the common one: by hand over file-backed libSQL ' +
+      '(scripts/measure/workspace-follow-cost.mjs, 20 documents x 50 nodes), as the ' +
+      'daemon wires it, one frontier read per subscribed workspace — 0.5ms at 1 ' +
+      'workspace, 2-3ms at 10, 12-20ms at 50, worst stall 4-8ms at 50 — against ' +
+      '1.5ms / 17-19ms / 100-149ms when each pass read the log.',
     measuredOn: '2026-08-30',
   },
   'auto-checkpoint': {

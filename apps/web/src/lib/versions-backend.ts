@@ -52,9 +52,10 @@ export interface VersionsBackend {
  * `reason` is the daemon's OWN display copy, read through `refusalReasonOf` —
  * the only thing that tells a reader why a restore did not happen (`a document
  * already exists there`, and the rest of the route's { error, message }
- * family). It has to travel on the error because the UI's fallback copy
- * answers every `Error` the same way by contract: a UI handed only this class would
- * say "try again" to a refusal that will never succeed.
+ * family), and absent when the daemon gave none. It has to travel on the
+ * error because the UI's fallback copy answers every `Error` the same way: a
+ * UI handed only this class would say "try again" to a refusal that will
+ * never succeed.
  */
 export class VersionsRequestError extends Error {
   readonly reason: string | undefined
@@ -103,11 +104,10 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
         method: 'POST',
       })
       if (!res.ok) {
-        throw new VersionsRequestError(
-          res.status,
-          'restore request',
-          (await refusalReasonOf(res, `Request failed (${res.status}).`)).reason,
-        )
+        // An empty fallback, so a refusal that says nothing carries no reason
+        // and the UI keeps its own wording rather than quoting a status line.
+        const { reason } = await refusalReasonOf(res, '')
+        throw new VersionsRequestError(res.status, 'restore request', reason || undefined)
       }
     },
   }

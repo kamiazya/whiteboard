@@ -67,7 +67,6 @@ export function resolveHookProjectRoot(env, cwd) {
  * .dev-data, which is intentional: it keeps parallel dev-loop lanes from
  * sharing (and corrupting) one another's canvas data.
  */
-// The project's own hosted-app origins (production + preview deployments).
 export function resolveDevDataDirEnv(env, repoRoot) {
   if (env.WHITEBOARD_DATA_DIR) {
     return { ...env }

@@ -192,8 +192,9 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
   })
 
   // Any job-level WHITEBOARD_DEV placement in release.yml is a regression:
-  // it would silence the src-vs-dist daemon spawn switch (spawn-args.ts) for
-  // every step in that job, not just the one that actually needs it.
+  // it would silence the src-vs-dist spawn switch (`WHITEBOARD_DEV` in
+  // `store/backup-subprocess.ts`) for every step in that job, not just the one
+  // that actually needs it.
   it('release.yml has zero job-level WHITEBOARD_DEV placements', async () => {
     const text = readFileSync(RELEASE_WORKFLOW_PATH, 'utf-8')
     const result = scanEnvKeyPlacements(text, 'WHITEBOARD_DEV')

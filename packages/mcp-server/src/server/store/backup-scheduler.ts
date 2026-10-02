@@ -24,7 +24,6 @@ import { backupDirName, isBackupDirName } from './backup-dir-name.js'
 import { collectMirroredBlobs } from './backup-mirror-retention.js'
 import type { ServerBackupOutcome } from './backup-pass.js'
 import { runBackupInSubprocess } from './backup-subprocess.js'
-import { getDb } from './db/index.js'
 import type { Database } from './db/schema.js'
 import type { LeaseOutcome } from './lease.js'
 import { withLease } from './lease.js'
@@ -58,7 +57,13 @@ export interface BackupSchedulerOptions {
 export interface BackupLeaseOptions {
   /** This instance. The daemon's `instanceId`, minted once per process. */
   holder: string
-  getDb?: () => Promise<Database>
+  /**
+   * The database the lease row lives in: the one the instances being
+   * coordinated SHARE, which is the served directory's. Required — a default
+   * of the process's directory would put the row where no other instance
+   * looks while the backup copied another tree.
+   */
+  getDb: () => Promise<Database>
 }
 
 /**
@@ -77,9 +82,8 @@ const BACKUP_LEASE_NAME = 'backup'
 export function createBackupLease(
   options: BackupLeaseOptions,
 ): <T>(body: () => Promise<T>) => Promise<LeaseOutcome<T>> {
-  const resolveDb = options.getDb ?? (() => getDb())
   return async <T>(body: () => Promise<T>) => {
-    const db = await resolveDb()
+    const db = await options.getDb()
     return withLease(
       db,
       { name: BACKUP_LEASE_NAME, holder: options.holder, ttlMs: BACKUP_LEASE_TTL_MS },

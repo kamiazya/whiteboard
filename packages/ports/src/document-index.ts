@@ -125,7 +125,7 @@ export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>
  * first, then `workspaceId`, else null.
  *
  * The ONE definition of that order. Every surface that accepts a handle — an
- * HTTP path parameter, a WS target, an MCP tool argument — shares a single
+ * HTTP path parameter, a sync-stream target, an MCP tool argument — shares a single
  * namespace between ADR-0019's canonical and user-facing layers, so a rule
  * spelled out per surface is a rule that will eventually be spelled
  * differently at one of them.

@@ -17,7 +17,7 @@
  * timing-safe.ts' ... after the environment was torn down`, on a shard
  * reporting `186 passed` files and `2121 passed` tests with `2 errors` and
  * exit 1 — every test green and the job red, which is the same unreadable
- * shape `.claude/rules/integrator-flow.md` records as its ninth.
+ * shape flake-shapes.md records as `teardown-wipes-dom`.
  *
  * Hoisted to a static top-level import, neither can happen: the cost lands
  * in the collection phase no per-test timeout bounds, and the linking

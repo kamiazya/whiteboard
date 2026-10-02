@@ -27,7 +27,7 @@ const queues = new Map<string, Promise<void>>()
 // and deadlock forever). AsyncLocalStorage propagates through awaits along
 // the exact call chain that acquired the lock, so it distinguishes true
 // reentrancy from a genuinely separate concurrent caller (e.g. an
-// unrelated websocket handler's saveDocument firing at the same time), which
+// unrelated sync-update handler's saveDocument firing at the same time), which
 // must still queue normally rather than run concurrently.
 const heldByThisChain = new AsyncLocalStorage<ReadonlySet<string>>()
 

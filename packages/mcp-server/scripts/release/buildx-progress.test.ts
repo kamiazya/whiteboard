@@ -8,37 +8,10 @@
 // indistinguishable from a cache that is genuinely failing, and it would send
 // a reader to rebuild the cache configuration that was fine.
 
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-
-interface BuildStep {
-  id: string
-  name: string
-  cached: boolean
-  seconds: number | null
-  layer: boolean
-}
-interface CacheReport {
-  parsed: boolean
-  steps: BuildStep[]
-  stepCount: number
-  layerCount: number
-  cachedCount: number
-  ranCount: number
-  cacheHitRatio: number | null
-  executedStepSeconds: number
-  slowest: BuildStep[]
-}
-
-const { parseBuildxProgress, formatCacheReport } = (await import(
-  join(__dirname, 'buildx-progress.mjs')
-)) as {
-  parseBuildxProgress: (output: unknown) => CacheReport
-  formatCacheReport: (report: CacheReport, timing?: { elapsedSeconds?: number }) => string[]
-}
+// The module's own JSDoc types are the contract the assertions below read; a
+// hand-written mirror of them here is what drifted from the real report.
+import { formatCacheReport, parseBuildxProgress } from './buildx-progress.mjs'
 
 // The shape `docker buildx build --progress=plain` writes to stderr. Both
 // build paths in publish-dry-run-docker.mjs already pass that flag.

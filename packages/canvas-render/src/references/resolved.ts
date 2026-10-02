@@ -39,7 +39,7 @@ export interface FacetCardData {
 export interface ResolvedReference {
   /**
    * Human-readable name, for a caller whose references are opaque ids (the
-   * browser-local store). Absent falls back to the raw reference string,
+   * browser-kept store). Absent falls back to the raw reference string,
    * which is why an export that resolves nothing keeps labels a pure
    * function of the canvas.
    *

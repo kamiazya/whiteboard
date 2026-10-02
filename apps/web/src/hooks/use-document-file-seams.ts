@@ -31,7 +31,11 @@ import {
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DocumentFileAdapter, LoadedFileDocument } from '../lib/document-file-contract.js'
+import type {
+  DocumentFileAdapter,
+  ImageStoreResult,
+  LoadedFileDocument,
+} from '../lib/document-file-contract.js'
 import { useImageUrls } from './use-image-urls.js'
 
 export interface UseDocumentFileSeamsOptions {
@@ -70,7 +74,7 @@ export interface DocumentFileSeams {
    * hands the object over and spreads it once.
    */
   references: ReferenceWire
-  onAddImage: (file: File) => Promise<string | undefined>
+  onAddImage: (file: File) => Promise<ImageStoreResult>
   isImageFileRef: (file: string) => boolean
 }
 

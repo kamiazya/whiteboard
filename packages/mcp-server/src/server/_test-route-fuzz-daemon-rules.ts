@@ -170,7 +170,6 @@ export const RULES: Record<string, Rule> = {
   'GET /api/runtime/ping': { answers: 'json', response: daemonPingResponseSchema },
   'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
   'GET /api/runtime/storage': { answers: 'json', response: storageReportPayloadSchema },
-  'POST /api/runtime/logs/prune': { answers: 'json', response: purgeResultSchema },
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },
   'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },

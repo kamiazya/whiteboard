@@ -52,8 +52,8 @@ export function isReservedUiPath(path: string): boolean {
 
 // Minimal, honest placeholder served at server-mode's root. Server-mode has
 // its own OAuth/JWT auth (see AsyncAuthStrategy) and no local-daemon bearer
-// token; apps/web's provider model only knows browser-local and
-// local-daemon-token auth, so injecting it here without a real token would
+// token; apps/web's provider model only knows a browser-kept
+// workspace and a daemon bearer token, so injecting it here without a real token would
 // serve a UI whose every request 401s. Point operators at the API/MCP
 // surface instead until apps/web grows a server-mode-aware auth flow.
 export const SERVER_MODE_PLACEHOLDER_HTML = `<!DOCTYPE html>

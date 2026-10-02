@@ -119,10 +119,6 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'packaged-daemon-replica-key-smoke.mjs reads the real answer from a real daemon — the ' +
       'round trip, from both ends',
   ),
-  'cli/daemon-support-bundle.ts': notModelled(
-    'it re-reads the JSONL that runDaemonLogs just printed, and that shape is round-tripped by ' +
-      'shared/diagnostics/log-jsonl.property.test.ts, redaction included',
-  ),
 
   // Not persistence. Classified rather than filtered out, because what
   // covers each is a different lane and naming it is the useful half.

@@ -26,6 +26,10 @@
       "types": "./src/api-contracts/document-url.ts",
       "import": "./src/api-contracts/document-url.ts"
     },
+    "./api-contracts/files": {
+      "types": "./src/api-contracts/files.ts",
+      "import": "./src/api-contracts/files.ts"
+    },
     "./api-contracts/fonts": {
       "types": "./src/api-contracts/fonts.ts",
       "import": "./src/api-contracts/fonts.ts"
@@ -41,6 +45,10 @@
     "./api-contracts/tenant-people": {
       "types": "./src/api-contracts/tenant-people.ts",
       "import": "./src/api-contracts/tenant-people.ts"
+    },
+    "./api-contracts/tolerant-answer": {
+      "types": "./src/api-contracts/tolerant-answer.ts",
+      "import": "./src/api-contracts/tolerant-answer.ts"
     },
     "./api-contracts/workspace-people": {
       "types": "./src/api-contracts/workspace-people.ts",
@@ -73,6 +81,10 @@
     "./document-backend-contract": {
       "types": "./src/document-backend-contract.ts",
       "import": "./src/document-backend-contract.ts"
+    },
+    "./key-widths": {
+      "types": "./src/key-widths.ts",
+      "import": "./src/key-widths.ts"
     },
     "./read-plane": {
       "types": "./src/read-plane.ts",

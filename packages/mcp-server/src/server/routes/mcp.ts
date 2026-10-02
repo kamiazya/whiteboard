@@ -6,6 +6,7 @@
 // the line the handler was registered at, after the auth middleware and
 // before the other routers.
 
+import { messageOf } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import {
   type createMcpHandler,
@@ -13,7 +14,6 @@ import {
   WebStandardStreamableHTTPServerTransport,
 } from '@modelcontextprotocol/server'
 import { type Context, Hono } from 'hono'
-import { errorMessage } from '../../shared/error-message.js'
 import {
   extractInitializeDebugPayload,
   isJsonObject,
@@ -82,7 +82,7 @@ function mcpHttpTrace(enabled: boolean) {
     },
 
     destructError(error: unknown): void {
-      if (enabled) httpLog.info({ message: errorMessage(error) }, 'mcp-http:destruct-error')
+      if (enabled) httpLog.info({ message: messageOf(error) }, 'mcp-http:destruct-error')
     },
 
     destruct(startedAt: number): void {

@@ -102,7 +102,7 @@ describe('ADR-0009 tool naming', () => {
   it('TOOL_PROFILES covers exactly the registered tools', () => {
     // Not a restatement of the smoke's check: that one compares tools/list
     // against ALL_REGISTERED_TOOLS. A tool can be registered and still have
-    // no profile, which silently downgrades it to MUTATING with the name as
+    // no profile, which falls back to the destructive profile with the name as
     // its title — the one piece of human-readable metadata a client sees.
     expect(Object.keys(TOOL_PROFILES).sort()).toEqual([...ALL_REGISTERED_TOOLS].sort())
   })

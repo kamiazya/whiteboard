@@ -144,7 +144,7 @@ If a surviving mutant reveals a gap but the production fix is out of scope for t
 
 ### Current mutation target set
 
-The target list is not copied here, because a copy goes stale silently: the files that own it are `packages/mcp-server/stryker.config.mjs` (the `mutate` array run by `pnpm mutation:contracts`) and, for `canvas-render`'s separate lane, `packages/canvas-render/stryker-targets.mjs`. Both are guarded — `packages/mcp-server/src/server/release/stryker-targets.test.ts` fails on a `mutate` entry that names no file, and `canvas-render`'s `mutation-lane-coverage.test.ts` pins its list exactly.
+The target list is not copied here, because a copy goes stale silently: the files that own it are `packages/mcp-server/stryker.config.mjs` (the `mutate` array run by `pnpm mutation:contracts`) and, for `canvas-render`'s separate lane, `packages/canvas-render/stryker-targets.mjs`. Both are guarded — `tools/arch-lint/src/stryker-targets.test.ts` fails on a `mutate` entry that names no file, and `canvas-render`'s `mutation-lane-coverage.test.ts` pins its list exactly.
 
 ---
 
@@ -320,7 +320,7 @@ proves each tool works:
 |---|---|---|
 | `src/server/mcp/tool-surface-quality.test.ts` | `pnpm test --project mcp-node` | Per tool, off a real `tools/list`: model-visible bytes (name + description + input schema), wire bytes, description words, parameters and how many are undescribed, whether a stray key is refused or stripped, which neighbours the description names — plus the totals and that every schema-invalid call is a tool error. Pinned exactly; a change re-pins its row and says why. |
 | `src/server/mcp/tool-call-count-quality.test.ts` | `pnpm test --project mcp-node` | Calls and request/response bytes per errand in `shared/test-utils/mcp-errand-corpus.ts`. |
-| `pnpm --filter @kamiazya/whiteboard-mcp eval:tool-surface` | on demand, needs the `claude` CLI and API quota; skips cleanly without | A real model given only this server's tools, from an empty directory, on a seeded fixture (`scripts/eval/fixture.mjs`), one task at a time (`scripts/eval/tasks.mjs`). Graded by outcome — the answer string or the state read back — with calls, tools used, tool errors, tokens, cost and pass@k / pass^k over `--trials`. `--dry-run` seeds and checks the verifiers with no model call. |
+| `pnpm --filter @kamiazya/whiteboard-mcp eval:tool-surface` | on demand, needs the `claude` CLI and API quota; skips cleanly without | A real model given only this server's tools, from an empty directory, on a seeded fixture (`packages/mcp-server/scripts/eval/fixture.mjs`), one task at a time (`packages/mcp-server/scripts/eval/tasks.mjs`). Graded by outcome — the answer string or the state read back — with calls, tools used, tool errors, tokens, cost and pass@k / pass^k over `--trials`. `--dry-run` seeds and checks the verifiers with no model call. |
 
 The oracle for the first lives in `src/shared/test-utils/tool-surface-metrics.ts`
 and never imports the registration code, so the surface cannot grade itself.

@@ -205,9 +205,8 @@ describe('a mirrored backup restores what it captured', () => {
 
   /**
    * A backup whose mirror is not where its manifest says refuses rather than
-   * restoring a data directory with holes in it. `snapshotIsRestorable` is
-   * the predicate; this is the moment ADR-0021 decision 6 says to call it,
-   * and a restore is when an operator most wants it checked.
+   * restoring a data directory with holes in it. ADR-0021 decision 6 names a
+   * restore as the moment an operator most wants the check made.
    */
   it('refuses when the mirror cannot supply everything the backup needs', async () => {
     const digest = await putBlob('will go missing')

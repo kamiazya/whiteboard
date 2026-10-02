@@ -31,7 +31,7 @@ describe('computeStorageReport', () => {
     }
   })
 
-  it('categorises canvas blobs, version thumbnails, files, db, exports, logs, and other', async () => {
+  it('categorises canvas blobs, version thumbnails, files, db, exports, and other', async () => {
     // Match the layout the daemon actually writes — uploaded files live
     // under <DATA_DIR>/<workspaceId>/files/ (document-store.ts), so the
     // categorizer has to recognise the real per-workspace paths, not the
@@ -43,19 +43,17 @@ describe('computeStorageReport', () => {
     await seed('whiteboard.db', 8000)
     await seed('whiteboard.db-wal', 16) // SQLite WAL
     await seed('daemon.json', 32) // runtime metadata folded into "db"
-    await seed('logs/daemon-2026-05-01.log', 75) // dedicated logs bucket
     await seed('ws_1/exports/canvas-a.png', 6000) // dedicated exports bucket
     await seed('stray.txt', 9) // genuinely unclassified → other
 
     const report = await computeStorageReport(tempDir)
-    expect(report.fileCount).toBe(10)
-    expect(report.totalBytes).toBe(1000 + 2000 + 500 + 4000 + 8000 + 16 + 32 + 75 + 6000 + 9)
+    expect(report.fileCount).toBe(9)
+    expect(report.totalBytes).toBe(1000 + 2000 + 500 + 4000 + 8000 + 16 + 32 + 6000 + 9)
 
     expect(report.byCategory.blobs).toEqual({ bytes: 3000, files: 2 })
     expect(report.byCategory.versions).toEqual({ bytes: 500, files: 1 })
     expect(report.byCategory.files).toEqual({ bytes: 4000, files: 1 })
     expect(report.byCategory.db).toEqual({ bytes: 8048, files: 3 })
-    expect(report.byCategory.logs).toEqual({ bytes: 75, files: 1 })
     expect(report.byCategory.exports).toEqual({ bytes: 6000, files: 1 })
     expect(report.byCategory.other).toEqual({ bytes: 9, files: 1 })
   })

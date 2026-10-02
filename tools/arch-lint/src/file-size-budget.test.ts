@@ -157,7 +157,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // lines were for, so it is not met that way.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 879,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
-  // measured, separately from what the named rules charge for it.
+  // measured, separately from what the named rules charge for it. The next
+  // shrink is the PREFERENCE half (candidate generation, from
+  // `facingLaneWindow` through `shouldAdoptCandidate`) as a sibling the same
+  // way: it reads only `fullyContains` from the penalty half, which moves to
+  // `edge-geometry.ts` first, and the penalty half (`PENALTY_RULES` and the
+  // cost tuple) reads `bendCount` and `fullyContains` and none of the rest.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 845,
   // The file browser's host: the column area's four views as a discriminated
   // union built once and drawn by one switch, and `refreshAndSelect`, the one
@@ -179,7 +184,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the command writes (`command-writes.ts`), the adopted-passage write
   // (`apply-adopted-passages.ts`) and the listener sets (`subscribers.ts`).
   // The next shrink is the locks and the history/undo group as sub-modules
-  // taking `contentOf` and `doc`.
+  // taking `contentOf` and `doc`; the undo one is also handed
+  // `dropQueuedWrite`, because the debounce timer and the queue stay closed
+  // over by the factory (`function-size-budget.test.ts` carries the same path
+  // for `createDocumentSyncSession`).
   'apps/web/src/lib/document-sync-session.ts': 1159,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
@@ -392,7 +400,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 964 -> 977: the `document.move` arm's row, re-pinned with why it moved
   // and why its follow report costs wire bytes and no visible ones — the
   // prose a pinned scoreboard carries instead of a changelog.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 977,
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
@@ -478,7 +486,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the
   // distribution smokes' helpers did.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2668,
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2666,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

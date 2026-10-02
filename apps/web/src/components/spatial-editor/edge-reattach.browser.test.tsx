@@ -11,6 +11,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { tick } from '../../test-utils/async.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -34,8 +35,6 @@ const inked: SpatialCanvas = {
 }
 
 const SIZE = { width: 900, height: 700 }
-
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const fire = async (
   target: Element,

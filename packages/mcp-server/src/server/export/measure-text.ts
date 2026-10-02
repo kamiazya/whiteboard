@@ -303,18 +303,6 @@ export async function createExportTextMeasurer(
   return cachedMeasurerPromise
 }
 
-/**
- * The measurement half alone, for a caller with no family question to ask.
- * Every production seam takes `createExportTextMeasurer` whole, so that a
- * family is declared exactly where it is measured; this stays for the tests
- * of the measurer itself.
- */
-export async function createOpentypeMeasureText(
-  options: { resolveFontFiles?: () => Promise<Record<ExportFontFace, string | null>> } = {},
-): Promise<MeasureText> {
-  return (await createExportTextMeasurer(options)).measure
-}
-
 /** Test-only: clears the module-level measurer cache and log-once flag. */
 export function _resetExportMeasureTextCacheForTests(): void {
   cachedMeasurerPromise = null

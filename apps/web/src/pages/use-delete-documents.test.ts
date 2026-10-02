@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { deferred } from '../test-utils/async.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
 
 const lookup = (path: string) =>
@@ -7,14 +8,6 @@ const lookup = (path: string) =>
     alpha: { displayName: 'Alpha board', kind: 'spatial' as const },
     beta: { displayName: 'Beta board', kind: 'spatial' as const },
   })[path]
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((r) => {
-    resolve = r
-  })
-  return { promise, resolve }
-}
 
 describe('useDeleteDocuments', () => {
   it('starts closed, and opens on the request it is handed', () => {

@@ -2,11 +2,11 @@
  * The daemon binding of the editor's file seams (see use-document-file-seams.ts
  * for the backend-agnostic half).
  *
- * Every method is total: a missing file, a rejected upload, or an unreachable
- * daemon resolves to `undefined` so the editor keeps the card. A broken
- * reference must never take the page down, and it must never be reported as
- * success either — an upload that failed returns undefined rather than a
- * reference to bytes the daemon never stored.
+ * Every method is total: a missing file resolves to `undefined` so the editor
+ * keeps the card, and a rejected upload or an unreachable daemon answers a
+ * refusal with its reason. A broken reference must never take the page down,
+ * and it must never be reported as success either — an upload that failed
+ * carries no reference to bytes the daemon never stored.
  */
 
 import {
@@ -19,6 +19,7 @@ import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import type { DocumentFileAdapter } from './document-file-contract.js'
+import { uploadRefusalReason } from './image-upload-policy.js'
 
 const log = getAppLogger('daemon-file-adapter')
 
@@ -98,12 +99,12 @@ export function createDaemonFileAdapter({
         })
         if (!res.ok) {
           log.warn('image upload rejected', { status: res.status })
-          return undefined
+          return { ok: false, reason: uploadRefusalReason(res.status) }
         }
-        return newImageRef(id)
+        return { ok: true, ref: newImageRef(id) }
       } catch (err) {
         log.warn('image upload failed', { err })
-        return undefined
+        return { ok: false, reason: 'Could not reach the daemon to store that image.' }
       }
     },
   }

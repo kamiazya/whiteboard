@@ -64,7 +64,7 @@ function Host({ width, height }: { width: number; height: number }) {
         onChange={setCanvas}
         theme="light"
         fileRefOptions={[]}
-        onAddImage={async () => 'asset:test'}
+        onAddImage={async () => ({ ok: true, ref: 'asset:test' })}
         paletteLeading={<HistoryCluster onUndo={() => {}} onRedo={() => {}} canUndo canRedo />}
       />
     </div>

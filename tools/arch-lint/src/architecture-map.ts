@@ -109,6 +109,20 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // scope-to-role table written out three times. Pure JS, no DOM and no
     // `node:*`, so it holds on Node, the browser and a Worker alike.
     allowedThirdParty: ['zod', 'css-line-break', 'lowlight', 'highlight.js'],
+    exemptBoundaryFiles: {
+      'layout/edges/spatial-edges.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+      'layout/nodes/mdast-blocks.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+      'layout/spatial-canvas.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+    },
   },
   '@kamiazya/whiteboard-ports': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
@@ -126,6 +140,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   '@kamiazya/whiteboard-facet-engine': {
     allowedInternalDeps: [],
     allowedThirdParty: ['zod'],
+    exemptBoundaryFiles: {
+      'testing/facet-arbitraries.ts': {
+        kinds: ['test-framework-import'],
+        reason:
+          "the package's `./testing` entry: fast-check generators over the registry, imported " +
+          "only by test files and kept out of the default entry, so no consumer's bundle loads it",
+      },
+    },
   },
   // Lexical search: a dictionary-free tokenizer (latin words, CJK bigrams),
   // BM25 ranking, snippets, and the ONE definition of what text a document
@@ -137,6 +159,12 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   '@kamiazya/whiteboard-search': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: [],
+    exemptBoundaryFiles: {
+      'snippet.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+    },
   },
   // What the documents of a workspace point at, as a graph: the facts one
   // document contributes, the aggregate that answers backlinks and unlinked
@@ -223,7 +251,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // does. `react-dom` is deliberately absent: this package renders
     // elements and never mounts them.
     allowedThirdParty: ['lucide-react', 'react'],
-    exemptBoundaryViolationKinds: ['dom-global'],
+    exemptBoundaryFiles: {
+      'catalog-popover.tsx': {
+        kinds: ['dom-global'],
+        reason:
+          'positions and dismisses a popover against the viewport (`window`, `document`, ' +
+          '`HTMLElement.showPopover`); every other file here renders elements and touches no DOM',
+      },
+    },
   },
   // The bundled `visual` plugin, as an ORDINARY plugin package. The engine
   // does not import it and nothing here is privileged; "bundled" means only
@@ -248,8 +283,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-model',
       '@kamiazya/whiteboard-scene',
     ],
+    // No `dom-global` exemption: its default entry and `/render` run in Node
+    // and the layout worker (canvas-render imports them), and it has no use
+    // of a DOM global to excuse.
     allowedThirdParty: ['react', 'zod'],
-    exemptBoundaryViolationKinds: ['dom-global'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {
     allowedInternalDeps: [
@@ -291,7 +328,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // version's leading-zero branches are unreachable from this package's one
     // call site and so could never be covered by a test here.
     allowedThirdParty: ['zod', '@opentelemetry/api', 'multiformats'],
-    exemptBoundaryViolationKinds: ['dom-global'],
+    exemptBoundaryFiles: {
+      'api-client.ts': {
+        kinds: ['dom-global'],
+        reason:
+          "reads the embedding page's `window` (its origin and injected runtime config) through a " +
+          'structural type, so the file compiles with or without the DOM lib; nothing else in the ' +
+          'package reaches a DOM global',
+      },
+    },
   },
   // Composition root (Node CLI/daemon), never a runtime dependency of any
   // shared-layer package. Registered here so direction-check.ts flags the
@@ -328,9 +373,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // runtime, relaying the hosted app to the native host. It reads only the
   // names the browser checks from daemon-client, and is registered so a
   // shared package that took a dependency on it would be flagged.
+  //
+  // Its source IS boundary-scanned (`BOUNDARY_SCANNED_ROOTS`): it runs in the
+  // browser and a service worker, so a `node:*` import is as much a defect here
+  // as in a shared package, and a page script touching `window` is its job.
   '@kamiazya/whiteboard-extension': {
     allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
     allowedThirdParty: [],
+    exemptBoundaryViolationKinds: ['dom-global'],
   },
   // The OTHER composition root (browser). Registered for the same reason
   // `@kamiazya/whiteboard-mcp` is — being in this table is what makes
@@ -493,9 +543,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   // and the route holds none; what remains is the invitation store's type,
   // handed on to `invitation-link.ts` to issue the tenant invitation.
   'routes/tenant-people.ts -> security/invitation-store',
-  // `POST /api/runtime/logs/prune` is daemon housekeeping with one caller;
-  // no second surface asks for it, so there is no operation to share yet.
-  'routes/runtime.ts -> daemon/log-rotation',
   // `export/` counted since the scan learned to look for it. `headless-export`
   // reads the stored document through the store's module-level handle and
   // renders it, so "export a document" cannot be asked of it without the
@@ -525,9 +572,9 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * Raising it is a decision, not a fix. Do it only when the alternative is
  * worse than the debt, and say in the PR why the operation could not go to
  * server-core instead. The ADR's scheduled burn-down is COMPLETE
- * (2026-09-02): restore.ts, live-doc.ts, workspace-document.ts and ws.ts
- * are all translation-only over the LiveDocuments/WorkspaceDocuments
- * seams. The edges left are the unscheduled adapters — each still a
+ * (2026-09-02): restore.ts, live-doc.ts, workspace-document.ts and the
+ * websocket route (since deleted) were all translation-only over the
+ * LiveDocuments/WorkspaceDocuments seams. The edges left are the unscheduled adapters — each still a
  * candidate for the same treatment, none yet ordered.
  *
  * Two of the 21 went when ADR-0029 retired the branch: `routes/branches.ts`
@@ -564,8 +611,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * font modules. One is `workspace-handle.ts`, the helper nine routes share,
  * whose own reach into the store's registry no route showed. All five already
  * existed.
+ *
+ * Then 24 -> 23, when `routes/runtime.ts -> daemon/log-rotation` went with
+ * the route: the daemon keeps no log file, so the prune had nothing to delete.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 24
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 23
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
@@ -617,7 +667,17 @@ export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
  */
 export const ADAPTER_HELPER_FILES: readonly string[] = ['workspace-handle.ts']
 
-export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
+/**
+ * `store-scope` is a value an adapter is HANDED, not a mechanic it reaches for:
+ * the directory and tenant its routes serve, which `createApp` derives once
+ * from the layout its root booted the deps over. Holding the type is what lets
+ * a router pass the directory on to the store functions it calls, and counting
+ * it here would ledger nine routes for holding the contract. What an adapter
+ * must NOT do — fall back to the process's directory, or build a scope itself —
+ * is `adapter-process-global-check`'s scope scan, which bans `globalStoreScope`
+ * and `storeScope(` outside `createApp`.
+ */
+export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data', 'store-scope']
 
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []
@@ -628,21 +688,11 @@ export function allowedThirdPartyDependencies(packageName: string): readonly str
 }
 
 /**
- * The scanner's loro-crdt exemption (see `scanner.ts` / `repo-coverage.test.ts`)
- * is data-driven from this set, not an ad hoc heuristic: a package may import
- * `loro-crdt` from source iff it's declared here as an allowed third-party
- * dependency.
- */
-export function packagesAllowedToImportLoroCrdt(): readonly string[] {
-  return Object.entries(ARCHITECTURE_MAP)
-    .filter(([, entry]) => entry.allowedThirdParty.includes('loro-crdt'))
-    .map(([packageName]) => packageName)
-}
-
-/**
  * Every `BoundaryViolationKind` a package's own source is exempt from,
- * combining the automatic loro-crdt exemption above with each package's
- * explicit `exemptBoundaryViolationKinds`, and — when `fileInSrc` (the path
+ * combining the automatic loro-crdt exemption (a package may import
+ * `loro-crdt` from source iff it records it in `allowedThirdParty` — one list,
+ * read here and nowhere else) with each package's explicit
+ * `exemptBoundaryViolationKinds`, and — when `fileInSrc` (the path
  * relative to the package's `src/`, `/`-separated) is given — that file's
  * `exemptBoundaryFiles` entry. `repo-coverage.test.ts` filters
  * `scanSourceForBoundaryViolations` output through this before asserting

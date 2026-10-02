@@ -19,7 +19,11 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import type { DocumentFileAdapter, LoadedFileDocument } from './document-file-contract.js'
+import type {
+  DocumentFileAdapter,
+  ImageStoreResult,
+  LoadedFileDocument,
+} from './document-file-contract.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { loadDocumentContent } from './workspace-content.js'
@@ -128,10 +132,10 @@ export async function loadBrowserReference(
 }
 
 /**
- * Stores a picked/dropped/pasted image in the canvas file store and returns
- * the reference for the created file node, or undefined on failure.
+ * Stores a picked/dropped/pasted image in the canvas file store and answers
+ * the reference for the created file node, or why it could not be stored.
  */
-async function storeImageAsset(file: File): Promise<string | undefined> {
+async function storeImageAsset(file: File): Promise<ImageStoreResult> {
   try {
     const ref = newImageRef(crypto.randomUUID())
     await new DocumentFileStore().put(ref, {
@@ -139,10 +143,10 @@ async function storeImageAsset(file: File): Promise<string | undefined> {
       blob: file,
       created: Date.now(),
     })
-    return ref
+    return { ok: true, ref }
   } catch (err) {
     log.warn('image asset store failed', { err })
-    return undefined
+    return { ok: false, reason: 'Could not save that image in this browser.' }
   }
 }
 

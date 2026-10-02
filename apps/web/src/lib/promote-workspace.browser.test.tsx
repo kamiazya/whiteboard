@@ -8,6 +8,7 @@
  * happened.
  */
 
+import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
@@ -233,6 +234,99 @@ describe('promoteWorkspace', () => {
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
     expect(result.blobs).toEqual({ transferred: [], missing: ['gone-image'], failed: [] })
+  })
+
+  /** A spatial document referencing one stored image per entry, each with its own type and bytes. */
+  async function seedImages(images: ReadonlyArray<{ id: string; type: string; blob: Blob }>) {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const sketch = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'sketch',
+      kind: 'spatial',
+    })
+    for (const image of images) {
+      await new DocumentFileStore().put(image.id, {
+        mimeType: image.type,
+        blob: image.blob,
+        created: Date.now(),
+      })
+    }
+    const content = new LoroDoc()
+    writeSpatialCanvas(content, {
+      nodes: images.map((image, i) =>
+        fileNode({
+          id: `n${i}`,
+          file: newImageRef(image.id),
+          x: i * 20,
+          y: 0,
+          width: 10,
+          height: 10,
+        }),
+      ),
+      edges: [],
+    })
+    await seedWorkspaceDocumentContent(
+      sketch.documentId,
+      new Uint8Array(content.export({ mode: 'snapshot' })),
+    )
+  }
+
+  it('reports why an image the daemon cannot store was left behind, per image, without uploading it', async () => {
+    const small = (type: string) => new Blob([new Uint8Array([1, 2, 3])], { type })
+    await seedImages([
+      { id: 'fine', type: 'image/png', blob: small('image/png') },
+      { id: 'modern', type: 'image/avif', blob: small('image/avif') },
+      {
+        id: 'huge',
+        type: 'image/png',
+        blob: new Blob([new Uint8Array(MAX_FILE_UPLOAD_BYTES + 1)], { type: 'image/png' }),
+      },
+    ])
+    const putFiles: Array<{ url: string; contentType: string; bytes: Uint8Array }> = []
+
+    const result = await promoteWorkspace({
+      fetch: daemonStub(new LoroDoc(), putFiles),
+      keeperBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+    })
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.blobs.transferred).toEqual(['fine'])
+    const failed = Object.fromEntries(result.blobs.failed.map((f) => [f.fileId, f.reason]))
+    expect(Object.keys(failed).sort()).toEqual(['huge', 'modern'])
+    expect(failed.modern).toContain('image/avif')
+    expect(failed.huge).toContain('16 MiB')
+    // A refusal the daemon is certain to repeat is not attempted.
+    expect(putFiles.map((p) => p.url)).toEqual([expect.stringContaining('/file/fine')])
+  })
+
+  it("reports the daemon's own refusal of an upload by its status", async () => {
+    await seedImages([
+      {
+        id: 'one',
+        type: 'image/png',
+        blob: new Blob([new Uint8Array([1])], { type: 'image/png' }),
+      },
+    ])
+    const stub = daemonStub(new LoroDoc())
+    const refusing = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes('/file/') && init?.method === 'PUT'
+        ? new Response(null, { status: 415 })
+        : stub(input, init)) as typeof globalThis.fetch
+
+    const result = await promoteWorkspace({
+      fetch: refusing,
+      keeperBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+    })
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.blobs.failed).toEqual([{ fileId: 'one', reason: expect.stringContaining('PNG') }])
   })
 
   it('a 404 target is a structured failure naming the missing daemon workspace', async () => {

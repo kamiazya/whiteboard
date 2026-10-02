@@ -12,7 +12,7 @@
  */
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspace-handle-')
 
@@ -76,7 +76,7 @@ describe('daemon routes address a workspace by its segment', () => {
 
   it('answers GET /api/workspaces/<segment>/names as it does the canonical id', async () => {
     await seeded()
-    const app = createDocumentMetadataRouter()
+    const app = createDocumentMetadataRouter({ scope: testStoreScope() })
     // Named through the CANONICAL id first, so the two responses differ from
     // each other unless the segment reached the same workspace. Comparing the
     // bare payloads would pass on two empty ones — which is what an
@@ -101,7 +101,7 @@ describe('daemon routes address a workspace by its segment', () => {
 
   it('resolves the handle inside the /api/workspaces/.../documents/* hand parse', async () => {
     await seeded()
-    const app = createDocumentMetadataRouter()
+    const app = createDocumentMetadataRouter({ scope: testStoreScope() })
 
     const res = await app.request(`/api/workspaces/${SEGMENT}/documents/spec/name`, {
       method: 'PUT',

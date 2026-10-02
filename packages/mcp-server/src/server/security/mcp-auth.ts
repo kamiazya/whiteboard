@@ -33,33 +33,6 @@ export function requiresMcpHttpAuth(method: string): boolean {
   return method.toUpperCase() !== 'OPTIONS'
 }
 
-function normalizeCsv(value: string | undefined): string[] | undefined {
-  if (!value) return undefined
-  const parts = value
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-  return parts.length > 0 ? parts : undefined
-}
-
-export function resolveMcpProtectedResourceMetadataFromEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
-): McpProtectedResourceMetadataConfig | undefined {
-  const authorizationServers =
-    normalizeCsv(env.WHITEBOARD_MCP_AUTHORIZATION_SERVERS) ??
-    normalizeCsv(env.WHITEBOARD_MCP_AUTHORIZATION_SERVER)
-
-  if (!authorizationServers) {
-    return undefined
-  }
-
-  return {
-    authorizationServers,
-    resource: env.WHITEBOARD_MCP_RESOURCE?.trim() || undefined,
-    scopesSupported: normalizeCsv(env.WHITEBOARD_MCP_SCOPES_SUPPORTED),
-  }
-}
-
 function getMcpProtectedResourceMetadataUrl(requestUrl: string): string {
   return new URL('/.well-known/oauth-protected-resource/mcp', requestUrl).toString()
 }

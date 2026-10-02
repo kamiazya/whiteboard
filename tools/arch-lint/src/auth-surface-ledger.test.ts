@@ -44,7 +44,7 @@ const AUTH_SURFACES = {
     'resolver: /api/*. Full authority passes without consulting the registry; every narrower grant goes through `grantCoversRoute`, which fails closed on an undeclared route and refuses `daemon-token-only` outright.',
 
   'packages/mcp-server/src/server/routes/runtime.ts':
-    'resolver: /api/runtime/*. STRICTER than /api/* on purpose — a narrow credential reaches only routes declaring `runtime:read`, whatever scopes it holds, so a grant carrying `runtime:admin` still cannot reach shutdown. The logs-prune handler re-checks by KIND for its own file-deleting reason.',
+    'resolver: /api/runtime/*. STRICTER than /api/* on purpose — a narrow credential reaches only routes declaring `runtime:read`, whatever scopes it holds, so a grant carrying `runtime:admin` still cannot reach shutdown.',
 
   'packages/mcp-server/src/server/security/mcp-auth.ts':
     'resolver: /mcp in local-daemon mode. Full authority passes; a macaroon passes iff it carries `mcp:call`, the same scope server-mode enforces on this route. A verified credential this surface will not admit gets 403 without a challenge.',

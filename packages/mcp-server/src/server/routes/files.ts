@@ -1,25 +1,29 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import {
+  isUploadableImageType,
+  UPLOADABLE_IMAGE_TYPES,
+  type UploadableImageType,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { Hono } from 'hono'
 import { isMissingFileError } from '../../shared/errno.js'
-import { errorMessage } from '../../shared/error-message.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
 import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
+import type { StoreScope } from '../store/store-scope.js'
 import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
-import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { validateFileId, validationErrorBody } from '../validators.js'
 import { parseWorkspaceHandle } from '../workspace-handle.js'
-import { limitBody } from './body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 import { onDocumentFile } from './document/path-route.js'
 
-// Per-file size limit. Loro thumbnails are around 2 MiB and assets pasted into
-// Excalidraw normally fit inside this range. Return 413 when exceeded to avoid
-// runaway memory usage from malicious large uploads.
-const MAX_FILE_UPLOAD_BYTES = 16 * 1024 * 1024
-
-const MIME_TO_EXT: Record<string, string> = {
+// The set of types and the per-file ceiling are the contract the editor
+// checks a pick against (api-contracts/files); only the on-disk extension is
+// the route's own, keyed by that set so a type added there without one fails
+// to compile instead of answering 415 for a type the editor offers.
+const MIME_TO_EXT: Record<UploadableImageType, string> = {
   'image/png': '.png',
   'image/jpeg': '.jpg',
   'image/gif': '.gif',
@@ -38,13 +42,17 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
     if (isMissingFileError(error)) {
       return null
     }
-    throw corruptStoredData(dir, `failed to read files directory (${errorMessage(error)})`)
+    throw corruptStoredData(dir, `failed to read files directory (${messageOf(error)})`)
   }
 }
 
 export interface FilesRouterOptions {
-  /** Where a workspace's files are stored, and the data dir uploads are written atomically under. */
-  dataLayout: DataLayout
+  /**
+   * The directory and tenant these routes serve: where a workspace's files are
+   * stored, the data dir uploads are written atomically under, and what the
+   * purge reads its references from.
+   */
+  scope: StoreScope
   // Provide a versionStore for version-aware purge. Without one, the
   // purge endpoint walks only the live state of each canvas and leaves
   // files referenced exclusively by saved versions untouched.
@@ -72,13 +80,14 @@ async function storedFileFor(
   try {
     data = await readFile(filePath)
   } catch (error) {
-    throw corruptStoredData(filePath, `failed to read stored file (${errorMessage(error)})`)
+    throw corruptStoredData(filePath, `failed to read stored file (${messageOf(error)})`)
   }
   return { data, contentType: EXT_TO_MIME[extname(match)] ?? 'application/octet-stream' }
 }
 
 export function createFilesRouter(options: FilesRouterOptions) {
   const app = new Hono()
+  const { scope, versionStore } = options
 
   // PUT /api/w/:workspaceId/document/<path>/file/:fileId
   // Called by MCP load_image. fileId is already generated on the MCP side with nanoid().
@@ -94,17 +103,17 @@ export function createFilesRouter(options: FilesRouterOptions) {
         throw err
       }
       const mimeType = c.req.header('Content-Type') ?? 'image/png'
-      const ext = MIME_TO_EXT[mimeType]
-      if (!ext) {
+      if (!isUploadableImageType(mimeType)) {
         return c.json(
           {
             error: 'unsupported_media_type',
-            message: `Unsupported Content-Type: ${mimeType}. Allowed: ${Object.keys(MIME_TO_EXT).join(', ')}`,
+            message: `Unsupported Content-Type: ${mimeType}. Allowed: ${UPLOADABLE_IMAGE_TYPES.join(', ')}`,
           },
           415,
         )
       }
-      const dir = options.dataLayout.workspaceFilesDir(workspaceId)
+      const ext = MIME_TO_EXT[mimeType]
+      const dir = scope.layout.workspaceFilesDir(workspaceId)
       const filePath = join(dir, `${fileId}${ext}`)
       const bytes = new Uint8Array(await c.req.arrayBuffer())
       if (bytes.length === 0) {
@@ -123,11 +132,11 @@ export function createFilesRouter(options: FilesRouterOptions) {
         // overlapping an in-flight 8 MiB upload captured a torn file 2 times
         // out of 10, which is worse than always, because a backup then holds
         // a corrupt image only sometimes.
-        await writeFileAtomicStaged(options.dataLayout.dataDir, filePath, bytes)
+        await writeFileAtomicStaged(scope.dataDir, filePath, bytes)
       })
       return c.body(null, 204)
     },
-    limitBody(MAX_FILE_UPLOAD_BYTES, 'Upload'),
+    limitBody(CONTENT_BODY_LIMIT_BYTES, 'Upload'),
   )
 
   // GET /api/w/:workspaceId/document/<path>/file/:fileId
@@ -141,7 +150,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
       throw err
     }
     try {
-      const found = await storedFileFor(options.dataLayout.workspaceFilesDir(workspaceId), fileId)
+      const found = await storedFileFor(scope.layout.workspaceFilesDir(workspaceId), fileId)
       // JSON like every other refusal here: `c.notFound()` is plain text,
       // which the browser client cannot read.
       if (found === null) {
@@ -167,9 +176,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
     try {
-      const result = await purgeDanglingFiles(workspaceId, {
-        versionStore: options.versionStore,
-      })
+      const result = await purgeDanglingFiles(workspaceId, { versionStore, scope })
       return c.json(result)
     } catch (err) {
       // 503: fail-closed refusal (some branch/version could not be scanned),

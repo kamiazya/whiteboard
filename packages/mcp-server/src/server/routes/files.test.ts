@@ -2,9 +2,10 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDataLayout, workspaceFilesDir } from '../tenant/data-layout.js'
+import { storeScope } from '../store/store-scope.js'
+import { workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { testDataLayout } from './_test-helpers.js'
+import { testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -60,7 +61,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   it('saves image binary data and returns 204', async () => {
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]) // PNG magic bytes
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -82,7 +83,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   it('stores an upload under the data layout it is handed, not the process data dir', async () => {
     const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-files-layout-'))
     try {
-      const app = createFilesRouter({ dataLayout: createDataLayout(elsewhere, 'other-tenant') })
+      const app = createFilesRouter({ scope: storeScope(elsewhere, 'other-tenant') })
       const res = await app.request('/api/w/session1/document/canvas-a/file/file-009', {
         method: 'PUT',
         headers: { 'Content-Type': 'image/png' },
@@ -108,7 +109,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('refuses an empty upload with 400 rather than storing a zero-byte file', async () => {
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-002', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -121,7 +122,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     withWorkspaceWriteLockMock.mockClear()
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -151,7 +152,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     })
 
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const responsePromise = app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -198,7 +199,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       imageData,
     )
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('image/png')
@@ -210,7 +211,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   // A JSON 404, like every other refusal on this surface: the browser
   // client reads the body, and a plain-text one is a refusal it cannot read.
   it('returns a JSON 404 for a missing fileId', async () => {
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/nonexistent')
     expect(res.status).toBe(404)
     expect(res.headers.get('Content-Type')).toContain('json')
@@ -223,7 +224,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       force: true,
     })
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(404)
@@ -238,7 +239,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     const { writeFile } = await import('node:fs/promises')
     await writeFile(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'not-a-directory')
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(500)
@@ -253,7 +254,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       recursive: true,
     })
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(500)
@@ -276,7 +277,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       new Uint8Array([0x02]),
     )
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
     expect(res.status).toBe(200)
 
@@ -286,7 +287,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('returns 400 for invalid workspaceId / fileId', async () => {
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
 
     const badSession = await app.request('/api/w/bad.sid/document/canvas-a/file/file-001')
     expect(badSession.status).toBe(400)
@@ -313,7 +314,7 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
       ]),
     )
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/workspaces/session1/files/purge-dangling', {
       method: 'POST',
     })
@@ -332,7 +333,7 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
       corruptStoredData('session1/canvas-a branch "feature"', 'tipFrontiers could not be decoded'),
     )
 
-    const app = createFilesRouter({ dataLayout: testDataLayout(tempDir) })
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
     const res = await app.request('/api/workspaces/session1/files/purge-dangling', {
       method: 'POST',
     })

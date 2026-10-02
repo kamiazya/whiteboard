@@ -44,6 +44,26 @@ describe('registerToolWithAnnotations', () => {
     expect(config._meta).toBeUndefined()
   })
 
+  // An omission must prompt rather than slip past: a tool nobody profiled is
+  // announced as the worst case, not as a harmless write.
+  it('announces a tool with no profile as destructive, titled by its name', () => {
+    const server = fakeServer()
+    registerToolWithAnnotations(
+      server,
+      'zz_unprofiled_tool',
+      { outputSchema: z.object({ ok: z.boolean() }) },
+      async () => ({ structuredContent: { ok: true }, content: [] }),
+    )
+
+    const config = vi.mocked(server.registerTool).mock.calls[0]?.[1] as {
+      annotations?: Record<string, unknown>
+    }
+    expect(config.annotations).toMatchObject({
+      destructiveHint: true,
+      title: 'zz_unprofiled_tool',
+    })
+  })
+
   // Type-level only — these bodies never execute. Widening `I` to accept a
   // whole schema (for wb_body_patch's discriminated union) must not
   // silently collapse the 17 existing raw-shape callers' handler argument

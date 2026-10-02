@@ -4,7 +4,9 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import {
+  armLocalDaemonTail,
   createWorkspaceTail,
+  LOCAL_DAEMON_TAIL_INTERVAL_MS,
   resolveWorkspaceTailIntervalMs,
   WORKSPACE_TAIL_INTERVAL_ENV,
 } from './workspace-tail.js'
@@ -233,5 +235,29 @@ describe('resolveWorkspaceTailIntervalMs', () => {
     for (const raw of ['2s', '2.5', '-1', 'fast', '1e3', ' 2000ms']) {
       expect(resolveWorkspaceTailIntervalMs({ [WORKSPACE_TAIL_INTERVAL_ENV]: raw })).toBeNull()
     }
+  })
+})
+
+describe('armLocalDaemonTail', () => {
+  it('turns the tail on at the local daemon interval when the operator said nothing', () => {
+    const env: NodeJS.ProcessEnv = {}
+    armLocalDaemonTail(env)
+    expect(resolveWorkspaceTailIntervalMs(env)).toBe(LOCAL_DAEMON_TAIL_INTERVAL_MS)
+  })
+
+  it("leaves an operator's interval alone, and their zero, which is off", () => {
+    const chosen: NodeJS.ProcessEnv = { [WORKSPACE_TAIL_INTERVAL_ENV]: '2000' }
+    armLocalDaemonTail(chosen)
+    expect(resolveWorkspaceTailIntervalMs(chosen)).toBe(2000)
+
+    const off: NodeJS.ProcessEnv = { [WORKSPACE_TAIL_INTERVAL_ENV]: '0' }
+    armLocalDaemonTail(off)
+    expect(resolveWorkspaceTailIntervalMs(off)).toBeNull()
+  })
+
+  it('does not rewrite a value it cannot read, so startup still refuses it', () => {
+    const mistyped: NodeJS.ProcessEnv = { [WORKSPACE_TAIL_INTERVAL_ENV]: '2s' }
+    armLocalDaemonTail(mistyped)
+    expect(mistyped[WORKSPACE_TAIL_INTERVAL_ENV]).toBe('2s')
   })
 })

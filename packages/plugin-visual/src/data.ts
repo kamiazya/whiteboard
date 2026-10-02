@@ -615,33 +615,16 @@ export function resolveEffectiveCanvasEdgeStyle(
 }
 
 /**
- * How ONE edge is drawn: its own `visual.edges/v0` facet field by field over
- * the canvas's answer, over the theme's default, over the built-in.
- *
- * Field by field rather than whole-value, and deliberately unlike the
- * canvas-vs-nothing case: the two payloads are at DIFFERENT scopes, so an
- * edge saying only `routing` is narrowing that one field, not declaring that
- * the board's line jumps do not apply to it. Whole-value replacement is the
- * rule WITHIN one scope, where a facet is one register.
- */
-export function resolveEdgeStyle(
-  canvas: SpatialCanvas,
-  edge: RoutableElement,
-  registry: FacetRegistry = bundledFacetRegistry,
-): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
-  const own = resolveEdgeOwnStyle(edge, registry)
-  const canvasWide = resolveEffectiveCanvasEdgeStyle(canvas, registry)
-  return {
-    style: own.routing ?? canvasWide.style,
-    lineJumps: own.lineJumps ?? canvasWide.lineJumps,
-  }
-}
-
-/**
  * What an edge says about ITSELF, with no canvas or theme filled in — the
- * stored facet and nothing else. Separate from `resolveEdgeStyle` because an
- * editor showing "inherited unless overridden" needs to know which fields
- * the edge actually holds, and a resolved value cannot say.
+ * stored facet and nothing else. An editor showing "inherited unless
+ * overridden" needs to know which fields the edge actually holds, and a
+ * resolved value cannot say.
+ *
+ * The layout narrows the board's answer with it field by field, not whole
+ * value: the two payloads are at DIFFERENT scopes, so an edge saying only
+ * `routing` narrows that one field rather than declaring that the board's line
+ * jumps do not apply to it. Whole-value replacement is the rule WITHIN one
+ * scope, where a facet is one register.
  */
 export function resolveEdgeOwnStyle(
   // Either element: a LINE carries the same facet bucket an edge does, and

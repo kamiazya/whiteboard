@@ -33,7 +33,7 @@ function hasNoExcludedDescendant(node: any): boolean {
   }
   // wikiLink/embed intentionally stringify to plain bracket-literal text
   // here (see to-remark.ts) — resolving them back into typed nodes is
-  // references.ts's job (a separate pass over already-parsed content, with
+  // the references/ modules' job (a separate pass over already-parsed content, with
   // its own round-trip coverage), not this pipeline's.
   if (node.type === 'wikiLink' || node.type === 'embed') return false
   // A hard line `break` only round-trips when followed by more content on

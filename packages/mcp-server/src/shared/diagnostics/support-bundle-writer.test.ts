@@ -17,15 +17,6 @@ const minimalInput: SupportBundleInput = {
   platform: { os: 'darwin', nodeVersion: 'v22.0.0' },
   status: { ok: true, reason: null, recordFound: false, recordFresh: false },
   doctor: { ok: true, status: 'ok', checks: [] },
-  logs: [
-    {
-      timestamp: FIXED_TS,
-      level: 'info',
-      source: 'daemon',
-      message: 'startup',
-      fields: { pid: 1234, port: 3099, status: 'ok' },
-    },
-  ],
 }
 
 let root: string
@@ -41,32 +32,27 @@ afterEach(async () => {
 })
 
 describe('writeSupportBundle', () => {
-  it('missing target directory: creates it and writes exactly the four bundle files in stable order', async () => {
+  it('missing target directory: creates it and writes exactly the three bundle files in stable order', async () => {
     const target = join(root, 'bundle-1')
     const result = await writeSupportBundle(bundle, target, { allowedRoots: [root] })
     expect(result.outputDir).toBe(target)
-    expect(result.files).toEqual(['status.json', 'doctor.json', 'logs.jsonl', 'manifest.json'])
+    expect(result.files).toEqual(['status.json', 'doctor.json', 'manifest.json'])
 
     const entries = (await readdir(target)).sort()
-    expect(entries).toEqual(['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'])
+    expect(entries).toEqual(['doctor.json', 'manifest.json', 'status.json'])
 
     // Each file matches the in-memory bundle byte-for-byte.
-    for (const name of ['manifest.json', 'status.json', 'doctor.json', 'logs.jsonl'] as const) {
+    for (const name of ['manifest.json', 'status.json', 'doctor.json'] as const) {
       const onDisk = await readFile(join(target, name), 'utf-8')
       expect(onDisk).toBe(bundle.files[name])
     }
   })
 
-  it('existing empty directory: writes the four files into it without complaining', async () => {
+  it('existing empty directory: writes the three files into it without complaining', async () => {
     const target = join(root, 'bundle-empty')
     await mkdir(target, { recursive: true })
     await writeSupportBundle(bundle, target, { allowedRoots: [root] })
-    expect((await readdir(target)).sort()).toEqual([
-      'doctor.json',
-      'logs.jsonl',
-      'manifest.json',
-      'status.json',
-    ])
+    expect((await readdir(target)).sort()).toEqual(['doctor.json', 'manifest.json', 'status.json'])
   })
 
   it('existing non-empty directory: throws SupportBundleError and preserves the canary file untouched', async () => {
@@ -173,21 +159,12 @@ describe('writeSupportBundle', () => {
         ...minimalInput.status,
         reason: 'Authorization: Bearer secret-token-XYZ at /opt/wb/server.ts:42',
       },
-      logs: [
-        {
-          timestamp: FIXED_TS,
-          level: 'error',
-          source: 'daemon',
-          message: 'Authorization: Bearer secret-token-XYZ at /Users/me/db.sqlite',
-          fields: { status: 'process-not-running' },
-        },
-      ],
     })
     const target = join(root, 'leaky-bundle')
     await writeSupportBundle(leaky, target, { allowedRoots: [root] })
     const concatenated = (
       await Promise.all(
-        ['manifest.json', 'status.json', 'doctor.json', 'logs.jsonl'].map((n) =>
+        ['manifest.json', 'status.json', 'doctor.json'].map((n) =>
           readFile(join(target, n), 'utf-8'),
         ),
       )

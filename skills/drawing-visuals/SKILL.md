@@ -13,7 +13,8 @@ What you draw stays on the document and can be revisited and refined later.
 tidy the layout, render SVG, save/restore versions. There is no icon or template library and no
 align/distribute. `wb_viewport_set` exists, but through this stdio entry it answers
 `delivered: false`, because no browser is in the same process: do not promise the user that the
-view moved, tell them to open or refresh the document. Plan the diagram with that ceiling in mind
+view moved, tell them to look at the document (an open tab picks your edit up within about half a
+second, but it stays where it is). Plan the diagram with that ceiling in mind
 rather than assuming a full-featured drawing-app tool set.
 
 Use these tools:

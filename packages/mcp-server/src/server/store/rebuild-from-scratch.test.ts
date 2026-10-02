@@ -42,8 +42,7 @@ const { loadWorkspaceNames, setDocumentDisplayName, setDocumentPinned } = await 
   './names-store.js'
 )
 const { FileVersionStore } = await import('./version-store.js')
-const { createIsolatedDb } = await import('./db/test-helpers.js')
-const { getDb } = await import('./db/index.js')
+const { createIsolatedDb, tableExists } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -68,16 +67,7 @@ function canvasDoc(text: string): LoroDoc {
 }
 
 /** Migration 0017 dropped the documents table outright: the tree is the whole address book. */
-async function documentsTableExists(): Promise<boolean> {
-  const db = await getDb(tempDir)
-  const row = await db
-    .selectFrom('sqlite_master' as never)
-    .select(['name' as never])
-    .where('type', '=', 'table')
-    .where('name', '=', 'documents')
-    .executeTakeFirst()
-  return row !== undefined
-}
+const documentsTableExists = (): Promise<boolean> => tableExists(handle.rawDb, 'documents')
 
 it('the whole document surface works with no documents table at all, across a restart', async () => {
   const WS = 'ws-scratch'

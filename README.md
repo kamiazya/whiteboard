@@ -35,7 +35,7 @@ identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub
 
 ## How whiteboard works
 
-You and your agent both reach the same whiteboard — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser through the whiteboard extension.
+You and your agent both reach the same whiteboard — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser through the whiteboard extension, picking up what the agent wrote within about half a second.
 
 <p align="center">
   <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP syncs the Browser Canvas through the whiteboard extension." width="780" />
@@ -43,7 +43,7 @@ You and your agent both reach the same whiteboard — they talk, the agent acts,
   <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.canvas">architecture.canvas</a> to open it as a JSON Canvas document and remix.</i></sub>
 </p>
 
-`@kamiazya/whiteboard-mcp` runs a spatial canvas editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync live to the browser, and are stored as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.
+`@kamiazya/whiteboard-mcp` runs a spatial canvas editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, reach the browser within about half a second while the daemon runs, and are stored as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.
 
 <p align="center">
   <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, live diagram synced from the agent in real time" width="780" />
@@ -224,7 +224,7 @@ The agent returns the `wb_scene_render` result so the next turn can reason about
 
 - No MCP tool currently returns a raster (PNG) image or `ImageContent` — `wb_scene_render` is the closest equivalent for handing a rendered canvas back to an LLM.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
-- The published `stdio` entry opens the store in its own process: it takes the same automatic History checkpoints and compaction as the daemon, but it has no live path — nobody is told of an edit until they open or refresh the document, and `wb_viewport_set` answers `delivered: false`.
+- The published `stdio` entry opens the store in its own process: it takes the same automatic History checkpoints and compaction as the daemon. It has no direct path to the browser — `wb_viewport_set` answers `delivered: false`, and the agent-activity highlight and version overlays need the daemon's process — but what it writes still reaches an open tab: the daemon follows the shared record every 500 ms for the workspaces a page is subscribed to (`WHITEBOARD_WORKSPACE_TAIL_MS`), and each process reads through to the record on every access, so the agent also sees what you drew or created.
 
 See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.
 

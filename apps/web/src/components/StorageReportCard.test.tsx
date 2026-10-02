@@ -10,15 +10,14 @@ const PAYLOAD = {
   totalBytes: 4096,
   fileCount: 6,
   // Every category the contract declares. It used to omit `exports` and
-  // `logs` and carry a `libraries` the daemon cannot report — a fixture
-  // describing a payload no server sends, which is how the component's rows
-  // were asserted against a shape nothing produced.
+  // carry a `libraries` the daemon cannot report — a fixture describing a
+  // payload no server sends, which is how the component's rows were asserted
+  // against a shape nothing produced.
   byCategory: {
     blobs: { bytes: 1024, files: 2 },
     versions: { bytes: 2048, files: 1 },
     files: { bytes: 0, files: 0 },
     exports: { bytes: 0, files: 0 },
-    logs: { bytes: 0, files: 0 },
     db: { bytes: 1024, files: 1 },
     other: { bytes: 0, files: 2 },
   },
@@ -44,8 +43,8 @@ describe('StorageReportCard', () => {
     const daemonFetch = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.endsWith('/api/runtime/storage')) return Promise.resolve(jsonResponse(PAYLOAD))
-      if (url.endsWith('/api/runtime/logs/prune')) {
-        return Promise.resolve(jsonResponse({ purgedCount: 1, purgedBytes: 512 }))
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [] }))
       }
       return Promise.resolve(jsonResponse({}))
     })
@@ -58,11 +57,21 @@ describe('StorageReportCard', () => {
       await vi.advanceTimersByTimeAsync(500)
     })
     expect(daemonFetch).toHaveBeenCalledWith('/api/runtime/storage')
-    fireEvent.click(getByRole('button', { name: 'Prune old daemon logs' }))
+    fireEvent.click(getByRole('button', { name: 'Optimize all documents' }))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500)
     })
-    expect(daemonFetch).toHaveBeenCalledWith('/api/runtime/logs/prune', { method: 'POST' })
+    expect(daemonFetch).toHaveBeenCalledWith('/api/workspaces')
+  })
+
+  it('has no Logs row or log-prune control: the daemon keeps no log file', async () => {
+    const { container, queryByRole } = render(<StorageReportCard />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    expect(container.querySelector('[data-storage-row]')).not.toBeNull()
+    expect(container.querySelector('[data-storage-row="logs"]')).toBeNull()
+    expect(queryByRole('button', { name: /daemon logs/i })).toBeNull()
   })
 
   it('renders exactly the categories the daemon can report, one row each', async () => {
@@ -405,62 +414,6 @@ describe('StorageReportCard', () => {
 
     await waitFor(() => {
       expect(versionsActions.textContent ?? '').toMatch(/Removed\s+3\s+auto-version/i)
-    })
-  })
-
-  it('exposes Cleanup on the Logs row and prunes old daemon logs', async () => {
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url === '/api/runtime/storage') {
-        return Promise.resolve(jsonResponse(PAYLOAD))
-      }
-      if (init?.method === 'POST' && url === '/api/runtime/logs/prune') {
-        return Promise.resolve(jsonResponse({ purgedCount: 5, purgedBytes: 10_240 }))
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`))
-    })
-
-    vi.useRealTimers()
-    const { container } = render(<StorageReportCard />)
-    await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="logs"]')).not.toBeNull()
-    })
-
-    const logsActions = container.querySelector('[data-storage-actions="logs"]')!
-    fireEvent.click(logsActions.querySelector('button')!)
-
-    await waitFor(() => {
-      expect(logsActions.textContent ?? '').toMatch(/Removed\s+5/i)
-    })
-  })
-
-  it('reports "Nothing to prune" when the Logs row Cleanup finds nothing to remove', async () => {
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url === '/api/runtime/storage') {
-        return Promise.resolve(jsonResponse(PAYLOAD))
-      }
-      if (init?.method === 'POST' && url === '/api/runtime/logs/prune') {
-        return Promise.resolve(jsonResponse({ purgedCount: 0, purgedBytes: 0 }))
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`))
-    })
-
-    vi.useRealTimers()
-    const { container } = render(<StorageReportCard />)
-    await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="logs"]')).not.toBeNull()
-    })
-
-    const logsActions = container.querySelector('[data-storage-actions="logs"]')!
-    fireEvent.click(logsActions.querySelector('button')!)
-
-    await waitFor(() => {
-      expect(logsActions.textContent ?? '').toMatch(/Nothing to prune/i)
     })
   })
 

@@ -64,6 +64,21 @@ describe('ContentFactsCache over a keeper version, for a listing with no digest'
     expect(cache.stampOf(WS, A)).not.toBe(before)
   })
 
+  // Hex that does not pad each byte to two digits writes [0x01, 0x23] and
+  // [0x12, 0x03] as the same text, so a change would read as no change.
+  it('tells two frontiers apart whose unpadded hex would be the same', async () => {
+    const frontiers = new Map<string, Uint8Array | null>([[A, new Uint8Array([0x01, 0x23])]])
+    const { source } = fakeSource(frontiers)
+    const cache = new ContentFactsCache(source)
+    await cache.factsFor(WS, [entry(A)])
+    const before = cache.stampOf(WS, A)
+
+    frontiers.set(A, new Uint8Array([0x12, 0x03]))
+    await cache.factsFor(WS, [entry(A)])
+
+    expect(cache.stampOf(WS, A)).not.toBe(before)
+  })
+
   // Extraction branches on the kind, so facts read as one kind are not facts
   // about the other, whatever the bytes say.
   it('treats a changed kind as a changed document', async () => {

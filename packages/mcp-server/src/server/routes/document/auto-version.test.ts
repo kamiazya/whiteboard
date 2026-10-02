@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testDataLayout, withTempDataDir } from '../_test-helpers.js'
+import { versionStoreMock } from '../../store/test-utils/version-store-mock.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-test-')
 
@@ -66,17 +67,7 @@ describe('createAutoVersionTrigger', () => {
       .fn()
       .mockRejectedValueOnce(new Error('transient fs error'))
       .mockResolvedValueOnce(entry)
-    const trigger = createAutoVersionTrigger(
-      {
-        save,
-        load: vi.fn(),
-        list: vi.fn(),
-        saveThumbnail: vi.fn(),
-        loadThumbnail: vi.fn(),
-        getFrontiersBase64: vi.fn(),
-      },
-      { quietMs: 60_000 },
-    )
+    const trigger = createAutoVersionTrigger(versionStoreMock({ save }), { quietMs: 60_000 })
 
     // A failed checkpoint must leave the key looking uncovered, or the next
     // edit would be skipped by the diff check and the failure would be
@@ -106,17 +97,7 @@ describe('createAutoVersionTrigger', () => {
       .fn()
       .mockRejectedValueOnce(corruptStoredData('/tmp/versions/v1.json', 'broken metadata'))
       .mockResolvedValueOnce(entry)
-    const trigger = createAutoVersionTrigger(
-      {
-        save,
-        load: vi.fn(),
-        list: vi.fn(),
-        saveThumbnail: vi.fn(),
-        loadThumbnail: vi.fn(),
-        getFrontiersBase64: vi.fn(),
-      },
-      { quietMs: 60_000 },
-    )
+    const trigger = createAutoVersionTrigger(versionStoreMock({ save }), { quietMs: 60_000 })
 
     // A failed checkpoint must leave the key looking uncovered, or the next
     // edit would be skipped by the diff check and the failure would be
@@ -146,16 +127,11 @@ describe('auto-version corruption handling', () => {
     const sendVersionCreated = vi
       .spyOn(wsModule, 'sendVersionCreated')
       .mockImplementation(() => undefined)
-    const versionStore = {
+    const versionStore = versionStoreMock({
       save: vi
         .fn()
         .mockRejectedValue(corruptStoredData('/tmp/versions/v1.json', 'broken metadata')),
-      load: vi.fn(),
-      list: vi.fn(),
-      saveThumbnail: vi.fn(),
-      loadThumbnail: vi.fn(),
-      getFrontiersBase64: vi.fn(),
-    }
+    })
 
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
@@ -168,7 +144,12 @@ describe('auto-version corruption handling', () => {
 
     // Quiet immediately: the checkpoint fires on the next tick rather than
     // five minutes out, so the route's own behaviour is what this observes.
-    const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 0, versionStore })
+    const app = createDocumentRouter({
+      scope: testStoreScope(),
+      serverDeps,
+      autoVersionQuietMs: 0,
+      versionStore,
+    })
     const res = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -228,18 +209,15 @@ describe('an unchanged document', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
 
-    const post = async (app: { request: (...args: never[]) => Promise<Response> }) =>
-      (app.request as unknown as (url: string, init: RequestInit) => Promise<Response>)(
-        '/api/w/session1/document/canvas-a/update',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: update,
-        },
-      )
+    const post = (app: ReturnType<typeof createDocumentRouter>) =>
+      app.request('/api/w/session1/document/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: update,
+      })
 
     const first = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 0,
       versionStore: store,
@@ -254,7 +232,7 @@ describe('an unchanged document', () => {
     // reconnecting client replaying ops the record already carries.
     const askedBefore = asked
     const second = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 0,
       versionStore: store,

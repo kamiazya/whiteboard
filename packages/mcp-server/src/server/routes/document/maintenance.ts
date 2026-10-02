@@ -1,22 +1,22 @@
-import type {
-  CompactWorkspaceResult,
-  PruneSandwichedVersionsResponse,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { PruneSandwichedVersionsResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { Hono } from 'hono'
 import { compactWorkspace, listDocuments } from '../../store/document-store.js'
+import type { StoreScope } from '../../store/store-scope.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { parseWorkspaceHandle } from '../../workspace-handle.js'
 import { handleCorruptStoredData } from './_shared.js'
 
 export interface MaintenanceRouterOptions {
   versionStore: VersionStore
+  /** The directory whose documents are listed and whose record is compacted. */
+  scope: StoreScope
 }
 
 // POST /api/workspaces/:workspaceId/versions/prune-sandwiched
 // POST /api/workspaces/:workspaceId/documents/optimize-all
 export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   const app = new Hono()
-  const { versionStore } = options
+  const { versionStore, scope } = options
 
   // Drop auto-saved versions strictly between two manual versions, per
   // document. Manuals are explicit user save-points; sandwiched autos add no
@@ -27,7 +27,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
     try {
-      const documents = await listDocuments(workspaceId)
+      const documents = await listDocuments(workspaceId, scope)
       const results: Array<{ path: string; deletedCount: number }> = []
       let totalDeleted = 0
       for (const { path } of documents) {
@@ -57,7 +57,7 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
     try {
-      const result: CompactWorkspaceResult = await compactWorkspace(workspaceId, versionStore)
+      const result = await compactWorkspace(workspaceId, versionStore, scope)
       return c.json(result)
     } catch (err) {
       const issue = handleCorruptStoredData(err)

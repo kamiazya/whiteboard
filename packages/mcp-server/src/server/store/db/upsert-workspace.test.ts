@@ -1,6 +1,6 @@
 import { WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
-import type { Database } from './schema.js'
+import type { TenantDatabase } from './tenant-database.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './upsert-workspace.js'
 
 /**
@@ -25,14 +25,14 @@ import { renameWorkspaceRow, upsertWorkspaceRow } from './upsert-workspace.js'
  * arm the pinned driver cannot raise.
  */
 
-/** A `Database` whose every builder chain ends in `err`. */
-function throwingDb(err: unknown): Database {
+/** A tenant-bound handle whose every builder chain ends in `err`. */
+function throwingDb(err: unknown): TenantDatabase {
   const chain: unknown = new Proxy(() => undefined, {
     get: (_target, prop) =>
       prop === 'execute' || prop === 'executeTakeFirst' ? () => Promise.reject(err) : chain,
     apply: () => chain,
   })
-  return chain as Database
+  return chain as TenantDatabase
 }
 
 /** What the driver raises: an Error carrying the driver's own fields. */

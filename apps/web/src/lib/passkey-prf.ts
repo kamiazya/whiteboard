@@ -10,8 +10,7 @@
  * authenticator does are different questions.
  */
 
-/** What `deriveWrappingKey` requires, and what a conforming prf returns. */
-const PRF_OUTPUT_BYTES = 32
+import { PRF_OUTPUT_BYTES } from '@kamiazya/whiteboard-daemon-client/key-widths'
 
 /**
  * The prf output an assertion carried, or null.

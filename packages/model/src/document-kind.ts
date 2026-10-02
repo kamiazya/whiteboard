@@ -15,7 +15,7 @@ import { z } from 'zod'
  * different things.
  *
  * Single source of truth for the spatial/markdown split — the mcp-server
- * api-contracts and the browser-local IndexedDB schema reference this
+ * api-contracts and the browser's IndexedDB schema reference this
  * rather than restating the two literals.
  */
 export const documentKindSchema = z.enum(['spatial', 'markdown'])

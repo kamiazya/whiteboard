@@ -97,13 +97,42 @@ browser and the daemon share follow one rule:
   at any depth strip an unknown key. Aliasing the tool output instead would make
   a newer daemon's added field fail a document create that had succeeded.
 
+### A new enum member is the same skew as a new field
+
+A stripped key costs nothing, but an enum a newer daemon gave a new member fails
+the parse around it — and what is around it is often a whole listing, search or
+history. The policy is by what the value is FOR:
+
+- **A value that is only displayed degrades per value, and the answer around it
+  stays readable.** An optional enum (a document `kind`, a workspace `tier`, a
+  purge's `skippedReason`) reads an unknown member as absent — `unknownIsAbsent`,
+  which `tolerantAnswer` also applies to every optional enum in the answers it
+  derives. A required one with a neutral member reads as that member through
+  `.catch`: an operator `kind` as `system`, a compaction `reason` as `no-gain`.
+  Both keep the inferred type, so the daemon still types what it emits from the
+  same schema, and a request is parsed with the strict original.
+- **A value a decision is made on stays lockstep**, and a new member is a
+  breaking change that waits for the browser to update: replica tier on the
+  replica-key answer (custody and lease), a workspace role, the storage report's
+  categories (exhaustive on purpose), the model's colour presets. Refusal
+  codes are read with `safeParse` beside `apiErrorReason`, so a code a build
+  cannot name still shows the daemon's own sentence rather than failing.
+
+`answers-tolerant.test.ts` walks every enum a browser-parsed answer still reads
+strictly and requires each to be listed with its reason (`LOCKSTEP`), from both
+sides: an enum that is not listed fails, and a listed one no answer reaches any
+more fails too. The list is keyed by an enum's members, so a degraded and a
+strict use of the same members share an entry; the per-site cases beside it
+parse an unknown member through each degraded schema to hold the other half.
+
 The split is made by declaration name — `*RequestSchema` may be strict, nothing
 else in `api-contracts/` may. Two guards hold it: `tools/arch-lint`'s
 `api-contract-response-tolerance.test.ts` reads the declarations (and the
 barrel's re-exports), and daemon-client's `answers-tolerant.test.ts` walks the
 live schema graph of everything the package publishes and fails on any strict
-object that is not a request. What no test yet covers is a recorded response from
-an older and a newer daemon parsed by the other side's schemas.
+object that is not a request (and, above, on an unlisted strict enum). What no
+test yet covers is a recorded response from an older and a newer daemon parsed
+by the other side's schemas.
 
 ## Why this matters
 

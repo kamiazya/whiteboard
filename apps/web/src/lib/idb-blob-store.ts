@@ -22,7 +22,7 @@
  * changes nothing a caller can see.
  */
 
-import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
+import { bytesToHex, uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import type {
   BlobDeleteInput,
   BlobGetInput,
@@ -67,7 +67,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   // See the conformance suite: a copy rather than a cast, because a
   // `Uint8Array<ArrayBufferLike>` is not a `BufferSource` since TS 5.7.
   const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes))
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return bytesToHex(new Uint8Array(digest))
 }
 
 export class IdbBlobStore implements BlobStore {

@@ -20,12 +20,20 @@ This project is split into three main runtime layers:
   - Opens the data directory's store directly, in its own process. It runs
     the same automatic checkpoint and compaction as the daemon: a History
     row after five quiet minutes and at process exit, and the op-log folded
-    once a version row exists. It does not reach the daemon, so only the
-    live path is absent (the notifier, viewport delivery, the agent-activity
-    highlight, the version-created and restore overlays): a browser on the
-    daemon sees a stdio edit when the daemon's workspace tail reads it, and
-    `wb_viewport_set` answers `delivered: false`. A client that wants the
-    live path connects to the daemon's `/mcp` on its socket instead
+    once a version row exists. It does not reach the daemon, so the pieces
+    that live in the daemon's process are absent (the notifier, viewport
+    delivery, the agent-activity highlight, the version-created and restore
+    overlays), and `wb_viewport_set` answers `delivered: false`. The two
+    processes still see each other's writes, because both read one stored
+    record and each follows it: every access first asks the store whether the
+    record moved (one read of its frontier, about 0.1 ms) and catches up if
+    it did, so a long-lived stdio process lists a document the browser just
+    created, and the daemon's workspace tail does the same every 500 ms for
+    each workspace an open page is subscribed to and pushes what it finds on
+    the sync stream. An edit the agent makes therefore reaches an open
+    browser within about half a second (96-403 ms measured), and no timer
+    runs in an idle stdio process. A client that wants the live path itself
+    connects to the daemon's `/mcp` on its socket instead
 - **daemon**
   - Entry point: `dist/server/index.js`
   - Serves `/api/*` (including the live-sync SSE stream) and `/mcp` on its

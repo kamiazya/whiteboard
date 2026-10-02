@@ -9,11 +9,8 @@ import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { captureLogsForTests } from '../log.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
 import { installedFontDir } from './installed-fonts.js'
-import {
-  _resetExportMeasureTextCacheForTests,
-  createExportTextMeasurer,
-  createOpentypeMeasureText,
-} from './measure-text.js'
+import { _resetExportMeasureTextCacheForTests, createExportTextMeasurer } from './measure-text.js'
+import { opentypeMeasureText } from './test-utils/opentype-measure.js'
 
 const NO_FACES = { regular: null, bold: null, italic: null, boldItalic: null }
 
@@ -35,13 +32,13 @@ function expectFiniteNonNegativeMetrics(metrics: TextMetrics) {
   }
 }
 
-describe('createOpentypeMeasureText', () => {
+describe('opentypeMeasureText', () => {
   afterEach(() => {
     _resetExportMeasureTextCacheForTests()
   })
 
   it('measures a spread of representative strings with finite, non-negative metrics', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const samples = ['A', 'Hello, world!', '0123456789', '.,:;!?()-', 'a long line of sample text']
     for (const text of samples) {
       for (const sizePx of [8, 16, 32, 64]) {
@@ -52,7 +49,7 @@ describe('createOpentypeMeasureText', () => {
   })
 
   it('selects the bold and italic faces the descriptor asks for — bold is measurably wider', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const regular = measure('Hello, bold world', font(16))
     const bold = measure('Hello, bold world', font(16, { weight: 700 }))
     const italic = measure('Hello, bold world', font(16, { style: 'italic' }))
@@ -65,7 +62,7 @@ describe('createOpentypeMeasureText', () => {
   })
 
   it('measures "Hello" at 16px to a plausible CSS-px advance width', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const metrics = measure('Hello', font(16))
     // 5 chars * 16px, bounded well below the raw-design-units range
     // (unitsPerEm is typically 1000-2048) so a units-vs-px scaling bug
@@ -75,13 +72,13 @@ describe('createOpentypeMeasureText', () => {
   })
 
   it('descent is returned as a positive magnitude', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const metrics = measure('gjpqy', font(32))
     expect(metrics.descent).toBeGreaterThan(0)
   })
 
   it('scales metrics linearly with sizePx (2x size doubles every field)', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const text = 'Scaling test 123'
     const base = measure(text, font(16))
     const doubled = measure(text, font(32))
@@ -92,7 +89,7 @@ describe('createOpentypeMeasureText', () => {
   })
 
   it('scales metrics linearly at a non-integer ratio (16px -> 24px)', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const text = 'non-integer ratio'
     const base = measure(text, font(16))
     const scaled = measure(text, font(24))
@@ -102,20 +99,20 @@ describe('createOpentypeMeasureText', () => {
   })
 
   it('measures the empty string with advanceWidth 0 at every size', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     for (const sizePx of [0, 1, 16, 100]) {
       expect(measure('', font(sizePx)).advanceWidth).toBe(0)
     }
   })
 
   it('sizePx 0 yields all-zero, non-NaN metrics', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const metrics = measure('Hello', font(0))
     expect(metrics).toEqual({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
   })
 
   it('degrades a missing sibling face to Regular metrics instead of throwing', async () => {
-    const measure = await createOpentypeMeasureText({
+    const measure = await opentypeMeasureText({
       resolveFontFiles: async () => ({
         ...(await resolveExportFontFaces()),
         bold: null,
@@ -129,15 +126,15 @@ describe('createOpentypeMeasureText', () => {
   })
 
   it('caches the parsed font: repeated factory calls return metrics-equivalent measurers', async () => {
-    const first = await createOpentypeMeasureText()
-    const second = await createOpentypeMeasureText()
+    const first = await opentypeMeasureText()
+    const second = await opentypeMeasureText()
     expect(first('Cache test', font(20))).toEqual(second('Cache test', font(20)))
   })
 
   it('falls back to the constant-ratio measurer and logs once when the asset cannot be resolved', async () => {
     const capture = captureLogsForTests('debug')
     try {
-      const measure = await createOpentypeMeasureText({
+      const measure = await opentypeMeasureText({
         resolveFontFiles: async () => NO_FACES,
       })
       const metrics = measure('Hello', font(16))
@@ -145,8 +142,8 @@ describe('createOpentypeMeasureText', () => {
 
       // A second/third call must not add another warning — the failure (and
       // its fallback measurer) is cached after the first factory call.
-      await createOpentypeMeasureText({ resolveFontFiles: async () => NO_FACES })
-      await createOpentypeMeasureText({ resolveFontFiles: async () => NO_FACES })
+      await opentypeMeasureText({ resolveFontFiles: async () => NO_FACES })
+      await opentypeMeasureText({ resolveFontFiles: async () => NO_FACES })
 
       const warnings = capture.records.filter(
         (r) => r.level === 'warning' && r.msg.includes('falling back to a constant-ratio'),
@@ -160,7 +157,7 @@ describe('createOpentypeMeasureText', () => {
   it('a corrupt sibling face degrades that face to Regular metrics and logs once', async () => {
     const capture = captureLogsForTests('debug')
     try {
-      const measure = await createOpentypeMeasureText({
+      const measure = await opentypeMeasureText({
         resolveFontFiles: async () => ({
           ...(await resolveExportFontFaces()),
           // Resolves, but the bytes are not a font: opentype.parse throws
@@ -185,7 +182,7 @@ describe('createOpentypeMeasureText', () => {
   it('falls back to the constant-ratio measurer and logs once when the asset bytes are corrupt', async () => {
     const capture = captureLogsForTests('debug')
     try {
-      const measure = await createOpentypeMeasureText({
+      const measure = await opentypeMeasureText({
         // A path that resolves but whose bytes are not a valid font —
         // readFile succeeds, opentype.parse must be the one to throw.
         resolveFontFiles: async () => ({
@@ -221,21 +218,21 @@ describe('a code point the vendored face does not carry', () => {
   }
 
   it('is estimated at a full em rather than measured as .notdef', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     for (const char of ['あ', '漢', '한']) {
       expect(measure(char, font).advanceWidth).toBeCloseTo(16)
     }
   })
 
   it('still measures the Latin it does carry from the font, not the estimate', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     // 'MMMM' vs 'iiii' is the discriminator: the estimator cannot tell them
     // apart, so equal advances here would mean the fallback swallowed everything.
     expect(measure('MMMM', font).advanceWidth).not.toBeCloseTo(measure('iiii', font).advanceWidth)
   })
 
   it('adds a carried and an uncarried run to the sum of their parts', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const whole = measure('API漢字', font).advanceWidth
     expect(whole).toBeCloseTo(measure('API', font).advanceWidth + 32)
   })
@@ -274,7 +271,7 @@ describe('a descriptor naming an installed family', () => {
   })
 
   it('is measured with that face, not with the vendored one', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const installed = measure(TEXT, descriptor(INSTALLED_FAMILY)).advanceWidth
     const bundled = measure(TEXT, descriptor(EXPORT_FONT_FAMILY)).advanceWidth
     // The synthetic face is a full em per glyph; Roboto is nothing like it.
@@ -292,7 +289,7 @@ describe('a descriptor naming an installed family', () => {
   })
 
   it('keeps the weight/style dispatch for the bundled family, which has four faces', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const regular = measure(TEXT, descriptor(EXPORT_FONT_FAMILY))
     const bold = measure(TEXT, { ...descriptor(EXPORT_FONT_FAMILY), weight: 700 })
     expect(bold.advanceWidth).toBeGreaterThan(regular.advanceWidth)

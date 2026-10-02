@@ -26,6 +26,9 @@ vi.mock('../server/http-server.js', () => ({
 }))
 
 const { runDaemonRun } = await import('./daemon-run.js')
+const { LOCAL_DAEMON_TAIL_INTERVAL_MS, resolveWorkspaceTailIntervalMs } = await import(
+  '../server/store/workspace-tail.js'
+)
 
 describe('runDaemonRun listens on its socket alone', () => {
   afterEach(() => vi.clearAllMocks())
@@ -92,6 +95,36 @@ describe('runDaemonRun WHITEBOARD_REPLICA_TIER wiring', () => {
     expect(startHttpServerMock).toHaveBeenCalledWith(
       expect.objectContaining({ replicaTier: 'offline' }),
     )
+  })
+})
+
+describe('runDaemonRun arms the workspace tail', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.clearAllMocks()
+  })
+
+  // The agent's stdio process writes the same record this daemon serves, and
+  // only the tail carries what it wrote to a browser that is just watching.
+  it('defaults the interval for the daemon it starts', async () => {
+    vi.stubEnv('WHITEBOARD_WORKSPACE_TAIL_MS', undefined)
+    const outcome = await runDaemonRun({
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: {},
+    })
+    expect(outcome.kind).toBe('running')
+    expect(resolveWorkspaceTailIntervalMs()).toBe(LOCAL_DAEMON_TAIL_INTERVAL_MS)
+  })
+
+  it('keeps an interval the operator chose, and does not arm one they turned off', async () => {
+    vi.stubEnv('WHITEBOARD_WORKSPACE_TAIL_MS', '2000')
+    await runDaemonRun({ tokenStdin: false, dataDir: '/tmp/whiteboard-test', env: {} })
+    expect(resolveWorkspaceTailIntervalMs()).toBe(2000)
+
+    vi.stubEnv('WHITEBOARD_WORKSPACE_TAIL_MS', '0')
+    await runDaemonRun({ tokenStdin: false, dataDir: '/tmp/whiteboard-test', env: {} })
+    expect(resolveWorkspaceTailIntervalMs()).toBeNull()
   })
 })
 

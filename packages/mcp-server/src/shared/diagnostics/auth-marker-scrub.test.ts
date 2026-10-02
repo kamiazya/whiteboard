@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { redactDaemonLogEntry } from './log-jsonl.js'
 import { scrubAuthMarkers } from './redact.js'
 import { buildDoctorSection } from './support-bundle.js'
 
@@ -25,21 +24,15 @@ describe('auth-marker scrub', () => {
     expect(scrubAuthMarkers(input)).toBe(expected)
   })
 
-  it.each(CORPUS)('the JSONL log surface and the support-bundle surface agree on %j', ({
+  it.each(CORPUS)('the support-bundle surface prints %j as the scrub does', ({
     input,
     expected,
   }) => {
-    const logMessage = redactDaemonLogEntry({
-      level: 'info',
-      source: 'daemon',
-      message: input,
-    }).message
     const bundleSummary = buildDoctorSection({
       ok: true,
       status: 'ok',
       checks: [{ id: 'check', status: 'ok', summary: input }],
     }).checks[0]?.summary
-    expect(logMessage).toBe(expected)
     expect(bundleSummary).toBe(expected)
   })
 })

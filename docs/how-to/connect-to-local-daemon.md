@@ -2,8 +2,8 @@
 
 The web app (`apps/web`) can run entirely in the browser with no daemon —
 documents are stored in IndexedDB and never leave the device. This guide
-covers connecting it to a local daemon (started with `whiteboard daemon run`,
-or by an MCP client), and moving a workspace kept in your browser onto it.
+covers connecting it to a local daemon (started with `whiteboard daemon run`),
+and moving a workspace kept in your browser onto it.
 
 The web app UI calls these "variations" and "combining changes," but the
 underlying MCP tools your AI agent calls keep their own names — the UI
@@ -125,7 +125,7 @@ any Flatpak apps), or reset every portal permission Firefox holds with
 
 ### 4. Connect
 
-Start the daemon (`whiteboard daemon run`, or let an MCP client start it),
+Start the daemon with `whiteboard daemon run`,
 then in the hosted app open the workspace popover and choose **Connect
 through the extension**. The app reloads onto the daemon's workspaces.
 
@@ -171,8 +171,10 @@ switch it on per copy: see
 [Read a copy offline](#read-a-copy-offline) below. Until you do, a copy
 stays readable only until the tab closes. If anything could
 not be confirmed (for example an image upload failed), the browser copy is
-kept unchanged and the result says so; moving again later is safe and
-simply re-merges.
+kept unchanged and the result says so, naming why. The daemon stores PNG,
+JPEG, GIF, WebP and SVG images up to 16 MiB each, so an image of another type
+or size stays behind until you replace it; a dropped connection is cured by
+moving again, which is safe and simply re-merges.
 
 ## See and remove the copies this device keeps
 

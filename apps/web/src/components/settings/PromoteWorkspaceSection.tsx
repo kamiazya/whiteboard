@@ -93,8 +93,12 @@ function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
     )
   }
   if (result.blobsFailed.length > 0) {
+    const count = `${result.blobsFailed.length} image${result.blobsFailed.length === 1 ? '' : 's'}`
+    const reasons = result.blobFailureReasons ?? []
     notes.push(
-      `${result.blobsFailed.length} image upload${result.blobsFailed.length === 1 ? '' : 's'} failed — moving again retries them safely`,
+      reasons.length === 0
+        ? `${count} could not be moved — moving again retries them safely`
+        : `${count} could not be moved: ${reasons.join(' ')}`,
     )
   }
   return notes
@@ -206,6 +210,14 @@ function browserCopyNotes(result: PromotionResultRecord & { ok: true }): string[
       : 'The original copy is kept in this browser',
   )
   return notes
+}
+
+/** The failed uploads as the record keeps them: the files, and each distinct reason once. */
+function failedBlobFields(failed: ReadonlyArray<{ fileId: string; reason: string }>) {
+  return {
+    blobsFailed: failed.map((failure) => failure.fileId),
+    blobFailureReasons: [...new Set(failed.map((failure) => failure.reason))],
+  }
 }
 
 function describeResult(result: PromotionResultRecord): string {
@@ -367,7 +379,7 @@ export function PromoteWorkspaceSection({
                 promotedCount: outcome.promotedDocumentIds.length,
                 shadowedPaths: outcome.shadowedPaths,
                 blobsMissing: outcome.blobs.missing,
-                blobsFailed: outcome.blobs.failed,
+                ...failedBlobFields(outcome.blobs.failed),
               }
             : {
                 at: new Date().toISOString(),

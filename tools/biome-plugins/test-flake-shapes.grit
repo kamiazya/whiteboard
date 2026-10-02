@@ -1,6 +1,7 @@
 language js
 
-// Executable half of three flake shapes from .claude/rules/integrator-flow.md,
+// Executable half of three flake shapes from
+// .claude/skills/steward/reference/flake-shapes.md,
 // plus three shapes that are not flakes but fail the same way: the run reports
 // green while checking less than it appears to.
 // Guarded by .claude/scripts/biome-plugin.test.mjs, which reads the rules OUT
@@ -20,7 +21,7 @@ any {
       severity = "error"
     )
   },
-  // The ninth flake shape: an afterEach wiping document.body leaves React
+  // The `teardown-wipes-dom` flake shape: an afterEach wiping document.body leaves React
   // roots mounted on detached nodes; the NEXT test's reconciler throws
   // removeChild errors while every test in the file reports PASSED.
   // A wipe behind a named helper (afterEach(resetDom)) is past this rule's

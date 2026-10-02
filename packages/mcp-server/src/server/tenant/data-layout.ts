@@ -31,8 +31,15 @@ const log = getLogger('data-layout')
  */
 const TENANTS_DIRNAME = 'tenants'
 const WORKSPACES_DIRNAME = 'workspaces'
-const BLOBS_DIRNAME = 'blobs'
-const FILES_DIRNAME = 'files'
+/**
+ * Also the two flat stores of the backup mirror (`<backupRoot>/blobs/`,
+ * `<backupRoot>/files/`), which hold what the live layout holds under a tenant,
+ * sharded the same way. The mirror, its retention and the restore import these
+ * rather than spelling them, since a name changed on one side is a restore that
+ * looks in a directory the mirror no longer writes.
+ */
+export const BLOBS_DIRNAME = 'blobs'
+export const FILES_DIRNAME = 'files'
 
 declare const tenantDir: unique symbol
 

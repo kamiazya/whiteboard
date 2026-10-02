@@ -18,6 +18,21 @@ paths:
   declaration's name (`*RequestSchema`), held by arch-lint's
   `api-contract-response-tolerance.test.ts` and explained in
   `docs/contributing/architecture/wire-protocol.md`.
+- **A new enum VALUE is the same skew as a new key.** `tolerantAnswer` strips
+  an unknown key and also reads an unknown member of an OPTIONAL enum as
+  absent (`unknownIsAbsent`); a required enum a reader only displays degrades
+  through `.catch` to its neutral member (operator kind -> `system`,
+  compaction reason -> `no-gain`) via the browser-side `*AnswerSchema`
+  variants, never by loosening the schema the daemon emits or parses a
+  request with. An enum a DECISION is made on stays lockstep.
+  `answers-tolerant.test.ts` lists every enum a browser-parsed answer still
+  reads strictly in `LOCKSTEP` with its reason, from both sides; adding an
+  enum to an answer means degrading it or listing it.
+- Values the browser and the daemon must agree on are declared ONCE here and
+  imported by both sides: the uploadable image types and the 16 MiB ceiling
+  (`api-contracts/files`, which the daemon's file route and body limit and
+  the editor's `accept`/refusal all read), and the key widths (`key-widths`:
+  `PRF_OUTPUT_BYTES`, `DERIVED_KEY_BITS`).
 - The one document backend the browser drives a daemon with (ADR-0050
   retired the WebSocket): `sse-backend` over `sse-stream-hub`, and the
   `document-backend-contract` types it implements. The SSE wire itself is

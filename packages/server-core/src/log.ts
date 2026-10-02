@@ -15,15 +15,7 @@
  * not itself implement MCP `notifications/message` forwarding.
  */
 
-type LogLevel =
-  | 'debug'
-  | 'info'
-  | 'notice'
-  | 'warning'
-  | 'error'
-  | 'critical'
-  | 'alert'
-  | 'emergency'
+import { LOG_LEVELS, type LogLevel } from './log-levels.js'
 
 interface LogRecord {
   readonly scope: string
@@ -33,17 +25,6 @@ interface LogRecord {
 }
 
 export type LogSink = (record: LogRecord) => void
-
-const LOG_LEVELS: readonly LogLevel[] = [
-  'debug',
-  'info',
-  'notice',
-  'warning',
-  'error',
-  'critical',
-  'alert',
-  'emergency',
-]
 
 let sink: LogSink = () => {}
 

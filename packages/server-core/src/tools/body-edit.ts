@@ -23,6 +23,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.js'
+import { withWorkspaceWrite } from './write-lock.js'
 
 /**
  * One proposed passage as a CALLER sends it: the model's own `body.replace`
@@ -259,11 +260,7 @@ export function createBodyEditTool(deps: ServerDeps) {
     inputSchema: bodyEditInputSchema,
     outputSchema: bodyEditOutputSchema,
     execute: (input: BodyEditInput): Promise<BodyEditOutput> =>
-      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
-      // mutating tool is a load-modify-save against a store whose save writes
-      // unconditionally, and the one place that holds the bracket is the one
-      // every surface — MCP, HTTP, the next one — goes through.
-      deps.liveDocuments.withWriteLock(input.workspaceId, () => editBody(deps, input)),
+      withWorkspaceWrite(deps, input.workspaceId, () => editBody(deps, input)),
   }
 }
 

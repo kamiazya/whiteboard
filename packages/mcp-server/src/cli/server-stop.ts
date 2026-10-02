@@ -27,6 +27,7 @@ import {
 } from '../shared/api-contracts/server-stop.js'
 import { isErrnoCode } from '../shared/errno.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
+import { STOP_SIGTERM_WINDOW_MS } from '../shared/stop-timeouts.js'
 import { type TerminateOutcome, terminateAndWait } from '../shared/terminate-and-wait.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
@@ -90,8 +91,9 @@ async function forgetRecord(
   }
 }
 
-// 10s matches the dispatcher's SIGTERM window. Overridable in tests.
-const DEFAULT_STOP_TIMEOUT_MS = 10_000
+// The same SIGTERM window `daemon stop` waits, derived from the sweeper's stop
+// cap rather than repeated. Overridable in tests.
+const DEFAULT_STOP_TIMEOUT_MS = STOP_SIGTERM_WINDOW_MS
 const DEFAULT_POLL_INTERVAL_MS = 50
 
 const defaultKillFn = (pid: number, signal: NodeJS.Signals | number) => {

@@ -1,4 +1,5 @@
 import type { AnnotationAnchor, ClipboardFragment, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { BoxMove } from './align.js'
 import type { GestureResult } from './gestures.js'
@@ -63,7 +64,7 @@ export interface CanvasCommands {
   readonly createGroupAtViewportCenter: (at?: Point) => void
   readonly openLinkNode: (node: SpatialNode) => void
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
-  readonly onAddImage?: (file: File) => Promise<string | undefined>
+  readonly onAddImage?: (file: File) => Promise<ImageStoreResult>
   readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void
   readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void
   readonly setEdgeLabelEditId: (id: string | null) => void

@@ -16,14 +16,12 @@ import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
-import { limitBody } from '../body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import { defaultHumanDisplayName } from './_shared.js'
 
-// Same ceiling as the per-document update path: a workspace-granularity
-// update carries the same kind of Loro delta, just scoped wider.
-const WORKSPACE_DOC_UPDATE_LIMIT_BYTES = 16 * 1024 * 1024
-// The same record, base64url-inflated by 4/3 inside a JSON body.
-const WORKSPACE_DOC_PROMOTE_LIMIT_BYTES = 24 * 1024 * 1024
+// The same record, base64url-inflated by 4/3 inside a JSON body, rounded up to
+// 3/2 of the content ceiling.
+const WORKSPACE_DOC_PROMOTE_LIMIT_BYTES = (CONTENT_BODY_LIMIT_BYTES * 3) / 2
 
 export interface WorkspaceDocumentRouterOptions {
   triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
@@ -119,7 +117,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
 
   app.post(
     '/api/w/:workspaceId/workspace-document/update',
-    limitBody(WORKSPACE_DOC_UPDATE_LIMIT_BYTES, 'Update'),
+    limitBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
     async (c) => {
       const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal

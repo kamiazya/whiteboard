@@ -18,7 +18,7 @@ export interface RestoreRouterOptions {
   // The operation's live-document seam, handed down from document.ts.
   serverDeps: ServerDeps
   // How a restore announces itself to connected clients. Absent means nobody
-  // is told, which is the right answer for a router with no WS surface.
+  // is told, which is the right answer for a router with no live audience.
   progress?: RestoreProgress
 }
 

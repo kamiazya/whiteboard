@@ -2,6 +2,12 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    // Runs once per invocation, for every project, and prints a banner when the
+    // Node major is not the one in .node-version. It never fails the run: the
+    // wrong-major symptoms name neither Node nor the pin, and a scoped run does
+    // not reach the guard that does. Same no-apostrophe, no-quoted-glob rule as
+    // the comment below, since this file is read as text.
+    globalSetup: ['./.claude/scripts/node-version-banner.mjs'],
     // Coverage is configured ONLY here: with `projects` the runner reads it
     // from the root config, and a per-project coverage block is ignored. The
     // consumer is the SonarQube lane (.github/workflows/sonarqube.yml), which

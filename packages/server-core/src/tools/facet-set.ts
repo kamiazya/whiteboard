@@ -31,6 +31,7 @@ import {
 } from './errors.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 import { refuseAgainstLibrary, workspaceTagLibrary } from './tag-library.js'
+import { withWorkspaceWrite } from './write-lock.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
@@ -256,13 +257,9 @@ export function createFacetSetTool(deps: ServerDeps) {
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: (input: FacetSetInput): Promise<FacetSetOutput> =>
-      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
-      // mutating tool is a load-modify-save against a store whose save writes
-      // unconditionally, and the one place that holds the bracket is the one
-      // every surface — MCP, HTTP, the next one — goes through.
       // One hold for the whole batch, so another writer cannot interleave
       // between two documents a caller asked for as a unit.
-      deps.liveDocuments.withWriteLock(input.workspaceId, () => setFacets(deps, input)),
+      withWorkspaceWrite(deps, input.workspaceId, () => setFacets(deps, input)),
   }
 }
 

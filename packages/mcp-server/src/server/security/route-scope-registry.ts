@@ -308,15 +308,6 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     decide: byAccess('workspace:write', 'workspace:read'),
   },
 
-  // Deleting the daemon's own log files mutates state no other runtime route
-  // touches, so it requires the admin tier even though its HTTP verb is POST
-  // like any other write route. Stopping the process is deliberately NOT here:
-  // it is a signal, not a route.
-  {
-    name: 'runtime/logs/prune',
-    claims: exactly('/api/runtime/logs/prune'),
-    decide: always('runtime:admin'),
-  },
   { name: 'runtime (rest)', claims: under('/api/runtime/'), decide: always('runtime:read') },
 
   { name: 'debug', claims: under('/api/debug'), decide: always('runtime:admin') },

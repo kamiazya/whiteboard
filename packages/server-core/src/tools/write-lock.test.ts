@@ -155,9 +155,10 @@ describe('a mutating tool holds the workspace write lock around its load-modify-
     expect(await storedPositions(store)).toEqual({ n1: 11, n2: 22 })
   })
 
-  // One row per tool that writes a document through the store. A tool
-  // added to the server and not to this table is not caught here; what is
-  // caught is one of THESE losing its lock in a refactor.
+  // One row per caller of `withWorkspaceWrite`, so one of THESE losing its
+  // lock in a refactor fails here. Which tools must call it, and that each
+  // caller has a row below, is derived by arch-lint's
+  // write-lock-completeness test; a row is added with the tool.
   const WRITERS: Record<string, (deps: ServerDeps) => Promise<unknown>> = {
     wb_canvas_edit: (deps) =>
       createCanvasEditTool(deps).execute({

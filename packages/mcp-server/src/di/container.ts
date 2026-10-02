@@ -163,7 +163,7 @@ export function resolveServerDeps(
     // undefined unless the user opted in, and even then the model loads on
     // the first search rather than here — a daemon that starts must not pay
     // a model download before it can answer anything.
-    embedder: resolveSearchEmbedder(),
+    embedder: resolveSearchEmbedder(scope.dataDir),
     // Wired here for the same reason clientNotifier is: it is this package's
     // own filesystem and doc cache, not an interchangeable implementation.
     // Without it wbDocumentDelete removes the rows and leaves the

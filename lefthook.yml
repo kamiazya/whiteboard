@@ -76,14 +76,18 @@ pre-push:
     # under push-time load is a saturated machine running timing-sensitive
     # code — which is how the port-squatting flake got in. This project runs no
     # product code, opens no port, starts no server and asserts on no clock; it
-    # reads files. Scoping it to the 13 scanning files instead would be a list
-    # to keep in step, which is the defect one level up.
+    # reads files. Scoping it to the files that scan other packages would be a
+    # list to keep in step, which is the defect one level up.
     #
-    # Costs the gate nothing, by the measure this file already uses: across
-    # three real `lefthook run pre-push` runs it took 25.84s, 29.25s and 28.73s
-    # while the run's total stayed exactly `pnpm -r typecheck`'s own (38.88s,
-    # 42.61s, 42.93s). It is the second-longest command and never the critical
-    # path. Quote the invariant, not the reading — the reading swings with
-    # contention.
+    # It is NOT free, and it is no longer hidden behind typecheck: the project
+    # grew with every guard, where an early reading had it at 25-29s beside
+    # typecheck's 39-43s. On a 4-core box it measures ~45s
+    # standalone when quiet and takes a quiet pre-push from 72-86s to 103-138s,
+    # so it is now the longest command and the critical path. Under the load of
+    # several concurrent sessions two runs each measured 201-290s without it
+    # and 335-400s with it — contention swings every number here by 2-4x, so the
+    # invariant is "this is the slowest command and adds tens of seconds", not
+    # any one reading. It stays because the failure it prevents is a push CI
+    # rejects, and a push is rarer than a commit.
     arch-lint:
       run: pnpm vitest run --project arch-lint-node

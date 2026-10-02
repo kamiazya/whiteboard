@@ -15,7 +15,13 @@
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getLogger } from '../log.js'
-import { blobShardPath, isBlobShardName, parseBlobShard } from '../tenant/data-layout.js'
+import {
+  BLOBS_DIRNAME,
+  blobShardPath,
+  FILES_DIRNAME,
+  isBlobShardName,
+  parseBlobShard,
+} from '../tenant/data-layout.js'
 import { BackupManifestUnusableError, readBackupBlobManifest } from './backup-blob-mirror.js'
 import { isBackupDirName } from './backup-dir-name.js'
 import { collectableFromBackup } from './backup-retention.js'
@@ -28,14 +34,14 @@ type Manifest = Awaited<ReturnType<typeof readBackupBlobManifest>>
 // a blob is collectable only when NO tenant of any retained backup wants it.
 const STORES = [
   {
-    dir: 'blobs',
+    dir: BLOBS_DIRNAME,
     of: (refs: Manifest) =>
       refs
         ? new Set(Object.values(refs.tenants).flatMap((tenant) => [...tenant.blobs]))
         : undefined,
   },
   {
-    dir: 'files',
+    dir: FILES_DIRNAME,
     of: (refs: Manifest) =>
       refs
         ? new Set(Object.values(refs.tenants).flatMap((tenant) => Object.values(tenant.files)))

@@ -17,6 +17,7 @@ import { page, userEvent } from 'vitest/browser'
 import '../../index.css'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
+import { ZOOM_WHEEL_FACTOR } from '../../lib/spatial/viewport.js'
 import { fillNodeEditor, nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -582,7 +583,6 @@ describe('SpatialEditor (browser)', () => {
     // clientX/clientY via clientPointToRootLocal, which subtracts
     // getBoundingClientRect(), so a body margin or test-harness wrapper
     // padding must not change the expected math here.
-    const ZOOM_WHEEL_FACTOR = 1.1 // must track SpatialEditor.tsx's own constant
     const rect = editor.element().getBoundingClientRect()
     const anchorX = 100 - rect.left
     const anchorY = 100 - rect.top

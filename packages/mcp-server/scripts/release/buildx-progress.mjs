@@ -115,7 +115,8 @@ function readProgressLine(line, steps, diagnostics) {
  * `CACHED` or `DONE <n>s`. Steps with neither (still running when the build
  * died) are dropped, since a report is about what finished.
  *
- * @param {string} output buildx stderr
+ * @param {unknown} output buildx stderr; anything that is not text reads as no
+ *   output, so the report says it is unavailable instead of throwing
  * @returns {CacheReport}
  */
 export function parseBuildxProgress(output) {

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
   resolveTestServerDeps,
-  testDataLayout,
+  testStoreScope,
   withTempDataDir,
 } from './_test-helpers.js'
 
@@ -30,10 +30,10 @@ const { clearCache } = await import('../store/doc-cache.js')
 // Dynamically import the Hono app.
 const { createDocumentRouter } = await import('./document.js')
 
-// canvas.ts's own job is composing the canvas/*.ts sub-routers into one
+// document.ts's own job is composing the document/*.ts sub-routers into one
 // router (see route-coverage.test.ts, which requires every route source
 // file to keep a sibling .test.ts). Per-behavior coverage for each
-// sub-router lives beside it under canvas/*.test.ts; this file keeps only
+// sub-router lives beside it under document/*.test.ts; this file keeps only
 // the two cross-family integration scenarios that exercise the composition
 // itself — a nested document path routed correctly across every sub-router
 // in one request sequence.
@@ -49,7 +49,7 @@ describe('createDocumentRouter composition', () => {
     // The path-addressed shape: the document path is the URL tail, one
     // segment per path segment, with the action suffix anchoring the parse.
     // A nested path is exactly what the old :path param could never match.
-    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
+    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps })
     await createTestDocument(serverDeps, {
       workspaceId: 'ws1',
       path: 'notes/2026/plan',
@@ -76,7 +76,7 @@ describe('createDocumentRouter composition', () => {
     // match a nested path): versions, restore, compact, name, pin, rename,
     // delete. One scenario, so a regression in ANY of them on a nested path
     // is loud.
-    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps })
+    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps })
     await createTestDocument(serverDeps, {
       workspaceId: 'ws1',
       path: 'notes/2026/plan',

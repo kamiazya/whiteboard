@@ -60,7 +60,7 @@ beforeEach(async () => {
     createServerModeApiAuthMiddleware(strategy, { members, sessions, origin: ORIGIN }),
   )
   app.get('/api/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
-  app.post('/api/runtime/logs/prune', (c) => c.json({ reached: true }))
+  app.post('/api/fonts/:id/install', (c) => c.json({ reached: true }))
   app.post('/api/v1/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
 })
 afterEach(async () => {
@@ -109,7 +109,7 @@ describe('server mode — who is asking, and are they a member', () => {
       Date.now(),
       60_000,
     )
-    const res = await app.request('/api/runtime/logs/prune', {
+    const res = await app.request('/api/fonts/inter/install', {
       method: 'POST',
       headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: ORIGIN },
     })

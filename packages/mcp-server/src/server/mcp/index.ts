@@ -7,6 +7,7 @@ import { bootSelfHostDeps, prepareSelfHostDataDir } from '../../di/boot-self-hos
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { startBackgroundWork } from '../background-work.js'
 import { getDataDir } from '../config.js'
+import { routeServerCoreLogs } from '../server-core-logs.js'
 import { stdioBackgroundWork } from '../shared-background-work.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
@@ -169,6 +170,8 @@ export async function main() {
  * shutdown flush sees every write the session made.
  */
 async function startStdioServer(): Promise<() => Promise<void>> {
+  // No app is built here, so the root arms server-core's log sink itself.
+  routeServerCoreLogs()
   // Prepared once at startup rather than on the first connection, so a data
   // dir that cannot be migrated fails the process here.
   await prepareSelfHostDataDir(getDataDir())

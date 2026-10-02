@@ -5,7 +5,7 @@ import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportResponseSchema } from '../../../shared/api-contracts/export.js'
-import { testDataLayout } from '../_test-helpers.js'
+import { testStoreScope } from '../_test-helpers.js'
 
 let tempDir: string
 
@@ -60,7 +60,7 @@ function makeApp() {
     '/',
     createDocumentSvgExportRouter({
       liveDocuments: { exists: mockDocumentExists },
-      dataLayout: testDataLayout(tempDir),
+      scope: testStoreScope(tempDir),
     }),
   )
   return app
@@ -111,7 +111,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
         '/',
         createDocumentSvgExportRouter({
           liveDocuments: { exists: mockDocumentExists },
-          dataLayout: testDataLayout(elsewhere),
+          scope: testStoreScope(elsewhere),
         }),
       )
 

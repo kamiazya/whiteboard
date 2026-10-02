@@ -17,13 +17,11 @@ vi.mock('./config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-import {
-  createSharedWorkers,
-  FILE_GC_STOP_TIMEOUT_MS,
-  sharedBackgroundWork,
-} from './shared-background-work.js'
+import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
+import { createSharedWorkers, sharedBackgroundWork } from './shared-background-work.js'
 import { checkpointAfterWrite, uninstallAutoCheckpoint } from './store/auto-checkpoint.js'
 import type { FileGcSweeper } from './store/file-gc-sweeper.js'
+import { globalStoreScope } from './store/store-scope.js'
 
 function fakeSweeper() {
   const sweeper = {
@@ -51,7 +49,9 @@ afterEach(() => uninstallAutoCheckpoint())
 describe('the file-GC worker the shared set builds', () => {
   it('starts the sweeper and stops it with the shutdown cap, never its default', async () => {
     const sweeper = fakeSweeper()
-    const { fileGc } = createSharedWorkers('instance-a', { fileGcSweeperFactory: () => sweeper })
+    const { fileGc } = createSharedWorkers('instance-a', globalStoreScope, {
+      fileGcSweeperFactory: () => sweeper,
+    })
 
     fileGc.start()
     expect(sweeper.start).toHaveBeenCalledTimes(1)
@@ -62,7 +62,9 @@ describe('the file-GC worker the shared set builds', () => {
   })
 
   it('is the worker the file-gc-sweeper declaration arms, when a root passes no arming of its own', () => {
-    const shared = createSharedWorkers('instance-a', { fileGcSweeperFactory: fakeSweeper })
+    const shared = createSharedWorkers('instance-a', globalStoreScope, {
+      fileGcSweeperFactory: fakeSweeper,
+    })
     const declared = sharedBackgroundWork(shared).find((w) => w.name === 'file-gc-sweeper')
     expect(declared?.worker).toBe(shared.fileGc)
   })
@@ -70,13 +72,13 @@ describe('the file-GC worker the shared set builds', () => {
 
 describe('the checkpoint holder the shared set builds', () => {
   it('takes no checkpoints, and flushes nothing, until createApp has handed a scheduler back', async () => {
-    const { checkpoints } = createSharedWorkers('instance-a')
+    const { checkpoints } = createSharedWorkers('instance-a', globalStoreScope)
     expect(checkpoints.scheduler()).toBeUndefined()
     await expect(checkpoints.flush()).resolves.toBeUndefined()
   })
 
   it('flushes the scheduler it captured', async () => {
-    const { checkpoints } = createSharedWorkers('instance-a')
+    const { checkpoints } = createSharedWorkers('instance-a', globalStoreScope)
     const { scheduler, flush } = fakeScheduler()
 
     checkpoints.capture(scheduler)
@@ -87,7 +89,7 @@ describe('the checkpoint holder the shared set builds', () => {
   })
 
   it('is what the auto-checkpoint declaration signals and flushes, with no arming passed', async () => {
-    const shared = createSharedWorkers('instance-a')
+    const shared = createSharedWorkers('instance-a', globalStoreScope)
     const worker = sharedBackgroundWork(shared).find((w) => w.name === 'auto-checkpoint')?.worker
     if (worker == null) throw new Error('the shared set declares no auto-checkpoint worker')
     const { scheduler, signalled, flush } = fakeScheduler()

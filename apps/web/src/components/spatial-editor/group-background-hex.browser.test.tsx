@@ -32,9 +32,7 @@ function menuItem(container: HTMLElement, name: string): HTMLElement | undefined
   ) as HTMLElement | undefined
 }
 
-it('the Color row opens a custom color panel and applies a typed hex', async () => {
-  const { Host, latest } = makeEditorHost({ initial: start })
-  const { container } = render(<Host />)
+async function openCustomColorPanel(container: HTMLElement) {
   rightClick(rootOf(container), 200, 150)
   await waitMenu(container)
 
@@ -50,22 +48,43 @@ it('the Color row opens a custom color panel and applies a typed hex', async () 
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="custom-color-panel"]')).not.toBeNull(),
   )
+  return container.querySelector('[data-testid="custom-color-panel"] input') as HTMLInputElement
+}
+
+it('the Color row opens a custom color panel and applies a typed hex', async () => {
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
+  const hexInput = await openCustomColorPanel(container)
   // A real saturation/hue picker is present, not a bare native input.
   expect(container.querySelector('.react-colorful')).not.toBeNull()
 
-  const hexInput = container.querySelector(
-    '[data-testid="custom-color-panel"] input',
-  ) as HTMLInputElement
   fireEvent.change(hexInput, { target: { value: 'ff00aa' } })
   await vi.waitFor(() =>
     expect(latest.canvas.nodes.find((n) => n.id === 'n1')?.color).toBe('#ff00aa'),
   )
 })
 
+it('a three-digit shorthand never commits, because the canvas color contract is six-digit hex', async () => {
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
+  const hexInput = await openCustomColorPanel(container)
+
+  fireEvent.change(hexInput, { target: { value: 'f0a' } })
+  // Typed after, so the wait below is for something that did commit.
+  fireEvent.change(hexInput, { target: { value: '00ff00' } })
+
+  await vi.waitFor(() =>
+    expect(latest.canvas.nodes.find((n) => n.id === 'n1')?.color).toBe('#00ff00'),
+  )
+  // No command ever carried the shorthand — the final colour alone would hide a
+  // commit that a later one overwrote.
+  expect(JSON.stringify(latest.commands)).not.toContain('#f0a')
+})
+
 it('a group gains Set background image, style options, and Remove background', async () => {
   const { Host, latest } = makeEditorHost({
     initial: start,
-    editorProps: { onAddImage: async () => 'stored-bg' },
+    editorProps: { onAddImage: async () => ({ ok: true as const, ref: 'stored-bg' }) },
   })
   const { container } = render(<Host />)
   const root = rootOf(container)

@@ -431,6 +431,46 @@ describe('VersionTimeline', () => {
     expect(preview.current).not.toBeNull()
   })
 
+  it('shows the reason the daemon gave for refusing a restore, not a retry prompt', async () => {
+    const preview = capturePreview()
+    vi.unstubAllGlobals()
+    const reason = 'A document already exists at that path.'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (url.includes('/restore')) {
+          return Promise.resolve(jsonResponse({ error: 'conflict', message: reason }, 409))
+        }
+        if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
+        if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+        return Promise.resolve(jsonResponse({}))
+      }),
+    )
+
+    render(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        onRestored={vi.fn()}
+        onPreview={preview.onPreview}
+      />,
+    )
+    const row = await screen.findByText(/Assistant/)
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(preview.current).not.toBeNull()
+    })
+
+    act(() => preview.require().restore())
+
+    // A retry cannot cure a refusal that will always be repeated.
+    await waitFor(() => {
+      expect(preview.require().error).toBe(reason)
+    })
+  })
+
   it('keeps the dialog open with an error when the restore request throws (network failure)', async () => {
     const preview = capturePreview()
     const onRestored = vi.fn()

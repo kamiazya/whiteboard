@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach } from 'vitest'
 import { getDataDir } from '../config.js'
+import { type StoreScope, storeScope } from '../store/store-scope.js'
 import { createDataLayout } from '../tenant/data-layout.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
@@ -107,4 +108,9 @@ export async function createTestDocument(
  */
 export function testDataLayout(dataDir: string = getDataDir()): DataLayout {
   return createDataLayout(dataDir, SELF_HOST_TENANT_ID)
+}
+
+/** The scope a router test hands a router: the data dir the test mocked, as production's root would. */
+export function testStoreScope(dataDir: string = getDataDir()): StoreScope {
+  return storeScope(dataDir, SELF_HOST_TENANT_ID)
 }

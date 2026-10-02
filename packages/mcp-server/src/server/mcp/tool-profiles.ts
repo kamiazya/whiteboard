@@ -4,10 +4,23 @@
 // Clients (Claude Code / Codex) use read-only / destructive flags for approval
 // UI and auto-run policy decisions.
 // openWorldHint: false means the tool operates only on local canvas state.
+//
+// `destructiveHint` is STATED on every write, never left out: the annotation
+// schema reads it as TRUE whenever `readOnlyHint` is false and the SDK fills
+// no defaults, so a write profile that omits it is announced to every host as
+// destructive.
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const
-const MUTATING_IDEMPOTENT = { idempotentHint: true, openWorldHint: false } as const
+const MUTATING_IDEMPOTENT = {
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const
 const DESTRUCTIVE = { destructiveHint: true, openWorldHint: false } as const
-export const MUTATING = { openWorldHint: false } as const
+const MUTATING = { destructiveHint: false, openWorldHint: false } as const
+
+// What a tool with no profile is announced as: the worst case, so an omission
+// makes a host ask rather than letting an unreviewed write run unprompted.
+export const UNPROFILED_TOOL_PROFILE = DESTRUCTIVE
 
 // Map from tool name to annotation profile and human-friendly title. Used by
 // registerToolWithAnnotations when building McpServer annotations.
@@ -61,7 +74,15 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   },
   wb_document_list: { profile: READ_ONLY, title: 'List the documents in a workspace' },
   wb_version_save: { profile: MUTATING, title: 'Save a labelled version of a document' },
-  wb_version_restore: { profile: MUTATING, title: 'Restore a document from a version' },
+  wb_version_restore: {
+    // Destructive for its worst op: `subtree` deletes the documents created
+    // since the version (the tree delete evacuates them, so it is recoverable,
+    // but it is a delete), and an in-place restore overwrites the current
+    // content with the saved state. Not idempotent — an into-target restore
+    // refuses a path the first call already took.
+    profile: DESTRUCTIVE,
+    title: 'Restore a document from a version',
+  },
   wb_version_list: { profile: READ_ONLY, title: 'List the versions of a document' },
   // The MCP Apps UI tool. ADR-0009 point 7 keeps it outside the `wb_` data
   // plane on purpose: it is a UI contract with the host, not a tool a model

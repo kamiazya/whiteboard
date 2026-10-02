@@ -182,7 +182,7 @@ const presses = fc.commands([fc.constant(new Indent()), fc.constant(new Outdent(
  * Measured: 200 runs take 5.4s on an idle machine — about 27ms per run, a
  * full remark parse after every press. Sixty runs keep it near 2s alone;
  * the ceiling is for the parallel suite, where a 5s default reads as a
- * property failure (see integrator-flow.md, CI flakes).
+ * property failure (flake-shapes.md's `property-timeout-reads-as-failure`).
  */
 const RUNS = 60
 const CEILING_MS = 30_000

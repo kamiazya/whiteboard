@@ -223,7 +223,7 @@ jobs:
   # times BEFORE they can flake on main): every test file this PR touches is
   # re-run 5x in fresh processes. A test that cannot survive five quiet runs
   # has no business gating anyone; catching it here costs one job, catching
-  # it on main costs a root-cause lane (integrator-flow.md, CI flakes).
+  # it on main costs a root-cause lane (.claude/skills/steward/reference/flake-shapes.md).
   stress-changed-tests:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

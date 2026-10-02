@@ -1,11 +1,10 @@
 // High-level headless export: take a canvas {workspaceId, path} and produce
 // a PNG/SVG buffer using the browser-less renderer.
 //
-// Reads the data root from the daemon's configured data dir rather than
-// taking it as a per-call argument. Mixing roots within one export was
-// previously possible because the doc cache reads from the data dir while a
-// separate file loader took an explicit dataDir; tying both ends to the
-// same canonical path closes that mismatch.
+// Reads the document from the `StoreScope` it is handed, which is the one
+// the keeper's routes serve. Mixing roots within one export was possible
+// while the doc cache read the process's data dir and a separate file loader
+// took an explicit one; tying both ends to the same scope closes that.
 
 import { readFacets, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -16,6 +15,7 @@ import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { getLogger } from '../log.js'
 import { documentExists, getDoc } from '../store/document-store.js'
+import type { StoreScope } from '../store/store-scope.js'
 import {
   type HeadlessExportResult,
   type HeadlessSvgExportResult,
@@ -59,8 +59,12 @@ export const _hasLegacyElementsForTests = hasLegacyElements
 // still carries a legacy Excalidraw `elements` list is not an error — it is
 // pre-migration data — so it degrades to a valid empty export with a
 // named warning rather than rendering nothing with no explanation.
-async function readCanvas(workspaceId: string, path: string): Promise<SpatialCanvas> {
-  const doc = await getDoc(workspaceId, path)
+async function readCanvas(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope,
+): Promise<SpatialCanvas> {
+  const doc = await getDoc(workspaceId, path, scope)
   const canvas = readSpatialCanvas(doc)
   if (canvas.nodes.length === 0 && hasLegacyElements(doc)) {
     log.warning(
@@ -82,23 +86,26 @@ async function readCanvas(workspaceId: string, path: string): Promise<SpatialCan
 async function libraryFor(
   workspaceId: string,
   canvas: SpatialCanvas,
+  scope: StoreScope,
 ): Promise<TagLibrary | undefined> {
   if (!carriesATag(canvas)) return undefined
-  if (!(await documentExists(workspaceId, TAG_LIBRARY_PATH))) return undefined
-  return readTagLibrary(readFacets(await getDoc(workspaceId, TAG_LIBRARY_PATH)))
+  if (!(await documentExists(workspaceId, TAG_LIBRARY_PATH, scope))) return undefined
+  return readTagLibrary(readFacets(await getDoc(workspaceId, TAG_LIBRARY_PATH, scope)))
 }
 
 interface HeadlessCanvasExportArgs {
   workspaceId: string
   path: string
+  /** Which data directory the document is read from. */
+  scope: StoreScope
   options?: HeadlessCanvasExportOptions
 }
 
 export async function exportCanvasHeadless(
   args: HeadlessCanvasExportArgs,
 ): Promise<HeadlessExportResult> {
-  const canvas = await readCanvas(args.workspaceId, args.path)
-  const tagLibrary = await libraryFor(args.workspaceId, canvas)
+  const canvas = await readCanvas(args.workspaceId, args.path, args.scope)
+  const tagLibrary = await libraryFor(args.workspaceId, canvas, args.scope)
   return renderSpatialCanvasToPng(canvas, {
     padding: args.options?.padding,
     scale: args.options?.scale,
@@ -111,8 +118,8 @@ export async function exportCanvasHeadless(
 export async function exportCanvasHeadlessSvg(
   args: HeadlessCanvasExportArgs,
 ): Promise<HeadlessSvgExportResult> {
-  const canvas = await readCanvas(args.workspaceId, args.path)
-  const tagLibrary = await libraryFor(args.workspaceId, canvas)
+  const canvas = await readCanvas(args.workspaceId, args.path, args.scope)
+  const tagLibrary = await libraryFor(args.workspaceId, canvas, args.scope)
   return renderSpatialCanvasToSvg(canvas, {
     padding: args.options?.padding,
     theme: args.options?.theme,

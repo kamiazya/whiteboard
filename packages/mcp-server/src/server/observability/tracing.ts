@@ -6,7 +6,7 @@ import { getLogger } from '../log.js'
 // Register the W3C trace-context propagator at module load so
 // `extract` / `inject` work even when the heavy SDK has not been
 // started. Tracing is a no-op without a TracerProvider, but trace
-// CONTEXT propagation is meaningful even then — it lets ws.ts read a
+// CONTEXT propagation is meaningful even then — it lets a request handler read a
 // caller's traceparent and pass it onward without forcing every test or
 // dev run to register the propagator manually.
 propagation.setGlobalPropagator(new W3CTraceContextPropagator())

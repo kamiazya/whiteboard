@@ -15,8 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // WorkspaceTopBar through React.lazy, and under a full parallel suite the
 // transform alone can outlast testing-library's 1000ms — the delete-confirm
 // helper's `More actions` query failed exactly that way in 2/2 full-suite
-// runs while every apps/web-only run passed (the lazy()-vs-findBy* family in
-// integrator-flow.md; same fix as App.test.tsx's precedent). The import is
+// runs while every apps/web-only run passed (flake-shapes.md's `lazy-import-race`;
+// same fix as App.test.tsx's precedent). The import is
 // unused by name on purpose — being in the module graph is the fix.
 import '../components/WorkspaceTopBar.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'

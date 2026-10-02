@@ -22,6 +22,7 @@ import {
   canvasViewCall,
   commentAddCall,
 } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
+import { watchChild } from './lib/child-watch.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
@@ -39,12 +40,8 @@ const child = spawn('node', childArgs, {
   stdio: ['pipe', 'pipe', 'pipe'],
 })
 
-let stderrBuf = ''
-child.stderr.on('data', (c) => {
-  stderrBuf += c.toString()
-})
-
 const pending = new Map()
+const watch = watchChild(child, pending)
 let stdoutBuf = Buffer.alloc(0)
 child.stdout.on('data', (chunk) => {
   stdoutBuf = Buffer.concat([stdoutBuf, chunk])
@@ -75,6 +72,7 @@ let nextId = 1
 function rpc(method, params) {
   const id = nextId++
   return new Promise((resolveRpc, reject) => {
+    if (watch.ended()) return reject(watch.ended())
     pending.set(id, { resolve: resolveRpc, reject })
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
     setTimeout(() => {
@@ -203,8 +201,8 @@ function cleanup(exitCode) {
     child.kill('SIGTERM')
   } catch {}
   rmSync(tmpDataDir, { recursive: true, force: true })
-  if (exitCode !== 0 && stderrBuf) {
-    console.error(`\n--- MCP stderr ---\n${stderrBuf}\n--- end ---`)
+  if (exitCode !== 0 && watch.stderr()) {
+    console.error(`\n--- MCP stderr ---\n${watch.stderr()}\n--- end ---`)
   }
   process.exit(exitCode)
 }

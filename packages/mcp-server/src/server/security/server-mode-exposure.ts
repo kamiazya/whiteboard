@@ -28,12 +28,7 @@
 // them without a flag day.
 
 import { isLoopbackHost } from '../daemon-auth-binding.js'
-import {
-  canonicalizeOriginPatternEntry,
-  matchOrigin,
-  parseOriginPatternEntry,
-  parseOriginPatterns,
-} from './origin-pattern.js'
+import { canonicalizeOriginPatternEntry, parseOriginPatternEntry } from './origin-pattern.js'
 
 function bracketIpv6(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
@@ -150,8 +145,8 @@ function externalOrigin(
  * canonicalized entry string (rather than `new URL(origin).origin`) matters
  * here: `new URL('https://*.example.com')` does not throw, so a naive
  * normalization would silently keep the wildcard as an inert literal string
- * that isOriginAllowedForServerMode's matcher must still be able to re-parse
- * back into a pattern.
+ * that the per-request matcher (server-mode-middleware) must still be able to
+ * re-parse back into a pattern.
  */
 function normalizedAllowedOrigins(
   allowedOrigins: readonly string[],
@@ -192,30 +187,4 @@ function serverModeExposure(input: ServerModeExposureInput): ServerModeExposureD
     allowedOrigins: normalizedOrigins,
     trustedProxy: input.trustedProxy ?? false,
   }
-}
-
-// Per-request origin allowlist check for server-mode. Config-level validation
-// (wildcard-shape rejection, https requirement) happens in
-// `resolveServerModeExposure`; this function parses the already-validated
-// canonical entries into OriginPattern values and delegates matching to the
-// shared matcher so exact and wildcard-subdomain entries are both admitted.
-//
-// The allowedOrigins array is resolved once at startup and reused by
-// reference for every request, so compiled patterns are cached per array
-// identity instead of re-parsing on each request.
-const compiledServerModePatterns = new WeakMap<
-  readonly string[],
-  ReturnType<typeof parseOriginPatterns>
->()
-
-export function isOriginAllowedForServerMode(
-  requestOrigin: string,
-  allowedOrigins: readonly string[],
-): boolean {
-  let patterns = compiledServerModePatterns.get(allowedOrigins)
-  if (!patterns) {
-    patterns = parseOriginPatterns(allowedOrigins)
-    compiledServerModePatterns.set(allowedOrigins, patterns)
-  }
-  return matchOrigin(patterns, requestOrigin)
 }

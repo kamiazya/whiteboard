@@ -1,6 +1,5 @@
 import {
   compactWorkspaceResultSchema,
-  logsPruneApiUrl,
   optimizeAllApiUrl,
   pruneSandwichedApiUrl,
   pruneSandwichedVersionsResponseSchema,
@@ -38,7 +37,6 @@ const CATEGORIES: CategoryDescriptor[] = [
   },
   { key: 'files', label: 'Uploaded files', description: 'Image / asset uploads' },
   { key: 'exports', label: 'Exports', description: 'PNG / JSON files you exported' },
-  { key: 'logs', label: 'Logs', description: 'Daemon stdout / stderr archives' },
   { key: 'db', label: 'Metadata DB', description: 'Workspaces, names, pins, version rows' },
   { key: 'other', label: 'Other', description: 'Unclassified files in the data dir' },
 ]
@@ -216,30 +214,6 @@ export function StorageReportCard() {
     [runMaintenance, fetchApi],
   )
 
-  // Daemon-log rotation override. Logs are also pruned fire-and-forget
-  // on every daemon startup; this button lets the user reclaim disk
-  // without bouncing the daemon.
-  const [pruningLogs, setPruningLogs] = useState(false)
-  const [pruneLogsStatus, setPruneLogsStatus] = useState<string | null>(null)
-  const pruneOldLogs = useCallback(
-    () =>
-      runMaintenance({
-        setBusy: setPruningLogs,
-        setStatus: setPruneLogsStatus,
-        running: 'Pruning…',
-        failed: 'Prune failed',
-        run: async () => {
-          const res = await fetchApi(logsPruneApiUrl(), { method: 'POST' })
-          if (!res.ok) return null
-          const body = purgeResultSchema.parse(await res.json())
-          return body.purgedCount > 0
-            ? `Removed ${body.purgedCount} (${formatBytes(body.purgedBytes)})`
-            : 'Nothing to prune'
-        },
-      }),
-    [runMaintenance, fetchApi],
-  )
-
   // Sandwiched auto-version prune. Manual versions are explicit user
   // save-points; autos between any two manuals add no rollback value and
   // can be safely dropped. Same iterating pattern as Optimize all.
@@ -344,15 +318,6 @@ export function StorageReportCard() {
       busy: cleaningFiles,
       run: () => void cleanupDanglingFiles(),
       status: cleanFilesStatus,
-    },
-    logs: {
-      icon: Eraser,
-      idleLabel: 'Cleanup',
-      busyLabel: 'Pruning…',
-      ariaLabel: 'Prune old daemon logs',
-      busy: pruningLogs,
-      run: () => void pruneOldLogs(),
-      status: pruneLogsStatus,
     },
   }
 

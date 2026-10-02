@@ -9,8 +9,8 @@ import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.j
 import { startHttpServer } from './http-server.js'
 import { getLogger } from './log.js'
 import { resolveReplicaEnv } from './replica-env.js'
-import { resolveMcpProtectedResourceMetadataFromEnv } from './security/mcp-auth.js'
 import { collectStartupEnvIssues } from './startup-env.js'
+import { armLocalDaemonTail } from './store/workspace-tail.js'
 
 /**
  * Reads a `--name=value` flag out of an argv list. When the same flag is
@@ -180,9 +180,6 @@ export async function main() {
   checkStartupConfig()
 
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
-  // Only the discovery metadata travels from here. The strategy that checks
-  // the credential is built inside `createApp`, over the one resolver.
-  const mcpProtectedResourceMetadata = resolveMcpProtectedResourceMetadataFromEnv(process.env)
 
   // Block startup until the schema is migrated so route handlers never see
   // a half-initialized data directory.
@@ -201,13 +198,16 @@ export async function main() {
 
   await prewarmExporter()
 
+  // The dev daemon is the same local keeper `whiteboard daemon run` starts,
+  // so it follows the record the agent's stdio process writes the same way.
+  armLocalDaemonTail()
+
   // Read once here, after the startup-issue gate above already validated it
   // — never re-read process.env inside a route.
   const replicaEnv = resolveReplicaEnv(process.env)
 
   const running = await startHttpServer({
     token,
-    mcpProtectedResourceMetadata,
     idleTimeoutMs,
     replicaTier: replicaEnv.tier,
     replicaLeaseTtlMs: replicaEnv.leaseTtlMs,

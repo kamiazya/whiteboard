@@ -1,8 +1,8 @@
 /**
  * Shared fixture for seeding a LoroDoc in the CURRENT nodes/edges spatial
  * model — the shape every production doc is actually written in (see
- * package-crdt.md's "LoroDoc spatial layout"). Mirrors
- * apps/web/src/test-utils/browser-local-canvas.ts in spirit: build via the
+ * package-loro-adapter.md's "LoroDoc spatial layout"). Mirrors
+ * apps/web/src/test-utils/browser-document.ts in spirit: build via the
  * real writeSpatialCanvas bridge rather than poking at LoroDoc internals, so
  * a fixture never drifts from what saveDocument actually persists.
  *

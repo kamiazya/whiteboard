@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
   resolveTestServerDeps,
-  testDataLayout,
+  testStoreScope,
   withTempDataDir,
 } from '../_test-helpers.js'
 
@@ -38,7 +38,7 @@ const { countAliveNodes } = await import('@kamiazya/whiteboard-server-core')
 const { createDocumentRouter } = await import('../document.js')
 
 const createRouter = () =>
-  createDocumentRouter({ dataLayout: testDataLayout(), serverDeps, autoVersionQuietMs: 60_000 })
+  createDocumentRouter({ scope: testStoreScope(), serverDeps, autoVersionQuietMs: 60_000 })
 // Pre-load sync-audience.js before any restore call, mirroring
 // restore-race.test.ts's documented cycle workaround for document.ts's
 // dynamic import.

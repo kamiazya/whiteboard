@@ -6,7 +6,6 @@ import {
   createLocalTokenMcpHttpAuthStrategy,
   type McpHttpAuthStrategy,
   requiresMcpHttpAuth,
-  resolveMcpProtectedResourceMetadataFromEnv,
 } from './mcp-auth.js'
 
 describe('requiresMcpHttpAuth', () => {
@@ -19,20 +18,6 @@ describe('requiresMcpHttpAuth', () => {
 })
 
 describe('MCP auth strategy', () => {
-  it('parses protected resource metadata config from env', () => {
-    expect(
-      resolveMcpProtectedResourceMetadataFromEnv({
-        WHITEBOARD_MCP_AUTHORIZATION_SERVER: 'https://auth.example.com',
-        WHITEBOARD_MCP_RESOURCE: 'https://mcp.example.com/mcp',
-        WHITEBOARD_MCP_SCOPES_SUPPORTED: 'canvas:read, canvas:write',
-      }),
-    ).toEqual({
-      authorizationServers: ['https://auth.example.com'],
-      resource: 'https://mcp.example.com/mcp',
-      scopesSupported: ['canvas:read', 'canvas:write'],
-    })
-  })
-
   it('returns protected resource metadata when authorization server discovery is configured', () => {
     const strategy = createLocalTokenMcpHttpAuthStrategy({
       resolver: createCredentialResolver({ daemonToken: 'secret' }),

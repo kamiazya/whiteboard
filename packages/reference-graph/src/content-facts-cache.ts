@@ -1,3 +1,4 @@
+import { bytesToHex } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import { type ContentFacts, extractContentFacts } from './extract.js'
@@ -158,14 +159,8 @@ function versionOf(
   if (entry.contentDigest !== undefined) return `digest:${entry.contentDigest}`
   if (!versions.has(entry.documentId)) return undefined
   const version = versions.get(entry.documentId) ?? null
-  return version === null ? null : `version:${hexOf(version)}`
-}
-
-function hexOf(version: Uint8Array): string {
   // Byte identity is the whole contract: the port makes no ordering claim
   // about versions, and none is needed — any persisted change produces
   // different bytes.
-  let out = ''
-  for (const byte of version) out += byte.toString(16).padStart(2, '0')
-  return out
+  return version === null ? null : `version:${bytesToHex(version)}`
 }

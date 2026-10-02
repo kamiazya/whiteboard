@@ -136,7 +136,7 @@ export function incompleteFileGcScanErrorBody(
  *
  * Measured at 5 documents x 20 versions, a fixture smaller than a real
  * workspace: 7690ms elapsed, 7670ms of it with the loop running nothing, in a
- * single 7404ms stretch. That is every request, WebSocket frame and MCP call
+ * single 7404ms stretch. That is every request, SSE event and MCP call
  * stopped for seven seconds, and it grows with the version history. With one
  * yield per scan unit the same pass leaves the longest stall at 86ms.
  * `file-gc-loop-availability.test.ts` pins it.

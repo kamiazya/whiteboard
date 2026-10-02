@@ -260,31 +260,54 @@ as measured on 2026-10-02:
 |---|---|---|
 | `sync-sse.ts` | `/api/sync/stream`, `/subscribe`, `/message` | node-bound, only by a `Buffer` global |
 | `document/workspace-document.ts` | workspace-document snapshot and update | node-bound, only by a `Buffer` global |
-| `document/workspaces.ts` | `/api/workspaces`: list, create, rename, a workspace's documents | portable |
-| `document/trash.ts` | the trash list and restore | portable |
-| `document/live-doc.ts`, `document/restore.ts`, `document/path-route.ts` | a document's snapshot, existence and update by path, its restore, and the path helper | portable |
-| `sync-audience.ts`, `viewport-requests.ts` | who has a document open and the viewport requests sent to them | portable |
-| `auth.ts`, `status.ts`, `body-limit.ts`, `document-output-path-error.ts` | the bearer gate, an operations probe no web page calls, and two small helpers | portable |
-| `workspace-people.ts` | a workspace's members | portable |
+| `document/workspaces.ts` (router) | `/api/workspaces`: list, create, rename, a workspace's documents | portable by its own imports; transitively held by both seams and `node:os` in `document/_shared.ts` |
+| `document/trash.ts` (router) | the trash list and restore | portable by its own imports; transitively held by both seams only |
+| `document/live-doc.ts` (router) | a document's snapshot, existence and update by path | portable by its own imports; transitively held by the `workspace-handle` seam only |
+| `document/restore.ts` (router) | a document's restore | portable by its own imports; transitively held by the `workspace-handle` seam and `node:os` in `document/_shared.ts` |
+| `document/path-route.ts` (helper) | the path helper those routers share | portable by its own imports; held by the `workspace-handle` seam only |
+| `status.ts` (router) | an operations probe no web page calls | portable by its own imports; transitively held by both seams and a `Buffer` global in `sync-sse.ts` |
+| `workspace-people.ts` (router) | a workspace's members | portable by its own imports; transitively held by both seams and a `Buffer` global in `sync-sse.ts` |
+| `sync-audience.ts` (registry) | who has a document open | portable by its own imports; transitively held by both seams and a `Buffer` global in `sync-sse.ts` |
+| `viewport-requests.ts` (registry) | the viewport requests sent to them | portable, and clean over its transitive imports |
+| `auth.ts` (middleware) | the bearer gate | portable by its own imports; transitively held by both seams, `node:crypto` and a `Buffer` global in `security/timing-safe.ts` |
+| `body-limit.ts`, `document-output-path-error.ts` (helpers) | two small helpers | portable, and clean over their transitive imports |
 | `document/metadata.ts` | workspace and document names | node-bound: `store/names-store` |
 | `document/maintenance.ts`, `document/versions.ts`, `document/auto-version.ts`, `document.ts` | version pruning, optimisation, history | node-bound: `store/document-store`, `store/version-store` |
 | `files.ts` | file purge and the file routes | node-bound: `node:fs`, `store/` |
 | `export.ts`, `document/export-svg.ts`, `fonts.ts` | headless export and installed fonts | node-bound: `node:fs`, `export/` |
 | `runtime-storage.ts`, `document/_shared.ts`, `runtime.ts`, `debug.ts` | daemon storage and runtime reports | node-bound: `node:*`, `store/`, `daemon/` |
 
-"Portable" is a statement about a file's OWN imports: hono, the contracts and
-the seams it is handed. It is the lower bound, not a promise. A portable route
-still reaches `../log.js` (a Node logger), the security gates and
-`workspace-handle.ts`, which reads the store's workspace registry through a
-module-level handle (a ledgered edge in `adapter-mechanic-check`), and those
-travel with it or must be replaced. The two `Buffer` files are the closest to
-portable of the node-bound: base64 through a `Uint8Array` helper would remove
-the one reason, and `Buffer` exists on Workers only behind a compatibility flag.
+"Portable" in the first sense is a statement about a file's OWN imports: hono,
+the contracts and the seams it is handed. That is the lower bound, not a
+promise, and it was the only reading the first version of the guard took — a
+`node:fs` planted in `validators.ts`, which three of these import, left it
+green. The guard now also walks each file's transitive VALUE imports (type-only
+edges are erased at emit) with two named cut seams, `log.ts` (the Node logger)
+and `workspace-handle.ts` (which reads the store's workspace registry through a
+module-level handle, a ledgered edge in `adapter-mechanic-check`), that a lift
+would replace with a handed-in dependency. Six of the twelve files are routers
+(they mount a Hono app); the other six are the bearer gate, three helpers and
+two registries, which sit in `routes/` and are not routes.
 
-The twelve portable files are listed in the test, which holds that list from
-both sides and pins its length so it can only fall: a portable route added to
-`mcp-server` fails the build until the ceiling is raised on the record, and one
-lifted into `server-core` fails it until the ceiling is lowered.
+Counted that way, as measured on 2026-10-02: **three** of the twelve are clean
+as they stand (`body-limit.ts`, `document-output-path-error.ts`,
+`viewport-requests.ts`, none a router), **six** are held only by the two seams,
+and **two** of the six routers (`live-doc`, `trash`) are among those. The rest
+carry a named blocker: `node:os` in `document/_shared.ts` (`restore`,
+`workspaces`), `node:crypto` and a `Buffer` in `security/timing-safe.ts` (`auth`),
+and a `Buffer` global in `sync-sse.ts`, which `status`, `workspace-people` and
+`sync-audience` reach through the audience registry. The `Buffer` figure
+differs from a count of import specifiers alone, which would give nine: the
+direct class has always counted an ambient `Buffer` as Node (it is why
+`sync-sse.ts` and `workspace-document.ts` are node-bound), and the same base64
+helper that clears those two clears this.
+
+The twelve portable files, the role of each and what holds it are listed in the
+test, which holds that list from both sides, checks each file's blockers
+against the closure and pins its length and the three counts so they can only
+fall: a portable route added to `mcp-server` fails the build until the ceiling
+is raised on the record, and one lifted into `server-core` fails it until the
+ceiling is lowered.
 
 **Whether to lift the seam-only routes into `server-core` is an OPEN DECISION
 for the maintainer, and nothing here makes it.** The alternatives are:

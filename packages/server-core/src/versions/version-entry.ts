@@ -4,7 +4,7 @@ import { z } from 'zod'
 /**
  * Who saved a version. Declared once, here, because it crosses three
  * boundaries under one shape: the daemon's HTTP save route accepts it, the
- * `version_created` WebSocket message carries it, and the MCP version tools
+ * `version_created` sync event carries it, and the MCP version tools
  * answer with it. `server-core` is the lowest package all three can import.
  *
  * `actor` is an OKF §7 actor, the SAME vocabulary the trust family's

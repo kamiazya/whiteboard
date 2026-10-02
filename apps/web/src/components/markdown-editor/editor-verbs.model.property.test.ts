@@ -94,7 +94,7 @@ const MARK_DELIMITERS: Record<Mark, readonly [open: string, close: string]> = {
   link: ['[[', ']]'],
   math: ['$', '$'],
 }
-/** The mdast node each mark becomes; `link` is text to codec (see references.ts). */
+/** The mdast node each mark becomes; `link` is text to codec (see the codec's references/ modules). */
 const MARK_NODE: Record<Mark, string | null> = {
   bold: 'strong',
   italic: 'emphasis',
@@ -485,7 +485,8 @@ const presses = fc.commands(
  * runs keep the property around 2s alone; the ceiling below is for the
  * parallel suite, where this file shares the machine with every other
  * project and a per-test default of 5s reads as a property failure
- * (`Test timed out` is the tell — see integrator-flow.md, CI flakes).
+ * (`Test timed out` is the tell — flake-shapes.md's
+ * `property-timeout-reads-as-failure`).
  */
 const RUNS = 60
 const CEILING_MS = 30_000

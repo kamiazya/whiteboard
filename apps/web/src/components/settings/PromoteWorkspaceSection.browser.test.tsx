@@ -720,6 +720,8 @@ describe('PromoteWorkspaceSection', () => {
     await userEvent.click(await screen.findByTestId('promote-confirm'))
     const result = await screen.findByTestId('promote-last-result')
     expect(result.textContent).toMatch(/kept in this browser/i)
+    // The reason the daemon gave travels to the report, not only the count.
+    expect(result.textContent).toContain('HTTP 507')
 
     expect(await new BrowserWorkspaceDocs().open(sourceId)).not.toBeNull()
     const promotion = createUserSettingsStore().load().migration.promotion

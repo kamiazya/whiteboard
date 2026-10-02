@@ -1,14 +1,14 @@
 // `whiteboard daemon support-bundle --json` helper.
 //
 // Funnels the redacted v0 support bundle through the existing status
-// / doctor / logs helpers and the side-effect-free
+// / doctor helpers and the side-effect-free
 // `buildSupportBundle` + `writeSupportBundle` pair. The CLI never
-// stringifies raw status / doctor / log objects directly; everything
+// stringifies raw status / doctor objects directly; everything
 // goes through the funnel so the manifest / sections inherit the
-// allow-list, redaction, and ISO-timestamp validation contracts.
+// allow-list, redaction, and ISO-timestamp validation contracts. There is no
+// log section: the daemon writes its records to stderr and keeps no file.
 
 import { dirname, resolve } from 'node:path'
-import { type DaemonLogEntryInput, daemonLogEntrySchema } from '../shared/diagnostics/log-jsonl.js'
 import {
   buildSupportBundle,
   SupportBundleError,
@@ -16,7 +16,6 @@ import {
 } from '../shared/diagnostics/support-bundle.js'
 import { writeSupportBundle } from '../shared/diagnostics/support-bundle-writer.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
-import { runDaemonLogs } from './daemon-logs.js'
 import { runDaemonStatus } from './daemon-status.js'
 import {
   daemonSupportBundleOutputSchema,
@@ -65,33 +64,6 @@ function fail(message: string): DaemonSupportBundleOutcome {
   return { stdout: '', stderr: `${message}\n`, exitCode: 1 }
 }
 
-/**
- * The daemon's own JSONL log stream, read back through the schema so the
- * support-bundle builder sees a typed array rather than hand-built strings.
- * A line that does not parse is DROPPED: a bundle is a diagnostic, and one
- * malformed record must not cost the operator every other one. Fields are
- * copied by name — no spread — so a field the schema gains later cannot ride
- * into the bundle without someone deciding it should.
- */
-function parseLogEntries(stdout: string): DaemonLogEntryInput[] {
-  if (!stdout) return []
-  const entries: DaemonLogEntryInput[] = []
-  for (const line of stdout.split('\n')) {
-    if (line.length === 0) continue
-    const parsed = daemonLogEntrySchema.safeParse(JSON.parse(line))
-    if (!parsed.success) continue
-    const e = parsed.data
-    entries.push({
-      timestamp: e.timestamp,
-      level: e.level,
-      source: e.source,
-      message: e.message,
-      fields: e.fields,
-    })
-  }
-  return entries
-}
-
 export async function runDaemonSupportBundle(
   options: DaemonSupportBundleOptions,
 ): Promise<DaemonSupportBundleOutcome> {
@@ -100,18 +72,12 @@ export async function runDaemonSupportBundle(
   const packageVersion = options.packageVersion ?? '0.0.0'
   const platform = options.platform ?? { os: process.platform, nodeVersion: process.version }
 
-  // Source: daemon status + doctor + logs. Each upstream helper
+  // Source: daemon status + doctor. Each upstream helper
   // already runs its own redaction gate; this wrapper takes their
   // typed results and copies allow-listed fields into the bundle
   // input. No raw object spread.
   const status = (await runDaemonStatus({ dataDir })).result
   const doctor = (await runDaemonDoctor({ dataDir })).result
-
-  // Daemon logs source: surface a minimal deterministic input by
-  // re-using runDaemonLogs's JSONL stream. Parse it back through the
-  // schema so the support-bundle builder sees a typed array, not
-  // hand-built strings.
-  const logsEntries = parseLogEntries((await runDaemonLogs({ dataDir, now })).stdout)
 
   const input: SupportBundleInput = {
     createdAt: now(),
@@ -144,7 +110,6 @@ export async function runDaemonSupportBundle(
         remediation: c.remediation,
       })),
     },
-    logs: logsEntries,
   }
 
   let bundle: ReturnType<typeof buildSupportBundle>

@@ -93,10 +93,8 @@ try {
 
     const onDisk = readdirSync(outputDir).sort()
     if (
-      onDisk.length !== 4 ||
-      !['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'].every((n) =>
-        onDisk.includes(n),
-      )
+      onDisk.length !== 3 ||
+      !['doctor.json', 'manifest.json', 'status.json'].every((n) => onDisk.includes(n))
     ) {
       fail('scenario 1 unexpected file set', { onDisk })
     }
@@ -104,7 +102,7 @@ try {
     if (manifest.schemaVersion !== 1) fail('scenario 1 manifest.schemaVersion !== 1', manifest)
     if (
       JSON.stringify([...manifest.sections].sort()) !==
-      JSON.stringify(['doctor.json', 'logs.jsonl', 'status.json'])
+      JSON.stringify(['doctor.json', 'status.json'])
     ) {
       fail('scenario 1 manifest.sections mismatch', manifest)
     }
@@ -136,7 +134,7 @@ try {
     ])
     if (res.status !== 0) fail('scenario 2 unexpected status', res)
 
-    const concatenated = ['manifest.json', 'status.json', 'doctor.json', 'logs.jsonl']
+    const concatenated = ['manifest.json', 'status.json', 'doctor.json']
       .map((n) => readFileSync(join(outputDir, n), 'utf-8'))
       .join('')
     assertNoLeakBundle('on-disk bundle', concatenated, ['secret-token-XYZ'])

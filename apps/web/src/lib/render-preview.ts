@@ -48,32 +48,6 @@ export interface RenderMarkdownPreviewOptions {
 }
 
 /**
- * Pure parse -> layout -> serialize helper backing the preview pane. This is
- * the ONLY renderer for markdown in this component: it goes through
- * codec's `parseMarkdownBody` and canvas-render's `layoutMdastBlocks`
- * / `renderSceneToSvg`, the same path CanvasViewer uses for spatial text
- * nodes and export. There is no markdown-to-HTML fallback anywhere in this
- * file — that would be a second renderer and would reintroduce the
- * preview/export drift this migration exists to remove.
- *
- * Total by construction: `parseMarkdownBody` ends in a Zod `.parse()` call
- * and can throw on a tree shape the schema rejects, so a malformed body
- * (e.g. mid-edit) degrades to an empty scene instead of crashing the editor
- * on a keystroke.
- *
- * `renderMath` / `renderDiagram` come from the host (useMarkdownFragments'
- * cache-backed sync resolvers over the async MathJax/mermaid engines);
- * absent, math keeps canvas-render's documented escaped-source placeholder
- * and a diagram fence renders as a plain code block.
- */
-export function renderMarkdownPreviewSvg(
-  value: string,
-  options: RenderMarkdownPreviewOptions,
-): string {
-  return renderMarkdownPreview(value, options).keyed.svg
-}
-
-/**
  * One top-level block's scroll-sync anchor: its 1-based source start line
  * paired with its top edge in the emitted SVG's own pixel space (viewBox
  * origin already folded in, so `y` is directly comparable to a pixel
@@ -86,8 +60,7 @@ export interface PreviewBlockAnchor {
 
 export interface RenderedMarkdownPreview {
   /** Keyed projection of the preview document: `keyed.svg` is the full
-   * byte-identical document for string consumers (the worker protocol,
-   * `renderMarkdownPreviewSvg`); the groups feed the pane's DOM patcher. */
+   * byte-identical document for string consumers (the worker protocol); the groups feed the pane's DOM patcher. */
   readonly keyed: KeyedSvgRender
   readonly anchors: readonly PreviewBlockAnchor[]
   /**
@@ -101,6 +74,24 @@ export interface RenderedMarkdownPreview {
 export const PREVIEW_PADDING_PX = 8
 
 /**
+ * Parse -> layout -> serialize, backing the preview pane. This is the ONLY
+ * renderer for markdown in this component: it goes through codec's
+ * `parseMarkdownBody` and canvas-render's `layoutMdastBlocks` /
+ * `renderSceneToSvg`, the same path CanvasViewer uses for spatial text nodes
+ * and export. There is no markdown-to-HTML fallback anywhere in this file —
+ * that would be a second renderer and would reintroduce the preview/export
+ * drift this migration exists to remove.
+ *
+ * Total by construction: `parseMarkdownBody` ends in a Zod `.parse()` call
+ * and can throw on a tree shape the schema rejects, so a malformed body
+ * (e.g. mid-edit) degrades to an empty scene instead of crashing the editor
+ * on a keystroke.
+ *
+ * `renderMath` / `renderDiagram` come from the host (useMarkdownFragments'
+ * cache-backed sync resolvers over the async MathJax/mermaid engines);
+ * absent, math keeps canvas-render's documented escaped-source placeholder
+ * and a diagram fence renders as a plain code block.
+ *
  * The SVG plus per-block scroll-sync anchors from the SAME layout pass —
  * anchors derived from a second layout could disagree with what is
  * painted (fragment seams change block heights). Source lines come from

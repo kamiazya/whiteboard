@@ -119,7 +119,6 @@ const SAMPLES: Record<string, readonly Sample[]> = {
     { label: 'purge', method: 'POST', url: daemonUrls.purgeDanglingApiUrl(WS) },
   ],
   storageReportApiUrl: [{ label: 'report', method: 'GET', url: daemonUrls.storageReportApiUrl() }],
-  logsPruneApiUrl: [{ label: 'prune', method: 'POST', url: daemonUrls.logsPruneApiUrl() }],
   documentsV1ApiUrl: [{ label: 'create', method: 'POST', url: daemonUrls.documentsV1ApiUrl(WS) }],
   documentBacklinksApiUrl: [
     { label: 'backlinks', method: 'GET', url: daemonUrls.documentBacklinksApiUrl(WS, 'doc1') },

@@ -126,8 +126,11 @@ export interface SseStreamHubOptions {
 }
 
 /** Exponential with a ceiling: a daemon that is down should be retried until
- *  it returns, without turning into a busy loop against loopback. */
-function defaultRetryDelayMs(attempt: number): number {
+ *  it returns, without turning into a busy loop against loopback. Exported so
+ *  a test reads the schedule itself: every other test injects its own delay,
+ *  and past about 23 failures an unclamped one exceeds `setTimeout`'s 2^31 ms
+ *  maximum and fires at once. */
+export function defaultRetryDelayMs(attempt: number): number {
   return Math.min(30_000, 500 * 2 ** Math.min(attempt, 6))
 }
 

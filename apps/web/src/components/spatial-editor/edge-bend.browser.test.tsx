@@ -6,6 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { tick } from '../../test-utils/async.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -60,7 +61,6 @@ const centre = (element: Element): { clientX: number; clientY: number } => {
  * like the gesture not being wired up. Real input always has frames
  * between.
  */
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const press = async (target: Element, at: { clientX: number; clientY: number }) => {
   target.dispatchEvent(

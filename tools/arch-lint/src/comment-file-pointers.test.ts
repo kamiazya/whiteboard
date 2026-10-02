@@ -84,6 +84,27 @@ function isPointer(name: string): boolean {
 const BARE_TEST_FILE = /(?<![\w./*-])([\w][\w.-]*\.test\.tsx?)(?![\w-]|\.\w)/g
 
 /**
+ * A bare source or Markdown file name in a COMMENT, the way a comment names
+ * the file it is about without backticks.
+ * Fifteen such names pointed at files that no longer exist when this was added,
+ * every one invisible to the backticked scan above. Resolved by basename, or by
+ * tracked suffix when a directory is written.
+ */
+const BARE_SOURCE_NAME =
+  /(?<![\w./*@`-])([A-Za-z][\w-]*(?:\/[\w.-]+)*\.(?:tsx?|mjs|md))(?![\w-]|\.\w)/g
+
+/**
+ * Shapes that are not pointers: an illustration of a path (`path/to/…`), a
+ * build output (`dist/…`), and the tail of a name wrapped across two comment
+ * lines (a name split after its hyphen or dot), where only the tail survives.
+ */
+function isBareSourcePointer(name: string, line: string, previous: string): boolean {
+  if (/^(path\/to|dist)\//.test(name)) return false
+  const tail = /^\s*(?:\/\/|\*|\/\*)\s*([^\s]+)/.exec(line)?.[1]
+  return !(tail?.startsWith(name) === true && /[-._]\s*$/.test(previous))
+}
+
+/**
  * Names that resolve to nothing AND are meant to. Each says why, because a
  * bare exemption is the omission with a word in front of it.
  */
@@ -102,6 +123,34 @@ const DELIBERATE: Record<string, string> = {
     'same sentence: the route went with the version row thumbnail',
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#sweep-imported-fs-blobs.ts':
     "a migration's own text is history and is never rewritten (.claude/rules/vocabulary.md); the sweeper existed when this was written (#858)",
+
+  // Bare names in comments (the scan that reads a name without backticks).
+  'apps/web/src/hooks/use-document-file-seams.ts#index.md':
+    "a quotation of the OKF spec's own words about generators, not a pointer",
+  'packages/canvas-render/src/theme/spatial-theme.ts#viewer-appearance.ts':
+    'lists the per-surface resolvers this theme layer replaced; the sentence is the record of what they were',
+  'packages/canvas-render/src/theme/spatial-theme.ts#spatial-scene-appearance.ts': 'same list',
+  'packages/mcp-server/src/daemon/purge-legacy-trust-file.ts#web-origin-trust-store.ts':
+    'names the legacy file this module exists to purge; correcting it would erase the reason',
+  // Stale pointers the bare-name scan found in files other lanes owned when
+  // it landed; each lane repoints its own, and the entry goes with it.
+  'apps/web/src/lib/daemon-auth-fetch.ts#packages/mcp-server/src/shared/api-client.ts':
+    'stale (now daemon-client api-client.ts); W7 lane C owns the file, repoint next wave',
+  'apps/web/src/lib/document-sync-types.ts#hooks/use-identity-event.ts':
+    'stale; W7 lane C owns the file, repoint next wave',
+  'packages/daemon-client/src/api-client.ts#daemon-connection-payload.ts':
+    'stale; W7 lane C owns the package, repoint next wave',
+  'packages/daemon-client/src/api-contracts/index.ts#libraries.ts':
+    'stale; W7 lane C owns the package, repoint next wave',
+  'packages/mcp-server/src/server/store/document-store.test.ts#ws.ts':
+    'stale (the sync routes replaced it); W7 lane A owns the store, repoint next wave',
+  // Stale directory-qualified pointers the suffix rule exposed in files other
+  // lanes owned when it landed; each is repointed by the lane that owns the
+  // file, and the entry goes with it (guarded from both sides below).
+  'apps/web/src/pages/DaemonIndexPage.test.tsx#references/extract.ts':
+    'stale pointer in an apps/web page test; repoint when that area is next touched, then drop this entry',
+  'packages/server-core/src/tools/viewport-set.ts#routes/viewport.ts':
+    'stale pointer in a server-core tool; the route is routes/viewport-requests.ts — repoint, then drop this entry',
 
   // The `.claude/**/*.md` half. Every one of these is a sentence whose
   // SUBJECT is the file's absence — a rule explaining why a surface went.
@@ -125,6 +174,43 @@ interface Pointer {
   readonly name: string
 }
 
+/** Whether a name written with a directory matches a tracked suffix, or a bare one a tracked basename. */
+function resolvesTo(name: string, tracked: readonly string[], byBasename: ReadonlySet<string>) {
+  // A bare name carries only a basename, so that is all it resolves by; a name
+  // WITH a directory must match a tracked suffix, or a pointer at the wrong
+  // directory resolves because the file exists elsewhere.
+  if (name.includes('/')) return tracked.some((path) => path === name || path.endsWith(`/${name}`))
+  return byBasename.has(basename(name))
+}
+
+/** Every pointer on one line that names a file nothing tracks. */
+function unresolvedOnLine(
+  line: string,
+  previous: string,
+  wholeFile: boolean,
+  tracked: readonly string[],
+  byBasename: ReadonlySet<string>,
+): string[] {
+  const names: string[] = []
+  if (!wholeFile) {
+    for (const match of line.matchAll(BARE_SOURCE_NAME)) {
+      const name = match[1] ?? ''
+      if (isBareSourcePointer(name, line, previous) && !resolvesTo(name, tracked, byBasename)) {
+        names.push(name)
+      }
+    }
+  }
+  for (const match of line.matchAll(/`([A-Za-z0-9._/-]+\.tsx?)`/g)) {
+    const name = match[1] ?? ''
+    if (isPointer(name) && !resolvesTo(name, tracked, byBasename)) names.push(name)
+  }
+  for (const match of line.matchAll(BARE_TEST_FILE)) {
+    const name = match[1] ?? ''
+    if (!byBasename.has(name)) names.push(name)
+  }
+  return names
+}
+
 function unresolvedPointers(): Pointer[] {
   const tracked = trackedFiles()
   const byBasename = new Set(tracked.map((path) => basename(path)))
@@ -135,23 +221,11 @@ function unresolvedPointers(): Pointer[] {
   )
   for (const file of scanned) {
     const wholeFile = file.endsWith('.md')
-    for (const line of readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')) {
+    const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
+    for (const [lineIndex, line] of lines.entries()) {
       if (!wholeFile && !/^\s*(\/\/|\*|\/\*)/.test(line)) continue
-      for (const match of line.matchAll(/`([A-Za-z0-9._/-]+\.tsx?)`/g)) {
-        const name = match[1] ?? ''
-        if (!isPointer(name)) continue
-        const resolves =
-          tracked.some((path) => path === name || path.endsWith(`/${name}`)) ||
-          byBasename.has(basename(name))
-        if (resolves) continue
-        const key = `${file}#${name}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        found.push({ key, file, name })
-      }
-      for (const match of line.matchAll(BARE_TEST_FILE)) {
-        const name = match[1] ?? ''
-        if (byBasename.has(name)) continue
+      const previous = lines[lineIndex - 1] ?? ''
+      for (const name of unresolvedOnLine(line, previous, wholeFile, tracked, byBasename)) {
         const key = `${file}#${name}`
         if (seen.has(key)) continue
         seen.add(key)
@@ -218,6 +292,15 @@ const REPO_ROOTED_PATH =
 /** Matches that name no tracked path and are meant to. Guarded from both sides. */
 const NOT_A_TRACKED_PATH: Record<string, string> = {
   'tools/list': 'the MCP method name, not a directory',
+  'tools/call': 'the MCP method name, not a directory',
+  'packages/mcp-server/_artifacts/npm-sbom.cdx.json':
+    'a release build output, gitignored by design (docs/contributing/releasing.md)',
+  'packages/mcp-server/_artifacts/npm-sbom.inputs.json': 'same build output',
+  'packages/canvas-render/tmp/vitest-traces':
+    'where a failing browser test writes its trace; gitignored',
+  'packages/canvas-viewer/tmp/vitest-traces': 'same trace directory, canvas-viewer half',
+  'apps/web/tmp/vitest-traces': 'same trace directory, apps/web half',
+  'apps/web/dist/': 'the web build output, gitignored by design',
   '.claude/settings.local.json': 'per-machine and gitignored by design (.gitignore)',
   '.claude/worktrees/':
     'per-machine and gitignored by design — where `new-worktree.mjs` puts a lane',
@@ -233,8 +316,14 @@ interface RootedPath {
 function repoRootedPaths(): RootedPath[] {
   const found: RootedPath[] = []
   for (const file of trackedFiles()) {
+    // The contributor docs are read from the README onward and name the same
+    // paths the rules do, so they rot the same way. `adr/` is history and is
+    // a subdirectory, which the anchored pattern leaves out.
     const inScope =
-      file === 'AGENTS.md' || (/^\.claude\/(rules|skills)\//.test(file) && file.endsWith('.md'))
+      file === 'AGENTS.md' ||
+      file === 'CONTRIBUTING.md' ||
+      /^docs\/contributing\/[^/]+\.md$/.test(file) ||
+      (/^\.claude\/(rules|skills)\//.test(file) && file.endsWith('.md'))
     if (!inScope) continue
     for (const match of readFileSync(join(REPO_ROOT, file), 'utf8').matchAll(REPO_ROOTED_PATH)) {
       found.push({ file, path: match[1] ?? '' })
@@ -248,7 +337,7 @@ function resolvesExactly(path: string, tracked: readonly string[]): boolean {
   return tracked.some((entry) => entry === bare || entry.startsWith(`${bare}/`))
 }
 
-describe('a repo-rooted path in AGENTS.md, a rule or a skill names something tracked', () => {
+describe('a repo-rooted path in AGENTS.md, a contributor doc, a rule or a skill names something tracked', () => {
   const tracked = trackedFiles()
   const rooted = repoRootedPaths()
 
@@ -271,5 +360,84 @@ describe('a repo-rooted path in AGENTS.md, a rule or a skill names something tra
       (path) => !written.has(path) || resolvesExactly(path, tracked),
     )
     expect(obsolete).toEqual([])
+  })
+})
+
+// Where a flake shape is DESCRIBED moved once already, and every comment that
+// said "integrator-flow.md's ninth shape" went on pointing at a rule file that
+// no longer held the shape — and an ordinal, besides, that `flake-shapes.md`
+// never kept in order. Those pointers resolve (the file exists), so the
+// scans above cannot see them. A shape is cited by its NAME, the `###` heading
+// of the taxonomy, and the rule file is only cited for what it still carries.
+const FLAKE_SHAPES = '.claude/skills/steward/reference/flake-shapes.md'
+const SOURCE_FILE = /\.(tsx?|mjs|cjs|js|jsonc?|ya?ml|grit)$/
+
+/** A comment wrapped across lines, joined so a citation split by a wrap still reads whole. */
+function unwrapped(text: string): string {
+  return text.replace(/\s*\n\s*(?:\/\/|\*|#)?\s*/g, ' ')
+}
+
+/**
+ * Non-Markdown files whose mention of the rule file is ABOUT a rule the file
+ * does carry (the second-occurrence promotion, the post-merge mechanics), not
+ * a pointer at a shape. Each says so; guarded from both sides below.
+ */
+const RULE_FILE_FLAKE_MENTIONS: Record<string, string> = {
+  '.claude/scripts/flake-watch-lib.mjs':
+    'the second-occurrence rule, which integrator-flow.md carries',
+  '.claude/scripts/flake-watch-lib.test.mjs': 'the same second-occurrence rule',
+}
+
+const RULE_FILE_FLAKE_CITATION = /integrator-flow\.md.{0,60}(?:shape|flake)/
+
+function nonMarkdownFlakeCitations(): string[] {
+  const hits: string[] = []
+  for (const file of trackedFiles()) {
+    if (!SOURCE_FILE.test(file) || file === 'tools/arch-lint/src/comment-file-pointers.test.ts') {
+      continue
+    }
+    const text = unwrapped(readFileSync(join(REPO_ROOT, file), 'utf8'))
+    if (RULE_FILE_FLAKE_CITATION.test(text)) hits.push(file)
+  }
+  return hits
+}
+
+describe('a flake shape is cited by the name of its heading in flake-shapes.md', () => {
+  const taxonomy = readFileSync(join(REPO_ROOT, FLAKE_SHAPES), 'utf8')
+  const names = [...taxonomy.matchAll(/^### ([a-z][a-z-]+)$/gm)].map((m) => m[1] ?? '')
+
+  it('read the taxonomy', () => {
+    // Fourteen when written. Fewer means the heading shape changed under the
+    // scan, which reads as every citation below resolving to nothing.
+    expect(names.length).toBeGreaterThanOrEqual(14)
+  })
+
+  it('has no comment that sends a reader to the rule file for a flake shape', () => {
+    const cited = nonMarkdownFlakeCitations().filter((file) => !(file in RULE_FILE_FLAKE_MENTIONS))
+    expect(cited).toEqual([])
+  })
+
+  it('holds no exemption for a file that no longer cites the rule file that way', () => {
+    const live = new Set(nonMarkdownFlakeCitations())
+    expect(Object.keys(RULE_FILE_FLAKE_MENTIONS).filter((file) => !live.has(file))).toEqual([])
+  })
+
+  it('names, wherever a comment cites flake-shapes.md by name, a shape that exists', () => {
+    const unknown: string[] = []
+    let citations = 0
+    for (const file of trackedFiles()) {
+      if (!SOURCE_FILE.test(file) || file === 'tools/arch-lint/src/comment-file-pointers.test.ts') {
+        continue
+      }
+      const text = unwrapped(readFileSync(join(REPO_ROOT, file), 'utf8'))
+      for (const match of text.matchAll(/flake-shapes\.md['’]s `([a-z][a-z-]+)`/g)) {
+        citations += 1
+        if (!names.includes(match[1] ?? '')) unknown.push(`${file}: \`${match[1]}\``)
+      }
+    }
+    // The subject is present: a citation regex that matched nothing reports
+    // every name as resolving.
+    expect(citations).toBeGreaterThan(10)
+    expect(unknown).toEqual([])
   })
 })

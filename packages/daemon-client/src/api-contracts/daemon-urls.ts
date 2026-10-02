@@ -107,10 +107,6 @@ export function storageReportApiUrl(): string {
   return '/api/runtime/storage'
 }
 
-export function logsPruneApiUrl(): string {
-  return '/api/runtime/logs/prune'
-}
-
 // ---- /api/v1: documents addressed by id ----
 
 function v1WorkspaceUrl(workspaceId: string): string {

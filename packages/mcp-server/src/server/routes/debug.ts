@@ -4,6 +4,7 @@ import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { listDocuments, listWorkspaces, loadDocument } from '../store/document-store.js'
+import type { StoreScope } from '../store/store-scope.js'
 
 type DocumentInfo = {
   path: string
@@ -18,9 +19,13 @@ type WorkspaceInfo = {
   documents: DocumentInfo[]
 }
 
-async function summarizeCanvas(workspaceId: string, path: string): Promise<DocumentInfo> {
-  const cached = peekDoc(workspaceId, path)
-  const doc = cached ?? (await loadDocument(workspaceId, path))
+async function summarizeCanvas(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope,
+): Promise<DocumentInfo> {
+  const cached = peekDoc(workspaceId, path, scope)
+  const doc = cached ?? (await loadDocument(workspaceId, path, scope))
   const visibleElements = countAliveNodes(doc)
   const tombstones = countLegacyTombstones(doc)
   return {
@@ -44,6 +49,8 @@ export interface CreateDebugRouterOptions {
    * loud.
    */
   credentialResolver: CredentialResolver
+  /** The directory whose workspaces, documents and cache the dump describes. */
+  scope: StoreScope
   enabled?: boolean
 }
 
@@ -75,18 +82,18 @@ export function createDebugRouter(options: CreateDebugRouterOptions) {
   })
 
   app.get('/api/debug', async (c) => {
-    const workspaces = await listWorkspaces()
+    const workspaces = await listWorkspaces(options.scope)
     const workspaceInfos: WorkspaceInfo[] = await Promise.all(
       workspaces.map(async ({ workspaceId }) => {
-        const documents = await listDocuments(workspaceId)
+        const documents = await listDocuments(workspaceId, options.scope)
         const canvasInfos = await Promise.all(
-          documents.map(({ path }) => summarizeCanvas(workspaceId, path)),
+          documents.map(({ path }) => summarizeCanvas(workspaceId, path, options.scope)),
         )
         return { workspaceId, documents: canvasInfos }
       }),
     )
 
-    const keys = getCacheKeys()
+    const keys = getCacheKeys(options.scope)
     return c.json({
       workspaces: workspaceInfos,
       cache: { size: keys.length, keys },

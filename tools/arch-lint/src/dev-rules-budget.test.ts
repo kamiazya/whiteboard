@@ -104,7 +104,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // the one part of the logging policy that only a session editing `log.ts`
   // needs, and AGENTS.md keeps the rule that matters to everyone (never log a
   // secret-bearing object wholesale). Pins only go down on a cut.
-  'AGENTS.md': 16,
+  //
+  // 15 when the browser-mode detail (the title-length measurement, the
+  // window-state project, the DOM-less default trace; ~1.3 KB) moved to
+  // `test-authoring.md`, which loads for exactly the files that need it. What
+  // stays is the default place for a browser test, the commands, and a pointer.
+  'AGENTS.md': 15,
   // 16 since `packages/history` joined the table — the shared mechanics both
   // keepers read a branch, a merge plan and a checkpoint out of. A package
   // that is not in the table is a package nobody can place, so the row is
@@ -127,7 +132,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // `package-canvas-render.md` already said. What stays is the rule a session
   // placing code needs and the NAMES (`background-work.ts`, `cycle-check.ts`,
   // `web-app-boundary.test.ts`) a doc-sync guard and a grep look for.
-  '.claude/rules/architecture-map.md': 13,
+  '.claude/rules/architecture-map.md': 14,
   // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
   // It belongs here rather than in a skill because it changes what a session
   // must do when it shards a job: nothing, where before it had to ask a human

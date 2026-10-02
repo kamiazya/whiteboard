@@ -1,14 +1,17 @@
+import { tolerantAnswer } from '@kamiazya/whiteboard-daemon-client/api-contracts/tolerant-answer'
 import { z } from 'zod'
 import { safeGetItem, safeRemoveItem, safeSetItem } from './safe-local-storage.js'
 
-// Namespaced + version-suffixed. Adding a NEW OPTIONAL field is backward- and
-// forward-compatible under `.strict()` (old payloads simply lack it; old tabs
-// safeParse-fail on it only transiently), so it does NOT bump the key/version —
-// bumping would discard every existing user's stored settings. Bump BOTH this
-// suffix and the `version` literal only for a BREAKING change (removing a
-// field, changing a type, or making a field required), AND ship a migration
-// in the same increment: bumping alone is the discard this comment warns
-// about, just spelled differently.
+// Namespaced + version-suffixed. Adding a NEW OPTIONAL field does NOT bump the
+// key/version: old payloads simply lack it, and a tab still running the older
+// build READS a payload carrying it (an unknown key is ignored at every depth,
+// see `readSchema`) — the hosted app updates behind a prompt, so tabs of two
+// builds routinely share this key. Such a tab's next write drops the field it
+// does not know, and nothing else. Bump BOTH this suffix and the `version`
+// literal for a BREAKING change (removing a field, changing a type — a new
+// value of an existing enum included — or making a field required), AND ship
+// a migration in the same increment: bumping alone is the discard this comment
+// warns about, just spelled differently.
 export const STORAGE_KEY = 'whiteboard:user-settings:v5'
 
 /**
@@ -42,8 +45,10 @@ const httpUrl = z.string().refine((value) => {
 }, 'must be an http(s) URL')
 
 // `.strict()` at every level is the enforcement point for "no daemon/cloud
-// token in UserSettings": an unknown key (e.g. a token-shaped field) makes
-// safeParse fail, and callers fall back to defaults rather than persisting it.
+// token in UserSettings" at WRITE: `save` refuses an unknown key (e.g. a
+// token-shaped field), so none can be persisted. A READ is tolerant instead
+// (`readSchema`): it never surfaces such a key either, and the next write
+// leaves it out of storage.
 const storageSettingsSchema = z
   .object({
     // Which daemon this browser uses. `local` is gone from the name because
@@ -144,6 +149,12 @@ const promotionResultSchema = z.discriminatedUnion('ok', [
       blobsMissing: z.array(z.string()),
       blobsFailed: z.array(z.string()),
       /**
+       * Why those uploads failed, one sentence per distinct cause. Absent on
+       * records from before the reasons were kept, which can only say how
+       * many failed.
+       */
+      blobFailureReasons: z.array(z.string()).optional(),
+      /**
        * Whether the verified demote removed the source browser record
        * (ADR-0023 decision 2). Absent on records from before the feature —
        * those runs kept the copy, so absent reads as false.
@@ -209,6 +220,15 @@ export const userSettingsSchema = z
     appearance: appearanceSettingsSchema.optional(),
   })
   .strict()
+
+/**
+ * What `load` reads the live payload with: the same schema, deriving only
+ * what a reader does about a key it has not heard of. A tab on an older build
+ * beside a newer one used to read the newer payload as unreadable and write
+ * defaults back, erasing the daemon URL, the replica registry and the
+ * promotion record to lose one field it could not name.
+ */
+const readSchema = tolerantAnswer(userSettingsSchema)
 
 /**
  * The shape v2 migrates FROM, kept parse-only.
@@ -637,7 +657,7 @@ export function createUserSettingsStore(): UserSettingsStore {
    */
   function load(): UserSettings {
     if (safeGetItem(STORAGE_KEY) !== null) {
-      const result = userSettingsSchema.safeParse(readJson(STORAGE_KEY))
+      const result = readSchema.safeParse(readJson(STORAGE_KEY))
       return result.success ? result.data : defaultUserSettings()
     }
     for (const { key, migrate } of LEGACY_VERSIONS) {

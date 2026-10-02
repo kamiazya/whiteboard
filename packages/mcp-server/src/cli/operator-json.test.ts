@@ -130,7 +130,7 @@ const CONTRACTS = {
         ...v,
         ok: true,
         outputDir: '/tmp/bundle',
-        files: ['status.json', 'doctor.json', 'logs.jsonl', 'manifest.json'],
+        files: ['status.json', 'doctor.json', 'manifest.json'],
       },
     ],
   },

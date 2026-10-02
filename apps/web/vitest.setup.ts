@@ -243,7 +243,7 @@ afterEach(clearCatalogRecents)
 // loading when the file ends — the replica keeper App connects on mount, and
 // whatever the pages it lazy-loads import in turn. The environment is then
 // torn down under them, and vitest reports every test PASSED while the file
-// exits 1 on `EnvironmentTeardownError` (integrator-flow.md's tenth shape).
+// exits 1 on `EnvironmentTeardownError` (flake-shapes.md's `environment-teardown-error`).
 // Mocking the module each time only moves the error to the next one in the
 // graph, so the file waits for all of them instead.
 afterAll(() => vi.dynamicImportSettled())

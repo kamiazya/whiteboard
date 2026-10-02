@@ -39,7 +39,7 @@ const { saveDocument, loadDocument, deleteDocument, renameDocumentPath } = await
   './document-store.js'
 )
 const { clearCache } = await import('./doc-cache.js')
-const { createIsolatedDb } = await import('./db/test-helpers.js')
+const { createIsolatedDb, tableExists } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
@@ -70,16 +70,7 @@ async function openWorkspace(workspaceId: string) {
 }
 
 /** Migration 0017 dropped the documents table outright: the tree is the whole address book. */
-async function documentsTableExists(): Promise<boolean> {
-  const db = await getDb(tempDir)
-  const row = await db
-    .selectFrom('sqlite_master' as never)
-    .select(['name' as never])
-    .where('type', '=', 'table')
-    .where('name', '=', 'documents')
-    .executeTakeFirst()
-  return row !== undefined
-}
+const documentsTableExists = (): Promise<boolean> => tableExists(handle.rawDb, 'documents')
 
 it('a save with a kind lands on the workspace tree node and writes no per-document record and no row', async () => {
   await saveDocument('ws-a', 'design', canvasDoc('tree-borne'), { kind: 'spatial' })

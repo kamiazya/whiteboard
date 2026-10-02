@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { globalStoreScope } from './store/store-scope.js'
 
 let tempDir: string
 
@@ -45,7 +46,7 @@ describe('the auto-checkpoint declaration both kinds of root arm', () => {
   })
 
   function httpDeclaration(scheduler: () => CheckpointScheduler | undefined) {
-    const declared = sharedBackgroundWork(createSharedWorkers('instance-a'), {
+    const declared = sharedBackgroundWork(createSharedWorkers('instance-a', globalStoreScope), {
       checkpointScheduler: scheduler,
       fileGc: { start: () => {}, stop: async () => {} },
     }).find((entry) => entry.name === 'auto-checkpoint')

@@ -1,31 +1,8 @@
-import {
-  createServer,
-  type ServerDeps,
-  setLogSink as setServerCoreLogSink,
-} from '@kamiazya/whiteboard-server-core'
+import { createServer, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
-import { getLogger } from '../log.js'
 import { gatedByMembership } from '../security/mcp-caller.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
-
-// server-core is a shared layer and cannot depend on this composition
-// root's pino-backed logger, so it exposes an injectable sink instead
-// (see server-core/src/log.ts). Without this call, any fail-open log site
-// in server-core silently drops its record — the failure becomes invisible
-// to operators even though the code path itself never throws.
-// Levels are named identically (RFC 5424) on both sides, so this is a
-// straight pass-through rather than a mapping. mcp-server's pino-backed
-// logger takes the structured payload before the message (pino's own
-// convention), the reverse order of server-core's LogRecord shape.
-setServerCoreLogSink((record) => {
-  const log = getLogger(record.scope)
-  if (record.data) {
-    log[record.level](record.data, record.msg)
-  } else {
-    log[record.level](record.msg)
-  }
-})
 
 export function registerDocumentTools(server: McpServer, deps: ServerDeps): void {
   const tools = gatedByMembership(createServer(deps).tools, deps.documentIndex)

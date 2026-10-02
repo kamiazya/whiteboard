@@ -21,7 +21,7 @@
  * - The window the bug lives in is "the chunk has not landed yet", which is
  *   a condition. A fixed sleep is a window that can close before the Back —
  *   under the full parallel run a web-browser test measures many times its
- *   isolated time (.claude/rules/integrator-flow.md) — and the test then
+ *   isolated time (flake-shapes.md's `browser-project-in-flight`) — and the test then
  *   passes over a case it never reached.
  * - `resolveManualMock` is the RPC that AWAITS the factory, so it is in
  *   flight for exactly as long as the factory is. A page closing under one

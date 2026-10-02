@@ -6,6 +6,7 @@ import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 import { createCredentialResolver } from '../security/credential-resolver.js'
+import { testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -65,7 +66,10 @@ describe('GET /api/debug', () => {
     await saveDocument('sess-a', 'canvas-1', makeDocWithElements(3, 2))
     await saveDocument('sess-a', 'canvas-2', makeDocWithElements(1, 0))
 
-    const app = createDebugRouter({ credentialResolver: createCredentialResolver({}) })
+    const app = createDebugRouter({
+      scope: testStoreScope(),
+      credentialResolver: createCredentialResolver({}),
+    })
     const res = await app.request('/api/debug')
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
@@ -121,7 +125,10 @@ describe('GET /api/debug', () => {
     })
     await saveDocument('sess-nodes', 'canvas-1', doc)
 
-    const app = createDebugRouter({ credentialResolver: createCredentialResolver({}) })
+    const app = createDebugRouter({
+      scope: testStoreScope(),
+      credentialResolver: createCredentialResolver({}),
+    })
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
       workspaces: Array<{
@@ -160,7 +167,10 @@ describe('GET /api/debug', () => {
     doc.commit()
     await saveDocument('sess-mixed', 'canvas-1', doc)
 
-    const app = createDebugRouter({ credentialResolver: createCredentialResolver({}) })
+    const app = createDebugRouter({
+      scope: testStoreScope(),
+      credentialResolver: createCredentialResolver({}),
+    })
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
       workspaces: Array<{
@@ -193,7 +203,10 @@ describe('GET /api/debug', () => {
     // Only touched documents should appear in cache.
     await getDoc('sess-cache', 'touched')
 
-    const app = createDebugRouter({ credentialResolver: createCredentialResolver({}) })
+    const app = createDebugRouter({
+      scope: testStoreScope(),
+      credentialResolver: createCredentialResolver({}),
+    })
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
       workspaces: Array<{
@@ -212,7 +225,10 @@ describe('GET /api/debug', () => {
   })
 
   it('returns workspaces: [] when no sessions exist', async () => {
-    const app = createDebugRouter({ credentialResolver: createCredentialResolver({}) })
+    const app = createDebugRouter({
+      scope: testStoreScope(),
+      credentialResolver: createCredentialResolver({}),
+    })
     const res = await app.request('/api/debug')
     const json = (await res.json()) as { workspaces: unknown[] }
     expect(json.workspaces).toEqual([])
@@ -221,6 +237,7 @@ describe('GET /api/debug', () => {
   it('requires bearer auth when a daemon token is configured', async () => {
     process.env.WHITEBOARD_DEBUG = '1'
     const app = createDebugRouter({
+      scope: testStoreScope(),
       credentialResolver: createCredentialResolver({ daemonToken: 'secret' }),
     })
 
@@ -236,7 +253,10 @@ describe('GET /api/debug', () => {
 
   it('remains public when no daemon token is configured', async () => {
     process.env.WHITEBOARD_DEBUG = '1'
-    const app = createDebugRouter({ credentialResolver: createCredentialResolver({}) })
+    const app = createDebugRouter({
+      scope: testStoreScope(),
+      credentialResolver: createCredentialResolver({}),
+    })
     const res = await app.request('/api/debug')
     expect(res.status).toBe(200)
   })
@@ -244,6 +264,7 @@ describe('GET /api/debug', () => {
   it('returns 404 unless WHITEBOARD_DEBUG=1 is enabled', async () => {
     delete process.env.WHITEBOARD_DEBUG
     const app = createDebugRouter({
+      scope: testStoreScope(),
       credentialResolver: createCredentialResolver({ daemonToken: 'secret' }),
     })
 
