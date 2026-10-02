@@ -84,7 +84,7 @@ export {
 } from './tools/canvas-view.js'
 export {
   WorkspaceDocumentNotFoundError,
-  WorkspaceNotFoundError,
+  WorkspaceNotFoundForCallerError,
   WorkspaceSegmentUnusableError,
 } from './tools/document-crud.errors.js'
 export {

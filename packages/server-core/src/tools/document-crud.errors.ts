@@ -5,7 +5,10 @@
  *
  * They exist alongside `DocumentIndex`'s own errors because these carry
  * advice aimed at an MCP caller; the port's are mapped to status codes
- * directly where no such advice applies.
+ * directly where no such advice applies. `WorkspaceNotFoundForCallerError` is
+ * named apart from the port's `WorkspaceNotFoundError` on purpose: one
+ * condition, two classes, and a bare name would have to be aliased wherever
+ * both are caught.
  */
 export class WorkspaceDocumentNotFoundError extends Error {
   constructor(
@@ -25,7 +28,7 @@ export class WorkspaceDocumentNotFoundError extends Error {
  */
 export type WorkspaceNotFoundIntent = 'create' | 'read'
 
-export class WorkspaceNotFoundError extends Error {
+export class WorkspaceNotFoundForCallerError extends Error {
   constructor(
     readonly workspaceId: string,
     intent: WorkspaceNotFoundIntent = 'read',
@@ -36,7 +39,7 @@ export class WorkspaceNotFoundError extends Error {
           ? 'Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.'
           : 'Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).'),
     )
-    this.name = 'WorkspaceNotFoundError'
+    this.name = 'WorkspaceNotFoundForCallerError'
   }
 }
 

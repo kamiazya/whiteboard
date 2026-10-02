@@ -3,8 +3,9 @@ import {
   isDocumentNotFoundError,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
+import { WorkspaceNotFoundForCallerError } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
-import { handleDocumentNotFound, notFoundAs } from './_shared.js'
+import { handleDocumentNotFound, notFoundAs, workspaceNotFoundAs } from './_shared.js'
 
 describe('the not-found translations over the port error', () => {
   const absent = new DocumentNotFoundError('ws', 'notes/a')
@@ -28,6 +29,12 @@ describe('the not-found translations over the port error', () => {
       status: 404,
       body: { title: 'gone' },
     })
+  })
+
+  it("answers the same title for the tool layer's own absent-workspace error", () => {
+    const toolError = new WorkspaceNotFoundForCallerError('ws')
+    expect(notFoundAs('gone')(toolError)).toEqual({ status: 404, body: { title: 'gone' } })
+    expect(workspaceNotFoundAs('gone')(toolError)).toEqual({ status: 404, body: { title: 'gone' } })
   })
 
   it('leaves an unrelated error to the caller', () => {

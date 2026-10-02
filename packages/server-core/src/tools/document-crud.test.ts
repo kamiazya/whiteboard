@@ -5,7 +5,10 @@ import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
-import { WorkspaceDocumentNotFoundError, WorkspaceNotFoundError } from './document-crud.errors.js'
+import {
+  WorkspaceDocumentNotFoundError,
+  WorkspaceNotFoundForCallerError,
+} from './document-crud.errors.js'
 import {
   wbDocumentCreate,
   wbDocumentDelete,
@@ -99,13 +102,13 @@ describe('wbDocumentCreate', () => {
     ).rejects.toThrow(DocumentPathTakenError)
   })
 
-  it('throws WorkspaceNotFoundError for an unknown workspaceId, and list agrees', async () => {
+  it('throws WorkspaceNotFoundForCallerError for an unknown workspaceId, and list agrees', async () => {
     const deps = await makeDeps()
     await expect(
       wbDocumentCreate(deps, { workspaceId: 'nope', path: 'doc-a', kind: 'spatial' }),
-    ).rejects.toThrow(WorkspaceNotFoundError)
+    ).rejects.toThrow(WorkspaceNotFoundForCallerError)
     await expect(wbDocumentList(deps, { workspaceId: 'nope' })).rejects.toThrow(
-      WorkspaceNotFoundError,
+      WorkspaceNotFoundForCallerError,
     )
   })
 
@@ -304,10 +307,10 @@ describe('wbDocumentList', () => {
     ])
   })
 
-  it('throws WorkspaceNotFoundError for a workspace that was never created', async () => {
+  it('throws WorkspaceNotFoundForCallerError for a workspace that was never created', async () => {
     const deps = await makeDeps()
     await expect(wbDocumentList(deps, { workspaceId: 'ghost' })).rejects.toThrow(
-      WorkspaceNotFoundError,
+      WorkspaceNotFoundForCallerError,
     )
   })
 
