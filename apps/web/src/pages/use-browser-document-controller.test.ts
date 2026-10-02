@@ -35,9 +35,8 @@ class FakeLoroStore implements LoroStoreLike {
   }
 }
 
-// duplicateDocument runs the real loro-crdt merge/export (mergeToSnapshot),
-// so its tests need real Loro bytes rather than the fake's placeholder
-// `[1, 2, 3]` — that would throw when mergeToSnapshot tries to import it.
+// duplicateDocument runs the real loro-crdt merge/export (mergeToSnapshot), so
+// its tests need real Loro bytes; the fake's `[1, 2, 3]` would throw on import.
 function realSnapshotWithElements(elements: unknown[]): Uint8Array {
   const doc = new Loro()
   const list = doc.getList('elements')
@@ -45,10 +44,8 @@ function realSnapshotWithElements(elements: unknown[]): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-// ULIDs, because the stored schema validates them now. Named constants
-// rather than inline literals: a 26-character id read six times in one
-// assertion is unreadable, and the tests are about which document, not which
-// characters.
+// ULIDs, because the stored schema validates them. Named, since a 26-character
+// id read six times in one assertion is unreadable.
 const C1 = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const C2 = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
 
@@ -72,12 +69,8 @@ async function refusalOf(del: () => Promise<void>): Promise<string> {
 }
 
 describe('useBrowserDocumentController', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-  })
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
 
   it('snapshot starts as null before load completes', () => {
     const store = new LocalStoreDouble()
