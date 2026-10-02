@@ -2857,6 +2857,39 @@ describe('the node extension on the write side', () => {
   })
 })
 
+describe('wb_canvas_edit — an object nested inside an op refuses a key it does not declare', () => {
+  // The top-level op objects are strict, and a nested model object that
+  // stripped instead made the same mistake silent one level down: a misspelt
+  // `versionRef` is an embed pinned to nothing, and a comment's invented
+  // field is dropped with the call reporting success.
+  const accepts = (op: Record<string, unknown>) =>
+    canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [op],
+    }).success
+  const embed = { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' }
+  const addNode = (node: Record<string, unknown>) => ({
+    op: 'node.add',
+    node: { type: 'text', text: 'x', ...node },
+  })
+
+  test('a node embed', () => {
+    expect(accepts(addNode({ embed: { ...embed, versionRef: 'v1' } }))).toBe(true)
+    expect(accepts(addNode({ embed: { ...embed, versionref: 'v1' } }))).toBe(false)
+  })
+
+  test('a comment draft', () => {
+    const add = (comment: Record<string, unknown>) => ({
+      op: 'comment.add',
+      comment: { text: 'x', x: 5, y: 5, ...comment },
+    })
+    expect(accepts(add({}))).toBe(true)
+    expect(accepts(add({ foo: 1 }))).toBe(false)
+  })
+})
+
 describe('wb_canvas_edit — a node created without a width', () => {
   // Found by the rung-3 lane, not by reading the code: three trials of three
   // added a box declaring NO geometry at all — which is what the surface asks

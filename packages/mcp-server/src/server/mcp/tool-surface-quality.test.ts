@@ -406,7 +406,13 @@ describe('what the tool table costs to read', () => {
         // 1.0's `x-whiteboard` extension key and names the model's own
         // `embed` and `facets`, and the `ExtensionFacets` registration pays
         // for the four sites the retired composite left inline.
-        visibleBytes: 15092,
+        //
+        // +58, the same on the wire: a node's `embed` and a comment draft
+        // stopped stripping a key they do not declare, so each now publishes
+        // `additionalProperties: false` (29 bytes apiece) — the C10
+        // refusal one level below the op, where a misspelt `versionRef`
+        // used to be an embed pinned to nothing. No parameter was added.
+        visibleBytes: 15150,
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
@@ -418,7 +424,7 @@ describe('what the tool table costs to read', () => {
         // -4857 on the merge, the input convergence and the resource fold
         // together — the same two causes as `canvas_view`'s row, arriving
         // here through the echo this tool's output carries.
-        wireBytes: 33784,
+        wireBytes: 33842,
         descriptionWords: 169,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
@@ -907,7 +913,9 @@ describe('what the tool table costs to read', () => {
       // Then -994 for wb_pairing_link_create's retirement (see `tools`).
       // Then +412 for `wb_workspace_edit`'s `document.move` arm, priced at
       // its own row.
-      visibleBytes: 38938,
+      // Then +58 for `wb_canvas_edit`'s two nested objects refusing a stray
+      // key, priced at its own row.
+      visibleBytes: 38996,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -926,7 +934,8 @@ describe('what the tool table costs to read', () => {
       // Then +143 for stating `destructiveHint` on the six writes that left it
       // to the default (five `false` at +24, wb_version_restore `true` at +23):
       // the annotation is client-side, so visibleBytes does not move.
-      wireBytes: 109619,
+      // Then +58, the same bytes as visible, for the nested strict objects.
+      wireBytes: 109677,
       parameters: 343,
       undescribed: 219,
     })
