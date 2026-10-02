@@ -508,7 +508,7 @@ function DocumentPageBody({
    * The slot's switchboard, keyed by the union rather than by a chain of
    * `inspector === K &&` ternaries.
    *
-   * Same shape `INSPECTOR_ORDER` and `INSPECTOR_LABELS` already use, one step
+   * Same shape `INSPECTOR_ORDER` and `INSPECTOR_CHROME` already use, one step
    * further: the union drove the header's order and its labels, and the
    * RENDER was the last place a panel was still named by hand — so a seventh
    * `InspectorKind` compiled, took a place in the header, and showed nothing

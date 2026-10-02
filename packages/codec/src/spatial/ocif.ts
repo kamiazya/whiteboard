@@ -11,7 +11,7 @@ import { z } from 'zod'
  * silence for an oversight: `rotation`/`rotationAxis`/`scale` (the model has
  * no rotation to project), 3D positions, `@ocif/ports`, `@ocif/inherit`,
  * `@ocif/page`, `@ocif/theme-*`, and `@ocif/global-positions`. A document
- * arriving with any of them keeps them — see `extensionSchema` below.
+ * arriving with any of them keeps them — see `ocifExtensionSchema` below.
  */
 
 /**

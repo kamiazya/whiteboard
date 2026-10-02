@@ -981,8 +981,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * "already selected" means.
      *
      * `primaryId` is passed in rather than read from state because the gather
-     * path learns the anchor from the in-flight gesture, whose `setSelectedId`
-     * has not been applied yet when this runs.
+     * path learns the anchor from the in-flight gesture, whose selection
+     * update has not been applied yet when this runs.
      */
     const toggleSelectionMember = (primaryId: string | null, hitId: string) => {
       // NOTHING is dropped here. It used to clear the whole path selection,

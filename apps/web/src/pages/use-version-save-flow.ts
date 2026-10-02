@@ -1,13 +1,12 @@
 /**
- * The save-a-version race guard, shared by the browser and daemon document
- * pages (previously duplicated between them, guard-for-guard).
+ * The save-a-version race guard, shared by every keeper's document model.
  *
  * A document page keeps its own document switching rather than remounting
  * (App.tsx says so at the mount site), so a save that started on one
  * document can settle after another is already on screen. `scopeRef` names
- * whatever the page's document identity currently is —
- * `currentDocumentIdRef` on the browser page, `currentDocumentPathRef` on
- * the daemon page — read fresh on every settle rather than captured once,
+ * whatever the page's document identity currently is — `DocumentPage` keeps
+ * `currentScopeRef` current from its model's `scopeKey` — read fresh on every
+ * settle rather than captured once,
  * because the page's own effect keeps it current across the switch this
  * guard is defending against.
  *

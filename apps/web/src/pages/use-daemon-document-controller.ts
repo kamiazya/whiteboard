@@ -54,7 +54,7 @@ export interface DaemonDocumentController {
    * `duplicateDocument` does: the page owns the refusal surface. The list is
    * refreshed either way by the caller's dialog, since after a FAILURE the
    * daemon's state is unknown from here — the same reading the index page's
-   * `closeDeleteDialog` is built on.
+   * `refreshAfterDelete` is built on.
    */
   deleteDocument: () => Promise<void>
   createError: string | null

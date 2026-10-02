@@ -302,7 +302,7 @@ export interface FacetFieldSpec {
  * How a plugin says this facet is met. Exactly one of the two: a `picker`
  * is one control writing whole payloads, `fields` is a form over the
  * schema's own fields. Declaring both would be two answers to one
- * question, and `assertEditorSpecFits` refuses it.
+ * question, and `resolveEditorSpec` refuses it.
  */
 export interface FacetEditorSpec {
   readonly picker?: FacetPickerSpec

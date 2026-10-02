@@ -147,7 +147,7 @@ export class LoroStore {
    * `appendDelta` reads the log, decides whether to fold it, and writes — and
    * that spans more than one port call, so a single IndexedDB transaction no
    * longer covers it. The daemon has the same shape and answers it the same
-   * way (`withDocumentWriteLock`): the lock is what stops two overlapping
+   * way (`withWorkspaceWriteLock`): the lock is what stops two overlapping
    * appends from both deciding to compact and the second's fold discarding
    * the first's update.
    *
