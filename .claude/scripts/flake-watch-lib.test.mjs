@@ -407,3 +407,82 @@ test('the report ends by telling the session what to DO, not only what happened'
 })
 
 import { failedLegFrom, formatReport, pathFromTestId } from './flake-watch-lib.mjs'
+
+// A flake that was root-caused keeps being reported for the rest of the
+// window — context charged to every session start, naming a file whose fix
+// had already landed. An entry that has demonstrably moved on is dropped:
+// either its file changed after its newest failure AND a later main run
+// passed, or a later commit's subject names the file.
+const settledWindow = (file, other) => [
+  { runId: '1', createdAt: '2026-09-20T00:00:00Z', titles: [`[p] ${file} > x`] },
+  { runId: '2', createdAt: '2026-09-21T00:00:00Z', titles: [`[p] ${file} > x`] },
+  { runId: '3', createdAt: '2026-09-20T00:00:00Z', titles: [`[p] ${other} > y`] },
+  { runId: '4', createdAt: '2026-09-21T00:00:00Z', titles: [`[p] ${other} > y`] },
+]
+const changedAt = (newestAt, extra = {}) => ({
+  state: 'changed',
+  commits: 2,
+  newest: 'refactor: tidy',
+  newestAt,
+  ...extra,
+})
+
+test('an entry whose file changed after its last failure, and whose next main run passed, is dropped', () => {
+  const clusters = clusterFailures(settledWindow('src/fixed.test.ts', 'src/open.test.ts'))
+  const inspect = (path) =>
+    path === 'src/fixed.test.ts' ? changedAt('2026-09-22T00:00:00Z') : { state: 'unchanged' }
+  const passedAfter = (iso) => iso <= '2026-09-23T00:00:00Z'
+
+  const report = formatReport(clusters, 14, inspect, passedAfter)
+
+  assert.doesNotMatch(report, /src\/fixed\.test\.ts/)
+  assert.match(report, /2x \[p\] src\/open\.test\.ts/)
+  // Not silent about it: a reader can tell an entry was omitted and why.
+  assert.match(report, /1 test\(s\) omitted.*changed since.*later main run passed/)
+})
+
+test('a changed file with no passing main run after the change stays listed', () => {
+  const clusters = clusterFailures(settledWindow('src/fixed.test.ts', 'src/open.test.ts'))
+  const report = formatReport(clusters, 14, () => changedAt('2026-09-22T00:00:00Z'), () => false)
+  assert.match(report, /src\/fixed\.test\.ts/)
+  assert.match(report, /verify the flake still reproduces/)
+  assert.doesNotMatch(report, /omitted/)
+})
+
+test('a later main pass does not retire a file nothing has touched', () => {
+  // A flake that fails one run in ten passes the next run by chance.
+  const clusters = clusterFailures(settledWindow('src/a.test.ts', 'src/b.test.ts'))
+  const report = formatReport(clusters, 14, () => ({ state: 'unchanged' }), () => true)
+  assert.match(report, /src\/a\.test\.ts/)
+  assert.match(report, /nothing has touched this file since/)
+})
+
+test('a later commit that names the file retires its entry without waiting for a pass', () => {
+  const clusters = clusterFailures(settledWindow('src/pages/Thing.browser.test.tsx', 'src/open.test.ts'))
+  const inspect = (path) =>
+    path === 'src/pages/Thing.browser.test.tsx'
+      ? changedAt('2026-09-22T00:00:00Z', {
+          newest: 'fix: root-cause the Thing.browser.test.tsx flake',
+          namedBy: 'fix: root-cause the Thing.browser.test.tsx flake',
+        })
+      : { state: 'unchanged' }
+
+  const report = formatReport(clusters, 14, inspect, () => false)
+
+  assert.doesNotMatch(report, /Thing\.browser/)
+  assert.match(report, /1 test\(s\) omitted.*named by a later commit/)
+})
+
+test('when every recurrence is retired the report is silent', () => {
+  const clusters = clusterFailures(settledWindow('src/a.test.ts', 'src/b.test.ts'))
+  assert.equal(formatReport(clusters, 14, () => changedAt('2026-09-22T00:00:00Z'), () => true), '')
+})
+
+test('a passed-after check that throws leaves the report as it was', () => {
+  const clusters = clusterFailures(settledWindow('src/a.test.ts', 'src/b.test.ts'))
+  const inspect = () => changedAt('2026-09-22T00:00:00Z')
+  const throwing = () => {
+    throw new Error('offline')
+  }
+  assert.equal(formatReport(clusters, 14, inspect, throwing), formatReport(clusters, 14, inspect))
+})

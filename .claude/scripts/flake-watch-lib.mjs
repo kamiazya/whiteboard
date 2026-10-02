@@ -150,19 +150,21 @@ export function pathFromTestId(id) {
  * touched this file since" is worse than no line at all, because it reads
  * as evidence.
  */
-function fileStatusLine(entry, inspect) {
-  if (typeof inspect !== 'function') return []
+function inspectEntry(entry, inspect) {
+  if (typeof inspect !== 'function') return null
   // An unhandled-error entry carries the path its annotation named, which is
   // an ordinary source file rather than a test — the same question ("has
   // this moved since it last failed?") and a different kind of answer.
   const path = entry.path ?? pathFromTestId(entry.id)
-  if (path === null || path === undefined) return []
-  let status
+  if (path === null || path === undefined) return null
   try {
-    status = inspect(path, entry.latest)
+    return inspect(path, entry.latest) ?? null
   } catch {
-    return []
+    return null
   }
+}
+
+function fileStatusLine(status) {
   if (status?.state === 'missing') return ['      this file no longer exists']
   if (status?.state === 'unchanged') return ['      nothing has touched this file since']
   if (status?.state === 'changed') {
@@ -172,6 +174,34 @@ function fileStatusLine(entry, inspect) {
     ]
   }
   return []
+}
+
+/**
+ * Why a recurrence no longer needs a lane, or null when it still might.
+ *
+ * Two independent signals, each stricter than "something moved":
+ *  - a later commit's SUBJECT names the file (`status.namedBy`) — the shape a
+ *    root-cause fix has. It need not touch the file and does not wait for a
+ *    pass, because the subject is the author saying what it was about;
+ *  - the file changed after the entry's newest failure AND a main run
+ *    created after that change passed (`passedAfter`). The pass alone proves
+ *    nothing — a flake failing one run in ten passes the next by chance — and
+ *    the change alone is only "what this is about moved", so both are needed.
+ *
+ * An unreadable `passedAfter` answers "unknown", never "passed": a wrong drop
+ * hides a live flake, which is worse than a stale line.
+ */
+function whyRetired(status, passedAfter) {
+  if (typeof status?.namedBy === 'string' && status.namedBy !== '') return 'named by a later commit'
+  if (status?.state !== 'changed') return null
+  if (typeof passedAfter !== 'function' || typeof status.newestAt !== 'string') return null
+  try {
+    return passedAfter(status.newestAt) === true
+      ? 'changed since its last failure and a later main run passed'
+      : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -199,22 +229,38 @@ function unattributedLegLines(unattributedRuns) {
   ]
 }
 
-/** One line per recurrence; silence when there is none is the caller's job. */
-export function formatReport({ recurrences, singles, unattributedRuns }, windowDays, inspect) {
-  if (recurrences.length === 0) return ''
+/**
+ * One line per recurrence; silence when there is none is the caller's job.
+ *
+ * @param inspect     `(path, sinceIso) => status`, whether the file moved since
+ * @param passedAfter `(iso) => boolean`, whether a main run created after `iso` passed
+ */
+export function formatReport({ recurrences, singles, unattributedRuns }, windowDays, inspect, passedAfter) {
+  const inspected = recurrences.map((entry) => ({ entry, status: inspectEntry(entry, inspect) }))
+  const retired = new Map()
+  for (const { entry, status } of inspected) {
+    const why = whyRetired(status, passedAfter)
+    if (why !== null) retired.set(entry.id, why)
+  }
+  const live = inspected.filter(({ entry }) => !retired.has(entry.id))
+  if (live.length === 0) return ''
   const lines = [
-    `[flake-watch] ${recurrences.length} test(s) failed main CI more than once in ${windowDays} days — the second occurrence is the promotion signal (integrator-flow.md):`,
+    `[flake-watch] ${live.length} test(s) failed main CI more than once in ${windowDays} days — the second occurrence is the promotion signal (integrator-flow.md):`,
     '',
   ]
-  for (const entry of recurrences) {
+  for (const { entry, status } of live) {
     lines.push(`  ${entry.runIds.length}x ${entry.id}`)
     lines.push(`      runs: ${entry.runIds.join(', ')} (newest ${entry.latest.slice(0, 10)})`)
-    lines.push(...fileStatusLine(entry, inspect))
+    lines.push(...fileStatusLine(status))
   }
   lines.push('')
   lines.push(
     `  (${singles.length} single-occurrence test failure(s) and ${unattributedRuns.length} run(s) with no test annotation — infra-shaped — not listed.)`,
   )
+  if (retired.size > 0) {
+    const reasons = [...new Set(retired.values())].join('; ')
+    lines.push(`  (${retired.size} test(s) omitted: ${reasons}.)`)
+  }
   lines.push(...unattributedLegLines(unattributedRuns))
   lines.push('')
   lines.push(
