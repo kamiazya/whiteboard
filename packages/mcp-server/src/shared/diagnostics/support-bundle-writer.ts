@@ -122,7 +122,6 @@ async function lstatOrNull(path: string) {
 const FILE_WRITE_ORDER: Array<keyof SupportBundle['files']> = [
   'status.json',
   'doctor.json',
-  'logs.jsonl',
   'manifest.json',
 ]
 
@@ -173,7 +172,7 @@ export async function writeSupportBundle(
 
   return {
     outputDir: targetDir,
-    // Surface in manifest order (status / doctor / logs / manifest)
+    // Surface in manifest order (status / doctor / manifest)
     // for callers that print the list — predictable for tests and
     // smoke output diffs.
     files: [...FILE_WRITE_ORDER],

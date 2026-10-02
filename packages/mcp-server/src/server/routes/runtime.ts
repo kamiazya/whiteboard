@@ -3,7 +3,6 @@ import {
   type RuntimeStatusResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { Hono } from 'hono'
-import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
@@ -26,7 +25,7 @@ export interface RuntimeRouterOptions {
    * route-scope registry had already declared, not working, with nothing red.
    */
   credentialResolver: CredentialResolver
-  /** The data directory the storage report walks and the log cleanup prunes. */
+  /** The data directory the storage report walks. */
   dataLayout: DataLayout
 }
 
@@ -54,7 +53,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // (the global daemon-mutation middleware skips /api/runtime/*), so it
     // must accept the same credential set as the global layer for READ
     // routes: the daemon token, or a scope-checked narrower credential. The
-    // admin routes (logs prune) accept the daemon token only. Stopping the daemon is not an HTTP route at
+    // admin routes accept the daemon token only. Stopping the daemon is not an HTTP route at
     // all: `whiteboard daemon stop` signals the process and the idle timer
     // calls close() directly, so no credential ends it.
     const scope = resolveApiRouteScope(c.req.method, c.req.path)
@@ -71,7 +70,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // follows it: a narrow credential reaches only the READ half of
     // `/api/runtime/*`, whatever scopes it holds. Dropping it in favour of
     // `hasRequiredScopes` alone would let a grant holding `runtime:admin`
-    // reach the log prune, which the admin routes have never allowed. That is a per-surface policy, so it stays here rather than
+    // an admin route mounted here, which the runtime surface has never allowed. That is a per-surface policy, so it stays here rather than
     // moving into the resolver.
     if (scope?.kind === 'scoped' && scope.scopes.includes('runtime:read')) {
       if (hasRequiredScopes(grant.scopes, scope.scopes)) return next()
@@ -93,31 +92,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     const report = await computeStorageReport(options.dataLayout.dataDir)
     const lastAutoCompactedAt = await readLatestCompactedAt()
     return c.json({ ...report, lastAutoCompactedAt })
-  })
-
-  // The one caller of the daemon-log rotation: the Storage tab's Logs row
-  // shows a Cleanup affordance for the daemon-*.log files an older daemon
-  // left under the data dir.
-  //
-  // Defense-in-depth on auth: the per-router middleware above also gates
-  // this path, but the global daemon-mutation middleware in app.ts
-  // explicitly skips /api/runtime/*, so this route is one middleware
-  // refactor away from being world-callable. Re-check the bearer in the
-  // handler so the file-deletion side effect is never reached without it.
-  app.post('/api/runtime/logs/prune', async (c) => {
-    // Daemon-token-only, checked against the grant's KIND rather than its
-    // scopes: no narrow credential deletes files here, however wide its scope
-    // set. Resolved through the same resolver as everything else so there is
-    // no second place that compares a secret.
-    const grant = await options.credentialResolver.resolve({
-      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
-    })
-    if (grant?.kind !== 'daemon-token' && grant?.kind !== 'anonymous') {
-      return c.json({ error: 'unauthorized' }, 401)
-    }
-    options.touch()
-    const result = await purgeOldDaemonLogs(options.dataLayout.dataDir)
-    return c.json(result)
   })
 
   return app

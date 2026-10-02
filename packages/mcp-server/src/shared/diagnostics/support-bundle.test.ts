@@ -31,15 +31,6 @@ const minimalInput: SupportBundleInput = {
       { id: 'daemon.token', status: 'ok', summary: 'Token present.' },
     ],
   },
-  logs: [
-    {
-      timestamp: FIXED_TS,
-      level: 'info',
-      source: 'daemon',
-      message: 'startup',
-      fields: { pid: 1234, port: 3099, status: 'ok' },
-    },
-  ],
 }
 
 function bundleAsConcatenatedText(bundle: ReturnType<typeof buildSupportBundle>): string {
@@ -49,31 +40,15 @@ function bundleAsConcatenatedText(bundle: ReturnType<typeof buildSupportBundle>)
 }
 
 describe('support bundle v0', () => {
-  it('produces a deterministic manifest + status + doctor + logs section set with stable filenames', () => {
-    // Use 2 log entries so the JSONL whole-stream JSON.parse guard
-    // is meaningful — a single line happens to also parse as a JSON
-    // object, which would mask an array-wrapper regression.
-    const bundle = buildSupportBundle({
-      ...minimalInput,
-      logs: [
-        ...minimalInput.logs,
-        {
-          timestamp: FIXED_TS,
-          level: 'warn',
-          source: 'daemon',
-          message: 'tick 2',
-          fields: { pid: 1234, status: 'ok' },
-        },
-      ],
-    })
+  it('produces a deterministic manifest + status + doctor section set with stable filenames', () => {
+    const bundle = buildSupportBundle(minimalInput)
     expect(Object.keys(bundle.files).sort()).toEqual([
       'doctor.json',
-      'logs.jsonl',
       'manifest.json',
       'status.json',
     ])
     expect(bundle.manifest.schemaVersion).toBe(SUPPORT_BUNDLE_SCHEMA_VERSION)
-    expect(bundle.manifest.sections).toEqual(['status.json', 'doctor.json', 'logs.jsonl'])
+    expect(bundle.manifest.sections).toEqual(['status.json', 'doctor.json'])
     expect(bundle.manifest.platform).toEqual({ os: 'darwin', nodeVersion: 'v22.0.0' })
 
     // Each JSON file must independently parse and end with a newline.
@@ -82,16 +57,6 @@ describe('support bundle v0', () => {
       expect(text.endsWith('\n')).toBe(true)
       expect(() => JSON.parse(text.trim())).not.toThrow()
     }
-    // logs.jsonl is JSONL: each line independently parses, whole
-    // stream MUST NOT be a single JSON document.
-    const jsonl = bundle.files['logs.jsonl']
-    expect(jsonl.endsWith('\n')).toBe(true)
-    expect(() => JSON.parse(jsonl)).toThrow()
-    const parsed = jsonl
-      .slice(0, -1)
-      .split('\n')
-      .map((line) => JSON.parse(line))
-    expect(parsed).toHaveLength(2)
   })
 
   it('redacts tokens, Authorization markers, paths, and stack frames from every section', () => {
@@ -117,15 +82,6 @@ describe('support bundle v0', () => {
           },
         ],
       },
-      logs: [
-        {
-          timestamp: FIXED_TS,
-          level: 'error',
-          source: 'daemon',
-          message: 'Authorization: Bearer secret-token-XYZ at /opt/wb/server.ts:42',
-          fields: { status: 'process-not-running' },
-        },
-      ],
     })
 
     const text = bundleAsConcatenatedText(bundle)
@@ -136,49 +92,6 @@ describe('support bundle v0', () => {
     expect(text).not.toMatch(/\/Users\//)
     expect(text).not.toMatch(/\/tmp\//)
     expect(text).not.toMatch(/\.ts:\d/)
-  })
-
-  it('drops canvas-plaintext / migration / raw-MCP / token producer fields via the JSONL formatter allow-list', () => {
-    const bundle = buildSupportBundle({
-      ...minimalInput,
-      logs: [
-        {
-          timestamp: FIXED_TS,
-          level: 'info',
-          source: 'mcp',
-          message: 'tick',
-          fields: {
-            canvasText: 'TOP_SECRET_CANVAS_TEXT',
-            elementText: 'TOP_SECRET_CANVAS_TEXT',
-            scene: { elements: [{ text: 'TOP_SECRET_CANVAS_TEXT' }] },
-            elements: [{ text: 'TOP_SECRET_CANVAS_TEXT' }],
-            files: { 'fid-1': 'TOP_SECRET_CANVAS_TEXT' },
-            rawPayload: 'TOP_SECRET_CANVAS_TEXT',
-            requestHeaders: { authorization: 'Bearer secret-token-XYZ' },
-            authorization: 'Bearer secret-token-XYZ',
-            token: 'secret-token-XYZ',
-            migrationBundle: { secret: 'TOP_SECRET_CANVAS_TEXT' },
-            // Allow-listed survivors:
-            pid: 7,
-            port: 3099,
-            status: 'ok',
-          },
-        },
-      ],
-    })
-    const text = bundleAsConcatenatedText(bundle)
-    expect(text).not.toContain('TOP_SECRET_CANVAS_TEXT')
-    expect(text).not.toContain('secret-token-XYZ')
-    expect(text).not.toContain('migrationBundle')
-    expect(text).not.toContain('canvasText')
-    expect(text).not.toContain('rawPayload')
-    expect(text).not.toContain('requestHeaders')
-
-    // Allow-listed fields stay.
-    const parsed = JSON.parse(bundle.files['logs.jsonl'].slice(0, -1).split('\n')[0]!) as {
-      fields: Record<string, unknown>
-    }
-    expect(parsed.fields).toEqual({ pid: 7, port: 3099, status: 'ok' })
   })
 
   it('schema sanity: schemaVersion is literal 1; bumping breaks the contract', () => {
@@ -195,7 +108,7 @@ describe('support bundle v0', () => {
     const server = { ...manifest, mode: 'server-mode', sections: ['status.json', 'record.json'] }
     expect(supportBundleManifestSchema.parse(server).mode).toBe('server-mode')
     expect(() =>
-      supportBundleManifestSchema.parse({ ...server, sections: ['logs.jsonl'] }),
+      supportBundleManifestSchema.parse({ ...server, sections: ['status.json', 'logs.jsonl'] }),
     ).toThrow()
     expect(() =>
       supportBundleManifestSchema.parse({ ...manifest, sections: ['record.json'] }),
@@ -269,7 +182,7 @@ describe('support bundle v0', () => {
   it('produces deterministic byte-for-byte output for the same input (replay friendly)', () => {
     const a = buildSupportBundle(minimalInput)
     const b = buildSupportBundle(minimalInput)
-    for (const name of ['manifest.json', 'status.json', 'doctor.json', 'logs.jsonl'] as const) {
+    for (const name of ['manifest.json', 'status.json', 'doctor.json'] as const) {
       expect(b.files[name]).toBe(a.files[name])
     }
   })

@@ -134,7 +134,7 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
       [
         "import type { MemberProfileStore } from '../security/member-profile-store.js'",
         "import { SESSION_COOKIE } from '../security/sign-in-session-store.js'",
-        "import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'",
+        "import { resolveDefaultDataDir } from '../../daemon/data-dir.js'",
         "import { workspaceFilesDir } from '../tenant/data-layout.js'",
         // Policy, parsing and contracts under security/ are not storage: an
         // adapter reading a bearer header or a credential type is translating.
@@ -142,7 +142,7 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
         "import type { DaemonIdentity } from '../security/daemon-identity.js'",
         // A tenant id is a value, not the layout that places files by it.
         "import { SELF_HOST_TENANT_ID } from '../tenant/id.js'",
-        'export const x = [purgeOldDaemonLogs, workspaceFilesDir]',
+        'export const x = [resolveDefaultDataDir, workspaceFilesDir]',
       ].join('\n'),
     )
     writeFileSync(
@@ -162,7 +162,7 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
       expect(findAdapterMechanicEdges(fixture, [])).toEqual([
         'mcp/tools.ts -> security/invitation-store',
         'routes/document/nested.ts -> tenant/data-layout',
-        'routes/people.ts -> daemon/log-rotation',
+        'routes/people.ts -> daemon/data-dir',
         'routes/people.ts -> security/member-profile-store',
         'routes/people.ts -> security/sign-in-session-store',
         'routes/people.ts -> tenant/data-layout',

@@ -30,10 +30,6 @@ vi.mock('./daemon-stop.js', () => ({
   })),
 }))
 
-vi.mock('./daemon-logs.js', () => ({
-  runDaemonLogs: vi.fn(async () => ({ stdout: '{"level":"info"}\n', stderr: '', exitCode: 0 })),
-}))
-
 vi.mock('./daemon-support-bundle.js', () => ({
   runDaemonSupportBundle: vi.fn(async () => ({ stdout: '{"ok":true}\n', stderr: '', exitCode: 0 })),
 }))
@@ -164,7 +160,6 @@ const mcpModule = await import('../server/mcp/index.js')
 const daemonStatusModule = await import('./daemon-status.js')
 const daemonDoctorModule = await import('./daemon-doctor.js')
 const daemonStopModule = await import('./daemon-stop.js')
-const daemonLogsModule = await import('./daemon-logs.js')
 const daemonSupportBundleModule = await import('./daemon-support-bundle.js')
 const daemonRunModule = await import('./daemon-run.js')
 const daemonReplicaPostureModule = await import('./daemon-replica-posture.js')
@@ -332,16 +327,19 @@ describe('dispatcher routing: whiteboard daemon set-replica-tier', () => {
   })
 })
 
-describe('dispatcher routing: whiteboard daemon logs', () => {
-  it('routes to runDaemonLogs and exits 0', async () => {
-    vi.mocked(daemonLogsModule.runDaemonLogs).mockClear()
-    const { result: exitCode } = await captureStdio(() => main(['daemon', 'logs', '--json']))
-    expect(exitCode).toBe(0)
-    expect(vi.mocked(daemonLogsModule.runDaemonLogs)).toHaveBeenCalledOnce()
-  })
-
-  it('USAGE includes `whiteboard daemon logs`', () => {
-    expect(USAGE).toMatch(/whiteboard daemon logs/)
+describe('dispatcher routing: there is no `daemon logs` command', () => {
+  // The daemon writes its log records to stderr and keeps no file, so a command
+  // that "reads the daemon's logs" could only ever restate the daemon record.
+  it('answers Unknown command (64) and does not list it in USAGE', async () => {
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'logs', '--json']))
+    expect(exitCode).toBe(64)
+    expect(stdout).toBe('')
+    expect(stderr).toMatch(/Unknown command/i)
+    expect(USAGE).not.toMatch(/daemon logs/)
   })
 })
 

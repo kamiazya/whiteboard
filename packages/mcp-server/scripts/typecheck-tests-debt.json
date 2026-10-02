@@ -19,7 +19,7 @@
     "src/server/routes/document/path-route.test.ts": 1,
     "src/server/routes/files.test.ts": 1,
     "src/server/routes/mcp.test.ts": 2,
-    "src/server/routes/runtime.test.ts": 3,
+    "src/server/routes/runtime.test.ts": 2,
     "src/server/routes/sync-audience.test.ts": 3,
     "src/server/routes/workspace-people.test.ts": 3,
     "src/server/search/docs-corpus.test.ts": 1,

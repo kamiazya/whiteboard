@@ -315,18 +315,18 @@ describe('app — server-mode composition', () => {
   })
 
   describe('server-mode runtime scope tiers', () => {
-    it('POST /api/runtime/logs/prune → 403 with runtime:read only (requires runtime:admin)', async () => {
+    it('POST /api/fonts/:id/install → 403 with runtime:read only (requires runtime:admin)', async () => {
       const app = createApp(makeServerModeOptions(['runtime:read']))
-      const res = await app.request('/api/runtime/logs/prune', {
+      const res = await app.request('/api/fonts/inter/install', {
         method: 'POST',
         headers: { authorization: BEARER },
       })
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/runtime/logs/prune → reaches the route with runtime:admin', async () => {
+    it('POST /api/fonts/:id/install → reaches the route with runtime:admin', async () => {
       const app = createApp(makeServerModeOptions(['runtime:admin']))
-      const res = await app.request('/api/runtime/logs/prune', {
+      const res = await app.request('/api/fonts/inter/install', {
         method: 'POST',
         headers: { authorization: BEARER },
       })

@@ -28,8 +28,7 @@ import type {
 //
 // `exports` holds the PNG / JSON files a user exported. It is kept out of
 // "other" because it is legitimate user data the UI must not invite them to
-// delete. `logs` is daemon operational data, usually safe to clean up, split
-// out so a user can tell what is actually growing.
+// delete.
 export type StorageReport = StorageReportPayload
 
 function emptyBucket(): StorageBucket {
@@ -42,7 +41,6 @@ function emptyBucket(): StorageBucket {
 //   tenants/<t>/blobs/<workspaceId>/versions/<id>.png    — version thumbnails
 //   tenants/<t>/workspaces/<workspaceId>/files/<id>.png  — user-uploaded files
 //   tenants/<t>/workspaces/<workspaceId>/exports/<f>.png — export artifacts
-//   logs/                                        — daemon log files
 //   whiteboard.db / .db-wal / .db-shm            — metadata SQLite
 //   daemon.json                                   — port + token registry
 function categorize(relPath: string): StorageCategory {
@@ -63,7 +61,6 @@ function categorize(relPath: string): StorageCategory {
     if (segments[2] === 'versions') return 'versions'
     return 'blobs'
   }
-  if (head === 'logs') return 'logs'
   // Per-workspace subtrees: <ws>/files, <ws>/exports.
   if (segments[1] === 'files') return 'files'
   if (segments[1] === 'exports') return 'exports'
@@ -114,7 +111,6 @@ export async function computeStorageReport(dataDir: string): Promise<StorageRepo
       files: emptyBucket(),
       db: emptyBucket(),
       exports: emptyBucket(),
-      logs: emptyBucket(),
       other: emptyBucket(),
     },
   }

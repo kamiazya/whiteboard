@@ -568,7 +568,7 @@ describe('SettingsPage — storage evidence wiring', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/api/runtime/storage')) {
-          // The contract requires ALL seven buckets — a partial byCategory is
+          // The contract requires EVERY bucket — a partial byCategory is
           // rejected by storageReportPayloadSchema (deliberately, see its doc).
           const bucket = { bytes: 0, files: 0 }
           return jsonResponse({
@@ -579,7 +579,6 @@ describe('SettingsPage — storage evidence wiring', () => {
               versions: bucket,
               files: bucket,
               exports: bucket,
-              logs: bucket,
               db: bucket,
               other: bucket,
             },

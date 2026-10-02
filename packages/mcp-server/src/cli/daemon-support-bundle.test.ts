@@ -37,23 +37,23 @@ describe('runDaemonSupportBundle helper', () => {
     const result = JSON.parse(outcome.stdout.trim())
     expect(result.ok).toBe(true)
     expect(result.outputDir).toBe(outputDir)
-    expect(result.files).toEqual(['status.json', 'doctor.json', 'logs.jsonl', 'manifest.json'])
+    expect(result.files).toEqual(['status.json', 'doctor.json', 'manifest.json'])
 
     const onDisk = (await readdir(outputDir)).sort()
-    expect(onDisk).toEqual(['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'])
+    expect(onDisk).toEqual(['doctor.json', 'manifest.json', 'status.json'])
 
     const manifest = JSON.parse(await readFile(join(outputDir, 'manifest.json'), 'utf-8'))
     expect(manifest.schemaVersion).toBe(1)
     expect(manifest.packageVersion).toBe('0.0.4-test')
     expect(manifest.platform).toEqual({ os: 'darwin', nodeVersion: 'v22.0.0' })
     expect(manifest.createdAt).toBe(FIXED_TS)
-    expect(manifest.sections).toEqual(['status.json', 'doctor.json', 'logs.jsonl'])
+    expect(manifest.sections).toEqual(['status.json', 'doctor.json'])
   })
 
   it('on-disk bundle inherits redaction: stdout + every file is free of token / Authorization / Bearer / common path / stack frames', async () => {
     const dataDir = join(root, 'data-leaky')
     const outputDir = join(root, 'bundle-leaky')
-    // Seed a deliberately leaky daemon.json — the daemon-logs / status
+    // Seed a deliberately leaky daemon.json — the status / doctor
     // helpers must funnel its `token` value through the redactor +
     // formatter funnel. Even with the token literal exposed on disk
     // here, none of it should reach the bundle.
@@ -80,7 +80,7 @@ describe('runDaemonSupportBundle helper', () => {
 
     const concatenated = (
       await Promise.all(
-        ['manifest.json', 'status.json', 'doctor.json', 'logs.jsonl'].map((n) =>
+        ['manifest.json', 'status.json', 'doctor.json'].map((n) =>
           readFile(join(outputDir, n), 'utf-8'),
         ),
       )
@@ -148,11 +148,10 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
     const result = JSON.parse(stdout.trim())
     expect(Array.isArray(result)).toBe(false)
     expect(result.ok).toBe(true)
-    expect(result.files).toEqual(['status.json', 'doctor.json', 'logs.jsonl', 'manifest.json'])
+    expect(result.files).toEqual(['status.json', 'doctor.json', 'manifest.json'])
 
     expect((await readdir(outputDir)).sort()).toEqual([
       'doctor.json',
-      'logs.jsonl',
       'manifest.json',
       'status.json',
     ])

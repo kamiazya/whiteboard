@@ -16,8 +16,7 @@ import { testDataLayout } from './_test-helpers.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR) and the helpers behind
-// /api/runtime/storage + /api/runtime/logs/prune so a buggy route can
-// not delete real daemon logs or stat the user's blobs/.
+// /api/runtime/storage so a buggy route can not stat the user's blobs/.
 const mockComputeStorageReport = vi.fn(async () => ({
   totalBytes: 0,
   fileCount: 0,
@@ -25,15 +24,12 @@ const mockComputeStorageReport = vi.fn(async () => ({
     blobs: { bytes: 0, files: 0 },
     versions: { bytes: 0, files: 0 },
     files: { bytes: 0, files: 0 },
-    libraries: { bytes: 0, files: 0 },
     db: { bytes: 0, files: 0 },
     exports: { bytes: 0, files: 0 },
-    logs: { bytes: 0, files: 0 },
     other: { bytes: 0, files: 0 },
   },
 }))
 const mockReadLatestCompactedAt = vi.fn<() => Promise<number | null>>(async () => null)
-const mockPurgeOldDaemonLogs = vi.fn(async () => ({ removed: 0, retained: 0 }))
 
 vi.mock('../config.js', () => ({
   DATA_DIR: '/__test__/runtime-routes-must-not-touch-real-disk',
@@ -46,9 +42,6 @@ vi.mock('./runtime-storage.js', () => ({
 }))
 vi.mock('../store/document-store.js', () => ({
   readLatestCompactedAt: () => mockReadLatestCompactedAt(),
-}))
-vi.mock('../../daemon/log-rotation.js', () => ({
-  purgeOldDaemonLogs: (dir: string) => mockPurgeOldDaemonLogs(dir),
 }))
 
 // Not the directory the mocked config names, so a route that read the process
@@ -99,7 +92,6 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
 beforeEach(() => {
   mockComputeStorageReport.mockClear()
   mockReadLatestCompactedAt.mockClear()
-  mockPurgeOldDaemonLogs.mockClear()
 })
 
 afterEach(() => {
@@ -172,10 +164,8 @@ describe('runtime routes', () => {
         blobs: { bytes: 4096, files: 3 },
         versions: { bytes: 0, files: 0 },
         files: { bytes: 0, files: 0 },
-        libraries: { bytes: 0, files: 0 },
         db: { bytes: 0, files: 0 },
         exports: { bytes: 0, files: 0 },
-        logs: { bytes: 0, files: 0 },
         other: { bytes: 0, files: 0 },
       },
     })
@@ -208,34 +198,18 @@ describe('runtime routes', () => {
     expect(mockComputeStorageReport).not.toHaveBeenCalled()
   })
 
-  it('rejects POST /api/runtime/logs/prune without a bearer token', async () => {
-    // Mutating runtime route — must be authenticated when the daemon was
-    // started with a token. The global daemon-mutation middleware in app.ts
-    // explicitly excludes /api/runtime/*, so the per-router middleware is
-    // the only thing standing between an unauthenticated request and the
-    // log-deletion side effect.
+  // The daemon writes its records to stderr and keeps no log file, so a prune
+  // route had nothing to delete; it is asserted with the daemon token for the
+  // same reason as the shutdown route above.
+  it('serves no log-prune route, not even to the daemon token', async () => {
     const { app } = createApp()
-    const res = await app.request('/api/runtime/logs/prune', { method: 'POST' })
-    expect(res.status).toBe(401)
-    const body = (await res.json()) as { error?: string }
-    expect(body.error).toBe('unauthorized')
-    // Hermetic guarantee: even if the auth check ever regressed, the
-    // mock catches it. purgeOldDaemonLogs must never run for an
-    // unauthenticated request.
-    expect(mockPurgeOldDaemonLogs).not.toHaveBeenCalled()
-  })
 
-  it('allows POST /api/runtime/logs/prune with the bearer token', async () => {
-    mockPurgeOldDaemonLogs.mockResolvedValueOnce({ removed: 2, retained: 5 })
-    const { app } = createApp()
     const res = await app.request('/api/runtime/logs/prune', {
       method: 'POST',
       headers: { Authorization: 'Bearer secret' },
     })
-    expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toMatchObject({ removed: 2, retained: 5 })
-    expect(mockPurgeOldDaemonLogs).toHaveBeenCalledTimes(1)
-    expect(mockPurgeOldDaemonLogs).toHaveBeenCalledWith(LAYOUT_DIR)
+
+    expect(res.status).toBe(404)
   })
 })
 
@@ -303,25 +277,6 @@ describe('runtime routes — a macaroon reaches the read half, like every other 
     })
 
     const res = await app.request('/api/runtime/storage', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    expect(res.status).toBe(401)
-  })
-
-  // The per-surface policy this router keeps, and the reason its check is not
-  // just `hasRequiredScopes`: the admin half is daemon-token-only whatever
-  // scopes a narrow credential holds — including `runtime:admin` itself.
-  it('refuses a macaroon on POST /api/runtime/logs/prune, which is daemon-token-only in the handler', async () => {
-    const { app } = createApp({ macaroonRootKey: ROOT_KEY })
-    const token = await mintMacaroon({
-      rootKey: ROOT_KEY,
-      tokenId: 'agent-1',
-      caveats: [{ kind: 'scope', scopes: ['runtime:admin', 'runtime:read'] }],
-    })
-
-    const res = await app.request('/api/runtime/logs/prune', {
-      method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     })
 

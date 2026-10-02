@@ -493,9 +493,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   // and the route holds none; what remains is the invitation store's type,
   // handed on to `invitation-link.ts` to issue the tenant invitation.
   'routes/tenant-people.ts -> security/invitation-store',
-  // `POST /api/runtime/logs/prune` is daemon housekeeping with one caller;
-  // no second surface asks for it, so there is no operation to share yet.
-  'routes/runtime.ts -> daemon/log-rotation',
   // `export/` counted since the scan learned to look for it. `headless-export`
   // reads the stored document through the store's module-level handle and
   // renders it, so "export a document" cannot be asked of it without the
@@ -564,8 +561,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * font modules. One is `workspace-handle.ts`, the helper nine routes share,
  * whose own reach into the store's registry no route showed. All five already
  * existed.
+ *
+ * Then 24 -> 23, when `routes/runtime.ts -> daemon/log-rotation` went with
+ * the route: the daemon keeps no log file, so the prune had nothing to delete.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 24
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 23
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

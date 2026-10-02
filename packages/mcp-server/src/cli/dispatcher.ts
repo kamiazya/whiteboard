@@ -6,12 +6,10 @@
 // Output contract:
 //   stdout  -> exactly one JSON object terminated by '\n', EXCEPT:
 //              - `--version` / `-v` emits a bare semver string (not JSON)
-//              - `logs` emits JSONL (one redacted JSON entry per line,
-//                trailing newline)
 //   stderr  -> diagnostics / usage / errors only
 //
 // `run` is dispatched via a dynamic import so the read-only commands
-// (`status`, `doctor`, `stop`, `logs`) never pull in `server/config`
+// (`status`, `doctor`, `stop`) never pull in `server/config`
 // (which mkdirs on load) or the rest of the daemon startup chain.
 
 import { resolve } from 'node:path'
@@ -38,7 +36,6 @@ import {
   parseDaemonSupportBundleArgs,
 } from './argv.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
-import { runDaemonLogs } from './daemon-logs.js'
 import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-replica-posture.js'
 import { runDaemonStatus } from './daemon-status.js'
 import { runDaemonStop } from './daemon-stop.js'
@@ -61,7 +58,6 @@ whiteboard mcp
 whiteboard daemon status         --json [--data-dir=<path>]
 whiteboard daemon doctor         --json [--data-dir=<path>]
 whiteboard daemon stop           --json [--data-dir=<path>]
-whiteboard daemon logs           --json [--data-dir=<path>]
 whiteboard daemon support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard daemon rotate-replica-key --json --workspace=<id> [--data-dir=<path>]
 whiteboard daemon set-replica-tier   --json --workspace=<id> --tier=<no-offline|offline|bounded|default> [--data-dir=<path>]
@@ -94,7 +90,6 @@ const DAEMON_SUBCOMMANDS = [
   'status',
   'doctor',
   'stop',
-  'logs',
   'support-bundle',
   'rotate-replica-key',
   'set-replica-tier',
@@ -114,10 +109,7 @@ const JSON_DAEMON_COMMANDS = {
   doctor: { run: runDaemonDoctor, schema: daemonDoctorResultSchema },
   stop: { run: runDaemonStop, schema: daemonStopResultSchema },
 } satisfies Record<
-  Exclude<
-    DaemonSubcommand,
-    'logs' | 'run' | 'support-bundle' | 'rotate-replica-key' | 'set-replica-tier'
-  >,
+  Exclude<DaemonSubcommand, 'run' | 'support-bundle' | 'rotate-replica-key' | 'set-replica-tier'>,
   {
     run: (options: { dataDir: string }) => Promise<{ result: unknown; exitCode: number }>
     schema: z.ZodType
@@ -219,16 +211,6 @@ async function dispatchDaemon(subcommand: DaemonSubcommand, rest: readonly strin
   // contractually side-effect-free; mkdir + write probes belong to
   // the daemon's startup path.
   const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
-
-  if (subcommand === 'logs') {
-    // `logs` emits JSONL — write the formatted stream verbatim, do NOT route
-    // it through `writeJsonObject` (which would wrap the stream with an extra
-    // trailing newline and break the one-line-per-entry contract downstream).
-    const { stdout, stderr, exitCode } = await runDaemonLogs({ dataDir })
-    if (stdout) process.stdout.write(stdout)
-    if (stderr) process.stderr.write(stderr)
-    return exitCode
-  }
 
   const command = JSON_DAEMON_COMMANDS[subcommand]
   const { result, exitCode } = await command.run({ dataDir })

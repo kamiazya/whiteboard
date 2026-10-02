@@ -2,7 +2,6 @@
 //
 // Collects a redacted diagnostic bundle for server-mode operators.
 // Sections: status.json, doctor.json, record.json, manifest.json.
-// No logs.jsonl — server-mode has no safe JSONL log source yet.
 //
 // Output contract (same as daemon-support-bundle.ts):
 //   stdout: one JSON object + '\n' on success; '' on failure

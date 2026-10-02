@@ -29,7 +29,7 @@ describe('requiresDaemonAuth', () => {
   it('allows only /api/runtime/ping to bypass the middleware', () => {
     expect(requiresDaemonAuth('/api/runtime/ping')).toBe(false)
     expect(requiresDaemonAuth('/api/runtime/status')).toBe(true)
-    expect(requiresDaemonAuth('/api/runtime/logs/prune')).toBe(true)
+    expect(requiresDaemonAuth('/api/runtime/storage')).toBe(true)
     expect(requiresDaemonAuth('/api/runtime/brand-new')).toBe(true)
   })
 

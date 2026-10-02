@@ -333,7 +333,7 @@ export const storageBucketSchema = z.object({
  * types: `z.record` over an enum requires every key, so a report missing a
  * category is rejected rather than parsed with that bucket absent. Measured
  * — a payload carrying only `blobs` fails with six `invalid_type` issues.
- * That is the intent. The walk initialises all seven buckets on every run, so
+ * That is the intent. The walk initialises every bucket on every run, so
  * a missing one means the producer changed, and failing loudly beats a client
  * rendering 0 B for a category that is no longer being counted.
  */
@@ -342,7 +342,6 @@ export const storageCategorySchema = z.enum([
   'versions',
   'files',
   'exports',
-  'logs',
   'db',
   'other',
 ])
@@ -388,9 +387,8 @@ export const pruneSandwichedVersionsResponseSchema = z.object({
 
 export type PruneSandwichedVersionsResponse = z.infer<typeof pruneSandwichedVersionsResponseSchema>
 
-// Shared response shape for the two file-purge endpoints that wrap
-// file-gc.ts's PurgeResult: POST /api/runtime/logs/prune and
-// POST /api/workspaces/:workspaceId/files/purge-dangling.
+// Response shape of the file-purge endpoint that wraps file-gc.ts's
+// PurgeResult: POST /api/workspaces/:workspaceId/files/purge-dangling.
 export const purgeResultSchema = z.object({
   purgedCount: z.number().int().nonnegative(),
   purgedBytes: z.number().int().nonnegative(),

@@ -822,7 +822,8 @@ deployment state with maintainers without exposing credentials or raw paths.
 - Raw JWT values, Authorization/Bearer headers, JWKS URI credentials
 - Absolute filesystem paths (raw dataDir, backup paths, internal bind URL)
 - Stack traces or raw fs / network error messages
-- `logs.jsonl` (no safe server-mode log source is available yet)
+- Log lines: the server writes its records to stderr and keeps no log file, so
+  there is none to bundle (read them with `docker logs`)
 
 **Usage** — run via `docker exec` while the container is running or host-side
 after stopping it:

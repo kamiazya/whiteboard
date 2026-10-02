@@ -137,7 +137,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
   'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
-  'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 308,
+  'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 275,
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 278,
   'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
@@ -571,7 +571,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/facet-ui/src/option-group.tsx#FacetOption': 57,
   'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 99,
   'packages/mcp-server/src/cli/daemon-doctor.ts#runDaemonDoctor': 73,
-  'packages/mcp-server/src/cli/daemon-logs.ts#buildInputs': 63,
   'packages/mcp-server/src/cli/daemon-run.ts#runDaemonRun': 86,
   'packages/mcp-server/src/cli/daemon-status.ts#runDaemonStatus': 84,
   'packages/mcp-server/src/cli/daemon-stop.ts#runDaemonStop': 84,
@@ -631,7 +630,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // .../replica-key/rotate joins the same router for the same reason —
   // one seam for a workspace's whole replica posture.
   'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 99,
-  'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 93,
+  'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 67,
   // The update fan-out subscribes at construction from the deps the root hands
   // down, where a per-process memoized fallback used to resolve its own.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 52,

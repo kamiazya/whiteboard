@@ -76,7 +76,6 @@ describe('daemon URL builders keep the bytes clients sent before', () => {
       `/api/workspaces/${ENC_WS}/files/purge-dangling`,
     ],
     ['storageReportApiUrl', urls.storageReportApiUrl(), '/api/runtime/storage'],
-    ['logsPruneApiUrl', urls.logsPruneApiUrl(), '/api/runtime/logs/prune'],
     ['documentsV1ApiUrl', urls.documentsV1ApiUrl(WS), `/api/v1/workspaces/${ENC_WS}/documents`],
     [
       'documentBacklinksApiUrl',

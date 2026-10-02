@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { isIsoDatetime } from './iso-datetime.js'
-import { type DaemonLogEntryInput, formatDaemonLogEntriesAsJsonLines } from './log-jsonl.js'
 import { redactDiagnosticText, scrubAuthMarkers } from './redact.js'
 
 // The shared redactor keeps the `Authorization: Bearer [REDACTED]` marker, which
@@ -24,11 +23,13 @@ function assertIsoTimestamp(value: string, label: string): string {
 // caller-side. No public upload, no telemetry, no crash reporting.
 //
 // The helper is the single funnel for what reaches the bundle: every
-// section (status, doctor, logs) is rebuilt through a tight allow-list
+// section (status, doctor) is rebuilt through a tight allow-list
 // from typed inputs. Raw `DaemonStatusResult` / `DaemonDoctorResult` /
 // log-source objects are NOT stringified wholesale — that pattern has
 // shipped Authorization / token / canvas-plaintext leaks before, and
-// the redactor is a defence-in-depth net, not a primary boundary.
+// the redactor is a defence-in-depth net, not a primary boundary. There is
+// no log section: the daemon writes its records to stderr and keeps no file
+// to bundle.
 //
 // Excluded by contract:
 //   - canvas plaintext (Excalidraw scene / elements / files / rawPayload)
@@ -43,22 +44,15 @@ function assertIsoTimestamp(value: string, label: string): string {
 
 export const SUPPORT_BUNDLE_SCHEMA_VERSION = 1
 
-const daemonBundleSectionSchema = z.enum([
-  'manifest.json',
-  'status.json',
-  'doctor.json',
-  'logs.jsonl',
-])
+const daemonBundleSectionSchema = z.enum(['manifest.json', 'status.json', 'doctor.json'])
 
-// Server mode has no safe log source, and carries the record it was started
-// from instead.
+// Server mode carries the record it was started from.
 const serverBundleSectionSchema = z.enum(['status.json', 'doctor.json', 'record.json'])
 
 const manifestCommon = {
   schemaVersion: z.literal(SUPPORT_BUNDLE_SCHEMA_VERSION),
-  // ISO 8601 datetime with timezone offset. Same shape the JSONL
-  // surface enforces; consumers ordering bundles by createdAt
-  // should never see a malformed value.
+  // ISO 8601 datetime with timezone offset; consumers ordering bundles by
+  // createdAt should never see a malformed value.
   createdAt: z.string().datetime({ offset: true }),
   packageVersion: z.string(),
   platform: z
@@ -201,16 +195,12 @@ export interface SupportBundleInput {
   platform: { os: string; nodeVersion: string }
   status: SupportBundleStatusInput
   doctor: SupportBundleDoctorInput
-  // Producer-supplied log entries. Each entry runs through
-  // `formatDaemonLogEntriesAsJsonLines` (allow-list + sentinel
-  // scrub + ISO timestamp normalisation + JSONL framing).
-  logs: DaemonLogEntryInput[]
 }
 
 export interface SupportBundle {
   manifest: SupportBundleManifest
   // Deterministic file map. Keys are stable section names; values
-  // are JSON or JSONL strings exactly as a maintainer would write
+  // are JSON strings exactly as a maintainer would write
   // to disk. Iteration order is the same as `manifest.sections`
   // plus the manifest itself, so a directory write produces a
   // deterministic layout.
@@ -218,7 +208,6 @@ export interface SupportBundle {
     'manifest.json': string
     'status.json': string
     'doctor.json': string
-    'logs.jsonl': string
   }
 }
 
@@ -238,7 +227,7 @@ export function buildSupportBundle(input: SupportBundleInput): SupportBundle {
     createdAt: input.createdAt,
     packageVersion: input.packageVersion,
     platform: input.platform,
-    sections: ['status.json', 'doctor.json', 'logs.jsonl'],
+    sections: ['status.json', 'doctor.json'],
   })
   if (!manifestParsed.success) {
     throw new SupportBundleError('Invalid support bundle manifest input.')
@@ -247,7 +236,6 @@ export function buildSupportBundle(input: SupportBundleInput): SupportBundle {
 
   const status = buildStatusSection(input.status)
   const doctor = buildDoctorSection(input.doctor)
-  const logsJsonl = formatDaemonLogEntriesAsJsonLines(input.logs)
 
   return {
     manifest,
@@ -255,7 +243,6 @@ export function buildSupportBundle(input: SupportBundleInput): SupportBundle {
       'manifest.json': `${JSON.stringify(manifest)}\n`,
       'status.json': `${JSON.stringify(status)}\n`,
       'doctor.json': `${JSON.stringify(doctor)}\n`,
-      'logs.jsonl': logsJsonl,
     },
   }
 }
