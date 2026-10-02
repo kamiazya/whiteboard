@@ -74,13 +74,16 @@ describe('parseOriginPatternEntry', () => {
     })
   })
 
-  it('rejects an IP-literal suffix', () => {
-    // WHATWG URL parsing throws on a wildcard host whose static suffix looks
-    // like an IPv4 address before this module's own IP-suffix check ever
-    // runs — the request never reaches a URL-parseable state, so the
-    // reported reason is 'unparseable', not 'wildcard_ip_suffix'.
-    const result = parseOriginPatternEntry('https://*.127.0.0.1')
-    expect(result).toEqual({ ok: false, reason: 'unparseable' })
+  // WHATWG URL parsing throws on a wildcard host whose last label is numeric
+  // (the IPv4 parser runs and `*` is no number), so no IP-literal suffix is ever
+  // parseable and this module carries no check of its own for one.
+  it.each([
+    'https://*.127.0.0.1',
+    'https://*.1.2.3.4:8443',
+    'https://*.001.2.3.4',
+    'https://*.255.255.255.255',
+  ])('rejects the IP-literal suffix %s as unparseable', (entry) => {
+    expect(parseOriginPatternEntry(entry)).toEqual({ ok: false, reason: 'unparseable' })
   })
 
   it('rejects a trailing dot on the pattern suffix', () => {
@@ -209,5 +212,31 @@ describe('matchOrigin', () => {
   it('returns false for an empty pattern list or missing origin header', () => {
     expect(matchOrigin([], 'https://x.example.com')).toBe(false)
     expect(matchOrigin([wildcard('example.com')], undefined)).toBe(false)
+    expect(matchOrigin([wildcard('example.com')], '')).toBe(false)
+    expect(matchOrigin([exact('https://board.example')], undefined)).toBe(false)
+  })
+
+  describe('an exact origin', () => {
+    const patterns = [exact('https://board.example')]
+
+    it('admits the same origin', () => {
+      expect(matchOrigin(patterns, 'https://board.example')).toBe(true)
+    })
+
+    it.each([
+      ['another port of the same host', 'https://board.example:8443'],
+      ['another scheme of the same host', 'http://board.example'],
+      ['another scheme and port of the same host', 'http://board.example:443'],
+      ['a subdomain of the host', 'https://evil.board.example'],
+    ])('does not admit %s', (_label, origin) => {
+      expect(matchOrigin(patterns, origin)).toBe(false)
+    })
+
+    it("does not carry an exact pattern's port over to another port", () => {
+      const ported = [exact('https://board.example:8443')]
+      expect(matchOrigin(ported, 'https://board.example:8443')).toBe(true)
+      expect(matchOrigin(ported, 'https://board.example')).toBe(false)
+      expect(matchOrigin(ported, 'https://board.example:9443')).toBe(false)
+    })
   })
 })

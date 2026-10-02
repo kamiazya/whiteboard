@@ -121,19 +121,21 @@ describe('a signed assertion', () => {
 
   interface TokenShape {
     signWith?: CryptoKey
-    exp?: string
+    exp?: string | null
+    sub?: string | null
     iss?: string
     aud?: string
   }
-  const token = (shape: TokenShape = {}) =>
-    new SignJWT({ email: 'ada@corp.example' })
+  const token = (shape: TokenShape = {}) => {
+    const jwt = new SignJWT({ email: 'ada@corp.example' })
       .setProtectedHeader({ alg: 'ES256' })
       .setIssuer(shape.iss ?? ISSUER)
       .setAudience(shape.aud ?? 'aud-1')
-      .setSubject('user-1')
       .setIssuedAt()
-      .setExpirationTime(shape.exp ?? '5m')
-      .sign(shape.signWith ?? key)
+    if (shape.sub !== null) jwt.setSubject(shape.sub ?? 'user-1')
+    if (shape.exp !== null) jwt.setExpirationTime(shape.exp ?? '5m')
+    return jwt.sign(shape.signWith ?? key)
+  }
 
   it('names the person by the claims the proxy signed', async () => {
     const identity = await read(request('127.0.0.1', { 'Cf-Access-Jwt-Assertion': await token() }))
@@ -162,6 +164,22 @@ describe('a signed assertion', () => {
       const identity = await read(request('127.0.0.1', { 'Cf-Access-Jwt-Assertion': assertion }))
       expect(identity).toEqual({ ok: false, why: 'assertion_invalid' })
     }
+  })
+
+  // Each claim is required on its own: an assertion with no `exp` never
+  // expires, and one with no `sub` names nobody.
+  it('is refused without an exp claim, even when otherwise validly signed', async () => {
+    const identity = await read(
+      request('127.0.0.1', { 'Cf-Access-Jwt-Assertion': await token({ exp: null }) }),
+    )
+    expect(identity).toEqual({ ok: false, why: 'assertion_invalid' })
+  })
+
+  it('is refused without a sub claim, even when otherwise validly signed', async () => {
+    const identity = await read(
+      request('127.0.0.1', { 'Cf-Access-Jwt-Assertion': await token({ sub: null }) }),
+    )
+    expect(identity).toEqual({ ok: false, why: 'assertion_invalid' })
   })
 
   // The proxy's key set decides which key; this list decides which

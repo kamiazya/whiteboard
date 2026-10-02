@@ -58,6 +58,20 @@ export function resolveToken(
   return token
 }
 
+// The same fail-closed stance as the config-file gate below: an empty token is
+// logged through the project logger and the process stops before it listens.
+function resolveTokenOrExit(): string | undefined {
+  try {
+    return resolveToken(process.argv, process.env)
+  } catch (err) {
+    getLogger('server-index').error(
+      { message: messageOf(err, String(err)) },
+      'empty daemon token; refusing to start',
+    )
+    process.exit(1)
+  }
+}
+
 // Loads the nearest whiteboard config file (if any) and layers its values
 // under process.env before any other startup reads (allowlist, token,
 // logLevel). Must run first: log.ts freezes its level at import time, so a
@@ -176,16 +190,7 @@ async function prewarmExporter(dataDir: string): Promise<void> {
 export async function main() {
   applyLoadedConfigFileForServerEntrypoint()
 
-  let token: string | undefined
-  try {
-    token = resolveToken(process.argv, process.env)
-  } catch (err) {
-    getLogger('server-index').error(
-      { message: messageOf(err, String(err)) },
-      'empty daemon token; refusing to start',
-    )
-    process.exit(1)
-  }
+  const token = resolveTokenOrExit()
   const idleTimeoutMs = parseInt(
     readArg('idle-timeout-ms', `${15 * 60_000}`) ?? `${15 * 60_000}`,
     10,
