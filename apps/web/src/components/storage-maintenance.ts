@@ -7,7 +7,10 @@
  * and how a response adds to a total, which is what these take as arguments.
  */
 
-import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import {
+  listWorkspacesResponseSchema,
+  workspacesApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { RefObject } from 'react'
 import { useCallback } from 'react'
 
@@ -36,7 +39,7 @@ export async function sweepWorkspaces<T>(
   accumulate: (total: T, body: unknown) => T,
   seed: T,
 ): Promise<SweepResult<T> | null> {
-  const listed = await fetchApi('/api/workspaces')
+  const listed = await fetchApi(workspacesApiUrl())
   if (!listed.ok) return null
   const { workspaces } = listWorkspacesResponseSchema.parse(await listed.json())
 
