@@ -7,6 +7,7 @@ import {
   extensionHelloReplySchema,
   extensionHelloSchema,
   extensionToPageSchema,
+  pageToHostSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import {
   BRIDGE_PROTOCOL_VERSION,
@@ -95,6 +96,26 @@ describe('installRelay', () => {
 
     page.drop()
     expect(native.disconnected).toBe(true)
+  })
+
+  // The extension reads no frame it carries, so the host's own protocol stamp
+  // reaches the page only if a hello travels both ways exactly as sent — an
+  // extension that answered it would be vouching for a hop it cannot see.
+  it("carries a hello to the host and the host's answer back, unread", () => {
+    const fake = fakeApi()
+    installRelay(fake.api, MATCHES)
+    const page = new FakePort({ origin: APP })
+    fake.connect(page)
+    const native = fake.natives[0]?.port
+    if (native === undefined) throw new Error('no native host was started')
+
+    page.receive(pageToHostSchema.parse({ type: 'hello' }))
+    const answer = { type: 'hello', version: '7.7.7', protocol: BRIDGE_PROTOCOL_VERSION + 1 }
+    native.receive(answer)
+
+    expect(native.sent).toEqual([{ type: 'hello' }])
+    expect(page.sent).toEqual([answer])
+    expect(extensionToPageSchema.parse(page.sent[0])).toEqual(answer)
   })
 
   it('refuses a page the manifest does not admit, without starting the host', () => {

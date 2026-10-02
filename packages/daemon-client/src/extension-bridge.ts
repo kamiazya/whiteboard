@@ -37,6 +37,24 @@ export const bridgeMethodSchema = z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH',
 
 export type BridgeMethod = z.infer<typeof bridgeMethodSchema>
 
+/** A one-off message the page sends to learn whether the extension is there. */
+export const extensionHelloSchema = z.object({ type: z.literal('hello') })
+export type ExtensionHello = z.infer<typeof extensionHelloSchema>
+/**
+ * What a hop of the bridge says of itself: its release, and the bridge
+ * protocol it speaks. `protocol` is optional only to read a hop built before
+ * the field existed — which `bridgeSkew` then reports as the skew it is. The
+ * extension answers with it to a one-off message, and the native host to the
+ * same `hello` sent down the port: one shape, because a page compares both
+ * against the one protocol it speaks.
+ */
+const bridgeIdentity = { version: z.string(), protocol: z.number().int().optional() }
+export const extensionHelloReplySchema = z.object({
+  type: z.literal('hello'),
+  ...bridgeIdentity,
+})
+export type ExtensionHelloReply = z.infer<typeof extensionHelloReplySchema>
+
 export const pageToHostSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('request'),
@@ -48,10 +66,15 @@ export const pageToHostSchema = z.discriminatedUnion('type', [
     body: z.string().optional(),
   }),
   z.object({ type: z.literal('abort'), id: idSchema }),
+  // Asks the host which protocol it speaks. The extension relays frames
+  // unread, so only the host can answer for itself; a host that predates this
+  // drops the frame, which the page reads as no answer rather than as skew.
+  extensionHelloSchema,
 ])
 export type PageToHost = z.infer<typeof pageToHostSchema>
 
 export const hostToPageSchema = z.discriminatedUnion('type', [
+  extensionHelloReplySchema,
   z.object({
     type: z.literal('head'),
     id: idSchema,
@@ -83,30 +106,31 @@ export const extensionToPageSchema = z.union([
 ])
 export type ExtensionToPage = z.infer<typeof extensionToPageSchema>
 
-/** A one-off message the page sends to learn whether the extension is there. */
-export const extensionHelloSchema = z.object({ type: z.literal('hello') })
-export type ExtensionHello = z.infer<typeof extensionHelloSchema>
-/**
- * What the extension says of itself: its release, and the bridge protocol it
- * speaks. `protocol` is optional only to read an extension built before the
- * field existed — which `bridgeSkew` then reports as the skew it is.
- */
-const extensionIdentity = { version: z.string(), protocol: z.number().int().optional() }
-export const extensionHelloReplySchema = z.object({
-  type: z.literal('hello'),
-  ...extensionIdentity,
-})
-export type ExtensionHelloReply = z.infer<typeof extensionHelloReplySchema>
+/** The hop of the bridge whose identity is being checked: each is released and updated separately. */
+type BridgeHop = 'extension' | 'host'
+
+const HOP_NAME: Record<BridgeHop, string> = {
+  extension: 'whiteboard extension',
+  host: 'whiteboard native host',
+}
+
+// The extension is built from a checkout; the host ships in the npm package and
+// moves with it, so the remedy differs by hop.
+const HOP_UPDATE: Record<BridgeHop, string> = {
+  extension: 'update the extension',
+  host: 'update @kamiazya/whiteboard-mcp, the package the native host ships in',
+}
 
 /**
- * Why a page must not use the extension that answered, or `null` when it
- * speaks the protocol this page does. The words are the whole diagnosis: a
- * skew otherwise shows as requests that fail or never answer.
+ * Why a page must not use the hop that answered, or `null` when it speaks the
+ * protocol this page does. The words are the whole diagnosis: a skew otherwise
+ * shows as requests that fail or never answer, and naming the hop is what
+ * sends the person to the right update.
  */
-export function bridgeSkew(identity: {
-  version: string
-  protocol?: number | undefined
-}): string | null {
+export function bridgeSkew(
+  identity: { version: string; protocol?: number | undefined },
+  hop: BridgeHop = 'extension',
+): string | null {
   if (identity.protocol === BRIDGE_PROTOCOL_VERSION) return null
   const speaks =
     identity.protocol === undefined
@@ -115,8 +139,8 @@ export function bridgeSkew(identity: {
   const remedy =
     identity.protocol !== undefined && identity.protocol > BRIDGE_PROTOCOL_VERSION
       ? 'reload this page to get the matching one'
-      : 'update the extension'
-  return `the whiteboard extension (version ${identity.version}) ${speaks}, but this page speaks protocol ${BRIDGE_PROTOCOL_VERSION}: ${remedy}`
+      : HOP_UPDATE[hop]
+  return `the ${HOP_NAME[hop]} (version ${identity.version}) ${speaks}, but this page speaks protocol ${BRIDGE_PROTOCOL_VERSION}: ${remedy}`
 }
 
 /**
@@ -128,7 +152,7 @@ export function bridgeSkew(identity: {
  */
 const fromExtension = { channel: z.literal(WINDOW_BRIDGE_CHANNEL), from: z.literal('extension') }
 export const windowFromExtensionSchema = z.discriminatedUnion('kind', [
-  z.object({ ...fromExtension, kind: z.literal('hello'), ...extensionIdentity }),
+  z.object({ ...fromExtension, kind: z.literal('hello'), ...bridgeIdentity }),
   z.object({ ...fromExtension, kind: z.literal('connected'), port: idSchema }),
   z.object({ ...fromExtension, kind: z.literal('message'), port: idSchema, message: z.unknown() }),
   z.object({ ...fromExtension, kind: z.literal('disconnect'), port: idSchema }),

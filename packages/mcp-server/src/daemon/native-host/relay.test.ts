@@ -13,7 +13,9 @@ import {
   type HostToPage,
   hostToPageSchema,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
+import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { encodeNativeMessage, readNativeMessages } from './native-messaging.js'
 import { bodyChunks, runNativeHost } from './relay.js'
 
@@ -78,6 +80,21 @@ const bodyOf = (messages: HostToPage[], id: string) =>
   )
 
 describe('runNativeHost', () => {
+  // The extension relays frames unread, so the host is the only hop that can
+  // say which protocol the frames after this one are in.
+  it('answers a hello with the protocol it speaks and the package it ships in', async () => {
+    const page = connectPage()
+
+    page.send({ type: 'hello' })
+    await page.until((m) => m.some((x) => x.type === 'hello'))
+
+    expect(page.received).toEqual([
+      { type: 'hello', version: PACKAGE_VERSION, protocol: BRIDGE_PROTOCOL_VERSION },
+    ])
+    page.close()
+    await page.done
+  })
+
   it('relays a request with the daemon credential it attaches itself', async () => {
     let seen: {
       method?: string

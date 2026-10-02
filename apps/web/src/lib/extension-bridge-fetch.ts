@@ -16,6 +16,7 @@ import {
   type ExtensionToPage,
   extensionHelloReplySchema,
   extensionToPageSchema,
+  type PageToHost,
 } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { WHITEBOARD_EXTENSION_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
@@ -75,6 +76,13 @@ async function extensionSkew(): Promise<string | null> {
   return reply === null ? null : bridgeSkew(reply)
 }
 
+/**
+ * How long the page waits for the host to say which protocol it speaks. A host
+ * built before the question drops it and never answers, and it relays fine, so
+ * the wait ends in carrying on rather than in a refusal.
+ */
+const HOST_HELLO_TIMEOUT_MS = 1_500
+
 /** Response statuses the Fetch spec gives no body. */
 const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304])
 
@@ -85,6 +93,38 @@ interface Pending {
   body?: ReadableStreamDefaultController<Uint8Array>
   /** Ends the request at the host when the reader stops reading. */
   cancel?: () => void
+}
+
+/**
+ * The native host's own protocol check, asked of it down the port once per
+ * connection: the extension relays frames unread, so it can vouch only for
+ * itself, and a host skew reported as an extension one sends the person to
+ * the wrong update.
+ */
+function hostChecker() {
+  let checked: Promise<string | null> | null = null
+  let answered: ((reply: ExtensionHelloReply | null) => void) | null = null
+  return {
+    /** Why the host cannot carry this page's requests, or `null`. Asks on first use. */
+    check(bridge: BridgePort): Promise<string | null> {
+      checked ??= new Promise<string | null>((resolve) => {
+        const timer = setTimeout(() => answered?.(null), HOST_HELLO_TIMEOUT_MS)
+        answered = (reply) => {
+          clearTimeout(timer)
+          answered = null
+          resolve(reply === null ? null : bridgeSkew(reply, 'host'))
+        }
+        bridge.postMessage({ type: 'hello' } satisfies PageToHost)
+      })
+      return checked
+    },
+    answer: (reply: ExtensionHelloReply): void => answered?.(reply),
+    /** The port is gone: a question in flight is given up on, and the next port is asked afresh. */
+    reset(): void {
+      answered?.(null)
+      checked = null
+    },
+  }
 }
 
 /**
@@ -100,9 +140,10 @@ export function createBridgeFetch(
   // Asked once per connection: the extension's protocol cannot change under
   // an open port, and a replaced extension drops it.
   let skewed: Promise<string | null> | null = null
-
+  const host = hostChecker()
   const failAll = (reason: Error) => {
     skewed = null
+    host.reset()
     for (const request of pending.values()) {
       request.reject(reason)
       request.body?.error(reason)
@@ -110,8 +151,7 @@ export function createBridgeFetch(
     pending.clear()
     port = null
   }
-
-  const onMessage = (raw: unknown) => receive(pending, raw, failAll)
+  const onMessage = (raw: unknown) => receive(pending, raw, failAll, host.answer)
 
   const open = (): BridgePort => {
     if (port !== null) return port
@@ -135,7 +175,7 @@ export function createBridgeFetch(
     request.signal.throwIfAborted()
     const body = await requestBody(request)
     skewed ??= skew()
-    const incompatible = await skewed
+    const incompatible = (await skewed) ?? (await host.check(open()))
     if (incompatible !== null) throw new TypeError(incompatible)
     return await sendRequest(open(), pending, request, method, body)
   }
@@ -201,6 +241,7 @@ function receive(
   pending: Map<string, Pending>,
   raw: unknown,
   failAll: (reason: Error) => void,
+  onHello: (reply: ExtensionHelloReply) => void,
 ): void {
   const parsed = extensionToPageSchema.safeParse(raw)
   if (!parsed.success) {
@@ -208,6 +249,10 @@ function receive(
     return
   }
   const message = parsed.data
+  if (message.type === 'hello') {
+    onHello(message)
+    return
+  }
   if (message.type === 'disconnected') {
     failAll(new TypeError(`the whiteboard extension lost its host: ${message.message}`))
     return
@@ -226,7 +271,7 @@ function abandonUnreadable(pending: Map<string, Pending>, raw: unknown): void {
   const request = typeof id === 'string' ? pending.get(id) : undefined
   if (request === undefined) return
   const reason = new TypeError(
-    'the whiteboard extension sent a message this page cannot read — the extension and this page are probably different versions',
+    'the whiteboard extension or its native host sent a message this page cannot read — one of them is probably a different version from this page: rebuild the extension, or update @kamiazya/whiteboard-mcp for the host',
   )
   request.reject(reason)
   request.body?.error(reason)
@@ -238,7 +283,7 @@ function abandonUnreadable(pending: Map<string, Pending>, raw: unknown): void {
 /** Lands one host message on the request it belongs to. */
 function settle(
   pending: Map<string, Pending>,
-  message: Exclude<ExtensionToPage, { type: 'disconnected' }>,
+  message: Exclude<ExtensionToPage, { type: 'disconnected' | 'hello' }>,
 ): void {
   const request = pending.get(message.id)
   if (request === undefined) return
