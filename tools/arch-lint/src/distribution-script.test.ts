@@ -6,7 +6,7 @@
 // deletes the very file the pack then demands:
 //
 //     ls dist/web-app/index.html                    -> present
-//     pnpm --filter @kamiazya/whiteboard-mcp build  -> exit 0
+//     pnpm build:mcp  -> exit 0
 //     ls dist/web-app/index.html                    -> No such file or directory
 //
 // The script read `pnpm build` for a long time and was therefore incapable of

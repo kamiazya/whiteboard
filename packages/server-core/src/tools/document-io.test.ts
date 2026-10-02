@@ -25,8 +25,8 @@ describe('document-io', () => {
   })
 
   // Moved here with the loader: this used to live beside a second,
-  // byte-identical `loadSpatialCanvas`, which is what made two classes for
-  // one condition look reasonable.
+  // byte-identical copy of the canvas loader, which is what made two classes
+  // for one condition look reasonable.
   test('loadDocument returns the doc and the decoded canvas for an existing snapshot', async () => {
     const documentStore = new FakeDocumentStore()
     await seedDoc(documentStore, DOCUMENT_ID, (doc) => {

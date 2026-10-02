@@ -192,7 +192,7 @@ Before closing a change:
 - Preserve the verified user scenario in `canvas-viewer-browser`/`web-browser` or E2E coverage.
 - Run the suites for the AREA you touched. **Full suites are CI's job, not a
   local step** (user decision, 2026-09-05): CI runs everything on every push
-  at 6-7min wall, so a local full run is the same work twice — push, then
+  at about 5 min wall on main (a PR that touches tests adds the sharded stress job), so a local full run is the same work twice — push, then
   watch the run (Monitor / `steward`). Exceptions: `pnpm check:local` for a
   pre-release check-job answer, and `pnpm test:browser` when the
   change touches real-browser behavior.

@@ -969,7 +969,7 @@ plugin adding a silhouette adds it to its own rather than widening
   A future a11y parallel-DOM projection reads these fields directly.
 - Layout functions are pure: no ambient platform API, only their arguments
   plus the injected `measure`/`renderMath` callbacks.
-- `routeEdge`, `resolveEmbeds`, `layoutMdastBlocks`, `sceneDigest`, and
+- `routeEdge`, `resolveEmbed`, `layoutMdastBlocks`, `sceneDigest`, and
   `renderSceneToSvg` never throw on malformed/degenerate input (missing
   endpoints, cycles, zero-sized nodes) — they degrade to a documented
   fallback instead, so one bad reference never aborts layout for the rest

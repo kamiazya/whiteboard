@@ -108,18 +108,8 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
 
   // Present-tense pointers at symbols that no longer exist, in files this
   // guard's owner does not edit. Each leaves when its owner fixes the sentence.
-  'apps/web/src/components/markdown-editor/indent-nesting.property.test.ts#renderPrefix':
-    'stale, fixed by the maintainability lane — remove at fold',
   'apps/web/src/pages/DaemonIndexPage.test.tsx#handleConfirmDelete':
-    'stale, fixed by the maintainability lane — remove at fold',
-  'packages/canvas-render/src/layout/contributed-router.test.ts#resolveRouter':
-    'stale, fixed by the maintainability lane — remove at fold',
-  'packages/plugin-visual/src/asset-ref-pickers.test.ts#assertPickerFits':
-    'stale, fixed by the maintainability lane — remove at fold',
-  'packages/server-core/src/tools/document-io.test.ts#loadSpatialCanvas':
-    'stale, fixed by the maintainability lane — remove at fold',
-  'packages/mcp-server/src/server/index.test.ts#isDirectEntryPoint':
-    'stale, fixed by the maintainability lane — remove at fold',
+    'stale, in a file the wiring lane holds — the integrator rewords it at fold',
 
   // Dev-workflow prose (.claude/rules, .claude/skills). History and worked
   // examples first: each names a thing that is gone, in a sentence that says so.
@@ -155,23 +145,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
   '.claude/skills/measured-change/SKILL.md#explainProbeFailure': 'same worked measurement',
   '.claude/skills/measured-change/SKILL.md#deriveCapabilityTier': 'same worked measurement',
   '.claude/skills/measured-change/SKILL.md#shouldShowDaemonCta': 'same worked measurement',
-  // Present-tense pointers in `.claude/rules`, which the integrator owns.
-  '.claude/rules/package-ports.md#protocolVersionSchema':
-    'stale, awaiting the integrator: the package holds no such schema',
-  '.claude/rules/package-ports.md#DeltaBatch':
-    'stale, awaiting the integrator: the package holds no such DTO',
-  '.claude/rules/package-ports.md#PresenceState':
-    'stale, awaiting the integrator: the package holds no presence DTO',
-  '.claude/rules/package-model.md#ANNOTATION_ANCHOR_KINDS':
-    'stale, awaiting the integrator: the generator lives in annotation.test.ts',
-  '.claude/rules/package-model.md#edgeEndpointSchema':
-    'stale, awaiting the integrator: only a test comment still uses the name',
-  '.claude/rules/package-canvas-render.md#resolveEmbeds':
-    'stale, awaiting the integrator: the function is `resolveEmbed`',
-  '.claude/rules/package-facet-engine.md#assertEditorSpecFits':
-    'stale, awaiting the integrator: the check is inline in `resolveEditorSpec`',
-  '.claude/rules/package-plugin-visual.md#resolveRouter':
-    'stale, awaiting the integrator: the function is `resolveRouterTable`',
 }
 
 /**

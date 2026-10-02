@@ -61,7 +61,7 @@ paths:
   carry meaning) or `chips` (picture alone, for a palette) — declared
   rather than derived from the option COUNT, since the count does not know
   whether the name is worth screen space. `deriveFacetForm(schema, editor)`
-  merges it over the derived form; `assertEditorSpecFits` rejects at definition time a spec
+  merges it over the derived form; `resolveEditorSpec` rejects at definition time a spec
   naming a field the schema does not declare, or one on a schema with no
   derivable form. A segmented option's `value: null` means the facet's
   ABSENCE — some defaults are unrepresentable as a stored value (a rect

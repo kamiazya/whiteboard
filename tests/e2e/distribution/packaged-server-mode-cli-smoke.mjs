@@ -144,7 +144,7 @@ const makeJwt = createAccessTokenMinter({
 
 if (!existsSync(DIST_CLI)) {
   console.error(`[server-cli-smoke] dist artifact missing: ${DIST_CLI}`)
-  console.error('Run `pnpm --filter @kamiazya/whiteboard-mcp build` first.')
+  console.error('Run `pnpm build:mcp` first.')
   process.exit(1)
 }
 
