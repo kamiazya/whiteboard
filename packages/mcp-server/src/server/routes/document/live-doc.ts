@@ -4,8 +4,8 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
+import { limitBody } from '../body-limit.js'
 import { onDocumentAction } from './path-route.js'
 
 // A Loro update embeds any attachment-affecting deltas since the client's
@@ -83,17 +83,7 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       const response: UpdateDocumentResponse = { ok: true }
       return c.json(response)
     },
-    bodyLimit({
-      maxSize: LIVE_DOC_UPDATE_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Update exceeds ${LIVE_DOC_UPDATE_LIMIT_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
+    limitBody(LIVE_DOC_UPDATE_LIMIT_BYTES, 'Update'),
   )
 
   return app

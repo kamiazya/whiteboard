@@ -6,7 +6,6 @@ import {
   type LiveDocuments,
 } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { ExportResponse } from '../../../shared/api-contracts/export.js'
@@ -18,14 +17,9 @@ import { errorMessage } from '../../../shared/error-message.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
 import type { DataLayout } from '../../tenant/data-layout-seam.js'
+import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
-
-// The body is a small JSON options object (padding/theme/style/outputPath/overwrite),
-// never canvas content — the export itself is rendered server-side from the
-// persisted doc. 1 MiB is a generous ceiling for that shape while still
-// bounding an adversarial request.
-const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 
 /**
  * An empty body is a valid export request — every option has a default — so
@@ -163,17 +157,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       }
       return c.json(response)
     },
-    bodyLimit({
-      maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Request body exceeds ${EXPORT_OPTIONS_BODY_LIMIT_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
+    limitBody(EXPORT_OPTIONS_BODY_LIMIT_BYTES, 'Request body'),
   )
 
   return app

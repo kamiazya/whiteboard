@@ -12,6 +12,10 @@
  * A route may still call `validateWorkspaceId` itself where its 400 is a
  * deliberately DIFFERENT contract; each such file is named below with the
  * reason, and the length is pinned so an addition is a decision in the diff.
+ *
+ * The 413 is the same story: six routes each hand-built the `payload_too_large`
+ * body beside `errorBody()`, which exists so the code slot and the reason slot
+ * cannot be written by hand. `limitBody` is the one place that names the code.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -32,6 +36,11 @@ const HANDLE_VALIDATION_ALLOWLIST: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/routes/replica-key.ts':
     'its 400 is the typed `MembershipRefusal` the client parses, pinned by `satisfies`, and it takes a canonical id, not a handle',
 }
+
+/** The one module that may name the code; every route reaches it through `limitBody`. */
+const PAYLOAD_TOO_LARGE_HOME = 'packages/mcp-server/src/server/routes/body-limit.ts'
+const PAYLOAD_TOO_LARGE = /['"]payload_too_large['"]/
+const PAYLOAD_TOO_LARGE_SCAN_DIRS = ['packages/mcp-server/src', 'packages/server-core/src']
 
 const files: string[] = []
 walkSourceFiles(join(REPO_ROOT, ROUTES_DIR), files)
@@ -91,5 +100,45 @@ describe('route refusals are written in one place', () => {
 
   it('holds the allowlist at its declared ceiling', () => {
     expect(Object.keys(HANDLE_VALIDATION_ALLOWLIST)).toHaveLength(3)
+  })
+
+  it('recognises the hand-built 413 code in either quote and passes prose through', () => {
+    const fixtures: readonly { readonly source: string; readonly hit: boolean }[] = [
+      { source: "c.json({ error: 'payload_too_large', message }, 413)", hit: true },
+      { source: 'c.json({ error: "payload_too_large" }, 413)', hit: true },
+      { source: "limitBody(MAX_FILE_UPLOAD_BYTES, 'Upload')", hit: false },
+      { source: '// payload_too_large is what limitBody answers', hit: false },
+    ]
+    for (const { source, hit } of fixtures) {
+      expect(PAYLOAD_TOO_LARGE.test(stripCommentsAndStrings(source)), source).toBe(hit)
+    }
+  })
+
+  it('no route builds the payload_too_large body outside limitBody', () => {
+    const scanned: string[] = []
+    for (const dir of PAYLOAD_TOO_LARGE_SCAN_DIRS) walkSourceFiles(join(REPO_ROOT, dir), scanned)
+    const sources = scanned.filter((path) => !isTestPath(path)).map(rel)
+    // An empty scan agrees with every rule; the count is what keeps it honest.
+    expect(sources.length).toBeGreaterThan(200)
+    expect(sources).toContain(PAYLOAD_TOO_LARGE_HOME)
+    const hits = sources
+      .filter((path) => path !== PAYLOAD_TOO_LARGE_HOME)
+      .filter((path) =>
+        PAYLOAD_TOO_LARGE.test(
+          stripCommentsAndStrings(readFileSync(join(REPO_ROOT, path), 'utf8')),
+        ),
+      )
+    expect(
+      hits,
+      'answer an oversized body with `limitBody(maxSize, noun)` from routes/body-limit.ts, so the 413 is built by `errorBody` in one place',
+    ).toEqual([])
+  })
+
+  it('the helper still names the code it is the home of', () => {
+    expect(
+      PAYLOAD_TOO_LARGE.test(
+        stripCommentsAndStrings(readFileSync(join(REPO_ROOT, PAYLOAD_TOO_LARGE_HOME), 'utf8')),
+      ),
+    ).toBe(true)
   })
 })
