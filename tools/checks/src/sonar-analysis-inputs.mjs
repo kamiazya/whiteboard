@@ -57,7 +57,7 @@ export function sonarGlob(pattern) {
     } else if (char === '*') {
       source += '[^/]*'
     } else {
-      source += char.replace(/[.+^${}()|[\]\\?]/g, '\\$&')
+      source += char.replace(/[.+^${}()|[\]\\?]/g, String.raw`\$&`)
     }
   }
   return new RegExp(`^${source}$`)

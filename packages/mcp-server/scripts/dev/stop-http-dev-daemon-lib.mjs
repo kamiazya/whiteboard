@@ -43,9 +43,24 @@ export async function stopDevDaemon({
   const target = via === 'wrapper' ? /** @type {number} */ (wrapperPid) : record.pid
   kill(target, 'SIGTERM')
 
-  for (let waited = 0; waited <= timeoutMs; waited += pollMs) {
-    if (!isAlive(record.pid) && !isAlive(target)) return { kind: 'stopped', via, pid: target }
-    await sleep(pollMs)
-  }
-  return { kind: 'timeout', pid: target }
+  const gone = await settles(() => !isAlive(record.pid) && !isAlive(target), {
+    sleep,
+    timeoutMs,
+    pollMs,
+  })
+  return gone ? { kind: 'stopped', via, pid: target } : { kind: 'timeout', pid: target }
+}
+
+/**
+ * Whether `done` holds within `timeoutMs`, asked every `pollMs` through the
+ * injected sleep; the first look is immediate.
+ * @param {() => boolean} done
+ * @param {{ sleep: (ms: number) => Promise<unknown>, timeoutMs: number, pollMs: number }} clock
+ * @returns {Promise<boolean>}
+ */
+async function settles(done, clock) {
+  if (done()) return true
+  if (clock.timeoutMs < clock.pollMs) return false
+  await clock.sleep(clock.pollMs)
+  return settles(done, { ...clock, timeoutMs: clock.timeoutMs - clock.pollMs })
 }

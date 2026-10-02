@@ -28,6 +28,8 @@ export class WorkspaceDocumentNotFoundError extends Error {
  */
 export type WorkspaceNotFoundIntent = 'create' | 'read'
 
+const quoted = (handles: readonly string[]) => handles.map((h) => `"${h}"`).join(', ')
+
 export class WorkspaceNotFoundForCallerError extends Error {
   constructor(
     readonly workspaceId: string,
@@ -36,7 +38,7 @@ export class WorkspaceNotFoundForCallerError extends Error {
   ) {
     super(
       `Workspace not found: "${workspaceId}". ` +
-        (known.length === 0 ? '' : `Workspaces here: ${known.map((h) => `"${h}"`).join(', ')}. `) +
+        (known.length === 0 ? '' : `Workspaces here: ${quoted(known)}. `) +
         (intent === 'create'
           ? 'Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.'
           : 'Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).'),

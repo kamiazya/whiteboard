@@ -128,7 +128,7 @@ const HOP_UPDATE: Record<BridgeHop, string> = {
  * sends the person to the right update.
  */
 export function bridgeSkew(
-  identity: { version: string; protocol?: number | undefined },
+  identity: { version: string; protocol?: number },
   hop: BridgeHop = 'extension',
 ): string | null {
   if (identity.protocol === BRIDGE_PROTOCOL_VERSION) return null
