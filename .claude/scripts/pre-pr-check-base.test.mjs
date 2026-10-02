@@ -54,8 +54,8 @@ function makeRepoPair() {
 }
 
 /** Runs the hook as `gh pr create` would trigger it; returns the exit status. */
-function runHook(cwd) {
-  const stdin = JSON.stringify({ tool_input: { command: 'gh pr create --title x' } })
+function runHook(cwd, command = 'gh pr create --title x') {
+  const stdin = JSON.stringify({ tool_input: { command } })
   try {
     execFileSync('node', [scriptPath], { cwd, input: stdin, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] })
     return { status: 0, stderr: '' }
@@ -83,4 +83,14 @@ test('an advance touching a file the branch also touches still blocks', () => {
   assert.equal(result.status, 2)
   assert.match(result.stderr, /behind origin\/main/)
   assert.match(result.stderr, /feat\.txt/)
+})
+
+test('a command that only mentions a PR creation does not fetch or block', () => {
+  const { origin, work } = makeRepoPair()
+  commitFile(origin, 'feat.txt', 'conflicting\n', 'overlapping advance')
+  const result = runHook(work, "git commit -m 'note: gh pr create later'")
+  assert.equal(result.status, 0)
+  assert.equal(result.stderr, '')
+  // No fetch ran, so the advance is still unknown to the clone.
+  assert.equal(git(work, ['rev-list', '--count', 'feat..origin/main']), '0')
 })

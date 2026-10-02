@@ -80,8 +80,27 @@ export function gateMerge({ pr, review, issue, alreadySeen }) {
   return { block: true, message: lines.join('\n') }
 }
 
-/** `gh pr merge 1234 ...` -> 1234; a bare `gh pr merge` -> null (use the branch's PR). */
-export function prNumberFrom(command) {
-  const match = command.match(/\bgh\s+pr\s+merge\s+(\d+)\b/)
-  return match ? Number(match[1]) : null
+/**
+ * What to say when the comments could not be read at all. Not silence: the
+ * gate exists because a merge was decided before the comments were read, and
+ * an unreadable feed is the same state with a better excuse. Blocks ONCE per
+ * PR so a GitHub that stays unreachable cannot stop a merge for good — the
+ * second attempt, after the session has read the comments some other way, goes
+ * through.
+ *
+ * @param pr          the PR number, or null when it could not be resolved
+ * @param reason      first line of what the failing call said
+ * @param alreadySeen true when this PR has been reported as unreadable once
+ */
+export function gateUnreadable({ pr, reason, alreadySeen }) {
+  if (alreadySeen) return { block: false, message: '' }
+  const which = pr === null ? 'the PR being merged' : `PR #${pr}`
+  return {
+    block: true,
+    message: [
+      `[pre-merge-show-comments] could not read ${which}'s review comments (${reason || 'no reason given'}); the merge is NOT cleared by this gate.`,
+      'Read them another way first — `gh api repos/{owner}/{repo}/pulls/<n>/comments` over REST (the GraphQL-backed `gh pr view` fails in some sessions) or the PR page —',
+      'then re-run the same `gh pr merge` command; this PR is now recorded as reported and will not be blocked again.',
+    ].join('\n'),
+  }
 }

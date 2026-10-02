@@ -86,8 +86,10 @@ const inventory = await agent(
 **Enumerate authors from the data — do not use a list of expected reviewers.** That mistake has already let a security finding through this gate.
 
 1. \`gh api repos/${REPO}/pulls/${PR}/comments\` — inline review comments. Collect EVERY distinct \`.user.login\`.
-2. \`gh pr view ${PR} --json reviews,comments\` — review bodies and issue-level comments. Collect every distinct author here too; the two feeds do not overlap.
-3. \`gh pr checks ${PR}\` — every check that is not \`pass\`. For each, get the run id and read \`gh run view <run-id> --log-failed\` for the failing job/step and the actual assertion text.
+2. \`gh api --paginate repos/${REPO}/pulls/${PR}/reviews\` and \`gh api --paginate repos/${REPO}/issues/${PR}/comments\` — review bodies and issue-level comments. Collect every distinct author here too; the two feeds do not overlap.
+3. The head commit's check-runs: \`gh api repos/${REPO}/pulls/${PR} --jq .head.sha\`, then \`gh api --paginate repos/${REPO}/commits/<sha>/check-runs --jq '.check_runs[]|{id,name,status,conclusion}'\` — every check that is not \`success\` (or \`skipped\`/\`neutral\`). For an Actions check its \`id\` is the job id: read \`gh run view --job <id> --log-failed\` for the failing job/step and the actual assertion text.
+
+**REST only.** The GraphQL-backed \`gh pr view\`, \`gh pr checks\` and \`gh pr list\` answer HTTP 403 in Claude Code web sessions. A call that fails or returns nothing is UNKNOWN: say so in \`note\` with the error text — never record an author as \`informational\` or the checks as passing because a read came back empty.
 
 Classify each author's output:
 - **findings** — it made at least one substantive claim about the code.

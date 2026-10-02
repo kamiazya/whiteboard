@@ -24,6 +24,8 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { runsGh } from '../hook-command-lib.mjs'
+
 /**
  * Paths whose diff a human can SEE the result of. Deliberately narrow: an
  * over-broad matcher fires on wiring-only changes, and a gate that cries
@@ -91,12 +93,9 @@ try {
 }
 
 const command = input?.tool_input?.command ?? ''
-// At a command POSITION — start of line, or after a separator. Matching the
-// bare text blocks `printf 'gh pr create …'`, which creates no PR, and a gate
-// that fires on something harmless is one people route around.
-if (!/(?:^|[\n;]|&&|\|\||\|)\s*(?:[A-Za-z_][\w]*=\S*\s+)*gh\s+pr\s+create\b/.test(command)) {
-  process.exit(0)
-}
+// Matched at a command position by the shared reader: the bare text would block
+// `printf 'gh pr create …'`, which creates no PR.
+if (!runsGh(command, 'pr create')) process.exit(0)
 
 /** Reads --body '<text>' / --body="<text>" / --body-file <path>. */
 function readBody(cmd, cwd) {

@@ -140,6 +140,11 @@ test('ignores the command text quoted inside an unrelated command', () => {
   assert.equal(runHook(work, `printf 'gh pr create --body x'`).status, 0)
 })
 
+test('ignores a commit message that mentions a PR creation', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, `git commit -m 'gh pr create --body x later'`).status, 0)
+})
+
 test('still fires when the command follows a cd or a chained separator', () => {
   const work = makeRepoPair('apps/web/src/components/Thing.tsx')
   assert.equal(runHook(work, `cd ${work} && ${bodyArg('## What')}`).status, 2)

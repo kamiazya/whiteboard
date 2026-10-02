@@ -56,14 +56,15 @@ function makeRepo(branch, subjects) {
   return repo
 }
 
-/** A `gh` that logs its arguments and answers `pr view` from GH_STUB_JSON. */
+/** A `gh` that logs its arguments and answers the open-PR lookup from GH_STUB_JSON; any subcommand but `api` fails
+as it does in a session with no GraphQL access. */
 function makeGhStub() {
   const dir = scratch('post-push-pr-sync-gh-')
   const log = join(dir, 'calls.log')
   const stub = join(dir, 'gh')
   writeFileSync(
     stub,
-    `#!/bin/sh\necho "$@" >> "${log}"\n[ -n "$GH_STUB_FAIL" ] && exit 1\nprintf '%s' "$GH_STUB_JSON"\n`,
+    `#!/bin/sh\necho "$@" >> "${log}"\n[ -n "$GH_STUB_FAIL" ] || [ "$1" != "api" ] && { echo 'HTTP 403: GraphQL is not available' >&2; exit 1; }\nprintf '%s' "$GH_STUB_JSON"\n`,
   )
   chmodSync(stub, 0o755)
   return { dir, log }
@@ -71,7 +72,7 @@ function makeGhStub() {
 
 function runHook({ cwd, command, pr, ghFails = false }) {
   const gh = makeGhStub()
-  const env = gitEnv({ PATH: `${gh.dir}:${process.env.PATH}`, GH_STUB_JSON: JSON.stringify(pr ?? {}) })
+  const env = gitEnv({ PATH: `${gh.dir}:${process.env.PATH}`, GH_STUB_JSON: JSON.stringify(pr ? [pr] : []) })
   if (ghFails) env.GH_STUB_FAIL = '1'
   const stdout = execFileSync('node', [scriptPath], {
     cwd,
@@ -89,7 +90,7 @@ function runHook({ cwd, command, pr, ghFails = false }) {
   return { out: stdout.trim(), calls }
 }
 
-const openPr = { number: 77, title: 'feat(x): the title', state: 'OPEN' }
+const openPr = { number: 77, title: 'feat(x): the title', state: 'open' }
 
 test('a command that is not a push is ignored without asking gh', () => {
   const repo = makeRepo('feat', ['one'])
@@ -114,21 +115,29 @@ test('a push on a branch with an open PR prompts a title check', () => {
   assert.match(out, /- "second change"/)
   assert.match(out, /- "first change"/)
   assert.match(out, /gh pr edit 77/)
-  assert.match(calls, /pr view feat --json number,title,state/)
+  assert.match(calls, /^api repos\/\{owner\}\/\{repo\}\/pulls\?head=\{owner\}:\{branch\}&state=open/m)
+  assert.doesNotMatch(calls, /pr view/)
 })
 
-test('a merged or closed PR is not prompted about', () => {
+test('a push with no open PR is quiet — an empty answer is a fact, not a failure', () => {
   const repo = makeRepo('feat', ['one'])
-  for (const state of ['MERGED', 'CLOSED']) {
-    const { out } = runHook({ cwd: repo, command: 'git push', pr: { ...openPr, state } })
-    assert.equal(out, '', state)
-  }
+  const { out, calls } = runHook({ cwd: repo, command: 'git push' })
+  assert.equal(out, '')
+  assert.match(calls, /pulls\?head=/)
 })
 
-test('a gh failure (no PR, offline, unauthenticated) exits quietly', () => {
+test('a lookup that fails says it could not look, rather than reading as no PR', () => {
   const repo = makeRepo('feat', ['one'])
   const { out } = runHook({ cwd: repo, command: 'git push', ghFails: true })
+  assert.match(out, /pushed 'feat' but could not look up its PR/)
+  assert.match(out, /HTTP 403/)
+})
+
+test('a commit message that mentions a push is not a push', () => {
+  const repo = makeRepo('feat', ['one'])
+  const { out, calls } = runHook({ cwd: repo, command: "git commit -m 'git push later'", pr: openPr })
   assert.equal(out, '')
+  assert.equal(calls, '')
 })
 
 test('a leading cd names the repo the push ran in', () => {
@@ -138,7 +147,7 @@ test('a leading cd names the repo the push ran in', () => {
   const { out, calls } = runHook({ cwd: elsewhere, command: `cd ${repo} && git push`, pr: openPr })
 
   assert.match(out, /pushed 'lane'/)
-  assert.match(calls, /pr view lane /)
+  assert.match(calls, /^api /m)
 })
 
 test('git -C names the repo the push ran in', () => {

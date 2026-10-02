@@ -163,7 +163,8 @@ phase('Gather')
 const prFilter = ONLY_PRS ? ` Restrict to these PR numbers: ${ONLY_PRS.join(', ')}.` : ''
 const gathered = await agent(
   `Gather the Dependabot triage surface for ${REPO} (read-only).${cwdHint}\n\n` +
-    `1. Open dependency PRs: \`gh pr list --author "app/dependabot" --state open --json number,title,labels --limit 50\`.${prFilter} ` +
+    `Read GitHub over REST (\`gh api\`) only: the GraphQL-backed \`gh pr view|checks|list\` answer HTTP 403 in Claude Code web sessions. A call that fails or returns nothing is UNKNOWN — say so, never report "no PRs" or "CI green" from an empty read.\n` +
+    `1. Open dependency PRs: \`gh api --paginate "repos/${REPO}/pulls?state=open&per_page=100" --jq '.[] | select(.user.login=="dependabot[bot]") | {number, title, labels: [.labels[].name]}'\`.${prFilter} ` +
     `For each, parse the package name and from/to versions from the "Bump X from A to B" title, classify the ecosystem (npm vs github-actions), and set isSecurity if it has a security label or the body/title cites a CVE/GHSA.\n` +
     (INCLUDE_ALERTS
       ? `2. Open security alerts: \`gh api repos/${REPO}/dependabot/alerts --paginate --jq '[.[] | select(.state=="open")] | .[] | {ghsa: .security_advisory.ghsa_id, severity: .security_advisory.severity, package: .dependency.package.name, scope: .dependency.scope, range: .security_vulnerability.vulnerable_version_range, patched: .security_vulnerability.first_patched_version.identifier, manifest: .dependency.manifest_path}'\`. Map scope "runtime"->runtime, "development"->development. If this 404s on auth scope (needs security_events/admin), set alertsAvailable=false with a note and return prs only — do NOT fail.\n`
@@ -188,10 +189,11 @@ const results = await pipeline(
         `PR #${p.number}: ${p.title}\nPackage: ${p.package} (${p.ecosystem || 'npm'})\n\n` +
         `All open Dependabot PRs (to detect supersedes — a later PR bumping the SAME package to a higher version supersedes an earlier one): ${allPackages}\n\n` +
         `Do ALL of:\n` +
-        `1. Read the PR: \`gh pr view ${p.number} --json title,body,labels\`. Classify level: security (label/CVE) | patch | minor | major. NOTE: TypeScript does not follow semver — class it by the changelog, not the number; @types/node must match .node-version (24) — recommend close if its major diverges.\n` +
+        `Read GitHub over REST (\`gh api\`) only — \`gh pr view|checks\` answer HTTP 403 in Claude Code web sessions; a failed or empty read is UNKNOWN, never "CI green".\n` +
+        `1. Read the PR: \`gh api repos/${REPO}/pulls/${p.number} --jq '{title, body, labels: [.labels[].name], head: .head.sha, mergeable_state}'\`. Classify level: security (label/CVE) | patch | minor | major. NOTE: TypeScript does not follow semver — class it by the changelog, not the number; @types/node must match .node-version (24) — recommend close if its major diverges.\n` +
         `2. Changelog/release notes: read the PR body's compatibility/release section; WebFetch the upstream release notes if needed. Summarize in 1-3 lines and LIST any breaking changes.\n` +
         `3. Repo impact: grep this repo for how ${p.package} is used and whether any breaking change actually hits our call sites. Cite path(s) or "none found".\n` +
-        `4. CI: \`gh pr checks ${p.number}\` — set ciStatus (the gating check is "verify"; mergeStateStatus BLOCKED with passing verify just means branch-protection awaits the merge step).\n` +
+        `4. CI: \`gh api --paginate repos/${REPO}/commits/<head sha>/check-runs --jq '.check_runs[] | {name, status, conclusion}'\` — set ciStatus (the gating check is "verify"; mergeStateStatus BLOCKED with passing verify just means branch-protection awaits the merge step).\n` +
         `5. Supersede: set supersededBy to the PR number that bumps the same package further (else 0).\n\n` +
         `${loadBearingHint}\n\n` +
         `Recommend: close-superseded (a later PR wins) | merge (patch/safe minor, CI green, no repo impact) | merge-with-care (load-bearing or minor touching our call sites — mergeable but smoke after) | needs-migration (breaking changes hit our code) | hold (CI fail / unclear). Set loadBearing if the package is in the load-bearing list.`,

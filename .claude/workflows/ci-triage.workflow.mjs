@@ -25,6 +25,9 @@ const PR = A.pr
 const CWD = A.cwd || null
 const GH = CWD ? `gh` : 'gh' // gh is repo-aware from cwd; integrator runs from repo root
 const cwdHint = CWD ? ` Run gh/git from ${CWD}.` : ''
+// The GraphQL-backed subcommands (gh pr view|checks|list) answer HTTP 403 in Claude Code web sessions, and
+// an agent that reads that as "nothing there" reports a clean PR. REST only, and a failed read is UNKNOWN.
+const REST = ' Read GitHub over REST (`gh api`) only — never `gh pr view`, `gh pr checks` or `gh pr list`, which answer HTTP 403 in Claude Code web sessions. If a call fails or returns nothing, report this source as UNKNOWN with the error text — never as "no findings" or "checks passing".'
 if (!PR) return { error: 'args.pr (PR number) is required' }
 
 // Sources to triage. Each is fetched read-only via gh; a source that 404s on auth scope is skipped, not failed.
@@ -33,15 +36,15 @@ const SOURCES = Array.isArray(A.sources) && A.sources.length
   : [
       {
         key: 'ci',
-        brief: `GitHub Actions CI for PR #${PR}. Run \`gh pr checks ${PR}\` to list checks; for any non-pass GitHub-Actions check, get its run id and read \`gh run view <run-id> --log-failed\` to find the failing job/step + assertion. A CI failure is almost always REAL + BLOCKING (it gates merge) — but a flaky test-isolation failure (different test fails per run, passes in isolation; steward's reference/flake-shapes.md lists the known shapes) is the exception: note it as flaky, not a code bug. Report each failure with the failing test/step, the likely cause, and a fix direction.`,
+        brief: `GitHub Actions CI for PR #${PR}. List the head commit's checks: \`gh api repos/kamiazya/whiteboard/pulls/${PR} --jq .head.sha\`, then \`gh api --paginate repos/kamiazya/whiteboard/commits/<sha>/check-runs --jq '.check_runs[]|{id,name,status,conclusion}'\`. For any non-success GitHub-Actions check, its \`id\` is the job id: read \`gh run view --job <id> --log-failed\` to find the failing job/step + assertion. A CI failure is almost always REAL + BLOCKING (it gates merge) — but a flaky test-isolation failure (different test fails per run, passes in isolation; steward's reference/flake-shapes.md lists the known shapes) is the exception: note it as flaky, not a code bug. Report each failure with the failing test/step, the likely cause, and a fix direction.`,
       },
       {
         key: 'coderabbit',
-        brief: `CodeRabbit review on PR #${PR}. Fetch its line comments + summary via \`gh api repos/kamiazya/whiteboard/pulls/${PR}/comments\` and \`gh pr view ${PR} --json reviews,comments\`. NOTE: CodeRabbit SKIPS PRs whose title contains WIP/draft — if so, report that it was skipped (no findings to triage) and that removing WIP from the title unblocks it. For each real comment, VERIFY it against the actual code (CodeRabbit has high recall but hallucinates context): keep correctness/security/contract points; drop style nits already enforced by Biome and inapplicable "consider" suggestions. Mark each kept item real=true with evidence.`,
+        brief: `CodeRabbit review on PR #${PR}. Fetch its line comments + summary via \`gh api repos/kamiazya/whiteboard/pulls/${PR}/comments\` and \`gh api --paginate repos/kamiazya/whiteboard/pulls/${PR}/reviews\` and \`.../issues/${PR}/comments\`. NOTE: CodeRabbit SKIPS PRs whose title contains WIP/draft — if so, report that it was skipped (no findings to triage) and that removing WIP from the title unblocks it. For each real comment, VERIFY it against the actual code (CodeRabbit has high recall but hallucinates context): keep correctness/security/contract points; drop style nits already enforced by Biome and inapplicable "consider" suggestions. Mark each kept item real=true with evidence.`,
       },
       {
         key: 'accesslint',
-        brief: `AccessLint accessibility review on PR #${PR}. Read its check + any a11y review comments (\`gh pr view ${PR} --json comments,reviews\`; \`gh api repos/kamiazya/whiteboard/pulls/${PR}/comments\` filtered to the accesslint actor). Keep real a11y issues on the touched UI components; map each to the file. If AccessLint did not run / has no comments, report none.`,
+        brief: `AccessLint accessibility review on PR #${PR}. Read its check + any a11y review comments (\`gh api --paginate repos/kamiazya/whiteboard/pulls/${PR}/reviews\`; \`gh api repos/kamiazya/whiteboard/pulls/${PR}/comments\` filtered to the accesslint actor). Keep real a11y issues on the touched UI components; map each to the file. If AccessLint did not run / has no comments, report none.`,
       },
       {
         key: 'codeql',
@@ -104,7 +107,7 @@ const gathered = (
   await parallel(
     SOURCES.map((s) => () =>
       agent(
-        `Gather and assess the automated-review findings from ONE source for PR #${PR}.\n\nSOURCE: ${s.brief}${cwdHint}\n\nFetch read-only via gh, verify each finding against the real code (cite file:line), set available=false (with a note) if the source 404s/skipped/unconfigured, and return only findings that survive verification (isReal). Do not invent findings; do not fail the run if a source is unavailable.`,
+        `Gather and assess the automated-review findings from ONE source for PR #${PR}.\n\nSOURCE: ${s.brief}${cwdHint}${REST}\n\nFetch read-only via gh, verify each finding against the real code (cite file:line), set available=false (with a note) if the source 404s/skipped/unconfigured, and return only findings that survive verification (isReal). Do not invent findings; do not fail the run if a source is unavailable.`,
         { label: `gather:${s.key}`, phase: 'Gather', agentType: 'general-purpose', schema: FINDINGS_SCHEMA },
       ),
     ),

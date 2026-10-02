@@ -83,6 +83,14 @@ test('a command that is not a merge is ignored without output', () => {
   assert.equal(git(work, ['log', '--oneline', '-1']).includes('next'), false)
 })
 
+test("a commit message that mentions a merge does not pull", () => {
+  const { origin, work } = makeRepoPair()
+  commitFile(origin, 'next.txt', 'next\n', 'next')
+  const command = "git commit -m 'note: gh pr merge 12 later'"
+  assert.equal(runHook(work, { tool_input: { command } }), '')
+  assert.equal(git(work, ['log', '--oneline', '-1']).includes('next'), false)
+})
+
 test('unparseable hook input is ignored without output', () => {
   const { work } = makeRepoPair()
   assert.equal(runHook(work, 'not json'), '')
