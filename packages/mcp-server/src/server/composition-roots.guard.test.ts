@@ -16,6 +16,14 @@ import { describe, expect, it } from 'vitest'
  *   root that does not leaves every tool announcing to nobody
  *   (`wb_viewport_set` answers `delivered: false` to an open page).
  *
+ * - **Background work.** Every root arms what the process does on its own
+ *   through `startBackgroundWork`, from the declarations that include the
+ *   automatic checkpoint (`sharedBackgroundWork` for the HTTP roots,
+ *   `stdioBackgroundWork` for stdio), and stops it with `.stopAll()` so the
+ *   pending checkpoints are taken. The published stdio entry mounts no router
+ *   and took none until it did — an agent-only workspace showed no History
+ *   and compaction declined `no-versions` forever.
+ *
  * A root is found by what it does — calling `createApp(` or `serveStdio(` —
  * rather than from a list, so a third one is checked the day it appears.
  */
@@ -39,6 +47,11 @@ function inspectRoot(source: string): RootFindings {
     missing.push('boot through the shared helper, not prepareDataDir/ensureWorkspaceId')
   }
   if (kind === 'http' && !/\battachLiveAudience\(/.test(code)) missing.push('attachLiveAudience')
+  if (!/\bstartBackgroundWork\(/.test(code)) missing.push('startBackgroundWork')
+  if (!/\b(sharedBackgroundWork|stdioBackgroundWork)\(/.test(code)) {
+    missing.push('the background work that carries the auto-checkpoint')
+  }
+  if (!/\.stopAll\(\)/.test(code)) missing.push('stopAll (flush the pending checkpoints)')
   return { kind, missing }
 }
 
@@ -69,14 +82,20 @@ describe('composition roots share one boot sequence and one live audience', () =
       ].join('\n'),
     )
     expect(findings.kind).toBe('http')
-    expect(findings.missing).toHaveLength(3)
+    expect(findings.missing).toHaveLength(6)
   })
 
   it('does not read a comment as a call', () => {
     const findings = inspectRoot(
       '// bootSelfHostDeps( attachLiveAudience(\nconst app = createApp({})',
     )
-    expect(findings.missing).toEqual(['shared boot', 'attachLiveAudience'])
+    expect(findings.missing).toEqual([
+      'shared boot',
+      'attachLiveAudience',
+      'startBackgroundWork',
+      'the background work that carries the auto-checkpoint',
+      'stopAll (flush the pending checkpoints)',
+    ])
   })
 
   it('finds both HTTP roots and the stdio root, and each meets the shared contract', async () => {
