@@ -56,7 +56,9 @@ the write lands):
   "facets": { "visual.theme/v0": { "theme": "visual.neon" } } }
 ```
 
-A theme id nothing registered is refused with the list of registered ids; `null` clears it.
+`default` is the segment of the daemon's first workspace; use another workspace's id or segment
+to theme a canvas there. A theme id nothing registered is refused with the list of registered ids;
+`null` clears it.
 
 ## Rendering with a theme
 
