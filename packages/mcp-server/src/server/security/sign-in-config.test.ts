@@ -78,7 +78,8 @@ describe('a bearer-only provider', () => {
 
   it('is accepted without a client', () => {
     const [provider] = signInConfigSchema.parse({ providers: [bearerOnly] }).providers
-    expect(provider?.clientId).toBeUndefined()
+    expect(provider?.kind).toBe('oidc')
+    if (provider?.kind === 'oidc') expect(provider.clientId).toBeUndefined()
   })
 
   // With no client and no bearer clients it could admit nobody, which is a

@@ -35,9 +35,7 @@ describe('wireMcpLogging', () => {
 
   it('forwards every emitted record to server.sendLoggingMessage with the spec shape', () => {
     const server = makeServer()
-    const sendSpy = vi
-      .spyOn(server, 'sendLoggingMessage')
-      .mockResolvedValue({} as Awaited<ReturnType<typeof server.sendLoggingMessage>>)
+    const sendSpy = vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
     wireMcpLogging(server)
 
     getLogger('document-store').warning({ workspaceId: 'ws_1' }, 'skipped corrupt row')
@@ -52,9 +50,7 @@ describe('wireMcpLogging', () => {
 
   it('still records to the existing destinations (capture / stderr) so logging keeps working', () => {
     const server = makeServer()
-    vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(
-      {} as Awaited<ReturnType<typeof server.sendLoggingMessage>>,
-    )
+    vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
     wireMcpLogging(server)
 
     getLogger('app').error('boom')
@@ -77,9 +73,7 @@ describe('wireMcpLogging', () => {
 
   it('restore() detaches the MCP destination so subsequent records skip sendLoggingMessage', () => {
     const server = makeServer()
-    const sendSpy = vi
-      .spyOn(server, 'sendLoggingMessage')
-      .mockResolvedValue({} as Awaited<ReturnType<typeof server.sendLoggingMessage>>)
+    const sendSpy = vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
     const handle = wireMcpLogging(server)
     handle.restore()
 
@@ -99,9 +93,7 @@ describe('wireMcpLogging', () => {
 
     for (let i = 0; i < 20; i++) {
       const server = makeServer()
-      vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(
-        {} as Awaited<ReturnType<typeof server.sendLoggingMessage>>,
-      )
+      vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
       // Match the createMcpServer wiring: chain restore() onto
       // the server's onclose so the caller does not have to remember.
       const handle = wireMcpLogging(server)

@@ -269,7 +269,7 @@ describe('planServerModeAuth — server-mode plan content', () => {
     expect(result2.ok).toBe(true)
     if (!result2.ok) return
 
-    expect(result2.routeAuthPlan!.find((e) => e.group === 'injected')).toBeUndefined()
+    expect(result2.routeAuthPlan!.map((e) => e.group)).not.toContain('injected')
     const canvasRead = result2.routeAuthPlan!.find((e) => e.group === 'canvas-read')
     expect(canvasRead!.requiredScopes).toEqual(['canvas:read'])
   })

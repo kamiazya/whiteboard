@@ -42,12 +42,15 @@ function runContractProperties(getMeasure: () => MeasureText, label: string) {
       const base = measure(text, font(sizePx))
       const scaled = measure(text, font(sizePx * scale))
       const tolerance = 0.02
-      const relativeDiff = (actual: number, expected: number) =>
-        expected === 0 ? Math.abs(actual) < 1e-6 : Math.abs(actual - expected) / expected
+      // A zero expectation has no relative error; it holds only for a zero answer.
+      const withinTolerance = (actual: number, expected: number) =>
+        expected === 0
+          ? Math.abs(actual) < 1e-6
+          : Math.abs(actual - expected) / expected <= tolerance
       return (
-        relativeDiff(scaled.advanceWidth, base.advanceWidth * scale) <= tolerance &&
-        relativeDiff(scaled.ascent, base.ascent * scale) <= tolerance &&
-        relativeDiff(scaled.descent, base.descent * scale) <= tolerance
+        withinTolerance(scaled.advanceWidth, base.advanceWidth * scale) &&
+        withinTolerance(scaled.ascent, base.ascent * scale) &&
+        withinTolerance(scaled.descent, base.descent * scale)
       )
     },
   )

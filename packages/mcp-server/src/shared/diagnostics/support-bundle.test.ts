@@ -21,7 +21,7 @@ const minimalInput: SupportBundleInput = {
     pidAlive: true,
     pingOk: true,
     statusOk: true,
-    record: { pid: 1234, port: 3099, version: '0.0.4', startedAt: FIXED_TS },
+    record: { pid: 1234, version: '0.0.4', startedAt: FIXED_TS },
   },
   doctor: {
     ok: true,
@@ -142,7 +142,6 @@ describe('support bundle v0', () => {
           ...minimalInput.status,
           record: {
             pid: 1234,
-            port: 3099,
             version: '0.0.4',
             startedAt: 'Authorization: Bearer secret-token-XYZ at /opt/wb.ts:42',
           },
@@ -170,7 +169,6 @@ describe('support bundle v0', () => {
           ...minimalInput.status,
           record: {
             pid: 1234,
-            port: 3099,
             version: '0.0.4',
             startedAt: '2026-05-10T00:00:00',
           },

@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { signsInWithBrowser } from './oidc-relying-party.js'
+import { type ConfiguredProvider, signsInWithBrowser } from './oidc-relying-party.js'
 import { loadSignInConfig } from './sign-in-config-file.js'
 
 let dir: string
@@ -12,6 +12,10 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
+
+/** The resolved secret, or undefined for a provider the keeper cannot sign in through. */
+const secretOf = (provider: ConfiguredProvider | undefined): string | undefined =>
+  provider !== undefined && signsInWithBrowser(provider) ? provider.clientSecretValue : undefined
 
 const yaml = (secret: string) => `providers:
   - id: google
@@ -28,7 +32,7 @@ describe('loadSignInConfig', () => {
     const path = join(dir, 'sign-in.yaml')
     await writeFile(path, yaml('{ env: GOOGLE_SECRET }'))
     const [google] = loadSignInConfig(path, { GOOGLE_SECRET: 'abc' }).providers
-    expect(google?.clientSecretValue).toBe('abc')
+    expect(secretOf(google)).toBe('abc')
     expect(google?.admission.googleHostedDomains).toEqual(['corp.example'])
   })
 
@@ -50,7 +54,7 @@ describe('loadSignInConfig', () => {
         ],
       }),
     )
-    expect(loadSignInConfig(path, {}).providers[0]?.clientSecretValue).toBe('from-file')
+    expect(secretOf(loadSignInConfig(path, {}).providers[0])).toBe('from-file')
   })
 
   // ADR-0049 decision 2: the keeper starts knowing who the file names as

@@ -50,7 +50,7 @@ describe('mcp-smoke-coverage classification', () => {
   })
 
   it('every tool in any category is present in ALL_REGISTERED_TOOLS', () => {
-    const registeredSet = new Set(ALL_REGISTERED_TOOLS)
+    const registeredSet = new Set<string>(ALL_REGISTERED_TOOLS)
     for (const name of categoryUnion) {
       expect(
         registeredSet.has(name),

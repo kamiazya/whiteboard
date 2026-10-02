@@ -137,14 +137,14 @@ const PROBES: readonly Probe[] = [
   { group: true, colour: undefined, locked: false },
 ]
 
-const WRITE_TASKS = TASKS.filter((t: { verify?: unknown }) => t.verify !== undefined)
+const WRITE_TASKS = TASKS.filter((t) => t.verify !== undefined)
 
 const wbOver = (board: unknown) => ({
   call: async (name: string) => {
     if (name === 'wb_document_list') {
       return {
-        documents: TASKS.filter((t: { boards?: string[] }) => t.boards !== undefined).flatMap(
-          (t: { boards?: string[] }) => (t.boards ?? []).map((path) => ({ path, documentId: 'd' })),
+        documents: TASKS.filter((t) => t.boards !== undefined).flatMap((t) =>
+          (t.boards ?? []).map((path) => ({ path, documentId: 'd' })),
         ),
       }
     }

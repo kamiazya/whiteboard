@@ -409,8 +409,8 @@ const allCommands = [
   instanceArbitrary.map((i) => new SaveCommand(i)),
   fc.tuple(instanceArbitrary, instanceArbitrary).map(([a, b]) => new ConcurrentSaveCommand(a, b)),
   fc.tuple(instanceArbitrary, instanceArbitrary).map(([a, b]) => new StraddledFoldCommand(a, b)),
-  // Rarest on purpose: a reopen REMOVES staleness, which is the very
-  // condition under test.
+  // A catch-up removes staleness too — it follows the record without dropping
+  // the doc — so it is drawn like any other command and never weighted up.
   instanceArbitrary.map((i) => new CatchUpCommand(i)),
   // Rarest on purpose: a reopen REMOVES staleness, which is the very
   // condition under test.

@@ -76,6 +76,19 @@ async function writeBlob(
   return path
 }
 
+// The harness hands rows back untyped, since a frozen migration test names the
+// columns as they stood then; these read one cell and refuse any other shape.
+function bytesOf(cell: unknown): Uint8Array<ArrayBuffer> {
+  if (cell instanceof Uint8Array || cell instanceof ArrayBuffer) return new Uint8Array(cell)
+  throw new Error(`expected a blob cell, got ${typeof cell}`)
+}
+
+function numberOf(cell: unknown): number {
+  if (typeof cell === 'number') return cell
+  if (typeof cell === 'bigint') return Number(cell)
+  throw new Error(`expected an integer cell, got ${typeof cell}`)
+}
+
 async function reassembledRow(db: Kysely<AnyTables>, docKey: string): Promise<Uint8Array | null> {
   const header = await db
     .selectFrom('documentSnapshots')
@@ -89,12 +102,17 @@ async function reassembledRow(db: Kysely<AnyTables>, docKey: string): Promise<Ui
     .where('docKey', '=', docKey)
     .orderBy('chunkIndex', 'asc')
     .execute()
+  const chunkCount = numberOf(header.chunkCount)
   return reassembleSnapshot(
-    header,
+    {
+      chunkCount,
+      totalBytes: numberOf(header.totalBytes),
+      maxChunkBytes: numberOf(header.maxChunkBytes),
+    },
     chunkRows.map((row) => ({
-      index: row.chunkIndex,
-      of: header.chunkCount,
-      bytes: row.bytes instanceof Uint8Array ? row.bytes : new Uint8Array(row.bytes),
+      index: numberOf(row.chunkIndex),
+      of: chunkCount,
+      bytes: bytesOf(row.bytes),
     })),
   )
 }
@@ -122,10 +140,7 @@ describe('0011-import-fs-blobs', () => {
       .select('frontier')
       .where('docKey', '=', 'canvas:doc-a')
       .executeTakeFirstOrThrow()
-    const frontier =
-      frontierRow.frontier instanceof Uint8Array
-        ? frontierRow.frontier
-        : new Uint8Array(frontierRow.frontier)
+    const frontier = bytesOf(frontierRow.frontier)
     expect(frontier).toEqual(expectedFrontier(bytes))
 
     await db.destroy()
@@ -452,10 +467,7 @@ describe('0011-import-fs-blobs', () => {
       .select('frontier')
       .where('docKey', '=', 'canvas:doc-partial')
       .executeTakeFirstOrThrow()
-    const frontier =
-      frontierRow.frontier instanceof Uint8Array
-        ? frontierRow.frontier
-        : new Uint8Array(frontierRow.frontier)
+    const frontier = bytesOf(frontierRow.frontier)
     expect(frontier).toEqual(expectedFrontier(bytes))
 
     await db.destroy()

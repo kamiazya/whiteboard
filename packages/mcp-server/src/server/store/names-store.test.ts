@@ -22,7 +22,7 @@ const { LoroDoc } = await import('loro-crdt')
 
 // Metadata writers refuse a path with no document, so every test that names
 // one seeds it first — the shape production always has.
-async function seedDocuments(workspaceId, paths) {
+async function seedDocuments(workspaceId: string, paths: readonly string[]) {
   for (const path of paths) {
     await saveDocument(workspaceId, path, new LoroDoc(), { kind: 'spatial' })
   }

@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { serverRunDryRunOutputSchema, serverRunReadyOutputSchema } from './operator-json.js'
+import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
+import { signsInWithBrowser } from '../server/security/oidc-relying-party.js'
 import type { StartServerFn } from './server-run.js'
 import { runServerRun } from './server-run.js'
 import type { ServerRunArgs } from './server-run-args.js'
@@ -445,7 +447,7 @@ describe('runServerRun — sign-in configuration', () => {
         ],
       }),
     )
-    let captured: readonly { id: string; clientSecretValue: string }[] | undefined
+    let captured: readonly ConfiguredProvider[] | undefined
     const startServer: StartServerFn = async (opts) => {
       captured = opts.signInProviders
       return {
@@ -463,6 +465,8 @@ describe('runServerRun — sign-in configuration', () => {
       startServer,
     })
     await rm(dir, { recursive: true, force: true })
-    expect(captured?.map((p) => [p.id, p.clientSecretValue])).toEqual([['corp', 'abc']])
+    expect(
+      captured?.map((p) => [p.id, signsInWithBrowser(p) ? p.clientSecretValue : undefined]),
+    ).toEqual([['corp', 'abc']])
   })
 })

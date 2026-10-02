@@ -35,13 +35,18 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, loadDocument, cacheBackedWorkspaceDocs, resolveDocumentIdAtPath } =
-  await import('./document-store.js')
+const {
+  saveDocument,
+  loadDocument,
+  cacheBackedWorkspaceDocs,
+  resolveDocumentIdAtPath,
+  workspaceRegistry,
+} = await import('./document-store.js')
 const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-const { LoroWorkspaceDocumentIndex } = await import('@kamiazya/whiteboard-workspace-index')
+const { CacheCoherentDocumentIndex } = await import('./cache-coherent-document-index.js')
 const { FsBlobStore } = await import('./fs/fs-blob-store.js')
 const { join: joinPath } = await import('node:path')
 
@@ -79,12 +84,13 @@ async function stores() {
     routed: new WorkspaceRoutedDocumentStore(inner),
     // The production wiring: the tree IS the index (S7), cache-backed so it
     // operates on the same live workspace doc every other path writes.
-    index: new LoroWorkspaceDocumentIndex(
+    index: new CacheCoherentDocumentIndex(
       cacheBackedWorkspaceDocs(),
       new FsBlobStore(
         blobsRoot(joinPath(tempDir, 'blobs'), SELF_HOST_TENANT_ID),
         joinPath(tempDir, 'blobs'),
       ),
+      workspaceRegistry(),
     ),
   }
 }

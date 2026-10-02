@@ -177,7 +177,7 @@ function assertToolSurface(names: readonly string[]): void {
   }
 
   const liveSet = new Set(names)
-  const classifiedSet = new Set(ALL_REGISTERED_TOOLS)
+  const classifiedSet = new Set<string>(ALL_REGISTERED_TOOLS)
   const inLiveNotClassified = names.filter((n) => !classifiedSet.has(n))
   const inClassifiedNotLive = ALL_REGISTERED_TOOLS.filter((n) => !liveSet.has(n))
   if (inLiveNotClassified.length === 0 && inClassifiedNotLive.length === 0) return

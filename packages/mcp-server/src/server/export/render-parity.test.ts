@@ -70,6 +70,7 @@ describe('wb_scene_render / export parity', () => {
       workspaceId: 'ws-1',
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      style: 'clean',
     })
     const viaExport = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
 
