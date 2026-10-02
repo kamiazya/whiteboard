@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, readdir, realpath } from 'node:fs/promises'
+import { cp, lstat, mkdir, readdir } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { isMissingFileError } from '../shared/errno.js'
