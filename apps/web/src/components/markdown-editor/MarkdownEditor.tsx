@@ -196,7 +196,7 @@ const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
 /**
  * A controlled markdown editor: one source-of-truth `value` string, edited
  * through a CodeMirror 6 source pane and previewed through
- * `renderMarkdownPreviewSvg` — the same parse -> layout -> SVG path the
+ * `renderMarkdownPreview` — the same parse -> layout -> SVG path the
  * spatial canvas's text node and export use, so there is no second
  * markdown-to-HTML renderer to drift from it.
  *
