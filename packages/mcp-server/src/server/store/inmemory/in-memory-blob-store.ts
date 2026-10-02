@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type {
   BlobDeleteInput,
   BlobGetInput,
@@ -10,19 +9,13 @@ import type {
   BlobRef,
   BlobStore,
 } from '@kamiazya/whiteboard-ports'
+import { blobRefKey } from '@kamiazya/whiteboard-ports'
+import { sha256Hex } from '../../../shared/sha256.js'
 import { cloneBytes } from './clone-bytes.js'
 
 interface BlobRecord {
   readonly bytes: Uint8Array
   readonly contentType?: string
-}
-
-function digestHex(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex')
-}
-
-function refKey(ref: BlobRef): string {
-  return `${ref.algorithm}:${ref.digestHex}`
 }
 
 /**
@@ -34,9 +27,9 @@ export class InMemoryBlobStore implements BlobStore {
   private readonly blobs = new Map<string, BlobRecord>()
 
   async put(input: BlobPutInput): Promise<BlobPutResult> {
-    const ref: BlobRef = { algorithm: 'sha-256', digestHex: digestHex(input.bytes) }
-    if (!this.blobs.has(refKey(ref))) {
-      this.blobs.set(refKey(ref), {
+    const ref: BlobRef = { algorithm: 'sha-256', digestHex: sha256Hex(input.bytes) }
+    if (!this.blobs.has(blobRefKey(ref))) {
+      this.blobs.set(blobRefKey(ref), {
         bytes: cloneBytes(input.bytes),
         contentType: input.contentType,
       })
@@ -45,7 +38,7 @@ export class InMemoryBlobStore implements BlobStore {
   }
 
   async get(input: BlobGetInput): Promise<BlobGetResult> {
-    const record = this.blobs.get(refKey(input.ref))
+    const record = this.blobs.get(blobRefKey(input.ref))
     if (!record) {
       return null
     }
@@ -53,10 +46,10 @@ export class InMemoryBlobStore implements BlobStore {
   }
 
   async has(input: BlobHasInput): Promise<BlobHasResult> {
-    return { exists: this.blobs.has(refKey(input.ref)) }
+    return { exists: this.blobs.has(blobRefKey(input.ref)) }
   }
 
   async delete(input: BlobDeleteInput): Promise<void> {
-    this.blobs.delete(refKey(input.ref))
+    this.blobs.delete(blobRefKey(input.ref))
   }
 }

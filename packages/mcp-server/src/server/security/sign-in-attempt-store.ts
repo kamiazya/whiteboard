@@ -4,7 +4,8 @@
  * as a host-only cookie); `take` hands them back exactly once, and only to
  * the browser that began the attempt.
  */
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
+import { sha256Hex } from '../../shared/sha256.js'
 import type { TenantDatabase } from '../store/db/tenant-database.js'
 
 interface BeginInput {
@@ -29,8 +30,6 @@ export interface SignInAttemptStore {
 }
 
 const random = () => randomBytes(32).toString('base64url')
-const hash = (value: string) => createHash('sha256').update(value).digest('hex')
-
 export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore {
   return {
     async begin({ providerId, returnTo, invitationToken, now, ttlMs }) {
@@ -52,7 +51,7 @@ export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore
         .insertInto('signInAttempts')
         .values({
           state: minted.state,
-          browserBindingHash: hash(minted.browserBinding),
+          browserBindingHash: sha256Hex(minted.browserBinding),
           providerId,
           nonce: minted.nonce,
           codeVerifier: minted.codeVerifier,
@@ -70,7 +69,7 @@ export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore
       const [row] = await db
         .deleteFrom('signInAttempts')
         .where('state', '=', state)
-        .where('browserBindingHash', '=', hash(browserBinding))
+        .where('browserBindingHash', '=', sha256Hex(browserBinding))
         .where('expiresAt', '>', now)
         .returning(['providerId', 'nonce', 'codeVerifier', 'invitationToken', 'returnTo'])
         .execute()

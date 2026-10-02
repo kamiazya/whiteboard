@@ -14,24 +14,33 @@
 // is the whole point of decision 5 — file-GC must never delete from the
 // backup, and the backup must never delete on GC's behalf.
 
-import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, sep } from 'node:path'
+import { blobRefSchema } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
+import { sha256Hex } from '../../shared/sha256.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
-import { blobsRoot, listTenants } from '../tenant/data-layout.js'
+import {
+  blobShardDir,
+  blobShardPath,
+  blobsRoot,
+  isBlobShardName,
+  listTenants,
+  parseBlobShard,
+} from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 const log = getLogger('backup-blob-mirror')
 
-// What `FsBlobStore` writes: `blobs/<first 2 hex>/<remaining 62 hex>`.
+// What `FsBlobStore` writes is `data-layout`'s `blobShardPath`, and the mirror
+// uses the same one, so a blob's mirror path follows from its digest.
 //
-// `REST_OF_DIGEST` is the guard that keeps anything not named like a digest
-// out of the sharded half; `SHARD_NAME` is an optimisation on top that stops
-// the walk descending into a non-sharded tree at all. Removing the latter
-// changes no outcome, measured; do not mistake it for the thing keeping
+// `parseBlobShard` is the guard that keeps anything not named like a digest
+// out of the sharded half; `isBlobShardName` is an optimisation on top that
+// stops the walk descending into a non-sharded tree at all. Removing the
+// latter changes no outcome, measured; do not mistake it for the thing keeping
 // non-content-addressed files out.
 //
 // Nothing WRITES a non-sharded tree under `blobs/` any more — version
@@ -39,10 +48,11 @@ const log = getLogger('backup-blob-mirror')
 // because backups already on disk still carry those pictures in their
 // `files` map, and a reader that no longer knows the shape would make a
 // retained backup partly unrestorable.
-const SHARD_NAME = /^[0-9a-f]{2}$/
-const REST_OF_DIGEST = /^[0-9a-f]{62}$/
 
 const BLOB_MANIFEST_FILENAME = 'blobs.json'
+
+// The digest's shape is the `BlobRef` contract's, not restated here.
+const DIGEST = blobRefSchema.shape.digestHex
 
 /**
  * Which blobs one backup references.
@@ -52,15 +62,13 @@ const BLOB_MANIFEST_FILENAME = 'blobs.json'
  * question — what is live now. A blob no live document references any more is
  * still referenced by every retained backup taken while it was live.
  */
-const DIGEST = /^[0-9a-f]{64}$/
-
 const tenantReferencesSchema = z.object({
   /**
    * The sharded content-addressed store, by digest — the same identity
    * `FsBlobStore` addresses by, so the mirror path follows from the digest
    * and nothing needs recording twice.
    */
-  blobs: z.array(z.string().regex(DIGEST)),
+  blobs: z.array(DIGEST),
   /**
    * Everything else under `blobs/`, as `<relative path>` to the digest of
    * what that path held AT THIS PASS. A named file is addressed by its path
@@ -69,7 +77,7 @@ const tenantReferencesSchema = z.object({
    * the same path. Written by nothing today; read for backups that predate
    * the version thumbnail's retirement.
    */
-  files: z.record(z.string(), z.string().regex(DIGEST)),
+  files: z.record(z.string(), DIGEST),
 })
 
 /**
@@ -102,8 +110,8 @@ const manifestSchema = z.object({
 /** What a backup taken before tenants existed recorded: one keeper, one set. */
 const legacyManifestSchema = z.object({
   schemaVersion: z.literal(2),
-  blobs: z.array(z.string().regex(DIGEST)),
-  files: z.record(z.string(), z.string().regex(DIGEST)),
+  blobs: z.array(DIGEST),
+  files: z.record(z.string(), DIGEST),
   mirror: mirrorLocationSchema,
 })
 
@@ -144,7 +152,7 @@ export interface MirrorBlobsOptions {
  * content-addressed layout by path, and everything else by the digest of its
  * own bytes. A workspace id is never two hex characters, which is what makes
  * the two layouts separable at all. Only the sharded half has a producer
- * now; see the note at `SHARD_NAME` for why the other is kept.
+ * now; see the note at the top of this file for why the other is kept.
  */
 export async function mirrorBlobsIntoBackup(
   dataDir: string,
@@ -177,7 +185,7 @@ async function mirrorOneTenant(
   // had an upload.
   const shards = await readdir(sourceRoot).catch(() => [] as string[])
   for (const entry of shards) {
-    if (SHARD_NAME.test(entry)) {
+    if (isBlobShardName(entry)) {
       await mirrorShard(sourceRoot, backupRoot, entry, blobs)
     } else {
       await mirrorNamedTree(sourceRoot, backupRoot, entry, files)
@@ -207,12 +215,13 @@ async function mirrorShard(
     return
   }
   for (const rest of entries) {
-    if (!REST_OF_DIGEST.test(rest)) continue
-    into.add(`${shard}${rest}`)
-    const destination = join(backupRoot, 'blobs', shard, rest)
+    const digest = parseBlobShard(shard, rest)
+    if (digest === null) continue
+    into.add(digest)
+    const destination = blobShardPath(join(backupRoot, 'blobs'), digest)
     if (await exists(destination)) continue
-    await mkdir(join(backupRoot, 'blobs', shard), { recursive: true })
-    await copyAtomically(join(sourceRoot, shard, rest), destination)
+    await mkdir(blobShardDir(join(backupRoot, 'blobs'), digest), { recursive: true })
+    await copyAtomically(blobShardPath(sourceRoot, digest), destination)
   }
 }
 
@@ -252,11 +261,11 @@ async function mirrorNamedTree(
       log.warning({ path: file.relative, err }, 'could not read a file for the mirror')
       continue
     }
-    const digest = createHash('sha256').update(bytes).digest('hex')
+    const digest = sha256Hex(bytes)
     into[file.relative] = digest
-    const destination = join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2))
+    const destination = blobShardPath(join(backupRoot, 'files'), digest)
     if (await exists(destination)) continue
-    await mkdir(join(backupRoot, 'files', digest.slice(0, 2)), { recursive: true })
+    await mkdir(blobShardDir(join(backupRoot, 'files'), digest), { recursive: true })
     await copyAtomically(file.absolute, destination)
   }
 }

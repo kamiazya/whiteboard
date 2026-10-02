@@ -1,3 +1,4 @@
+export { blobRefKey } from './blob-ref-key.js'
 export * from './blob-store.js'
 export * from './delta.js'
 export * from './doc-ref.js'

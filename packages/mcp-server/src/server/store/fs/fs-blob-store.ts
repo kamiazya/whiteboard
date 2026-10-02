@@ -1,6 +1,4 @@
-import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm } from 'node:fs/promises'
-import { join } from 'node:path'
 import type {
   BlobDeleteInput,
   BlobGetInput,
@@ -15,8 +13,10 @@ import type {
 import { z } from 'zod'
 import { isMissingFileError } from '../../../shared/errno.js'
 import { errorMessage } from '../../../shared/error-message.js'
+import { sha256Hex } from '../../../shared/sha256.js'
 import { writeFileAtomicStaged } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
+import { blobShardDir, blobShardPath } from '../../tenant/data-layout.js'
 import { corruptStoredData } from '../corrupt-stored-data.js'
 import { assertPathWithinDir } from '../path-guard.js'
 
@@ -31,10 +31,6 @@ const blobEnvelopeSchema = z.object({
 })
 
 type BlobEnvelope = z.infer<typeof blobEnvelopeSchema>
-
-function digestHex(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex')
-}
 
 /**
  * Filesystem-backed, content-addressed `BlobStore`. Bytes are stored under
@@ -60,17 +56,23 @@ export class FsBlobStore implements BlobStore {
   }
 
   private shardDirForRef(ref: BlobRef): string {
-    const shard = ref.digestHex.slice(0, 2)
-    return assertPathWithinDir(join(this.blobsDir, shard), this.blobsDir, 'blob shard dir')
+    return assertPathWithinDir(
+      blobShardDir(this.blobsDir, ref.digestHex),
+      this.blobsDir,
+      'blob shard dir',
+    )
   }
 
   private pathForRef(ref: BlobRef): string {
-    const rest = ref.digestHex.slice(2)
-    return assertPathWithinDir(join(this.shardDirForRef(ref), rest), this.blobsDir, 'blob path')
+    return assertPathWithinDir(
+      blobShardPath(this.blobsDir, ref.digestHex),
+      this.blobsDir,
+      'blob path',
+    )
   }
 
   async put(input: BlobPutInput): Promise<BlobPutResult> {
-    const ref: BlobRef = { algorithm: 'sha-256', digestHex: digestHex(input.bytes) }
+    const ref: BlobRef = { algorithm: 'sha-256', digestHex: sha256Hex(input.bytes) }
     const filePath = this.pathForRef(ref)
     const envelope: BlobEnvelope = {
       bytesBase64: Buffer.from(input.bytes).toString('base64'),

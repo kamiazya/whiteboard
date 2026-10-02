@@ -8,13 +8,12 @@
  * suite says so rather than a comment claiming it does.
  */
 
-import type {
-  BlobRef,
-  BlobStore,
-  RenameWorkspaceInput,
-  WorkspaceEntry,
+import type { BlobStore, RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import {
+  blobRefKey,
+  WorkspaceNotFoundError,
+  WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
-import { WorkspaceNotFoundError, WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
@@ -97,7 +96,7 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
 /** Enough of a `BlobStore` for the evacuation a delete performs. */
 function inMemoryBlobStore(): BlobStore {
   const blobs = new Map<string, Uint8Array>()
-  const key = (ref: BlobRef) => `${ref.algorithm}:${ref.digestHex}`
+  const key = blobRefKey
   let next = 0
   return {
     async put({ bytes }) {
