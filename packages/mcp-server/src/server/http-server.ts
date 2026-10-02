@@ -80,7 +80,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // Booted before the workers so they serve the directory the deps were booted
   // over (`scope`). Prepared and migrated before the ports get a handle — see
   // `prepareSelfHostDataDir` for what each step's absence produced.
-  const { db, serverDeps: bootedDeps, dataLayout, scope } = await bootSelfHostDeps(getDataDir(), {
+  const {
+    db,
+    serverDeps: bootedDeps,
+    dataLayout,
+    scope,
+  } = await bootSelfHostDeps(getDataDir(), {
     nameKnownWorkspaces: true,
   })
   const shared = createSharedWorkers(instanceId, scope, options)
