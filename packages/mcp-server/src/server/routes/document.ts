@@ -2,9 +2,10 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
+import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto-version.js'
 import type { StoreScope } from '../store/store-scope.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
+import { sendRestoreEvent, sendVersionCreated } from '../sync-audience.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
@@ -14,7 +15,6 @@ import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
-import { sendRestoreEvent, sendVersionCreated } from './sync-audience.js'
 
 export type { AutoVersionTrigger }
 export { createAutoVersionTrigger }

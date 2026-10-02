@@ -4,8 +4,8 @@ import {
   type CheckpointScheduler,
   createCheckpointScheduler,
 } from '@kamiazya/whiteboard-history'
-import { getLogger } from '../../log.js'
-import type { OperatorInfo, VersionEntry, VersionStore } from '../../store/version-store.js'
+import { getLogger } from '../log.js'
+import type { OperatorInfo, VersionEntry, VersionStore } from './version-store.js'
 
 /**
  * The daemon's automatic checkpoints: the shared scheduler

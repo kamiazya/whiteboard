@@ -23,7 +23,7 @@ vi.mock('../config.js', () => ({
 // browser must have no effect on export, which is headless-only.
 const mockGetClientCount = vi.fn<(workspaceId: string, path: string) => number>()
 
-vi.mock('./sync-audience.js', () => ({
+vi.mock('../sync-audience.js', () => ({
   getClientCount: (workspaceId: string, path: string) => mockGetClientCount(workspaceId, path),
 }))
 

@@ -42,7 +42,7 @@ const createRouter = () =>
 // Pre-load sync-audience.js before any restore call, mirroring
 // restore-race.test.ts's documented cycle workaround for document.ts's
 // dynamic import.
-await import('../sync-audience.js')
+await import('../../sync-audience.js')
 
 beforeEach(() => {
   clearCache()
@@ -772,7 +772,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     })
     const { version } = (await saveRes.json()) as { version: { id: string } }
 
-    const syncAudience = await import('../sync-audience.js')
+    const syncAudience = await import('../../sync-audience.js')
     const announce = vi.spyOn(syncAudience, 'sendRestoreEvent')
 
     const res = await app.request(

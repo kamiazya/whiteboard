@@ -5,9 +5,9 @@
 // op-log without bound whatever the debounce did.
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AutoVersionTrigger } from '../../store/auto-version.js'
 import { globalStoreScope } from '../../store/store-scope.js'
 import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
-import type { AutoVersionTrigger } from './auto-version.js'
 
 const tmp = withTempDataDir('whiteboard-agent-checkpoint-')
 

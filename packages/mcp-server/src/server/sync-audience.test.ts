@@ -17,12 +17,12 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect, vi } from 'vitest'
-import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
 
 /** Every raw event handed to the SSE transport, whichever broadcaster carried it. */
 const sent: string[] = []
 
-vi.mock('./sync-sse.js', () => ({
+vi.mock('./sync-streams.js', () => ({
   setSyncSseHooks: () => {},
   sseBroadcastText: (_workspaceId: string, _path: string, raw: string) => {
     sent.push(raw)

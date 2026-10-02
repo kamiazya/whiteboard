@@ -16,7 +16,6 @@ import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { isDataDirWritable } from './data-dir-writable.js'
 import { startHttpRootTracing } from './observability/root-tracing.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
-import { syncStreamStats } from './routes/sync-sse.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AuthenticatorBinding } from './security/member-profile-store.js'
@@ -44,6 +43,7 @@ import { getDb } from './store/db/index.js'
 import type { TenantDatabase } from './store/db/tenant-database.js'
 import type { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import type { createWorkspaceTail } from './store/workspace-tail.js'
+import { syncStreamStats } from './sync-streams.js'
 
 export interface StartServerModeHttpOptions {
   host: string

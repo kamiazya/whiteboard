@@ -67,7 +67,7 @@ const { getDb } = await import('./store/db/index.js')
 const { clearCache } = await import('./store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store.js')
 const { seedWorkspaceRow } = await import('./routes/_test-helpers.js')
-const { resetSyncStreamsForTests } = await import('./routes/sync-sse.js')
+const { resetSyncStreamsForTests } = await import('./sync-streams.js')
 
 const TOKEN = 'fuzz-token'
 // A handle per seed: the daemon's document store is module-level and keyed

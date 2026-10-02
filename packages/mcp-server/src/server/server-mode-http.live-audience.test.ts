@@ -12,8 +12,8 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bearerNamesItsSubject, ISSUER, PUBLIC_URL } from './_test-server-mode-harness.js'
 import { toServedServer as toServer } from './_test-server-mode-served.js'
-import { resetSyncStreamsForTests } from './routes/sync-sse.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
+import { resetSyncStreamsForTests } from './sync-streams.js'
 
 let tempDir: string
 

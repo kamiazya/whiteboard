@@ -8,7 +8,7 @@ const sendAgentActivity = vi.fn<Forwarded<unknown>>()
 const sendViewportRequest = vi.fn<Forwarded<unknown>>()
 const getReadyClientCount = vi.fn<Forwarded<number>>(() => 1)
 
-vi.mock('./routes/sync-audience.js', () => ({
+vi.mock('./sync-audience.js', () => ({
   sendAgentActivity: (...args: unknown[]) => sendAgentActivity(...args),
   sendViewportRequest: (...args: unknown[]) => sendViewportRequest(...args),
   getReadyClientCount: (...args: unknown[]) => getReadyClientCount(...args),

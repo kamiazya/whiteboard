@@ -90,7 +90,7 @@ const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
 const { clearCache } = await import('./store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store.js')
-const { resetSyncStreamsForTests } = await import('./routes/sync-sse.js')
+const { resetSyncStreamsForTests } = await import('./sync-streams.js')
 
 const HOUR = 60 * 60 * 1000
 const PERSON_NAMES = ['admin', 'admin2', 'member', 'active', 'victim'] as const

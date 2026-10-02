@@ -3,8 +3,8 @@ import { join } from 'node:path'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { versionStoreMock } from '../../store/test-utils/version-store-mock.js'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../routes/_test-helpers.js'
+import { versionStoreMock } from './test-utils/version-store-mock.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-test-')
 
@@ -15,7 +15,7 @@ beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
 })
 
-vi.mock('../../config.js', () => ({
+vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return tmp.dir
   },
@@ -27,12 +27,12 @@ vi.mock('../../config.js', () => ({
 const { AUTO_VERSION_CEILING_MS, AUTO_VERSION_QUIET_MS, createAutoVersionTrigger } = await import(
   './auto-version.js'
 )
-const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
-const { clearCache } = await import('../../store/doc-cache.js')
-const { loadDocument } = await import('../../store/document-store.js')
-const { createDocumentRouter } = await import('../document.js')
+const { corruptStoredData } = await import('./corrupt-stored-data.js')
+const { clearCache } = await import('./doc-cache.js')
+const { loadDocument } = await import('./document-store.js')
+const { createDocumentRouter } = await import('../routes/document.js')
 const wsModule = await import('../sync-audience.js')
-const { FileVersionStore } = await import('../../store/version-store.js')
+const { FileVersionStore } = await import('./version-store.js')
 
 describe('auto-version', () => {
   it('exports a quiet period, and a ceiling longer than it', () => {

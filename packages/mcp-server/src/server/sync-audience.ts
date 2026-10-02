@@ -1,6 +1,6 @@
 // The pages a document is open in, and the text events the daemon sends them.
 //
-// Every page is reached over its SSE sync stream (sync-sse.ts owns the
+// Every page is reached over its SSE sync stream (sync-streams.ts holds the
 // streams): the WebSocket that used to carry the same traffic is retired
 // (ADR-0050 decision 1). This module is the document-level vocabulary the
 // rest of the daemon speaks — "announce a version", "ask the open pages to
@@ -17,7 +17,7 @@ import {
   sseBroadcastTextToReady,
   sseClientCount,
   sseSubscribedWorkspaceIds,
-} from './sync-sse.js'
+} from './sync-streams.js'
 import { cacheViewportRequest } from './viewport-requests.js'
 
 /**

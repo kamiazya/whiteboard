@@ -127,7 +127,7 @@ const PROCESS_IN_HELPERS = 'process in app-helpers.ts'
 const OS_IN_SHARED = 'node:os in routes/document/_shared.ts'
 const CRYPTO_IN_TIMING = 'node:crypto in security/timing-safe.ts'
 const BUFFER_IN_TIMING = 'Buffer in security/timing-safe.ts'
-const BUFFER_IN_SSE = 'Buffer in routes/sync-sse.ts'
+const BUFFER_IN_SSE = 'Buffer in sync-streams.ts'
 
 /**
  * The portable files that still sit in `mcp-server`, relative to `routes/`.
@@ -141,7 +141,7 @@ const BUFFER_IN_SSE = 'Buffer in routes/sync-sse.ts'
  * decides it.
  *
  * Two things the closure found that the direct scan could not say. The
- * registries and three routers reach `routes/sync-sse.ts`, which is node-bound
+ * routers reach the sync-stream registry (`sync-streams.ts`), which is node-bound
  * only by a `Buffer` global — the base64 helper ADR-0052 names would clear it.
  * And the bearer gate's timing-safe compare is `node:crypto` plus a `Buffer`.
  */
@@ -155,9 +155,8 @@ const PORTABLE_ROUTES_IN_MCP_SERVER: Readonly<Record<string, PortableRoute>> = {
   'document/trash.ts': { role: 'router', blockedBy: [HANDLE, LOG] },
   'document/workspaces.ts': { role: 'router', blockedBy: [HANDLE, LOG, OS_IN_SHARED] },
   'mcp.ts': { role: 'router', blockedBy: [LOG, MCP_SERVER, PROCESS_IN_HELPERS] },
+  'sync-sse.ts': { role: 'router', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
   'status.ts': { role: 'router', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
-  'sync-audience.ts': { role: 'registry', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
-  'viewport-requests.ts': { role: 'registry', blockedBy: [] },
   'workspace-people.ts': { role: 'router', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
 }
 
@@ -184,7 +183,7 @@ const CUT_SEAMS: Readonly<Record<string, string>> = {
  * it is lowered, so the number keeps saying where the lift stands. The same
  * shape as `ADAPTERS_REACHING_MECHANICS_CEILING`.
  */
-const PORTABLE_ROUTES_CEILING = 13
+const PORTABLE_ROUTES_CEILING = 12
 
 /**
  * What the closure says, pinned by equality for the same reason: a file
@@ -196,7 +195,7 @@ const PORTABLE_ROUTES_CEILING = 13
  * - `liftableRouters`: the routers among those. This is the number ADR-0052's
  *   decision is about.
  */
-const CLOSURE_COUNTS = { cleanFiles: 3, liftableFiles: 6, liftableRouters: 2 } as const
+const CLOSURE_COUNTS = { cleanFiles: 2, liftableFiles: 5, liftableRouters: 2 } as const
 
 function ledgerDrift(
   portable: readonly string[],

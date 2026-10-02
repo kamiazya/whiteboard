@@ -514,7 +514,7 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
   'routes/document.ts -> version-store',
-  'routes/document/auto-version.ts -> version-store',
+  'routes/document.ts -> auto-version',
   'routes/document/maintenance.ts -> document-store',
   'routes/document/maintenance.ts -> version-store',
   'routes/document/metadata.ts -> names-store',

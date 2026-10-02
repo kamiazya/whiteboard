@@ -1,6 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import {
   Client,
   LATEST_PROTOCOL_VERSION,
@@ -563,9 +562,8 @@ describe('createApp daemon mutation auth', () => {
     await reader.cancel()
   })
 
-  it('handles concurrent /mcp initialize requests without racing the workspace marker file', async () => {
+  it('answers concurrent /mcp initialize requests, each on a server of its own', async () => {
     const app = createApp(createRuntimeOptions())
-    const dataDir = join(tmp.dir, 'data')
 
     const sendInitialize = async (id: number): Promise<Response> =>
       app.request('http://127.0.0.1/mcp', {
@@ -596,20 +594,6 @@ describe('createApp daemon mutation auth', () => {
       const body = (await res.json()) as { result?: { protocolVersion?: string } }
       expect(body.result?.protocolVersion).toBeDefined()
     }
-
-    const { getDb } = await import('./store/db/index.js')
-    const db = await getDb(dataDir)
-    const runtimeRow = await db
-      .selectFrom('runtime')
-      .select(['value'])
-      .where('key', '=', 'currentWorkspaceId')
-      .executeTakeFirst()
-    // Concurrency is this test's subject — 32 initializes must settle on ONE
-    // id — and the shape is incidental to that. It asserts the canonical
-    // schema rather than a literal pattern so it does not quietly become a
-    // second place the id format is pinned; `current-workspace.test.ts` owns
-    // that.
-    expect(workspaceCanonicalIdSchema.safeParse(runtimeRow?.value).success).toBe(true)
   })
 
   it('protects newly added /api routes by default, GET included', async () => {

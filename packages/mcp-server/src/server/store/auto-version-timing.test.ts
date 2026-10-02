@@ -1,10 +1,10 @@
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { withTempDataDir } from '../routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-timing-')
 
-vi.mock('../../config.js', () => ({
+vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return tmp.dir
   },
@@ -14,7 +14,7 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { createAutoVersionTrigger } = await import('./auto-version.js')
-type VersionStore = import('../../store/version-store.js').VersionStore
+type VersionStore = import('./version-store.js').VersionStore
 
 /**
  * WHEN a checkpoint is taken.

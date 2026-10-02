@@ -83,8 +83,8 @@ const LEDGER: Record<string, number> = {
   'packages/mcp-server/src/server/http-server.test.ts': 1,
   // A local `sleep` helper, called per wait: the subject is WHEN a debounced checkpoint lands, on
   // the real clock. Fake timers (`advanceTimersByTimeAsync`) can express every case.
-  'packages/mcp-server/src/server/routes/document/auto-version-timing.test.ts': 6,
-  'packages/mcp-server/src/server/routes/document/auto-version.test.ts': 1,
+  'packages/mcp-server/src/server/store/auto-version-timing.test.ts': 6,
+  'packages/mcp-server/src/server/store/auto-version.test.ts': 1,
   'packages/mcp-server/src/server/routes/document/restore-race.test.ts': 2,
   'packages/mcp-server/src/server/routes/document/versions.test.ts': 2,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 2,

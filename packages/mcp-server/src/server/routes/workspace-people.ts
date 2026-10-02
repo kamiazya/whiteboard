@@ -20,9 +20,9 @@ import { getLogger } from '../log.js'
 import type { WorkspacePeopleAdministration } from '../security/people-administration.js'
 import type { WorkspacePeopleKeeper } from '../security/people-keepers.js'
 import type { WorkspaceMember, WorkspaceRoles } from '../security/workspace-roles.js'
+import { endSyncStreamsOf } from '../sync-streams.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
 import { issueInvitationLink } from './invitation-link.js'
-import { endSyncStreamsOf } from './sync-sse.js'
 
 const log = getLogger('workspace-people')
 

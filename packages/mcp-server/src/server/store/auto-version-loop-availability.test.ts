@@ -3,16 +3,16 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import type { LoopAvailability } from '../../../shared/test-utils/loop-availability.js'
+import type { LoopAvailability } from '../../shared/test-utils/loop-availability.js'
 import {
   measureLoopAvailability,
   measureSchedulingFloor,
-} from '../../../shared/test-utils/loop-availability.js'
-import { withTempDataDir } from '../_test-helpers.js'
+} from '../../shared/test-utils/loop-availability.js'
+import { withTempDataDir } from '../routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-loop-')
 
-vi.mock('../../config.js', () => ({
+vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return tmp.dir
   },
@@ -22,11 +22,9 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { createAutoVersionTrigger } = await import('./auto-version.js')
-const { FileVersionStore } = await import('../../store/version-store.js')
-const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
-  '../../store/document-store.js'
-)
-const { stallCeilingMs } = await import('../../background-work-costs.js')
+const { FileVersionStore } = await import('./version-store.js')
+const { saveDocument, _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
+const { stallCeilingMs } = await import('../background-work-costs.js')
 
 function canvasOf(nodes: number): SpatialCanvas {
   return {

@@ -98,6 +98,12 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   'server/background-work-costs.ts': 'mechanics',
   'server/shared-background-work.ts': 'mechanics',
   'server/canvas-client-notifier.ts': 'mechanics',
+  // What is open and listening: the registry of sync streams, the audience
+  // vocabulary the daemon speaks over it, and the viewport-request cache the
+  // two share. The route that opens a stream (`routes/sync-sse.ts`) sits above.
+  'server/sync-streams.ts': 'mechanics',
+  'server/sync-audience.ts': 'mechanics',
+  'server/viewport-requests.ts': 'mechanics',
   'server/daemon-actor.ts': 'mechanics',
   'server/daemon-auth-binding.ts': 'mechanics',
   'server/current-workspace.ts': 'mechanics',
@@ -172,15 +178,6 @@ const UPWARD_EDGES: Readonly<Record<string, string>> = {
   'daemon/purge-legacy-trust-file.ts -> server/log.ts':
     'the one daemon module that logs through the server logger; a logger seam the daemon is ' +
     'handed, or the logger moving below `daemon/`, retires it',
-  'server/canvas-client-notifier.ts -> server/routes/sync-audience.ts':
-    'the audience registry is a mechanic filed under `routes/`; moving `sync-audience.ts` out of ' +
-    'it retires this and the shared-background-work edge below',
-  'server/shared-background-work.ts -> server/routes/sync-audience.ts':
-    'the same registry, reached by the background-work declarations',
-  'server/shared-background-work.ts -> server/routes/document/auto-version.ts':
-    '`auto-version.ts` is a scheduler wrapper, not a route: moving it out of `routes/` retires ' +
-    'this and the `routes/document/auto-version.ts -> version-store` entry in ' +
-    'ADAPTERS_REACHING_MECHANICS, which is a misfiled mechanic',
   'server/mcp/tarball.distribution-impl.ts -> cli/operator-json.ts':
     'distribution-smoke support filed under the adapter tree reaches the CLI JSON sink; moving ' +
     'the smoke impls beside the smokes retires it',
@@ -190,7 +187,7 @@ const UPWARD_EDGES: Readonly<Record<string, string>> = {
 }
 
 /** How many entries {@link UPWARD_EDGES} may hold — pinned by equality, a ratchet and not a budget. */
-const UPWARD_EDGES_CEILING = 6
+const UPWARD_EDGES_CEILING = 3
 
 describe('what counts as an upward edge', () => {
   const edgesOf = (files: Record<string, string>): string[] =>
