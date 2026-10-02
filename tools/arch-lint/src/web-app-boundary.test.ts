@@ -21,14 +21,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { builtinModules } from 'node:module'
 import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-// __dirname → packages/mcp-server/src/server/release
-const REPO_ROOT = repoRoot()
-const PACKAGE_ROOT = resolve(__dirname, '../../..')
+const PACKAGE_ROOT = resolve(REPO_ROOT, 'packages/mcp-server')
 const PACKAGE_SRC_DIR = resolve(PACKAGE_ROOT, 'src')
 const APPS_WEB_DIR = resolve(REPO_ROOT, 'apps/web')
 const APPS_WEB_SRC_DIR = resolve(REPO_ROOT, 'apps/web/src')

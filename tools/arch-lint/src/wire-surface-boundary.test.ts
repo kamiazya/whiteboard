@@ -1,9 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
-
-const REPO_ROOT = repoRoot()
+import { REPO_ROOT } from './scan-roots.js'
 
 /**
  * A surface somebody OUTSIDE this repo reads or writes, carrying a whole

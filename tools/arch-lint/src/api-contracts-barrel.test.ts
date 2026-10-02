@@ -7,13 +7,11 @@
 // widen the client contract surface without any test noticing.
 
 import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-// __dirname -> packages/mcp-server/src/server/release
-const BARREL_PATH = resolve(__dirname, '../../../../daemon-client/src/api-contracts/index.ts')
+const BARREL_PATH = resolve(REPO_ROOT, 'packages/daemon-client/src/api-contracts/index.ts')
 
 function reExportSpecifiers(source: string): string[] {
   const re = /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g

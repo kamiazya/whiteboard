@@ -5,14 +5,9 @@
 // the allowlisted historical references fails the build.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, extname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { extname, join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-// __dirname → packages/mcp-server/src/server/release
-const REPO_ROOT = repoRoot()
+import { REPO_ROOT } from './scan-roots.js'
 
 const FORBIDDEN_PATTERNS: RegExp[] = [/\bsrc\/app\b/, /\bdist\/app\b/, /WHITEBOARD_LEGACY_UI/]
 
@@ -24,10 +19,10 @@ const ALLOWLISTED_FILES = new Set([
   'packages/mcp-server/CHANGELOG.md',
   // This sweep test's own source necessarily contains the forbidden strings
   // as literal pattern/allowlist text.
-  'packages/mcp-server/src/server/release/legacy-ui-retired.test.ts',
+  'tools/arch-lint/src/legacy-ui-retired.test.ts',
   // Asserts the flag is NOT documented — the literal string is the thing
   // being searched for, not a live reference to the flag.
-  'packages/mcp-server/src/server/docs-contract.test.ts',
+  'tools/arch-lint/src/docs-contract.test.ts',
   // Asserts the packed tarball contains ZERO dist/app/ entries — the
   // literal string is the regression guard itself, not a live reference.
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts',
@@ -36,14 +31,14 @@ const ALLOWLISTED_FILES = new Set([
   'packages/mcp-server/src/server/mcp/tarball.distribution.test.ts',
 ])
 
+// A read that fails is an error, not an empty answer: this sweep passes by
+// finding nothing, so a root it could not read (a moved file, a renamed
+// directory) used to read as a clean tree. `APP_NAMES` is asserted non-empty
+// below for the same reason.
 function listAppNames(): string[] {
-  try {
-    return readdirSync(resolve(REPO_ROOT, 'apps'), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-  } catch {
-    return []
-  }
+  return readdirSync(resolve(REPO_ROOT, 'apps'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
 }
 
 const APP_NAMES = listAppNames()
@@ -53,7 +48,7 @@ const APP_NAMES = listAppNames()
 const SCAN_ROOTS = [
   'packages',
   ...APP_NAMES.map((name) => `apps/${name}/src`),
-  'scripts',
+  'tools',
   '.github/workflows',
   'docs',
 ]
@@ -76,12 +71,7 @@ const SCANNABLE_EXTENSIONS = new Set([
 ])
 
 function collectFiles(dir: string): string[] {
-  let entries: ReturnType<typeof readdirSync>
-  try {
-    entries = readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return []
-  }
+  const entries = readdirSync(dir, { withFileTypes: true })
   const results: string[] = []
   for (const entry of entries) {
     if (
@@ -102,15 +92,37 @@ function collectFiles(dir: string): string[] {
   return results
 }
 
-describe('legacy UI (src/app, dist/app, WHITEBOARD_LEGACY_UI) stays retired', () => {
-  it('no non-allowlisted file mentions the retired legacy-UI strings', () => {
-    const filesToScan = new Set<string>([
+// Measured at 3290 files; the floor is half of that, so ordinary churn passes
+// and a root that stopped being reached does not.
+const FILE_FLOOR = 1500
+
+function filesToScan(): string[] {
+  return [
+    ...new Set<string>([
       ...SCAN_ROOTS.flatMap((rel) => collectFiles(resolve(REPO_ROOT, rel))),
       ...SCAN_FILES.map((rel) => resolve(REPO_ROOT, rel)).filter((abs) => existsSync(abs)),
-    ])
+    ]),
+  ]
+}
 
+describe('legacy UI (src/app, dist/app, WHITEBOARD_LEGACY_UI) stays retired', () => {
+  it('sweeps the apps and the file count it claims to', () => {
+    // Present, not assumed: a sweep that reaches nothing reports no violation.
+    expect(APP_NAMES).toContain('web')
+    expect(filesToScan().length).toBeGreaterThan(FILE_FLOOR)
+  })
+
+  it('every allowlisted file exists and still mentions a retired string', () => {
+    const stale = [...ALLOWLISTED_FILES].filter((rel) => {
+      const abs = resolve(REPO_ROOT, rel)
+      return !existsSync(abs) || !FORBIDDEN_PATTERNS.some((p) => p.test(readFileSync(abs, 'utf-8')))
+    })
+    expect(stale).toEqual([])
+  })
+
+  it('no non-allowlisted file mentions the retired legacy-UI strings', () => {
     const violations: string[] = []
-    for (const absPath of filesToScan) {
+    for (const absPath of filesToScan()) {
       const relPath = relative(REPO_ROOT, absPath)
       if (ALLOWLISTED_FILES.has(relPath)) continue
       const content = readFileSync(absPath, 'utf-8')
