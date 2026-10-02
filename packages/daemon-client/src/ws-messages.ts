@@ -1,14 +1,15 @@
 import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-server-core/viewport-request'
 import { z } from 'zod'
-import { operatorInfoSchema, versionEntrySchema } from './api-contracts/document.js'
+import { operatorInfoAnswerSchema, versionEntryAnswerSchema } from './api-contracts/document.js'
 
 // One schema for a version wherever it travels: the REST listing and this
 // broadcast used to carry sibling copies of the same shape, and a field
 // added server-side reached whichever one somebody remembered — the wire
 // silently dropped it from the other. The server's own VersionEntry type is
-// z.infer of this same schema (version-store.ts), so producing a version
-// and publishing it cannot disagree.
-const versionCreatedPayloadSchema = versionEntrySchema
+// z.infer of `versionEntrySchema`, which this extends only in how a browser
+// reads an operator kind it has no word for, so producing a version and
+// publishing it cannot disagree.
+const versionCreatedPayloadSchema = versionEntryAnswerSchema
 
 export const versionCreatedMessageSchema = z.object({
   type: z.literal('version_created'),
@@ -38,7 +39,7 @@ export const restoreCompleteMessageSchema = z.object({
  */
 export const agentActivityMessageSchema = z.object({
   type: z.literal('agent_activity'),
-  operator: operatorInfoSchema,
+  operator: operatorInfoAnswerSchema,
   /** What to highlight. Ids only — the change itself arrives as a Loro update. */
   touched: z.object({
     nodes: z.array(z.string()),

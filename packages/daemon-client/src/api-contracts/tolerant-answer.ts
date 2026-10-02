@@ -17,14 +17,33 @@ import { z } from 'zod'
  * what a field IS; this only changes what a reader does about one it has
  * not heard of.
  *
- * Only strictness changes, so the inferred type is the schema's own and the
- * result is returned as the same type. A schema built from a kind this does
- * not walk is returned untouched rather than half-converted, and
- * `v1-answers.test.ts` parses an extra key at every level of each answer to
- * hold that the walk reached all of them.
+ * An optional enum also stops failing on a member it does not know and reads
+ * as absent (`unknownIsAbsent`): a document `kind` a newer daemon added must
+ * not make a whole search or backlink list unreadable.
+ *
+ * Only strictness and that absence rule change, so the inferred type is the
+ * schema's own and the result is returned as the same type. A schema built
+ * from a kind this does not walk is returned untouched rather than
+ * half-converted, and `v1-answers.test.ts` parses an extra key at every level
+ * of each answer to hold that the walk reached all of them.
  */
 export function tolerantAnswer<S extends z.ZodType>(schema: S): S {
   return derive(schema) as S
+}
+
+/**
+ * An optional enum that reads a member this build has no name for as ABSENT
+ * rather than failing the answer around it. Absence is a state every reader of
+ * an optional field already handles, so the newer daemon's new member costs
+ * the one field instead of the listing it sits in (every document in a list,
+ * every hit of a search). The inferred type is the schema's own.
+ *
+ * Only for a field whose absence a reader copes with: a value a decision is
+ * made on (custody, an exhaustive report) stays strict, and
+ * `answers-tolerant.test.ts` holds that split by listing the strict ones.
+ */
+export function unknownIsAbsent<S extends z.ZodType>(schema: S) {
+  return schema.optional().catch(undefined)
 }
 
 type Def = z.core.$ZodTypeDef & Record<string, unknown>
@@ -87,8 +106,15 @@ function changes(def: Def, next: Next): Record<string, unknown> | undefined {
 
 function rebuild(schema: z.core.$ZodType, next: Next): z.core.$ZodType {
   const def = schema._zod.def as Def
+  if (def.type === 'optional' && isEnum(def.innerType)) {
+    return unknownIsAbsent(def.innerType as z.ZodEnum)
+  }
   const changed = changes(def, next)
   return changed === undefined ? schema : z.core.clone(schema, { ...def, ...changed } as never)
+}
+
+function isEnum(schema: unknown): boolean {
+  return (schema as z.core.$ZodType | undefined)?._zod.def.type === 'enum'
 }
 
 function isNever(schema: unknown): boolean {

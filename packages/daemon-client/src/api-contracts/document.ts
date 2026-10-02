@@ -6,7 +6,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { replicaTierSchema } from './replica-key.js'
-import { tolerantAnswer } from './tolerant-answer.js'
+import { tolerantAnswer, unknownIsAbsent } from './tolerant-answer.js'
 
 // Request/response schemas for the canvas / workspace mutation endpoints.
 // Imported by routes/document.ts (validates incoming bodies) and by any client
@@ -38,6 +38,18 @@ import {
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 
 export { operatorInfoSchema, versionEntrySchema }
+
+// What a browser reads a version row with. An operator kind this build has no
+// word for reads as `system`, which every surface already shows as no one in
+// particular, so a newer daemon's new kind costs the label and not the history
+// it sits in. The daemon's own schema stays strict where it emits and where it
+// reads a request.
+export const operatorInfoAnswerSchema = operatorInfoSchema.extend({
+  kind: operatorInfoSchema.shape.kind.catch('system'),
+})
+export const versionEntryAnswerSchema = versionEntrySchema.extend({
+  operator: operatorInfoAnswerSchema.optional(),
+})
 
 // `operator` here is `requestOperatorSchema`, NOT the full operator: a caller
 // may say which KIND of party asked and what to show a reader, and may not
@@ -110,11 +122,11 @@ export const versionDocumentResponseSchema = z.discriminatedUnion('kind', [
 export type VersionDocumentResponse = z.infer<typeof versionDocumentResponseSchema>
 
 export const listVersionsResponseSchema = z.object({
-  versions: z.array(versionEntrySchema),
+  versions: z.array(versionEntryAnswerSchema),
 })
 
 export const saveVersionResponseSchema = z.object({
-  version: versionEntrySchema,
+  version: versionEntryAnswerSchema,
 })
 
 // POST /api/w/:workspaceId/document/<path>/update — success body.
@@ -199,7 +211,7 @@ export const workspaceSummarySchema = z.object({
    * as `documentCount`: a caller that does not thread a tier resolver
    * through omits the field rather than guessing.
    */
-  tier: replicaTierSchema.optional(),
+  tier: unknownIsAbsent(replicaTierSchema),
 })
 
 export const listWorkspacesResponseSchema = z.object({
@@ -268,7 +280,9 @@ export const documentSummarySchema = z.object({
   // practice every listed document carries one — a workspace-tree entry
   // cannot be kindless (the node meta schema requires it) — but the type
   // follows the port's promise rather than claiming more.
-  kind: documentKindSchema.optional(),
+  // A kind a newer daemon added reads as absent, like any other kindless row:
+  // the listing stays readable and this build simply cannot open that one.
+  kind: unknownIsAbsent(documentKindSchema),
   // The losing side of a converged path collision, carried from the port's
   // DocumentEntry so the daemon-connected file browser can badge it the way
   // the browser-kept one does.
@@ -375,7 +389,9 @@ export const compactWorkspaceResultSchema = z.object({
   compacted: z.boolean(),
   beforeBytes: z.number().int().nonnegative(),
   afterBytes: z.number().int().nonnegative(),
-  reason: z.enum(['no-versions', 'no-file', 'no-gain', 'raced', 'ok']),
+  // A reason this build does not know reads as `no-gain`, the one that claims
+  // least: nothing reads it to decide, and the pass itself already happened.
+  reason: z.enum(['no-versions', 'no-file', 'no-gain', 'raced', 'ok']).catch('no-gain'),
 })
 
 export type CompactWorkspaceResult = z.infer<typeof compactWorkspaceResultSchema>
@@ -409,7 +425,7 @@ export const purgeResultSchema = z.object({
    * nothing (ADR-0021 decision 6's far end). Same affordability argument as
    * above — a skipped pass happens again on the next tick.
    */
-  skippedReason: z.enum(['record-moved', 'backup-in-progress']).optional(),
+  skippedReason: unknownIsAbsent(z.enum(['record-moved', 'backup-in-progress'])),
 })
 
 export type PurgeResult = z.infer<typeof purgeResultSchema>
