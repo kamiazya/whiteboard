@@ -35,7 +35,6 @@ import {
   DESTRUCTIVE_COPY,
   type DestructiveActionId,
   type DestructiveDescription,
-  destructiveCopyFragments,
 } from './lib/destructive-copy.js'
 
 const sources = import.meta.glob('./**/*.{ts,tsx}', {
@@ -57,6 +56,27 @@ const SELF = './destructive-copy-surface.test.ts'
  * `/^The note moves to the Trash/`, which is the case that motivated this.
  */
 const PROBE_WORDS = 5
+
+/**
+ * A subject no copy would ever contain, so splitting on it recovers a
+ * sentence's static halves without anyone writing them down a second time.
+ */
+const SUBJECT_HOLE = '\u0000'
+
+/**
+ * The static text a description is built from — the halves either side of
+ * the subject.
+ *
+ * Derived by calling the builder rather than listed by hand: a listed
+ * fragment is one more copy to keep in step, which is the defect the
+ * declaration exists to remove.
+ */
+function destructiveCopyFragments(build: DestructiveDescription): string[] {
+  return build(SUBJECT_HOLE)
+    .split(SUBJECT_HOLE)
+    .map((fragment) => fragment.trim())
+    .filter((fragment) => fragment.length > 0)
+}
 
 /**
  * Every PROBE_WORDS-long word run of `fragment`, sliced out of the original

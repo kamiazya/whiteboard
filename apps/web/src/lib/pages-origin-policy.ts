@@ -53,7 +53,3 @@ export function classifyPagesOrigin(candidate: string): PagesOriginClass {
   // Custom domain or unrecognised pages.dev project — deferred.
   return 'custom-domain-deferred'
 }
-
-export function isProductionPagesOrigin(candidate: string): boolean {
-  return classifyPagesOrigin(candidate) === 'production'
-}

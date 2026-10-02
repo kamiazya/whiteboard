@@ -87,29 +87,9 @@ export async function loadDocumentContent(
 }
 
 /**
- * Writes standalone-document bytes INTO an existing tree node (a create
- * seed, a duplicate's copy). Returns false when the workspace record or the
- * node is absent — the caller falls back to the legacy per-document store,
- * which is also what keeps injected test doubles working.
- */
-/**
- * The tree-only half of `loadDocumentContent`, for callers with their own
- * legacy fallback (an injected store double, say): the projection when the
- * tree holds the document, null otherwise.
- */
-export async function loadWorkspaceDocumentProjection(
-  documentId: string,
-  dbName?: string,
-): Promise<LoroDoc | null> {
-  return (await treeProjection(documentId, dbName)).doc
-}
-
-/**
  * The tree's answer AND whether the tree could be read at all — the
- * distinction `loadDocumentContent` needs and its callers must not be given:
- * `loadWorkspaceDocumentProjection` is total on purpose (see `boot.test.ts`,
- * which holds it as the real consumer of a workspace id whose resolution can
- * reject), so the two answers are separated here instead.
+ * distinction `loadDocumentContent` needs and its callers must not be given.
+ * Total on purpose: a read that failed is `read: false`, never a throw.
  */
 async function treeProjection(
   documentId: string,
@@ -144,6 +124,12 @@ export async function touchIfWorkspaceBacked(
   return true
 }
 
+/**
+ * Writes standalone-document bytes INTO an existing tree node (a create
+ * seed, a duplicate's copy). Returns false when the workspace record or the
+ * node is absent — the caller falls back to the legacy per-document store,
+ * which is also what keeps injected test doubles working.
+ */
 export async function seedWorkspaceDocumentContent(
   documentId: string,
   content: Uint8Array,
