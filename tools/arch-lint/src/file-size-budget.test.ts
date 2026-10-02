@@ -402,7 +402,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 964 -> 977: the `document.move` arm's row, re-pinned with why it moved
   // and why its follow report costs wire bytes and no visible ones — the
   // prose a pinned scoreboard carries instead of a changelog.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
+  // 963 -> 966: `wb_canvas_edit`'s row and the two totals say why they moved +58.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 966,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
