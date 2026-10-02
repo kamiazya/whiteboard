@@ -16,10 +16,26 @@ export function encodeDocumentPath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/')
 }
 
+/**
+ * The closed set of actions a document URL can end in. Each one has a route
+ * registered by the daemon; `document-url-actions.test.ts` in mcp-server holds
+ * the two lists together.
+ */
+export const DOCUMENT_API_ACTIONS = [
+  'snapshot',
+  'exists',
+  'update',
+  'export',
+  'export-svg',
+  'client-count',
+] as const
+
+export type DocumentApiAction = (typeof DOCUMENT_API_ACTIONS)[number]
+
 export function documentApiUrl(
   workspaceId: string,
   path: string,
-  action: 'snapshot' | 'exists' | 'update' | 'export' | 'export-svg' | 'viewport' | 'client-count',
+  action: DocumentApiAction,
 ): string {
   return `/api/w/${encodeURIComponent(workspaceId)}/document/${encodeDocumentPath(path)}/${action}`
 }

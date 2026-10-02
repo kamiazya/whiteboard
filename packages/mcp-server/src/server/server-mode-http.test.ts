@@ -26,18 +26,14 @@ vi.mock('./app.js', () => ({ createApp: vi.fn(() => ({ fetch: vi.fn() })) }))
 vi.mock('./server-mode-web-app.js', () => ({
   serverModeUiStatus: vi.fn(() => ({ buildPresent: true, ui: 'web-app' })),
 }))
-// The root now builds real ServerDeps before createApp (the /api/v1 mount
-// fix); this unit harness is about listen/close mechanics, so the store
-// layer is stubbed — unmocked, ensureWorkspaceId/getDb would open the
-// contributor's real data dir and time the test out.
-vi.mock('./current-workspace.js', () => ({ ensureWorkspaceId: vi.fn(async () => 'ws') }))
-vi.mock('./store/db/index.js', () => ({ getDb: vi.fn(async () => ({})) }))
-vi.mock('../di/container.js', () => ({
-  createContainer: vi.fn(() => ({})),
-  resolveServerDeps: vi.fn(() => ({})),
-}))
-vi.mock('../di/store-local.module.js', () => ({
-  createSelfHostStoreLocalModule: vi.fn(() => ({})),
+// The root builds real ServerDeps before createApp; this unit harness is about
+// listen/close mechanics, so the boot helper is stubbed — unmocked it would
+// open the contributor's real data dir and time the test out.
+vi.mock('../di/boot-self-host-deps.js', () => ({
+  bootSelfHostDeps: vi.fn(async () => ({
+    db: {},
+    serverDeps: { documentIndex: {} },
+  })),
 }))
 
 import { createApp } from './app.js'

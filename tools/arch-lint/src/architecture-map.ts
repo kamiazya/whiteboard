@@ -422,7 +422,7 @@ export const KNOWN_PACKAGE_CYCLES: readonly {
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
-  'routes/document.ts -> auto-compact',
+  'routes/document.ts -> auto-checkpoint',
   'routes/document.ts -> version-store',
   'routes/document/auto-version.ts -> version-store',
   'routes/document/maintenance.ts -> document-store',
@@ -488,12 +488,10 @@ export const ADAPTERS_REACHING_MECHANICS_CEILING = 14
  * The same reasoning already excludes `corrupt-stored-data` below.
  */
 export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
-  // The McpServer FACTORY and the stdio entry point: it calls
-  // `createContainer(createStoreLocalModule(...))` and `resolveServerDeps`,
-  // the same three calls `http-server.ts` makes. It registers tools; it is
-  // not itself a tool registration. The tool registrations it calls
-  // (`mcp/document-tools.ts` and friends) stay scanned.
-  'mcp/index.ts',
+  // Empty: `mcp/index.ts`, the McpServer factory and stdio entry, stood here
+  // while it called the store's own boot functions. It now boots through
+  // `di/boot-self-host-deps.ts` like every other root, so nothing needs the
+  // exemption. A file that does must be added with its reason.
 ]
 
 export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']

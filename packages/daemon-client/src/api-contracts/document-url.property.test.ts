@@ -9,6 +9,7 @@
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
+  DOCUMENT_API_ACTIONS,
   documentApiUrl,
   documentFileApiUrl,
   documentPathForAction,
@@ -16,15 +17,7 @@ import {
   parseDocumentApiPath,
 } from './document-url.js'
 
-const ACTIONS = [
-  'snapshot',
-  'exists',
-  'update',
-  'export',
-  'export-svg',
-  'viewport',
-  'client-count',
-] as const
+const ACTIONS = DOCUMENT_API_ACTIONS
 
 /**
  * A path segment as data: non-empty, and deliberately DENSE in the

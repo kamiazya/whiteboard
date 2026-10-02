@@ -590,7 +590,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
   // 435 -> 182: the four workers both HTTP roots run are built and declared
   // in shared-background-work.ts; what is left here is the daemon's own.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 178,
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 139,
   'packages/mcp-server/src/server/index.ts#main': 81,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
@@ -606,7 +606,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/observability/http-tracing.ts#tracingMiddleware': 51,
   'packages/mcp-server/src/server/observability/tracing.ts#initTracing': 85,
   // 80 -> 81 (ADR-0041 S8 slice 2): threads the membership admit to the workspaces router.
-  'packages/mcp-server/src/server/routes/document.ts#createDocumentRouter': 69,
   'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 86,
   'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
   // 101 -> 66: the per-document compact route went, and optimize-all is one
@@ -654,7 +653,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // they wrap. Long because a declaration list is long, not because it
   // branches — a reader shrinking it would be deleting the reasons.
   'packages/mcp-server/src/server/shared-background-work.ts#createSharedWorkers': 61,
-  'packages/mcp-server/src/server/shared-background-work.ts#sharedBackgroundWork': 63,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 52,
   // 53 -> 58: the refresh interval's in-flight write is now held and awaited
   // before the marker is removed. `clearInterval` cancels the next tick and

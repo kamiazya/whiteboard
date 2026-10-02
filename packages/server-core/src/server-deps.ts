@@ -183,7 +183,8 @@ export interface ServerDeps {
   /**
    * Told which document a write just changed, so a composition root can do
    * whatever it keeps outside the store — the daemon schedules a debounced
-   * auto-compaction of the op-log.
+   * auto-compaction of the op-log and signals the automatic history
+   * checkpoint, the two things its HTTP write path does after an update.
    *
    * The write side of the gap `documentTeardown` closed on the delete side.
    * The daemon's HTTP write path fired a saved-listener that scheduled
@@ -380,9 +381,18 @@ export interface VersionHistory {
 // Carries the workspaceId because the tree is the address book: resolving a
 // bare documentId back to its workspace would mean scanning every workspace
 // record, while every tool write already knows which workspace it wrote.
+//
+// `doc` and `path` are what a history checkpoint is taken from — the version
+// store addresses a document by path and reads the state off the doc — and
+// the writer already holds both, where an observer would have to reopen the
+// workspace record to find them. `path` is absent when the index does not
+// place the document, which an observer that needs one treats as nothing to
+// checkpoint.
 export type DocumentWritten = (input: {
   workspaceId: string
   documentId: DocumentId
+  doc: LoroDoc
+  path?: string
 }) => Promise<void>
 
 /**

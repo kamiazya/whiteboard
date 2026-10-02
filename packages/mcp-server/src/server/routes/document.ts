@@ -2,7 +2,7 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
-import { installAutoCompact } from '../store/auto-compact.js'
+import { installAutoCheckpoint } from '../store/auto-checkpoint.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
@@ -73,6 +73,9 @@ function armAutoVersionTrigger(
       sendVersionCreated(workspaceId, path, entry)
     },
   })
+  // The agent write path signals this same scheduler, so an agent-only
+  // workspace gets the checkpoints (and the compaction floor) an edited one does.
+  installAutoCheckpoint(trigger)
   options.onAutoVersionTrigger?.(trigger)
   return trigger
 }
@@ -81,19 +84,13 @@ function armAutoVersionTrigger(
 // CRUD, names/pin metadata, the live-doc snapshot+update path, version
 // history (list/save/thumbnails/restore), and maintenance (compact/prune/
 // optimize). Split by concern so each is independently testable; this file
-// only wires shared dependencies (versionStore, auto-version trigger,
-// auto-compact) between them.
+// only wires shared dependencies (versionStore, auto-version trigger) between
+// them. Auto-compaction is armed by the composition root's background work
+// (`shared-background-work.ts`), not here.
 export function createDocumentRouter(options: DocumentRouterOptions) {
   const app = new Hono()
   const versionStore = options.versionStore ?? new FileVersionStore()
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
-
-  // Auto-compact debounce: every successful saveDocument reschedules a
-  // compaction of its WORKSPACE record. The 30s default lets active editing
-  // sessions burst without thrashing the op-log; once the user pauses, the
-  // shallow-snapshot runs in the background. A test that wants the save path
-  // isolated from the compact path calls `uninstallAutoCompact()`.
-  installAutoCompact(versionStore)
 
   app.route(
     '/',

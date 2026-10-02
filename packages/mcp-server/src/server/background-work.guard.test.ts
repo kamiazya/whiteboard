@@ -1,6 +1,8 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { LOOP_COSTS } from './background-work-costs.js'
 
 /**
  * A background worker must be declared before it can be armed.
@@ -115,5 +117,101 @@ describe('background work is declared before it is armed', () => {
     )
     expect(source).toMatch(/startBackgroundWork\(\[/)
     expect([...source.matchAll(/\.start\(\)/g)].length).toBeGreaterThan(0)
+  })
+})
+
+const SERVER_SRC = fileURLToPath(new URL('.', import.meta.url))
+const PACKAGE_SRC = fileURLToPath(new URL('../', import.meta.url))
+
+async function sourceFiles(dir: string): Promise<string[]> {
+  const found: string[] = []
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) found.push(...(await sourceFiles(path)))
+    else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) found.push(path)
+  }
+  return found
+}
+
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+}
+
+/**
+ * The other bypass, and the one `.start()` cannot see: a module that owns a
+ * timer arms itself the moment something calls into it, so it is a background
+ * worker whether or not a composition root ever starts it. `auto-compact`
+ * was exactly that — a per-workspace debounce running a whole-record export
+ * under the in-process lock — and declared nothing, because nothing about its
+ * arming looked like a worker's.
+ *
+ * Every module under `store/` that owns a timer is therefore classified here:
+ * either it IS a declared worker, named by its `LOOP_COSTS` key, or it runs
+ * inside one and says which. A new timer-owning module fails until someone
+ * answers which.
+ */
+const TIMER_OWNERS: Record<string, { worker: keyof typeof LOOP_COSTS } | { within: string }> = {
+  'auto-compact.ts': { worker: 'auto-compact' },
+  'backup-scheduler.ts': { worker: 'backup-scheduler' },
+  'file-gc-sweeper.ts': { worker: 'file-gc-sweeper' },
+  'workspace-tail.ts': { worker: 'workspace-tail' },
+  // Keeps a marker file warm for exactly as long as a backup pass runs.
+  'backup-in-progress.ts': { within: 'backup-scheduler' },
+  // Renews a lease for exactly as long as the leased work (the backup pass) runs.
+  'lease.ts': { within: 'backup-scheduler' },
+}
+
+describe('a timer-owning store module is a declared worker', () => {
+  async function timerOwners(): Promise<string[]> {
+    const storeDir = join(SERVER_SRC, 'store')
+    const owners: string[] = []
+    for (const file of await sourceFiles(storeDir)) {
+      const code = withoutComments(await readFile(file, 'utf8'))
+      if (/\b(setTimeout|setInterval)\(/.test(code)) owners.push(relative(storeDir, file))
+    }
+    return owners.sort()
+  }
+
+  it('classifies every module under store/ that owns a timer, and none that does not', async () => {
+    const owners = await timerOwners()
+    // The scan reached something: a pattern that stopped matching would
+    // otherwise report an empty store as correctly classified.
+    expect(owners.length).toBeGreaterThan(3)
+    expect(owners).toEqual(Object.keys(TIMER_OWNERS).sort())
+  })
+
+  it('names, for each, a worker that is declared with its cost', () => {
+    for (const [file, owner] of Object.entries(TIMER_OWNERS)) {
+      const worker = 'worker' in owner ? owner.worker : owner.within
+      expect(Object.keys(LOOP_COSTS), `${file} names ${worker}, which declares no cost`).toContain(
+        worker,
+      )
+    }
+  })
+})
+
+/**
+ * Who may reach the auto-compact scheduler. Subscribing to saves is the
+ * shared set's (`shared-background-work.ts`, which declares it); scheduling a
+ * fold for an agent write is the `documentWritten` seam's, which has no
+ * registry call in its chain and works under stdio. Anywhere else —
+ * a router constructor was the old one — arms a debounce no declaration
+ * answers for.
+ */
+const AUTO_COMPACT_IMPORTERS = [
+  'server/shared-background-work.ts',
+  'server/store/document-written.ts',
+]
+
+describe('the auto-compact scheduler is reached only where it is declared', () => {
+  it('has exactly the importers it declares', async () => {
+    const importers: string[] = []
+    for (const file of await sourceFiles(PACKAGE_SRC)) {
+      const code = withoutComments(await readFile(file, 'utf8'))
+      if (/\/auto-compact(\.js)?['"]/.test(code) && !file.endsWith('store/auto-compact.ts')) {
+        importers.push(relative(PACKAGE_SRC, file))
+      }
+    }
+    expect(importers.sort()).toEqual([...AUTO_COMPACT_IMPORTERS].sort())
   })
 })

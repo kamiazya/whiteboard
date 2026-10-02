@@ -59,11 +59,12 @@
  * background grid, drawing the guide that justifies each snap; Cmd/Ctrl
  * suspends it for one gesture (`snap.ts` holds the geometry).
  *
- * NOT yet supported (see `SPATIAL_EDITOR_UNSUPPORTED`): persistence and
- * sync. Those are later phases.
+ * Persistence and sync are the host's job, not this component's: it
+ * hands every change to `onChange` and the host's document session stores
+ * and syncs it.
  *
- * Freehand drawing and shape tools are NOT on that list because they are not
- * deferred — they are out of scope. JSON Canvas 1.0 has no shape or stroke
+ * Freehand drawing and shape tools are not offered because they are out of
+ * scope. JSON Canvas 1.0 has no shape or stroke
  * node, and a strict export drops the extension that would have carried one,
  * so anything drawn that way would lose its shape reaching another tool. A
  * diagram that needs a shape uses an image node.

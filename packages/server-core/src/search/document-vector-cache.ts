@@ -1,5 +1,7 @@
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ContentFacts, ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
+import { factsCacheFor } from '../references/content-source.js'
+import type { ServerDeps } from '../server-deps.js'
 import { assertVectorWidth, type Embedder } from './embedder.js'
 
 interface HeldVector {
@@ -116,4 +118,21 @@ export class DocumentVectorCache {
     }
     return pending
   }
+}
+
+const vectorCaches = new WeakMap<ServerDeps, DocumentVectorCache>()
+
+/**
+ * The vector cache for these deps, held beside `factsCacheFor`'s for the same
+ * reason: embedding is the expensive half, and a per-request server must not
+ * start it from nothing. Built over that facts cache so the two share one
+ * stamp.
+ */
+export function vectorCacheFor(deps: ServerDeps): DocumentVectorCache {
+  let cache = vectorCaches.get(deps)
+  if (cache === undefined) {
+    cache = new DocumentVectorCache(factsCacheFor(deps))
+    vectorCaches.set(deps, cache)
+  }
+  return cache
 }

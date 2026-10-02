@@ -1,21 +1,22 @@
 // HTTP server startup for server-mode (OAuth/JWT, no local-daemon lifecycle).
 //
-// Server-mode does not use WebSocket, idle timeout, or per-connection
-// tracking in this initial slice — those are local-daemon concerns.
+// Server mode never idles out, which is a local-daemon concern. It serves the
+// same SSE sync audience the daemon does, and reports it the same way.
 // The close() returned by startServerModeHttp tears down the HTTP server
 // cleanly so the dispatcher's SIGTERM handler can await it.
 
 import { randomUUID } from 'node:crypto'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
-import { resolveSelfHostServerDeps } from '../di/self-host-server-deps.js'
+import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
+import { attachLiveAudience } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
-import { ensureWorkspaceId } from './current-workspace.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
+import { syncStreamStats } from './routes/sync-sse.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AuthenticatorBinding } from './security/member-profile-store.js'
@@ -34,6 +35,7 @@ import { createUserDeletion } from './security/user-deletion.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { serverModeUiStatus } from './server-mode-web-app.js'
 import {
+  createRootShutdown,
   createSharedWorkers,
   FILE_GC_STOP_TIMEOUT_MS,
   sharedBackgroundWork,
@@ -96,39 +98,31 @@ export async function startServerModeHttp(
   const startedAt = new Date(startedAtMs).toISOString()
   const instanceId = randomUUID()
   const baseUrl = `https://${options.host}:${options.port}`
-  let closing = false
+  const close = createRootShutdown({
+    stopBackgroundWork: () => backgroundWork.stopAll(),
+    closeListener: () => closeListener(server),
+    flushCheckpoints: async () => {
+      await autoVersionTrigger?.flush()
+    },
+  })
 
-  const close = async () => {
-    if (closing) return
-    closing = true
-    await backgroundWork.stopAll()
-    await closeListener(server)
-
-    // A SECOND flush, after the listener is closed and every in-flight
-    // request has finished.
-    //
-    // The registry's stop already flushed, and that one is not redundant: it
-    // is what runs on a bind-failure teardown, where there is no server to
-    // close. But `server.close()` keeps serving the requests already in
-    // progress, and an update handler completing during that window arms a
-    // fresh debounce — against a timer that is `unref`ed and will never fire,
-    // so the checkpoint it scheduled would leave with the process. Flushing
-    // once more here is the point at which no handler can arm another.
-    await autoVersionTrigger?.flush()
-  }
-
-  // The same explicit production wiring the local daemon builds
-  // (http-server.ts), minus its WS-only clientNotifier — server mode
-  // installs no upgrade handler, so there is no live-socket audience to
-  // notify. Without this, createApp mounted no /api/v1 surface at all and
-  // a self-hosted deployment 404'd on search/backlinks/tags/okf and the v1
-  // document CRUD while /api/workspaces/* worked
-  // (server-mode-route-parity.test.ts pins both the option and the route
-  // set now). ensureWorkspaceId first, as the sibling root does: a fresh
-  // data dir must not answer an empty workspace list.
+  // The same wiring the local daemon builds (http-server.ts), through the
+  // same helpers. Where this root DIVERGES on purpose:
+  //
+  // - no macaroon root key and no workspace replica keys: both are
+  //   local-daemon `createApp` options (its credential, and the read plane it
+  //   hands the hosted app — ADR-0042/0043), and server mode authenticates
+  //   through sign-in and bearers instead (ADR-0046);
+  // - people, sessions and administration stores over the same database
+  //   (`peopleOptions`), which a single-user daemon has no use for;
+  // - no idle shutdown: a deployment is stopped by its operator.
+  //
+  // Anything not on that list that the daemon does, this root should do too:
+  // the migration, the current workspace and the live audience are not
+  // optional here.
   const dataDir = getDataDir()
-  await ensureWorkspaceId(dataDir)
-  const serverDeps = resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
+  const { serverDeps: bootedDeps } = await bootSelfHostDeps(dataDir)
+  const serverDeps = attachLiveAudience(bootedDeps)
 
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.
@@ -164,7 +158,7 @@ export async function startServerModeHttp(
       // build (ADR-0047), the inline placeholder when it does not.
       app: { served: true, ...serverModeUiStatus(DIST_WEB_APP_DIR) },
       mcp: { httpEnabled: true, endpoint: `${baseUrl}/mcp` },
-      clients: { connected: 0, ready: 0 },
+      clients: syncStreamStats(),
       publicBaseUrl: options.publicBaseUrl,
     }),
   })

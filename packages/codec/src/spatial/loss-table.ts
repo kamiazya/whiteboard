@@ -160,6 +160,18 @@ export function jsonCanvasLossTable(): string {
   return `${lines.join('\n')}\n`
 }
 
+/** The page's opening, including the fact that nothing offers the projection as an export. */
+const OCIF_INTRO = [
+  '[OCIF v0.7.0](https://spec.canvasprotocol.org/) is a **third projection** of a whiteboard',
+  'document ([ADR-0038](../contributing/adr/0038-ocif-projection.md)), beside JSON Canvas 1.0 and',
+  'OKF Markdown. The claim first-party support makes is the same one ADR-0037 made for JSON',
+  'Canvas: a round-trip property over the expressible subset, and this table for everything else.',
+  '',
+  'This is the codec library’s projection (`toOcif` / `parseOcif`); no MCP tool, route or menu',
+  'produces an OCIF document yet, so read it as what the projection costs, not as an export you',
+  'can run today.',
+]
+
 const OCIF_HEADING: Record<(typeof KIND_ORDER)[number], string> = {
   native: 'Stated by OCIF v0.7.0',
   degraded: 'Stated, but not in the same shape',
@@ -214,12 +226,9 @@ export function ocifLossTable(): string {
     '<!-- Generated from packages/codec/src/spatial/ocif-projection.ts. Do not edit by hand:',
     '     `pnpm vitest run --project codec-node loss-table -u` regenerates it. -->',
     '',
-    '# What an OCIF export keeps, and what it costs',
+    '# What the OCIF projection keeps, and what it costs',
     '',
-    '[OCIF v0.7.0](https://spec.canvasprotocol.org/) is a **third projection** of a whiteboard',
-    'document ([ADR-0038](../contributing/adr/0038-ocif-projection.md)), beside JSON Canvas 1.0 and',
-    'OKF Markdown. The claim first-party support makes is the same one ADR-0037 made for JSON',
-    'Canvas: a round-trip property over the expressible subset, and this table for everything else.',
+    ...OCIF_INTRO,
     '',
     `The model can hold **${total}** field positions. **${understood}** of them are something OCIF can`,
     `state in its own vocabulary; the remaining **${total - understood}** ride an extension of ours.`,

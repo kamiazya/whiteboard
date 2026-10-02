@@ -104,9 +104,29 @@ export async function saveDocumentSnapshot(
   // observer owns reporting its own failure — server-core is a shared
   // layer with no logger to report it for them.
   try {
-    await deps.documentWritten({ workspaceId, documentId })
+    // A lookup that fails costs the observer its path, not the notification:
+    // compaction is addressed by workspace and needs none.
+    const path = await placementOf(deps, workspaceId, documentId)
+    await deps.documentWritten({
+      workspaceId,
+      documentId,
+      doc,
+      ...(path === undefined ? {} : { path }),
+    })
   } catch {
     // Deliberately swallowed; see above and document-io.test.ts.
+  }
+}
+
+async function placementOf(
+  deps: ServerDeps,
+  workspaceId: string,
+  documentId: DocumentId,
+): Promise<string | undefined> {
+  try {
+    return (await deps.documentIndex.resolveDocumentById({ workspaceId, documentId }))?.path
+  } catch {
+    return undefined
   }
 }
 

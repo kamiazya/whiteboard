@@ -3,11 +3,9 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { McpServer } from '@modelcontextprotocol/server'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { z } from 'zod'
-import { resolveSelfHostServerDeps } from '../../di/self-host-server-deps.js'
+import { bootSelfHostDeps, prepareSelfHostDataDir } from '../../di/boot-self-host-deps.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getDataDir } from '../config.js'
-import { ensureWorkspaceId } from '../current-workspace.js'
-import { getDb } from '../store/db/index.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
@@ -27,11 +25,10 @@ import { installStdioLifecycle } from './stdio-lifecycle.js'
  * composes its own here.
  */
 export async function createMcpServer(deps?: ServerDeps) {
-  // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
-  // HTTP /mcp handler does not race concurrent requests on the marker file.
-  // Called for its prepareDataDir migration side effect ahead of the DB use
-  // below; the returned id itself is not needed here.
-  await ensureWorkspaceId(getDataDir())
+  // Memoized per data dir, so concurrent /mcp requests share one resolve of
+  // the current-workspace marker instead of racing on it, and deps handed in
+  // by anything but a root still meet a migrated schema.
+  await prepareSelfHostDataDir(getDataDir())
 
   // Read `version` from package.json at runtime so release-please bumps propagate
   // without source edits.
@@ -115,8 +112,7 @@ export async function createMcpServer(deps?: ServerDeps) {
  * client with socket access use instead of this entry.
  */
 export async function stdioRootServerDeps(): Promise<ServerDeps> {
-  const dataDir = getDataDir()
-  return resolveSelfHostServerDeps(await getDb(dataDir), dataDir)
+  return (await bootSelfHostDeps(getDataDir())).serverDeps
 }
 
 export async function main() {
@@ -162,11 +158,9 @@ export async function main() {
   // sdk.shutdown() twice concurrently on a real signal.
   await initTracing({ role: 'stdio-mcp', installSignalHandlers: false })
 
-  // The HTTP daemon runs prepareDataDir in src/server/index.ts; the stdio
-  // entrypoint reaches createMcpServer first, so call the same
-  // hook here to keep schema bootstrapping symmetric.
-  const { prepareDataDir } = await import('../store/db/prepare.js')
-  await prepareDataDir(getDataDir())
+  // Prepared once at startup rather than on the first connection, so a data
+  // dir that cannot be migrated fails the process here.
+  await prepareSelfHostDataDir(getDataDir())
   // serveStdio owns the era decision for the connection: a 2025-era opening
   // (`initialize`) is served exactly as the old hand-wired transport served
   // it, and a 2026-07-28 opening pins a modern instance from the same
