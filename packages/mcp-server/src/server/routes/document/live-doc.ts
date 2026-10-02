@@ -2,14 +2,8 @@ import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/
 import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
-import { limitBody } from '../body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import { onDocumentAction } from './path-route.js'
-
-// A Loro update embeds any attachment-affecting deltas since the client's
-// last sync, so it can approach the file-upload ceiling in the worst case.
-// Match files.ts's MAX_FILE_UPLOAD_BYTES rather than inventing a separate
-// number.
-const LIVE_DOC_UPDATE_LIMIT_BYTES = 16 * 1024 * 1024
 
 export interface LiveDocRouterOptions {
   triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
@@ -72,7 +66,7 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       const response: UpdateDocumentResponse = { ok: true }
       return c.json(response)
     },
-    limitBody(LIVE_DOC_UPDATE_LIMIT_BYTES, 'Update'),
+    limitBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
   )
 
   return app

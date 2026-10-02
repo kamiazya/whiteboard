@@ -11,13 +11,8 @@ import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import { validateFileId, validationErrorBody } from '../validators.js'
 import { parseWorkspaceHandle } from '../workspace-handle.js'
-import { limitBody } from './body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 import { onDocumentFile } from './document/path-route.js'
-
-// Per-file size limit. Loro thumbnails are around 2 MiB and assets pasted into
-// Excalidraw normally fit inside this range. Return 413 when exceeded to avoid
-// runaway memory usage from malicious large uploads.
-const MAX_FILE_UPLOAD_BYTES = 16 * 1024 * 1024
 
 const MIME_TO_EXT: Record<string, string> = {
   'image/png': '.png',
@@ -132,7 +127,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
       })
       return c.body(null, 204)
     },
-    limitBody(MAX_FILE_UPLOAD_BYTES, 'Upload'),
+    limitBody(CONTENT_BODY_LIMIT_BYTES, 'Upload'),
   )
 
   // GET /api/w/:workspaceId/document/<path>/file/:fileId

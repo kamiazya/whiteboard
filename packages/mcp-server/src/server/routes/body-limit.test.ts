@@ -3,10 +3,16 @@
  * Each route's suite pins its own noun and limit; this pins the contract they
  * share, so a change to the code or the wording names the helper's test first.
  */
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
+import {
+  CONTENT_BODY_LIMIT_BYTES,
+  EXPORT_OPTIONS_BODY_LIMIT_BYTES,
+  limitBody,
+} from './body-limit.js'
 
 function appLimitedTo(maxSize: number, noun: string) {
   const app = new Hono()
@@ -39,5 +45,30 @@ describe('limitBody', () => {
 describe('EXPORT_OPTIONS_BODY_LIMIT_BYTES', () => {
   it('bounds an options object, not canvas content', () => {
     expect(EXPORT_OPTIONS_BODY_LIMIT_BYTES).toBe(1024 * 1024)
+  })
+})
+
+describe('CONTENT_BODY_LIMIT_BYTES', () => {
+  it('is 16 MiB, the ceiling payload-too-large.test.ts spells out for each content route', () => {
+    expect(CONTENT_BODY_LIMIT_BYTES).toBe(16 * 1024 * 1024)
+  })
+
+  // Declared in three places before, each saying to match the others; a fourth
+  // route copying the number is how they would drift again.
+  it('is the only place a route spells that number', async () => {
+    const entries = await readdir(import.meta.dirname, { recursive: true })
+    const sources = entries.filter((e) => e.endsWith('.ts') && !e.endsWith('.test.ts'))
+    expect(sources.length).toBeGreaterThan(20)
+    const spelling = /16\s*\*\s*1024\s*\*\s*1024|\b16_?777_?216\b/
+    const offenders: string[] = []
+    for (const entry of sources) {
+      if (entry === 'body-limit.ts') continue
+      const code = (await readFile(join(import.meta.dirname, entry), 'utf8')).replace(
+        /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
+        '',
+      )
+      if (spelling.test(code)) offenders.push(entry)
+    }
+    expect(offenders).toEqual([])
   })
 })
