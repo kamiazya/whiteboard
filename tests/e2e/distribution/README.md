@@ -60,6 +60,18 @@ They are run individually or via the CI release workflow:
 | `packaged-daemon-support-bundle-smoke.mjs` | Daemon support bundle |
 | `packaged-daemon-token-smoke.mjs` | Daemon token auth |
 
+### Shared helpers
+
+`smoke-helpers.mjs` is the one home for what the scripts share: leak patterns,
+failure reporting (`createFail`), the ES256 JWT and TLS fixtures the server-mode
+smokes build their mock identity provider from, the CLI and container runners,
+and the readiness polls. A script binds a helper to its own label or entry point
+with a `create*` factory instead of re-declaring it; a function name declared at
+the top level of two scripts fails `tools/arch-lint`'s
+`distribution-smoke-helpers-one-place.test.ts`. The helpers' own unit coverage is
+`smoke-helpers.test.mjs`, part of `pnpm test:scripts`. The scripts' length is held
+by the `.mjs` ledger in `file-size-budget.test.ts` beside the TypeScript ones.
+
 ### External CLI smokes
 
 `pnpm smoke:claude` and `pnpm smoke:codex` consume API quota and require the respective

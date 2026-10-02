@@ -19,30 +19,24 @@
 //   4. Usage regression: an unknown subcommand prints the USAGE
 //      block, which must still list `whiteboard daemon logs --json`.
 
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, CANVAS_LEAK_PATTERNS } from './smoke-helpers.mjs'
+import {
+  assertNoLeak,
+  CANVAS_LEAK_PATTERNS,
+  createCliRunner,
+  createFail,
+  createTempDirs,
+} from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
 const CLI_ENTRY = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
 
-function fail(msg, ctx = {}) {
-  console.error(`[packaged-daemon-logs-smoke] ${msg}`)
-  for (const [k, v] of Object.entries(ctx)) {
-    console.error(`  ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-  }
-  process.exit(1)
-}
-
-function runCli(args) {
-  const res = spawnSync(process.execPath, [CLI_ENTRY, ...args], { encoding: 'utf-8' })
-  if (res.error) fail('CLI spawn failed', { error: String(res.error) })
-  return res
-}
+const fail = createFail('packaged-daemon-logs-smoke')
+const runCli = createCliRunner(CLI_ENTRY)
 
 function assertJsonl(stdout, expectedLineCount) {
   if (stdout === '') fail('expected non-empty JSONL stdout, got empty')
@@ -104,22 +98,12 @@ function assertSchemaShape(parsed) {
   }
 }
 
-const dataDirs = []
-function makeTempDataDir() {
-  const dir = mkdtempSync(join(tmpdir(), 'whiteboard-packaged-daemon-logs-smoke-'))
-  dataDirs.push(dir)
-  return dir
-}
-function cleanup() {
-  for (const dir of dataDirs) {
-    rmSync(dir, { recursive: true, force: true })
-  }
-}
+const dataDirs = createTempDirs()
 
 try {
   // --- Scenario 1: missing daemon record ---
   {
-    const dataDir = makeTempDataDir()
+    const dataDir = dataDirs.make('whiteboard-packaged-daemon-logs-smoke-')
     const res = runCli(['daemon', 'logs', '--json', `--data-dir=${dataDir}`])
     if (res.status !== 0) {
       fail('exit code !== 0 for missing record', {
@@ -141,7 +125,7 @@ try {
   // never reach stdout. Using a guaranteed-dead PID keeps the helper
   // on the `process-not-running` branch deterministically.
   {
-    const dataDir = makeTempDataDir()
+    const dataDir = dataDirs.make('whiteboard-packaged-daemon-logs-smoke-')
     writeFileSync(
       join(dataDir, 'daemon.json'),
       JSON.stringify({
@@ -176,7 +160,7 @@ try {
 
   // --- Scenario 3: no-array-wrapper guard ---
   {
-    const dataDir = makeTempDataDir()
+    const dataDir = dataDirs.make('whiteboard-packaged-daemon-logs-smoke-')
     const a = runCli(['daemon', 'logs', '--json', `--data-dir=${dataDir}`])
     const b = runCli(['daemon', 'logs', '--json', `--data-dir=${dataDir}`])
     const concatenated = a.stdout + b.stdout
@@ -214,5 +198,5 @@ try {
 
   console.log('[packaged-daemon-logs-smoke] all scenarios passed')
 } finally {
-  cleanup()
+  dataDirs.cleanup()
 }

@@ -15,21 +15,24 @@
 //   4. Usage regression: an unknown subcommand prints the USAGE
 //      block, which must still list `whiteboard daemon support-bundle`.
 
-import { spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
-  rmSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, CANVAS_LEAK_PATTERNS } from './smoke-helpers.mjs'
+import {
+  assertNoLeak,
+  CANVAS_LEAK_PATTERNS,
+  createCliRunner,
+  createFail,
+  createTempDirs,
+} from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -45,20 +48,8 @@ if (!existsSync(CLI_ENTRY)) {
 
 const RESOLVED_TMP = realpathSync(tmpdir())
 
-function fail(msg, ctx = {}) {
-  console.error(`[packaged-daemon-support-bundle-smoke] ${msg}`)
-  for (const [k, v] of Object.entries(ctx)) {
-    if (v === undefined || v === '') continue
-    console.error(`  ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-  }
-  process.exit(1)
-}
-
-function runCli(args) {
-  const res = spawnSync(process.execPath, [CLI_ENTRY, ...args], { encoding: 'utf-8' })
-  if (res.error) fail('CLI spawn failed', { error: String(res.error) })
-  return res
-}
+const fail = createFail('packaged-daemon-support-bundle-smoke')
+const runCli = createCliRunner(CLI_ENTRY)
 
 // assertNoLeak (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
 // This wrapper adds canvas-plaintext checks and the canonical-tmpdir check
@@ -73,18 +64,13 @@ function assertNoLeakBundle(label, text, extraLiterals = []) {
   }
 }
 
-const cleanup = []
-function makeTempDataDir() {
-  const dir = mkdtempSync(join(tmpdir(), 'whiteboard-support-bundle-smoke-'))
-  cleanup.push(dir)
-  return dir
-}
+const tempDirs = createTempDirs()
 
 try {
   // ─── Scenario 1: missing record + missing output dir ───
   {
-    const dataDir = makeTempDataDir()
-    const root = makeTempDataDir()
+    const dataDir = tempDirs.make('whiteboard-support-bundle-smoke-')
+    const root = tempDirs.make('whiteboard-support-bundle-smoke-')
     const outputDir = join(root, 'bundle')
 
     const res = runCli([
@@ -126,8 +112,8 @@ try {
 
   // ─── Scenario 2: valid record + leaky token ───
   {
-    const dataDir = makeTempDataDir()
-    const root = makeTempDataDir()
+    const dataDir = tempDirs.make('whiteboard-support-bundle-smoke-')
+    const root = tempDirs.make('whiteboard-support-bundle-smoke-')
     const outputDir = join(root, 'bundle')
 
     writeFileSync(
@@ -164,8 +150,8 @@ try {
 
   // ─── Scenario 3: non-empty output dir ───
   {
-    const dataDir = makeTempDataDir()
-    const root = makeTempDataDir()
+    const dataDir = tempDirs.make('whiteboard-support-bundle-smoke-')
+    const root = tempDirs.make('whiteboard-support-bundle-smoke-')
     const outputDir = join(root, 'bundle')
     mkdirSync(outputDir, { recursive: true })
     const canaryPath = join(outputDir, 'pre-existing.txt')
@@ -206,7 +192,5 @@ try {
 
   console.log('[packaged-daemon-support-bundle-smoke] all scenarios passed')
 } finally {
-  for (const dir of cleanup) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  tempDirs.cleanup()
 }

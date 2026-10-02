@@ -1,10 +1,21 @@
 #!/usr/bin/env node
-// Shared helpers for distribution smoke scripts: leak detection, plus the one
-// Docker build invocation both server-mode smokes have to get identical.
-// Process lifecycle and temp-dir creation remain in each script.
+// Shared helpers for distribution smoke scripts: leak detection, failure
+// reporting, the ES256 JWT and TLS fixtures the server-mode smokes build their
+// mock identity provider from, container and CLI runners, and the one Docker
+// build invocation both Docker smokes have to get identical. What stays in
+// each script is the scenario list and the values only that script owns.
+//
+// A function declared in two scripts is a failing guard
+// (`distribution-smoke-helpers-one-place.test.ts`), so a script binds a
+// helper to its own label or entry point with a `create*` factory rather than
+// re-declaring it.
 
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { sign } from 'node:crypto'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 
 /**
  * Core security leak patterns: auth headers, JWTs, local filesystem paths,
@@ -166,4 +177,281 @@ export function resolveServerImage({ repoRoot, defaultTag, docker, fail, label }
   })
   if (built.status !== 0) fail('docker build failed')
   return defaultTag
+}
+
+/**
+ * A `fail(message, context)` that prints `[label] FAIL: message`, one indented
+ * line per context entry that has a value, and exits 1.
+ *
+ * Context values are printed, so a caller that must not leak (every smoke's
+ * last scenario asserts that) passes lengths or redacted text, never the raw
+ * output.
+ *
+ * @param {string} label
+ * @returns {(message: string, context?: Record<string, unknown>) => never}
+ */
+export function createFail(label) {
+  return (message, context = {}) => {
+    console.error(`[${label}] FAIL: ${message}`)
+    for (const [key, value] of Object.entries(context)) {
+      if (value !== undefined && value !== '') {
+        console.error(`  ${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+      }
+    }
+    process.exit(1)
+  }
+}
+
+/**
+ * A `skip(reason)` that prints `[label] SKIP: reason` and exits 0.
+ *
+ * @param {string} label
+ * @returns {(reason: string) => never}
+ */
+export function createSkip(label) {
+  return (reason) => {
+    console.log(`[${label}] SKIP: ${reason}`)
+    process.exit(0)
+  }
+}
+
+/**
+ * Temp directories a script creates and removes together at the end.
+ *
+ * @returns {{ make: (prefix: string) => string, cleanup: () => void }}
+ */
+export function createTempDirs() {
+  const made = []
+  return {
+    make(prefix) {
+      const dir = mkdtempSync(join(tmpdir(), prefix))
+      made.push(dir)
+      return dir
+    },
+    cleanup() {
+      for (const dir of made) rmSync(dir, { recursive: true, force: true })
+    },
+  }
+}
+
+/**
+ * Runs the packaged CLI under `cliEntry` with WHITEBOARD_DEV scrubbed from the
+ * child environment, and throws if the process could not be spawned.
+ *
+ * `defaults` are `spawnSync` options a script applies to every call; a call's
+ * own `options` win, except `env`, which is merged over the scrubbed ambient
+ * one. A `timeout` has to leave headroom over the longest wait the command
+ * itself performs (`server stop` waits up to 10s for its child before it
+ * escalates), or the CLI timeout races the production-side one.
+ *
+ * @param {string} cliEntry absolute path to `dist/cli/index.js`
+ * @param {import('node:child_process').SpawnSyncOptions} [defaults]
+ * @returns {(args: string[], options?: import('node:child_process').SpawnSyncOptions) => import('node:child_process').SpawnSyncReturns<string>}
+ */
+export function createCliRunner(cliEntry, defaults = {}) {
+  return (args, options = {}) => {
+    const result = spawnSync(process.execPath, [cliEntry, ...args], {
+      encoding: 'utf8',
+      ...defaults,
+      ...options,
+      env: { ...scrubDevEnv(process.env), ...defaults.env, ...options.env },
+    })
+    if (result.error) throw new Error(`CLI spawn failed: ${String(result.error)}`)
+    return result
+  }
+}
+
+/**
+ * One stdout line as a server's READY record (`{ ok: true, pid }`), or
+ * `undefined`.
+ *
+ * The stream carries ordinary log lines too, so a line that is not JSON, or is
+ * JSON saying something else, is simply not the record a smoke is waiting for.
+ *
+ * @param {string} line
+ */
+export function readyRecord(line) {
+  if (!line.trim()) return undefined
+  try {
+    const obj = JSON.parse(line)
+    return obj.ok === true && typeof obj.pid === 'number' ? obj : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** `docker <args>` with UTF-8 output and a 120s default timeout. */
+export function docker(args, opts = {}) {
+  return spawnSync('docker', args, { encoding: 'utf8', timeout: opts.timeout ?? 120_000, ...opts })
+}
+
+export function stopContainer(name) {
+  docker(['stop', '-t', '10', name], { timeout: 20_000 })
+}
+
+/**
+ * Polls a container's logs for its READY record.
+ *
+ * Answers the record, or `null` on timeout. When the container stops before
+ * emitting one the answer is `null` too, unless `reportExit` is set, in which
+ * case it is `{ _stopped: true, stdout, stderr }` carrying the logs read at
+ * that moment: a stopped container's logs are still there, but a caller that
+ * wants them in a failure message has to take them before it removes the
+ * container.
+ *
+ * @param {string} containerName
+ * @param {{ timeoutMs?: number, reportExit?: boolean }} [options]
+ */
+export async function waitForContainerReadyJson(
+  containerName,
+  { timeoutMs = 60_000, reportExit = false } = {},
+) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    await delay(1000)
+    const logs = docker(['logs', containerName], { timeout: 5_000 })
+    const ready = logs.stdout
+      .split('\n')
+      .map(readyRecord)
+      .find((r) => r !== undefined)
+    if (ready !== undefined) return ready
+    const inspect = docker(['inspect', '--format={{.State.Running}}', containerName], {
+      timeout: 5_000,
+    })
+    if (inspect.stdout.trim() !== 'true') {
+      if (!reportExit) return null
+      const exitLogs = docker(['logs', containerName], { timeout: 5_000 })
+      return { _stopped: true, stdout: exitLogs.stdout, stderr: exitLogs.stderr }
+    }
+  }
+  return null
+}
+
+/**
+ * Polls `url` until it answers 2xx, and says whether it did within the budget.
+ *
+ * A container emits its ready record before Docker's host-side port mapping is
+ * necessarily up, so the first request may arrive too early; `intervalMs` is
+ * the pause between tries.
+ *
+ * @param {string} url
+ * @param {{ timeoutMs?: number, intervalMs?: number }} [options]
+ */
+export async function waitForHttpReady(url, { timeoutMs = 15_000, intervalMs = 300 } = {}) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url)
+      if (response.ok) return true
+    } catch {
+      /* port not yet reachable */
+    }
+    await delay(intervalMs)
+  }
+  return false
+}
+
+export function base64url(data) {
+  return Buffer.from(data).toString('base64url')
+}
+
+/**
+ * An ES256 JWT (RFC 7518 section 3.4) signed with `privateKey`.
+ *
+ * `ieee-p1363` makes Node return the raw 64-byte r||s a JWT carries, rather
+ * than the ASN.1 DER a default signature has, so nothing here parses DER.
+ *
+ * @param {import('node:crypto').KeyObject} privateKey
+ * @param {object} header
+ * @param {object} payload
+ */
+export function signEs256Jwt(privateKey, header, payload) {
+  const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`
+  const signature = sign('SHA256', Buffer.from(signingInput), {
+    key: privateKey,
+    dsaEncoding: 'ieee-p1363',
+  })
+  return `${signingInput}.${base64url(signature)}`
+}
+
+/**
+ * A `mint(privateKey, scope)` for the one-hour access token a smoke presents
+ * to a server whose JWKS it hosts. The key id, subject and client are named
+ * after `name` so a token in a log says which smoke minted it.
+ *
+ * @param {{ name: string, issuer: string, audience: string }} identity
+ * @returns {(privateKey: import('node:crypto').KeyObject, scope: string) => string}
+ */
+export function createAccessTokenMinter({ name, issuer, audience }) {
+  return (privateKey, scope) => {
+    const now = Math.floor(Date.now() / 1000)
+    return signEs256Jwt(
+      privateKey,
+      { alg: 'ES256', typ: 'at+jwt', kid: `${name}-key` },
+      {
+        sub: `${name}-user`,
+        azp: `${name}-client`,
+        scope,
+        iss: issuer,
+        aud: audience,
+        iat: now,
+        exp: now + 3600,
+      },
+    )
+  }
+}
+
+/**
+ * A self-signed CA certificate for the HTTPS JWKS mock, written to `dir` as
+ * `server.key` / `server.crt`.
+ *
+ * It is handed to the spawned server through NODE_EXTRA_CA_CERTS, which
+ * Node's fetch honours, so the server under test reaches the mock without TLS
+ * verification being disabled anywhere. `subjectAltName` has to name the host
+ * the server dials: a container reaching the host through
+ * `host.docker.internal` needs that DNS name beside the loopback IP.
+ *
+ * @param {string} dir
+ * @param {{ commonName: string, subjectAltName?: string }} options
+ * @returns {{ keyFile: string, certFile: string }}
+ */
+export function generateTestTlsCert(dir, { commonName, subjectAltName = 'IP:127.0.0.1' }) {
+  const keyFile = join(dir, 'server.key')
+  const certFile = join(dir, 'server.crt')
+  const cnfFile = join(dir, 'openssl.cnf')
+  writeFileSync(
+    cnfFile,
+    [
+      '[req]',
+      'distinguished_name = req_dn',
+      'x509_extensions = san_ext',
+      'prompt = no',
+      '[req_dn]',
+      `CN = ${commonName}`,
+      '[san_ext]',
+      `subjectAltName = ${subjectAltName}`,
+      'basicConstraints = critical,CA:true',
+    ].join('\n'),
+  )
+  const r = spawnSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-keyout',
+      keyFile,
+      '-out',
+      certFile,
+      '-days',
+      '1',
+      '-nodes',
+      '-config',
+      cnfFile,
+    ],
+    { stdio: 'pipe', encoding: 'utf8' },
+  )
+  if (r.status !== 0) throw new Error(`openssl cert gen failed: ${r.stderr}`)
+  return { keyFile, certFile }
 }

@@ -27,55 +27,22 @@
 // Port 4290 is used by scenario 8 (distinct from 4250/4260/4270/4280/4282).
 // Scenarios 14–16 JWKS mock uses port 0 (OS-assigned, avoids collisions).
 
-import { spawn, spawnSync } from 'node:child_process'
-import { createSign, generateKeyPairSync } from 'node:crypto'
+import { spawn } from 'node:child_process'
+import { generateKeyPairSync } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak as assertNoLeakHelper, scrubDevEnv } from './smoke-helpers.mjs'
-
-// Minimal ES256 JWT helpers using Node.js built-in crypto only.
-// (Distribution smokes run with plain `node`, not in the pnpm workspace.)
-
-function base64url(data) {
-  const buf = typeof data === 'string' ? Buffer.from(data) : Buffer.from(data)
-  return buf.toString('base64url')
-}
-
-/**
- * Convert an ASN.1 DER-encoded ECDSA signature to the raw r||s format
- * required by RFC 7518 ES256 (each component padded to 32 bytes).
- */
-function derToRawEs256(derSig) {
-  let offset = 2 // skip 0x30 (SEQUENCE) and total-length byte
-  const rLen = derSig[offset + 1]
-  let r = derSig.slice(offset + 2, offset + 2 + rLen)
-  if (r[0] === 0x00) r = r.slice(1) // strip DER positive-integer sentinel
-
-  offset += 2 + rLen
-  const sLen = derSig[offset + 1]
-  let s = derSig.slice(offset + 2, offset + 2 + sLen)
-  if (s[0] === 0x00) s = s.slice(1)
-
-  const rPad = Buffer.alloc(32)
-  r.copy(rPad, 32 - r.length)
-  const sPad = Buffer.alloc(32)
-  s.copy(sPad, 32 - s.length)
-  return Buffer.concat([rPad, sPad])
-}
-
-function signEs256Jwt(privateKey, header, payload) {
-  const headerB64 = base64url(JSON.stringify(header))
-  const payloadB64 = base64url(JSON.stringify(payload))
-  const sigInput = `${headerB64}.${payloadB64}`
-  const sign = createSign('SHA256')
-  sign.update(sigInput)
-  const derSig = sign.sign(privateKey)
-  return `${sigInput}.${derToRawEs256(derSig).toString('base64url')}`
-}
+import {
+  assertNoLeak as assertNoLeakHelper,
+  createCliRunner,
+  createFail,
+  generateTestTlsCert,
+  scrubDevEnv,
+  signEs256Jwt,
+} from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -92,83 +59,19 @@ if (!existsSync(CLI)) {
 const SENSITIVE_TOKEN = 'smoke-secret-jwks-token-xyz-789'
 const SENSITIVE_URL = 'https://super-secret-auth.internal'
 
-/**
- * Generate a self-signed TLS certificate for 127.0.0.1 using openssl.
- * The cert is written to `dir` and returned for use with NODE_EXTRA_CA_CERTS.
- * Node.js >=22 respects NODE_EXTRA_CA_CERTS in undici-based fetch, so the
- * spawned server process can reach the HTTPS JWKS mock without disabling TLS
- * verification globally.
- */
-function generateTestTlsCert(dir) {
-  const keyFile = join(dir, 'tls-key.pem')
-  const certFile = join(dir, 'tls-cert.pem')
-  const cnfFile = join(dir, 'openssl.cnf')
-  writeFileSync(
-    cnfFile,
-    [
-      '[req]',
-      'distinguished_name = req_dn',
-      'x509_extensions = san_ext',
-      'prompt = no',
-      '',
-      '[req_dn]',
-      'CN = smoke-test-jwks-ca',
-      '',
-      '[san_ext]',
-      'subjectAltName = IP:127.0.0.1',
-      'basicConstraints = critical,CA:true',
-    ].join('\n'),
-  )
-  const r = spawnSync(
-    'openssl',
-    [
-      'req',
-      '-x509',
-      '-newkey',
-      'rsa:2048',
-      '-keyout',
-      keyFile,
-      '-out',
-      certFile,
-      '-days',
-      '1',
-      '-nodes',
-      '-config',
-      cnfFile,
-    ],
-    { stdio: 'pipe', encoding: 'utf8' },
-  )
-  if (r.status !== 0) throw new Error(`openssl cert gen failed: ${r.stderr}`)
-  return { keyFile, certFile }
-}
-
-function fail(msg, ctx = {}) {
-  console.error(`[server-run-smoke] FAIL: ${msg}`)
-  for (const [k, v] of Object.entries(ctx)) {
-    if (v !== undefined && v !== '') {
-      console.error(`  ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-    }
-  }
-  process.exit(1)
-}
+const fail = createFail('server-run-smoke')
 
 // assertNoLeakHelper (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
 // SENSITIVE_TOKEN and SENSITIVE_URL are dynamic values passed as extraLiterals.
-function assertNoLeak(label, text) {
+function assertNoServerRunLeak(label, text) {
   assertNoLeakHelper(label, text, [SENSITIVE_TOKEN, SENSITIVE_URL])
 }
 
-function runCli(args, { env } = {}) {
-  return spawnSync(process.execPath, [CLI, ...args], {
-    env: { ...scrubDevEnv(process.env), ...env },
-    encoding: 'utf8',
-    // `server stop` can itself wait up to 10s (DEFAULT_STOP_TIMEOUT_MS in
-    // server-stop.ts) for the child process to exit before escalating to
-    // SIGKILL. A CLI timeout equal to that budget races it — bump ours to
-    // leave real headroom over the production-side wait.
-    timeout: 15_000,
-  })
-}
+// `server stop` can itself wait up to 10s (DEFAULT_STOP_TIMEOUT_MS in
+// server-stop.ts) for the child process to exit before escalating to
+// SIGKILL. A CLI timeout equal to that budget races it — bump ours to
+// leave real headroom over the production-side wait.
+const runCli = createCliRunner(CLI, { timeout: 15_000 })
 
 // Async twin of runCli, for CLI invocations that must fetch a JWKS mock
 // hosted in THIS same process (server doctor's server.jwks check). spawnSync
@@ -230,7 +133,7 @@ const REQUIRED_FLAGS = [
     fail(`scenario 1: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
   if (r.stdout.trim() !== '')
     fail('scenario 1: stdout must be empty', { lineLength: r.stdout.length })
-  assertNoLeak('scenario 1 stderr', r.stderr)
+  assertNoServerRunLeak('scenario 1 stderr', r.stderr)
   console.log('[server-run-smoke] scenario 1 PASS: non-HTTPS externalUrl → exit 1, stderr safe')
 }
 
@@ -303,7 +206,7 @@ const REQUIRED_FLAGS = [
   if (r.status !== 1)
     fail(`scenario 4: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
   if (r.stdout.trim() !== '') fail('scenario 4: stdout must be empty')
-  assertNoLeak('scenario 4 stderr', r.stderr)
+  assertNoServerRunLeak('scenario 4 stderr', r.stderr)
   console.log('[server-run-smoke] scenario 4 PASS: wildcard origin → exit 1, stderr safe')
 }
 
@@ -371,7 +274,9 @@ const REQUIRED_FLAGS = [
   const SHUTDOWN_TIMEOUT_MS = 10_000
 
   const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s8-'))
-  const { keyFile: tlsKeyFile, certFile: tlsCertFile } = generateTestTlsCert(dataDir)
+  const { keyFile: tlsKeyFile, certFile: tlsCertFile } = generateTestTlsCert(dataDir, {
+    commonName: 'smoke-test-jwks-ca',
+  })
   const tlsKey = readFileSync(tlsKeyFile)
   const tlsCert = readFileSync(tlsCertFile)
 
@@ -491,8 +396,8 @@ const REQUIRED_FLAGS = [
     const lines = stdoutBuf.trim().split('\n')
     if (lines.length !== 1) fail(`scenario 8: stdout must be exactly one line, got ${lines.length}`)
 
-    assertNoLeak('scenario 8 stdout', stdoutBuf)
-    assertNoLeak('scenario 8 stderr', stderrBuf)
+    assertNoServerRunLeak('scenario 8 stdout', stdoutBuf)
+    assertNoServerRunLeak('scenario 8 stderr', stderrBuf)
 
     // Small delay to ensure the server is accepting connections
     await delay(300)
@@ -518,7 +423,7 @@ const REQUIRED_FLAGS = [
     if (noAuthResp.status !== 401)
       fail(`scenario 8: no-auth protected route expected 401, got ${noAuthResp.status}`)
     const noAuthBody = await noAuthResp.text()
-    assertNoLeak('scenario 8 no-auth response body', noAuthBody)
+    assertNoServerRunLeak('scenario 8 no-auth response body', noAuthBody)
 
     // Valid JWT with correct scope → auth passes (not 401 or 403)
     const now = Math.floor(Date.now() / 1000)
@@ -543,7 +448,7 @@ const REQUIRED_FLAGS = [
       fail(`scenario 8: expected a membership 403, got ${authResp.status}`)
     const authBody = await authResp.text()
     if (!authBody.includes('not_a_member')) fail('scenario 8: 403 was not the membership refusal')
-    assertNoLeak('scenario 8 auth response body', authBody)
+    assertNoServerRunLeak('scenario 8 auth response body', authBody)
     if (authBody.includes(validJwt)) fail('scenario 8: JWT leaked to response body')
 
     // JWT with wrong scope → 403
@@ -586,7 +491,7 @@ const REQUIRED_FLAGS = [
       if (obj.publicBaseUrl !== SMOKE_AUDIENCE)
         fail(`scenario 9: publicBaseUrl wrong: ${obj.publicBaseUrl}`)
       if (obj.recordFresh !== true) fail('scenario 9: recordFresh must be true')
-      assertNoLeak('scenario 9 status stdout', r.stdout)
+      assertNoServerRunLeak('scenario 9 status stdout', r.stdout)
       console.log('[server-run-smoke] scenario 9 PASS: status while running → correct fields')
     }
 
@@ -603,7 +508,7 @@ const REQUIRED_FLAGS = [
       if (obj.action !== 'stopped') fail(`scenario 10: expected action:stopped, got ${obj.action}`)
       if (obj.ok !== true) fail('scenario 10: ok must be true')
       if (obj.pid !== ready.pid) fail(`scenario 10: pid mismatch: ${obj.pid} vs ${ready.pid}`)
-      assertNoLeak('scenario 10 stop stdout', r.stdout)
+      assertNoServerRunLeak('scenario 10 stop stdout', r.stdout)
       console.log('[server-run-smoke] scenario 10 PASS: stop while running → stopped')
     }
 
@@ -623,7 +528,7 @@ const REQUIRED_FLAGS = [
       }
       if (obj.state !== 'missing') fail(`scenario 11: expected state:missing, got ${obj.state}`)
       if (obj.ok !== false) fail('scenario 11: ok must be false')
-      assertNoLeak('scenario 11 status-after-stop stdout', r.stdout)
+      assertNoServerRunLeak('scenario 11 status-after-stop stdout', r.stdout)
       console.log('[server-run-smoke] scenario 11 PASS: status after stop → missing')
     }
   } finally {
@@ -649,7 +554,7 @@ const REQUIRED_FLAGS = [
     }
     if (obj.state !== 'missing') fail(`scenario 12: expected state:missing, got ${obj.state}`)
     if (obj.ok !== false) fail('scenario 12: ok must be false')
-    assertNoLeak('scenario 12 output', r.stdout)
+    assertNoServerRunLeak('scenario 12 output', r.stdout)
     console.log('[server-run-smoke] scenario 12 PASS: status no record → missing, exit 1')
   } finally {
     rmSync(dataDir, { recursive: true, force: true })
@@ -672,7 +577,7 @@ const REQUIRED_FLAGS = [
     if (obj.action !== 'not-running')
       fail(`scenario 13: expected action:not-running, got ${obj.action}`)
     if (obj.ok !== true) fail('scenario 13: ok must be true')
-    assertNoLeak('scenario 13 output', r.stdout)
+    assertNoServerRunLeak('scenario 13 output', r.stdout)
     console.log('[server-run-smoke] scenario 13 PASS: stop no record → not-running, exit 0')
   } finally {
     rmSync(dataDir, { recursive: true, force: true })
@@ -687,7 +592,9 @@ const REQUIRED_FLAGS = [
     keys: [{ ...drPublicKey.export({ format: 'jwk' }), kid: 'dr-key', use: 'sig', alg: 'ES256' }],
   }
   const drCertsDir = mkdtempSync(join(tmpdir(), 'whiteboard-doctor-smoke-certs-'))
-  const { keyFile: drKeyFile, certFile: drCertFile } = generateTestTlsCert(drCertsDir)
+  const { keyFile: drKeyFile, certFile: drCertFile } = generateTestTlsCert(drCertsDir, {
+    commonName: 'smoke-test-jwks-ca',
+  })
   const drTlsKey = readFileSync(drKeyFile)
   const drTlsCert = readFileSync(drCertFile)
 
@@ -747,7 +654,7 @@ const REQUIRED_FLAGS = [
           fail(
             `scenario 14: all checks must be ok or skipped, got ${badCheck.id}:${badCheck.status}`,
           )
-        assertNoLeak('scenario 14 stdout', r.stdout)
+        assertNoServerRunLeak('scenario 14 stdout', r.stdout)
         console.log(
           '[server-run-smoke] scenario 14 PASS: doctor valid config + JWKS → exit 0, ok:true',
         )
@@ -790,8 +697,8 @@ const REQUIRED_FLAGS = [
           fail('scenario 15: stdout must not contain raw externalUrl')
         if (r.stderr.trim() !== '')
           fail('scenario 15: stderr must be empty', { stderrBytes: r.stderr.length })
-        assertNoLeak('scenario 15 stdout', r.stdout)
-        assertNoLeak('scenario 15 stderr', r.stderr)
+        assertNoServerRunLeak('scenario 15 stdout', r.stdout)
+        assertNoServerRunLeak('scenario 15 stderr', r.stderr)
         console.log(
           '[server-run-smoke] scenario 15 PASS: invalid config → exit 1, ok:false, stderr safe',
         )
@@ -847,7 +754,7 @@ const REQUIRED_FLAGS = [
           if (permCheck.status !== 'warning')
             fail(`scenario 16: expected server.record_permissions warning, got ${permCheck.status}`)
         }
-        assertNoLeak('scenario 16 stdout', r.stdout)
+        assertNoServerRunLeak('scenario 16 stdout', r.stdout)
         console.log(
           '[server-run-smoke] scenario 16 PASS: stale record → identity skipped, permissions warning',
         )

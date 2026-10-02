@@ -25,15 +25,24 @@
 // available in all CI environments). Run it explicitly:
 //   node tests/e2e/distribution/packaged-server-mode-docker-smoke.mjs
 
-import { spawnSync } from 'node:child_process'
-import { createSign, generateKeyPairSync } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { generateKeyPairSync } from 'node:crypto'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, redactForDiagnostics, resolveServerImage } from './smoke-helpers.mjs'
+import {
+  assertNoLeak,
+  createFail,
+  createSkip,
+  docker,
+  generateTestTlsCert,
+  redactForDiagnostics,
+  resolveServerImage,
+  signEs256Jwt,
+  stopContainer,
+  waitForContainerReadyJson,
+} from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -42,129 +51,11 @@ const IMAGE_TAG = 'whiteboard-server-smoke:test'
 const SMOKE_ISSUER = 'https://auth.docker-smoke.example'
 const SMOKE_AUDIENCE = 'https://whiteboard.docker-smoke.example'
 const HOST_SERVER_PORT = 4293 // host port mapped to container's 3099
-const READINESS_TIMEOUT_MS = 60_000
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function fail(msg, ctx = {}) {
-  console.error(`[docker-smoke] FAIL: ${msg}`)
-  for (const [k, v] of Object.entries(ctx)) {
-    if (v !== undefined && v !== '') {
-      console.error(`  ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-    }
-  }
-  process.exit(1)
-}
-
-function skip(reason) {
-  console.log(`[docker-smoke] SKIP: ${reason}`)
-  process.exit(0)
-}
-
-function docker(args, opts = {}) {
-  return spawnSync('docker', args, {
-    encoding: 'utf8',
-    timeout: opts.timeout ?? 120_000,
-    ...opts,
-  })
-}
-
-// assertNoLeak (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
-
-function generateTestTlsCert(dir) {
-  const keyFile = join(dir, 'server.key')
-  const certFile = join(dir, 'server.crt')
-  const cnfFile = join(dir, 'openssl.cnf')
-  writeFileSync(
-    cnfFile,
-    [
-      '[req]',
-      'distinguished_name = req_dn',
-      'x509_extensions = san_ext',
-      'prompt = no',
-      '[req_dn]',
-      'CN = docker-smoke-ca',
-      '[san_ext]',
-      'subjectAltName = IP:127.0.0.1',
-      'basicConstraints = critical,CA:true',
-    ].join('\n'),
-  )
-  const r = spawnSync(
-    'openssl',
-    [
-      'req',
-      '-x509',
-      '-newkey',
-      'rsa:2048',
-      '-keyout',
-      keyFile,
-      '-out',
-      certFile,
-      '-days',
-      '1',
-      '-nodes',
-      '-config',
-      cnfFile,
-    ],
-    { stdio: 'pipe', encoding: 'utf8' },
-  )
-  if (r.status !== 0) throw new Error(`openssl failed: ${r.stderr}`)
-  return { keyFile, certFile }
-}
-
-function base64url(data) {
-  return Buffer.from(data).toString('base64url')
-}
-
-function derToRawEs256(derSig) {
-  let offset = 2
-  const rLen = derSig[offset + 1]
-  let r = derSig.slice(offset + 2, offset + 2 + rLen)
-  if (r[0] === 0x00) r = r.slice(1)
-  offset += 2 + rLen
-  const sLen = derSig[offset + 1]
-  let s = derSig.slice(offset + 2, offset + 2 + sLen)
-  if (s[0] === 0x00) s = s.slice(1)
-  const rPad = Buffer.alloc(32)
-  r.copy(rPad, 32 - r.length)
-  const sPad = Buffer.alloc(32)
-  s.copy(sPad, 32 - s.length)
-  return Buffer.concat([rPad, sPad])
-}
-
-function signEs256Jwt(privateKey, header, payload) {
-  const h = base64url(JSON.stringify(header))
-  const p = base64url(JSON.stringify(payload))
-  const signer = createSign('SHA256')
-  signer.update(`${h}.${p}`)
-  const raw = derToRawEs256(signer.sign({ key: privateKey, dsaEncoding: 'der' }))
-  return `${h}.${p}.${base64url(raw)}`
-}
-
-async function waitForReadyJson(containerName) {
-  const deadline = Date.now() + READINESS_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    await delay(1000)
-    const logs = docker(['logs', containerName], { timeout: 5_000 })
-    for (const line of logs.stdout.split('\n')) {
-      try {
-        const obj = JSON.parse(line)
-        if (obj.ok === true && typeof obj.pid === 'number') return obj
-      } catch {
-        /* not JSON */
-      }
-    }
-    const inspect = docker(['inspect', '--format={{.State.Running}}', containerName], {
-      timeout: 5_000,
-    })
-    if (inspect.stdout.trim() !== 'true') return null
-  }
-  return null
-}
-
-function stopContainer(name) {
-  docker(['stop', '-t', '10', name], { timeout: 20_000 })
-}
+const fail = createFail('docker-smoke')
+const skip = createSkip('docker-smoke')
 
 // ── Availability check ────────────────────────────────────────────────────────
 
@@ -249,7 +140,9 @@ const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256
 const jwkPublic = publicKey.export({ format: 'jwk' })
 const jwks = { keys: [{ ...jwkPublic, kid: 'smoke-key', use: 'sig', alg: 'ES256' }] }
 
-const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir)
+const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir, {
+  commonName: 'docker-smoke-ca',
+})
 const tlsKey = readFileSync(tlsKeyFile)
 const tlsCert = readFileSync(tlsCertFile)
 
@@ -313,7 +206,7 @@ try {
     if (r.status !== 0) fail('scenario 3: docker run failed', { stderrBytes: r.stderr.length })
     activeContainer = 'wb-smoke-valid'
 
-    const ready = await waitForReadyJson('wb-smoke-valid')
+    const ready = await waitForContainerReadyJson('wb-smoke-valid')
     if (!ready) {
       const logs = docker(['logs', 'wb-smoke-valid'], { timeout: 5_000 })
       const exit = docker(['inspect', '--format={{.State.ExitCode}}', 'wb-smoke-valid'], {
@@ -343,7 +236,7 @@ try {
     // the schema, so a raw pid could not reach the wire even if the handler
     // built one. Nothing caught the drift because this smoke ran only on the
     // release path. The startup line on stdout is a DIFFERENT payload and does
-    // still carry pid; that is what waitForReadyJson reads.
+    // still carry pid; that is what waitForContainerReadyJson reads.
     if (body.ok !== true) fail('scenario 4: ping.ok must be true')
     if (typeof body.instanceId !== 'string' || body.instanceId.length === 0) {
       fail('scenario 4: ping.instanceId must be a non-empty string')
@@ -473,7 +366,7 @@ try {
     if (r.status !== 0) fail('scenario 9: docker run (restart) failed')
     activeContainer = 'wb-smoke-restart'
 
-    const ready = await waitForReadyJson('wb-smoke-restart')
+    const ready = await waitForContainerReadyJson('wb-smoke-restart')
     if (!ready) fail('scenario 9: server did not start after restart with stale volume')
     stopContainer('wb-smoke-restart')
     activeContainer = null

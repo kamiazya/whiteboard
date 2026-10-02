@@ -18,11 +18,11 @@
 //      pass with) — only /api/runtime/ping is public
 //   7. WWW-Authenticate contract: 401 carries it, 403 does not
 
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak as assertNoLeakHelper } from './smoke-helpers.mjs'
+import { assertNoLeak as assertNoLeakHelper, createFail, createTempDirs } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -43,39 +43,23 @@ const PUBLIC_URL = 'https://smoke.example.com'
 const ALLOWED_ORIGINS = ['https://smoke.example.com']
 const RESOLVED_TMP = realpathSync(tmpdir())
 
-function fail(msg, ctx = {}) {
-  console.error(`[server-mode-smoke] FAIL: ${msg}`)
-  for (const [k, v] of Object.entries(ctx)) {
-    if (v !== undefined && v !== '') {
-      console.error(`  ${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-    }
-  }
-  process.exit(1)
-}
+const fail = createFail('server-mode-smoke')
 
 // assertNoLeakHelper (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
 // This wrapper adds the script-specific token, the 0.0.0.0 bind address,
 // and the canonical-tmpdir check.
-function assertNoLeak(label, text) {
+function assertNoAppLeak(label, text) {
   assertNoLeakHelper(label, text, [SMOKE_TOKEN, 'http://0.0.0.0'])
   if (RESOLVED_TMP && text.includes(RESOLVED_TMP)) {
     fail(`${label}: resolved tmpdir path leaked`)
   }
 }
 
-const tempDirs = []
-function makeTempDir(prefix) {
-  const d = mkdtempSync(join(tmpdir(), prefix))
-  tempDirs.push(d)
-  return d
-}
-function cleanup() {
-  for (const d of tempDirs) rmSync(d, { recursive: true, force: true })
-}
+const tempDirs = createTempDirs()
 
 // Set WHITEBOARD_DATA_DIR before any dynamic imports so dist/server/config.js
 // captures the temp path at module evaluation time.
-const dataDir = makeTempDir('whiteboard-server-mode-smoke-')
+const dataDir = tempDirs.make('whiteboard-server-mode-smoke-')
 process.env.WHITEBOARD_DATA_DIR = dataDir
 
 const [{ createApp }, { planServerModeAuth }, { createContainer, resolveServerDeps }] =
@@ -178,7 +162,7 @@ try {
         message: threw.message,
       })
     }
-    assertNoLeak('1a error message', threw.message)
+    assertNoAppLeak('1a error message', threw.message)
   }
   {
     let threw = null
@@ -298,7 +282,7 @@ try {
     if (status401 !== 401) fail('5a: expected 401 without auth', { status: status401 })
     if (wwwa401 !== 'Bearer')
       fail('5a: 401 must have WWW-Authenticate: Bearer', { header: wwwa401 })
-    assertNoLeak('5a 401', body401)
+    assertNoAppLeak('5a 401', body401)
 
     const res403 = await req(appEmpty, 'GET', '/api/workspaces', { bearer: SMOKE_TOKEN })
     const status403 = res403.status
@@ -306,7 +290,7 @@ try {
     const body403 = await res403.text()
     if (status403 !== 403) fail('5a: expected 403 with empty scopes', { status: status403 })
     if (wwwa403) fail('5a: 403 must not have WWW-Authenticate', { header: wwwa403 })
-    assertNoLeak('5a 403', body403)
+    assertNoAppLeak('5a 403', body403)
 
     const appRead = makeApp(['workspace:read'])
     const resPass = await req(appRead, 'GET', '/api/workspaces', { bearer: SMOKE_TOKEN })
@@ -321,7 +305,7 @@ try {
     const appEmpty = makeApp([])
     const res401 = await req(appEmpty, 'POST', '/api/w/w1/document/s1/export')
     if (res401.status !== 401) fail('5b: expected 401 without auth', { status: res401.status })
-    assertNoLeak('5b 401', await res401.text())
+    assertNoAppLeak('5b 401', await res401.text())
 
     const appRead = makeApp(['canvas:read'])
     const res403 = await req(appRead, 'POST', '/api/w/w1/document/s1/export', {
@@ -330,7 +314,7 @@ try {
     if (res403.status !== 403) {
       fail('5b: canvas:read must be 403 on canvas:write export route', { status: res403.status })
     }
-    assertNoLeak('5b 403', await res403.text())
+    assertNoAppLeak('5b 403', await res403.text())
 
     const appWrite = makeApp(['canvas:write'])
     const resPass = await req(appWrite, 'POST', '/api/w/w1/document/s1/export', {
@@ -370,7 +354,7 @@ try {
         status: resNoAuth.status,
       })
     }
-    assertNoLeak('6 401', await resNoAuth.text())
+    assertNoAppLeak('6 401', await resNoAuth.text())
 
     const resAuthed = await appLocal.request('/api/workspaces', {
       headers: { Authorization: `Bearer ${LOCAL_TOKEN}` },
@@ -414,5 +398,5 @@ try {
 
   console.log('[server-mode-smoke] all scenarios passed')
 } finally {
-  cleanup()
+  tempDirs.cleanup()
 }
