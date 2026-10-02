@@ -390,8 +390,6 @@ const RULE_FILE_FLAKE_MENTIONS: Record<string, string> = {
   '.claude/scripts/flake-watch-lib.mjs':
     'the second-occurrence rule, which integrator-flow.md carries',
   '.claude/scripts/flake-watch-lib.test.mjs': 'the same second-occurrence rule',
-  '.claude/workflows/ci-triage.workflow.mjs':
-    'a pointer to the rule file in general, not to a shape',
 }
 
 const RULE_FILE_FLAKE_CITATION = /integrator-flow\.md.{0,60}(?:shape|flake)/
