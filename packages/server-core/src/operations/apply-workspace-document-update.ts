@@ -26,32 +26,13 @@ export interface ApplyWorkspaceDocumentUpdateInput {
  * projection between the import and the eviction would diff old content
  * back over this import on its next save.
  */
-export interface ApplyWorkspaceDocumentUpdateHooks {
-  /**
-   * Consulted INSIDE the lock, after the read: a surface whose frames queue
-   * (a websocket) uses this for its frame-race guard — a later frame can
-   * pass the surface's own pre-lock check before an earlier frame tears the
-   * socket down, and only a check taken under the hold closes that window.
-   */
-  readonly abortIf?: () => boolean
-  /**
-   * Called INSIDE the lock before `'malformed-update'` returns, so a
-   * surface can mark its socket closing while the lock still excludes
-   * other writers — a queued valid frame must not persist onto a socket
-   * the malformed frame is about to close.
-   */
-  readonly onMalformed?: () => void
-}
-
 export async function applyWorkspaceDocumentUpdate(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments'>,
   input: ApplyWorkspaceDocumentUpdateInput,
-  hooks: ApplyWorkspaceDocumentUpdateHooks = {},
-): Promise<'applied' | 'aborted' | 'malformed-update'> {
+): Promise<'applied' | 'malformed-update'> {
   const { workspaceId, update } = input
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
-    if (hooks.abortIf?.() === true) return 'aborted'
     try {
       doc.import(update)
     } catch (err: unknown) {
@@ -60,7 +41,6 @@ export async function applyWorkspaceDocumentUpdate(
         updateBytes: update.byteLength,
         err,
       })
-      hooks.onMalformed?.()
       return 'malformed-update'
     }
     // Fan-out to subscribers happens inside save.

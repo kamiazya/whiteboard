@@ -142,8 +142,6 @@ export interface DocumentPageModel {
     readonly menuTriggerRef?: RefObject<HTMLButtonElement | null>
     /** After the ⋯ menu in the actions row (a confirm dialog). */
     readonly afterMenu?: ReactNode
-    /** Header rows under the top bar (banners, notices, teasers). */
-    readonly headerExtras?: ReactNode
     /** Rendered INSTEAD of the editor row (an empty state). */
     readonly replaceEditor?: ReactNode
     /** After the editor row, inside the shell (a toast). */

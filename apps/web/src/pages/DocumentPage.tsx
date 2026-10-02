@@ -194,7 +194,6 @@ function DocumentHeader({
           />
         </Suspense>
       )}
-      {model.slots.headerExtras}
     </>
   )
 }

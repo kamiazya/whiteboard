@@ -16,9 +16,9 @@ widget, HTML export). Private workspace package — never published to npm.
   body or unrecognized node kind still renders, silently.
   Pan/zoom/select are the browser's native SVG behavior; there is no
   editing affordance.
-- `mountCanvasViewer(container, options)` — imperative mount with a
-  `messageHandler` seam for embedding hosts and an embedded-scene slot
-  (`<script data-whiteboard-scene>` or `window.__WHITEBOARD_VIEWER_SCENE__`).
+- `mountCanvasViewer(container, options)` — imperative mount with an
+  embedded-scene slot (`<script data-whiteboard-scene>` or
+  `window.__WHITEBOARD_VIEWER_SCENE__`).
   Throws a `ViewerSceneError` if the scene payload fails schema validation.
 - `parseViewerScene` / `serializeViewerScene` (from `./scene`) — a total
   parser/serializer pair delegating to codec's

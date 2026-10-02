@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { mountCanvasViewer, ViewerSceneError } from './mount.js'
 
 function resetDom() {
@@ -89,42 +89,6 @@ describe('mountCanvasViewer', () => {
 
     expect(container.querySelector('[data-testid="canvas-viewer"]')).toBeTruthy()
     handle.dispose()
-  })
-
-  it('registers a window message listener that forwards the full MessageEvent to messageHandler', () => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-    const messageHandler = vi.fn()
-
-    const handle = mountCanvasViewer(container, {
-      scene: { nodes: [] },
-      messageHandler,
-    })
-
-    window.dispatchEvent(
-      new MessageEvent('message', { data: { hello: 'world' }, origin: 'https://host.example' }),
-    )
-    expect(messageHandler).toHaveBeenCalledTimes(1)
-    const receivedEvent = messageHandler.mock.calls[0]?.[0] as MessageEvent
-    expect(receivedEvent.data).toEqual({ hello: 'world' })
-    expect(receivedEvent.origin).toBe('https://host.example')
-
-    handle.dispose()
-  })
-
-  it('unbinds the message listener on dispose', () => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-    const messageHandler = vi.fn()
-
-    const handle = mountCanvasViewer(container, {
-      scene: { nodes: [] },
-      messageHandler,
-    })
-    handle.dispose()
-
-    window.dispatchEvent(new MessageEvent('message', { data: { hello: 'again' } }))
-    expect(messageHandler).not.toHaveBeenCalled()
   })
 
   it('forwards background, so a host can paint the paper the theme names', () => {
