@@ -14,16 +14,18 @@ import type { LoroStoreLike } from '../pages/use-browser-document-controller.js'
 class InMemoryDefaultDocumentPointer implements DefaultDocumentPointer {
   private documentId: string | null = null
 
-  async get(): Promise<string | null> {
-    return this.documentId
+  get(): Promise<string | null> {
+    return Promise.resolve(this.documentId)
   }
 
-  async set(documentId: string): Promise<void> {
+  set(documentId: string): Promise<void> {
     this.documentId = documentId
+    return Promise.resolve()
   }
 
-  async clear(): Promise<void> {
+  clear(): Promise<void> {
     this.documentId = null
+    return Promise.resolve()
   }
 }
 

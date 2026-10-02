@@ -105,7 +105,7 @@ function GetTheExtension() {
  * requests, so the person is told which side to update rather than offered a
  * button whose every use fails.
  */
-function ExtensionSkew({ why }: { why: string }) {
+function ExtensionSkew({ why }: { readonly why: string }) {
   return (
     <p role="alert" className="text-xs text-muted-foreground">
       {why}
