@@ -67,10 +67,9 @@
     "publish-gate": "pnpm --filter @whiteboard/checks publish-gate",
     "lint": "biome check --error-on-warnings .",
     "lint:fix": "biome check --write .",
-    "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server apps/web/src",
     "knip": "knip --treat-config-hints-as-errors",
     "secretlint": "secretlint --secretlintignore .secretlintignore \"**/*\"",
-    "test:scripts": "node --test .claude/scripts/*.test.mjs .claude/workflows/lib/*.test.mjs tests/e2e/distribution/*.test.mjs",
+    "test:scripts": "node --test --test-reporter=dot .claude/scripts/*.test.mjs .claude/workflows/lib/*.test.mjs tests/e2e/distribution/*.test.mjs",
     "prepare": "lefthook install || echo WARNING: lefthook install failed - git hooks are NOT active. Re-run pnpm lefthook install once fixed.",
     "bench": "vitest bench --project \"canvas-render-node (bench)\""
   },
