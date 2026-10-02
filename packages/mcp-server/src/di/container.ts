@@ -19,16 +19,28 @@ import type { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-
 import { Container, type ContainerModule } from 'inversify'
 import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
-import { documentTeardown } from '../server/store/document-store.js'
-import { documentWritten } from '../server/store/document-written.js'
+import { createDocumentTeardown } from '../server/store/document-store.js'
+import { createDocumentWritten } from '../server/store/document-written.js'
 import { liveDocuments, workspaceDocuments } from '../server/store/live-documents.js'
+import { globalStoreScope, type StoreScope } from '../server/store/store-scope.js'
 import { FileVersionStore } from '../server/store/version-store.js'
 import { agentVersionHistory } from './agent-version-history.js'
+import { STORE_SCOPE } from './store-scope-token.js'
 
 export function createContainer(storeModule: ContainerModule): Container {
   const container = new Container()
   container.load(storeModule)
   return container
+}
+
+/**
+ * The data directory and tenant the container's stores serve. The store module
+ * binds it beside the stores themselves, so the seams built here follow the
+ * stores by construction; a container with no binding (the in-memory one a
+ * test builds) has no directory of its own, and its seams take the process's.
+ */
+function storeScopeOf(container: Container): StoreScope {
+  return container.isBound(STORE_SCOPE) ? container.get<StoreScope>(STORE_SCOPE) : globalStoreScope
 }
 
 /**
@@ -91,6 +103,7 @@ export function resolveServerDeps(
   const documentStore: DocumentStore = container.get(TOKENS.DocumentStore)
   const blobStore: BlobStore = container.get(TOKENS.BlobStore)
   const documentIndex: DocumentIndex = container.get(TOKENS.DocumentIndex)
+  const scope = storeScopeOf(container)
   const trashCapable =
     'listTrash' in documentIndex && 'restoreDocument' in documentIndex
       ? (documentIndex as DocumentIndex & LoroWorkspaceDocumentIndex)
@@ -157,19 +170,19 @@ export function resolveServerDeps(
     // thumbnails, the blob and a cached doc instance behind — the HTTP
     // DELETE has always cleaned those up, and the two paths disagreeing is
     // the defect this closes.
-    documentTeardown,
+    documentTeardown: createDocumentTeardown(scope),
     // Same reason as documentTeardown: this package's own op-log
     // maintenance, not an interchangeable implementation. Wired HERE rather
     // than in the HTTP route registration, which is what confined the old
     // saved-listener to one deployment shape.
-    documentWritten,
+    documentWritten: createDocumentWritten(scope),
     // The daemon's own version store behind the seam, stamping the daemon's
     // agent identity on a save that names no operator (see the wrapper).
-    versions: agentVersionHistory(new FileVersionStore(), options.daemonActor),
+    versions: agentVersionHistory(new FileVersionStore(scope), options.daemonActor),
     // Same reason as documentTeardown: this package's own store, cache and
     // lock, bundled once so operations reach them through the seam instead
     // of any adapter importing a mechanic.
-    liveDocuments: liveDocuments(),
-    workspaceDocuments: workspaceDocuments(),
+    liveDocuments: liveDocuments(scope),
+    workspaceDocuments: workspaceDocuments(scope),
   }
 }

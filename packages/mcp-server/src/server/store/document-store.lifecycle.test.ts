@@ -161,9 +161,8 @@ describe('deleting a document', () => {
     const { FsBlobStore } = await import('./fs/fs-blob-store.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { peekDoc } = await import('./doc-cache.js')
-    const { cacheBackedWorkspaceDocs, documentTeardown, resolveDocumentIdAtPath } = await import(
-      './document-store.js'
-    )
+    const { cacheBackedWorkspaceDocs, createDocumentTeardown, resolveDocumentIdAtPath } =
+      await import('./document-store.js')
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'agent-deleted', doc)
@@ -191,7 +190,7 @@ describe('deleting a document', () => {
             join(tempDir, 'blobs'),
           ),
         ),
-        documentTeardown,
+        documentTeardown: createDocumentTeardown(),
       },
       { workspaceId: 'session1', documentId },
     )

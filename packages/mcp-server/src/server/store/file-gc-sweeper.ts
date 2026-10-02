@@ -16,14 +16,13 @@ import { lstat, readdir, realpath } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 import { isMissingFileError } from '../../shared/errno.js'
 import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay.js'
-import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { workspaceDir, workspaceFilesDir, workspacesRoot } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { validateWorkspaceId } from '../validators.js'
 import { listWorkspaces } from './document-store.js'
 import { purgeDanglingFiles } from './file-gc.js'
 import { parseFileGcIntervalMs } from './storage-env.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
 import { FileVersionStore } from './version-store.js'
 
@@ -74,10 +73,12 @@ function resolveIntervalMs(explicit: number | undefined): number {
  */
 async function admittedWorkspaceDir(
   name: string,
-  dataDir: string,
+  scope: StoreScope,
   realDataDir: string,
 ): Promise<string | null> {
-  const entryPath = join(workspacesRoot(dataDir, SELF_HOST_TENANT_ID), name)
+  const { dataDir } = scope
+  const { tenantId } = scope.layout
+  const entryPath = join(workspacesRoot(dataDir, tenantId), name)
 
   let stats: Awaited<ReturnType<typeof lstat>>
   try {
@@ -110,7 +111,7 @@ async function admittedWorkspaceDir(
   }
 
   try {
-    const filesStat = await lstat(workspaceFilesDir(dataDir, SELF_HOST_TENANT_ID, name))
+    const filesStat = await lstat(workspaceFilesDir(dataDir, tenantId, name))
     if (!filesStat.isDirectory()) return null
   } catch {
     return null
@@ -119,11 +120,11 @@ async function admittedWorkspaceDir(
   return workspaceId
 }
 
-async function discoverFsWorkspaces(): Promise<string[]> {
-  const dataDir = getDataDir()
+async function discoverFsWorkspaces(scope: StoreScope): Promise<string[]> {
+  const { dataDir } = scope
   let entries: Dirent<string>[]
   try {
-    entries = await readdir(workspacesRoot(dataDir, SELF_HOST_TENANT_ID), {
+    entries = await readdir(workspacesRoot(dataDir, scope.layout.tenantId), {
       withFileTypes: true,
       encoding: 'utf8',
     })
@@ -141,7 +142,7 @@ async function discoverFsWorkspaces(): Promise<string[]> {
 
   const result: string[] = []
   for (const entry of entries) {
-    const workspaceId = await admittedWorkspaceDir(entry.name, dataDir, realDataDir)
+    const workspaceId = await admittedWorkspaceDir(entry.name, scope, realDataDir)
     if (workspaceId !== null) result.push(workspaceId)
   }
   return result
@@ -215,9 +216,10 @@ async function checkSubpathContainment(
 // filesystem-discovered workspace never reaches purge with such a files/ dir
 // (discoverFsWorkspaces()'s lstat().isDirectory() check is false for a
 // symlink), so a DB-listed workspace needs the same files/ subpath check.
-async function isDbWorkspaceDirSafe(workspaceId: string): Promise<boolean> {
-  const dataDir = getDataDir()
-  const entryPath = workspaceDir(dataDir, SELF_HOST_TENANT_ID, workspaceId)
+async function isDbWorkspaceDirSafe(scope: StoreScope, workspaceId: string): Promise<boolean> {
+  const { dataDir } = scope
+  const { tenantId } = scope.layout
+  const entryPath = workspaceDir(dataDir, tenantId, workspaceId)
 
   let realDataDir: string
   try {
@@ -234,7 +236,7 @@ async function isDbWorkspaceDirSafe(workspaceId: string): Promise<boolean> {
   if (dirCheck === 'unsafe') return false
   if (dirCheck === 'missing') return true
 
-  const filesPath = workspaceFilesDir(dataDir, SELF_HOST_TENANT_ID, workspaceId)
+  const filesPath = workspaceFilesDir(dataDir, tenantId, workspaceId)
   const filesCheck = await checkSubpathContainment(
     workspaceId,
     filesPath,
@@ -253,6 +255,12 @@ export interface FileGcSweeperOptions {
   listWorkspaces?: () => Promise<{ workspaceId: string }[]>
   discoverFsWorkspaces?: () => Promise<string[]>
   purge?: (workspaceId: string) => Promise<unknown>
+  /**
+   * Which data directory this sweeper keeps clean. Omitted, the process's —
+   * what the composition roots take, since each serves the keeper's one
+   * directory.
+   */
+  scope?: StoreScope
   // FileVersionStore is stateless (no fields; every method re-reads the
   // filesystem under withWorkspaceWriteLock), so constructing one here is
   // semantically identical to routes/files.ts's instance over the same data
@@ -294,34 +302,35 @@ export interface FileGcSweeper {
  * has not, so it gets its own check before joining.
  */
 async function workspacesToSweep(
-  listWs: () => Promise<{ workspaceId: string }[]>,
-  discoverFs: () => Promise<string[]>,
+  scope: StoreScope,
+  options: Pick<FileGcSweeperOptions, 'listWorkspaces' | 'discoverFsWorkspaces'>,
 ): Promise<Set<string>> {
+  const listWs = options.listWorkspaces ?? (() => listWorkspaces(scope))
+  const discoverFs = options.discoverFsWorkspaces ?? (() => discoverFsWorkspaces(scope))
   const [dbWorkspaces, fsWorkspaces] = await Promise.all([listWs(), discoverFs()])
   const ids = new Set<string>(fsWorkspaces)
   for (const w of dbWorkspaces) {
     if (ids.has(w.workspaceId)) continue
-    if (await isDbWorkspaceDirSafe(w.workspaceId)) ids.add(w.workspaceId)
+    if (await isDbWorkspaceDirSafe(scope, w.workspaceId)) ids.add(w.workspaceId)
   }
   return ids
 }
 
 export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcSweeper {
   const intervalMs = resolveIntervalMs(options.intervalMs)
-  const sweeperVersionStore = options.versionStore ?? new FileVersionStore()
-  const listWs = options.listWorkspaces ?? listWorkspaces
-  const discoverFs = options.discoverFsWorkspaces ?? discoverFsWorkspaces
+  const scope = options.scope ?? globalStoreScope
+  const sweeperVersionStore = options.versionStore ?? new FileVersionStore(scope)
   const purge =
     options.purge ??
     ((workspaceId: string) =>
-      purgeDanglingFiles(workspaceId, { versionStore: sweeperVersionStore }))
+      purgeDanglingFiles(workspaceId, { versionStore: sweeperVersionStore, scope }))
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let inFlight: Promise<void> | null = null
   let stopped = false
 
   async function runPass(): Promise<void> {
-    const ids = await workspacesToSweep(listWs, discoverFs)
+    const ids = await workspacesToSweep(scope, options)
 
     // Sequential, not parallel: purgeDanglingFiles holds a per-workspace
     // write lock and forks Loro docs internally, so running every workspace
@@ -343,7 +352,7 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
         //
         // `isDbWorkspaceDirSafe` already logs the specific reason it refused,
         // so there is nothing more to log here beyond skipping the purge.
-        if (!(await isDbWorkspaceDirSafe(workspaceId))) continue
+        if (!(await isDbWorkspaceDirSafe(scope, workspaceId))) continue
         await purge(workspaceId)
       } catch (err) {
         log.error({ workspaceId, err }, 'file-gc sweep failed for workspace')

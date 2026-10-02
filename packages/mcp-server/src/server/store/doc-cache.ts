@@ -1,14 +1,19 @@
 import type { LoroDoc } from 'loro-crdt'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 
-// key: "workspaceId/path"
+// key: "<dataDir>::workspaceId/path". The data dir is part of it because the
+// cache is process-wide while a store is not: two stores over different
+// directories holding the same workspace id and path would otherwise be
+// served each other's documents.
 //
 // LRU eviction keeps LoroDoc memory from growing without bound across many
 // documents or during long daemon uptime. One canvas can hold several MiB
 // of CRDT history, so cap the cache at 32 entries. This uses Map insertion order as
 // the minimal implementation with no extra dependency.
 //
-// This module imports nothing of its own: the store passes `getOrLoad` the
-// loader to call on a miss, rather than the cache reaching back into it.
+// This module imports no store module but the scope: the store passes
+// `getOrLoad` the loader to call on a miss, rather than the cache reaching
+// back into it.
 // That is what keeps `document-store.ts` — which must evict after operations
 // that replace on-disk state — free of an import cycle with this file.
 //
@@ -18,6 +23,14 @@ import type { LoroDoc } from 'loro-crdt'
 // hot side of the LRU.
 const CACHE_MAX_SIZE = 32
 const cache = new Map<string, LoroDoc>()
+
+function keyOf(scope: StoreScope, workspaceId: string, path: string): string {
+  return `${workspacePrefix(scope, workspaceId)}${path}`
+}
+
+function workspacePrefix(scope: StoreScope, workspaceId: string): string {
+  return `${scope.dataDir}::${workspaceId}/`
+}
 
 function touch(key: string, doc: LoroDoc): void {
   // Reinsert existing keys so they move to the end of insertion order (= MRU).
@@ -47,8 +60,9 @@ export async function getOrLoad(
   workspaceId: string,
   path: string,
   load: () => Promise<LoroDoc>,
+  scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc> {
-  const key = `${workspaceId}/${path}`
+  const key = keyOf(scope, workspaceId, path)
   const existing = cache.get(key)
   if (existing) {
     touch(key, existing)
@@ -92,8 +106,12 @@ export function clearCache(): void {
 // forcing the next getDoc call to reload it.
 // Callers already holding a live doc reference, such as WS handlers, do not get swapped
 // automatically. getDoc is safe because it always consults the cache first.
-export function evictDoc(workspaceId: string, path: string): void {
-  const key = `${workspaceId}/${path}`
+export function evictDoc(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): void {
+  const key = keyOf(scope, workspaceId, path)
   cache.delete(key)
   abortPendingLoad(key)
 }
@@ -103,8 +121,11 @@ export function evictDoc(workspaceId: string, path: string): void {
 // per-document projection at once, and a stale projection is worse than a
 // stale doc — the next per-document save would diff the OLD content against
 // the tree and silently revert the imported edit.
-export function evictWorkspaceDocs(workspaceId: string): void {
-  const prefix = `${workspaceId}/`
+export function evictWorkspaceDocs(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): void {
+  const prefix = workspacePrefix(scope, workspaceId)
   for (const key of Array.from(cache.keys())) {
     if (key.startsWith(prefix)) cache.delete(key)
   }
@@ -113,12 +134,19 @@ export function evictWorkspaceDocs(workspaceId: string): void {
   }
 }
 
-// /debug helper: list cached canvas keys ("workspaceId/path").
-export function getCacheKeys(): string[] {
+// /debug helper: list cached canvas keys ("workspaceId/path") of one store.
+export function getCacheKeys(scope: StoreScope = globalStoreScope): string[] {
+  const own = `${scope.dataDir}::`
   return Array.from(cache.keys())
+    .filter((key) => key.startsWith(own))
+    .map((key) => key.slice(own.length))
 }
 
 // /debug helper: read a LoroDoc from cache without populating it.
-export function peekDoc(workspaceId: string, path: string): LoroDoc | undefined {
-  return cache.get(`${workspaceId}/${path}`)
+export function peekDoc(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): LoroDoc | undefined {
+  return cache.get(keyOf(scope, workspaceId, path))
 }

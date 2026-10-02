@@ -106,22 +106,29 @@ async function buildDb(dataDir: string): Promise<Database> {
 }
 
 /**
- * The database as a store sees it: bound to the self-host tenant, so every
- * query on a tenant-scoped table is filtered and stamped (`tenant-database.ts`).
- * A keeper with one tenant is the only keeper today; a many-tenant one binds
- * per request instead, and nothing below this line changes.
+ * The database as a store sees it: bound to one tenant — the self-host one
+ * unless a keeper that hosts several names another — so every query on a
+ * tenant-scoped table is filtered and stamped (`tenant-database.ts`).
  */
-export async function getDb(dataDir: string = getDataDir()): Promise<TenantDatabase> {
+export async function getDb(
+  dataDir: string = getDataDir(),
+  tenantId: string = SELF_HOST_TENANT_ID,
+): Promise<TenantDatabase> {
   const raw = await getRawDb(dataDir)
-  let bound = tenantBound.get(raw)
+  let perTenant = tenantBound.get(raw)
+  if (!perTenant) {
+    perTenant = new Map()
+    tenantBound.set(raw, perTenant)
+  }
+  let bound = perTenant.get(tenantId)
   if (!bound) {
-    bound = tenantDatabase(raw, SELF_HOST_TENANT_ID)
-    tenantBound.set(raw, bound)
+    bound = tenantDatabase(raw, tenantId)
+    perTenant.set(tenantId, bound)
   }
   return bound
 }
 
-const tenantBound = new WeakMap<Database, TenantDatabase>()
+const tenantBound = new WeakMap<Database, Map<string, TenantDatabase>>()
 
 /**
  * The unscoped database, for what works across every tenant — today only the

@@ -2,10 +2,15 @@ import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { Container, ContainerModule } from 'inversify'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { EXPORT_FONT_FAMILY } from '../server/export/export-font.js'
-import { documentTeardown } from '../server/store/document-store.js'
-import { documentWritten } from '../server/store/document-written.js'
+import {
+  _autoCompactTimerCountForTests,
+  uninstallAutoCompact,
+} from '../server/store/auto-compact.js'
+import { peekDoc } from '../server/store/doc-cache.js'
+import { getDoc } from '../server/store/document-store.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { createContainer, resolveServerDeps } from './container.js'
@@ -100,15 +105,36 @@ describe('resolveServerDeps document teardown', () => {
   // saved-listener was installed from createDocumentRouter, so stdio MCP —
   // which never registers routes — had no subscriber at all. Asserting the
   // container supplies it is what stops that shape returning.
-  it('supplies the write observer, so stdio MCP schedules compaction too', () => {
+  it('supplies the write observer, so stdio MCP schedules compaction too', async () => {
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
+    uninstallAutoCompact()
 
-    expect(deps.documentWritten).toBe(documentWritten)
+    await deps.documentWritten?.({
+      workspaceId: 'ws-container',
+      documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
+      doc: new LoroDoc(),
+    })
+
+    expect(_autoCompactTimerCountForTests()).toBe(1)
+    uninstallAutoCompact()
   })
 
-  it("supplies the composition root's own teardown, not an inert stub", () => {
+  it("supplies the composition root's own teardown, not an inert stub", async () => {
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
+    // A cached projection the teardown has to drop: an inert stub would run
+    // the delete and leave it behind for the next create to inherit.
+    await getDoc('ws-container', 'torn-down')
+    expect(peekDoc('ws-container', 'torn-down')).toBeDefined()
 
-    expect(deps.documentTeardown).toBe(documentTeardown)
+    await deps.documentTeardown.around(
+      {
+        workspaceId: 'ws-container',
+        documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
+        path: 'torn-down',
+      },
+      async () => true,
+    )
+
+    expect(peekDoc('ws-container', 'torn-down')).toBeUndefined()
   })
 })

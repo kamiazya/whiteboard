@@ -16,7 +16,8 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { documentWritten } = await import('./document-written.js')
+const { createDocumentWritten } = await import('./document-written.js')
+const documentWritten = createDocumentWritten()
 const { saveDocument } = await import('./document-store.js')
 const { getDb } = await import('./db/index.js')
 const { prepareDataDir } = await import('./db/prepare.js')

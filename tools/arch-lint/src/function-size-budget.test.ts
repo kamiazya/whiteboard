@@ -650,7 +650,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 202 -> 132: the same move; server mode declares nothing of its own.
   // 128 -> 103: the holder and the sweeper's capped stop moved there as well.
   'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 103,
-  'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 52,
   // 53 -> 58: the refresh interval's in-flight write is now held and awaited
   // before the marker is removed. `clearInterval` cancels the next tick and
   // not the one already running, so a straggler used to recreate the marker

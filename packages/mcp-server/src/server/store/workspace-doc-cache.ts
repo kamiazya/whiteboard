@@ -5,12 +5,12 @@ import {
 } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
 import { errorMessage } from '../../shared/error-message.js'
-import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictWorkspaceDocs } from './doc-cache.js'
-import { dbReady, documentStoreReady } from './store-handles.js'
+import { documentStoreReady } from './store-handles.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /**
@@ -21,10 +21,10 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  * O(workspace) on every keystroke burst, while the incremental `save`
  * exports only what moved.
  *
- * Keyed by data dir AS WELL as workspace id because tests point
- * `getDataDir()` at a fresh directory per test; a cache keyed by workspace
- * alone would carry one test's document tree into the next test's empty
- * database. In production there is one data dir for the process lifetime.
+ * Keyed by data dir AS WELL as workspace id, because the cache is process-wide
+ * while a store is not: two stores over different directories (a second
+ * keeper's, or a test's fresh one) must not be served each other's document
+ * tree for the same workspace id.
  *
  * Coherence rule: every content write flows through the cached instance
  * (saveDocument diffs the caller's doc against it), so it can only go stale
@@ -34,8 +34,8 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  */
 const workspaceDocCache = new Map<string, LoroDoc>()
 
-function workspaceDocCacheKey(workspaceId: string): string {
-  return `${getDataDir()}::${workspaceId}`
+function workspaceDocCacheKey(scope: StoreScope, workspaceId: string): string {
+  return `${scope.dataDir}::${workspaceId}`
 }
 
 // A workspace record whose stored bytes will not decode is CORRUPTION, and
@@ -60,15 +60,21 @@ export function _clearWorkspaceDocCacheForTests(): void {
  * but persisting it failed — keeping it would serve unpersisted state as
  * though it were durable.
  */
-export function evictWorkspaceDocCache(workspaceId: string): void {
-  workspaceDocCache.delete(workspaceDocCacheKey(workspaceId))
+export function evictWorkspaceDocCache(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): void {
+  workspaceDocCache.delete(workspaceDocCacheKey(scope, workspaceId))
 }
 
-export async function getWorkspaceDoc(workspaceId: string): Promise<LoroDoc> {
-  const key = workspaceDocCacheKey(workspaceId)
+export async function getWorkspaceDoc(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<LoroDoc> {
+  const key = workspaceDocCacheKey(scope, workspaceId)
   const cached = workspaceDocCache.get(key)
   if (cached !== undefined) return cached
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
   const doc = await docs
     .create(workspaceId)
     .catch((err) => throwWorkspaceRecordCorrupt(workspaceId, err))
@@ -77,11 +83,14 @@ export async function getWorkspaceDoc(workspaceId: string): Promise<LoroDoc> {
 }
 
 /** The workspace doc when one is STORED (or cached); null otherwise — a read path must not mint one. */
-export async function openWorkspaceDocIfStored(workspaceId: string): Promise<LoroDoc | null> {
-  const key = workspaceDocCacheKey(workspaceId)
+export async function openWorkspaceDocIfStored(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<LoroDoc | null> {
+  const key = workspaceDocCacheKey(scope, workspaceId)
   const cached = workspaceDocCache.get(key)
   if (cached !== undefined) return cached
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
   const doc = await docs
     .open(workspaceId)
     .catch((err) => throwWorkspaceRecordCorrupt(workspaceId, err))
@@ -131,6 +140,7 @@ export function onWorkspaceDocUpdated(listener: WorkspaceDocUpdatedListener): ()
 export async function saveWorkspaceDoc(
   workspaceId: string,
   doc: LoroDoc,
+  scope: StoreScope = globalStoreScope,
 ): Promise<Uint8Array | null> {
   // The workspaces table is the REGISTRY of workspaces this daemon keeps
   // (workspaceExists reads it to refuse ids it never heard of), and this is
@@ -138,8 +148,8 @@ export async function saveWorkspaceDoc(
   // including the tree index's createDocument, which never touches
   // saveDocument. Without this, a workspace minted by an MCP tool has a
   // stored record but no registry row, and the WS route refuses it (4404).
-  await upsertWorkspaceRow(await dbReady(), workspaceId)
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  await upsertWorkspaceRow(await scope.db(), workspaceId)
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
   let update: Uint8Array | null
   try {
     update = await docs.save(workspaceId, doc)
@@ -148,8 +158,8 @@ export async function saveWorkspaceDoc(
     // every cached projection derives from it. Serving either as though
     // persisted would resurrect exactly the unpersisted-state bug eviction
     // exists to prevent — drop both so the next read reloads stored bytes.
-    evictWorkspaceDocCache(workspaceId)
-    evictWorkspaceDocs(workspaceId)
+    evictWorkspaceDocCache(workspaceId, scope)
+    evictWorkspaceDocs(workspaceId, scope)
     throw err
   }
   // Through the shared funnel rather than a second loop: a remote update
@@ -171,9 +181,12 @@ export async function saveWorkspaceDoc(
  * store. Answering its cursor anyway keeps the two callers of this symmetric,
  * so a fence taken around a pass compares like with like either way.
  */
-export async function catchUpWorkspaceDoc(workspaceId: string): Promise<WorkspaceDocCursor> {
-  const docs = cacheBackedWorkspaceDocs()
-  const cached = workspaceDocCache.get(workspaceDocCacheKey(workspaceId))
+export async function catchUpWorkspaceDoc(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<WorkspaceDocCursor> {
+  const docs = cacheBackedWorkspaceDocs(scope)
+  const cached = workspaceDocCache.get(workspaceDocCacheKey(scope, workspaceId))
   if (cached === undefined) return docs.readCursor(workspaceId)
   // A COLD cursor, not the record's current one. Nothing tracks where the
   // cached document stands — it is mutated in place by every local write —
@@ -193,16 +206,16 @@ export async function catchUpWorkspaceDoc(workspaceId: string): Promise<Workspac
  * delete/rename, the dual-plane index) shares the same instance the save
  * path diffs against, so no path can leave another holding a stale doc.
  */
-export function cacheBackedWorkspaceDocs(): WorkspaceDocs {
+export function cacheBackedWorkspaceDocs(scope: StoreScope = globalStoreScope): WorkspaceDocs {
   return {
-    open: (workspaceId) => openWorkspaceDocIfStored(workspaceId),
-    create: (workspaceId) => getWorkspaceDoc(workspaceId),
-    save: (workspaceId, doc) => saveWorkspaceDoc(workspaceId, doc),
+    open: (workspaceId) => openWorkspaceDocIfStored(workspaceId, scope),
+    create: (workspaceId) => getWorkspaceDoc(workspaceId, scope),
+    save: (workspaceId, doc) => saveWorkspaceDoc(workspaceId, doc, scope),
     // The tailing half is a STORE concern, so it delegates rather than being
     // reimplemented against the cache: the cursor describes the record, and
     // the only thing this wrapper adds is which doc gets caught up.
     readCursor: async (workspaceId) =>
-      new DocumentStoreWorkspaceDocs(await documentStoreReady()).readCursor(workspaceId),
+      new DocumentStoreWorkspaceDocs(await documentStoreReady(scope)).readCursor(workspaceId),
     // Under the workspace write barrier, because this MUTATES the live cached
     // document that every in-process writer is diffing against. Importing
     // another instance's ops into it while a local save is computing its own
@@ -210,7 +223,7 @@ export function cacheBackedWorkspaceDocs(): WorkspaceDocs {
     // better.
     catchUp: (workspaceId, doc, cursor) =>
       withWorkspaceWriteLock(workspaceId, async () =>
-        new DocumentStoreWorkspaceDocs(await documentStoreReady()).catchUp(
+        new DocumentStoreWorkspaceDocs(await documentStoreReady(scope)).catchUp(
           workspaceId,
           doc,
           cursor,

@@ -14,9 +14,11 @@
  * scheduled, since nothing can schedule one without importing this file.
  */
 
+import type { CompactWorkspaceResult } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { getLogger } from '../log.js'
 import { registerDbDisposeHook } from './db/index.js'
 import { compactWorkspace, setDocumentSavedListener } from './document-store.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
 
 // ── auto-compact debouncer ────────────────────────────────────────────
@@ -51,6 +53,10 @@ function clearAllAutoCompactTimers(): void {
  * why the store never had to know the concrete version-store type — that
  * indirection was the original reason for a registered trigger, and it
  * survives the split intact.
+ *
+ * Compacts in the process's own `StoreScope`: the saved-listener carries no
+ * scope, and the version store is the root's. A keeper serving another
+ * directory schedules through `createDocumentWritten(scope)` instead.
  */
 export function installAutoCompact(versionStore: VersionStore): void {
   setDocumentSavedListener((workspaceId) => {
@@ -100,41 +106,46 @@ const inFlightAutoCompacts = new Set<Promise<unknown>>()
 // draining.
 let disposingAutoCompactCount = 0
 
+function logCompactionOutcome(workspaceId: string, result: CompactWorkspaceResult): void {
+  if (result.compacted) {
+    getLogger('auto-compact').info(
+      { workspaceId, beforeBytes: result.beforeBytes, afterBytes: result.afterBytes },
+      'compacted',
+    )
+    return
+  }
+  // The other arm, and NOT a warning: declining is the common case — every
+  // save schedules a compaction and most have nothing to gain — so `no-gain`
+  // and `no-versions` are the scheduler working. What is worth the symmetry
+  // with 'compacted' above is that the reason survives at all.
+  // `compactWorkspace` distinguishes four of them and this was the one place
+  // that could record which; reading only `compacted` collapsed them into an
+  // absence, so a caller looking at an unwritten `lastCompactedAt` could not
+  // tell a fence race ('raced') from a snapshot that was already as short as
+  // it gets ('no-gain'). An absence explains nothing, and three reports of a
+  // null stamp in this scheduler's tests are what it cost.
+  getLogger('auto-compact').info(
+    { workspaceId, reason: result.reason, beforeBytes: result.beforeBytes },
+    'declined',
+  )
+}
+
 export function scheduleAutoCompact(
   workspaceId: string,
   versionStore: VersionStore,
-  options: { debounceMs?: number } = {},
+  options: { debounceMs?: number; scope?: StoreScope } = {},
 ): void {
   if (disposingAutoCompactCount > 0) return
-  const existing = autoCompactTimers.get(workspaceId)
+  const scope = options.scope ?? globalStoreScope
+  // Keyed by data dir as well: a workspace id names a workspace within ONE
+  // keeper, so two keepers' pending compactions must not replace each other.
+  const key = `${scope.dataDir}::${workspaceId}`
+  const existing = autoCompactTimers.get(key)
   if (existing) clearTimeout(existing)
   const timer = setTimeout(() => {
-    autoCompactTimers.delete(workspaceId)
-    const compaction = compactWorkspace(workspaceId, versionStore)
-      .then((result) => {
-        if (result.compacted) {
-          getLogger('auto-compact').info(
-            { workspaceId, beforeBytes: result.beforeBytes, afterBytes: result.afterBytes },
-            'compacted',
-          )
-          return
-        }
-        // The other arm, and NOT a warning: declining is the common case —
-        // every save schedules a compaction and most have nothing to gain —
-        // so `no-gain` and `no-versions` are the scheduler working. What is
-        // worth the symmetry with 'compacted' above is that the reason
-        // survives at all. `compactWorkspace` distinguishes four of them and
-        // this was the one place that could record which; reading only
-        // `compacted` collapsed them into an absence, so a caller looking at
-        // an unwritten `lastCompactedAt` could not tell a fence race
-        // ('raced') from a snapshot that was already as short as it gets
-        // ('no-gain'). An absence explains nothing, and three reports of a
-        // null stamp in this scheduler's tests are what it cost.
-        getLogger('auto-compact').info(
-          { workspaceId, reason: result.reason, beforeBytes: result.beforeBytes },
-          'declined',
-        )
-      })
+    autoCompactTimers.delete(key)
+    const compaction = compactWorkspace(workspaceId, versionStore, scope)
+      .then((result) => logCompactionOutcome(workspaceId, result))
       .catch((err) => {
         getLogger('auto-compact').warning({ workspaceId, err }, 'failed')
       })
@@ -150,7 +161,7 @@ export function scheduleAutoCompact(
   if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
     timer.unref()
   }
-  autoCompactTimers.set(workspaceId, timer)
+  autoCompactTimers.set(key, timer)
 }
 
 // Awaitable superset of uninstallAutoCompact(): cancels every pending

@@ -6,19 +6,17 @@ import { collectImageRefIds } from '@kamiazya/whiteboard-loro-adapter'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
-import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
-import { workspaceFilesDir as tenantFilesDir } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { validateWorkspaceId } from '../validators.js'
 import { backupIsInProgress } from './backup-in-progress.js'
 import { catchUpWorkspaceDoc, listDocuments, loadDocument } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { parseFileGcGraceMs } from './storage-env.js'
+import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
-// Garbage-collect files in <getDataDir()>/<workspaceId>/files/ that are not
+// Garbage-collect files in a workspace's files directory that are not
 // referenced by any live canvas in the workspace — and, when a versionStore
 // is supplied, by any saved past version state either.
 //
@@ -37,10 +35,13 @@ const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
 // this internal return type derive from it so they cannot drift apart.
 export type PurgeFilesResult = z.infer<typeof purgeResultSchema>
 
-function workspaceFilesDir(workspaceId: string): string {
+function workspaceFilesDir(scope: StoreScope, workspaceId: string): string {
   validateWorkspaceId(workspaceId)
-  const dir = tenantFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId)
-  return assertPathWithinDir(dir, getDataDir(), 'files dir')
+  return assertPathWithinDir(
+    scope.layout.workspaceFilesDir(workspaceId),
+    scope.dataDir,
+    'files dir',
+  )
 }
 
 /**
@@ -151,15 +152,16 @@ export function incompleteFileGcScanErrorBody(
  */
 async function collectReferencedFileIds(
   workspaceId: string,
+  scope: StoreScope,
   versionStore?: VersionStore,
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
-  const documents = await listDocuments(workspaceId)
+  const documents = await listDocuments(workspaceId, scope)
   for (const { path } of documents) {
     // One per scan unit: document, version. See above.
     await yieldToLoop()
-    const live = await loadDocument(workspaceId, path)
+    const live = await loadDocument(workspaceId, path, scope)
     collectFromDoc(live, referenced)
 
     if (!versionStore) continue
@@ -202,6 +204,11 @@ export interface PurgeFilesOptions {
   // between those two events permanently deletes a file that was about
   // to be referenced. Default 1 hour; tests pass 0 to bypass.
   graceMs?: number
+  /**
+   * Which data directory's files and workspace record this pass judges.
+   * Omitted, the process's — what the periodic sweeper and the route take.
+   */
+  scope?: StoreScope
 }
 
 const DEFAULT_GRACE_MS = 60 * 60 * 1000
@@ -288,10 +295,10 @@ export async function purgeDanglingFiles(
   options: PurgeFilesOptions = {},
 ): Promise<PurgeFilesResult> {
   validateWorkspaceId(workspaceId)
-  // Hold the workspace write barrier across the collect + unlink pass so
-  // a concurrent saveDocument / version-save cannot insert a new file
-  // reference between snapshot and delete and have its file unlinked
-  // as "dangling".
+  const scope = options.scope ?? globalStoreScope
+  // Hold the workspace write barrier across the collect + unlink pass, so a
+  // concurrent saveDocument / version-save cannot add a file reference between
+  // snapshot and delete and have its file unlinked as "dangling".
   const graceMs = resolveGraceMs(options)
   return withWorkspaceWriteLock(workspaceId, async () => {
     // Asked INSIDE the barrier, not before it. Doing async work first looks
@@ -310,7 +317,7 @@ export async function purgeDanglingFiles(
     //
     // Standing down costs nothing: this pass is periodic (24h by default), so
     // a skipped one simply happens on the next tick.
-    if (await backupIsInProgress(getDataDir())) {
+    if (await backupIsInProgress(scope.dataDir)) {
       log.info({ workspaceId }, 'purge stood down: a backup is assembling this data directory')
       return { purgedCount: 0, purgedBytes: 0, skippedReason: 'backup-in-progress' as const }
     }
@@ -326,13 +333,13 @@ export async function purgeDanglingFiles(
     // Reentrant on the barrier held above: `withWorkspaceWriteLock` detects
     // an acquisition from the chain that already holds it, so this does not
     // deadlock against the lock this pass is running inside.
-    const before = await catchUpWorkspaceDoc(workspaceId)
+    const before = await catchUpWorkspaceDoc(workspaceId, scope)
     // List the candidate files BEFORE the reference scan: collecting
     // references forks + checks out every version of every canvas,
     // which is far too expensive to pay for a workspace that has no files
     // directory (or an empty one) — the common case for every workspace
     // the periodic sweeper visits that never had an upload.
-    const dir = workspaceFilesDir(workspaceId)
+    const dir = workspaceFilesDir(scope, workspaceId)
     let entries: string[]
     try {
       entries = await readdir(dir)
@@ -342,7 +349,7 @@ export async function purgeDanglingFiles(
     }
     if (entries.length === 0) return { purgedCount: 0, purgedBytes: 0 }
 
-    const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
+    const referenced = await collectReferencedFileIds(workspaceId, scope, options.versionStore)
 
     // The fence. Collecting forks and checks out every version of every
     // document, so it is the longest window in this pass and the one
@@ -354,7 +361,7 @@ export async function purgeDanglingFiles(
     // This narrows the window to the span between the check and the unlinks
     // rather than closing it, which is what a fence over a filesystem can do
     // — the grace period covers what is left.
-    const after = await catchUpWorkspaceDoc(workspaceId)
+    const after = await catchUpWorkspaceDoc(workspaceId, scope)
     if (after.generation !== before.generation || after.afterSeq !== before.afterSeq) {
       log.info({ workspaceId }, 'purge stood down: the workspace record moved mid-pass')
       return { purgedCount: 0, purgedBytes: 0, skippedReason: 'record-moved' as const }
