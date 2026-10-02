@@ -28,7 +28,7 @@ const SLOT_CLASS =
  * `left`. `scale` counter-scales a canvas-space layer's zoom so the pill
  * keeps its screen size — a tap target has a screen size, not a canvas one.
  */
-export interface EditorExitHintPlacement {
+interface EditorExitHintPlacement {
   readonly left: number
   readonly right: number
   readonly top: number

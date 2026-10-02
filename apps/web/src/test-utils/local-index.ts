@@ -40,61 +40,6 @@ export class InMemoryLoroStore implements LoroStoreLike {
   }
 }
 
-export interface SeededLocal {
-  index: InMemoryDocumentIndex
-  pointer: InMemoryDefaultDocumentPointer
-  clock: ContentClock
-}
-
-/**
- * A browser-kept backing store for a page test, seeded from the same
- * `DocumentSnapshot` fixtures the bespoke store used to take.
- *
- * Three pieces rather than one, because that is what the production wiring is
- * now: the port's index for placement and identity, and two app-side concerns
- * it deliberately does not own — which document a plain load resumes into, and
- * when a document was last edited.
- *
- * `seed` rather than `createDocument`, so a fixture keeps the id it declares.
- * The port refuses a caller-chosen id on the real path on purpose — assigning
- * it is the index's job — and its test double carries this escape hatch for
- * exactly this: a test that asserts on an id it wrote.
- *
- * The clock is a plain map, so a jsdom test gets its fixtures' timestamps
- * without an IndexedDB anywhere near it.
- */
-export function seedLocal(
-  snapshots: readonly DocumentSnapshot[] = [],
-  defaultDocumentId?: string,
-): SeededLocal {
-  const index = new InMemoryDocumentIndex()
-  // Registered up front. `seed` adds the workspace as a side effect, so a
-  // double that is seeded works by accident — but `seedLocal([])` and a
-  // `LocalStoreDouble` read before its first `save` would answer
-  // `WorkspaceNotFoundError` where production answers an empty list, which is
-  // the one case a test of the empty state most wants to reach.
-  void index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-  const stamps = new Map<string, string>()
-  for (const snapshot of snapshots) {
-    index.seed({
-      workspaceId: getBrowserWorkspaceId(),
-      documentId: snapshot.documentId,
-      path: snapshot.path,
-      kind: snapshot.kind,
-      // Absent rather than the path, matching what the index stores: a
-      // document whose name equals its path has no name of its own, and the
-      // listing's fallback is what puts one back.
-      ...(snapshot.name === snapshot.path ? {} : { name: snapshot.name }),
-    })
-    stamps.set(snapshot.documentId, snapshot.updatedAt)
-  }
-  const pointer = new InMemoryDefaultDocumentPointer()
-  if (defaultDocumentId !== undefined) void pointer.set(defaultDocumentId)
-  const clock: ContentClock = async (ids) =>
-    new Map(ids.flatMap((id) => (stamps.has(id) ? [[id, stamps.get(id) as string]] : [])))
-  return { index, pointer, clock }
-}
-
 /**
  * The same three pieces, behind the write methods the bespoke store used to
  * offer, so a test that seeds imperatively keeps its shape.

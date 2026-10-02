@@ -150,7 +150,7 @@ const proposalField = StateField.define<ProposalState>({
 })
 
 /** Where the press landed, so the host can put its card beside the words. */
-export interface PassagePressPoint {
+interface PassagePressPoint {
   readonly clientX: number
   readonly clientY: number
 }

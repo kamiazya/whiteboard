@@ -58,7 +58,7 @@ export const DOUBLE_PRESS_WINDOW_MS = 400
 export const DOUBLE_PRESS_SLOP_PX = 40
 
 /** How much closer a hand-mode double press gets. */
-export const DOUBLE_PRESS_ZOOM_FACTOR = 2
+const DOUBLE_PRESS_ZOOM_FACTOR = 2
 
 /** The pointer kinds this machine distinguishes. Pen behaves as a mouse. */
 export type PointerKind = 'mouse' | 'pen' | 'touch'
@@ -80,7 +80,7 @@ export type NavigationMode =
     }
 
 /** What a press remembers about the press before it, for double-press detection. */
-export interface HandPressMemory {
+interface HandPressMemory {
   readonly at: number
   readonly point: Point
 }

@@ -8,7 +8,7 @@
  * outline is deliberately STATIC — a marching-ants loop would break the
  * draw-once motion grammar.
  */
-export interface GhostBox {
+interface GhostBox {
   readonly id: string
   readonly x: number
   readonly y: number

@@ -133,7 +133,7 @@ export interface SourcePaneApi {
  *   to its content up to a ceiling, then scrolls; inherits the surrounding
  *   type instead of setting its own.
  */
-export type SourcePaneVariant = 'document' | 'compact'
+type SourcePaneVariant = 'document' | 'compact'
 
 export interface SourcePaneProps {
   value: string

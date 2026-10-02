@@ -18,7 +18,7 @@ import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/d
  * switcher until that switcher was retired; the browser's search is the only
  * caller left, so it lives here now.
  */
-export function documentMatchesSearch(
+function documentMatchesSearch(
   query: string,
   document: {
     readonly path: string

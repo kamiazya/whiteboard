@@ -13,15 +13,4 @@
  * Today this exposes `getAppContext`; see create-commands.ts's doc comment
  * for the extension recipe for the next one.
  */
-export { createWhiteboardCommands } from './create-commands.js'
-export {
-  CommandError,
-  type CommandErrorCode,
-  type GetAppContextInput,
-  type GetAppContextResult,
-  getAppContextInputSchema,
-  getAppContextResultSchema,
-  type WhiteboardCommandDeps,
-  type WhiteboardCommandDocumentIdentity,
-  type WhiteboardCommands,
-} from './types.js'
+export type { WhiteboardCommands } from './types.js'

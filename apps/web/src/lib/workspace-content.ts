@@ -25,7 +25,7 @@ import { LoroStore, type LoroStoreLike, touchContentTimestamp } from './loro-sto
  * asking again, and caching it as the other is what leaves a preview blank
  * for good.
  */
-export class DocumentContentUnreadableError extends Error {
+class DocumentContentUnreadableError extends Error {
   constructor(readonly documentId: string) {
     super(`document content could not be read: ${documentId}`)
     this.name = 'DocumentContentUnreadableError'

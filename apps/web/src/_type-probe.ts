@@ -37,9 +37,7 @@ export {
   DropdownMenuContent,
   DropdownMenuItem,
 } from './components/ui/dropdown-menu.js'
-export { Input } from './components/ui/input.js'
 export { ScrollArea } from './components/ui/scroll-area.js'
-export { Separator } from './components/ui/separator.js'
 export {
   Tooltip,
   TooltipContent,

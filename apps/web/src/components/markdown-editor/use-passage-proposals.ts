@@ -18,7 +18,7 @@ import {
 } from './proposal-decorations.js'
 
 /** Where the card sits, in the editor root's own coordinates. */
-export interface OpenPassage {
+interface OpenPassage {
   readonly proposalId: string
   readonly changeId: string
   readonly x: number

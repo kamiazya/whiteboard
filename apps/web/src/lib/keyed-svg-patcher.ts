@@ -19,7 +19,7 @@ import type { KeyedSvgRender } from '@kamiazya/whiteboard-canvas-render'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-export interface KeyedSvgUpdateOptions {
+interface KeyedSvgUpdateOptions {
   /**
    * `false` says this update is NOT a change to the document — the host
    * swapped which pipeline produces the render, and the same content is

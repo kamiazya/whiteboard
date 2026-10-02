@@ -31,7 +31,7 @@ import { textNodeDefaults } from './node-factories.js'
  * at cut time so ANY change reads as "someone touched it" and cancels the
  * hold.
  */
-export interface PendingCut {
+interface PendingCut {
   readonly cutId: string
   readonly snapshot: ReadonlyMap<string, string>
 }

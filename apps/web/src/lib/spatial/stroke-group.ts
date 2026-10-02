@@ -29,7 +29,7 @@ export const STROKE_GROUP_PAUSE_MS = 700
  * are: what reads as "the same mark" is what the eye sees, so zooming out
  * must not silently merge two marks that look far apart.
  */
-export const STROKE_GROUP_GAP_PX = 48
+const STROKE_GROUP_GAP_PX = 48
 
 /** The axis-aligned box a stroke's points occupy. */
 export interface StrokeBounds {

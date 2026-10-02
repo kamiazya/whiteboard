@@ -23,7 +23,7 @@ import {
 } from './pending-delete.js'
 
 /** Which keeper's sentence the confirmation shows, and which fallback it reports. */
-export type DeleteKeeper = 'browser' | 'daemon'
+type DeleteKeeper = 'browser' | 'daemon'
 
 const FALLBACK: Record<DeleteKeeper, string> = {
   browser: 'Failed to delete the document from this browser.',

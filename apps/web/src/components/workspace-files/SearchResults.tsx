@@ -25,7 +25,7 @@ import { useLongPressMenu } from './use-long-press.js'
  * contexts mean the match was in the name or the path — both already on
  * the row — so there is nothing more to show.
  */
-export interface SearchResultRow {
+interface SearchResultRow {
   readonly document: WorkspaceDocumentEntry
   readonly contexts?: readonly string[]
   /**

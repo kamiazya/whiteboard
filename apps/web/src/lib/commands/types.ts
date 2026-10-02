@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { ProviderState } from '../provider.js'
 
-export interface WhiteboardCommandDocumentIdentity {
+interface WhiteboardCommandDocumentIdentity {
   workspaceId?: string
   documentId: string
   name: string

@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 
 /** What a parent may substitute for the connection this hook would build. */
-export type CreateDaemonBackend = (
+type CreateDaemonBackend = (
   workspaceId: string,
   path: string,
   fetch: typeof globalThis.fetch,

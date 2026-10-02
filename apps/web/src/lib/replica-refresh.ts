@@ -34,7 +34,7 @@ const noop = (): void => {}
  * page already pays once per visit — and it fires at most once per resolve,
  * so the ceiling is visits, never a timer loop.
  */
-export const REPLICA_STALE_AFTER_MS = 15 * 60 * 1000
+const REPLICA_STALE_AFTER_MS = 15 * 60 * 1000
 
 const refreshed = new Set<string>()
 // Pulls in flight: a second resolve while one is pending must not double

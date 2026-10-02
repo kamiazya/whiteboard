@@ -12,7 +12,7 @@
 import type { AnnotationAnchor, LivePassage } from '@kamiazya/whiteboard-model'
 import { resolveTextAnchor } from '@kamiazya/whiteboard-model'
 
-export type { LivePassage, ResolvedTextAnchor, TextAnchor } from '@kamiazya/whiteboard-model'
+export type { LivePassage, TextAnchor } from '@kamiazya/whiteboard-model'
 export { resolveTextAnchor } from '@kamiazya/whiteboard-model'
 
 /**

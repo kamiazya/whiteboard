@@ -14,7 +14,7 @@ import { browserWorkspaceHandleOrNull } from '../lib/browser-workspace-id.js'
  * nothing — which is a deleted or hand-typed path once the list has been
  * enumerated, and "not known yet" before that.
  */
-export function routeSyncAction({
+function routeSyncAction({
   pathname,
   documentId,
   documentPath,

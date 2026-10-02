@@ -14,7 +14,7 @@ import { HEADER_WIDE_TOGGLE_CLASS } from '../ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 /** What one member shows beside its glyph, when it has anything to show. */
-export interface InspectorTabState {
+interface InspectorTabState {
   /**
    * A number the member carries — open conversations, documents linking
    * here. `null` means the answer has not arrived, and the member waits

@@ -107,7 +107,7 @@ function isPathAddressed(value: unknown): boolean {
   )
 }
 
-export function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
+function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
   const documents = tx.objectStore('documents')
   const loro = tx.objectStore('loroDocuments')
   const meta = tx.objectStore('meta')
@@ -158,7 +158,7 @@ export function discardPrePathDocuments(tx: IDBTransaction, done: () => void): v
  * snapshot alone is not its current state, so leaving the log behind would
  * silently roll every unsaved edit back.
  */
-export function carryLoroDocuments(tx: IDBTransaction, done: () => void): void {
+function carryLoroDocuments(tx: IDBTransaction, done: () => void): void {
   const loro = tx.objectStore('loroDocuments')
   const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
   const stamps = tx.objectStore(CONTENT_TIMESTAMPS_STORE)
@@ -231,7 +231,7 @@ function isEnvelopeV1(value: unknown): value is { v: 1; snapshot: unknown } {
  * store, splits nothing, and looks exactly like a successful upgrade — leaving
  * v1 records the new parser reports as unreadable documents.
  */
-export function splitInlineSnapshotChunks(tx: IDBTransaction, done: () => void): void {
+function splitInlineSnapshotChunks(tx: IDBTransaction, done: () => void): void {
   const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
   const chunks = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
   const cursorReq = sync.openCursor()
@@ -426,7 +426,7 @@ export function mintBrowserWorkspaceSegment(tx: IDBTransaction, done: () => void
   }
 }
 
-export function backfillDocumentIndex(tx: IDBTransaction, done: () => void): void {
+function backfillDocumentIndex(tx: IDBTransaction, done: () => void): void {
   const documents = tx.objectStore('documents')
   const workspaces = tx.objectStore(WORKSPACES_STORE)
   const index = tx.objectStore(DOCUMENT_INDEX_STORE)
@@ -458,7 +458,7 @@ export function backfillDocumentIndex(tx: IDBTransaction, done: () => void): voi
 }
 
 /** The version at which a saved point began carrying its content's digest. */
-export const VERSION_DIGEST_DB_VERSION = 19
+const VERSION_DIGEST_DB_VERSION = 19
 
 /**
  * v19's sweep: empty the `versions` store of every point written before a row
@@ -490,7 +490,7 @@ export function sweepVersionsWrittenBeforeDigests(tx: IDBTransaction, oldVersion
 }
 
 /** The version at which a plaintext daemon replica stops being possible on disk. */
-export const SEALED_REPLICA_DB_VERSION = 20
+const SEALED_REPLICA_DB_VERSION = 20
 
 /**
  * v20's discard: a `workspace-tree:*` record whose id is not one of this

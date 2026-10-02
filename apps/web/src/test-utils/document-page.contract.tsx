@@ -51,13 +51,13 @@ export interface DocumentPageFixture {
 }
 
 /** Two documents, with a path, an id and a name that could never stand in for one another. */
-export const HERE: ContractDocument = {
+const HERE: ContractDocument = {
   id: '005AFMSY38DJQW16BGNTZ49EKR',
   path: 'here',
   name: 'Here',
   kind: 'spatial',
 }
-export const TARGET: ContractDocument = {
+const TARGET: ContractDocument = {
   id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
   path: 'archive/target',
   name: 'Target',

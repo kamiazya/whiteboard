@@ -46,7 +46,7 @@ export interface NodePropertiesContext {
 }
 
 /** `canvasSettings`: what a canvas-settings panel widget receives. */
-export interface CanvasSettingsContext {
+interface CanvasSettingsContext {
   readonly canvas: SpatialCanvas
   readonly run: (command: EditorCommand) => void
   /**

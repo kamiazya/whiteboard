@@ -64,7 +64,7 @@ const rectSchema = z
  * The narrowing that matters is the discriminator plus the fields a consumer
  * reads.
  */
-export const storedReplySchema = z.discriminatedUnion('type', [
+const storedReplySchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('outlined'), rects: z.array(rectSchema) }).loose(),
   z
     .object({ type: z.literal('markdown-render-done'), svg: z.string(), bounds: boundsSchema })
@@ -81,8 +81,6 @@ export const storedReplySchema = z.discriminatedUnion('type', [
     })
     .loose(),
 ])
-
-export type StoredReply = z.infer<typeof storedReplySchema>
 
 /**
  * The reply as it should be WRITTEN: without the request id it answered, and

@@ -12,7 +12,7 @@ import type {
 
 // Dispatched on window as CustomEvent<DirtyEventDetail> by
 // dispatchIdentityEvent below; listened for by `useDocumentOutline` as DOCUMENT_SYNC_CHANGED_EVENT.
-export interface DirtyEventDetail {
+interface DirtyEventDetail {
   workspaceId: string
   path: string
 }

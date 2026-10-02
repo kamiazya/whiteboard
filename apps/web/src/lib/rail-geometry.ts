@@ -19,7 +19,7 @@ export interface RailBlock {
   readonly h: number
 }
 
-export interface RailRow {
+interface RailRow {
   readonly top: number
   readonly height: number
   readonly left: number
