@@ -31,14 +31,14 @@ const BOARD: SpatialCanvas = {
 }
 
 function openedSession() {
-  let handlers: DocumentBackendHandlers | null = null
+  const link: { handlers: DocumentBackendHandlers | null } = { handlers: null }
   const backend: DocumentBackend = {
     connect(next) {
-      handlers = next
+      link.handlers = next
       next.onConnected()
     },
     disconnect() {
-      handlers = null
+      link.handlers = null
     },
     pushLocalUpdate: () => Promise.resolve(),
     sendClientReady: () => {},
@@ -54,7 +54,7 @@ function openedSession() {
   session.connect()
   const seed = new LoroDoc()
   writeSpatialCanvas(seed, BOARD)
-  handlers?.onSnapshot(seed.export({ mode: 'snapshot' }))
+  link.handlers?.onSnapshot(seed.export({ mode: 'snapshot' }))
   return session
 }
 
