@@ -71,22 +71,22 @@ const nodeFacetsAt = async (wb, ids, path, match) => {
  * The workspace packages this file's verifiers read a board with, loaded
  * LAZILY and memoised.
  *
- * Not a static import, and the reason is load ORDER rather than cost: these
- * are TypeScript sources, and the runner registers the tsx loader at its own
- * startup — after every static import in its graph, this file's included,
- * has already been resolved. A static import here therefore resolves against
- * a build artifact that is not there, and the run dies before the first
- * task with a missing `.js` that names neither tsx nor this file. The runner
- * imports the same two the same way for the same reason.
+ * Not a static import, and the reason is load ORDER rather than cost: these are
+ * TypeScript sources, and the runner registers the tsx loader at its own
+ * startup, after every static import in its graph (this file's included) has
+ * resolved. A static import here resolves against a build artifact that is not
+ * there, and the run dies before the first task with a missing `.js` that names
+ * neither tsx nor this file. The runner imports them the same way.
  */
 let workspacePackagesPromise
 const workspacePackages = () => {
   workspacePackagesPromise ??= Promise.all([
     import('@kamiazya/whiteboard-codec'),
     import('@kamiazya/whiteboard-canvas-render'),
-  ]).then(([codec, render]) => ({
+    import('@kamiazya/whiteboard-canvas-render/scoring'),
+  ]).then(([codec, render, scoring]) => ({
     parseSpatial: codec.parseSpatial,
-    scoreFacets: render.scoreFacets,
+    scoreFacets: scoring.scoreFacets,
     withDeclaredColours: render.withDeclaredColours,
   }))
   return workspacePackagesPromise
