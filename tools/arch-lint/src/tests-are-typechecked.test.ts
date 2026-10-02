@@ -164,7 +164,7 @@ const PARTLY_UNCHECKED_PACKAGES_PINNED = 1
  * pins its size from outside, so
  * a file cannot be added to it without this number being raised in review.
  */
-const MCP_TEST_TYPE_DEBT = { files: 36, errors: 63 }
+const MCP_TEST_TYPE_DEBT = { files: 2, errors: 4 }
 
 describe('every package type-checks its test files', () => {
   const dirs = TEST_SCAN_DIRS

@@ -97,7 +97,7 @@ export interface CommentBodyLayoutOptions extends Omit<MdastLayoutOptions, 'them
 }
 
 /** What a surface may say about the room it has. Not a theme. */
-export type CommentDensity = 'comfortable' | 'compact'
+type CommentDensity = 'comfortable' | 'compact'
 
 const THEME_FOR_DENSITY = {
   comfortable: MARKDOWN_THEME_NODE,

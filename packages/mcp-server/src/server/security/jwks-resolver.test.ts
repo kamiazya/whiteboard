@@ -16,10 +16,25 @@ import { createJwksKeyResolver } from './jwks-resolver.js'
 
 const mockCreateRemoteJWKSet = vi.mocked(createRemoteJWKSet)
 
+// What jose's remote key set carries beside the resolving call; none of it is
+// read by the resolver under test.
+type RemoteKeySet = ReturnType<typeof createRemoteJWKSet>
+type Resolve = (...args: Parameters<RemoteKeySet>) => ReturnType<RemoteKeySet>
+
+function asRemoteKeySet(resolve: Resolve): RemoteKeySet {
+  return Object.assign(resolve, {
+    coolingDown: false,
+    fresh: false,
+    reloading: false,
+    reload: async () => {},
+    jwks: () => undefined,
+  })
+}
+
 describe('createJwksKeyResolver', () => {
   it('calls createRemoteJWKSet with the parsed URL', () => {
-    const mockFn = vi.fn().mockResolvedValue({} as CryptoKey)
-    mockCreateRemoteJWKSet.mockReturnValue(mockFn as ReturnType<typeof createRemoteJWKSet>)
+    const mockFn = vi.fn<Resolve>().mockResolvedValue({} as CryptoKey)
+    mockCreateRemoteJWKSet.mockReturnValue(asRemoteKeySet(mockFn))
 
     createJwksKeyResolver('https://auth.example.com/.well-known/jwks.json')
 
@@ -30,8 +45,8 @@ describe('createJwksKeyResolver', () => {
 
   it('returns the key from the remote key set', async () => {
     const mockKey = {} as CryptoKey
-    const mockFn = vi.fn().mockResolvedValue(mockKey)
-    mockCreateRemoteJWKSet.mockReturnValue(mockFn as ReturnType<typeof createRemoteJWKSet>)
+    const mockFn = vi.fn<Resolve>().mockResolvedValue(mockKey)
+    mockCreateRemoteJWKSet.mockReturnValue(asRemoteKeySet(mockFn))
 
     const resolver = createJwksKeyResolver('https://auth.example.com/.well-known/jwks.json')
     const header = { alg: 'RS256', kid: 'test-key' }
@@ -43,11 +58,11 @@ describe('createJwksKeyResolver', () => {
 
   it('re-throws remote key set errors as bare Error (no message)', async () => {
     const mockFn = vi
-      .fn()
+      .fn<Resolve>()
       .mockRejectedValue(
         new Error('JWKSNoMatchingKey: https://auth.example.com/jwks – kid=test, alg=RS256'),
       )
-    mockCreateRemoteJWKSet.mockReturnValue(mockFn as ReturnType<typeof createRemoteJWKSet>)
+    mockCreateRemoteJWKSet.mockReturnValue(asRemoteKeySet(mockFn))
 
     const resolver = createJwksKeyResolver('https://auth.example.com/.well-known/jwks.json')
 
@@ -63,11 +78,11 @@ describe('createJwksKeyResolver', () => {
 
   it('re-throws network errors as bare Error (no URL in message)', async () => {
     const mockFn = vi
-      .fn()
+      .fn<Resolve>()
       .mockRejectedValue(
         new TypeError('fetch failed: ECONNREFUSED https://secret-auth.internal/jwks'),
       )
-    mockCreateRemoteJWKSet.mockReturnValue(mockFn as ReturnType<typeof createRemoteJWKSet>)
+    mockCreateRemoteJWKSet.mockReturnValue(asRemoteKeySet(mockFn))
 
     const resolver = createJwksKeyResolver('https://secret-auth.internal/jwks')
 

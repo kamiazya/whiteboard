@@ -1,11 +1,14 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const sendAgentActivity = vi.fn()
-const sendViewportRequest = vi.fn()
-const getReadyClientCount = vi.fn(() => 1)
+// Declared with a rest signature so the lazy wrappers below can forward whatever
+// the notifier passes; the factory is hoisted above these bindings.
+type Forwarded<R> = (...args: unknown[]) => R
+const sendAgentActivity = vi.fn<Forwarded<unknown>>()
+const sendViewportRequest = vi.fn<Forwarded<unknown>>()
+const getReadyClientCount = vi.fn<Forwarded<number>>(() => 1)
 
-vi.mock('./routes/sync-audience.js', () => ({
+vi.mock('./sync-audience.js', () => ({
   sendAgentActivity: (...args: unknown[]) => sendAgentActivity(...args),
   sendViewportRequest: (...args: unknown[]) => sendViewportRequest(...args),
   getReadyClientCount: (...args: unknown[]) => getReadyClientCount(...args),

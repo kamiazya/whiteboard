@@ -38,14 +38,13 @@ export type { UseDocumentSyncOptions }
 // Re-exported so existing call sites can keep importing it from the hook
 // module; the canonical definition lives in lib/document-sync-types.ts
 // alongside the session module that also needs it.
-export { dispatchIdentityEvent }
 
 // canvas-render's SVG backend + this hook's own Canvas-2D raster path are the
 // only export routes now that Excalidraw's exportToBlob/exportToSvg are gone.
 export type SceneExportFormat = 'png' | 'svg'
 
 /** What an export from the editor takes beside its format. */
-export interface SceneExportOptions {
+interface SceneExportOptions {
   readonly tagLibrary?: TagLibrary
 }
 

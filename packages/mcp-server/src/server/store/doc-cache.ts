@@ -17,9 +17,9 @@ import { globalStoreScope, type StoreScope } from './store-scope.js'
 // That is what keeps `document-store.ts` — which must evict after operations
 // that replace on-disk state — free of an import cycle with this file.
 //
-// Caveat: WS handlers may keep live doc references. Evicting a canvas that still has
-// active connections could leave callers mutating an old doc instance. In practice,
-// documents with active WS connections should stay recently touched and remain on the
+// Caveat: update handlers may keep live doc references. Evicting a canvas that still has
+// active sync streams could leave callers mutating an old doc instance. In practice,
+// documents with active sync streams should stay recently touched and remain on the
 // hot side of the LRU.
 const CACHE_MAX_SIZE = 32
 const cache = new Map<string, LoroDoc>()
@@ -104,7 +104,7 @@ export function clearCache(): void {
 
 // Evict a doc after operations such as compact or rename that replace on-disk state,
 // forcing the next getDoc call to reload it.
-// Callers already holding a live doc reference, such as WS handlers, do not get swapped
+// Callers already holding a live doc reference, such as update handlers, do not get swapped
 // automatically. getDoc is safe because it always consults the cache first.
 export function evictDoc(
   workspaceId: string,

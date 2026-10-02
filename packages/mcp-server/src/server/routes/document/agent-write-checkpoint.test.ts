@@ -3,12 +3,11 @@
 // lets compaction fold the op-log. Compaction declines `no-versions` while no
 // row exists, so an agent-only workspace that never got a checkpoint grew its
 // op-log without bound whatever the debounce did.
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AutoVersionTrigger } from '../../store/auto-version.js'
 import { globalStoreScope } from '../../store/store-scope.js'
 import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
-import type { AutoVersionTrigger } from './auto-version.js'
 
 const tmp = withTempDataDir('whiteboard-agent-checkpoint-')
 
@@ -76,14 +75,15 @@ describe('an agent-only workspace', () => {
           ops: [
             {
               op: 'node.add',
-              node: textNode({
+              node: {
                 id: `n${i}`,
+                type: 'text',
                 text: `note ${i}`,
                 x: i * 100,
                 y: 0,
                 width: 80,
                 height: 40,
-              }),
+              },
             },
           ],
         })

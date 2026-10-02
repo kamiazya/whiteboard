@@ -10,7 +10,7 @@ The chain has fifteen steps after the initial build prerequisite:
 
 1. `pnpm smoke:e2e` — full stdio MCP round-trip against the source entry point (canvas create → checkpoint → restore → export)
 2. `pnpm smoke:tarball` — validates the packed `.tgz` is installable and functional
-3. `pnpm smoke:packaged` — full e2e round-trip against `dist/server/mcp/index.js`
+3. `pnpm smoke:packaged` — full e2e round-trip against `dist/server/mcp/stdio.js`
 4. `pnpm smoke:codex-config` — validates the Codex plugin manifest and published MCP config
 5. `pnpm smoke:claude` — end-to-end Claude CLI integration smoke
 6. `pnpm smoke:codex` — end-to-end Codex CLI integration smoke

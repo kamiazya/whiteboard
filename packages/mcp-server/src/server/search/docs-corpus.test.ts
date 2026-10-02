@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
-import { corpusDigest, DOCS_JUDGED_QUERIES, loadDocsCorpus, queryDigest } from './docs-corpus.js'
+import {
+  corpusDigest,
+  DOCS_JUDGED_QUERIES,
+  type DocsJudgedQuery,
+  loadDocsCorpus,
+  queryDigest,
+} from './docs-corpus.js'
 
 // `.pathname` keeps percent-encoding, so a checkout under a directory with
 // a space in its name would resolve to a path that does not exist.
@@ -54,7 +60,10 @@ describe('digests', () => {
 
   it('changes when a JUDGEMENT changes, not only when a query is added', () => {
     const [first, ...rest] = DOCS_JUDGED_QUERIES
-    const regraded = [{ ...first, relevant: { ...first.relevant, README: 1 } }, ...rest]
+    const regraded: DocsJudgedQuery[] = [
+      { ...first, relevant: { ...first.relevant, README: 1 } },
+      ...rest,
+    ]
     expect(queryDigest(regraded)).not.toBe(queryDigest(DOCS_JUDGED_QUERIES))
   })
 })

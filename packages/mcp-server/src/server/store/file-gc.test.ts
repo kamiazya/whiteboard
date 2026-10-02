@@ -460,7 +460,7 @@ describe('purgeDanglingFiles', () => {
       list: async () => {
         throw new Error('the reference scan ran when it should have been skipped')
       },
-    } as unknown as FileVersionStore
+    } as unknown as InstanceType<typeof FileVersionStore>
 
     await expect(
       purgeDanglingFiles('ws_noscan', { graceMs: 0, versionStore: exploding }),

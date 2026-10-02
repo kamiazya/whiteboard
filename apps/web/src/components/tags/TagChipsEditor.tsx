@@ -41,7 +41,7 @@ export interface TagChipsEditorProps {
 }
 
 /** Every `key:value` a library declares, so the datalist offers them beside what is in use. */
-export function declaredTags(library: TagLibrary): string[] {
+function declaredTags(library: TagLibrary): string[] {
   return Object.entries(library).flatMap(([key, declared]) =>
     Object.keys(declared.values ?? {}).map((value) => `${key}:${value}`),
   )
@@ -55,7 +55,7 @@ function objectionSentence(objection: TagLibraryObjection): string {
 }
 
 /** What the datalist offers for the draft as typed. */
-export function tagCompletions(draft: string, suggestions: readonly string[]): string[] {
+function tagCompletions(draft: string, suggestions: readonly string[]): string[] {
   const colon = draft.indexOf(':')
   const offered = new Set<string>()
   if (colon === -1) {

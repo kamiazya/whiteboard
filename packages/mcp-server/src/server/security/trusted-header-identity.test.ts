@@ -82,7 +82,8 @@ describe('a bare identity header', () => {
   })
 
   it('is refused when the subject header is absent or blank', async () => {
-    for (const headers of [{}, { 'X-Forwarded-User': '   ' }]) {
+    const withoutSubject: Record<string, string>[] = [{}, { 'X-Forwarded-User': '   ' }]
+    for (const headers of withoutSubject) {
       expect(await read(request('::1', headers))).toEqual({ ok: false, why: 'no_identity' })
     }
   })

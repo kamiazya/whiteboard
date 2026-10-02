@@ -50,8 +50,6 @@ export const visualStencilsFacetSchema = z.object({
   ),
 })
 
-export type VisualStencilsFacet = z.infer<typeof visualStencilsFacetSchema>
-
 /**
  * The stencil library a MARKDOWN document declares, as the registry's own
  * asset shape, ready to hand to `withWorkspaceStencils`.

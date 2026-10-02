@@ -4,7 +4,7 @@ import {
   EMBEDDER_LOAD_REMEDY,
   EMBEDDING_DIMENSIONS,
 } from '../server/search/transformers-embedder.js'
-import { searchFetchModelOutputSchema } from './operator-json.js'
+import { searchFetchModelOutputSchema } from '../shared/api-contracts/search-fetch-model.js'
 import { runSearchFetchModel } from './search-fetch-model.js'
 
 const pipeline = vi.hoisted(() => vi.fn())

@@ -32,7 +32,7 @@
  * `.window-state.browser.test.*` file lands here and NOT in `web-browser`.
  */
 
-import { sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
+import { browserTracesSetup, sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
 import base from './vitest.browser.config.js'
 
 const baseTest = (base as { test?: Record<string, unknown> }).test ?? {}
@@ -54,9 +54,7 @@ export default {
     // invisible to it, so inheriting left the project classified as a node
     // one and tripped its own "a browser test file must never land in a
     // node/jsdom project" guard.
-    browser: sharedBrowserTestConfig({
-      viewport: { width: 1280, height: 900 },
-      projectRoot: import.meta.dirname,
-    }),
+    globalSetup: [browserTracesSetup],
+    browser: sharedBrowserTestConfig({ viewport: { width: 1280, height: 900 } }),
   },
 }

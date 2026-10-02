@@ -11,6 +11,7 @@ import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { testStoreScope } from '../routes/_test-helpers.js'
+import type { renderSpatialCanvasToPng, renderSpatialCanvasToSvg } from './headless-renderer.js'
 
 let tempDir: string
 
@@ -23,13 +24,17 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const renderSpy = vi.fn(async () => ({
+const renderSpy = vi.fn<typeof renderSpatialCanvasToPng>(async () => ({
   png: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
   width: 10,
   height: 10,
+  undrawable: [],
+  unresolvedFamilies: [],
 }))
-const renderSvgSpy = vi.fn(async () => ({
+const renderSvgSpy = vi.fn<typeof renderSpatialCanvasToSvg>(async () => ({
   svg: '<svg><rect/></svg>',
+  undrawable: [],
+  unresolvedFamilies: [],
 }))
 vi.mock('./headless-renderer.js', () => ({
   renderSpatialCanvasToPng: renderSpy,
@@ -75,11 +80,10 @@ describe('exportCanvasHeadless', () => {
     })
 
     expect(renderSpy).toHaveBeenCalledTimes(1)
-    const [canvas, options] = renderSpy.mock.calls[0] as [
-      { nodes: Array<{ id: string }> },
-      { padding?: number; scale?: number; theme?: string },
-    ]
+    const [canvas, fontsDir, options] = renderSpy.mock.calls[0]!
     expect(canvas.nodes.map((n) => n.id)).toEqual(['n1'])
+    // The renderer is keyed by the fonts directory of the scope being served.
+    expect(fontsDir).toBe(testStoreScope().layout.fontsDir)
     expect(options).toEqual({ padding: 20, scale: 2, theme: 'dark' })
   })
 
@@ -102,7 +106,7 @@ describe('exportCanvasHeadless', () => {
       })
       expect(result.png.length).toBeGreaterThan(0)
       expect(renderSpy).toHaveBeenCalledTimes(1)
-      const [canvas] = renderSpy.mock.calls[0] as [{ nodes: unknown[] }]
+      const [canvas] = renderSpy.mock.calls[0]!
       expect(canvas.nodes).toEqual([])
 
       const warnings = capture.records.filter(
@@ -180,7 +184,7 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
     return doc
   }
   const optionsOf = (spy: { mock: { calls: unknown[][] } }) =>
-    spy.mock.calls[0]?.[1] as { tagLibrary?: unknown } | undefined
+    spy.mock.calls[0]?.[2] as { tagLibrary?: unknown } | undefined
 
   it('hands the renderer the library the document at `tags` declares, for a tagged board', async () => {
     await saveDocument('ws_lib', 'tags', libraryDoc())
@@ -234,7 +238,7 @@ describe('exportCanvasHeadlessSvg', () => {
 
     expect(renderSvgSpy).toHaveBeenCalledTimes(1)
     expect(result.svg).toBe('<svg><rect/></svg>')
-    const [canvas] = renderSvgSpy.mock.calls[0] as [{ nodes: Array<{ id: string }> }]
+    const [canvas] = renderSvgSpy.mock.calls[0]!
     expect(canvas.nodes.map((n) => n.id)).toEqual(['n1'])
   })
 })

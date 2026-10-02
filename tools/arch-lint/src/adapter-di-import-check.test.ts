@@ -13,10 +13,9 @@
  * keeps the fallback from growing back: an adapter that imports the di
  * graph fails here, whatever it imports it for.
  *
- * The one adapter-adjacent module allowed to know the graph is the stdio
- * root (`server/mcp/index.ts`), which IS a composition root — it has nobody
- * above it to hand deps down — so it is listed by name rather than by
- * pattern.
+ * There is no exemption: the stdio root, which does compose its own deps, is
+ * `server/stdio-root.ts` — beside the other roots, outside the adapter trees —
+ * and the MCP server factory under `server/mcp/` takes the deps it is handed.
  *
  * Specifiers come from the AST walk every other import scan uses, and are
  * judged by where they RESOLVE rather than by how they are spelled. A text
@@ -33,12 +32,6 @@ import { REPO_ROOT } from './scan-roots.js'
 
 const SERVER_ROOT = join(REPO_ROOT, 'packages/mcp-server/src/server')
 const DI_DIR = join(REPO_ROOT, 'packages/mcp-server/src/di')
-/** Composition roots that live beside the adapters; each carries its reason. */
-const COMPOSITION_ROOTS_AMONG_ADAPTERS: ReadonlySet<string> = new Set([
-  // The packaged stdio entry: it is the root, so it resolves its own deps.
-  'mcp/index.ts',
-])
-
 /** Whether `file` imports anything under `di/`, however the import is written. */
 function importsDiGraph(file: string, source: string): boolean {
   return collectRelativeImportEdges(file, source).some(({ specifier }) => {
@@ -84,18 +77,9 @@ describe('an adapter never imports the di graph', () => {
   it('finds no route or MCP adapter resolving its own ServerDeps through di/', () => {
     const offenders = files
       .map((full) => relative(SERVER_ROOT, full))
-      .filter((rel) => !COMPOSITION_ROOTS_AMONG_ADAPTERS.has(rel))
       .filter((rel) =>
         importsDiGraph(join(SERVER_ROOT, rel), readFileSync(join(SERVER_ROOT, rel), 'utf8')),
       )
     expect(offenders).toEqual([])
-  })
-
-  it('lists no composition root that has stopped importing di/', () => {
-    const stale = [...COMPOSITION_ROOTS_AMONG_ADAPTERS].filter(
-      (rel) =>
-        !importsDiGraph(join(SERVER_ROOT, rel), readFileSync(join(SERVER_ROOT, rel), 'utf8')),
-    )
-    expect(stale).toEqual([])
   })
 })

@@ -15,7 +15,4 @@
  * magnitude; what they must never differ on is what a name means, which is
  * why all three go through `emojiSlug` over the same rows.
  */
-export { EMOJI_VERSION } from './catalog-data.js'
-export { EMOJI_JA_TAG } from './catalog-ja.js'
 export { emojiSections } from './sections.js'
-export { emojiSlug } from './slug.js'

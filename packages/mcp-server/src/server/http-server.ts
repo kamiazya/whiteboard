@@ -13,9 +13,7 @@ import { getDataDir } from './config.js'
 import { isDataDirWritable } from './data-dir-writable.js'
 import { startHttpRootTracing } from './observability/root-tracing.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
-import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
-import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import {
   createRootShutdown,
@@ -25,6 +23,7 @@ import {
 import type { createBackupScheduler } from './store/backup-scheduler.js'
 import type { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import type { createWorkspaceTail } from './store/workspace-tail.js'
+import { openSyncStreamCount, syncStreamStats } from './sync-streams.js'
 
 /**
  * The local daemon. It listens on ONE owner-only socket — a Unix socket, or a
@@ -37,7 +36,6 @@ export interface StartHttpServerOptions {
   /** Where to listen (`daemon-socket.ts`'s `daemonSocketPath`). */
   socketPath: string
   token?: string
-  mcpProtectedResourceMetadata?: McpProtectedResourceMetadataConfig
   idleTimeoutMs?: number
   onClose?: () => Promise<void> | void
   /** Test-only seam: overrides the real createFileGcSweeper so wiring tests
@@ -144,7 +142,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     authMode: 'local-daemon',
     onAutoVersionTrigger: shared.checkpoints.capture,
     token: options.token,
-    mcpProtectedResourceMetadata: options.mcpProtectedResourceMetadata,
     instanceId,
     touch,
     getStatus: getRuntimeStatus,

@@ -12,8 +12,8 @@
 
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { getLogger } from '../server/log.js'
 import { isMissingFileError } from '../shared/errno.js'
+import { getLogger } from './log.js'
 
 // The filename/dirname literals formerly lived in web-origin-trust-store.ts,
 // which owned the reconnect trust store. That module is gone; this is now

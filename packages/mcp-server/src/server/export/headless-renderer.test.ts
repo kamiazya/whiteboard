@@ -36,13 +36,28 @@ function rectCanvas(over: Partial<SpatialCanvas['nodes'][number]> = {}): Spatial
   }
 }
 
+// The exporter is keyed by fonts directory; none of these tests installs a
+// font, so they all render against an empty one.
 async function importRenderer() {
-  return import('./headless-renderer.js')
+  const renderer = await import('./headless-renderer.js')
+  return {
+    ...renderer,
+    renderSpatialCanvasToPng: (
+      canvas: Parameters<typeof renderer.renderSpatialCanvasToPng>[0],
+      options?: Parameters<typeof renderer.renderSpatialCanvasToPng>[2],
+    ) => renderer.renderSpatialCanvasToPng(canvas, NO_INSTALLED_FONTS, options),
+    renderSpatialCanvasToSvg: (
+      canvas: Parameters<typeof renderer.renderSpatialCanvasToSvg>[0],
+      options?: Parameters<typeof renderer.renderSpatialCanvasToSvg>[2],
+    ) => renderer.renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS, options),
+    prewarmHeadlessExporter: () => renderer.prewarmHeadlessExporter(NO_INSTALLED_FONTS),
+  }
 }
 
 import { renderSceneToSvg, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { buildSpatialScene } from './headless-renderer.js'
 import { loadExportFonts } from './measure-text.js'
+import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 import { opentypeMeasureText } from './test-utils/opentype-measure.js'
 
 describe('emphasis survives the whole export pipeline', () => {
@@ -403,7 +418,7 @@ describe('an export says which declared families it could not provide', () => {
     // answers `[]` for EVERY canvas by design, so this assertion would hold
     // while the report was inert. The mono case above is what proves the
     // machinery runs; this proves it can also stay quiet.
-    expect((await loadExportFonts()).length).toBeGreaterThan(0)
+    expect((await loadExportFonts(NO_INSTALLED_FONTS)).length).toBeGreaterThan(0)
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const plain: SpatialCanvas = {
       nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 120, text: 'plain prose' })],

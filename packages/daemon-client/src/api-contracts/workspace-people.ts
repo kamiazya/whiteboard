@@ -8,7 +8,7 @@ import { z } from 'zod'
  * the browser consumes these schemas directly.
  */
 
-export const workspaceRoleSchema = z.enum(['owner', 'member'])
+const workspaceRoleSchema = z.enum(['owner', 'member'])
 
 export const workspacePersonSchema = z.object({
   userId: z.string().min(1),

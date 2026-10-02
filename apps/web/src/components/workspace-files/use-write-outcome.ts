@@ -11,7 +11,7 @@ import { useCallback, useState } from 'react'
  * Carries the action because the verb is the whole message: "Created" and
  * "Pinned" tell the person a different thing about what is now true.
  */
-export interface StaleListNotice {
+interface StaleListNotice {
   readonly action: 'created' | 'pinned' | 'unpinned'
   readonly path: string
 }
@@ -22,7 +22,7 @@ export interface StaleListNotice {
  * read-only, say — and a pin is the one verb on the card menu with no form of
  * its own to report into.
  */
-export interface PinRefusal {
+interface PinRefusal {
   readonly pinning: boolean
   readonly path: string
   readonly reason: string
@@ -44,7 +44,7 @@ export interface PinRefusal {
  * rule for an outcome the clearing already produces, and no test could tell
  * the two apart.
  */
-export interface CreateRefusal {
+interface CreateRefusal {
   readonly kind: DocumentKind
   readonly reason: string
 }

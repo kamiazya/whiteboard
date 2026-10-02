@@ -3,7 +3,6 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRoutesDeps } from './routes/sign-in.js'
 import type { DaemonIdentity } from './security/daemon-identity.js'
-import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import type { WorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
@@ -21,13 +20,6 @@ interface LocalDaemonAppOptions {
    *  route reads the process's data dir or names the tenant itself. */
   dataLayout: DataLayout
   token?: string
-  /**
-   * RFC 9728 metadata for `/mcp`'s protected-resource discovery. The strategy
-   * that CHECKS the credential is no longer injected — `createApp` builds it
-   * over the one credential resolver, so there is no second place a secret is
-   * compared.
-   */
-  mcpProtectedResourceMetadata?: McpProtectedResourceMetadataConfig
   /** Per-process-start identifier for /api/runtime/ping. Falls back to a
    *  fresh crypto.randomUUID() when omitted (tests, ad-hoc callers). */
   instanceId?: string

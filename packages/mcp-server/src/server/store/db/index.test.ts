@@ -106,7 +106,6 @@ describe('getDb / closeDb', () => {
         totalBytes: 3,
         maxChunkBytes: 1_000_000,
         frontier: new Uint8Array(),
-        generation: 1,
       })
       .execute()
     await db

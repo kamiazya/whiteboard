@@ -20,7 +20,7 @@ import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
 import { parseServerBackupArgs } from './server-backup-args.js'
 import { parseServerLifecycleArgs } from './server-lifecycle-args.js'
 import { parseServerRestoreArgs } from './server-restore-args.js'
-import { parseServerSupportBundleArgs } from './server-support-bundle-args.js'
+import { parseServerSupportBundleArgs } from './support-bundle-args.js'
 
 type Result = { kind: 'usage-error'; message: string } | Record<string, unknown>
 

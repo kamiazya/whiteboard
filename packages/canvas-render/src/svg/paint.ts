@@ -28,7 +28,7 @@ export function isFiniteBox(box: BoundingBox): boolean {
   return [box.x, box.y, box.w, box.h].every(Number.isFinite)
 }
 
-export function isNonEmptyString(value: string | undefined): value is string {
+function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === 'string' && value.length > 0
 }
 

@@ -49,7 +49,7 @@ const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = 
  * a blank pane. Everything else is the source's own hits, widened with the
  * documents whose NAME matches — a content index does not rank a name.
  */
-export function searchResultRows({
+function searchResultRows({
   activeTag,
   hits,
   documents,

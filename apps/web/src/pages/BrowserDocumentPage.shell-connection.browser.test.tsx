@@ -129,11 +129,11 @@ describe('shell mark over a real document kept in this browser', () => {
     } finally {
       IDBDatabase.prototype.transaction = transaction
     }
-    // WHICH reader logs the refusal first depends on timing, and so does
-    // whether it has logged by the time the mark shows failed (measured under
-    // the full browser project: the mark was failed with no record yet); what
-    // must hold is that every record is the refusal this test induced, and
-    // nothing else.
+    // The controller's own catch logs the refused rename, so a record is
+    // guaranteed rather than left to whichever other reader happened to touch
+    // the store in the window (measured: none did in 2 of 6 runs); it lands
+    // after the mark shows failed, hence the wait. What must hold is that every
+    // record is the refusal this test induced, and nothing else.
     await waitFor(() => expect(logged.length).toBeGreaterThan(0))
     for (const line of logged) expect(line).toContain('storage refused the write (induced)')
   })

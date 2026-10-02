@@ -22,7 +22,7 @@
 
 import type { SafeHref } from './format.js'
 
-export type SvgRole = 'presentation'
+type SvgRole = 'presentation'
 
 export type SvgBoxAttrs = {
   x: number

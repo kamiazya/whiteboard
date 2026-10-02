@@ -42,7 +42,7 @@ export function previewDocumentSvg(within: Element | null | undefined): SVGEleme
  * source API, no rendered SVG — and the caller keeps its proportional
  * fallback.
  */
-export function anchoredPreviewTop(
+function anchoredPreviewTop(
   anchors: readonly PreviewBlockAnchor[],
   api: SourcePaneApi | null,
   preview: HTMLElement,

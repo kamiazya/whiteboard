@@ -609,7 +609,7 @@ export function interiorInkThrough(path: readonly Point[], rects: readonly Rect[
   return inkAlongRects(path, bodies, (fixed, near, far) => near < fixed && fixed < far)
 }
 
-export const endpointBodyInk: PenaltyRule = {
+const endpointBodyInk: PenaltyRule = {
   name: 'endpoint-body-ink',
   tier: 3,
   pairTerm: () => 0,

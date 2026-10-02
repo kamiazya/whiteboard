@@ -40,7 +40,7 @@ import { VISUAL_THEMES } from './themes.js'
  * both answer the same question. `v0`: unstable, payload may still change
  * shape.
  */
-export const visualEdgesFacetSchema = z.object({
+const visualEdgesFacetSchema = z.object({
   routing: edgeRoutingStyleSchema.optional(),
   lineJumps: lineJumpsSchema.optional(),
 })
@@ -101,19 +101,15 @@ export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
  * none is one object by itself, which is what ink from an import or an
  * agent's write is.
  */
-export const visualInkFacetSchema = z.object({
+const visualInkFacetSchema = z.object({
   group: z.string().min(1),
 })
 
-export type VisualInkFacet = z.infer<typeof visualInkFacetSchema>
-
 export const VISUAL_INK_KEY = 'visual.ink/v0'
 
-export const visualAxesFacetSchema = z.object({
+const visualAxesFacetSchema = z.object({
   axes: z.array(z.string().regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"')),
 })
-
-export type VisualAxesFacet = z.infer<typeof visualAxesFacetSchema>
 
 export const VISUAL_AXES_KEY = 'visual.axes/v0'
 
@@ -193,7 +189,7 @@ export const VISUAL_SYMBOL_KEY = 'visual.symbol/v0'
  * centres what fits, a rect starts at the top). The facet overrides that
  * default; it does not restate it, which is why there is no third value.
  */
-export const visualTextFacetSchema = z.object({
+const visualTextFacetSchema = z.object({
   align: z.enum(['start', 'center']),
 })
 
@@ -209,11 +205,9 @@ export const VISUAL_TEXT_KEY = 'visual.text/v0'
  * registered at write time. ABSENT is the bundled look, which is why the
  * picker's first segment is `null` rather than a stored `'default'`.
  */
-export const visualThemeFacetSchema = z.object({
+const visualThemeFacetSchema = z.object({
   theme: namespacedIdSchema,
 })
-
-export type VisualThemeFacet = z.infer<typeof visualThemeFacetSchema>
 
 export const VISUAL_THEME_KEY = 'visual.theme/v0'
 
@@ -234,11 +228,9 @@ export const VISUAL_THEME_KEY = 'visual.theme/v0'
  * `assetRefs` does the same job it does for a theme: a write naming a
  * stencil nobody registered is refused, with the registered ids listed.
  */
-export const visualStencilFacetSchema = z.object({
+const visualStencilFacetSchema = z.object({
   stencil: namespacedIdSchema,
 })
-
-export type VisualStencilFacet = z.infer<typeof visualStencilFacetSchema>
 
 /**
  * The vendored geometry as registered assets, keyed by bare name — the

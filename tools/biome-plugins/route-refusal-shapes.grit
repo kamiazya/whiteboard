@@ -13,12 +13,9 @@ language js
 // fuzz lane rather than by a reader).
 //
 // SCOPED in biome.json to packages/mcp-server/src/server/routes/**, and it
-// has to be: `c.notFound()` is CORRECT three times outside that directory,
+// has to be: `c.notFound()` is CORRECT twice outside that directory,
 // and a rule reaching them would flag working code.
 //
-//   - `app.ts`'s `/.well-known/oauth-protected-resource` pair answers a bare
-//     404 by design (RFC 9728 discovery; the fuzz lane's ledger skips them
-//     for the same reason).
 //   - `app.ts`'s two UI catch-alls (`app.get('*')`) serve a browser, not an
 //     API client, and a reserved UI path 404s with no body on purpose.
 //

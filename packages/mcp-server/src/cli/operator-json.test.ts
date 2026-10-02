@@ -2,6 +2,7 @@
 // (docs/how-to/self-host-with-docker.md): one declaration per command, and a
 // payload must survive being written and read back through it.
 import { describe, expect, it } from 'vitest'
+import { searchFetchModelOutputSchema } from '../shared/api-contracts/search-fetch-model.js'
 import {
   addUserOutputSchema,
   daemonSupportBundleOutputSchema,
@@ -10,7 +11,6 @@ import {
   grantMemberOutputSchema,
   nativeHostInstallOutputSchema,
   OPERATOR_JSON_SCHEMA_VERSION,
-  searchFetchModelOutputSchema,
   serverRestoreOutputSchema,
   serverRunDryRunOutputSchema,
   serverRunReadyOutputSchema,

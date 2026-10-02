@@ -8,8 +8,6 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { blobsRoot } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 // Swap DATA_DIR to a temp directory through vi.mock.
 let tempDir: string
@@ -156,13 +154,8 @@ describe('deleting a document', () => {
   // { deleted: true }, which it did throughout the whole defect.
   it('leaves the same state when the delete comes through wbDocumentDelete as through the HTTP path', async () => {
     const { getDb } = await import('./db/index.js')
-    const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
-    const { LoroWorkspaceDocumentIndex } = await import('@kamiazya/whiteboard-workspace-index')
-    const { FsBlobStore } = await import('./fs/fs-blob-store.js')
-    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { peekDoc } = await import('./doc-cache.js')
-    const { cacheBackedWorkspaceDocs, createDocumentTeardown, resolveDocumentIdAtPath } =
-      await import('./document-store.js')
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'agent-deleted', doc)
@@ -179,21 +172,11 @@ describe('deleting a document', () => {
     const documentId = await resolveDocumentIdAtPath('session1', 'agent-deleted')
     expect(documentId).not.toBeNull()
     if (documentId === null) throw new Error('unreachable')
-    await wbDocumentDelete(
-      {
-        documentStore: new LibsqlDocumentStore(db),
-        blobStore: {} as never,
-        documentIndex: new LoroWorkspaceDocumentIndex(
-          cacheBackedWorkspaceDocs(),
-          new FsBlobStore(
-            blobsRoot(join(tempDir, 'blobs'), SELF_HOST_TENANT_ID),
-            join(tempDir, 'blobs'),
-          ),
-        ),
-        documentTeardown: createDocumentTeardown(),
-      },
-      { workspaceId: 'session1', documentId },
-    )
+    // The production wiring, so the teardown the assertion is about is the real one.
+    await wbDocumentDelete(await resolveTestServerDeps(tempDir), {
+      workspaceId: 'session1',
+      documentId,
+    })
 
     const survivors = await db
       .selectFrom('versions')

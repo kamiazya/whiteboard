@@ -2,13 +2,17 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { createCanvasEditTool, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
+import {
+  createCanvasEditTool,
+  type ServerDeps,
+  wbDocumentCreate,
+} from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../routes/_test-helpers.js'
+import { withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-stdio-checkpoint-')
 
-vi.mock('../config.js', () => ({
+vi.mock('./config.js', () => ({
   get DATA_DIR() {
     return join(tmp.dir, 'data')
   },
@@ -19,13 +23,13 @@ vi.mock('../config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
 
-const { stdioRootServerDeps } = await import('./index.js')
-const { startBackgroundWork } = await import('../background-work.js')
-const { stdioBackgroundWork } = await import('../shared-background-work.js')
-const { FileVersionStore } = await import('../store/version-store.js')
-const { compactWorkspace } = await import('../store/document-store.js')
-const { uninstallAutoCheckpoint } = await import('../store/auto-checkpoint.js')
-const { disposeAutoCompact } = await import('../store/auto-compact.js')
+const { bootStdioRoot } = await import('./stdio-root.js')
+const { startBackgroundWork } = await import('./background-work.js')
+const { stdioBackgroundWork } = await import('./shared-background-work.js')
+const { FileVersionStore } = await import('./store/version-store.js')
+const { compactWorkspace } = await import('./store/document-store.js')
+const { uninstallAutoCheckpoint } = await import('./store/auto-checkpoint.js')
+const { disposeAutoCompact } = await import('./store/auto-compact.js')
 
 /**
  * The published entry is `npx @kamiazya/whiteboard-mcp`, which is this root
@@ -44,8 +48,7 @@ describe('the stdio root takes automatic checkpoints for agent-only writes', () 
     await disposeAutoCompact()
   })
 
-  async function editThroughStdioDeps(edits: number) {
-    const deps = await stdioRootServerDeps()
+  async function editThroughStdioDeps(deps: ServerDeps, edits: number) {
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
     const created = await wbDocumentCreate(deps, {
       workspaceId: 'ws-1',
@@ -68,11 +71,12 @@ describe('the stdio root takes automatic checkpoints for agent-only writes', () 
   }
 
   it('lands a version once the document has been quiet, so compaction has a floor', async () => {
-    const versions = new FileVersionStore()
-    const work = startBackgroundWork(stdioBackgroundWork())
+    const { serverDeps, scope } = await bootStdioRoot()
+    const versions = new FileVersionStore(scope)
+    const work = startBackgroundWork(stdioBackgroundWork(scope))
     try {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
-      await editThroughStdioDeps(3)
+      await editThroughStdioDeps(serverDeps, 3)
       expect(await versions.list('ws-1', 'agent-only')).toHaveLength(0)
       expect((await compactWorkspace('ws-1', versions)).reason).toBe('no-versions')
 
@@ -89,9 +93,10 @@ describe('the stdio root takes automatic checkpoints for agent-only writes', () 
   })
 
   it('takes the pending checkpoint when the process shuts down before the quiet window ends', async () => {
-    const versions = new FileVersionStore()
-    const work = startBackgroundWork(stdioBackgroundWork())
-    await editThroughStdioDeps(2)
+    const { serverDeps, scope } = await bootStdioRoot()
+    const versions = new FileVersionStore(scope)
+    const work = startBackgroundWork(stdioBackgroundWork(scope))
+    await editThroughStdioDeps(serverDeps, 2)
     expect(await versions.list('ws-1', 'agent-only')).toHaveLength(0)
 
     await work.stopAll()

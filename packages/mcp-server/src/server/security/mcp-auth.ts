@@ -2,16 +2,9 @@ import { hasRequiredScopes } from './auth-strategy.js'
 import { parseBearerAuthorizationHeader } from './bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from './credential-resolver.js'
 
-export interface McpProtectedResourceMetadataConfig {
-  authorizationServers: string[]
-  resource?: string
-  scopesSupported?: string[]
-}
-
 interface McpAuthRequestContext {
   method: string
   authorizationHeader?: string
-  requestUrl: string
 }
 
 type McpAuthDecision =
@@ -24,76 +17,12 @@ type McpAuthDecision =
     }
 
 export interface McpHttpAuthStrategy {
-  readonly protectedResourceMetadata?: McpProtectedResourceMetadataConfig
   authorize(context: McpAuthRequestContext): Promise<McpAuthDecision>
 }
 
 /** A CORS preflight carries no credentials, so it is the one method the strategy never asks for them. */
 export function requiresMcpHttpAuth(method: string): boolean {
   return method.toUpperCase() !== 'OPTIONS'
-}
-
-function getMcpProtectedResourceMetadataUrl(requestUrl: string): string {
-  return new URL('/.well-known/oauth-protected-resource/mcp', requestUrl).toString()
-}
-
-function buildWwwAuthenticateHeader(
-  requestUrl: string,
-  metadata: McpProtectedResourceMetadataConfig | undefined,
-  options?: {
-    error?: string
-    scope?: string[]
-    errorDescription?: string
-  },
-): string | null {
-  const parts = ['Bearer']
-
-  if (options?.error) {
-    parts.push(`error="${options.error}"`)
-  }
-  if (options?.scope && options.scope.length > 0) {
-    parts.push(`scope="${options.scope.join(' ')}"`)
-  }
-  if (metadata) {
-    parts.push(`resource_metadata="${getMcpProtectedResourceMetadataUrl(requestUrl)}"`)
-  }
-  if (options?.errorDescription) {
-    parts.push(`error_description="${options.errorDescription}"`)
-  }
-
-  return parts.length > 1 ? parts.join(' ') : null
-}
-
-function createUnauthorizedHeaders(
-  requestUrl: string,
-  metadata: McpProtectedResourceMetadataConfig | undefined,
-): Headers {
-  const headers = new Headers()
-  const challenge = buildWwwAuthenticateHeader(requestUrl, metadata)
-  if (challenge) {
-    headers.set('WWW-Authenticate', challenge)
-  }
-  return headers
-}
-
-export function buildMcpProtectedResourceMetadata(
-  strategy: McpHttpAuthStrategy,
-  requestUrl: string,
-): {
-  resource: string
-  authorization_servers: string[]
-  scopes_supported?: string[]
-} | null {
-  const metadata = strategy.protectedResourceMetadata
-  if (!metadata) {
-    return null
-  }
-
-  return {
-    resource: metadata.resource ?? new URL('/mcp', requestUrl).toString(),
-    authorization_servers: metadata.authorizationServers,
-    ...(metadata.scopesSupported ? { scopes_supported: metadata.scopesSupported } : {}),
-  }
 }
 
 /**
@@ -137,10 +66,8 @@ function admitsMcp(grant: ResolvedGrant): boolean {
  */
 export function createLocalTokenMcpHttpAuthStrategy(options: {
   resolver: CredentialResolver
-  protectedResourceMetadata?: McpProtectedResourceMetadataConfig
 }): McpHttpAuthStrategy {
   return {
-    protectedResourceMetadata: options.protectedResourceMetadata,
     async authorize(context) {
       if (!requiresMcpHttpAuth(context.method)) {
         return { ok: true }
@@ -155,7 +82,7 @@ export function createLocalTokenMcpHttpAuthStrategy(options: {
           ok: false,
           status: 401,
           message: 'unauthorized',
-          headers: createUnauthorizedHeaders(context.requestUrl, options.protectedResourceMetadata),
+          headers: new Headers(),
         }
       }
 

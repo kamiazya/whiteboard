@@ -201,7 +201,8 @@ before the term is a term, and a kana reading index is a different data set.
 ## `/emoji` — the catalog as a reusable subpath
 
 `@kamiazya/whiteboard-plugin-visual/emoji` exports `emojiSections()` (the
-picker's rows) and `emojiSlug()` (the shortcode vocabulary). It is a subpath
+picker's rows); `emojiSlug()` (the shortcode vocabulary) lives in
+`emoji/slug.ts`, read by the other emoji subpaths. It is a subpath
 rather than part of the barrel for the reason the dynamic import exists: the
 tables are 190KB and the default entry is loaded wherever a document is READ.
 

@@ -15,7 +15,7 @@
  */
 
 /** How far above the window's bottom edge a keyboard-docked strip belongs. */
-export function keyboardLiftPx(): number {
+function keyboardLiftPx(): number {
   const visual = window.visualViewport
   if (visual === null || visual === undefined) return 0
   // Zero whenever the layout viewport already tracks the keyboard, which is

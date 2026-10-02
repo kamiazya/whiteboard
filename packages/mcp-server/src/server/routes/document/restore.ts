@@ -3,6 +3,8 @@ import {
   restoreVersionRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
+  type ApiErrorBody,
+  errorBody,
   type RestoreProgress,
   restoreVersion,
   type ServerDeps,
@@ -39,11 +41,11 @@ export interface RestoreRouterOptions {
  */
 type RestoreAnswer =
   | { status: 200; body: RestoreVersionResponse }
-  | { status: 400 | 404 | 409; body: unknown }
+  | { status: 400 | 404 | 409; body: ApiErrorBody }
 
 /** A restore that happened answers under the one contract the client reads it with. */
 const restored = (body: RestoreVersionResponse): RestoreAnswer => ({ status: 200, body })
-const refused = (body: unknown, status: 400 | 404 | 409): RestoreAnswer => ({ status, body })
+const refused = (body: ApiErrorBody, status: 400 | 404 | 409): RestoreAnswer => ({ status, body })
 
 function restoreAnswer(
   result: Awaited<ReturnType<typeof restoreVersion>>,
@@ -51,7 +53,7 @@ function restoreAnswer(
 ): RestoreAnswer {
   switch (result.kind) {
     case 'not-found':
-      return refused({ error: 'not_found' }, 404)
+      return refused(errorBody('not_found', 'That version does not exist for this document.'), 404)
     case 'invalid-target-path':
       // The operation's schema backstop rejected it; re-run the rich
       // per-segment validator for the same 400 body this route has

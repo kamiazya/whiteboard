@@ -20,7 +20,7 @@ import { resolveSelfHostServerDeps } from './self-host-server-deps.js'
  * `prepareDataDir` itself, which is how a root once got migrated by accident —
  * naming both here is what stops that being load-bearing.
  */
-export async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
+async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
   await prepareDataDir(dataDir)
   await ensureWorkspaceId(dataDir)
 }
@@ -48,15 +48,10 @@ export async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
  * them (live documents, versions, teardown, the write signal, the caches under
  * them), which take the one `StoreScope` the store module binds.
  *
- * What does NOT follow it yet, so `dataDir` must equal `getDataDir()` for
- * these (each is ledgered in `adapter-process-global-check.test.ts`):
- *
- * - the installed-font directory the export measurer and exporter read
- *   (`server/export/installed-fonts.ts`), both process singletons;
- * - resolving a handle in an address (`workspace-handle.ts`), which reads the
- *   process's workspace registry rather than the injected index;
- * - the stdio root's own background work (`stdioBackgroundWork`), which takes
- *   the process's scope by default.
+ * What does NOT follow it yet, so `dataDir` must equal `getDataDir()` for it
+ * (ledgered in `adapter-process-global-check.test.ts`): resolving a handle in
+ * an address (`workspace-handle.ts`), which reads the process's workspace
+ * registry rather than the injected index.
  *
  * The workspace write lock and the workspace-update subscribers are keyed by
  * workspace id alone: two keepers sharing an id share a queue, which costs

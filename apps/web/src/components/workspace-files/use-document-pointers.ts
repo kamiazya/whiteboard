@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction, useCallback, useState } from 'react
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 
 /** The object-action menu: which document was right-clicked, and where. */
-export interface CardMenuTarget {
+interface CardMenuTarget {
   readonly entry: WorkspaceDocumentEntry
   readonly x: number
   readonly y: number

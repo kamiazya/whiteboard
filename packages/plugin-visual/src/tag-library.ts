@@ -43,7 +43,7 @@ const identifierSchema = z
   .string()
   .regex(TAG_IDENTIFIER_PATTERN, 'a key or value must be a lowercase identifier, like "health"')
 
-export const tagValueDeclarationSchema = z
+const tagValueDeclarationSchema = z
   .object({
     /** The colour a box or an edge carrying this value is drawn in when it has none of its own. */
     color: canvasColorSchema.optional(),
@@ -51,7 +51,7 @@ export const tagValueDeclarationSchema = z
   })
   .strict()
 
-export const tagKeyDeclarationSchema = z
+const tagKeyDeclarationSchema = z
   .object({
     description: z.string().optional(),
     /** One value at a time: a thing carrying two values under this key is refused. */
@@ -81,9 +81,7 @@ export const visualTagsFacetSchema = z.object({
  */
 export const tagLibrarySchema = visualTagsFacetSchema.shape.keys
 
-export type TagValueDeclaration = z.infer<typeof tagValueDeclarationSchema>
-export type TagKeyDeclaration = z.infer<typeof tagKeyDeclarationSchema>
-export type VisualTagsFacet = z.infer<typeof visualTagsFacetSchema>
+type TagKeyDeclaration = z.infer<typeof tagKeyDeclarationSchema>
 
 /** What a workspace declares: keys by name, each key's values by name. */
 export type TagLibrary = Readonly<Record<string, TagKeyDeclaration>>

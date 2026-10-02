@@ -24,12 +24,12 @@
     "tanstack-intent"
   ],
   "type": "module",
-  "main": "./dist/server/mcp/index.js",
-  "types": "./dist/server/mcp/index.d.ts",
+  "main": "./dist/server/mcp/server.js",
+  "types": "./dist/server/mcp/server.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/server/mcp/index.d.ts",
-      "import": "./dist/server/mcp/index.js"
+      "types": "./dist/server/mcp/server.d.ts",
+      "import": "./dist/server/mcp/server.js"
     },
     "./package.json": "./package.json"
   },
@@ -54,8 +54,8 @@
     "access": "public",
     "exports": {
       ".": {
-        "types": "./dist/server/mcp/index.d.ts",
-        "import": "./dist/server/mcp/index.js"
+        "types": "./dist/server/mcp/server.d.ts",
+        "import": "./dist/server/mcp/server.js"
       },
       "./package.json": "./package.json"
     }

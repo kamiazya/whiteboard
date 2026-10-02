@@ -40,7 +40,7 @@ export interface AnnotationScopeSource {
   readonly focus: () => void
 }
 
-export function annotationAnchorFrom(
+function annotationAnchorFrom(
   body: string,
   source: AnnotationScopeSource | null,
 ): TextAnchor | null {

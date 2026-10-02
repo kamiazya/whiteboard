@@ -1,6 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { deferred } from '../test-utils/async.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
 
 const lookup = (path: string) =>
@@ -71,7 +70,7 @@ describe('useDeleteDocuments', () => {
   it('reports busy while the delete is in flight, until it settles', async () => {
     // The dialog is what refuses a dismiss while busy (its own onOpenChange);
     // the hook only has to say so truthfully.
-    const gate = deferred<{ failed: string[]; lastError: unknown }>()
+    const gate = Promise.withResolvers<{ failed: string[]; lastError: unknown }>()
     const { result } = renderHook(() =>
       useDeleteDocuments({
         keeper: 'daemon',
@@ -189,7 +188,7 @@ describe('useDeleteDocuments', () => {
     // flight. Without a guard the partial failure re-opened the dialog with
     // the OLD workspace's paths, and the next confirm sent them to the new
     // one — the mismatched identity the reset exists to prevent.
-    const gate = deferred<{ failed: string[]; lastError: unknown }>()
+    const gate = Promise.withResolvers<{ failed: string[]; lastError: unknown }>()
     const { result } = renderHook(() =>
       useDeleteDocuments({
         keeper: 'daemon',

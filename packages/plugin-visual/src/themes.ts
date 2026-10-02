@@ -93,7 +93,7 @@ const SKETCH_DARK: PaletteTokens = {
  * written by two hands. Chosen from a thirteen-face specimen of the same
  * canvas; the runner-up, Zen Kurenaido, is thinner and quieter.
  */
-export const VISUAL_THEME_SKETCH: ThemeTokens = {
+const VISUAL_THEME_SKETCH: ThemeTokens = {
   ink: 'sketch',
   // A pencil line, not a hairline: the two passes are painted at this
   // weight and a lighter second one, and a 1px stroke doubled read as a
@@ -191,7 +191,7 @@ const NEON_LIGHT: PaletteTokens = {
  * Neon: crisp geometry, a soft halo on every stroke, symbol and label in its
  * own colour, orthogonal routing by default so edges read as traces.
  */
-export const VISUAL_THEME_NEON: ThemeTokens = {
+const VISUAL_THEME_NEON: ThemeTokens = {
   ink: 'clean',
   // The halo is the element's own paint blurred, so a hairline has almost
   // nothing to bloom from: at 1px the peak of the blur is a quarter of the

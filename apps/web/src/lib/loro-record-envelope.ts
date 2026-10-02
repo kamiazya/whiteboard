@@ -24,5 +24,3 @@ export const loroRecordEnvelopeSchema = z.object({
   updatedAt: z.string(),
   deltas: z.array(uint8ArrayAnyRealmSchema).optional(),
 })
-
-export type LoroRecordEnvelope = z.infer<typeof loroRecordEnvelopeSchema>

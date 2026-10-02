@@ -34,8 +34,7 @@ scan says.
   reach a route (sync needs an open stream, a fresh data dir has no
   installed font) and is checked to stay
   true; `skip:` names why a route is not requested (the SSE stream holds
-  the response open, font install reaches the network, RFC 9728 discovery
-  answers a bare 404 by design).
+  the response open, font install reaches the network).
   A rule may also name the `response` schema the web client reads that
   route's answer with (daemon-client's `api-contracts`), and every 2xx is
   parsed under it: the handlers are typed, but nothing parses on the way
@@ -97,8 +96,8 @@ scan says.
   files router shipped until the fuzz lane found it. The lint rule is the
   rung that stops a new one being written; it caught one live instance, the
   disabled `/api/debug` router. It is scoped to `routes/` because
-  `c.notFound()` is CORRECT three times in `app.ts`: RFC 9728 discovery
-  answers a bare 404 by design, and the two UI catch-alls serve a browser.
+  `c.notFound()` is CORRECT twice outside `routes/`: the two UI catch-alls
+  in `app.ts` serve a browser.
 
 ## The export reads the workspace's tag library (ADR-0040 decision 5)
 
@@ -213,15 +212,16 @@ takes the `scope` `bootSelfHostDeps` returns — the backup's directory and the
 lease's database, the sweeper, the workspace tail and auto-compaction — and
 both HTTP roots boot before they build workers; `composition-roots.guard.test.ts`
 names a root that gives them any other scope. `store/` functions still default
-`scope = globalStoreScope`, for tests and the stdio root, and `tools/arch-lint`'s
+`scope = globalStoreScope`, for tests, and `tools/arch-lint`'s
 `scope-default-calls.ts` derives that list from the store's own signatures and
 fails an adapter, `app.ts`, `shared-background-work.ts` or a root that calls
 one without a scope. `boot-self-host-deps.test.ts`, `app.split-dir.test.ts`
 and `shared-background-work.split-dir.test.ts` boot over one dir with
 `getDataDir()` naming another and assert nothing lands outside the served
-dir. Still on the process global, each ledgered: the installed-font dir the
-export singletons read, handle resolution in `workspace-handle.ts`, and
-`stdioBackgroundWork`'s default.
+dir. Still on the process global, ledgered: handle resolution in
+`workspace-handle.ts`. The installed-font directory is `DataLayout.fontsDir`
+(the export measurer and exporter are keyed by it), and `stdioBackgroundWork`
+takes the scope the stdio root booted.
 
 **`createContainer(storeModule)` takes its module; the in-memory one is a
 test double at `shared/test-utils/store-memory.module.ts`.** There is no

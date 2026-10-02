@@ -70,7 +70,7 @@ describe('ensureDevDataDirSecured', () => {
 
 describe('reraiseSignalOrExit', () => {
   it('re-raises the signal against the given pid via kill', () => {
-    const calls = []
+    const calls: { pid: number; signal: string | number | undefined }[] = []
     reraiseSignalOrExit('SIGTERM', {
       pid: 4242,
       kill: (pid, signal) => calls.push({ pid, signal }),
@@ -83,7 +83,7 @@ describe('reraiseSignalOrExit', () => {
   })
 
   it('falls back to exit(1) when kill throws (e.g. Windows EINVAL on POSIX signals)', () => {
-    const exitCalls = []
+    const exitCalls: (number | undefined)[] = []
     reraiseSignalOrExit('SIGTERM', {
       pid: 4242,
       kill: () => {

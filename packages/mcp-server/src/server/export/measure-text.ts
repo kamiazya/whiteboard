@@ -27,7 +27,7 @@ function clampNonNegative(value: number): number {
 }
 
 /** CSS-style face selection: 600+ is bold, per the numeric weight scale. */
-export function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
+function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
   const bold = descriptor.weight >= 600
   const italic = descriptor.style === 'italic'
   if (bold && italic) return 'boldItalic'
@@ -154,7 +154,10 @@ export interface ExportTextMeasurer {
   readonly measurableFamilies: ReadonlySet<string>
 }
 
-let cachedMeasurerPromise: Promise<ExportTextMeasurer> | null = null
+// One measurer per fonts directory: a keeper serving another directory has other
+// installed families, and a measurer built from the first would declare and
+// measure faces the second does not have.
+const cachedMeasurers = new Map<string, Promise<ExportTextMeasurer>>()
 let hasLoggedFallback = false
 
 /**
@@ -199,9 +202,10 @@ async function parseFace(path: string | null): Promise<opentype.Font | null> {
  * corrupt file in the directory must not take the export down with it.
  */
 export async function loadExportFonts(
+  fontsDir: string,
   resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>> = resolveExportFontFaces,
 ): Promise<readonly opentype.Font[]> {
-  const paths = [(await resolveFontFiles()).regular, ...(await installedFontFiles())]
+  const paths = [(await resolveFontFiles()).regular, ...(await installedFontFiles(fontsDir))]
   const fonts: opentype.Font[] = []
   for (const path of paths) {
     try {
@@ -228,9 +232,11 @@ export async function loadExportFonts(
  * `loadExportFonts` skips one: it cannot draw anything, so it measures
  * nothing, and a corrupt file in the directory must not take the export down.
  */
-async function loadInstalledFamilies(): Promise<ReadonlyMap<string, opentype.Font>> {
+async function loadInstalledFamilies(
+  fontsDir: string,
+): Promise<ReadonlyMap<string, opentype.Font>> {
   const families = new Map<string, opentype.Font>()
-  for (const path of await installedFontFiles()) {
+  for (const path of await installedFontFiles(fontsDir)) {
     try {
       const font = await parseFace(path)
       if (font === null) continue
@@ -250,6 +256,7 @@ async function loadInstalledFamilies(): Promise<ReadonlyMap<string, opentype.Fon
 const BUNDLED_ONLY: ReadonlySet<string> = new Set([EXPORT_FONT_FAMILY])
 
 async function loadRealMeasurer(
+  fontsDir: string,
   resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>>,
 ): Promise<ExportTextMeasurer> {
   try {
@@ -270,7 +277,7 @@ async function loadRealMeasurer(
         logFallbackOnce(describeLoadFailure(err))
       }
     }
-    const installed = await loadInstalledFamilies()
+    const installed = await loadInstalledFamilies(fontsDir)
     return {
       measure: buildOpentypeMeasurer(regular, faces, installed),
       measurableFamilies: new Set([EXPORT_FONT_FAMILY, ...installed.keys()]),
@@ -285,26 +292,33 @@ async function loadRealMeasurer(
  * The canonical export measurer: the vendored opentype.js faces plus every
  * installed family, and the one answer to which families may be declared.
  *
- * Parses the font assets at most once per process — the parsed result (or, on
- * failure, the fallback measurer) is cached and reused by every caller. A font
- * installed later reaches resvg on the next export (the renderer resolves
- * `fontFiles` per render) but is not measured until this cache is rebuilt, so
- * it is drawn in the bundled family it was also measured in — degraded, never
- * mismatched.
- * ponytail: key the cache on the installed directory if a font installed
+ * Parses the font assets at most once per fonts directory — the parsed result
+ * (or, on failure, the fallback measurer) is cached and reused by every caller
+ * of that directory. A font installed later reaches resvg on the next export
+ * (the renderer resolves `fontFiles` per render) but is not measured until this
+ * cache is rebuilt, so it is drawn in the bundled family it was also measured
+ * in — degraded, never mismatched.
+ * ponytail: key the cache on the directory's contents if a font installed
  * mid-session must change the very next export's declarations.
  */
-export async function createExportTextMeasurer(
-  options: { resolveFontFiles?: () => Promise<Record<ExportFontFace, string | null>> } = {},
-): Promise<ExportTextMeasurer> {
-  if (!cachedMeasurerPromise) {
-    cachedMeasurerPromise = loadRealMeasurer(options.resolveFontFiles ?? resolveExportFontFaces)
+export async function createExportTextMeasurer(options: {
+  /** `DataLayout.fontsDir`: where the installed families are read from. */
+  fontsDir: string
+  resolveFontFiles?: () => Promise<Record<ExportFontFace, string | null>>
+}): Promise<ExportTextMeasurer> {
+  let measurer = cachedMeasurers.get(options.fontsDir)
+  if (measurer === undefined) {
+    measurer = loadRealMeasurer(
+      options.fontsDir,
+      options.resolveFontFiles ?? resolveExportFontFaces,
+    )
+    cachedMeasurers.set(options.fontsDir, measurer)
   }
-  return cachedMeasurerPromise
+  return measurer
 }
 
 /** Test-only: clears the module-level measurer cache and log-once flag. */
 export function _resetExportMeasureTextCacheForTests(): void {
-  cachedMeasurerPromise = null
+  cachedMeasurers.clear()
   hasLoggedFallback = false
 }

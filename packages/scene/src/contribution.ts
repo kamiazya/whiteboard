@@ -118,7 +118,7 @@ export interface ScenePoint {
  * router's INPUT, never part of its answer. A router that returned sides
  * would be returning what it was told.
  */
-export interface EdgeRouteAnchors {
+interface EdgeRouteAnchors {
   readonly fromSide: EdgeSide
   readonly toSide: EdgeSide
   /** Where on that side, when the fan-out moved the end off the midpoint. */
@@ -149,7 +149,7 @@ export interface EdgeRouteRequest {
  * second producer of that geometry, which is the drift this package's own
  * rules exist to prevent.
  */
-export interface EdgeRoute {
+interface EdgeRoute {
   readonly path: readonly ScenePoint[]
   readonly rounded?: boolean
 }

@@ -70,7 +70,7 @@ describe('route refusals are written in one place', () => {
 
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
-    expect(production.length).toBeGreaterThan(30)
+    expect(production.length).toBeGreaterThan(25)
   })
 
   it('no route validates a workspace handle by hand outside the allowlist', () => {

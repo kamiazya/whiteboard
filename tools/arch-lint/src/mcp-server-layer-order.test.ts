@@ -28,8 +28,7 @@
  *
  * Measured before writing this: eight upward edges (see `UPWARD_EDGES`), none
  * of them a surprise once the layers were named — each is a module filed in the
- * wrong directory (a scheduler under `routes/`, a stdio root inside the library
- * that composes the HTTP server) rather than a design that wants the edge. They
+ * wrong directory (a scheduler under `routes/`) rather than a design that wants the edge. They
  * are ledgered rather than moved here because each is a relocation with its own
  * importers, and the count may only fall.
  *
@@ -67,8 +66,12 @@ const MECHANIC_DIRS: ReadonlySet<string> = new Set([
   'release',
 ])
 
-/** MCP files that are a process entry, not a tool registration. */
-const MCP_ENTRY_FILES: ReadonlySet<string> = new Set(['server/mcp/index.ts', 'server/mcp/stdio.ts'])
+/**
+ * The one file under `server/mcp/` that is a process entry rather than a tool
+ * registration: it starts the stdio root (`server/stdio-root.ts`), so it sits
+ * above it.
+ */
+const MCP_PROCESS_ENTRY = 'server/mcp/stdio.ts'
 
 /**
  * Top-level `server/*.ts`, each named. Named rather than guessed so a new one
@@ -95,9 +98,17 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   'server/background-work-costs.ts': 'mechanics',
   'server/shared-background-work.ts': 'mechanics',
   'server/canvas-client-notifier.ts': 'mechanics',
+  // What is open and listening: the registry of sync streams, the audience
+  // vocabulary the daemon speaks over it, and the viewport-request cache the
+  // two share. The route that opens a stream (`routes/sync-sse.ts`) sits above.
+  'server/sync-streams.ts': 'mechanics',
+  'server/sync-audience.ts': 'mechanics',
+  'server/viewport-requests.ts': 'mechanics',
   'server/daemon-actor.ts': 'mechanics',
   'server/daemon-auth-binding.ts': 'mechanics',
   'server/current-workspace.ts': 'mechanics',
+  // Startup clean-up of data-dir artifacts a retired feature left behind.
+  'server/purge-legacy-trust-file.ts': 'mechanics',
   // Translation shared between routes (`ADAPTER_HELPER_FILES` names the first).
   'server/workspace-handle.ts': 'adapters',
   'server/app-helpers.ts': 'adapters',
@@ -110,6 +121,7 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   // Process entries.
   'server/index.ts': 'entry',
   'server/daemon-entry.ts': 'entry',
+  'server/stdio-root.ts': 'entry',
 }
 
 /** The layer of a path relative to `src/`, or `undefined` when it belongs to none. */
@@ -122,7 +134,7 @@ function layerOf(path: string): Layer | undefined {
   if (top !== 'server') return undefined
   if (path.split('/').length === 2) return TOP_LEVEL[path]
   if (second === 'routes') return 'adapters'
-  if (second === 'mcp') return MCP_ENTRY_FILES.has(path) ? 'entry' : 'adapters'
+  if (second === 'mcp') return path === MCP_PROCESS_ENTRY ? 'entry' : 'adapters'
   return MECHANIC_DIRS.has(second as string) ? 'mechanics' : undefined
 }
 
@@ -165,35 +177,13 @@ const FILES: readonly SourceFile[] = walk(SRC, {
  * where its importers can reach it.
  */
 const UPWARD_EDGES: Readonly<Record<string, string>> = {
-  'daemon/purge-legacy-trust-file.ts -> server/log.ts':
-    'the one daemon module that logs through the server logger; a logger seam the daemon is ' +
-    'handed, or the logger moving below `daemon/`, retires it',
-  'server/app.ts -> server/mcp/index.ts':
-    '`createMcpServer` lives in the file that is also the stdio root and its `main()`; splitting ' +
-    '`mcp/index.ts` into a library module and a stdio root retires this, the next entry and the ' +
-    'three places that exempt `mcp/index.ts` by name',
-  'server/routes/mcp.ts -> server/mcp/index.ts':
-    'the same file as the entry above: the route mounts `createMcpServer` from the module that ' +
-    'also starts stdio',
-  'server/canvas-client-notifier.ts -> server/routes/sync-audience.ts':
-    'the audience registry is a mechanic filed under `routes/`; moving `sync-audience.ts` out of ' +
-    'it retires this and the shared-background-work edge below',
-  'server/shared-background-work.ts -> server/routes/sync-audience.ts':
-    'the same registry, reached by the background-work declarations',
-  'server/shared-background-work.ts -> server/routes/document/auto-version.ts':
-    '`auto-version.ts` is a scheduler wrapper, not a route: moving it out of `routes/` retires ' +
-    'this and the `routes/document/auto-version.ts -> version-store` entry in ' +
-    'ADAPTERS_REACHING_MECHANICS, which is a misfiled mechanic',
-  'server/mcp/tarball.distribution-impl.ts -> cli/operator-json.ts':
-    'distribution-smoke support filed under the adapter tree reaches the CLI JSON sink; moving ' +
-    'the smoke impls beside the smokes retires it',
   'server/security/membership-gate.ts -> server/workspace-handle.ts':
     'the gate resolves an address through the adapter helper `workspace-handle.ts`; handing it the ' +
     'resolved workspace, as `createApp` hands routes everything else, retires it',
 }
 
 /** How many entries {@link UPWARD_EDGES} may hold — pinned by equality, a ratchet and not a budget. */
-const UPWARD_EDGES_CEILING = 8
+const UPWARD_EDGES_CEILING = 1
 
 describe('what counts as an upward edge', () => {
   const edgesOf = (files: Record<string, string>): string[] =>
@@ -252,9 +242,10 @@ describe('what counts as an upward edge', () => {
     ).toEqual([])
   })
 
-  it('treats the stdio root as an entry, above the app that composes the library', () => {
-    expect(layerOf('server/mcp/index.ts')).toBe('entry')
+  it('treats the stdio root and its process entry as entries, above the library the app composes', () => {
+    expect(layerOf('server/stdio-root.ts')).toBe('entry')
     expect(layerOf('server/mcp/stdio.ts')).toBe('entry')
+    expect(layerOf('server/mcp/server.ts')).toBe('adapters')
     expect(layerOf('server/mcp/document-tools.ts')).toBe('adapters')
   })
 })

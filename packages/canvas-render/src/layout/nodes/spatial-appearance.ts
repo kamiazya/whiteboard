@@ -84,7 +84,7 @@ export interface SpatialProposalAppearance {
  * The three shapes a comment composes, whichever visual treatment is
  * assigned to them — the unresolved default, or the resolved/muted overlay.
  */
-export interface SpatialCommentChromeAppearance {
+interface SpatialCommentChromeAppearance {
   readonly pin: Appearance
   readonly bubble: Appearance
   /** The dashed line tying pin to bubble, so the pair reads as one comment. */

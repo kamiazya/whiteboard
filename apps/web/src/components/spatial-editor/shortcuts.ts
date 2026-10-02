@@ -107,6 +107,9 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     display: 'Shift+2',
     description: 'Zoom to the selection',
   },
+  // Its handler answers true even on an empty canvas: false would let the
+  // chord fall through to the browser's own select-all, highlighting the whole
+  // page, so a handled no-op still consumes it.
   {
     id: 'select-all',
     keys: ['a'],

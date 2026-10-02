@@ -2,17 +2,13 @@ import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 import type { BackgroundWork, BackgroundWorker } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
-import {
-  type AutoVersionTrigger,
-  createAutoVersionTrigger,
-} from './routes/document/auto-version.js'
-import { subscribedWorkspaceIds } from './routes/sync-audience.js'
 import { installAutoCheckpoint } from './store/auto-checkpoint.js'
 import {
   disposeAutoCompact,
   installAutoCompact,
   uninstallAutoCompact,
 } from './store/auto-compact.js'
+import { type AutoVersionTrigger, createAutoVersionTrigger } from './store/auto-version.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import {
   cacheBackedWorkspaceDocs,
@@ -21,9 +17,10 @@ import {
 } from './store/document-store.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
-import { globalStoreScope, type StoreScope } from './store/store-scope.js'
+import type { StoreScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
+import { subscribedWorkspaceIds } from './sync-audience.js'
 
 /**
  * The background work BOTH HTTP composition roots run — the local daemon
@@ -396,8 +393,11 @@ export function sharedBackgroundWork(
  * The compaction declaration is here for its stop: `documentWritten` already
  * schedules folds under stdio, and what that left unanswered was waiting out
  * a fold in flight before the process closes the database under it.
+ *
+ * The scope is the one the stdio root booted its deps over, so the checkpoints
+ * and folds land in the directory those deps write to.
  */
-export function stdioBackgroundWork(scope: StoreScope = globalStoreScope): BackgroundWork[] {
+export function stdioBackgroundWork(scope: StoreScope): BackgroundWork[] {
   const scheduler = createAutoVersionTrigger(new FileVersionStore(scope))
   return [autoCheckpointWork(() => scheduler), autoCompactWork(scope)]
 }

@@ -24,8 +24,11 @@ vi.mock('../config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
 
-const { createMcpServer } = await import('./index.js')
+const { createMcpServer } = await import('./server.js')
+const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 const { clearWorkspaceIdCache } = await import('../current-workspace.js')
+
+const factory = async () => createMcpServer(await resolveTestServerDeps(join(tmp.dir, 'data')))
 
 afterEach(() => {
   clearWorkspaceIdCache()
@@ -33,7 +36,7 @@ afterEach(() => {
 
 it('serveStdio serves a legacy (2025) client from the createMcpServer factory', async () => {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
-  const handle = serveStdio(() => createMcpServer(), { transport: serverSide })
+  const handle = serveStdio(factory, { transport: serverSide })
   const client = new Client({ name: 'legacy-stdio-client', version: '1.0.0' })
   try {
     await client.connect(clientSide)
@@ -47,7 +50,7 @@ it('serveStdio serves a legacy (2025) client from the createMcpServer factory', 
 
 it('serveStdio serves a modern-pinned (2026-07-28) client from the same factory', async () => {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
-  const handle = serveStdio(() => createMcpServer(), { transport: serverSide })
+  const handle = serveStdio(factory, { transport: serverSide })
   const client = new Client(
     { name: 'modern-stdio-client', version: '1.0.0' },
     { versionNegotiation: { mode: { pin: '2026-07-28' } } },

@@ -10,23 +10,22 @@ import { describe, expect, it } from 'vitest'
 
 const BACKGROUND = '#030711'
 
-const scene: Scene = {
-  nodes: [
-    {
-      kind: 'edge',
-      id: 'e',
-      path: [
-        { x: 20, y: 60 },
-        { x: 220, y: 60 },
-      ],
-      fromSide: 'right',
-      toSide: 'left',
-      fromEnd: 'none',
-      toEnd: 'none',
-      appearance: { stroke: '#f472b6', strokeWidth: 2, glow: { radiusPx: 6 } },
-    },
+type SceneEdge = Extract<Scene['nodes'][number], { kind: 'edge' }>
+
+const edge: SceneEdge = {
+  kind: 'edge',
+  id: 'e',
+  path: [
+    { x: 20, y: 60 },
+    { x: 220, y: 60 },
   ],
+  fromSide: 'right',
+  toSide: 'left',
+  fromEnd: 'none',
+  toEnd: 'none',
+  appearance: { stroke: '#f472b6', strokeWidth: 2, glow: { radiusPx: 6 } },
 }
+const scene: Scene = { nodes: [edge] }
 
 function pixelAt(pixels: Buffer, width: number, x: number, y: number): [number, number, number] {
   const i = (y * width + x) * 4
@@ -49,9 +48,8 @@ describe('glow under resvg', () => {
   })
 
   it('the same edge without glow leaves the ground untouched five pixels off the line', () => {
-    const { glow: _glow, ...plain } =
-      scene.nodes[0]!.kind === 'edge' ? scene.nodes[0].appearance! : {}
-    const crisp: Scene = { nodes: [{ ...(scene.nodes[0] as never), appearance: plain }] }
+    const { glow: _glow, ...plain } = edge.appearance ?? {}
+    const crisp: Scene = { nodes: [{ ...edge, appearance: plain }] }
     const svg = renderSceneToSvg(crisp, { width: 240, height: 120, background: BACKGROUND })
     const image = new Resvg(svg, { fitTo: { mode: 'original' } }).render()
     const [r] = pixelAt(image.pixels, image.width, 120, 60 - 5)

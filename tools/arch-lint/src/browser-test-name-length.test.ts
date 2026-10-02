@@ -87,13 +87,25 @@ const NAME_LIMIT = 255
 const sanitize = (title: string): string => title.replace(/[^a-zA-Z0-9]/g, '-')
 
 /**
+ * The traces directory exactly as the shared browser config names it, read
+ * from there rather than restated. Its flattened form is the first thing in
+ * every attachment name, so a longer directory shrinks EVERY project's title
+ * budget by the same amount and nothing else reports it — the self-test below
+ * pins the budgets, which makes that a decision in a diff.
+ */
+const TRACES_DIR =
+  /export const TRACES_DIR = '([^']+)'/.exec(
+    readFileSync(join(REPO_ROOT, 'vitest.browser.shared.ts'), 'utf-8'),
+  )?.[1] ?? ''
+
+/**
  * What the attachment name costs before the test's own title:
- * `tmp-vitest-traces-` (the flattened `tracesDir`), `<project>--chromium--`
+ * the flattened `TRACES_DIR` (`tmp-vitest-traces-`), `<project>--chromium--`
  * (project + browser), and a `-0-0-trace-zip-<40-char sha>.zip` suffix.
  */
 function titleBudget(projectName: string): number {
   const fixedOverhead =
-    'tmp-vitest-traces-'.length +
+    `${sanitize(TRACES_DIR)}-`.length +
     `${projectName}--chromium--`.length +
     '-0-0-trace-zip-'.length +
     40 +
@@ -186,6 +198,9 @@ const browserFiles = TEST_SCAN_DIRS.flatMap((dir) => listTestFiles(join(REPO_ROO
 
 describe('browser test names fit the trace attachment filename', () => {
   it('budgets each project by its own name, as measured at the boundary (self-test)', () => {
+    expect(sanitize(TRACES_DIR), 'the directory name every attachment name starts with').toBe(
+      'tmp-vitest-traces',
+    )
     expect(titleBudget('web-browser')).toBe(155)
     expect(titleBudget('canvas-viewer-browser')).toBe(145)
     expect(titleBudget('web-browser-window-state')).toBe(142)

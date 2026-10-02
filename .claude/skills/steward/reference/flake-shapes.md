@@ -183,3 +183,18 @@ the menu stays shut, so the failure reads as "the list does not contain this ite
 list was ever opened — and raising the query's timeout only buys a slower identical failure.
 Measured: `menus=0 expanded=false connected=true`. Wait for `[role="menu"]` to be gone before
 re-opening.
+
+### wait-on-the-row-not-the-pointer
+
+**A test that waits for the observable a flow produces FIRST, then acts on its
+half-finished state.** A delete here is four steps: clear the pointer, remove
+the row, create the fresh row, repoint. A test that waited for "the store holds
+one fresh row" finished between steps three and four — measured with a probe on
+31 runs, the pointer was still null in 28 of them. The test then unmounted and
+remounted a page, which read no pointer and seeded a SECOND document, ending
+with two rows; the test passed, so nothing reported it. The same window, with
+the pointer naming a document the index lacked instead of null, was the "The
+canvas data could not be read." error screen that failed main three times in
+four days. Wait for the LAST write of the flow (here the pointer naming the
+row) and assert what the next step opened, not only that it rendered.
+Mutation: without the pointer wait, the stronger final assertion failed 4 of 6.

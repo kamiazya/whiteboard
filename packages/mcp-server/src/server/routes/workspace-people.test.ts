@@ -18,10 +18,10 @@ import { createWorkspacePeopleAdministration } from '../security/people-administ
 import { serverModePeopleKeeper } from '../security/people-keepers.js'
 import { createServerModeApiAuthMiddleware } from '../security/server-mode-middleware.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
-import { endSyncStreamsOf } from './sync-sse.js'
+import { endSyncStreamsOf } from '../sync-streams.js'
 import { createWorkspacePeopleRouter } from './workspace-people.js'
 
-vi.mock('./sync-sse.js', () => ({ endSyncStreamsOf: vi.fn() }))
+vi.mock('../sync-streams.js', () => ({ endSyncStreamsOf: vi.fn() }))
 
 const AUTHENTICATOR = 'oidc:https://idp.test'
 

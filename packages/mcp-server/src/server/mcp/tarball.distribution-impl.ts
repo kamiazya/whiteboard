@@ -2,9 +2,11 @@ import { type SpawnSyncReturns, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import type { z } from 'zod'
 
-import { searchFetchModelOutputSchema } from '../../cli/operator-json.js'
+import {
+  type SearchFetchModelOutput,
+  searchFetchModelOutputSchema,
+} from '../../shared/api-contracts/search-fetch-model.js'
 import { runE2eCheckpointSmoke } from './mcp-e2e-checkpoint.smoke-impl.js'
 
 interface RunPackedTarballSmokeOptions {
@@ -36,9 +38,7 @@ function spawnChecked(
 
 // The command's stdout is a documented scripting contract, so the smoke reads
 // it through the same schema the command prints through.
-function readFetchModelOutput(
-  result: SpawnSyncReturns<string>,
-): z.infer<typeof searchFetchModelOutputSchema> {
+function readFetchModelOutput(result: SpawnSyncReturns<string>): SearchFetchModelOutput {
   const stdout = result.stdout ?? ''
   let json: unknown
   try {
@@ -125,7 +125,7 @@ function listTarballEntries(tarballPath: string): string[] {
  *     defect this whole check exists for: it used to live only in scripts/,
  *     which is never published.
  */
-export function assertSemanticSearchOptIn(options: {
+function assertSemanticSearchOptIn(options: {
   installDir: string
   installedPackageRoot: string
   installedBin: string

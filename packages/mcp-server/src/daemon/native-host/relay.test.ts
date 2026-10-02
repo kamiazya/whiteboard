@@ -46,7 +46,12 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 }
 
 /** A browser on the other end of the host's stdio. */
-function connectPage(resolveDaemon = async () => ({ socketPath, token: 'daemon-token' })) {
+function connectPage(
+  resolveDaemon: Parameters<typeof runNativeHost>[0]['resolveDaemon'] = async () => ({
+    socketPath,
+    token: 'daemon-token',
+  }),
+) {
   const input = new PassThrough()
   const output = new PassThrough()
   const received: HostToPage[] = []

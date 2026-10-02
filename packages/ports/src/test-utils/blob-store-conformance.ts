@@ -13,6 +13,10 @@ import type { BlobRef, BlobStore } from '../index.js'
  *
  * The digest is computed here with WebCrypto rather than `node:crypto` —
  * this package must run unchanged in a browser, and arch-lint enforces it.
+ * Its byte-to-hex is likewise spelled out rather than imported from model's
+ * `encoding/hex.ts`, the one production helper: this is the independent oracle
+ * for a store's digest, and one that reused the helper a store calls would
+ * share its defect and still agree.
  */
 export function describeBlobStoreConformance(
   makeStore: () => Promise<{ store: BlobStore; dispose: () => Promise<void> }>,

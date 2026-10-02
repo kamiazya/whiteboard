@@ -1,4 +1,4 @@
-import type { ColumnType, Kysely } from 'kysely'
+import type { ColumnType, Generated, Kysely } from 'kysely'
 
 // Unix milliseconds.
 type Timestamp = ColumnType<number, number, number>
@@ -78,8 +78,9 @@ interface DocumentSnapshotsTable {
   frontier: Uint8Array
   // ADR-0020's fencing token: advanced by every write that replaces this row,
   // read with the manifest, and presented back on a fold to make the replace
-  // conditional.
-  generation: number
+  // conditional. A first write may omit it: migration 0020 defaults the column
+  // to 1, which is what a row with no predecessor holds.
+  generation: Generated<number>
 }
 
 interface DocumentSnapshotChunksTable {
@@ -129,8 +130,11 @@ interface MemberProfilesTable {
   accountId: string
   createdAt: Timestamp
   updatedAt: Timestamp
-  /** Set while an administrator has deactivated the user (ADR-0049). */
-  deactivatedAt: number | null
+  /**
+   * Set while an administrator has deactivated the user (ADR-0049). An insert
+   * may omit it: the column has no default, so it is NULL, which is "active".
+   */
+  deactivatedAt: Generated<number | null>
 }
 
 // ADR-0045's ACCOUNT: the keeper-wide login identity. Belongs to no tenant

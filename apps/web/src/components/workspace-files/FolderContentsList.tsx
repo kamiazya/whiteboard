@@ -12,7 +12,7 @@ import { useLongPressMenu } from './use-long-press.js'
  * preview — so the list reports which it was rather than taking two handlers
  * a caller could wire to the same place.
  */
-export type FolderContentsOpen =
+type FolderContentsOpen =
   | { kind: 'folder'; path: string }
   | { kind: 'document'; document: WorkspaceDocumentEntry }
 

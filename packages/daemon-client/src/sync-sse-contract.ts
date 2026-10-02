@@ -8,7 +8,7 @@
  * declaration; the hub cannot import from `server/`.
  */
 import { z } from 'zod'
-import { clientTextMessageSchema } from './ws-messages.js'
+import { clientTextMessageSchema } from './sync-frames.js'
 
 /**
  * These are deliberately NOT `.strict()`, unlike the request DTOs elsewhere in
@@ -40,12 +40,12 @@ export type SyncUpdateEvent = z.infer<typeof syncUpdateEventSchema>
 
 /**
  * A server text message (version_created, restore_started, …) wrapped with the
- * document it belongs to. A WebSocket is per-canvas so its text frames need no
- * addressing; one SSE stream serves many documents, so an unaddressed frame
- * would be applied to whichever canvas happened to be listening.
+ * document it belongs to. One SSE stream serves many documents, so an
+ * unaddressed frame would be applied to whichever canvas happened to be
+ * listening.
  *
- * `raw` stays a string: it is the WebSocket text payload verbatim, validated
- * by the receiver against the same union both transports share.
+ * `raw` stays a string: it is the frame's JSON verbatim, validated by the
+ * receiver against the server text-message union.
  */
 export const syncMessageEventSchema = z.object({ doc: z.string().min(1), raw: z.string() })
 

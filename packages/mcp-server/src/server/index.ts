@@ -11,6 +11,7 @@ import { getLogger } from './log.js'
 import { resolveReplicaEnv } from './replica-env.js'
 import { collectStartupEnvIssues } from './startup-env.js'
 import { armLocalDaemonTail } from './store/workspace-tail.js'
+import { fontsDir } from './tenant/data-layout.js'
 
 /**
  * Reads a `--name=value` flag out of an argv list. When the same flag is
@@ -49,9 +50,6 @@ export function resolveToken(
   const match = [...argv].reverse().find((arg) => arg.startsWith(prefix))
   return match !== undefined ? match.slice(prefix.length) : env.WHITEBOARD_TOKEN
 }
-
-export { createApp } from './app.js'
-export { startHttpServer } from './http-server.js'
 
 // Loads the nearest whiteboard config file (if any) and layers its values
 // under process.env before any other startup reads (allowlist, token,
@@ -143,13 +141,13 @@ function checkStartupConfig(): void {
  * absolute paths, and the distribution smoke asserts the daemon never leaks
  * one to stderr.
  */
-async function prewarmExporter(): Promise<void> {
+async function prewarmExporter(dataDir: string): Promise<void> {
   try {
     const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
     // prewarmHeadlessExporter resolves on failure by contract — it logs its
     // own sanitized warning — so this catch is a net for a future contract
     // change, not the handler for a build error.
-    prewarmHeadlessExporter().catch((err) => {
+    prewarmHeadlessExporter(fontsDir(dataDir)).catch((err) => {
       getLogger('server-index').warning(
         { reason: err instanceof Error ? err.name : 'unknown' },
         'headless exporter pre-warm rejected unexpectedly',
@@ -196,7 +194,7 @@ export async function main() {
     'resolved data dir',
   )
 
-  await prewarmExporter()
+  await prewarmExporter(dataDir)
 
   // The dev daemon is the same local keeper `whiteboard daemon run` starts,
   // so it follows the record the agent's stdio process writes the same way.

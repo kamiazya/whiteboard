@@ -15,9 +15,9 @@ import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { createApp } from '../app.js'
 import { captureLogsForTests } from '../log.js'
+import { subscribedWorkspaceIds } from '../sync-audience.js'
+import { resetSyncStreamsForTests } from '../sync-streams.js'
 import { testDataLayout } from './_test-helpers.js'
-import { subscribedWorkspaceIds } from './sync-audience.js'
-import { resetSyncStreamsForTests } from './sync-sse.js'
 
 // Its own data dir, through the seam every reader goes through: opening a
 // stream opens the store, and a store shared with another file running in

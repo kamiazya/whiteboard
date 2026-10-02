@@ -175,7 +175,7 @@ export const completionTouchAccept = ViewPlugin.define((view) => {
  * a dialog CodeMirror has not marked falls back to the first row, which is
  * what `selectOnOpen` would have marked.
  */
-export const acceptRenderedCompletion: Command = (view) => {
+const acceptRenderedCompletion: Command = (view) => {
   const list = view.dom.querySelector('.cm-tooltip-autocomplete ul')
   if (list === null) return false
   const li = list.querySelector('li[aria-selected="true"]') ?? list.querySelector('li')

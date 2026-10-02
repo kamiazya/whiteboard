@@ -8,7 +8,7 @@ import { setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
-import { createMcpServer } from './mcp/index.js'
+import { createMcpServer } from './mcp/server.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
@@ -30,10 +30,7 @@ import {
   createCredentialResolver,
 } from './security/credential-resolver.js'
 import { createDaemonIdentity } from './security/daemon-identity.js'
-import {
-  buildMcpProtectedResourceMetadata,
-  createLocalTokenMcpHttpAuthStrategy,
-} from './security/mcp-auth.js'
+import { createLocalTokenMcpHttpAuthStrategy } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware } from './security/mcp-http.js'
 import {
   callerUserId,
@@ -239,10 +236,7 @@ function credentialWiring(options: AppOptions, token: string | undefined) {
   })
   const mcpAuth =
     localDaemon !== undefined
-      ? createLocalTokenMcpHttpAuthStrategy({
-          resolver: credentialResolver,
-          protectedResourceMetadata: localDaemon.mcpProtectedResourceMetadata,
-        })
+      ? createLocalTokenMcpHttpAuthStrategy({ resolver: credentialResolver })
       : undefined
   return { credentialResolver, mcpAuth }
 }
@@ -307,19 +301,6 @@ export function createApp(options: AppOptions) {
 
   mountApiAuth(app, options, credentialResolver)
 
-  if (mcpAuth) {
-    app.get('/.well-known/oauth-protected-resource', (c) => {
-      const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
-      if (!metadata) return c.notFound()
-      return c.json(metadata)
-    })
-    app.get('/.well-known/oauth-protected-resource/mcp', (c) => {
-      const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
-      if (!metadata) return c.notFound()
-      return c.json(metadata)
-    })
-  }
-
   mountMcpMiddleware(app, options, mcpAuth)
 
   // The modern (2026-07-28) serving entry: per-request factory, no protocol
@@ -379,7 +360,7 @@ export function createApp(options: AppOptions) {
   )
   app.route('/', createFilesRouter({ versionStore, scope }))
   app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments, scope }))
-  app.route('/', createFontsRouter())
+  app.route('/', createFontsRouter({ fontsDir: scope.layout.fontsDir }))
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ credentialResolver, scope }))
   app.route('/', createStatusRouter())
@@ -391,7 +372,6 @@ export function createApp(options: AppOptions) {
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       credentialResolver,
-      dataLayout: options.dataLayout,
       scope,
     }),
   )

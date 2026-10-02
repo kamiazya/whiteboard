@@ -1,7 +1,7 @@
 // @vitest-environment node
-// The two transport backends against the shared DocumentBackend contract. The
-// browser-local implementation runs the same cases from apps/web, where its
-// store lives.
+// The SSE backend against the shared DocumentBackend contract. The backend
+// over a workspace kept in the browser runs the same cases from apps/web,
+// where its store lives.
 import { describe, vi } from 'vitest'
 import { SseBackend } from './sse-backend.js'
 import type { DocumentBackendHarness } from './test-utils/document-backend-contract.js'

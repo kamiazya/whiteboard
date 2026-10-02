@@ -18,4 +18,10 @@ export interface DataLayout {
   workspaceFilesDir(workspaceId: string): string
   /** Where a workspace's exports are written by default. Keeper-level, not tenant-scoped. */
   exportsDir(workspaceId: string): string
+  /**
+   * Where a font the user installed lives. Keeper-level, not tenant-scoped: a
+   * font is a file on this machine, and the export that draws with it reads
+   * every tenant's documents.
+   */
+  readonly fontsDir: string
 }

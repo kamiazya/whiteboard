@@ -9,7 +9,6 @@ import { z } from 'zod'
 import { opentypeApi } from '../../shared/opentype.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
-import { installedFontDir } from './installed-fonts.js'
 
 const log = getLogger('font-install')
 
@@ -28,7 +27,7 @@ export const MAX_FONT_BYTES = 32 * 1024 * 1024
  */
 const FETCH_TIMEOUT_MS = 5 * 60 * 1000
 
-export const fontInstallFailureSchema = z.enum([
+const fontInstallFailureSchema = z.enum([
   /** No catalogue entry has this id. The only failure that is the caller's fault. */
   'unknown-font',
   'unreachable',
@@ -49,6 +48,8 @@ export class FontInstallError extends Error {
 }
 
 export interface InstallFontOptions {
+  /** The directory the font is kept in: `DataLayout.fontsDir`. */
+  readonly fontsDir: string
   /** Injected so tests never reach the network. */
   readonly fetchImpl?: typeof fetch
   readonly maxBytes?: number
@@ -74,10 +75,7 @@ export interface InstalledFont {
  * parse as a font before anything is written. The file name comes from the
  * catalogue, never from the URL or a `Content-Disposition` header.
  */
-export async function installFont(
-  id: string,
-  options: InstallFontOptions = {},
-): Promise<InstalledFont> {
+export async function installFont(id: string, options: InstallFontOptions): Promise<InstalledFont> {
   const entry = fontCatalogueEntry(id)
   if (entry === undefined) {
     throw new FontInstallError('unknown-font', `No font in the catalogue is called ${id}.`)
@@ -100,9 +98,8 @@ export async function installFont(
     )
   }
 
-  const dir = installedFontDir()
-  await mkdir(dir, { recursive: true })
-  const path = join(dir, `${entry.id}${extname(entry.path)}`)
+  await mkdir(options.fontsDir, { recursive: true })
+  const path = join(options.fontsDir, `${entry.id}${extname(entry.path)}`)
   // Atomic, because a render running concurrently would otherwise hand resvg
   // a half-written file.
   await writeFileAtomic(path, bytes)

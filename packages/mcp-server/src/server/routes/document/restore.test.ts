@@ -1,6 +1,6 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { apiErrorReason, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -42,7 +42,7 @@ const createRouter = () =>
 // Pre-load sync-audience.js before any restore call, mirroring
 // restore-race.test.ts's documented cycle workaround for document.ts's
 // dynamic import.
-await import('../sync-audience.js')
+await import('../../sync-audience.js')
 
 beforeEach(() => {
   clearCache()
@@ -396,6 +396,9 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
       { method: 'POST' },
     )
     expect(res.status).toBe(404)
+    // The browser shows a refusal's reason, so a bare code would leave it
+    // with nothing to say.
+    expect(apiErrorReason(await res.json())).toMatch(/version/i)
   })
 
   it('returns 400 for an invalid version id', async () => {
@@ -772,7 +775,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     })
     const { version } = (await saveRes.json()) as { version: { id: string } }
 
-    const syncAudience = await import('../sync-audience.js')
+    const syncAudience = await import('../../sync-audience.js')
     const announce = vi.spyOn(syncAudience, 'sendRestoreEvent')
 
     const res = await app.request(

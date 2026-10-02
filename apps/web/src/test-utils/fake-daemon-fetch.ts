@@ -43,7 +43,7 @@ import {
 import { vi } from 'vitest'
 import { jsonResponse } from './json-response.js'
 
-export interface FakeDaemonDocumentRow {
+interface FakeDaemonDocumentRow {
   path: string
   updatedAt?: string
   id?: string

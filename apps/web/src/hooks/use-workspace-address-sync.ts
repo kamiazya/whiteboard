@@ -256,7 +256,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   // its closure, and a run-count flag let that replay read the stale '/'
   // as user intent — overwriting the canvas view with the gallery and, in a
   // live browser, seeding a perpetual navigation
-  // ping-pong that remounted the canvas page (and its WebSocket) ~170
+  // ping-pong that remounted the canvas page (and its sync stream) ~170
   // times a second. Only an actual pathname CHANGE is a URL-driven
   // navigation; the ref seeds from the mount pathname so the mount run and
   // any replay of it are no-ops. `lastRouteSyncPathRef` itself is declared

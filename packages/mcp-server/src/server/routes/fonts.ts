@@ -31,16 +31,35 @@ const FONT_CONTENT_TYPE: Readonly<Record<string, string>> = {
  * one later is a decision that has to re-examine that sentence, not a natural
  * extension of this router.
  */
+const stemOf = (path: string): string => basename(path, extname(path))
+
+/**
+ * What a failed install answers. The reason is the machine-readable half and
+ * the message is what the picker shows; `apiErrorReason` only forwards a
+ * message that arrives alongside an `error` code. Only an unknown id is the
+ * caller's mistake: everything else is the upstream source failing, which is
+ * not this daemon's fault and not something a retry of the same request will
+ * fix differently.
+ */
+function refusalOf(err: FontInstallError): { body: ApiErrorBody; status: 404 | 502 } {
+  return {
+    body: { error: err.reason, message: err.message },
+    status: err.reason === 'unknown-font' ? 404 : 502,
+  }
+}
+
 export interface FontsRouterDeps {
+  /** The directory fonts are installed into and listed from: `DataLayout.fontsDir`. */
+  readonly fontsDir: string
   /** Injected so a route test never reaches the network. */
   readonly install?: typeof installFont
 }
 
-export function createFontsRouter({ install = installFont }: FontsRouterDeps = {}) {
+export function createFontsRouter({ fontsDir, install = installFont }: FontsRouterDeps) {
   const app = new Hono()
 
   app.get('/api/fonts', async (c) => {
-    const stems = new Set((await installedFontFiles()).map((path) => basename(path, extname(path))))
+    const stems = new Set((await installedFontFiles(fontsDir)).map(stemOf))
     const response: ListFontsResponse = {
       fonts: FONT_CATALOGUE.map(({ path: _sourcePath, ...item }) => ({
         ...item,
@@ -57,7 +76,7 @@ export function createFontsRouter({ install = installFont }: FontsRouterDeps = {
   // request cannot name a file outside the font directory.
   app.get('/api/fonts/:id/file', async (c) => {
     const id = c.req.param('id')
-    const file = (await installedFontFiles()).find((path) => basename(path, extname(path)) === id)
+    const file = (await installedFontFiles(fontsDir)).find((path) => stemOf(path) === id)
     if (file === undefined) {
       return c.json(
         { error: 'not_found', message: `No installed font ${id}.` } satisfies ApiErrorBody,
@@ -75,20 +94,12 @@ export function createFontsRouter({ install = installFont }: FontsRouterDeps = {
 
   app.post('/api/fonts/:id/install', async (c) => {
     try {
-      const { id, family, bytes } = await install(c.req.param('id'))
+      const { id, family, bytes } = await install(c.req.param('id'), { fontsDir })
       return c.json({ id, family, bytes } satisfies InstallFontResponse)
     } catch (err) {
       if (!(err instanceof FontInstallError)) throw err
-      // The reason is the machine-readable half and the message is what the
-      // picker shows; `apiErrorReason` only forwards a message that arrives
-      // alongside an `error` code.
-      return c.json(
-        { error: err.reason, message: err.message } satisfies ApiErrorBody,
-        // Only an unknown id is the caller's mistake. Everything else is the
-        // upstream source failing, which is not this daemon's fault and not
-        // something a retry of the same request will fix differently.
-        err.reason === 'unknown-font' ? 404 : 502,
-      )
+      const { body, status } = refusalOf(err)
+      return c.json(body, status)
     }
   })
 

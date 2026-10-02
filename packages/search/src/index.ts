@@ -1,10 +1,8 @@
 export {
-  type AlsoIndex,
   fullTextSearch,
   type SearchableDocument,
-  type SearchHit,
   tokenize,
   tokenizeForIndex,
 } from './full-text.js'
-export { type SearchableContent, searchableTexts } from './searchable-texts.js'
+export { searchableTexts } from './searchable-texts.js'
 export { snippetAround } from './snippet.js'

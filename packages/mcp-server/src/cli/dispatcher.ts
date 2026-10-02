@@ -25,6 +25,7 @@ import {
 import { daemonRunReadyResultSchema } from '../shared/api-contracts/daemon-run.js'
 import { daemonStatusResultSchema } from '../shared/api-contracts/daemon-status.js'
 import { daemonStopResultSchema } from '../shared/api-contracts/daemon-stop.js'
+import { searchFetchModelOutputSchema } from '../shared/api-contracts/search-fetch-model.js'
 import { serverStatusResultSchema } from '../shared/api-contracts/server-status.js'
 import { serverStopResultSchema } from '../shared/api-contracts/server-stop.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
@@ -42,7 +43,6 @@ import { runDaemonStop } from './daemon-stop.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
 import {
   operatorJsonLine,
-  searchFetchModelOutputSchema,
   serverRestoreOutputSchema,
   serverRunDryRunOutputSchema,
   serverRunReadyOutputSchema,
@@ -51,7 +51,7 @@ import { parseServerBackupArgs } from './server-backup-args.js'
 import { parseServerLifecycleArgs } from './server-lifecycle-args.js'
 import { parseServerRestoreArgs } from './server-restore-args.js'
 import { parseServerRunArgs } from './server-run-args.js'
-import { parseServerSupportBundleArgs } from './server-support-bundle-args.js'
+import { parseServerSupportBundleArgs } from './support-bundle-args.js'
 
 export const USAGE = `whiteboard --version | -v
 whiteboard mcp
@@ -264,7 +264,7 @@ async function dispatchMcp(): Promise<number> {
   // surface on stderr only, then the process exits non-zero.
   // Dynamic import keeps the MCP module (and its server/config
   // mkdir + daemon side effects) out of the read-only command path.
-  const { main: runMcp } = await import('../server/mcp/index.js')
+  const { main: runMcp } = await import('../server/stdio-root.js')
   try {
     await runMcp()
   } catch (err) {

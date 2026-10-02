@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../config.js'
-import { createMcpServer } from './index.js'
+import { resolveTestServerDeps } from '../routes/_test-helpers.js'
+import { createMcpServer } from './server.js'
 
 // createMcpServer is reused per-request by the HTTP /mcp handler.
 // If it ever installed process-level stdin/signal listeners itself (instead
@@ -31,7 +32,7 @@ describe('createMcpServer process-listener isolation', () => {
       stdinError: process.stdin.listenerCount('error'),
     }
 
-    await createMcpServer()
+    await createMcpServer(await resolveTestServerDeps(tmpDataDir))
 
     expect(process.listenerCount('SIGTERM')).toBe(before.sigterm)
     expect(process.listenerCount('SIGINT')).toBe(before.sigint)

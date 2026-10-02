@@ -11,28 +11,13 @@
  * seam (methods + on* callbacks), NOT a JSON shape that crosses a process
  * boundary. The zod-schema-discipline rule governs cross-boundary JSON
  * payloads; the payload field types used here flow from z.infer<> in
- * ws-messages.ts, so there is no parallel re-declaration of those shapes.
+ * sync-frames.ts, so there is no parallel re-declaration of those shapes.
  */
 
-// ── Payload types re-exported from the Zod SoT ───────────────────────────────
-// All payload types originate from z.infer<> in ws-messages.ts.
-export type {
-  ClientTextMessage,
-  RestoreStartedMessage,
-  ServerTextMessage,
-  VersionCreatedPayload,
-  ViewportRequestMessage,
-} from './ws-messages.js'
-
-export {
-  clientReadyMessageSchema,
-  clientTextMessageSchema,
-  restoreCompleteMessageSchema,
-  restoreStartedMessageSchema,
-  serverTextMessageSchema,
-  versionCreatedMessageSchema,
-  viewportRequestMessageSchema,
-} from './ws-messages.js'
+// ── The one payload type a root reads through this contract ──────────────────
+// It originates from z.infer<> in sync-frames.ts; the frame schemas themselves
+// are read from that module, not re-exported here.
+export type { VersionCreatedPayload } from './sync-frames.js'
 
 // ── Inbound callback surface (hook receives from backend) ─────────────────────
 
@@ -41,9 +26,9 @@ import type {
   RestoreStartedMessage,
   VersionCreatedPayload,
   ViewportRequestMessage,
-} from './ws-messages.js'
+} from './sync-frames.js'
 
-export type RestoreStartedPayload = RestoreStartedMessage
+type RestoreStartedPayload = RestoreStartedMessage
 export type ViewportRequestPayload = ViewportRequestMessage
 export type AgentActivityPayload = AgentActivityMessage
 
@@ -74,7 +59,7 @@ export interface DocumentBackendHandlers {
   onConnected: () => void
   /**
    * The transport dropped and the backend is retrying. Optional because a
-   * backend with no transport (browser-local) has nothing to report; a backend
+   * backend with no transport (a workspace kept in the browser) has nothing to report; a backend
    * that HAS one must call it, or its caller cannot tell a quiet connection
    * from a dead one.
    */
@@ -126,7 +111,7 @@ export interface DocumentBackendHandlers {
 
 export interface DocumentBackend {
   /**
-   * Start the transport (open WebSocket, subscribe to IndexedDB, etc.)
+   * Start the transport (open the SSE stream, subscribe to IndexedDB, etc.)
    * and wire the given event handlers. Called on mount / canvas-key change.
    */
   connect(handlers: DocumentBackendHandlers): void
@@ -143,6 +128,6 @@ export interface DocumentBackend {
    */
   pushLocalUpdate(bytes: Uint8Array): void | Promise<void>
 
-  /** Send client_ready to the server (gated on OPEN state + api present). */
+  /** Tell the keeper this page is ready for its document's text frames; a no-op where there is no stream. */
   sendClientReady(): void
 }

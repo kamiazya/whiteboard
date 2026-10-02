@@ -55,7 +55,7 @@ import { CREATION_LABELS } from './creation-labels.js'
  * `dragstart` — `getData` reads back empty at the drop, while `types` stays
  * readable throughout.
  */
-export const CREATE_DRAG_MIME_PREFIX = 'application/x-whiteboard-create+'
+const CREATE_DRAG_MIME_PREFIX = 'application/x-whiteboard-create+'
 
 /** The kind carried by a drag, or null when the drag is not one of ours. */
 export function draggedCreation(types: readonly string[]): DraggableCreation | null {

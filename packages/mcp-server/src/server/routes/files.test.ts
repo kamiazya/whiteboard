@@ -310,7 +310,7 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
   it('returns a structured 503 when the GC scan is incomplete instead of an unstructured 500', async () => {
     purgeDanglingFilesMock.mockRejectedValue(
       new IncompleteFileGcScanError('session1', [
-        { kind: 'branch', path: 'canvas-a', branch: 'feature', cause: new Error('boom') },
+        { kind: 'version', path: 'canvas-a', versionId: 'v1', cause: new Error('boom') },
       ]),
     )
 

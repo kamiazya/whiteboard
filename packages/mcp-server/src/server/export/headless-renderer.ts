@@ -18,9 +18,11 @@
 //      Roboto TTF registered directly and system-font loading disabled, so
 //      the same canvas rasterises identically on any machine.
 //
-// This module is process-singleton: buildExporter() — invoked lazily by
-// getHeadlessExporter() — warms the font measurer and resvg's module
-// import once per process; every render call after that reuses the result.
+// An exporter is built lazily per fonts directory (`DataLayout.fontsDir`):
+// buildExporter() warms the font measurer and resvg's module import once for
+// that directory, and every render call after that reuses the result. The
+// directory names which installed families exist, so a keeper serving another
+// one gets an exporter of its own.
 
 import type {
   MeasureText,
@@ -48,7 +50,7 @@ import { unresolvedFamilies } from './unresolved-families.js'
 
 // Export never has its own theme switch (the composition root always
 // exports light, see package-canvas-render.md decision #8), so this
-// singleton is built once and reused across renders.
+// theme table is built once and reused across renders.
 const EXPORT_APPEARANCE_BY_MODE = {
   light: createSpatialTheme({ mode: 'light' }),
   dark: createSpatialTheme({ mode: 'dark' }),
@@ -57,7 +59,7 @@ type ExportThemeMode = keyof typeof EXPORT_APPEARANCE_BY_MODE
 
 const log = getLogger('headless-renderer')
 
-let setupPromise: Promise<HeadlessExporter> | null = null
+const exporters = new Map<string, Promise<HeadlessExporter>>()
 
 export interface HeadlessExportOptions {
   // padding: extra px around the content bounds. Default mirrors the
@@ -261,16 +263,16 @@ function buildSvg(
  * gated on what the measurer holds. A face can draw a family this export would
  * never declare — that is the fallback doing its job.
  */
-async function availableFamilies(): Promise<readonly string[]> {
-  const fonts = await loadExportFonts()
+async function availableFamilies(fontsDir: string): Promise<readonly string[]> {
+  const fonts = await loadExportFonts(fontsDir)
   return fonts.flatMap((font) => {
     const name = readFontFamilyName(font)
     return name === undefined ? [] : [name]
   })
 }
 
-async function buildExporter(): Promise<HeadlessExporter> {
-  const { measure, measurableFamilies } = await createExportTextMeasurer()
+async function buildExporter(fontsDir: string): Promise<HeadlessExporter> {
+  const { measure, measurableFamilies } = await createExportTextMeasurer({ fontsDir })
   const { Resvg } = await import('@resvg/resvg-js')
   const faces = await resolveExportFontFaces()
   if (!faces.regular) {
@@ -313,28 +315,28 @@ async function buildExporter(): Promise<HeadlessExporter> {
         Number.isFinite(scale) && scale > 0 && scale !== 1
           ? ({ mode: 'zoom', value: scale } as const)
           : ({ mode: 'original' } as const)
-      const installed = await installedFontFiles()
+      const installed = await installedFontFiles(fontsDir)
       const resvg = new Resvg(svg, {
         background,
         font: { ...fontOption, fontFiles: [...(fontOption.fontFiles ?? []), ...installed] },
         fitTo,
       })
       const png = resvg.render()
-      const undrawable = await reportUndrawable(canvas)
+      const undrawable = await reportUndrawable(canvas, fontsDir)
       return {
         png: Buffer.from(png.asPng()),
         width: png.width,
         height: png.height,
         undrawable,
-        unresolvedFamilies: await reportUnresolvedFamilies(scene),
+        unresolvedFamilies: await reportUnresolvedFamilies(scene, fontsDir),
       }
     },
     async renderSvg(canvas, options) {
       const { svg, scene } = buildSvg(canvas, options, measure, fontAvailable)
       return {
         svg,
-        undrawable: await reportUndrawable(canvas),
-        unresolvedFamilies: await reportUnresolvedFamilies(scene),
+        undrawable: await reportUndrawable(canvas, fontsDir),
+        unresolvedFamilies: await reportUnresolvedFamilies(scene, fontsDir),
       }
     },
   }
@@ -347,8 +349,11 @@ async function buildExporter(): Promise<HeadlessExporter> {
  * per-character case, and it is logged per render because it depends on the
  * canvas rather than on the install.
  */
-async function reportUnresolvedFamilies(scene: Scene): Promise<readonly string[]> {
-  const families = unresolvedFamilies(scene, await availableFamilies())
+async function reportUnresolvedFamilies(
+  scene: Scene,
+  fontsDir: string,
+): Promise<readonly string[]> {
+  const families = unresolvedFamilies(scene, await availableFamilies(fontsDir))
   if (families.length > 0) {
     log.warning(
       { families },
@@ -358,8 +363,11 @@ async function reportUnresolvedFamilies(scene: Scene): Promise<readonly string[]
   return families
 }
 
-async function reportUndrawable(canvas: SpatialCanvas): Promise<readonly string[]> {
-  const undrawable = await undrawableCharacters(canvas)
+async function reportUndrawable(
+  canvas: SpatialCanvas,
+  fontsDir: string,
+): Promise<readonly string[]> {
+  const undrawable = await undrawableCharacters(canvas, fontsDir)
   if (undrawable.length > 0) {
     log.warning(
       { count: undrawable.length, characters: undrawable.join('') },
@@ -369,7 +377,7 @@ async function reportUndrawable(canvas: SpatialCanvas): Promise<readonly string[
   return undrawable
 }
 
-// Pre-warm the singleton during daemon startup so the first user-facing
+// Pre-warm the exporter during daemon startup so the first user-facing
 // `export_canvas` call does not pay the font-parse + resvg-import cost.
 // Errors are swallowed because pre-warming is best-effort: the actual
 // export path will still surface a descriptive failure.
@@ -379,9 +387,9 @@ async function reportUndrawable(canvas: SpatialCanvas): Promise<readonly string[
 // responsibility. Only the failure class is logged: a module-resolution or
 // font-read error carries absolute paths in its message and stack, and the
 // distribution smoke asserts the daemon never leaks one to stderr.
-export async function prewarmHeadlessExporter(): Promise<void> {
+export async function prewarmHeadlessExporter(fontsDir: string): Promise<void> {
   try {
-    await getHeadlessExporter()
+    await getHeadlessExporter(fontsDir)
   } catch (err) {
     const code = err instanceof Error ? errnoCode(err) : undefined
     const name = err instanceof Error ? err.name : 'unknown'
@@ -389,8 +397,8 @@ export async function prewarmHeadlessExporter(): Promise<void> {
   }
 }
 
-// Public entry — idempotent. The first call resolves a singleton exporter;
-// subsequent calls reuse it.
+// Public entry — idempotent. The first call for a fonts directory resolves its
+// exporter; subsequent calls reuse it.
 //
 // Failure recovery: if buildExporter() rejects (e.g. a font read error
 // during prewarm) we drop the cached promise so the next call retries from
@@ -398,31 +406,35 @@ export async function prewarmHeadlessExporter(): Promise<void> {
 // until the daemon restarts. Storing the in-flight promise (not just the
 // resolved value) is what makes concurrent first-callers share one build
 // instead of racing separate ones.
-function getHeadlessExporter(): Promise<HeadlessExporter> {
-  if (!setupPromise) {
-    const pending = buildExporter().catch((err) => {
-      if (setupPromise === pending) setupPromise = null
+function getHeadlessExporter(fontsDir: string): Promise<HeadlessExporter> {
+  let exporter = exporters.get(fontsDir)
+  if (exporter === undefined) {
+    const pending = buildExporter(fontsDir).catch((err) => {
+      if (exporters.get(fontsDir) === pending) exporters.delete(fontsDir)
       throw err
     })
-    setupPromise = pending
+    exporter = pending
+    exporters.set(fontsDir, pending)
   }
-  return setupPromise
+  return exporter
 }
 
 // Named `renderSpatialCanvasTo*` (not `renderSceneTo*`) so a call site never
 // reads as, or shadows, canvas-render's own `renderSceneToSvg` export.
 export async function renderSpatialCanvasToPng(
   canvas: SpatialCanvas,
+  fontsDir: string,
   options: HeadlessExportOptions = {},
 ): Promise<HeadlessExportResult> {
-  const exporter = await getHeadlessExporter()
+  const exporter = await getHeadlessExporter(fontsDir)
   return exporter.render(canvas, options)
 }
 
 export async function renderSpatialCanvasToSvg(
   canvas: SpatialCanvas,
+  fontsDir: string,
   options: HeadlessExportOptions = {},
 ): Promise<HeadlessSvgExportResult> {
-  const exporter = await getHeadlessExporter()
+  const exporter = await getHeadlessExporter(fontsDir)
   return exporter.renderSvg(canvas, options)
 }

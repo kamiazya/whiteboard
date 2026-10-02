@@ -144,7 +144,7 @@ export function resolveServerDeps(
     // The export's own measurer, families included, so wb_scene_render
     // declares a theme's family exactly where the PNG export would: from the
     // faces this daemon can measure, never from a second list.
-    textMeasurer: createExportTextMeasurer,
+    textMeasurer: () => createExportTextMeasurer({ fontsDir: scope.layout.fontsDir }),
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so

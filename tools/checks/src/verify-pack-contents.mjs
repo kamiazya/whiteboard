@@ -32,7 +32,7 @@ const REQUIRED_FILES = [
   'README.md',
   'LICENSE',
   'package.json',
-  'dist/server/mcp/index.js',
+  'dist/server/mcp/server.js',
   // The stdio process entry, separate from the library entry above since
   // `main` resolves to that one. Both ship: one is imported, one is run.
   'dist/server/mcp/stdio.js',

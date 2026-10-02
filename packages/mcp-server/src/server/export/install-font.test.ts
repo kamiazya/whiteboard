@@ -17,20 +17,18 @@ import {
   fontCatalogueEntry,
   fontDownloadUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
+import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { FontInstallError, installFont, MAX_FONT_BYTES } from './install-font.js'
-import { FONT_EXTENSIONS, installedFontDir, installedFontFiles } from './installed-fonts.js'
+import { FONT_EXTENSIONS, installedFontFiles } from './installed-fonts.js'
 
 const COVERED = 'こ'
 
-beforeEach(() => {
-  setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-font-install-')))
-})
+let fontsDir: string
 
-afterEach(() => {
-  resetDataDirForTests()
+beforeEach(() => {
+  fontsDir = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-font-install-')))
 })
 
 /** Records what the installer asked for, and answers with `body`. */
@@ -44,7 +42,7 @@ function recordingFetch(body: BodyInit | null, init?: ResponseInit) {
 }
 
 async function installedNames(): Promise<string[]> {
-  return (await installedFontFiles()).map((path) => path.split('/').at(-1) ?? '')
+  return (await installedFontFiles(fontsDir)).map((path) => path.split('/').at(-1) ?? '')
 }
 
 describe('the catalogue', () => {
@@ -106,21 +104,21 @@ describe('installFont', () => {
     const font = syntheticFont(COVERED)
     const { impl, calls } = recordingFetch(font)
 
-    const installed = await installFont(known().id, { fetchImpl: impl })
+    const installed = await installFont(known().id, { fontsDir, fetchImpl: impl })
 
     expect(installed.id).toBe(known().id)
     expect(installed.family).toBe(known().family)
     expect(installed.bytes).toBe(font.byteLength)
-    expect(installed.path).toBe(join(installedFontDir(), `${known().id}.ttf`))
+    expect(installed.path).toBe(join(fontsDir, `${known().id}.ttf`))
     // The whole point: the read side finds it without being told.
-    expect(await installedFontFiles()).toContain(installed.path)
+    expect(await installedFontFiles(fontsDir)).toContain(installed.path)
     expect(calls).toHaveLength(1)
   })
 
   it('requests exactly the pinned URL, refusing redirects and bounding the wait', async () => {
     const { impl, calls } = recordingFetch(syntheticFont(COVERED))
 
-    await installFont(known().id, { fetchImpl: impl })
+    await installFont(known().id, { fontsDir, fetchImpl: impl })
 
     expect(calls[0]?.url).toBe(fontDownloadUrl(known()))
     // A host that answers 302 could otherwise send the daemon anywhere, which
@@ -132,28 +130,28 @@ describe('installFont', () => {
   it('refuses an id that is not in the catalogue, without fetching anything', async () => {
     const { impl, calls } = recordingFetch(syntheticFont(COVERED))
 
-    await expect(installFont('../../etc/passwd', { fetchImpl: impl })).rejects.toThrow(
+    await expect(installFont('../../etc/passwd', { fontsDir, fetchImpl: impl })).rejects.toThrow(
       FontInstallError,
     )
     expect(calls).toHaveLength(0)
-    expect(await installedFontFiles()).toEqual([])
+    expect(await installedFontFiles(fontsDir)).toEqual([])
   })
 
   it('keeps nothing that does not parse as a font', async () => {
     const { impl } = recordingFetch('<!doctype html><title>Not Found</title>')
 
-    await expect(installFont(known().id, { fetchImpl: impl })).rejects.toMatchObject({
+    await expect(installFont(known().id, { fontsDir, fetchImpl: impl })).rejects.toMatchObject({
       reason: 'not-a-font',
     })
     // Not merely "no .ttf": a leftover temp file would be an unbounded litter
     // of failed downloads in the user's data directory.
-    expect(await readdir(installedFontDir()).catch(() => [])).toEqual([])
+    expect(await readdir(fontsDir).catch(() => [])).toEqual([])
   })
 
   it('keeps nothing when the source answers an error status', async () => {
     const { impl } = recordingFetch('nope', { status: 404 })
 
-    await expect(installFont(known().id, { fetchImpl: impl })).rejects.toMatchObject({
+    await expect(installFont(known().id, { fontsDir, fetchImpl: impl })).rejects.toMatchObject({
       reason: 'unreachable',
     })
     expect(await installedNames()).toEqual([])
@@ -172,15 +170,18 @@ describe('installFont', () => {
     const { impl } = recordingFetch(body, { headers: { 'content-length': '10' } })
 
     await expect(
-      installFont(known().id, { fetchImpl: impl, maxBytes: 4 * 1024 }),
+      installFont(known().id, { fontsDir, fetchImpl: impl, maxBytes: 4 * 1024 }),
     ).rejects.toMatchObject({ reason: 'too-large' })
     expect(await installedNames()).toEqual([])
   })
 
   it('replaces an earlier install of the same font rather than accumulating files', async () => {
     const { impl } = recordingFetch(syntheticFont(COVERED))
-    await installFont(known().id, { fetchImpl: impl })
-    await installFont(known().id, { fetchImpl: recordingFetch(syntheticFont(COVERED)).impl })
+    await installFont(known().id, { fontsDir, fetchImpl: impl })
+    await installFont(known().id, {
+      fontsDir,
+      fetchImpl: recordingFetch(syntheticFont(COVERED)).impl,
+    })
 
     expect(await installedNames()).toEqual([`${known().id}.ttf`])
   })

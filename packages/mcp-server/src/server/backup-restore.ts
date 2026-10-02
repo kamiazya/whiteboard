@@ -185,8 +185,8 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
  *   matches, so a copy of one resolves to nothing. It is also the entry a
  *   live copy is most likely to trip over: `cp` stats each name it listed,
  *   and a file renamed away in between raises ENOENT for the whole backup.
- * - The daemon record holds the Bearer token the daemon authenticates HTTP
- *   and WS with, which is why it is written owner-only. A backup directory is
+ * - The daemon record holds the Bearer token the daemon authenticates its HTTP
+ *   routes and sync stream with, which is why it is written owner-only. A backup directory is
  *   the opposite of owner-only — it gets copied to another disk, shipped to
  *   support, kept for months. It was never present during a backup until
  *   backups could be taken hot, so enabling that is what would have started

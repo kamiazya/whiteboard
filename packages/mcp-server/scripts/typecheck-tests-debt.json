@@ -1,52 +1,6 @@
 {
   "files": {
-    "scripts/dev/dev-spawn-lock-lib.test.ts": ["TS2769"],
-    "scripts/dev/with-dev-data-dir-lib.test.ts": [
-      "TS2322",
-      "TS2322",
-      "TS7005",
-      "TS7005",
-      "TS7034",
-      "TS7034"
-    ],
-    "scripts/eval/snapshot-shape.test.ts": ["TS2345", "TS2769"],
-    "src/cli/server-run.test.ts": ["TS2322"],
-    "src/daemon/native-host/relay.test.ts": ["TS2345"],
-    "src/server/app.server-mode.sign-in.test.ts": ["TS2741"],
-    "src/server/canvas-client-notifier.test.ts": ["TS2556"],
-    "src/server/export/glow-raster.test.ts": ["TS2698"],
-    "src/server/export/headless-export.test.ts": ["TS2352", "TS2352", "TS2352"],
-    "src/server/export/measure-text.properties.test.ts": ["TS2365", "TS2365", "TS2365"],
-    "src/server/export/render-parity.test.ts": ["TS2741"],
-    "src/server/mcp/index.stdio-checkpoint.test.ts": ["TS2322"],
-    "src/server/mcp/logging.test.ts": ["TS2352", "TS2352", "TS2352", "TS2352"],
-    "src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts": ["TS2345"],
-    "src/server/mcp/tool-structured-content.property.test.ts": ["TS2345"],
-    "src/server/routes/document/agent-write-checkpoint.test.ts": ["TS2322"],
-    "src/server/routes/document/path-route.test.ts": ["TS2345"],
-    "src/server/routes/files.test.ts": ["TS2322"],
-    "src/server/routes/sync-audience.test.ts": ["TS2694", "TS2694", "TS2694"],
-    "src/server/search/docs-corpus.test.ts": ["TS2345"],
-    "src/server/security/jwks-resolver.test.ts": ["TS2352", "TS2352", "TS2352", "TS2352"],
-    "src/server/security/oauth-jwt-validator.test.ts": ["TS2741"],
-    "src/server/security/server-mode-auth-plan.test.ts": ["TS2367"],
-    "src/server/security/server-mode-middleware.people.test.ts": ["TS2739"],
-    "src/server/security/server-mode-middleware.provisioning.test.ts": ["TS2739", "TS2741"],
-    "src/server/security/sign-in-config-file.test.ts": ["TS2339", "TS2339"],
-    "src/server/security/sign-in-config.test.ts": ["TS2339"],
-    "src/server/security/trusted-header-identity.test.ts": ["TS2345"],
-    "src/server/store/db/migrations/0011-import-fs-blobs.test.ts": [
-      "TS2345",
-      "TS2769",
-      "TS2769",
-      "TS2769"
-    ],
-    "src/server/store/document-store.compact.test.ts": ["TS2554"],
-    "src/server/store/document-store.lifecycle.test.ts": ["TS2554", "TS2739"],
-    "src/server/store/document-written.test.ts": ["TS2322"],
-    "src/server/store/file-gc.test.ts": ["TS2749"],
-    "src/server/store/names-store.test.ts": ["TS7006", "TS7006"],
-    "src/server/store/workspace-plane.test.ts": ["TS2554"],
-    "src/shared/diagnostics/support-bundle.test.ts": ["TS2353", "TS2353", "TS2353"]
+    "src/server/stdio-root.checkpoint.test.ts": ["TS2322"],
+    "src/server/sync-audience.test.ts": ["TS2694", "TS2694", "TS2694"]
   }
 }

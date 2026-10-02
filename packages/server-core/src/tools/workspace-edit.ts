@@ -26,7 +26,7 @@ import { createDocumentSetTool } from './document-set.js'
  * class, because only `.message` survives the MCP error path and a caller
  * repairing a rejected batch needs to know where to resume.
  */
-export class WorkspaceEditError extends Error {
+class WorkspaceEditError extends Error {
   constructor(
     readonly opIndex: number,
     readonly op: string,
@@ -138,7 +138,7 @@ export const workspaceEditInputSchema = z
   .strict()
 export type WorkspaceEditInput = z.infer<typeof workspaceEditInputSchema>
 
-export const workspaceEditOutputSchema = z
+const workspaceEditOutputSchema = z
   .object({
     /**
      * The workspace the batch applied to, as its CANONICAL id (ADR-0019).

@@ -15,6 +15,7 @@
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
+import type { ClientTextMessage } from './sync-frames.js'
 import {
   type SyncClientMessageRequest,
   type SyncSubscribeRequest,
@@ -22,7 +23,6 @@ import {
   syncReadyEventSchema,
   syncUpdateEventSchema,
 } from './sync-sse-contract.js'
-import type { ClientTextMessage } from './ws-messages.js'
 
 interface SseEvent {
   event: string

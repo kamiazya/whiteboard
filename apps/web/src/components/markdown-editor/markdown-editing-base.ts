@@ -34,7 +34,7 @@ import { headingLevelAt } from './line-prefix.js'
  * rule — so `.cm-md-marker` has to win on the shared properties by order in
  * the stylesheet, not by being the only match.
  */
-export const markdownHighlightStyle = HighlightStyle.define([
+const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.heading, class: 'cm-md-heading' },
   { tag: tags.strong, class: 'cm-md-strong' },
   { tag: tags.emphasis, class: 'cm-md-emphasis' },

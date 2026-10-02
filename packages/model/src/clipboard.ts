@@ -11,14 +11,12 @@ import { canvasEdgeSchema, canvasLineSchema, endNode, spatialNodeSchema } from '
  * `version` is a literal so a future breaking change is a new literal
  * union member, not a silent drift.
  */
-export const clipboardFileAssetSchema = z
+const clipboardFileAssetSchema = z
   .object({
     mimeType: z.string().min(1),
     dataBase64: z.string(),
   })
   .strict()
-
-export type ClipboardFileAsset = z.infer<typeof clipboardFileAssetSchema>
 
 export const clipboardFragmentSchema = z
   .object({

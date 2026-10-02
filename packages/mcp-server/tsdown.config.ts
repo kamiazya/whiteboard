@@ -5,7 +5,7 @@ import { defineConfig } from 'tsdown'
 // rollup-plugin-dts that needs the JS compiler API TS7 removed.
 export default defineConfig({
   entry: {
-    'server/mcp/index': 'src/server/mcp/index.ts',
+    'server/mcp/server': 'src/server/mcp/server.ts',
     'server/mcp/stdio': 'src/server/mcp/stdio.ts',
     'server/index': 'src/server/index.ts',
     'server/daemon-entry': 'src/server/daemon-entry.ts',

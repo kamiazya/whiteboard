@@ -6,7 +6,7 @@ import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
-import { sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
+import { browserTracesSetup, sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
 import { rendererBuildDefine } from './renderer-build-id.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
@@ -121,9 +121,7 @@ export default defineConfig({
     // Every browser test renders against the app's real stylesheet — see
     // browser-setup.ts for what silently breaks without it.
     setupFiles: ['./src/test-utils/browser-setup.ts'],
-    browser: sharedBrowserTestConfig({
-      viewport: { width: 1280, height: 900 },
-      projectRoot: import.meta.dirname,
-    }),
+    globalSetup: [browserTracesSetup],
+    browser: sharedBrowserTestConfig({ viewport: { width: 1280, height: 900 } }),
   },
 })

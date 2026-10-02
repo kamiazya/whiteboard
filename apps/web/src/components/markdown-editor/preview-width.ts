@@ -15,7 +15,7 @@ export const PREVIEW_COLUMN_PADDING_PX = 48
  * The measure the preview would LIKE, never what it is entitled to. On a
  * container too narrow to grant it, the fit wins — see `previewWidth`.
  */
-export const MIN_PREVIEW_WIDTH_PX = 320
+const MIN_PREVIEW_WIDTH_PX = 320
 
 /** Re-typeset in 64px steps so a divider drag does not relayout per pointermove. */
 const QUANTUM_PX = 64

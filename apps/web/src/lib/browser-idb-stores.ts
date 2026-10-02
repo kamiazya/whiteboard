@@ -77,7 +77,7 @@ export const VERSIONS_BY_DOCUMENT_INDEX = 'byDocument'
  * for its own reason, so every row carrying the flag went with it and the
  * field left the schema without any row ever being rewritten.
  */
-export const RETIRED_VERSION_THUMBNAILS_STORE = 'versionThumbnails'
+const RETIRED_VERSION_THUMBNAILS_STORE = 'versionThumbnails'
 
 /**
  * A store this database holds, as data: its name, the options it is created

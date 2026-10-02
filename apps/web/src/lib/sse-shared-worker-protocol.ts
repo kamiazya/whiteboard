@@ -5,7 +5,7 @@
  * drift — a mismatch here fails silently at runtime (a message nobody handles)
  * rather than at build time.
  */
-import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
+import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { z } from 'zod'
 
 export const sseWorkerRequestSchema = z.discriminatedUnion('type', [

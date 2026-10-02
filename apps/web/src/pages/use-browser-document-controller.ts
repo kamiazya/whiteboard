@@ -1,5 +1,6 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
@@ -16,6 +17,8 @@ import {
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import { trackIndexWrite } from '../lib/pending-index-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+
+const log = getAppLogger('browser-document-controller')
 
 // Re-exported so the many page-side consumers keep their import path; the
 // type itself lives beside the concrete store.
@@ -272,8 +275,8 @@ export function useBrowserDocumentController(
           })
           setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
           return true
-        } catch {
-          // Generic safe copy — do not expose raw IndexedDB error
+        } catch (err) {
+          log.warn('a rename could not be saved; the person sees the generic copy', err)
           setPersistenceRef.current((p) => ({
             kind: 'degraded',
             reason: 'save-failed',

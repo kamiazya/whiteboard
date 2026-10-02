@@ -838,7 +838,7 @@ describe('DaemonIndexPage', () => {
     // it is a plain re-save, which `document-store.ts` deliberately never
     // lets touch a stored kind. The split that leaves is not cosmetic: the
     // two readers take OPPOSITE precedence, so `resolve-file-references.ts`
-    // reads the markdown body while `references/extract.ts` runs
+    // reads the markdown body while `reference-graph/src/extract.ts` runs
     // `readSpatialCanvas` over the same note.
     const created: Array<[string, string, string | undefined]> = []
     installFakeDaemonFetch({

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { ClientCountResponse } from '../../shared/api-contracts/document-runtime.js'
+import { getClientCount, getReadyClientCount } from '../sync-audience.js'
 import { onDocumentAction } from './document/path-route.js'
-import { getClientCount, getReadyClientCount } from './sync-audience.js'
 
 // An operations probe: how many browsers are connected to a document, read
 // over either transport (getClientCount). The product's own clients learn this

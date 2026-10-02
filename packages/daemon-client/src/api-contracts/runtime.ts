@@ -34,8 +34,6 @@ export const daemonIdentitySchema = z
     { message: 'did must decode to publicKey', path: ['did'] },
   )
 
-export type DaemonIdentityInfo = z.infer<typeof daemonIdentitySchema>
-
 export const daemonPingResponseSchema = z.object({
   ok: z.literal(true),
   instanceId: z.string(),

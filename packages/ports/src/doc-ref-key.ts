@@ -32,13 +32,3 @@ export function docRefKey(docRef: DocRef): string {
       return `workspace-tree:${docRef.workspaceId}`
   }
 }
-
-/**
- * The `docKey` prefix for a document, without needing a DocRef to hand.
- *
- * Exists for the two boot-time routines that walk the legacy FS blob tree
- * (`importFsBlobs`, `sweepImportedFsBlobs`) and know a documentId but not a
- * DocRef. They must agree with `docRefKey` exactly — a boot-time writer using
- * a stale prefix re-seeds rows the migration just corrected.
- */
-export const DOCUMENT_DOC_KEY_PREFIX = 'document:'

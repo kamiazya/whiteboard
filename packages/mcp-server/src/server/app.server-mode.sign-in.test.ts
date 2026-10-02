@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
-import { DENY_ALL_STRATEGY, oidcProviders } from './security/_test-helpers.js'
+import { DENY_ALL_STRATEGY, oidcProviders, resolvedForTest } from './security/_test-helpers.js'
 import { signInConfigSchema } from './security/sign-in-config.js'
 
 let tempDir: string
@@ -72,7 +72,7 @@ describe('app — server-mode sign-in (ADR-0046)', () => {
   if (provider === undefined) throw new Error('unreachable')
 
   const signIn = {
-    providers: [{ ...provider, clientSecretValue: 's' }],
+    providers: [resolvedForTest(provider)],
     rp: {
       authorizationUrl: async () => new URL('https://idp.test/authorize'),
       exchange: async () => ({}),
@@ -91,6 +91,10 @@ describe('app — server-mode sign-in (ADR-0046)', () => {
     },
     // Not reached by a sign-in's first leg.
     signIn: {} as never,
+    administrators: {
+      isAdministrator: async () => false,
+      administratorIds: async () => new Set<string>(),
+    },
     publicBaseUrl: PUBLIC_URL,
   }
 

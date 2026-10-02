@@ -270,9 +270,6 @@ function findNode(canvas: SpatialCanvas, id: string) {
   return canvas.nodes.find((node) => node.id === id)
 }
 
-/** Whether the gesture's target(s) are still present, with matching type, in `canvas`. */
-/** The bends an edge stores — its own field since ADR-0037 slice 4. */
-
 /**
  * What a gesture records about the node it started on, so it can abandon
  * itself if that node becomes something else mid-drag. `''` for a node
@@ -284,6 +281,7 @@ function startKindOf(node: SpatialNode): string {
   return nodeKind(node) ?? ''
 }
 
+/** Whether the gesture's target(s) are still present, with matching type, in `canvas`. */
 function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean {
   switch (state.kind) {
     case 'idle':

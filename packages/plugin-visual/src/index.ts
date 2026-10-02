@@ -10,7 +10,7 @@
 export * from './apply-stencil.js'
 export * from './data.js'
 export type { LucideIconElement } from './icons/icons.js'
-export { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX, VISUAL_ICONS } from './icons/icons.js'
+export { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, VISUAL_ICONS } from './icons/icons.js'
 export * from './stencil-library.js'
 export * from './stencils.js'
 export * from './tag-library.js'

@@ -59,7 +59,7 @@ export const CROSS_ORIGIN_TRANSFER_PROTOCOL = 1
  * window open, or open two, and a result landing against the wrong attempt
  * would report one transfer's outcome as another's.
  */
-export const transferNonceSchema = z.string().min(16).max(128)
+const transferNonceSchema = z.string().min(16).max(128)
 
 export const transferRequestSchema = z.discriminatedUnion('type', [
   /**
@@ -138,7 +138,6 @@ export const transferResponseSchema = z.discriminatedUnion('ok', [
   }),
 ])
 
-export type TransferRequest = z.infer<typeof transferRequestSchema>
 export type TransferResponse = z.infer<typeof transferResponseSchema>
 
 /**

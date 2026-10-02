@@ -4,6 +4,16 @@ import type { ContainerSize, Point } from '../../lib/spatial/viewport.js'
 /**
  * Below this root width the minimap is noise rather than orientation, and
  * the inspector renders as a bottom sheet rather than a docked column.
+ *
+ * The overview and the dock fight for the bottom edge: both are anchored
+ * there in the same container, the dock is centred and, on a coarse pointer,
+ * runs about 380px, and the overview claims 160px plus a 16px inset on the
+ * right. They start touching once `(W + 380) / 2 > W - 176`, i.e. below
+ * ~732px. 768 rounds that up so the two never sit shoulder to shoulder with
+ * no gap.
+ *
+ * Keyed off the CONTAINER, not the viewport: a narrow editor column on a wide
+ * screen collides in exactly the same way, and a media query cannot see it.
  */
 export const MINIMAP_MIN_ROOT_WIDTH_PX = 768
 

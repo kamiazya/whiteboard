@@ -105,7 +105,7 @@ export function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgCh
 }
 
 /** Presence-only: attach a glow's filter reference and definition to an element. */
-export function withGlow(element: SvgVNode, glow: ReturnType<typeof glowOf>): SvgChild {
+function withGlow(element: SvgVNode, glow: ReturnType<typeof glowOf>): SvgChild {
   if (glow.filter === undefined) return element
   return withDefs({ ...element, attrs: { ...element.attrs, filter: glow.filter } }, glow.defs)
 }

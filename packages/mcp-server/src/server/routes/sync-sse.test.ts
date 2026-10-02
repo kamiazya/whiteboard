@@ -15,14 +15,14 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
-import { resolveTestServerDeps, testDataLayout } from './_test-helpers.js'
 import {
   getClientCount,
   getReadyClientCount,
   sendRestoreEvent,
   sendViewportRequest,
-} from './sync-audience.js'
-import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-sse.js'
+} from '../sync-audience.js'
+import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from '../sync-streams.js'
+import { resolveTestServerDeps, testDataLayout } from './_test-helpers.js'
 
 // Its own data dir: opening a stream opens the store, and a store shared with
 // another file running in parallel waits on that file's lock until timeout.

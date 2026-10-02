@@ -10,7 +10,7 @@ import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
  * would have been persisted — so a test asserts on this rather than on React
  * state or the DOM it happens to produce.
  */
-export interface EditorHostLatest {
+interface EditorHostLatest {
   /** The canvas as of the last render. */
   canvas: SpatialCanvas
   /** Every command the editor reported, in order. */

@@ -142,7 +142,7 @@ export const strictlyInside = (n, g) =>
   n.y >= g.y &&
   n.x + n.width <= g.x + g.width &&
   n.y + n.height <= g.y + g.height
-export const boxesOverlap = (a, b) =>
+const boxesOverlap = (a, b) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 export const firstOverlap = (nodes) => {
   for (let i = 0; i < nodes.length; i++) {

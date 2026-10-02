@@ -30,8 +30,8 @@ import {
   type PeopleAdministration,
   type PeopleAdministrationWiring,
 } from '../security/people-administration.js'
+import { endSyncStreamsOf } from '../sync-streams.js'
 import { issueInvitationLink } from './invitation-link.js'
-import { endSyncStreamsOf } from './sync-sse.js'
 
 const log = getLogger('tenant-people')
 

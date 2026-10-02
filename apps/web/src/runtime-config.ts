@@ -1,5 +1,4 @@
 import {
-  bareOriginSchema,
   type RuntimeConfig,
   runtimeConfigSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-client'
@@ -11,7 +10,7 @@ export type { RuntimeConfig }
 // module re-exports it rather than redefining it, and adds only the
 // deployment-target policy that decides which parsed configs are acceptable
 // here (hosted-origin allowlisting).
-export { bareOriginSchema, runtimeConfigSchema }
+export { runtimeConfigSchema }
 
 export function resolveRuntimeConfig(raw: unknown): RuntimeConfig {
   return runtimeConfigSchema.parse(raw)

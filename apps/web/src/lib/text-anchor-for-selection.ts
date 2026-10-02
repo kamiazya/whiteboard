@@ -34,7 +34,7 @@ import type { TextAnchor } from './text-anchor.js'
  * One named constant because both sides must agree, and a second literal is
  * how they stop agreeing.
  */
-export const ANCHOR_CONTEXT_CHARS = 16
+const ANCHOR_CONTEXT_CHARS = 16
 
 export function textAnchorForSelection(body: string, from: number, to: number): TextAnchor | null {
   const start = Math.max(0, Math.min(from, to))

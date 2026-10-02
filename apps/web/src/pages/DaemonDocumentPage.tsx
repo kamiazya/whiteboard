@@ -56,22 +56,22 @@ export interface DaemonDocumentPageProps {
   // Authorization header. Empty or absent for a daemon reached through the
   // extension (ADR-0050): the native host supplies the daemon's own.
   token?: string
-  // Injectable so tests can avoid real WebSocket networking; production
+  // Injectable so tests can avoid real SSE networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
   // Wired to WorkspaceTopBar's own "Back to documents" button. Absent
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
   onNavigateBack?: () => void
-  // Served by a server-mode keeper from its own origin (ADR-0047): it has no
-  // WebSocket and no replica routes, and its data is not this browser's to
+  // Served by a server-mode keeper from its own origin (ADR-0047): it serves
+  // SSE only and has no replica routes, and its data is not this browser's to
   // keep — the session cookie authenticates, so there is no token either.
   serverMode?: boolean
 }
 
 /**
  * The daemon keeper: the controller over the daemon's REST routes, the sync
- * session over a WebSocket or SSE backend, the markdown body off that same
+ * session over the SSE backend, the markdown body off that same
  * session, and the daemon's version rows — answered to the shared
  * `DocumentPage` as one model (ADR-0004 decision 2: the controller layer
  * stays capability-selected, the page does not).
@@ -95,10 +95,9 @@ function useDaemonDocument(
   // daemon's base URL by `daemonFetch`.
   const versionsBackend = useMemo(() => createDaemonVersionsBackend(daemonFetch), [daemonFetch])
 
-  // The WebSocket URL is derived from this locationHref (see
-  // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
-  // web app paired to a loopback daemon must not open the socket against its
-  // own page origin.
+  // The sync stream and every route resolve against the daemon's own origin,
+  // never the page's — a hosted web app paired to a loopback daemon must not
+  // open the stream against its own page origin.
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
   // ADR-0023's replica reconciliation, both directions, at the moment this

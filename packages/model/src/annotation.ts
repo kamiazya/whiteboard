@@ -21,7 +21,7 @@ export const annotationIdSchema = z.string().min(1, 'annotation id must not be e
  * anchor at the very start or end of a body); `exact` is not, because it is
  * the only part that can re-find the passage after an edit.
  */
-export const textQuoteSelectorSchema = z
+const textQuoteSelectorSchema = z
   .object({
     prefix: z
       .string()
@@ -215,7 +215,7 @@ export const commentMessageSchema = z
 
 export type CommentMessage = z.infer<typeof commentMessageSchema>
 
-export const commentThreadStatusSchema = z.enum(['open', 'resolved'])
+const commentThreadStatusSchema = z.enum(['open', 'resolved'])
 
 export type CommentThreadStatus = z.infer<typeof commentThreadStatusSchema>
 

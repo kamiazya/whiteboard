@@ -2,8 +2,8 @@
  * The behavioural contract every `DocumentBackend` must satisfy, written once and
  * run against each implementation.
  *
- * Three ship — the WebSocket daemon backend, the SSE backend, and the
- * browser-local one — and each grew its own suite, so a behaviour one of them
+ * Two ship — the SSE backend and the one over a workspace kept in the
+ * browser — and each grew its own suite, so a behaviour one of them
  * got wrong was only ever caught if someone thought to write that case in that
  * file. The teardown case below is the clearest example: a delivery after
  * `disconnect()` resurrects state the caller deliberately left, and it is a
@@ -36,15 +36,16 @@ export interface DocumentBackendHarness {
   sentUpdates?(): Uint8Array[]
   /**
    * Drop this backend's transport, if it has one. Omitted by an
-   * implementation with nothing to drop (the browser-local backend reads a
-   * store, so it is never disconnected) — the case below then skips rather
+   * implementation with nothing to drop (the backend over a workspace kept in
+   * the browser reads a store, so it is never disconnected) — the case below then skips rather
    * than asserting a behaviour that cannot exist.
    */
   dropTransport?(): void
   /**
    * Make the keeper refuse this backend's credential from now on, so the
    * reconnect `dropTransport` provokes is answered 401. Omitted by an
-   * implementation with no credential to refuse (the browser-local backend).
+   * implementation with no credential to refuse (the backend over a workspace kept in the
+   * browser).
    */
   refuseAuth?(): void
   cleanup(): void
@@ -81,10 +82,9 @@ export function documentBackendContract(
 ): void {
   it('seeds the document and reports the connection', async () => {
     // Deliberately no ordering assertion between the two. The implementations
-    // genuinely disagree — a WebSocket is "connected" when the socket opens and
-    // the snapshot is the first frame after, while the SSE backend fetches the
-    // snapshot before it subscribes — and the port has never specified which.
-    // Pinning one here would silently make the other's behaviour a bug.
+    // genuinely disagree — the SSE backend fetches the snapshot before it
+    // subscribes, while a store-backed one reports its connection first — and
+    // the port has never specified which. Pinning one here would silently make the other's behaviour a bug.
     const h = await create()
     const rec = recorder()
 
@@ -105,8 +105,8 @@ export function documentBackendContract(
     // Measured from the moment disconnect returns, not from connect: a
     // callback the backend fires synchronously inside connect() has already
     // been delivered to a caller that was still listening, and forbidding that
-    // would make a legitimate design (the browser-local backend reports its
-    // connection immediately) fail for no reason.
+    // would make a legitimate design (the backend over a workspace kept in the
+    // browser reports its connection immediately) fail for no reason.
     const h = await create()
     const rec = recorder()
 

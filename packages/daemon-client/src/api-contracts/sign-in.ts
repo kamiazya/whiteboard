@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 /** A provider a person can sign in with in a browser. Bearer-only providers
  *  have no browser client and are not listed. */
-export const signInProviderSummarySchema = z.object({
+const signInProviderSummarySchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
 })

@@ -29,7 +29,7 @@ import { cn } from '../../lib/utils.js'
 /** Gap kept between the menu and the editor edge when nudging it inside. */
 const MENU_EDGE_MARGIN_PX = 4
 
-export interface ContextMenuActionItem {
+interface ContextMenuActionItem {
   readonly kind?: 'action'
   readonly label: string
   /** Leading icon (a lucide element); decorative — the label carries the name. */
@@ -39,7 +39,7 @@ export interface ContextMenuActionItem {
   readonly danger?: boolean
 }
 
-export interface ContextMenuOption {
+interface ContextMenuOption {
   /** Visible content of the option button (often a glyph). */
   readonly label: string
   /** Icon rendered INSTEAD of the label text when provided (decorative). */
@@ -69,7 +69,7 @@ export interface ContextMenuOptionsItem {
 }
 
 /** Visual section boundary between action, property, and destructive groups. */
-export interface ContextMenuSeparator {
+interface ContextMenuSeparator {
   readonly kind: 'separator'
 }
 
@@ -77,7 +77,7 @@ export interface ContextMenuSeparator {
  * A namespace-container heading over contributed property bands — shown only
  * once a second plugin contributes, so a single-namespace menu stays clean.
  */
-export interface ContextMenuHeadingItem {
+interface ContextMenuHeadingItem {
   readonly kind: 'heading'
   readonly label: string
 }

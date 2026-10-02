@@ -104,11 +104,6 @@ export function useEditorKeyboard({
   }
 
   /**
-   * Toggle the lock on the current selection. Lock is host state, so
-   * this reports through the callback and never touches the canvas
-   * value — a lock is not an edit to the document.
-   */
-  /**
    * What the lock shortcut can reach, per collection.
    *
    * Each is empty when its own half is switched off — a keeper that cannot
@@ -124,6 +119,11 @@ export function useEditorKeyboard({
         : [],
   })
 
+  /**
+   * Toggle the lock on the current selection. Lock is host state, so
+   * this reports through the callback and never touches the canvas
+   * value — a lock is not an edit to the document.
+   */
   const toggleSelectionLock = (): boolean => {
     // A MERGE, not a dispatch. It dispatched — edges first, else nodes —
     // while an edge selection was exclusive with a node one, so there was

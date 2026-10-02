@@ -36,7 +36,8 @@ const ADAPTER_DIRS = ['routes', 'mcp', 'export', 'search'] as const
 const ADAPTER_FILES = ['app.ts', 'shared-background-work.ts', 'workspace-handle.ts'] as const
 const ROOT_FILES = ['http-server.ts', 'server-mode-http.ts'] as const
 
-function adapterFiles(serverDir: string, extra: readonly string[] = []): string[] {
+/** The files {@link findAdapterGlobalReads} reads, so a test can say the walk was not empty. */
+export function adapterFiles(serverDir: string, extra: readonly string[] = []): string[] {
   const files: string[] = []
   for (const base of ADAPTER_DIRS) {
     const dir = join(serverDir, base)

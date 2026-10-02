@@ -7,12 +7,11 @@
  * no IndexedDB involved, the contract is purely about promise ordering.
  */
 import { describe, expect, it } from 'vitest'
-import { deferred } from '../test-utils/async.js'
 import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
 
 describe('pending index writes', () => {
   it('a read started after a tracked write settles only after that write does', async () => {
-    const write = deferred()
+    const write = Promise.withResolvers<void>()
     trackIndexWrite(write.promise)
 
     let settled = false
@@ -30,7 +29,7 @@ describe('pending index writes', () => {
   })
 
   it('a rejected write still clears, and the rejection does not escape the tracker', async () => {
-    const write = deferred()
+    const write = Promise.withResolvers<void>()
     // Attach the caller's own handler the way a real save loop does, so the
     // tracked promise's rejection is observed exactly once.
     const observed = trackIndexWrite(write.promise).catch((err) => err)
@@ -41,8 +40,8 @@ describe('pending index writes', () => {
   })
 
   it('a write registered WHILE settling is also waited for — the gap the loop exists to close', async () => {
-    const first = deferred()
-    const second = deferred()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
     trackIndexWrite(first.promise)
 
     let settled = false

@@ -58,7 +58,7 @@ const SYMBOL_MIN_PX = 14
  * A node in the overview: its box, an already-resolved CSS colour, and the
  * node's own symbol when it declares one.
  */
-export type MinimapNode = MinimapBox & {
+type MinimapNode = MinimapBox & {
   readonly color?: string
   readonly symbol?: VisualSymbolFacet
 }

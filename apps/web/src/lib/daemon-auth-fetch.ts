@@ -41,10 +41,10 @@ function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string)
  * `/api/...` paths against `daemonBaseUrl` and attaches an `Authorization:
  * Bearer` header — but ONLY when the fully-resolved request URL's origin
  * equals the daemon's own origin. This mirrors apiFetch's same-origin-only
- * rule (packages/mcp-server/src/shared/api-client.ts): the daemon bearer
- * token must never leak to an absolute external URL or a foreign-origin
- * Request object that happens to pass through this wrapper (e.g. an
- * Excalidraw asset fetch).
+ * rule (`apiFetch` in packages/daemon-client/src/api-client.ts): the daemon
+ * bearer token must never leak to an absolute external URL or a foreign-origin
+ * Request object that happens to pass through this wrapper (e.g. an image
+ * asset fetch).
  *
  * This is the SOLE place in apps/web allowed to set an Authorization header
  * toward the daemon (enforced by daemon-auth-seam.test.ts's source scan).

@@ -90,6 +90,40 @@ describe('DatabaseSchema against the migrated database', () => {
     }
   })
 
+  // A column the schema lets an insert omit must be one the database fills with
+  // the value its readers expect; `Generated` on any other column lets production
+  // code drop a value the row needs. `role` and `accountId` are the counter-case:
+  // nullable with no default, so they stay required (the exemption ledger above).
+  it('an insert that omits generation or deactivatedAt reads back as a first snapshot and an active user', async () => {
+    await handle.db
+      .insertInto('documentSnapshots')
+      .values({
+        docKey: 'document:omitted',
+        chunkCount: 1,
+        totalBytes: 1,
+        maxChunkBytes: 1,
+        frontier: new Uint8Array(),
+      })
+      .execute()
+    await handle.db
+      .insertInto('memberProfiles')
+      .values({ id: 'p-omitted', displayName: 'Ada', accountId: 'a-1', createdAt: 1, updatedAt: 1 })
+      .execute()
+
+    const snapshot = await handle.db
+      .selectFrom('documentSnapshots')
+      .select('generation')
+      .where('docKey', '=', 'document:omitted')
+      .executeTakeFirstOrThrow()
+    const profile = await handle.db
+      .selectFrom('memberProfiles')
+      .select('deactivatedAt')
+      .where('id', '=', 'p-omitted')
+      .executeTakeFirstOrThrow()
+    expect(snapshot.generation).toBe(1)
+    expect(profile.deactivatedAt).toBeNull()
+  })
+
   it('every exempted column is declared NOT NULL by the schema yet nullable in the database', async () => {
     const exemptions = Object.entries(NULLABLE_IN_DATABASE).flatMap(([table, columns]) =>
       Object.keys(columns).map((column) => ({ table: table as keyof DatabaseSchema, column })),

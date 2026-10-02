@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { matchDocumentsTail, onDocumentAction, onDocumentFile } from './path-route.js'
 
 describe('onDocumentAction', () => {
-  function appWith(action: string) {
+  function appWith(action: Parameters<typeof onDocumentAction>[2]) {
     const app = new Hono()
     onDocumentAction(app, 'get', action, (c, workspaceId, path) => c.json({ workspaceId, path }))
     return app

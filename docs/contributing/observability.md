@@ -51,7 +51,7 @@ to `unknown` when neither is given):
 - `daemon` — the local daemon, both the packaged `whiteboard daemon run` and
   the dev entry (`pnpm mcp:http:dev`)
 - `server` — server mode (`whiteboard server run`)
-- `stdio-mcp` — stdio MCP entry (`packages/mcp-server/src/server/mcp/index.ts`)
+- `stdio-mcp` — stdio MCP entry (`packages/mcp-server/src/server/stdio-root.ts`)
 
 Each HTTP root starts tracing itself (`startHttpRootTracing`), so the env vars
 above work on a packaged daemon and on server mode, not only on the dev entry.

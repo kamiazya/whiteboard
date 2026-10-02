@@ -45,7 +45,7 @@ export interface PoolWorker {
  * is still something they are looking at, and an icon competing with it on
  * equal terms wins slots by arrival order.
  */
-export type LayoutPriority = 'interactive' | 'background' | 'idle'
+type LayoutPriority = 'interactive' | 'background' | 'idle'
 
 /** Highest first. `nextRunnableIndex` walks this order. */
 const PRIORITY_ORDER: readonly LayoutPriority[] = ['interactive', 'background', 'idle']

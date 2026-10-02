@@ -23,7 +23,7 @@ export interface TagStripProps {
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 /** What carries the tag, for the chip's title: "2 documents, 1 board". */
-export function carriedBy(row: TagInUse): string {
+function carriedBy(row: TagInUse): string {
   const parts: string[] = []
   if (row.documents > 0) parts.push(plural(row.documents, 'document', 'documents'))
   if (row.boards > 0) parts.push(plural(row.boards, 'board', 'boards'))

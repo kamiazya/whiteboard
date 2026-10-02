@@ -126,10 +126,6 @@ export const edgePatchFieldsSchema = canvasEdgeSchema
  */
 export const linePatchFieldsSchema = canvasLineSchema.omit({ id: true }).partial().strict()
 
-export type EdgePatchFields = z.infer<typeof edgePatchFieldsSchema>
-
-export type LinePatchFields = z.infer<typeof linePatchFieldsSchema>
-
 /**
  * Where one change stands. The DECISION is per change (ADR-0029 decision 4),
  * which is why the status lives here and the batch has none: "nine of these
@@ -141,7 +137,7 @@ export type LinePatchFields = z.infer<typeof linePatchFieldsSchema>
  * happened to the document, and two peers deciding concurrently converge on a
  * verdict rather than on a gap.
  */
-export const proposedChangeStatusSchema = z.enum(['open', 'adopted', 'dismissed'])
+const proposedChangeStatusSchema = z.enum(['open', 'adopted', 'dismissed'])
 
 export type ProposedChangeStatus = z.infer<typeof proposedChangeStatusSchema>
 

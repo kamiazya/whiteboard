@@ -71,7 +71,7 @@ async function buildToken({
   if (tokenUse !== undefined) payload.token_use = tokenUse
   if (nbf !== undefined) payload.nbf = nbf
 
-  const header: Record<string, unknown> = { alg, kid }
+  const header: JWTHeaderParameters = { alg, kid }
   if (!omitTyp) header.typ = typ
   const builder = new SignJWT(payload).setProtectedHeader(header)
   if (sub !== null) builder.setSubject(sub)

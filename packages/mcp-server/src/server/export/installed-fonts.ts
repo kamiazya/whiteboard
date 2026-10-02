@@ -1,18 +1,13 @@
 import { readdir } from 'node:fs/promises'
 import { extname, join } from 'node:path'
-import { getDataDir } from '../../shared/data-dir-secure.js'
 
 /**
- * Where a font the user installed lives.
- *
- * A plain directory rather than a manifest, deliberately. Dropping a TTF in is
- * the simplest possible answer to "my exports are tofu", and a mechanism that
+ * A font the user installed lives in a plain directory (`DataLayout.fontsDir`)
+ * rather than behind a manifest, deliberately. Dropping a TTF in is the
+ * simplest possible answer to "my exports are tofu", and a mechanism that
  * recognised only its own downloads would refuse it. The download path
- * (ADR-0012) writes here; it does not own the directory.
+ * (ADR-0012) writes there; it does not own the directory.
  */
-export function installedFontDir(): string {
-  return join(getDataDir(), 'fonts')
-}
 
 /**
  * `.ttc` is a collection rather than a single face; both resvg's fontdb and
@@ -36,8 +31,7 @@ export const FONT_EXTENSIONS: ReadonlySet<string> = new Set(['.ttf', '.otf', '.t
  * A missing directory is the normal state of a daemon that has installed
  * nothing, so it answers `[]` rather than throwing.
  */
-export async function installedFontFiles(): Promise<readonly string[]> {
-  const dir = installedFontDir()
+export async function installedFontFiles(dir: string): Promise<readonly string[]> {
   let entries: string[]
   try {
     entries = await readdir(dir)

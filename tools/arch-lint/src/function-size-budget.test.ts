@@ -598,7 +598,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/index.ts#main': 81,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
-  'packages/mcp-server/src/server/mcp/index.ts#createMcpServer': 76,
   'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts#runE2eCheckpointSmoke': 101,
   'packages/mcp-server/src/server/mcp/startup.smoke-impl.ts#runStartupSmoke': 67,
   'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 115,
@@ -625,7 +624,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 266,
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 54,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 108,
-  'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
   // same router as POST .../replica-key — one seam for a workspace's whole
   // replica posture rather than a second router with its own mount block.

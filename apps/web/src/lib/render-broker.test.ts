@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { deferred } from '../test-utils/async.js'
 import { createInTabRenderBroker } from './render-broker.js'
 import { outlineKeyOf, renderKeyOf } from './render-key.js'
 
@@ -24,7 +23,7 @@ describe('the in-tab render broker', () => {
   // worker. Memoising the RESULT is not enough — the join has to happen while
   // the work is in flight, or the second caller starts a second render.
   it('joins a caller that arrives while the same key is still rendering', async () => {
-    const pending = deferred<typeof drawn | null>()
+    const pending = Promise.withResolvers<typeof drawn | null>()
     const produce = vi.fn().mockReturnValue(pending.promise)
     const broker = createInTabRenderBroker()
     const key = keyFor('doc-1')
@@ -57,7 +56,7 @@ describe('the in-tab render broker', () => {
   // bytes, so the join still applies. This is the half that keeps the
   // measured double render fixed for a keeper that stamps no time.
   it('still joins concurrent callers for a document with no version', async () => {
-    const pending = deferred<typeof drawn | null>()
+    const pending = Promise.withResolvers<typeof drawn | null>()
     const produce = vi.fn().mockReturnValue(pending.promise)
     const broker = createInTabRenderBroker()
     const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light', '')

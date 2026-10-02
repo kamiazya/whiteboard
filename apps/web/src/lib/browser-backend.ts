@@ -322,7 +322,7 @@ export class BrowserBackend implements DocumentBackend {
     }
   }
 
-  /** No WebSocket in browser mode. */
+  /** A workspace kept in the browser has no sync stream to announce readiness to. */
   sendClientReady(): void {
     /* no-op */
   }

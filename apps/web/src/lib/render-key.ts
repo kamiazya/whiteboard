@@ -29,7 +29,7 @@ export const RENDERER_BUILD_ID: string = __RENDERER_BUILD_ID__
  * `render-surfaces.ts` widens this by exactly that member, so the two say the
  * same thing about the families they share.
  */
-export const brokeredPipelineSchema = z.enum(['svg', 'outline'])
+const brokeredPipelineSchema = z.enum(['svg', 'outline'])
 
 export type BrokeredPipeline = z.infer<typeof brokeredPipelineSchema>
 

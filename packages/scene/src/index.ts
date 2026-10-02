@@ -10,8 +10,6 @@
  */
 export type {
   DecorationContext,
-  EdgeRoute,
-  EdgeRouteAnchors,
   EdgeRouteRequest,
   EdgeRouter,
   NodeDecoration,

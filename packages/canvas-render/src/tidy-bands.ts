@@ -44,11 +44,7 @@ interface SnapGuard {
   readonly insideMargin: (unit: Unit, delta: number) => boolean
 }
 
-export function snapGuardFor(
-  units: readonly Unit[],
-  ax: Axis,
-  floor: number | undefined,
-): SnapGuard {
+function snapGuardFor(units: readonly Unit[], ax: Axis, floor: number | undefined): SnapGuard {
   return {
     clearAfter: (unit, delta) => {
       const moved = ax.moved(unit.bbox, delta)

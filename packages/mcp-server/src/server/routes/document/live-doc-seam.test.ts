@@ -30,7 +30,7 @@ const { resolveTestServerDeps } = await import('../_test-helpers.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
 // workaround for document.ts's dynamic import.
-await import('../sync-audience.js')
+await import('../../sync-audience.js')
 
 function updateBytes(nodeIds: readonly string[]): Uint8Array<ArrayBuffer> {
   const doc = new LoroDoc()

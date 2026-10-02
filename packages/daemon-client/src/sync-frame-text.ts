@@ -1,4 +1,4 @@
-import { type ServerTextMessage, serverTextMessageSchema } from './ws-messages.js'
+import { type ServerTextMessage, serverTextMessageSchema } from './sync-frames.js'
 
 export function parseServerTextMessage(
   raw: string,

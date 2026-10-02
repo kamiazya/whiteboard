@@ -238,11 +238,11 @@ pnpm --filter @kamiazya/whiteboard-mcp test:smoke    # vitest run --project mcp-
 
 ### `mcp-distribution` — opt-in, requires build
 
-Not included in `pnpm test`. Requires `dist/server/mcp/index.js` to exist. `test:distribution` includes the build step; individual `smoke:*` scripts do not (CI builds before calling them). Tests run sequentially, one packaged daemon at a time.
+Not included in `pnpm test`. Requires `dist/server/mcp/stdio.js` to exist. `test:distribution` includes the build step; individual `smoke:*` scripts do not (CI builds before calling them). Tests run sequentially, one packaged daemon at a time.
 
 | Script | What it covers | Build included |
 |---|---|---|
-| `pnpm smoke:packaged` | Packaged `dist/server/mcp/index.js` passes full e2e checkpoint flow | No |
+| `pnpm smoke:packaged` | Packaged `dist/server/mcp/stdio.js` passes full e2e checkpoint flow | No |
 | `pnpm smoke:tarball` | `npm pack` → install → installed entry passes full e2e checkpoint flow | No |
 | `pnpm smoke:codex-config` | Plugin manifest + published MCP config valid; packaged entry starts | No |
 | `pnpm test:distribution` | All three above, after `pnpm build` | Yes |

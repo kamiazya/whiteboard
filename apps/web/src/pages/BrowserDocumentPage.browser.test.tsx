@@ -143,16 +143,22 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
       .getByRole('button', { name: /^delete$/i })
       .click()
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
-    // The editor stays on screen through the switch, so it proves nothing; the
-    // store holding only a fresh row is what says the delete has finished.
+    // The editor stays on screen through the switch, so it proves nothing. The
+    // delete clears the pointer, removes the row, then creates the fresh row
+    // and repoints, so the row appearing is NOT the end: the pointer naming
+    // that row is. A remount that reads in between finds no pointer and seeds
+    // a second document of its own.
+    const pointer = new IdbDefaultDocumentPointer()
     await waitFor(
       async () => {
         const ids = (await listLocalDocuments(store)).map((doc) => doc.documentId)
         expect(ids).toHaveLength(1)
         expect(deletedIds).not.toContain(ids[0])
+        expect(await pointer.get()).toBe(ids[0])
       },
       { timeout: 5000 },
     )
+    const [fresh] = await listLocalDocuments(store)
     cleanup()
     renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(
@@ -161,6 +167,11 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
         timeout: 5000,
       },
     )
+    // The remount opened the fresh document rather than seeding another one.
+    expect((await listLocalDocuments(store)).map((doc) => doc.documentId)).toEqual([
+      fresh?.documentId,
+    ])
+    expect(await pointer.get()).toBe(fresh?.documentId)
   })
 
   // A pointer outliving its document — a delete whose repoint had not landed,

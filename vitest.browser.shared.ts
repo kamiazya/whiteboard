@@ -1,10 +1,15 @@
-import { rmSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { playwright } from '@vitest/browser-playwright'
+import type { TestProject } from 'vitest/node'
 import { resolveBrowserLaunchOptions } from './vitest.browser.launch-options.js'
 
 /** Where a project's failure traces land, relative to its own root. */
-const TRACES_DIR = 'tmp/vitest-traces'
+export const TRACES_DIR = 'tmp/vitest-traces'
+
+/** A run records that it is live in the traces directory as `.live-<pid>`. */
+const LIVE_MARKER = '.live-'
 
 /**
  * Set by `pnpm test:browser:trace` to record DOM snapshots as well.
@@ -30,8 +35,9 @@ const SNAPSHOTS_VAR = 'WHITEBOARD_TRACE_SNAPSHOTS'
  * component-scale projects render at 800x600, apps/web's page tests at
  * 1280x900.
  *
- * **Traces are kept for the MOST RECENT RUN ONLY**, cleared here as the
- * config loads. Nothing else ever deleted them, and each retained trace
+ * **Traces are kept for the MOST RECENT RUN ONLY**, cleared when a run that
+ * USES the project starts (`browserTracesSetup`, a per-project globalSetup).
+ * Nothing else ever deleted them, and each retained trace
  * carries screenshots and DOM snapshots: measured, one session's failing
  * runs left **19GB** under `apps/web/tmp/vitest-traces` and filled the
  * disk. What that looks like is worth stating, because it names nothing:
@@ -40,6 +46,23 @@ const SNAPSHOTS_VAR = 'WHITEBOARD_TRACE_SNAPSHOTS'
  * still reports plenty of "Used". One run's worth is also all that is
  * useful: the traces you read are the ones from the run that just failed,
  * and a second run at the same path would overwrite them anyway.
+ *
+ * **The clear is not done at config load, and it skips a directory another
+ * live run holds.** Vitest loads EVERY project config on every invocation to
+ * resolve `--project`, so a clear at load time wiped all four browser
+ * projects' traces for a run that touched none of them (measured: an
+ * `arch-lint-node` run deleted a sentinel under `packages/canvas-render` and
+ * `apps/web`), and wiped the live trace directory of a browser run in flight.
+ * That second case is not only lost traces: a concurrent run's `tracing.stopChunk`
+ * then failed with ENOENT and a PASSING test was reported failed (2 failed of
+ * 2, against 1 failed and 1 passed alone). Without the clear, two concurrent
+ * runs of the same file completed identically three times in three, so the
+ * shared directory is safe to write and only unsafe to delete.
+ *
+ * The directory name is deliberately unchanged: it is flattened into the
+ * attachment name (`tmp-vitest-traces-<project>--chromium--…`), so a longer one
+ * shrinks every browser test's title budget silently
+ * (`browser-test-name-length.test.ts` reads it from here).
  *
  * **DOM snapshots are off unless asked for**, which is a separate bound and
  * the one that stops a SINGLE run filling the disk — the clear above only
@@ -66,20 +89,8 @@ const SNAPSHOTS_VAR = 'WHITEBOARD_TRACE_SNAPSHOTS'
  * away — `pnpm test:browser:trace`, which is what that script is for.
  */
 export function sharedBrowserTestConfig(
-  options: {
-    viewport?: { width: number; height: number }
-    /**
-     * The project's own root (`import.meta.dirname` at the call site), so
-     * the stale traces cleared are the ones this project is about to
-     * rewrite. Omitted, nothing is cleared — which is the old, unbounded
-     * behavior, so a config that wants the bound has to say where it lives.
-     */
-    projectRoot?: string
-  } = {},
+  options: { viewport?: { width: number; height: number } } = {},
 ) {
-  if (options.projectRoot !== undefined) {
-    rmSync(join(options.projectRoot, TRACES_DIR), { recursive: true, force: true })
-  }
   return {
     enabled: true,
     headless: true,
@@ -98,3 +109,50 @@ export function sharedBrowserTestConfig(
     instances: [{ browser: 'chromium' as const }],
   }
 }
+
+function isLive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM means the process exists and belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/**
+ * Takes `dir` for the run `self`: clears what an earlier run left unless
+ * another LIVE run is writing there, then records `self` as live. Returns the
+ * release, which removes only `self`'s record.
+ *
+ * Liveness is a process probe on a pid recorded in the directory, so a run
+ * killed before it released leaves a record that stops counting the moment its
+ * pid is gone. ponytail: a recycled pid keeps one dead run's record alive and
+ * the directory un-cleared until that process exits, which costs disk and
+ * nothing else; a lease with a heartbeat would close it if that ever matters.
+ */
+export function claimTracesDir(dir: string, self: number = process.pid): () => void {
+  mkdirSync(dir, { recursive: true })
+  const markers = readdirSync(dir).filter((name) => name.startsWith(LIVE_MARKER))
+  const others = markers.filter((name) => {
+    const pid = Number(name.slice(LIVE_MARKER.length))
+    return pid !== self && Number.isInteger(pid) && isLive(pid)
+  })
+  if (others.length === 0) {
+    for (const name of readdirSync(dir)) rmSync(join(dir, name), { recursive: true, force: true })
+  }
+  const marker = join(dir, `${LIVE_MARKER}${self}`)
+  writeFileSync(marker, '')
+  return () => rmSync(marker, { force: true })
+}
+
+/**
+ * A project's `globalSetup`. Vitest runs it only for a project the run
+ * includes, which is what a clear at config load could not know.
+ */
+export default function setup(project: TestProject): () => void {
+  return claimTracesDir(join(project.config.root, TRACES_DIR))
+}
+
+/** What each browser project lists under `test.globalSetup`. */
+export const browserTracesSetup = fileURLToPath(import.meta.url)

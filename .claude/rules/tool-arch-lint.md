@@ -296,9 +296,10 @@ resolved themselves when handed none — a second composition path, carrying
 none of what the root attaches, and one that let a router threaded without the
 field compile clean and pass every test that only ever took the fallback.
 `serverDeps` is required on every router and on `createApp` now, and tests
-get theirs from `routes/_test-helpers.ts`'s `resolveTestServerDeps`. The one
-exemption is the stdio root (`server/mcp/index.ts`), listed by name and
-checked from both sides: it must keep importing `di/`, or the entry is stale.
+get theirs from `routes/_test-helpers.ts`'s `resolveTestServerDeps`. There is
+no exemption: the stdio root, which does compose its own deps, is
+`server/stdio-root.ts` — beside the other roots, outside the adapter trees —
+and `server/mcp/server.ts`, the McpServer factory, takes the deps it is handed.
 
 It reads import specifiers from the AST (`collectRelativeImportEdges`) and
 judges them by where they RESOLVE, not by how they are spelled. It was the last
@@ -383,10 +384,9 @@ whole value is that it shrinks.
 
 **`ADAPTER_SCAN_EXEMPT_FILES`** carries by FILE what the wiring exemption —
 a directory list (`di/`, `app.ts`, `http-server.ts`) — misses: a composition
-root living inside an adapter tree. It is EMPTY today: `mcp/index.ts`, the
-McpServer factory and stdio entry point, stood here while it called the
-store's own boot functions, and it now boots through
-`di/boot-self-host-deps.ts` like every other root. It is separate from
+root living inside an adapter tree. It is EMPTY today: no composition root
+sits inside an adapter tree. The stdio root is `server/stdio-root.ts`, and
+`mcp/server.ts` is a library that takes the deps it is handed. It is separate from
 `ADAPTERS_REACHING_MECHANICS` on purpose: an exemption is a CLASSIFICATION,
 not debt, and a composition root's edges will never shrink.
 
@@ -405,30 +405,34 @@ order, bottom to top, is stated in the test's header and derived from how the
 code is used: `shared` < `daemon` < `mechanics` (`server/{store,security,tenant,
 export,search,observability,release}/**` plus the top-level `server/*.ts` that
 are mechanisms) < `adapters` (`routes/`, `mcp/`, the helpers routes share) <
-`composition` (`app.ts`, the HTTP roots, `di/`) < `entry` (`cli/`, the process
-entries and the MCP stdio root). A module may import its own layer or any below.
+`composition` (`app.ts`, the HTTP roots, `di/`) < `entry` (`cli/`,
+`server/stdio-root.ts` and its process entry `mcp/stdio.ts`). A module may
+import its own layer or any below.
 
 Top-level `server/*.ts` files are each NAMED in `TOP_LEVEL`, not guessed, so a
 new one fails `belongs to no layer` until someone places it. The classifier is a
 pure function over file contents, so the two planted cases are also fixture
 tests that keep their teeth without planting.
 
-Eight upward edges exist and are ledgered with the move that retires each,
-count pinned by equality: the stdio root living inside the library the HTTP app
-composes (`mcp/index.ts`, two edges), the audience registry and the auto-version
-scheduler filed under `routes/` (three), a distribution-smoke impl under the
-adapter tree reaching the CLI, the membership gate reaching an adapter helper,
-and a daemon module logging through the server logger. None is a design that
-wants the edge; each is a module in the wrong directory. They were
-cross-checked against an independent directory-level import matrix and are not
-moved here. Type-only edges count, as in the web guard.
+One upward edge exists, ledgered with the move that retires it, count pinned
+by equality: the membership gate reaching an adapter helper
+(`security/membership-gate.ts -> workspace-handle.ts`). It was eight; the rest
+were modules in the wrong directory and moved: the stdio root out of the
+library the HTTP app composes (now `server/stdio-root.ts` beside
+`mcp/server.ts`), the stream registry, audience and viewport cache to
+`server/sync-streams.ts`, `sync-audience.ts` and `viewport-requests.ts`, the
+scheduler to `store/auto-version.ts`, the fetch-model contract to
+`shared/api-contracts/search-fetch-model.ts`, and the legacy trust-file purge
+to `server/purge-legacy-trust-file.ts`. The eight were cross-checked against
+an independent directory-level import matrix first. Type-only edges count, as
+in the web guard.
 
 ## `route-portability.test.ts`: which routes could leave Node
 
 Classifies every non-test file under `mcp-server/src/server/routes/**` as
 `node-bound` (a Node builtin, a Node-only package, inversify, a `store/`,
 `daemon/`, `di/` or `export/` module, a `security/*-store`, the data layout,
-the stdio root, or anything `scanSourceForBoundaryViolations` flags except
+or anything `scanSourceForBoundaryViolations` flags except
 loro-crdt) or `portable`. The portable files that sit in `mcp-server` are a
 ledger held from both sides with a length pinned by equality, so it can only
 fall: a new portable route fails as unlisted, a listed route that gained Node
@@ -443,17 +447,17 @@ lower bound and was once the whole guard: `import 'node:fs'` planted in
 18/18 green. Each ledgered file is therefore also classified over the
 transitive closure of its VALUE imports (`route-closure.ts`, on
 `value-import-closure.ts`'s walk; type-only edges are erased and not followed),
-with two named cut seams — `log.ts`, `workspace-handle.ts` — that a lift would
+with three named cut seams — `log.ts`, `workspace-handle.ts`, `mcp/server.ts` — that a lift would
 replace with a handed-in dependency. A seam must itself be Node-bound and be
 reached by a ledgered file, or it is a fake cut. Each ledger entry states its
 `role` (a `router` is a file that mounts `new Hono(`; six of the twelve were
 middleware, helpers and registries) and its `blockedBy`, which is checked
 against the closure, so Node arriving through a helper edits an entry instead of
 passing. Three counts are pinned by equality in `CLOSURE_COUNTS` (clean files,
-files held only by the seams, routers among those), measured 3 / 6 / 2.
+files held only by the seams, routers among those), measured 2 / 5 / 2.
 
 A closure over import specifiers alone says nine of twelve once the seams are
-cut; this says six because it counts an ambient `Buffer` (in `routes/sync-sse.ts`,
+cut; this says six because it counts an ambient `Buffer` (in `sync-streams.ts`,
 reached through the audience registry, and in `security/timing-safe.ts`) the way
 the direct class always has. `store/corrupt-stored-data` is entered, not called a
 mechanic, for the reason `MECHANICS_NOT_SCANNED` gives. It owns its own matcher
@@ -481,10 +485,10 @@ joins directory names — which the mechanic scan would count.
 Comments and string bodies are stripped before matching (`source-scan.ts`'s
 `stripCommentsAndStrings`), so prose naming `getDataDir()` is not a read. The
 ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
-from both sides, size pinned, every entry carrying its reason. It holds two
-entries: `mcp/index.ts`, the stdio composition root that resolves the data dir
-once before booting, and `export/installed-fonts.ts` until the export
-singletons are keyed by directory. `findCompositionGlobalReads` covers the layers that BUILD
+from both sides, size pinned, every entry carrying its reason. Its ledger is
+empty: the stdio root's `getDataDir()` read lives in `server/stdio-root.ts`, a
+composition root outside the scanned trees, and the export measurer and
+exporter are keyed by `DataLayout.fontsDir`. `findCompositionGlobalReads` covers the layers that BUILD
 stores: `di/**` (also banning `globalStoreScope`, the stores' default) and
 `server/store/**`. Its both-sided, size-pinned ledger holds the reads that are
 each the one place allowed to choose the data dir or tenant; a new
@@ -500,9 +504,9 @@ scope, an `undefined` passed for it, a bare reference to such a function, and
 any naming of `globalStoreScope` or `storeScope(`. It matches by imported
 NAME, so a local function of the same name is not read as one, and it does
 not follow a function handed on by reference to code elsewhere. Its ledger is
-both-sided with a pinned size: `app.ts -> storeScope` (the one derivation),
-`shared-background-work.ts -> globalStoreScope` (the stdio default) and
-`workspace-handle.ts -> workspaceRegistry`. `store-scope` is in
+both-sided with a pinned size: `app.ts -> storeScope` (the one derivation)
+and `workspace-handle.ts -> workspaceRegistry`; `stdioBackgroundWork` takes
+the scope the stdio root booted. `store-scope` is in
 `MECHANICS_NOT_SCANNED`: a router holding the `StoreScope` it is HANDED is
 not reaching for a mechanic.
 

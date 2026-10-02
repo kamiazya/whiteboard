@@ -19,7 +19,7 @@ import type { AnnotationAnchor, SpatialCanvas, SpatialNode } from '@kamiazya/whi
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { resolveTextAnchor } from './text-anchor.js'
 
-export type AnchorPlacement = 'placed' | 'orphaned'
+type AnchorPlacement = 'placed' | 'orphaned'
 export type AnchorResolver = (thread: { readonly anchor: AnnotationAnchor }) => AnchorPlacement
 
 export type AnchorResolverSubject =

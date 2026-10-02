@@ -17,17 +17,6 @@
 
 import { isMemoisableKey, type RenderKey, renderKeyPath } from './render-key.js'
 
-/** The SVG family's answer. `null` is "nothing to draw", and it is an answer. */
-export interface RenderResult {
-  readonly svg: string
-  readonly bounds: {
-    readonly x: number
-    readonly y: number
-    readonly w: number
-    readonly h: number
-  }
-}
-
 export interface RenderBroker {
   /**
    * The picture for `key`. `produce` runs at most once per key: a caller that

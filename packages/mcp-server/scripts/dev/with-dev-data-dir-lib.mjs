@@ -80,6 +80,12 @@ export function resolveDevDataDirEnv(env, repoRoot) {
  * signal)` with a POSIX signal name can throw EINVAL on Windows — Windows
  * has no POSIX signal delivery, so falling through uncaught would crash this
  * wrapper instead of just exiting non-zero.
+ *
+ * `kill` and `exit` are typed by what this function does with them (call, and
+ * ignore the answer), so a test can inject a recorder rather than something
+ * that really never returns.
+ * @param {string} signal
+ * @param {{ pid?: number, kill?: (pid: number, signal?: string | number) => unknown, exit?: (code?: number) => unknown }} [seams]
  */
 export function reraiseSignalOrExit(
   signal,

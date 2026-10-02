@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // ES2024.Promise only: `Promise.withResolvers` is Chrome 119 / Firefox 121 /
+    // Safari 17.4, below the floor the app already needs (WebAuthn PRF, local
+    // network access, OPFS), and `build.target` is `esnext`, so nothing is
+    // transpiled or polyfilled that would hide a missing global.
+    "lib": ["ES2022", "ES2024.Promise", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,

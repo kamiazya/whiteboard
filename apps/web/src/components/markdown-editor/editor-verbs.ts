@@ -91,7 +91,7 @@ function nestAround(
  * still takes the bold off. A selection that itself begins and ends with
  * the pair is stripped the same way. Anything else wraps.
  */
-export function wrapSelectionWith(open: string, close: string = open): StateCommand {
+function wrapSelectionWith(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
     const main = state.selection.main
     const scope = rangeToActOn(state)
@@ -163,7 +163,7 @@ export function wrapSelectionWith(open: string, close: string = open): StateComm
  * test can drive against an `EditorState` with no React and no browser,
  * which is what makes the property test one layer down possible at all.
  */
-export type MarkdownVerbAction =
+type MarkdownVerbAction =
   /** Inserts delimiters around the caret's scope. */
   | { readonly kind: 'wrap'; readonly open: string; readonly close?: string }
   /** Runs a command over the line(s) the selection covers. */

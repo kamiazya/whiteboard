@@ -15,7 +15,7 @@ This project is split into three main runtime layers:
 ## Main components
 
 - **stdio MCP server**
-  - Entry point: `dist/server/mcp/index.js`
+  - Entry point: `dist/server/mcp/stdio.js`
   - Registers tools, prompts, and resources
   - Opens the data directory's store directly, in its own process. It runs
     the same automatic checkpoint and compaction as the daemon: a History

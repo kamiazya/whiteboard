@@ -11,6 +11,7 @@ import { textNode as buildTextNode } from '@kamiazya/whiteboard-model/test-utils
 import { describe, expect, it, vi } from 'vitest'
 
 import { captureLogsForTests } from '../log.js'
+import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 
 vi.mock('@kamiazya/whiteboard-codec', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@kamiazya/whiteboard-codec')>()
@@ -23,7 +24,9 @@ vi.mock('@kamiazya/whiteboard-codec', async (importOriginal) => {
   }
 })
 
-const { renderSpatialCanvasToSvg } = await import('./headless-renderer.js')
+const renderer = await import('./headless-renderer.js')
+const renderSpatialCanvasToSvg = (canvas: SpatialCanvas) =>
+  renderer.renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS)
 
 function textNode(overrides: Partial<SpatialNode> = {}): SpatialCanvas {
   return {

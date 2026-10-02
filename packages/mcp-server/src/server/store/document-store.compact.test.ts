@@ -208,7 +208,7 @@ describe('compactWorkspace', () => {
     expect(live.getMovableList('elements').length).toBe(60)
 
     // Restoring the oldest version should still work at the cut point.
-    const past = await store.load('session1', v.id, live)
+    const past = await store.load('session1', v.id)
     expect(past).not.toBeNull()
     expect(past!.getMovableList('elements').length).toBe(30)
 

@@ -63,13 +63,7 @@ import { dropWrappedKey, loadWrappedKey, saveWrappedKey } from './replica-wrappe
  *   including a copy no passkey in this browser was kept for.
  * - `lapsed` — the bounded lease it was remembered under has been spent.
  */
-export type UnlockFailure =
-  | 'no-blob'
-  | 'no-passkey'
-  | 'no-prf'
-  | 'cancelled'
-  | 'unopenable'
-  | 'lapsed'
+type UnlockFailure = 'no-blob' | 'no-passkey' | 'no-prf' | 'cancelled' | 'unopenable' | 'lapsed'
 
 export type UnlockOutcome = { ok: true; tier: ReplicaTier } | { ok: false; reason: UnlockFailure }
 

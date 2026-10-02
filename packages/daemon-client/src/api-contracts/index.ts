@@ -9,8 +9,8 @@
 // docs/contributing/architecture/wire-protocol.md carries the reasoning.
 //
 // Deliberately narrow: only the schemas below are re-exported here.
-// document-runtime.ts, daemon-doctor.ts, export.ts, libraries.ts, and the
-// rest of runtime.ts stay off the published npm surface — widening this
+// mcp-server's shared/api-contracts (document-runtime.ts, daemon-doctor.ts,
+// export.ts) and the rest of runtime.ts stay off the published npm surface — widening this
 // barrel widens semver liability for a public package, so any addition
 // here must be an intentional decision, not incidental scope creep.
 // daemonPingResponseSchema and listGrantsResponseSchema are promoted so apps/web consumes each contract

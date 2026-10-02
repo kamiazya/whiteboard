@@ -5,6 +5,7 @@ import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   type LoroStoreLike,
   useBrowserDocumentController,
@@ -34,9 +35,8 @@ class FakeLoroStore implements LoroStoreLike {
   }
 }
 
-// duplicateDocument runs the real loro-crdt merge/export (mergeToSnapshot),
-// so its tests need real Loro bytes rather than the fake's placeholder
-// `[1, 2, 3]` — that would throw when mergeToSnapshot tries to import it.
+// duplicateDocument runs the real loro-crdt merge/export (mergeToSnapshot), so
+// its tests need real Loro bytes; the fake's `[1, 2, 3]` would throw on import.
 function realSnapshotWithElements(elements: unknown[]): Uint8Array {
   const doc = new Loro()
   const list = doc.getList('elements')
@@ -44,10 +44,8 @@ function realSnapshotWithElements(elements: unknown[]): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-// ULIDs, because the stored schema validates them now. Named constants
-// rather than inline literals: a 26-character id read six times in one
-// assertion is unreadable, and the tests are about which document, not which
-// characters.
+// ULIDs, because the stored schema validates them. Named, since a 26-character
+// id read six times in one assertion is unreadable.
 const C1 = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const C2 = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
 
@@ -71,12 +69,8 @@ async function refusalOf(del: () => Promise<void>): Promise<string> {
 }
 
 describe('useBrowserDocumentController', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-  })
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
 
   it('snapshot starts as null before load completes', () => {
     const store = new LocalStoreDouble()
@@ -178,6 +172,7 @@ describe('useBrowserDocumentController', () => {
       result.current.renameDocument('Renamed').catch(() => {})
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     if (result.current.persistence.kind === 'degraded') {
       expect(result.current.persistence.message).not.toMatch(/secret-key|abc123/i)
       expect(result.current.persistence.message).not.toMatch(
@@ -219,6 +214,7 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     const refusal = await refusalOf(() => result.current.deleteDocument())
     expect(refusal).not.toMatch(/secret-credential-xyz/i)
     expect(refusal).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
@@ -253,6 +249,7 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     const refusal = await refusalOf(() => result.current.deleteDocument())
     expect(refusal).toMatch(/\bnote\b/)
     expect(refusal).not.toMatch(/\bcanvas\b/i)
@@ -294,6 +291,7 @@ describe('useBrowserDocumentController', () => {
     })
     expect(caught).toBeInstanceOf(Error)
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
   })
 
   it('deleteDocument aborts when flush fails — preserves data copy', async () => {
@@ -328,6 +326,7 @@ describe('useBrowserDocumentController', () => {
       await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('degraded')
+    await expectLoggedFailure('a rename could not be saved')
     // Refused, and SAYS so: the rejection is the sentence the page shows.
     expect(await refusalOf(() => result.current.deleteDocument())).toMatch(/could not be safely/)
     expect(result.current.snapshot).not.toBeNull()
@@ -1180,6 +1179,7 @@ describe('useBrowserDocumentController', () => {
 
       expect(switchSettled).toBe(true)
       expect(result.current.persistence.kind).toBe('degraded')
+      await expectLoggedFailure('a rename could not be saved')
       // The failed flush must abort the switch: default pointer stays on the
       // original canvas instead of silently losing the rename.
       expect(await store.getDefaultDocumentId()).toBe(C1)

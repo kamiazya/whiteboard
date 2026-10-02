@@ -8,7 +8,13 @@ import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboar
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { renderSpatialCanvasToSvg } from './headless-renderer.js'
+import { renderSpatialCanvasToSvg as renderSvgIn } from './headless-renderer.js'
+import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
+
+const renderSpatialCanvasToSvg = (
+  canvas: Parameters<typeof renderSvgIn>[0],
+  options?: Parameters<typeof renderSvgIn>[2],
+) => renderSvgIn(canvas, NO_INSTALLED_FONTS, options)
 
 const themed = (theme: string): SpatialCanvas => ({
   nodes: [

@@ -13,7 +13,8 @@ Contributor and maintainer guides:
 - **[observability](observability.md)** — OpenTelemetry tracing for the daemon and MCP entrypoint.
 - **[review-checklist](review-checklist.md)** — checklist for PR authors and reviewers.
 - **[deployment/cloudflare-pages](deployment/cloudflare-pages.md)** — deploying the hosted browser app.
-- **[architecture/wire-protocol](architecture/wire-protocol.md)** — the live-sync wire-protocol reference (the only page under `architecture/`; the architecture overview is [explanation/architecture](../explanation/architecture.md)).
+- **[architecture/wire-protocol](architecture/wire-protocol.md)** — the live-sync wire-protocol reference (the architecture overview is [explanation/architecture](../explanation/architecture.md)).
+- **[architecture/canvas-render-decisions](architecture/canvas-render-decisions.md)** — the measurements, rejected alternatives and incident history behind the canvas-render package's standing rules, which `.claude/rules/package-canvas-render.md` keeps in short form.
 - **[adr/](adr/)** — Architecture Decision Records (MADR-lite; numbered, lifecycle-tracked).
 
 See also the repo-root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [AGENTS.md](../../AGENTS.md).

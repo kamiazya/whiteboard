@@ -338,8 +338,8 @@ describe('composition roots share one boot sequence and one live audience', () =
 
     expect(roots.map((r) => r.file).sort()).toEqual([
       'server/http-server.ts',
-      'server/mcp/index.ts',
       'server/server-mode-http.ts',
+      'server/stdio-root.ts',
     ])
     expect(roots.flatMap((r) => r.missing.map((m) => `${r.file}: ${m}`))).toEqual([])
   })

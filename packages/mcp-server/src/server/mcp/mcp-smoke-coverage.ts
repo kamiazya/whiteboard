@@ -2,7 +2,7 @@
  * Classification of all registered MCP tools by smoke-test coverage level.
  *
  * ALL_REGISTERED_TOOLS is the authoritative list that mirrors what
- * createMcpServer (index.ts) registers at runtime via registerDocumentTools.
+ * createMcpServer (server.ts) registers at runtime via registerDocumentTools.
  * It is defined independently of the three category arrays below so that the
  * meta-property test can verify category completeness without self-reference.
  *

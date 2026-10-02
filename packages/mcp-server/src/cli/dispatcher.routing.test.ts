@@ -5,7 +5,7 @@ import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 // Each mock returns the minimal shape needed to exercise the routing
 // branch and assert exit code. Handler behavior is tested elsewhere.
 
-vi.mock('../server/mcp/index.js', () => ({
+vi.mock('../server/stdio-root.js', () => ({
   main: vi.fn(async () => undefined),
 }))
 
@@ -156,7 +156,7 @@ vi.mock('./server-support-bundle.js', () => ({
 }))
 
 // Import modules after mocks are installed.
-const mcpModule = await import('../server/mcp/index.js')
+const mcpModule = await import('../server/stdio-root.js')
 const daemonStatusModule = await import('./daemon-status.js')
 const daemonDoctorModule = await import('./daemon-doctor.js')
 const daemonStopModule = await import('./daemon-stop.js')

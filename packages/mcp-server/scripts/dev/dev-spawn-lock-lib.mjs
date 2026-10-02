@@ -90,7 +90,7 @@ function createLockFileExclusive(lockPath, content, { fsOpen, fsWrite, fsClose }
  * fallback (wait for the daemon) instead of a thrown exception killing a
  * SessionStart hook.
  *
- * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: typeof writeSync, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
+ * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
  * @returns {'acquired' | 'held-by-other'}
  */
 export function acquireSpawnLock({

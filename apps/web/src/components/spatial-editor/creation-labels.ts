@@ -20,5 +20,3 @@ export const CREATION_LABELS = {
   document: 'Document',
   image: 'Image',
 } as const
-
-export type CreationLabel = (typeof CREATION_LABELS)[keyof typeof CREATION_LABELS]

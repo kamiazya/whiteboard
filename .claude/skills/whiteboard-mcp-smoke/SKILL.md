@@ -12,7 +12,7 @@ This repository splits verification targets into two categories.
   `packages/daemon-client/src/sse-backend.ts` (the only transport since the
   WebSocket client went, ADR-0050)
 - **MCP schema/registration-side changes**
-  Example: descriptions, schemas, or registration in `src/server/mcp/index.ts` and `src/server/mcp/tools/**`
+  Example: descriptions, schemas, or registration in `src/server/mcp/server.ts` (the factory), `src/server/mcp/document-tools.ts` and `src/server/mcp/tools/**`
 
 ## Decide First
 
@@ -115,9 +115,9 @@ first passes. Do not open with a quota-consuming one.
 - `RPC <method> timed out`
   - MCP failed to start, or stdio is blocked
 - If the target tool does not appear in `tools/list`
-  - It is likely missing from `src/server/mcp/index.ts`
+  - It is likely missing from `src/server/mcp/document-tools.ts` (the factory is `src/server/mcp/server.ts`)
 - If you get an error other than `no_client`
-  - A guard likely regressed in `routes/export.ts`, `routes/viewport-requests.ts`, or `routes/sync-audience.ts`
+  - A guard likely regressed in `routes/export.ts`, `viewport-requests.ts`, or `sync-audience.ts` (the latter two under `src/server/`)
 - If version restore returns the wrong element count
   - There is likely a regression in `routes/document.ts` or `store/version-store.ts`
 

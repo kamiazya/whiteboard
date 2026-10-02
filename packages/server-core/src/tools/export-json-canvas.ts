@@ -9,7 +9,7 @@ import { loadDocument } from './document-io.js'
  * field is accepted for API symmetry with workspace-scoped tools and as a
  * future authorization-scoping hook, not passed to the store.
  */
-export const exportJsonCanvasInputSchema = z
+const exportJsonCanvasInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
@@ -21,7 +21,7 @@ export const exportJsonCanvasInputSchema = z
   .strict()
 export type ExportJsonCanvasInput = z.infer<typeof exportJsonCanvasInputSchema>
 
-export const exportJsonCanvasOutputSchema = z.object({ json: z.string() }).strict()
+const exportJsonCanvasOutputSchema = z.object({ json: z.string() }).strict()
 export type ExportJsonCanvasOutput = z.infer<typeof exportJsonCanvasOutputSchema>
 
 /**

@@ -74,7 +74,7 @@ export type TraceEntry =
   /** The one place the component resets the machine outside the reducer. */
   | { kind: 'reset'; at: number; reason: string }
 
-export interface RecordedNavigation {
+interface RecordedNavigation {
   readonly at: number
   readonly event: NavigationEvent
   readonly before: NavigationState

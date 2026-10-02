@@ -99,7 +99,7 @@ vi.mock('./native-host.js', () => ({
     return 0
   }),
 }))
-vi.mock('../server/mcp/index.js', () => ({
+vi.mock('../server/stdio-root.js', () => ({
   main: vi.fn(async () => {
     answer('mcp', readDataDirFromEnv())
     throw new Error('stubbed stdio server')

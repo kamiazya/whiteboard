@@ -16,7 +16,7 @@ export type LineHeightOf = (theme: MarkdownTheme) => number
  * list's checkbox is an outline around nothing. Every other piece of chrome
  * over there paints a surface (`panelPaint`), so nothing else has a stroke.
  */
-export function outlinePaint(theme: MarkdownTheme, opacity: number): Appearance {
+function outlinePaint(theme: MarkdownTheme, opacity: number): Appearance {
   return {
     fill: 'none',
     stroke: theme.chromeColor,

@@ -132,9 +132,5 @@ export const workspaceDisplayNameSchema = z
   )
 
 export type DocumentId = z.infer<typeof documentIdSchema>
-export type DocumentPath = z.infer<typeof documentPathSchema>
 export type NodeId = z.infer<typeof nodeIdSchema>
 export type WorkspaceId = z.infer<typeof workspaceIdSchema>
-export type WorkspaceCanonicalId = z.infer<typeof workspaceCanonicalIdSchema>
-export type WorkspaceSegment = z.infer<typeof workspaceSegmentSchema>
-export type WorkspaceDisplayName = z.infer<typeof workspaceDisplayNameSchema>

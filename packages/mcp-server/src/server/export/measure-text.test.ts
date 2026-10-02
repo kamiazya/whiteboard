@@ -4,11 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FontDescriptor, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { captureLogsForTests } from '../log.js'
+import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
-import { installedFontDir } from './installed-fonts.js'
 import { _resetExportMeasureTextCacheForTests, createExportTextMeasurer } from './measure-text.js'
 import { opentypeMeasureText } from './test-utils/opentype-measure.js'
 
@@ -247,6 +246,7 @@ describe('a code point the vendored face does not carry', () => {
 describe('a descriptor naming an installed family', () => {
   const INSTALLED_FAMILY = 'WhiteboardTestFont'
   const TEXT = 'xxxx xxxx'
+  let fontsDir: string
 
   const descriptor = (family: string): FontDescriptor => ({
     family,
@@ -257,21 +257,20 @@ describe('a descriptor naming an installed family', () => {
   })
 
   beforeEach(async () => {
-    // The parsed faces are cached per process, so the cache has to be dropped
-    // around a data directory this test is about to change.
+    // The parsed faces are cached per fonts directory; a fresh one per test
+    // keeps the cache from carrying a family into the next.
     _resetExportMeasureTextCacheForTests()
-    setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-measure-family-')))
-    await mkdir(installedFontDir(), { recursive: true })
-    await writeFile(join(installedFontDir(), 'covered.ttf'), syntheticFont(TEXT))
+    fontsDir = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-measure-family-')))
+    await mkdir(fontsDir, { recursive: true })
+    await writeFile(join(fontsDir, 'covered.ttf'), syntheticFont(TEXT))
   })
 
   afterEach(() => {
     _resetExportMeasureTextCacheForTests()
-    resetDataDirForTests()
   })
 
   it('is measured with that face, not with the vendored one', async () => {
-    const measure = await opentypeMeasureText()
+    const measure = await opentypeMeasureText({ fontsDir })
     const installed = measure(TEXT, descriptor(INSTALLED_FAMILY)).advanceWidth
     const bundled = measure(TEXT, descriptor(EXPORT_FONT_FAMILY)).advanceWidth
     // The synthetic face is a full em per glyph; Roboto is nothing like it.
@@ -280,12 +279,23 @@ describe('a descriptor naming an installed family', () => {
   })
 
   it('answers the family question from the faces it actually holds', async () => {
-    const measurer = await createExportTextMeasurer()
+    const measurer = await createExportTextMeasurer({ fontsDir })
     expect(measurer.measurableFamilies.has(INSTALLED_FAMILY)).toBe(true)
     // The bundled family is always answerable: it is what the layout falls
     // back to declaring when a theme's family is not.
     expect(measurer.measurableFamilies.has(EXPORT_FONT_FAMILY)).toBe(true)
     expect(measurer.measurableFamilies.has('Nothing Installed')).toBe(false)
+  })
+
+  it('keeps one measurer per fonts directory, so another keeper does not inherit the family', async () => {
+    const empty = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-measure-empty-')))
+
+    const withFont = await createExportTextMeasurer({ fontsDir })
+    const without = await createExportTextMeasurer({ fontsDir: empty })
+
+    expect(withFont.measurableFamilies.has(INSTALLED_FAMILY)).toBe(true)
+    expect(without.measurableFamilies.has(INSTALLED_FAMILY)).toBe(false)
+    expect(await createExportTextMeasurer({ fontsDir })).toBe(withFont)
   })
 
   it('keeps the weight/style dispatch for the bundled family, which has four faces', async () => {

@@ -37,7 +37,7 @@ export type RenderSurfaceId =
  * in export, which is a file a person asks for rather than a surface this
  * ledger tallies.
  */
-export type RenderPipeline = BrokeredPipeline
+type RenderPipeline = BrokeredPipeline
 
 type KindCoverage = 'covered' | `not covered: ${string}`
 type BrokerUse = 'through' | `not yet: ${string}`

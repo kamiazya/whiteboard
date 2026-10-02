@@ -41,6 +41,15 @@ pre-push:
     # under push-time load is a full suite on a saturated machine.
     noconsole:
       run: pnpm lint:noconsole
+    # `pnpm lint` is one `biome check` over the repo, and ~62% of its CPU is the
+    # GritQL plugins. Three interleaved with/without pairs, 3373 files, load
+    # average 9-12: CPU time (user + sys) 50.2, 50.3, 49.1s with the four plugins
+    # against 19.1, 18.8, 18.7s with `plugins: []` (mean 49.9 -> 18.9s); wall
+    # 33.9, 27.7, 19.5s against 11.8, 13.5, 8.4s. All of it is one plugin:
+    # `test-flake-shapes.grit` alone cost 49.6 and 48.2s of CPU in two runs, and
+    # each of the other three alone cost the same as none (19.0-19.6s). It earns
+    # that by matching on every test file, which is also why it is the one that
+    # grows with the suite.
     lint:
       run: pnpm lint
     # ~1s, and it is the only check anywhere that notices the mutation lane
@@ -89,5 +98,13 @@ pre-push:
     # invariant is "this is the slowest command and adds tens of seconds", not
     # any one reading. It stays because the failure it prevents is a push CI
     # rejects, and a push is rarer than a commit.
+    #
+    # The project now runs with `isolate: false` (its config says why that is
+    # safe here and how it was checked). Three interleaved plain/no-isolate
+    # pairs of the whole project, load average 17-27 on 4 cores: CPU time
+    # (user + sys) 102.1s -> 54.2s, wall 145.6s -> 65.8s. The ~45s quiet and
+    # 103-138s pre-push figures above predate it and were NOT re-taken, because
+    # this box never went quiet: read them as upper bounds, and re-measure
+    # before quoting any of them.
     arch-lint:
       run: pnpm vitest run --project arch-lint-node

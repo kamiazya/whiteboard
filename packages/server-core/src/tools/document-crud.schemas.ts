@@ -152,14 +152,8 @@ export const wbDocumentDeleteOutputSchema = z
 
 /**
  * Tool descriptions live beside the schemas they describe so metadata and
- * validation cannot drift. These four register with literal names rather
- * than through a tool object, so they have nowhere else to live.
+ * validation cannot drift. This one registers with a literal name rather
+ * than through a tool object, so it has nowhere else to live.
  */
-export const WB_DOCUMENT_CREATE_DESCRIPTION =
-  'Create an empty document at a path in a workspace. The path is the placement: `plan/sub` sits under `plan`.'
 export const WB_DOCUMENT_LIST_DESCRIPTION =
   'List the documents in a workspace with their placement. An unknown workspace is an error rather than an empty list, so a mistyped workspaceId cannot be mistaken for a genuinely empty workspace.'
-export const WB_DOCUMENT_RESOLVE_DESCRIPTION =
-  'Resolve a document id to its path. Returns placement only, never content.'
-export const WB_DOCUMENT_DELETE_DESCRIPTION =
-  'Delete a document. Fails if documents sit below it — deletion is not recoverable, so the caller names what it destroys.'

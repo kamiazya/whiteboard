@@ -190,7 +190,7 @@ export interface MultiKey {
 }
 
 /** @see FacetScore.channels */
-export type ChannelUse = 'carried' | 'contested' | 'unused'
+type ChannelUse = 'carried' | 'contested' | 'unused'
 
 /**
  * What a channel is doing, and — when it is carrying something — WHICH
@@ -208,7 +208,7 @@ export type ChannelUse = 'carried' | 'contested' | 'unused'
  * whether it is healthy), so the instrument had to be able to see it before
  * a board could be judged on it.
  */
-export interface ChannelReading {
+interface ChannelReading {
   readonly use: ChannelUse
   readonly carriedBy: readonly string[]
 }

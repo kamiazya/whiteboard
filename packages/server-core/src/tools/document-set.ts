@@ -60,7 +60,7 @@ export const documentSetInputSchema = z
   .strict()
 export type DocumentSetInput = z.infer<typeof documentSetInputSchema>
 
-export const documentSetOutputSchema = z
+const documentSetOutputSchema = z
   .object({
     documentId: documentIdSchema,
     imported: z.literal(true),
