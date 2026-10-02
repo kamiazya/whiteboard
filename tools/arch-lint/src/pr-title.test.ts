@@ -1,11 +1,19 @@
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-// The script CI runs, not a copy of it: pr-title.yml executes this file.
-import { explainPullRequestTitleRule, isValidPullRequestTitle } from '../../check-pr-title.mjs'
 import { REPO_ROOT } from './scan-roots.js'
 
 const SCRIPT = join(REPO_ROOT, 'tools/check-pr-title.mjs')
+
+// The script CI runs, not a copy of it: pr-title.yml executes this file. Loaded
+// by path with a cast, as the other tests over tools/*.mjs do.
+const { explainPullRequestTitleRule, isValidPullRequestTitle } = (await import(
+  pathToFileURL(SCRIPT).href
+)) as {
+  explainPullRequestTitleRule: () => string
+  isValidPullRequestTitle: (title: string) => boolean
+}
 
 function runScript(...args: string[]) {
   return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' })

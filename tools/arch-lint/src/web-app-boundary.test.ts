@@ -336,15 +336,12 @@ describe('apps/web/src scan coverage', () => {
     // vite-env.d.ts is a hand-written Vite client type reference, not a tsc emit.
     const HAND_WRITTEN_DTS = new Set(['vite-env.d.ts'])
     const emitted: string[] = []
-    for (const entry of readdirSync(APPS_WEB_SRC_DIR, {
+    for (const { name } of readdirSync(APPS_WEB_SRC_DIR, {
       withFileTypes: true,
       recursive: true,
-    } as Parameters<typeof readdirSync>[1])) {
-      if (typeof entry === 'object' && 'name' in entry) {
-        const name = (entry as { name: string }).name
-        if (/\.(js|d\.ts)$/.test(name) && !HAND_WRITTEN_DTS.has(name)) {
-          emitted.push(name)
-        }
+    })) {
+      if (/\.(js|d\.ts)$/.test(name) && !HAND_WRITTEN_DTS.has(name)) {
+        emitted.push(name)
       }
     }
     expect(

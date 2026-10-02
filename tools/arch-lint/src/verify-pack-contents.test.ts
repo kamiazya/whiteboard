@@ -26,6 +26,7 @@ interface MainOptions {
     opts: Record<string, unknown>,
   ) => { status: number | null; error?: Error; stdout?: string }
   readStdin?: () => string
+  platform?: string
 }
 
 async function importModule() {
