@@ -11,7 +11,7 @@
  * guard is defending against.
  *
  * `save` performs the actual write and resolves to a COMMIT THUNK: the
- * post-save announce work (thumbnail attach, event dispatch) that must run
+ * post-save announce work (event dispatch) that must run
  * only while the save's own document is still the one on screen. Returning
  * it instead of running it inline is what keeps the outcome applied before
  * that work runs, and skipped along with it after a switch — flattening the

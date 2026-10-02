@@ -23,11 +23,10 @@ import { DB_FILENAME } from '../store/db/location.js'
 import { storeAreaOf } from './data-layout.js'
 
 // Derived from the wire schema rather than written alongside it. A
-// hand-written interface beside a Zod schema is the shape that shipped the
-// `create_frame` `assignedMembers` bug, and here the two had already drifted
-// in the direction nobody sees: the schema's `byCategory` was an open
-// `z.record(z.string(), …)`, so the Storage tab could ask for a category this
-// walk never produces and get a permanent 0 B row instead of a failure.
+// hand-written interface beside a Zod schema can drift in the direction
+// nobody sees: an open `z.record(z.string(), …)` for `byCategory` would let
+// the Storage tab ask for a category this walk never produces and get a
+// permanent 0 B row instead of a failure.
 //
 // `exports` holds the PNG / JSON files a user exported. It is kept out of
 // "other" because it is legitimate user data the UI must not invite them to

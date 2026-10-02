@@ -729,7 +729,7 @@ describe('DaemonDocumentPage', () => {
         (input, init) => {
           const url = String(input)
           // The panel LISTS versions on mount, and this mock only answered the
-          // POST — so the catch-all reached `versionsResponseSchema` and this
+          // POST — so the catch-all reached `listVersionsResponseSchema` and this
           // test quietly exercised a schema failure it is not about.
           if (
             url.includes('/workspaces/w1/documents/main/versions') &&

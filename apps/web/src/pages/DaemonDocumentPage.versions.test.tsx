@@ -109,7 +109,7 @@ describe('DaemonDocumentPage versions', () => {
         (input, init) => {
           const url = String(input)
           // The panel LISTS versions on mount, and this mock only answered the
-          // POST — so the catch-all `{}` below reached `versionsResponseSchema`
+          // POST — so the catch-all `{}` below reached `listVersionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
           if (
@@ -176,7 +176,7 @@ describe('DaemonDocumentPage versions', () => {
         (input, init) => {
           const url = String(input)
           // The panel LISTS versions on mount, and this mock only answered the
-          // POST — so the catch-all `{}` below reached `versionsResponseSchema`
+          // POST — so the catch-all `{}` below reached `listVersionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
           if (
@@ -222,7 +222,7 @@ describe('DaemonDocumentPage versions', () => {
         (input, init) => {
           const url = String(input)
           // The panel LISTS versions on mount, and this mock only answered the
-          // POST — so the catch-all `{}` below reached `versionsResponseSchema`
+          // POST — so the catch-all `{}` below reached `listVersionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
           if (
