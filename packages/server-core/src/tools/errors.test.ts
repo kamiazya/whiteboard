@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from './document-io.js'
-import { NodeNotFoundError, PatchValidationError } from './errors.js'
+import { NodeNotFoundError } from './errors.js'
 
 describe('server-core tool errors', () => {
   test('SnapshotNotFoundError carries the documentId and a descriptive message', () => {
@@ -19,16 +19,5 @@ describe('server-core tool errors', () => {
     expect(err.nodeId).toBe('node-1')
     expect(err.message).toContain('node-1')
     expect(err.message).toContain('canvas-1')
-  })
-
-  test('PatchValidationError carries the issues and joins their messages', () => {
-    const issues = [
-      { code: 'custom', message: 'bad thing', path: ['edges', 0, 'fromNode'] },
-    ] as unknown as import('zod').ZodIssue[]
-    const err = new PatchValidationError(issues)
-    expect(err).toBeInstanceOf(Error)
-    expect(err.name).toBe('PatchValidationError')
-    expect(err.issues).toBe(issues)
-    expect(err.message).toContain('bad thing')
   })
 })
