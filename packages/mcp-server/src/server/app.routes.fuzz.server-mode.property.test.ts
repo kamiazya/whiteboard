@@ -41,6 +41,7 @@ import {
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { RULES as DAEMON_RULES } from './_test-route-fuzz-daemon-rules.js'
 import {
   assertLedger,
@@ -197,7 +198,7 @@ function composedApp(
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     people: stores.people,
     signIn: {

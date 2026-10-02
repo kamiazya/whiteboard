@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
+import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 // Imported STATICALLY, though nothing here mocks it. As `await import()`
 // inside the test body, the cost of transforming and loading app.ts's whole
 // module graph was charged to the 10s per-test budget — fine on an idle
@@ -73,7 +74,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       // single v1 route and the whole surface is exempt from the guard by
       // accident. The in-memory container is enough: this test inspects
       // `app.routes` and never issues a request.
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
     })
 
@@ -135,7 +136,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       // single v1 route and the whole surface is exempt from the guard by
       // accident. The in-memory container is enough: this test inspects
       // `app.routes` and never issues a request.
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
     })
 

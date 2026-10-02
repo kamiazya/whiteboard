@@ -4,6 +4,7 @@
  * person's, and another person's agent reaches it neither by reading nor by
  * "creating" it again.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,6 +12,7 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { type CryptoKey, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
 import { oidcProviders } from './security/_test-helpers.js'
@@ -80,7 +82,7 @@ beforeEach(async () => {
         keyResolver: async () => publicKey,
       }),
     }),
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     people: {
       members,

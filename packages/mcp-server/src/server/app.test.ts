@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/client'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 
@@ -39,7 +40,7 @@ function createRuntimeOptions(
     token,
     mcpProtectedResourceMetadata: options?.protectedResourceMetadata,
     // The root's deps, over the memory store: nothing here reads a document.
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     touch: vi.fn(),
     getStatus: () => ({

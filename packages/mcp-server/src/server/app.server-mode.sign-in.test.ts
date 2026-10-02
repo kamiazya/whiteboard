@@ -3,10 +3,12 @@
  * providers are configured, and ahead of the placeholder page that would
  * otherwise answer every path.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
 import { DENY_ALL_STRATEGY, oidcProviders } from './security/_test-helpers.js'
@@ -42,7 +44,7 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
     // The root's deps, over the memory store: nothing here reads a document.
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     authStrategy: DENY_ALL_STRATEGY,
     touch: () => {},

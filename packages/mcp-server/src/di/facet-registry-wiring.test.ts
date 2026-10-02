@@ -14,10 +14,12 @@
 // file naming module specifiers to import IS runtime code loading wearing a
 // config file's clothes. Distribution time means whoever BUILDS or EMBEDS
 // this server chooses the set, in code, which is what an argument is.
+
 import { createFacetRegistry, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import { bundledPlugins, visualPlugin } from '@kamiazya/whiteboard-plugin-visual'
 import { createFacetListTool } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { createContainer, resolveServerDeps } from './container.js'
 
 const pack = definePlugin({
@@ -32,17 +34,19 @@ describe('a composition root chooses the plugin set', () => {
     // The seam is LIVE: absent here, each tool's own `?? bundledFacetRegistry`
     // silently answered, so nothing could tell a configured deployment from
     // an unconfigured one.
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
     expect(deps.facetRegistry).toBeDefined()
   })
 
   it('defaults to the bundled plugins, so an unconfigured daemon is unchanged', () => {
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
     expect(deps.facetRegistry?.plugins).toEqual(bundledPlugins)
   })
 
   it('carries a set the root passed, including a plugin this repo did not ship', () => {
-    const deps = resolveServerDeps(createContainer(), { plugins: [visualPlugin, pack] })
+    const deps = resolveServerDeps(createContainer(storeMemoryModule), {
+      plugins: [visualPlugin, pack],
+    })
     expect(deps.facetRegistry?.assetIds('stencils')).toContain('infra.bucket')
   })
 
@@ -50,14 +54,14 @@ describe('a composition root chooses the plugin set', () => {
     // "The bundled plugin goes through this same pipeline with no privileged
     // wiring — it is ordinary, disable-able". A root that composes only its
     // own plugins must get exactly those.
-    const deps = resolveServerDeps(createContainer(), { plugins: [pack] })
+    const deps = resolveServerDeps(createContainer(storeMemoryModule), { plugins: [pack] })
     expect(deps.facetRegistry?.plugins.map((plugin) => plugin.id)).toEqual(['infra'])
     expect(deps.facetRegistry?.assetIds('stencils')).toEqual(['infra.bucket'])
   })
 
   it('builds the registry ONCE, since it is immutable data and every call reads it', () => {
-    const deps = resolveServerDeps(createContainer())
-    const again = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
+    const again = resolveServerDeps(createContainer(storeMemoryModule))
     // Two roots are two registries; one root is one. What must not happen is
     // a fresh registry per tool call, which is what a `?? createFacetRegistry(...)`
     // inside a handler would have produced.
@@ -69,7 +73,7 @@ describe('a composition root chooses the plugin set', () => {
     // A root that needs the registry for something else (a renderer, a
     // picker) must not be forced to build a second one that disagrees.
     const registry = createFacetRegistry([visualPlugin, pack])
-    const deps = resolveServerDeps(createContainer(), { facetRegistry: registry })
+    const deps = resolveServerDeps(createContainer(storeMemoryModule), { facetRegistry: registry })
     expect(deps.facetRegistry).toBe(registry)
   })
 
@@ -81,7 +85,9 @@ describe('a composition root chooses the plugin set', () => {
     // Through the real `resolveServerDeps`, not a hand-built `deps`: the
     // hand-built kind is exactly what hid the gap, because it supplied the
     // registry the production path never did.
-    const deps = resolveServerDeps(createContainer(), { plugins: [visualPlugin, pack] })
+    const deps = resolveServerDeps(createContainer(storeMemoryModule), {
+      plugins: [visualPlugin, pack],
+    })
     const result = await createFacetListTool(deps).execute({ assetKind: 'stencils' })
     expect(result.assets.map((asset) => asset.id)).toContain('infra.bucket')
   })

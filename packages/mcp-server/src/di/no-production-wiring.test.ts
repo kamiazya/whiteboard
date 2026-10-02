@@ -31,6 +31,9 @@ const productionSources = {
     eager: true,
     import: 'default',
   }),
+  // The composition itself: `createContainer` takes its store module as an
+  // argument, so nothing in here may name the in-memory one.
+  ...import.meta.glob('./**/*.ts', { query: '?raw', eager: true, import: 'default' }),
   ...import.meta.glob('../server/mcp/**/*.ts', { query: '?raw', eager: true, import: 'default' }),
   ...import.meta.glob('../server/routes/**/*.ts', {
     query: '?raw',
@@ -41,12 +44,12 @@ const productionSources = {
 
 const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
   {
-    name: 'static import of di/store-memory.module',
-    pattern: /from\s+['"].*di\/store-memory\.module/,
+    name: 'static import of the store-memory module',
+    pattern: /from\s+['"].*store-memory\.module/,
   },
   {
-    name: 'dynamic import of di/store-memory.module',
-    pattern: /import\(['"].*di\/store-memory\.module/,
+    name: 'dynamic import of the store-memory module',
+    pattern: /import\(['"].*store-memory\.module/,
   },
   { name: 'server/store/inmemory import', pattern: /server\/store\/inmemory/ },
   { name: 'bare storeMemoryModule identifier', pattern: /\bstoreMemoryModule\b/ },

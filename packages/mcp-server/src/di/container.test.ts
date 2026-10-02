@@ -7,21 +7,22 @@ import { EXPORT_FONT_FAMILY } from '../server/export/export-font.js'
 import { documentTeardown } from '../server/store/document-store.js'
 import { documentWritten } from '../server/store/document-written.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { createContainer, resolveServerDeps } from './container.js'
 
 describe('createContainer', () => {
   it('resolves TOKENS.DocumentStore to an InMemoryDocumentStore', () => {
-    const container = createContainer()
+    const container = createContainer(storeMemoryModule)
     expect(container.get(TOKENS.DocumentStore)).toBeInstanceOf(InMemoryDocumentStore)
   })
 
   it('resolves TOKENS.BlobStore to an InMemoryBlobStore', () => {
-    const container = createContainer()
+    const container = createContainer(storeMemoryModule)
     expect(container.get(TOKENS.BlobStore)).toBeInstanceOf(InMemoryBlobStore)
   })
 
   it('resolves each port to the same singleton instance across repeated calls', () => {
-    const container = createContainer()
+    const container = createContainer(storeMemoryModule)
 
     expect(container.get(TOKENS.DocumentStore)).toBe(container.get(TOKENS.DocumentStore))
     expect(container.get(TOKENS.BlobStore)).toBe(container.get(TOKENS.BlobStore))
@@ -30,7 +31,7 @@ describe('createContainer', () => {
 
 describe('resolveServerDeps', () => {
   it('assembles ServerDeps from container.get(TOKENS.X) for both ports', () => {
-    const container = createContainer()
+    const container = createContainer(storeMemoryModule)
 
     const deps = resolveServerDeps(container)
 
@@ -40,7 +41,7 @@ describe('resolveServerDeps', () => {
   })
 
   it('supplies the real opentype measurer, not the constant-ratio fallback', async () => {
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
 
     const measurer = await deps.textMeasurer?.()
     const measure = measurer?.measure
@@ -100,13 +101,13 @@ describe('resolveServerDeps document teardown', () => {
   // which never registers routes — had no subscriber at all. Asserting the
   // container supplies it is what stops that shape returning.
   it('supplies the write observer, so stdio MCP schedules compaction too', () => {
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
 
     expect(deps.documentWritten).toBe(documentWritten)
   })
 
   it("supplies the composition root's own teardown, not an inert stub", () => {
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
 
     expect(deps.documentTeardown).toBe(documentTeardown)
   })

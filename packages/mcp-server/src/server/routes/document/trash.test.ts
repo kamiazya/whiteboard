@@ -16,6 +16,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../../../shared/test-utils/store-memory.module.js'
 import { testDataLayout, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-trash-test-')
@@ -112,7 +113,7 @@ describe('trash routes', () => {
   it('a composition without the trash capability answers 501 on both routes', async () => {
     // The default (in-memory) module binds an index with no listTrash /
     // restoreDocument, so resolveServerDeps leaves deps.trash undefined.
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
     expect(deps.trash).toBeUndefined()
     const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps: deps })
 

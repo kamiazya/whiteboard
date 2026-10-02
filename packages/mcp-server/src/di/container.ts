@@ -24,9 +24,8 @@ import { documentWritten } from '../server/store/document-written.js'
 import { liveDocuments, workspaceDocuments } from '../server/store/live-documents.js'
 import { FileVersionStore } from '../server/store/version-store.js'
 import { agentVersionHistory } from './agent-version-history.js'
-import { storeMemoryModule } from './store-memory.module.js'
 
-export function createContainer(storeModule: ContainerModule = storeMemoryModule): Container {
+export function createContainer(storeModule: ContainerModule): Container {
   const container = new Container()
   container.load(storeModule)
   return container

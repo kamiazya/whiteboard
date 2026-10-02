@@ -6,9 +6,11 @@
  * routes existed. The mount sits under the same /api/* daemon auth as every
  * other API route.
  */
+
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-app-v1-test-')
@@ -68,7 +70,7 @@ describe('createApp /api/v1 document mount', () => {
   })
 
   it('serves the v1 canvas list behind daemon auth when serverDeps are provided', async () => {
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
     const app = createApp({
       ...createRuntimeOptions('secret'),
       serverDeps: deps,
@@ -88,7 +90,7 @@ describe('createApp /api/v1 document mount', () => {
   })
 
   it('round-trips create → list with the document path', async () => {
-    const deps = resolveServerDeps(createContainer())
+    const deps = resolveServerDeps(createContainer(storeMemoryModule))
     const app = createApp({
       ...createRuntimeOptions('secret'),
       serverDeps: deps,

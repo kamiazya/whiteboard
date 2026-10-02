@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { serverModeSignIn } from '../_test-server-mode-harness.js'
 import { createApp } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
@@ -165,7 +166,7 @@ function serverModeApp(
     authStrategy: DENY_ALL_STRATEGY,
     touch: () => {},
     getStatus: () => ({}) as never,
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     // The `/auth` routes mount only with a provider configured (ADR-0046).
     signIn: serverModeSignIn(db, createRelyingParty()),
@@ -191,7 +192,7 @@ function localDaemonApp(db: IsolatedDbHandle['db']) {
     token: 'test-token',
     touch: () => {},
     getStatus: () => ({}) as never,
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     replicaKeys: createWorkspaceReplicaKeyStore(db, { defaultTier: 'offline' }),
   })
