@@ -11,7 +11,7 @@ import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import type { LoroStoreLike } from '../pages/use-browser-document-controller.js'
 
 /** The pointer a test gets when it is testing a page, not persistence. */
-export class InMemoryDefaultDocumentPointer implements DefaultDocumentPointer {
+class InMemoryDefaultDocumentPointer implements DefaultDocumentPointer {
   private documentId: string | null = null
 
   async get(): Promise<string | null> {

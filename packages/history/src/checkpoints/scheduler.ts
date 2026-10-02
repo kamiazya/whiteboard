@@ -33,7 +33,7 @@ import { frontiersToBase64 } from '../frontiers-base64.js'
 /** The pause after which a document is considered settled. */
 export const CHECKPOINT_QUIET_MS = 5 * 60_000
 /** How long editing may run with no pause before a checkpoint is taken regardless. */
-export const CHECKPOINT_CEILING_MS = 30 * 60_000
+const CHECKPOINT_CEILING_MS = 30 * 60_000
 
 export interface CheckpointSchedulerOptions<Entry> {
   readonly quietMs?: number
