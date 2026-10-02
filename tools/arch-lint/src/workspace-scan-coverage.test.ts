@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ARCHITECTURE_MAP } from './architecture-map.js'
@@ -7,7 +7,7 @@ import {
   COMPOSITION_ROOTS,
   SHARED_LAYER_PACKAGES,
 } from './scan-packages.js'
-import { REPO_ROOT } from './scan-roots.js'
+import { REPO_ROOT, workspaceDirs } from './scan-roots.js'
 import { scanSourceForBoundaryViolations } from './scanner.js'
 
 // What `repo-coverage.test.ts` scans, and the contracts that keep the lists it
@@ -40,28 +40,15 @@ const NOT_BOUNDARY_SCANNED: Readonly<Record<string, string>> = {
     'results, outside every runtime the shared layer has to hold on',
 }
 
-/** Every directory under `packages/`, `apps/` and `tools/` that carries a package.json. */
-function workspaceManifestDirs(): string[] {
-  return ['packages', 'apps', 'tools'].flatMap((root) =>
-    readdirSync(join(REPO_ROOT, root), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => `${root}/${entry.name}`)
-      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
-  )
-}
-
 describe('every workspace is in a per-package scan list', () => {
   const listed = new Set([...SHARED_LAYER_PACKAGES, ...COMPOSITION_ROOTS])
 
   it('finds the workspaces it is meant to check', () => {
-    expect(
-      workspaceManifestDirs().length,
-      'the workspace walk found almost nothing',
-    ).toBeGreaterThan(15)
+    expect(workspaceDirs().length, 'the workspace walk found almost nothing').toBeGreaterThan(15)
   })
 
   it('lists every workspace in SHARED_LAYER_PACKAGES or COMPOSITION_ROOTS, or exempts it with a reason', () => {
-    const unscanned = workspaceManifestDirs().filter(
+    const unscanned = workspaceDirs().filter(
       (dir) => !listed.has(dir) && NOT_BOUNDARY_SCANNED[dir] === undefined,
     )
     expect(
@@ -73,7 +60,7 @@ describe('every workspace is in a per-package scan list', () => {
   })
 
   it('keeps every NOT_BOUNDARY_SCANNED entry a real, otherwise unlisted workspace with a reason', () => {
-    const dirs = new Set(workspaceManifestDirs())
+    const dirs = new Set(workspaceDirs())
     const stale = Object.entries(NOT_BOUNDARY_SCANNED).filter(
       ([dir, reason]) => !dirs.has(dir) || listed.has(dir) || reason.trim().length <= 20,
     )

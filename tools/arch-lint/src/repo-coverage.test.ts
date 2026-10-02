@@ -18,7 +18,7 @@ import {
   listTsFiles,
   SHARED_LAYER_PACKAGES,
 } from './scan-packages.js'
-import { REPO_ROOT } from './scan-roots.js'
+import { REPO_ROOT, workspaceDirs } from './scan-roots.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 import { findTypeOnlyCycles } from './type-cycle-check.js'
 
@@ -505,16 +505,6 @@ describe('every workspace ships the path-scoped rule that teaches it', () => {
       documentedIn: '.claude/rules/dev-flow.md',
       mentions: 'ci-gate',
     },
-  }
-
-  /** Every directory carrying a package.json under the three workspace roots. */
-  function workspaceDirs(): string[] {
-    return Object.keys(RULE_PREFIX).flatMap((root) =>
-      readdirSync(join(REPO_ROOT, root), { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => `${root}/${entry.name}`)
-        .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
-    )
   }
 
   /**

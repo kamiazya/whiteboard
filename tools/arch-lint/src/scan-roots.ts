@@ -24,6 +24,24 @@ export const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
  */
 export const WORKTREES_PATH = '.claude/worktrees'
 
+/** The three top-level groups `pnpm-workspace.yaml` globs: `packages/*`, `apps/*`, `tools/*`. */
+export const WORKSPACE_GROUPS = ['packages', 'apps', 'tools'] as const
+
+/**
+ * Every workspace directory (`<group>/<name>`, repo-relative, `/`-separated)
+ * that carries a `package.json`, enumerated from the three groups above rather
+ * than listed — a workspace added to one of them joins every guard that walks
+ * this.
+ */
+export function workspaceDirs(): string[] {
+  return WORKSPACE_GROUPS.flatMap((group) =>
+    readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `${group}/${entry.name}`)
+      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
+  )
+}
+
 /** The `<sub>` directory of every package/tool matching a `<group>/*` glob that has one. */
 function groupSubdirs(group: string, sub: string): string[] {
   return readdirSync(join(REPO_ROOT, group), { withFileTypes: true })

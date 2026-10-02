@@ -189,6 +189,34 @@ fail; `FakeDocumentStore`, a test double, is exempted with its reason. Blind
 spot: only `implements` clauses are read, so an object literal typed as a port
 is not a member.
 
+## `relative-import-escape.test.ts`: the door the manifest checks cannot see
+
+Direction, allowed dependencies and package cycles all read MANIFESTS, and a
+relative specifier walks past every one: `export * from
+'../../codec/src/index.js'` planted in `packages/model/src` is an upward edge and
+a package cycle, and left the whole project green with `tsc` passing in `model`.
+Every relative specifier in every workspace's `src` (`packages/*`, `apps/*`,
+`tools/*`, tests and `test-utils` included) must now resolve inside that
+workspace. No shipped file may escape; the six tests that do, on purpose, are
+`ESCAPES` entries with reasons (three `mcp-server` release-policy tests reading
+`tools/arch-lint/src/job-section.ts` through its `.js` specifier, and three tests that read the root manifest
+or the root vitest config they police), both-sided like every ledger here. The
+workspace list is `scan-roots.ts`'s `workspaceDirs()`, enumerated from the three
+`pnpm-workspace.yaml` groups, so a new one joins without being listed.
+
+Its second half pins the cycle scan's own blind spot: `cycle-check.ts` resolves
+against TypeScript files and DROPS what it cannot, which reads as "no edge".
+From shipped source that is eight edges today, all assets (two font `?url`
+imports, four SVGR `?react` components, one JSON schema, one stylesheet),
+ledgered in `UNRESOLVED_IN_SHIPPED_SOURCE`. A relative import that names no file
+at all fails as dangling — a `?raw` or `?url` query would otherwise hide it from
+`tsc` — and a new dropped edge fails as unlisted until someone says what it is.
+Measured when written: 3087 files, 8558 relative edges, 97 resolving to no
+TypeScript file, 89 of them from tests that sit outside the cycle graph.
+
+Named blind spot: only import specifiers are read. `import.meta.glob` and a
+`new URL('../x', import.meta.url)` carry paths this does not see.
+
 ## The always-on table is parsed, not trusted
 
 `architecture-map.md`'s table is a second hand-kept copy of `ARCHITECTURE_MAP`,
@@ -545,8 +573,10 @@ ways, the fourth being the one that matters: reverting
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 
-`scan-roots.ts` owns `REPO_ROOT`, the size ledgers' `SCAN_ROOTS`, their
-`EXCLUDED_DIR_SEGMENTS` and the one `walk(dir, { include, skip })`; a scan
+`scan-roots.ts` owns `REPO_ROOT`, `workspaceDirs()` (every `packages/*`, `apps/*`
+and `tools/*` directory with a manifest — three guards kept their own copy), the
+size ledgers' `SCAN_ROOTS`, their `EXCLUDED_DIR_SEGMENTS` and the one
+`walk(dir, { include, skip })`; a scan
 passes its FILTER and gets the traversal. Two of its choices are measured, not
 tidy: `skip` is judged before the entry is stat'ed, so it reaches FILES (a
 nested worktree's `.git` is a file), and `isExcludedPath` matches the path
