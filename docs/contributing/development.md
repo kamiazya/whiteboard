@@ -230,7 +230,7 @@ pnpm test:browser            # when the change touches real-browser behavior
 pnpm test                    # optional: every project at once, not required; full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower)
 ```
 
-For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-eight configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, extension node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all four browser projects (canvas-render-browser, canvas-viewer-browser, web-browser, web-browser-window-state)):
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-eight configured in root `vitest.config.ts`; the table in [CONTRIBUTING.md](../../CONTRIBUTING.md) lists what each project covers, so everything it does not cover is not run):
 
 ```bash
 pnpm test --project mcp-node

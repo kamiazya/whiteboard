@@ -11,7 +11,7 @@ version before relying on one.
 - The root `vitest.config.ts` lists every project config file; each declares a `name:`
   (`tools/checks/src/vitest-projects.mjs` throws on one without, since CI derives the
   shared-layer step from the list). `vitest run --project <name>` runs one;
-  `pnpm test:browser` runs the three browser projects.
+  `pnpm test:browser` runs every browser project.
 - **A filter that matches nothing beside one that does is silent.** vitest errors only when
   the whole `--project` set is empty (`resources/isolation-and-state.md`). Match the local
   command to the CI job and treat a low count as a missed filter.
@@ -145,7 +145,7 @@ Inlines the UI assets, metadata and attachments — including `traceView` replay
 `index.html`, which is the shape a CI artifact wants. The multi-file form measured 1.7MB for
 20 page files with replays, of which ~0.9MB is the UI's own static assets; the report data
 itself was 774KB gzipped with replays against 177KB without (`browser-mode.md` › Traces).
-`pnpm test:browser:replay` runs the three browser projects with `traceView` and this
+`pnpm test:browser:replay` runs every browser project with `traceView` and this
 reporter.
 
 ### Merging reports across environments

@@ -337,6 +337,48 @@ describe('docs/ contract', () => {
     expect(claim?.[1]).toBe(correct)
   })
 
+  // The sentence enumerated what `--project mcp-node` skips, out of "the
+  // twenty-eight" — and named twenty-seven, omitting `scene-node`, because a
+  // hand list of a derived set is wrong the day a project lands. The set is
+  // CONTRIBUTING.md's table's to state.
+  it('points at the project table instead of enumerating what `--project mcp-node` skips', () => {
+    const content = readFileSync(join(DOCS_ROOT, 'contributing/development.md'), 'utf8')
+    const sentence = content.match(/selects only the `mcp-node` project[^\n]*/)?.[0]
+    expect(sentence, 'development.md lost the mcp-node narrow-pass sentence').toBeDefined()
+    expect(sentence).toContain('CONTRIBUTING.md')
+    expect(sentence, 'an enumeration of skipped projects is back').not.toMatch(/also skips/)
+    expect(sentence?.length).toBeLessThan(450)
+  })
+
+  // The browser projects were "three" in four places after a fourth landed
+  // (`web-browser-window-state`), and the checks above only prove each NAME is
+  // somewhere, so they stayed green. A spelled count of them in prose is a
+  // claim nobody re-reads; it must equal the number the configs declare.
+  it('states no count of the browser projects other than the one the configs declare', () => {
+    const words = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
+    const count = readBrowserProjectNames(REPO_ROOT).length
+    const correct = words[count - 2]
+    expect(correct, `extend the spelled-number list past ${count}`).toBeDefined()
+
+    const claim = new RegExp(
+      `\\b(${words.join('|')}) (?:real-)?browser(?:-mode)? (?:vitest )?projects?`,
+      'gi',
+    )
+    const files = trackedFiles(REPO_ROOT, '*.md').filter((path) => !path.includes('/adr/'))
+    let reached = 0
+    const wrong: string[] = []
+    for (const path of files) {
+      for (const match of readFileSync(join(REPO_ROOT, path), 'utf8').matchAll(claim)) {
+        reached++
+        if (match[1]?.toLowerCase() !== correct)
+          wrong.push(`${path}: "${match[0]}" (declared: ${correct})`)
+      }
+    }
+    // The subject must be present: a regex that matched nothing would pass.
+    expect(reached).toBeGreaterThanOrEqual(1)
+    expect(wrong).toEqual([])
+  })
+
   it('describes `pnpm test --project mcp-node` as a narrow, not a broad non-browser, pass', () => {
     // mcp-node is one of thirteen root vitest.config.ts projects. A doc that
     // frames it as merely "skipping the Playwright browser project" implies
