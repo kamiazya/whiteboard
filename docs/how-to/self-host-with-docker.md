@@ -748,6 +748,16 @@ reach the shared database skips the pass rather than assuming it is alone.
 - Raw JWT values, Authorization/Bearer headers, filesystem paths, and stack
   traces are never written to stdout, stderr, or the backup archive.
 
+Each command prints one JSON line with its own `schemaVersion`, bumped when a
+field is lost or renamed, so a script should check the version it was written
+against:
+
+| Command | `operation` | `schemaVersion` |
+|---------|-------------|-----------------|
+| `server backup` | `backup` | 2 |
+| `server restore` | `restore` | 1 |
+| `server support-bundle` | `support-bundle` | 1 |
+
 **Backup** — run host-side after stopping the container:
 
 ```sh
@@ -758,9 +768,10 @@ whiteboard server backup --json \
   --output-dir=/data/backups/2025-01-01
 ```
 
-Success: stdout contains `{"schemaVersion":1,"ok":true,"operation":"backup"}`,
-stderr is empty, exit 0. On any error, stdout is empty, stderr carries a generic
-safe message, exit 1.
+Success: stdout contains
+`{"schemaVersion":2,"ok":true,"operation":"backup","stores":{"database":{"captured":true},"blobs":{"captured":true}}}`,
+exit 0; `stores` says what was captured, as described above. On any error,
+stdout is empty, stderr carries a generic safe message, exit 1.
 
 **Restore** — into a fresh or empty target directory:
 
@@ -796,7 +807,7 @@ deployment state with maintainers without exposing credentials or raw paths.
 | `status.json` | Server running/stale/missing/malformed state, PID, port, authStrategy |
 | `doctor.json` | Config, exposure, JWKS, data-dir, record, and runtime checks |
 | `record.json` | Allow-listed server-mode record summary (publicBaseUrl → hostname only) |
-| `manifest.json` | Bundle metadata: createdAt, packageVersion, platform, mode |
+| `manifest.json` | Bundle metadata: createdAt, packageVersion, platform, `mode` (`server-mode`), and the sections listed |
 
 **What the bundle never contains:**
 
@@ -821,7 +832,7 @@ whiteboard server support-bundle --json \
 ```
 
 Success: stdout contains
-`{"schemaVersion":1,"ok":true,"operation":"support-bundle","files":[...]}`,
+`{"schemaVersion":1,"ok":true,"operation":"support-bundle","files":["status.json","doctor.json","record.json","manifest.json"]}`,
 stderr is empty, exit 0. On any error, stdout is empty, stderr carries a
 generic safe message, exit 1.
 
