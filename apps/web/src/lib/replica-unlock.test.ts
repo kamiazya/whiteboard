@@ -15,8 +15,17 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type OfflinePasskeyCredentials, saveOfflinePasskey } from './replica-offline-passkey.js'
-import { rememberReplicaKey, unlockReplicaKey } from './replica-unlock.js'
+import {
+  dropOfflinePasskey,
+  type OfflinePasskeyCredentials,
+  saveOfflinePasskey,
+} from './replica-offline-passkey.js'
+import {
+  isReplicaReadableOffline,
+  makeReplicaReadableOffline,
+  rememberReplicaKey,
+  unlockReplicaKey,
+} from './replica-unlock.js'
 import { loadWrappedKey, saveWrappedKey } from './replica-wrapped-key-store.js'
 
 const DAEMON = 'http://127.0.0.1:3099'
@@ -240,5 +249,82 @@ describe('unlockReplicaKey', () => {
     // prompt this whole design exists to avoid.
     expect(outcome).toEqual({ ok: true, tier: 'offline' })
     expect(get).not.toHaveBeenCalled()
+  })
+})
+
+describe('isReplicaReadableOffline', () => {
+  it('needs both the wrapped key and the passkey kept for it', async () => {
+    // beforeEach kept the passkey; no key has been wrapped yet.
+    expect(isReplicaReadableOffline(DAEMON, WORKSPACE)).toBe(false)
+
+    await rememberReplicaKey({
+      daemonBaseUrl: DAEMON,
+      workspaceId: WORKSPACE,
+      response: RESPONSE,
+      prfOutput: PRF,
+    })
+    expect(isReplicaReadableOffline(DAEMON, WORKSPACE)).toBe(true)
+
+    dropOfflinePasskey(DAEMON, WORKSPACE)
+    expect(isReplicaReadableOffline(DAEMON, WORKSPACE)).toBe(false)
+  })
+})
+
+describe('makeReplicaReadableOffline asking the daemon for the key', () => {
+  const noPasskeyMadeHere = (): OfflinePasskeyCredentials => ({
+    create: vi.fn(async () => null),
+    get: vi.fn(async () => null),
+  })
+
+  it('POSTs to the workspace replica-key route, naming the workspace in the path', async () => {
+    const fetch = vi.fn(async () => Response.json({ ...RESPONSE, tier: 'no-offline' }))
+
+    await makeReplicaReadableOffline({
+      daemonBaseUrl: DAEMON,
+      workspaceId: 'a b/c',
+      label: 'Notes',
+      fetch,
+      credentials: noPasskeyMadeHere(),
+    })
+
+    // A key handed out on a GET could be fetched by a link or a prefetch.
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledWith(`${DAEMON}/api/workspaces/a%20b%2Fc/replica-key`, {
+      method: 'POST',
+    })
+  })
+
+  it.each([
+    403, 500,
+  ])('answers unreachable for a %i, even when the body would have parsed', async (status) => {
+    const credentials = noPasskeyMadeHere()
+    const fetch = vi.fn(async () => Response.json(RESPONSE, { status }))
+
+    const made = await makeReplicaReadableOffline({
+      daemonBaseUrl: DAEMON,
+      workspaceId: WORKSPACE,
+      label: 'Notes',
+      fetch,
+      credentials,
+    })
+
+    expect(made).toEqual({ ok: false, reason: 'unreachable' })
+    expect(credentials.create).not.toHaveBeenCalled()
+  })
+
+  it('answers unreachable for a body that is not the key response', async () => {
+    const credentials = noPasskeyMadeHere()
+    const fetch = vi.fn(async () => Response.json({ tier: 'offline' }))
+
+    const made = await makeReplicaReadableOffline({
+      daemonBaseUrl: DAEMON,
+      workspaceId: WORKSPACE,
+      label: 'Notes',
+      fetch,
+      credentials,
+    })
+
+    expect(made).toEqual({ ok: false, reason: 'unreachable' })
+    expect(credentials.create).not.toHaveBeenCalled()
   })
 })

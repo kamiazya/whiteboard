@@ -19,7 +19,11 @@ import {
   listReplicas,
   withReplicaEntry,
 } from './replicas.js'
-import { createUserSettingsStore, type UserSettings } from './user-settings-store.js'
+import {
+  createUserSettingsStore,
+  defaultUserSettings,
+  type UserSettings,
+} from './user-settings-store.js'
 
 function settingsWith(
   entries: { workspaceId: string; daemonBaseUrl: string; syncedAt: string; segment?: string }[],
@@ -159,5 +163,58 @@ describe('forgetReplicaEntry', () => {
     expect(listReplicas(createUserSettingsStore().load()).map((e) => e.workspaceId)).toEqual([
       'ws-b',
     ])
+  })
+})
+
+describe('a replica entry written in two steps', () => {
+  const pulled = withReplicaEntry(defaultUserSettings(), 'ws-1', {
+    daemonBaseUrl: 'http://d',
+    syncedAt: '2026-01-01T00:00:00Z',
+    segment: 'team',
+    displayName: 'Team',
+    syncedFrontier: 'f1',
+  })
+
+  it('records the segment and display name a pull captured', () => {
+    expect(findReplicaForHandle(pulled, 'team')?.displayName).toBe('Team')
+  })
+
+  it('keeps them when a later push states only what it synced', () => {
+    const pushed = withReplicaEntry(pulled, 'ws-1', {
+      daemonBaseUrl: 'http://d',
+      syncedAt: '2026-01-02T00:00:00Z',
+      syncedFrontier: 'f2',
+    })
+
+    expect(findReplicaForHandle(pushed, 'team')).toMatchObject({
+      workspaceId: 'ws-1',
+      displayName: 'Team',
+      syncedAt: '2026-01-02T00:00:00Z',
+      syncedFrontier: 'f2',
+    })
+  })
+
+  it('does not invent a frontier an entry never recorded', () => {
+    const withoutFrontier = withReplicaEntry(defaultUserSettings(), 'ws-1', {
+      daemonBaseUrl: 'http://d',
+      syncedAt: '2026-01-01T00:00:00Z',
+    })
+
+    expect(withoutFrontier.storage.replicas?.['ws-1']).toEqual({
+      daemonBaseUrl: 'http://d',
+      syncedAt: '2026-01-01T00:00:00Z',
+    })
+  })
+
+  it('forgetting a workspace the registry never held answers the same settings object', () => {
+    expect(forgetReplicaEntry(pulled, 'nope')).toBe(pulled)
+    expect(forgetReplicaEntry(defaultUserSettings(), 'nope')).toEqual(defaultUserSettings())
+  })
+
+  it('finds an entry by its canonical id or by its segment, and nothing else', () => {
+    expect(findReplicaForHandle(pulled, 'ws-1')?.workspaceId).toBe('ws-1')
+    expect(findReplicaForHandle(pulled, 'team')?.workspaceId).toBe('ws-1')
+    expect(findReplicaForHandle(pulled, 'nobody')).toBeNull()
+    expect(findReplicaForHandle(defaultUserSettings(), 'ws-1')).toBeNull()
   })
 })
