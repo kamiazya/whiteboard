@@ -82,19 +82,16 @@ pnpm run test:browser:trace  # same, plus a trace for EVERY test and its DOM sna
   Re-run the ONE failing file under `test:browser:trace` for it — that
   traces every test, so never point it at the suite.
 - **Keep a browser test's `describe` + `it` titles under its project's
-  budget — 155 characters combined for `web-browser`, 145 for
-  `canvas-viewer-browser` and `canvas-render-browser`, 142 for
-  `web-browser-window-state`** (characters, not UTF-8 bytes: vitest replaces every
-  non-alphanumeric character with one ASCII `-` before the name reaches the
-  filesystem, so `導線` costs two, not six). vitest copies the trace into `.vitest/attachments/` under a name
-  flattened from its path, which carries the PROJECT NAME too (the budget is
-  166 minus its length), and past the filesystem's 255-byte limit that copy
-  throws `ENAMETOOLONG` during teardown — so vitest abandons the REST OF THE
-  FILE. Measured: one forced failure with a 194-char title reported
-  `1 failed | 2 passed (6)`, the same failure with a 58-char title reported
-  `1 failed | 5 passed (6)`. Three tests silently did not run, and the smaller
-  total reads like good news. `tools/arch-lint/src/browser-test-name-length.test.ts`
-  enforces the budget.
+  budget: 166 minus the project name's length (155 for `web-browser`, 145
+  for the canvas projects, 142 for the window-state one)**, in characters,
+  not UTF-8 bytes: vitest turns every non-alphanumeric character into one
+  ASCII `-`, so `導線` costs two. vitest copies the trace into
+  `.vitest/attachments/` under a name flattened from its path, and past the
+  filesystem's 255-byte limit that copy throws `ENAMETOOLONG` during
+  teardown — so vitest abandons the REST OF THE FILE. Measured: a 194-char
+  title reported `1 failed | 2 passed (6)`, a 58-char one `1 failed | 5
+  passed (6)` — three tests silently did not run, which reads like good news.
+  `tools/arch-lint/src/browser-test-name-length.test.ts` enforces the budget.
 - Remove temporary debug overlays, logging, and instrumentation before finishing.
 
 ## MCP Development Mode
