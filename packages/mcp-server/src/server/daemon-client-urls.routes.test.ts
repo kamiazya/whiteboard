@@ -8,7 +8,7 @@ import {
   type WorkspaceDocumentApiAction,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from './routes/_test-helpers.js'
+import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-client-urls-')
 
@@ -169,6 +169,7 @@ describe('daemon client URLs reach a route', () => {
       authMode: 'local-daemon',
       token: TOKEN,
       serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
       touch: vi.fn(),
       getStatus: () => ({
         ok: true,

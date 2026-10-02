@@ -62,12 +62,14 @@ const tempDirs = createTempDirs()
 const dataDir = tempDirs.make('whiteboard-server-mode-smoke-')
 process.env.WHITEBOARD_DATA_DIR = dataDir
 
-const [{ createApp }, { planServerModeAuth }, { createContainer, resolveServerDeps }] =
-  await Promise.all([
-    import(`${DIST_SERVER}/app.js`),
-    import(`${DIST_SERVER}/security/server-mode-auth-plan.js`),
-    import(`${DIST_SERVER}/../di/container.js`),
-  ])
+const [{ createApp }, { planServerModeAuth }, { bootSelfHostDeps }] = await Promise.all([
+  import(`${DIST_SERVER}/app.js`),
+  import(`${DIST_SERVER}/security/server-mode-auth-plan.js`),
+  import(`${DIST_SERVER}/../di/boot-self-host-deps.js`),
+])
+// Booted once, the way a root boots: the deps and the data layout the routes
+// serve come from the same call, over the same directory.
+const { serverDeps, dataLayout } = await bootSelfHostDeps(dataDir)
 
 // Fake deterministic auth strategy — no real OAuth/JWKS involved.
 // Returns 401 when Authorization header is absent, 403 when the required
@@ -120,7 +122,8 @@ function makeInternalStatus() {
 function makeApp(scopes, overrides = {}) {
   return createApp({
     authMode: 'server-mode',
-    serverDeps: resolveServerDeps(createContainer()),
+    serverDeps,
+    dataLayout,
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: ALLOWED_ORIGINS,
     authStrategy: makeScopeStrategy(scopes),
@@ -145,7 +148,8 @@ try {
     try {
       createApp({
         authMode: 'server-mode',
-        serverDeps: resolveServerDeps(createContainer()),
+        serverDeps,
+        dataLayout,
         publicBaseUrl: 'http://example.com', // non-HTTPS
         allowedOrigins: ['https://example.com'],
         authStrategy: makeScopeStrategy([]),
@@ -169,7 +173,8 @@ try {
     try {
       createApp({
         authMode: 'server-mode',
-        serverDeps: resolveServerDeps(createContainer()),
+        serverDeps,
+        dataLayout,
         publicBaseUrl: 'https://example.com',
         allowedOrigins: ['*'], // wildcard
         authStrategy: makeScopeStrategy([]),
@@ -218,7 +223,8 @@ try {
   {
     const appNorm = createApp({
       authMode: 'server-mode',
-      serverDeps: resolveServerDeps(createContainer()),
+      serverDeps,
+      dataLayout,
       publicBaseUrl: 'https://norm-check.example.com',
       allowedOrigins: ['https://norm-check.example.com:443'],
       authStrategy: makeScopeStrategy([]),
@@ -337,7 +343,8 @@ try {
     try {
       appLocal = createApp({
         authMode: 'local-daemon',
-        serverDeps: resolveServerDeps(createContainer()),
+        serverDeps,
+        dataLayout,
         token: LOCAL_TOKEN,
         touch: () => {},
         getStatus: makeInternalStatus,
