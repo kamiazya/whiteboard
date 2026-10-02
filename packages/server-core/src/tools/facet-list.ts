@@ -32,7 +32,7 @@ const facetTargetSchema = z.enum(['document', 'canvas', 'node', 'edge'])
  */
 const assetKindSchema = z.enum(['themes', 'icons', 'stencils'])
 
-export const facetListInputSchema = z
+const facetListInputSchema = z
   .object({
     /**
      * Described to pay C3, and NOT to steer: a clause telling the caller

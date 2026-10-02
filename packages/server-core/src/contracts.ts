@@ -29,15 +29,9 @@
  * a caller wanting only the error body should not name the tool contracts
  * either.
  */
-export { type BacklinksOutput, backlinksOutputSchema } from './tools/backlinks.schemas.js'
+export { backlinksOutputSchema } from './tools/backlinks.schemas.js'
 export { wbDocumentCreateOutputSchema } from './tools/document-crud.schemas.js'
-export {
-  type DocumentSearchOutput,
-  documentSearchOutputSchema,
-} from './tools/document-search.schemas.js'
-export { type DocumentTagsOutput, documentTagsOutputSchema } from './tools/document-tags.schemas.js'
-export { type ExportOkfOutput, exportOkfOutputSchema } from './tools/export-okf.schemas.js'
-export {
-  type LinkifyMentionsOutput,
-  linkifyMentionsOutputSchema,
-} from './tools/linkify-mentions.schemas.js'
+export { documentSearchOutputSchema } from './tools/document-search.schemas.js'
+export { documentTagsOutputSchema } from './tools/document-tags.schemas.js'
+export { exportOkfOutputSchema } from './tools/export-okf.schemas.js'
+export { linkifyMentionsOutputSchema } from './tools/linkify-mentions.schemas.js'

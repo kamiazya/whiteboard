@@ -155,7 +155,7 @@ export const facetSetInputSchema = z
   .strict()
 export type FacetSetInput = z.infer<typeof facetSetInputSchema>
 
-export const facetSetOutputSchema = z
+const facetSetOutputSchema = z
   .object({
     updated: z
       .array(

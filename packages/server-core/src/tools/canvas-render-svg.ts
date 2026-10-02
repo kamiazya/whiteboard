@@ -57,7 +57,7 @@ export const canvasRenderSvgInputSchema = z
   .strict()
 export type CanvasRenderSvgInput = z.infer<typeof canvasRenderSvgInputSchema>
 
-export const canvasRenderSvgOutputSchema = z
+const canvasRenderSvgOutputSchema = z
   .object({ svg: z.string(), width: z.number(), height: z.number() })
   .strict()
 export type CanvasRenderSvgOutput = z.infer<typeof canvasRenderSvgOutputSchema>

@@ -29,7 +29,7 @@ import {
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 
-export const wbDocumentMoveInputSchema = z
+const wbDocumentMoveInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,

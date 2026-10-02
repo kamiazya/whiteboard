@@ -9,7 +9,7 @@
 import type { DocumentSearchInput } from './tools/document-search.schemas.js'
 
 /** The names the query string carries, keyed by the input field each one is. */
-export const SEARCH_QUERY_PARAMS = {
+const SEARCH_QUERY_PARAMS = {
   query: 'q',
   kind: 'kind',
   tags: 'tag',

@@ -31,8 +31,8 @@ import { withWorkspaceWrite } from './write-lock.js'
  * an agent declares. Omitted from the model schema rather than restated, so
  * the wire shape and the shape a person's card decides on cannot drift.
  */
-export const bodyEditOpSchema = bodyReplaceChangeSchema.omit({ status: true })
-export type BodyEditOp = z.infer<typeof bodyEditOpSchema>
+const bodyEditOpSchema = bodyReplaceChangeSchema.omit({ status: true })
+type BodyEditOp = z.infer<typeof bodyEditOpSchema>
 
 export const bodyEditInputSchema = z
   .object({
@@ -57,7 +57,7 @@ export const bodyEditInputSchema = z
   .strict()
 export type BodyEditInput = z.infer<typeof bodyEditInputSchema>
 
-export const bodyEditOutputSchema = z
+const bodyEditOutputSchema = z
   .object({
     documentId: documentIdSchema,
     /** How many passages the body now holds differently. Zero when proposing. */
