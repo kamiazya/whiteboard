@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { supportBundleStatusSectionSchema } from '../shared/diagnostics/support-bundle.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
@@ -179,7 +178,7 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
     expect(manifest.packageVersion).toBe(PACKAGE_VERSION)
   })
 
-  it('writes a status section the status contract derives, nothing beside it', async () => {
+  it("writes the status contract's fields and nothing beside them", async () => {
     const outputDir = join(root, 'cli-status-out')
 
     await captureStdio(() =>
@@ -193,9 +192,12 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
     )
 
     const status = JSON.parse(await readFile(join(outputDir, 'status.json'), 'utf-8'))
-    expect(supportBundleStatusSectionSchema.parse(status)).toMatchObject({
+    expect(status).toEqual({
       schemaVersion: 1,
+      ok: false,
+      reason: 'record-not-found',
       recordFound: false,
+      recordFresh: false,
       pidAlive: null,
       pingOk: null,
       statusOk: null,

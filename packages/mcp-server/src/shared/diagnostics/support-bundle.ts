@@ -101,7 +101,7 @@ type SupportBundleStatusInput = Omit<DaemonStatusResult, 'schemaVersion'>
 
 const absentAsNull = <T extends z.ZodTypeAny>(field: z.ZodOptional<T>) => field.unwrap().nullable()
 
-export const supportBundleStatusSectionSchema = z
+const supportBundleStatusSectionSchema = z
   .object({
     ...daemonStatusResultSchema.shape,
     pidAlive: absentAsNull(daemonStatusResultSchema.shape.pidAlive),
