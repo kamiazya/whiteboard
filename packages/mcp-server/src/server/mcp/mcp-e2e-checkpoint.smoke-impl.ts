@@ -338,6 +338,21 @@ export async function runE2eCheckpointSmoke({
     try {
       child.kill('SIGTERM')
     } catch {}
-    rmSync(tmpDataDir, { recursive: true, force: true })
+    // The child still holds its database open when SIGTERM lands; removing
+    // the data dir under it races its own close and fails ENOTEMPTY. Wait
+    // for the exit (bounded, so a child that ignores the signal cannot hang
+    // the smoke) and let rmSync retry what is left.
+    await new Promise<void>((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        resolve()
+        return
+      }
+      const timer = setTimeout(resolve, 2000)
+      child.once('exit', () => {
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+    rmSync(tmpDataDir, { recursive: true, force: true, maxRetries: 3 })
   }
 }

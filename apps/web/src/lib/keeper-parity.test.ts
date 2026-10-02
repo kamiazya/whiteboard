@@ -63,6 +63,10 @@ const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
+  'src/pages/use-follow-workspace-writes.ts': {
+    reach: 'daemon-itself',
+    why: "re-reads the daemon index when the daemon's workspace update frame says an agent wrote; a browser keeper has no agent writing beside the page, so its index changes only through the page's own writes",
+  },
   'src/lib/member-workspaces.ts': {
     reach: 'daemon-itself',
     why: "lists the workspaces a server-mode keeper lets the signed-in person reach, for its entrance and its shell (ADR-0047); membership is a server keeper's idea, and a browser keeper has one person and every workspace, so there is nothing to mirror",
