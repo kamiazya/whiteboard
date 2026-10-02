@@ -50,6 +50,11 @@ describe('api-contracts barrel scope', () => {
     expect(specifiers).toEqual([
       '@kamiazya/whiteboard-server-core/api-errors',
       '@kamiazya/whiteboard-server-core/contracts',
+      // daemon-urls: one builder per daemon route apps/web requests, so a
+      // path is spelled once and `daemon-client-urls.routes.test.ts` holds
+      // every builder against the routes the daemon really mounts. It
+      // imports nothing but the encoders beside it.
+      './daemon-urls.js',
       './document.js',
       // document-url: the live-canvas API's URL shape, exported so apps/web
       // builds request URLs through the same function the daemon's own
