@@ -174,22 +174,6 @@ import { useWorkerScene } from './use-worker-scene.js'
 const MINIMAP_WIDTH_PX = 160
 const MINIMAP_HEIGHT_PX = 110
 
-/**
- * Below this container width the overview and the dock fight for the bottom
- * edge, so the overview yields.
- *
- * Both are bottom-anchored in the same container. The dock is centred and, on
- * a coarse pointer, runs about 380px; the overview claims 160px plus a 16px
- * inset on the right. They start touching once
- * `(W + 380) / 2 > W - 176`, i.e. below ~732px. 768 rounds that up so the two
- * never sit shoulder to shoulder with no gap.
- *
- * Keyed off the CONTAINER, not the viewport: a narrow editor column on a wide
- * screen collides in exactly the same way, and a media query cannot see it.
- */
-
-/** The routing styles offered in the UI. */
-
 export interface SpatialEditorProps {
   readonly canvas: SpatialCanvas
   readonly onChange: (next: SpatialCanvas, command: EditorCommand) => void
@@ -583,23 +567,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       minimapNodes,
     } = useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
     /**
-     * The routed path of an edge, as drawn — for a comment about an edge to
-     * open its bubble on the path (canvas-render's `commentAnchor`), the
-     * same producer the layer pins it with.
-     */
-    /**
-     * How near a press has to land to count as on a drawn path, in CANVAS
-     * units: the budget is a screen distance, so zooming out widens it in
-     * document space and the stroke stays as easy to hit with a finger.
-     */
-    /**
      * What the last committed stroke left behind, for the next press to be
      * judged against. A ref rather than state: nothing renders from it, and
      * the press that reads it runs before React could have committed a
      * setState from the release that wrote it.
      */
     const lastStrokeRef = useRef<PreviousStroke | null>(null)
+    /**
+     * How near a press has to land to count as on a drawn path, in CANVAS
+     * units: the budget is a screen distance, so zooming out widens it in
+     * document space and the stroke stays as easy to hit with a finger.
+     */
     const inkTolerance = EDGE_HIT_TOLERANCE_PX / viewport.zoom
+    /**
+     * The routed path of an edge, as drawn — for a comment about an edge to
+     * open its bubble on the path (canvas-render's `commentAnchor`), the
+     * same producer the layer pins it with.
+     */
     const edgePathOf = useCallback(
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
       [edgePaths],
@@ -757,15 +741,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const isMultiSelection = selectionMembers.length > 1
 
     /**
-     * Folds `result.commands` in order over a LOCAL running canvas (seeded
-     * from `canvasRef.current`, never re-read from the ref between steps) so
-     * a multi-command result — e.g. a pending-text commit ordered ahead of a
-     * create-node — can never lose its first command to a stale read. Each
-     * command still gets its own `onChange` call, one canvas/command pair
-     * per mutation, matching this component's pre-existing one-call-per-
-     * command contract for the (still common) single-command case.
-     */
-    /**
      * A gesture result's own selection, applied at the ONE place that does it.
      *
      * A node becoming primary means no edge is selected, enforced here rather
@@ -785,6 +760,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (result.selectedId !== null) setSelectedEdgeId(null)
     }
 
+    /**
+     * Folds `result.commands` in order over a LOCAL running canvas (seeded
+     * from `canvasRef.current`, never re-read from the ref between steps) so
+     * a multi-command result — e.g. a pending-text commit ordered ahead of a
+     * create-node — can never lose its first command to a stale read. Each
+     * command still gets its own `onChange` call, one canvas/command pair
+     * per mutation, matching this component's pre-existing one-call-per-
+     * command contract for the (still common) single-command case.
+     */
     const applyResult = (result: ReturnType<typeof reduceGesture>) => {
       // Any gesture that leaves an in-flight state retires the preview: the
       // committed canvas is about to draw the real thing. Same predicate the
@@ -1078,13 +1062,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       viewportCenterScreen,
     })
 
-    /**
-     * Select every node; the first becomes primary, the rest extras.
-     * Always returns true, INCLUDING on an empty canvas: returning false
-     * would let the chord fall through to the browser's own select-all,
-     * highlighting the whole page. A handled no-op still consumes it.
-     */
-
     const handleWheel = (e: WheelEvent) => {
       const root = rootRef.current
       if (root === null) return
@@ -1120,19 +1097,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applySelection({ type: 'collapse-extras' })
     }
 
-    /**
-     * The button path (unlike double-click, whose point comes straight from
-     * the pointer) always resolves to the same viewport-center point, so
-     * without a placement rule every click here would stack an identical,
-     * unreachable rect on the last one. `findFreeSpot` cascades off the
-     * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
-     * stale `canvas` prop) so two rapid clicks still see each other's result.
-     */
-    /**
-     * Pans so the union of all node boxes sits centered in the viewport,
-     * keeping the current zoom (the hand-mode "where did my content go"
-     * recovery). No boxes → no-op.
-     */
     // The keyboard surface — shortcut dispatch plus the three keydown
     // handlers the JSX wires (canvas root, focused resize handle, connect
     // handle). See use-editor-keyboard.ts; shortcuts.ts stays the catalog.
@@ -1172,6 +1136,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       else createGroupAtViewportCenter(point)
     }
 
+    /**
+     * The button path (unlike double-click, whose point comes straight from
+     * the pointer) always resolves to the same viewport-center point, so
+     * without a placement rule every click here would stack an identical,
+     * unreachable rect on the last one. `findFreeSpot` cascades off the
+     * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
+     * stale `canvas` prop) so two rapid clicks still see each other's result.
+     */
     const createNodeAtViewportCenter = () => {
       const preferred = screenToCanvas(viewportCenterScreen(), viewport)
       const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)

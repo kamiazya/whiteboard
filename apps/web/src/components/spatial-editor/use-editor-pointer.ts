@@ -111,12 +111,6 @@ function navigationPointerKind(pointerType: string): PointerKind {
 const LONG_PRESS_SLOP_PX = 10
 
 /**
- * Screen px a press on a comment may wander before it is a pin drag rather
- * than a tap. A finger's tap is never perfectly still, and below this the
- * release opens the card instead of moving the comment by nothing.
- */
-
-/**
  * What a press landed on, as the three answers every claimant asks for.
  *
  * `hitId` is `undefined` when INK won the pick, so a press on a stroke over
@@ -332,16 +326,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   })
 
   /**
-   * A press is offered to each claimant in PRIORITY ORDER, and the first that
-   * takes it stops the chain — the same shape `handlePointerMove` below
-   * already had, applied to the path that never got it.
-   *
-   * The order is the whole content of this function: chrome above the
-   * document claims before the document does, navigation answers before
-   * either, and what each position is FOR is on the claimant rather than in a
-   * comment beside a `return`.
-   */
-  /**
    * Everything that floats ABOVE the document gets the press first.
    *
    * Navigation is in this half rather than the document's because in hand
@@ -434,21 +418,6 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   openContextMenuAtRef.current = (screenPoint: Point) => openContextMenuAt(inputs, screenPoint)
 
   /**
-   * The steps `handlePointerMove` runs, in the order it runs them — which
-   * is the semantics rather than a detail: a pointer move belongs to at
-   * most one gesture, and an earlier step winning is how that is decided.
-   *
-   * A step leaves this scope with its CLAIMANT, not on its own: moved
-   * singly, the handler's 32 closed-over values become 32 parameters, the
-   * same knot with a longer signature. A claimant (`pointer-comment-claim.ts`)
-   * carries its press, move and release together and takes only the inputs
-   * that gesture reads. The handler below still reads as the order.
-   *
-   * A step that ANSWERS the move returns true; one that only has a side
-   * effect returns nothing.
-   */
-
-  /**
    * Movement past finger-jitter slop turns the press into a drag: the
    * armed long-press menu must not interrupt it.
    */
@@ -507,6 +476,20 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     applyResult(reduceGesture(gestureState, canvas, { type: 'pointermove', point: snapped.point }))
   }
 
+  /**
+   * The steps `handlePointerMove` runs, in the order it runs them — which
+   * is the semantics rather than a detail: a pointer move belongs to at
+   * most one gesture, and an earlier step winning is how that is decided.
+   *
+   * A step leaves this scope with its CLAIMANT, not on its own: moved
+   * singly, the handler's 32 closed-over values become 32 parameters, the
+   * same knot with a longer signature. A claimant (`pointer-comment-claim.ts`)
+   * carries its press, move and release together and takes only the inputs
+   * that gesture reads. The handler below still reads as the order.
+   *
+   * A step that ANSWERS the move returns true; one that only has a side
+   * effect returns nothing.
+   */
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const root = rootRef.current
     if (root === null) return
