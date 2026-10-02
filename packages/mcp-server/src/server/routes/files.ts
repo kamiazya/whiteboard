@@ -1,5 +1,10 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import {
+  isUploadableImageType,
+  UPLOADABLE_IMAGE_TYPES,
+  type UploadableImageType,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { Hono } from 'hono'
 import { isMissingFileError } from '../../shared/errno.js'
@@ -14,7 +19,11 @@ import { parseWorkspaceHandle } from '../workspace-handle.js'
 import { CONTENT_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 import { onDocumentFile } from './document/path-route.js'
 
-const MIME_TO_EXT: Record<string, string> = {
+// The set of types and the per-file ceiling are the contract the editor
+// checks a pick against (api-contracts/files); only the on-disk extension is
+// the route's own, keyed by that set so a type added there without one fails
+// to compile instead of answering 415 for a type the editor offers.
+const MIME_TO_EXT: Record<UploadableImageType, string> = {
   'image/png': '.png',
   'image/jpeg': '.jpg',
   'image/gif': '.gif',
@@ -94,16 +103,16 @@ export function createFilesRouter(options: FilesRouterOptions) {
         throw err
       }
       const mimeType = c.req.header('Content-Type') ?? 'image/png'
-      const ext = MIME_TO_EXT[mimeType]
-      if (!ext) {
+      if (!isUploadableImageType(mimeType)) {
         return c.json(
           {
             error: 'unsupported_media_type',
-            message: `Unsupported Content-Type: ${mimeType}. Allowed: ${Object.keys(MIME_TO_EXT).join(', ')}`,
+            message: `Unsupported Content-Type: ${mimeType}. Allowed: ${UPLOADABLE_IMAGE_TYPES.join(', ')}`,
           },
           415,
         )
       }
+      const ext = MIME_TO_EXT[mimeType]
       const dir = scope.layout.workspaceFilesDir(workspaceId)
       const filePath = join(dir, `${fileId}${ext}`)
       const bytes = new Uint8Array(await c.req.arrayBuffer())

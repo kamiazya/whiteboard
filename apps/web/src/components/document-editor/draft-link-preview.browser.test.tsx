@@ -96,7 +96,7 @@ describe('a link typed into the node editor overlay', () => {
       isImageRef: () => false,
       loadDocument,
       loadImageUrl: async () => undefined,
-      storeImage: async () => undefined,
+      storeImage: async () => ({ ok: false, reason: 'unused' }),
     }
     const { container, getByRole } = render(<Harness adapter={adapter} />)
     await userEvent.click(getByRole('button', { name: 'raise open-in-editor' }))

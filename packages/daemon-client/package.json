@@ -26,6 +26,10 @@
       "types": "./src/api-contracts/document-url.ts",
       "import": "./src/api-contracts/document-url.ts"
     },
+    "./api-contracts/files": {
+      "types": "./src/api-contracts/files.ts",
+      "import": "./src/api-contracts/files.ts"
+    },
     "./api-contracts/fonts": {
       "types": "./src/api-contracts/fonts.ts",
       "import": "./src/api-contracts/fonts.ts"

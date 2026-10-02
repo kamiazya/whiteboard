@@ -144,6 +144,12 @@ const promotionResultSchema = z.discriminatedUnion('ok', [
       blobsMissing: z.array(z.string()),
       blobsFailed: z.array(z.string()),
       /**
+       * Why those uploads failed, one sentence per distinct cause. Absent on
+       * records from before the reasons were kept, which can only say how
+       * many failed.
+       */
+      blobFailureReasons: z.array(z.string()).optional(),
+      /**
        * Whether the verified demote removed the source browser record
        * (ADR-0023 decision 2). Absent on records from before the feature —
        * those runs kept the copy, so absent reads as false.

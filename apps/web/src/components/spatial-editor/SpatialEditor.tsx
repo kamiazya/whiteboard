@@ -86,8 +86,10 @@ import {
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
+import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
+import { firstImageFile } from '../../lib/image-upload-policy.js'
 import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
@@ -126,6 +128,7 @@ import { isFollowableUrl } from './followable-url.js'
 import { GestureOverlays } from './gesture-overlays.js'
 import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import { ImageIntake } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
@@ -154,6 +157,7 @@ import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { useEditorPointer } from './use-editor-pointer.js'
 import { useFileSeamScene } from './use-file-seam-scene.js'
+import { useImageIntake } from './use-image-intake.js'
 import { useInteractionState } from './use-interaction-state.js'
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
 import { useLockPolicy } from './use-lock-policy.js'
@@ -326,11 +330,11 @@ export interface SpatialEditorProps {
    */
   readonly references?: ReferenceWire
   /**
-   * Stores a picked/dropped/pasted image and returns the reference to put
-   * in the created file node, or undefined on failure (nothing is
-   * created). Absent → all image-creation affordances hide.
+   * Stores a picked/dropped/pasted image and answers the reference to put in
+   * the created file node, or why it was refused (nothing is created, and the
+   * reason is shown). Absent → all image-creation affordances hide.
    */
-  readonly onAddImage?: (file: File) => Promise<string | undefined>
+  readonly onAddImage?: (file: File) => Promise<ImageStoreResult>
   /**
    * Whether a file reference denotes a stored IMAGE asset rather than a
    * canvas. Image references get no canvas actions (follow, retarget) —
@@ -1194,7 +1198,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       panToShow,
       createLinkAtViewportCenter,
       createFileRefAtViewportCenter,
-      addImageFile,
+      createImageNodeAt,
       createGroupAtViewportCenter,
       groupSelection,
     } = useNodeCreation({
@@ -1204,10 +1208,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setViewport,
       createId,
       fileRefOptions,
-      onAddImage,
       applyResult,
       collapseExtras: () => applySelection({ type: 'collapse-extras' }),
       containerSizeOf,
+    })
+    const { imageNotice, dismissImageNotice, storeImageFile, addImageFile } = useImageIntake({
+      onAddImage,
+      createImageNodeAt,
     })
 
     const imageInputRef = useRef<HTMLInputElement | null>(null)
@@ -1572,35 +1579,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           }}
         />
         {onAddImage !== undefined && (
-          <input
-            ref={imageInputRef}
-            data-editor-overlay
-            data-testid="image-file-input"
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              e.target.value = ''
-              if (file === undefined) return
+          <ImageIntake
+            inputRef={imageInputRef}
+            notice={imageNotice}
+            onDismissNotice={dismissImageNotice}
+            onFile={(file) => {
               const backgroundGroupId = pendingBackgroundGroupIdRef.current
               pendingBackgroundGroupIdRef.current = null
-              if (backgroundGroupId !== null) {
-                if (onAddImage === undefined || !file.type.startsWith('image/')) return
-                void onAddImage(file).then((ref) => {
-                  if (ref !== undefined) {
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        { kind: 'set-group-background', id: backgroundGroupId, background: ref },
-                      ],
-                    })
-                  }
-                })
+              if (backgroundGroupId === null) {
+                addImageFile(file, pendingImagePointRef.current ?? undefined)
+                pendingImagePointRef.current = null
                 return
               }
-              addImageFile(file, pendingImagePointRef.current ?? undefined)
-              pendingImagePointRef.current = null
+              storeImageFile(file, (ref) =>
+                applyResult({
+                  state: { kind: 'idle' },
+                  commands: [
+                    { kind: 'set-group-background', id: backgroundGroupId, background: ref },
+                  ],
+                }),
+              )
             }}
           />
         )}
@@ -1857,7 +1855,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // Cancel the browser's default file-drop handling (navigation to
             // the file) for EVERY file drop, then only act on images.
             e.preventDefault()
-            const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
+            const file = firstImageFile(e.dataTransfer.files)
             if (file === undefined) return
             const root = rootRef.current
             if (root === null) return
@@ -1887,9 +1885,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // Content cascade (Excalidraw's shape): image file, then our own
             // JSON, then any other text as a note. Only a completely empty
             // clipboard falls through untouched.
-            const file = [...(e.clipboardData?.files ?? [])].find((f) =>
-              f.type.startsWith('image/'),
-            )
+            const file = firstImageFile(e.clipboardData?.files ?? [])
             if (file !== undefined) {
               if (onAddImage === undefined) return
               e.preventDefault()

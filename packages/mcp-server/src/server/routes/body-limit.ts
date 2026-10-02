@@ -1,3 +1,4 @@
+import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import type { MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -25,9 +26,11 @@ export function limitBody(maxSize: number, noun: string): MiddlewareHandler {
  * record. A Loro update embeds any attachment-affecting deltas since the
  * client's last sync, so it can approach the largest file an upload may carry;
  * one number keeps the three from drifting apart, each refusing at its own
- * ceiling. Loro thumbnails run around 2 MiB and pasted assets normally fit.
+ * ceiling. The number itself is the per-file ceiling the editor checks a pick
+ * against (`api-contracts/files`), so the browser and the daemon refuse the
+ * same file. Loro thumbnails run around 2 MiB and pasted assets normally fit.
  */
-export const CONTENT_BODY_LIMIT_BYTES = 16 * 1024 * 1024
+export const CONTENT_BODY_LIMIT_BYTES = MAX_FILE_UPLOAD_BYTES
 
 /**
  * The export routes take a small JSON options object (padding, scale, theme,

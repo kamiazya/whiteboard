@@ -171,8 +171,10 @@ switch it on per copy: see
 [Read a copy offline](#read-a-copy-offline) below. Until you do, a copy
 stays readable only until the tab closes. If anything could
 not be confirmed (for example an image upload failed), the browser copy is
-kept unchanged and the result says so; moving again later is safe and
-simply re-merges.
+kept unchanged and the result says so, naming why. The daemon stores PNG,
+JPEG, GIF, WebP and SVG images up to 16 MiB each, so an image of another type
+or size stays behind until you replace it; a dropped connection is cured by
+moving again, which is safe and simply re-merges.
 
 ## See and remove the copies this device keeps
 

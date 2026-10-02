@@ -23,6 +23,15 @@ export interface LoadedFileDocument {
   readonly body?: string
 }
 
+/**
+ * What storing an image came to. A refusal carries the sentence a person
+ * reads: `undefined` for a failed upload was indistinguishable from "nothing
+ * happened", so the click that triggered it did nothing visible.
+ */
+export type ImageStoreResult =
+  | { readonly ok: true; readonly ref: string }
+  | { readonly ok: false; readonly reason: string }
+
 /** What a backend must supply for the seams to work against it. */
 export interface DocumentFileAdapter {
   /** Distinguishes a stored image asset from a reference to another canvas. */
@@ -35,6 +44,6 @@ export interface DocumentFileAdapter {
   loadDocument(ref: string): Promise<LoadedFileDocument | undefined>
   /** Resolves an image reference to a displayable URL, or undefined. */
   loadImageUrl(ref: string): Promise<string | undefined>
-  /** Stores a picked/dropped/pasted image, returning its new reference. */
-  storeImage(file: File): Promise<string | undefined>
+  /** Stores a picked/dropped/pasted image, answering its new reference or why not. */
+  storeImage(file: File): Promise<ImageStoreResult>
 }

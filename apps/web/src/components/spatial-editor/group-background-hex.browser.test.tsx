@@ -65,7 +65,7 @@ it('the Color row opens a custom color panel and applies a typed hex', async () 
 it('a group gains Set background image, style options, and Remove background', async () => {
   const { Host, latest } = makeEditorHost({
     initial: start,
-    editorProps: { onAddImage: async () => 'stored-bg' },
+    editorProps: { onAddImage: async () => ({ ok: true as const, ref: 'stored-bg' }) },
   })
   const { container } = render(<Host />)
   const root = rootOf(container)

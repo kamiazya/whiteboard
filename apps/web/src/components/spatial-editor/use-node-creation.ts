@@ -33,7 +33,6 @@ export interface NodeCreationInputs {
   readonly setViewport: (updater: (vp: Viewport) => Viewport) => void
   readonly createId: (() => string) | undefined
   readonly fileRefOptions: readonly FileRefOption[] | undefined
-  readonly onAddImage: ((file: File) => Promise<string | undefined>) | undefined
   /**
    * The command sink: the same applyResult every gesture goes through, so a
    * palette/menu creation writes the canvas, the selection primary and the
@@ -68,7 +67,6 @@ export function useNodeCreation({
   setViewport,
   createId,
   fileRefOptions,
-  onAddImage,
   applyResult,
   collapseExtras,
   containerSizeOf,
@@ -161,14 +159,6 @@ export function useNodeCreation({
     panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
   }
 
-  /** Stores the image via the host seam, then creates the node. */
-  const addImageFile = (file: File, at?: Point) => {
-    if (onAddImage === undefined || !file.type.startsWith('image/')) return
-    void onAddImage(file).then((ref) => {
-      if (ref !== undefined) createImageNodeAt(ref, at)
-    })
-  }
-
   const createGroupAtViewportCenter = (at?: Point) => {
     const point = spawnPoint(at, { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT })
     const id = newId()
@@ -203,7 +193,6 @@ export function useNodeCreation({
     createLinkAtViewportCenter,
     createFileRefAtViewportCenter,
     createImageNodeAt,
-    addImageFile,
     createGroupAtViewportCenter,
     groupSelection,
   }

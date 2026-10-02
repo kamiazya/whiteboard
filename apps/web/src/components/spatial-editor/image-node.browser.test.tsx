@@ -29,7 +29,7 @@ function imageStore() {
   const editorProps = {
     onAddImage: (file: File) => {
       stored.push(file)
-      return Promise.resolve(`asset:${stored.length}`)
+      return Promise.resolve({ ok: true as const, ref: `asset:${stored.length}` })
     },
     references: referenceWire(new Map(), {
       extras: new Map(
