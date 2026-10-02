@@ -15,7 +15,7 @@ justified it (how many occurrences today, what the false-positive rate would be)
 | `tools/arch-lint/src/test-lazy-import-check.test.ts` | `arch-lint-node` | literal `await import()` in a test file with no mock machinery and no `lazy-import:` marker |
 | `tools/arch-lint/src/test-title-check.test.ts` | `arch-lint-node` | two tests sharing one full `describe > it` path in a file |
 | `tools/arch-lint/src/test-fixed-sleep-ledger.test.ts` | `arch-lint-node` | a file gaining a fixed-duration sleep (`setTimeout(r, N>0)` in a promise); per-file count pinned by equality, a ratchet |
-| `apps/web/src/browser-test-name-length.test.ts` | `web-jsdom` | browser titles past the 155-char budget (`?raw` source scan, no `node:fs`) |
+| `tools/arch-lint/src/browser-test-name-length.test.ts` | `arch-lint-node` | browser titles past their project's budget (166 minus the project name's length; the owning project is read off the vitest configs) |
 | `apps/web/src/App.lazy-coverage.test.ts` | `web-jsdom` | a `React.lazy` page neither mocked nor statically imported by `App.test.tsx` |
 | `apps/web/src/test-config/vitest-browser-optimize-deps.test.ts` | `web-jsdom` | `optimizeDeps.include` missing a package every browser test imports |
 | `apps/web/src/test-utils/no-setstate-in-render.ts` (`assertNoSetStateInRenderWarning`) | per-test assertion | React's setState-during-render warning, read from a `console.error` spy rather than eyeballed in the log |
