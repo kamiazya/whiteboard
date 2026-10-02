@@ -33,7 +33,7 @@ const INLINE_VALUE_FLAGS = {
 type InlineField = (typeof INLINE_VALUE_FLAGS)[keyof typeof INLINE_VALUE_FLAGS]
 type InlineValues = { [K in InlineField]: string | undefined }
 
-const RUN_FLAGS: FlagTable<InlineField> = {
+export const SERVER_RUN_FLAGS: FlagTable<InlineField> = {
   booleans: ['--json', '--dry-run', '--trusted-proxy'],
   values: INLINE_VALUE_FLAGS,
 }
@@ -48,7 +48,7 @@ export type ServerRunArgs =
   | { kind: 'usage-error'; message: string }
 
 export function parseServerRunArgs(args: readonly string[]): ServerRunArgs {
-  const scan = scanFlags(args, RUN_FLAGS)
+  const scan = scanFlags(args, SERVER_RUN_FLAGS)
   if (scan.kind === 'usage-error') return scan
   if (!scan.seen.has('--json')) {
     return {
