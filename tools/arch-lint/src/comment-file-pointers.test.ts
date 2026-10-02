@@ -273,3 +273,84 @@ describe('a repo-rooted path in AGENTS.md, a rule or a skill names something tra
     expect(obsolete).toEqual([])
   })
 })
+
+// Where a flake shape is DESCRIBED moved once already, and every comment that
+// said "integrator-flow.md's ninth shape" went on pointing at a rule file that
+// no longer held the shape — and an ordinal, besides, that `flake-shapes.md`
+// never kept in order. Those pointers resolve (the file exists), so the
+// scans above cannot see them. A shape is cited by its NAME, the `###` heading
+// of the taxonomy, and the rule file is only cited for what it still carries.
+const FLAKE_SHAPES = '.claude/skills/steward/reference/flake-shapes.md'
+const SOURCE_FILE = /\.(tsx?|mjs|cjs|js|jsonc?|ya?ml|grit)$/
+
+/** A comment wrapped across lines, joined so a citation split by a wrap still reads whole. */
+function unwrapped(text: string): string {
+  return text.replace(/\s*\n\s*(?:\/\/|\*|#)?\s*/g, ' ')
+}
+
+/**
+ * Non-Markdown files whose mention of the rule file is ABOUT a rule the file
+ * does carry (the second-occurrence promotion, the post-merge mechanics), not
+ * a pointer at a shape. Each says so; guarded from both sides below.
+ */
+const RULE_FILE_FLAKE_MENTIONS: Record<string, string> = {
+  '.claude/scripts/flake-watch-lib.mjs':
+    'the second-occurrence rule, which integrator-flow.md carries',
+  '.claude/scripts/flake-watch-lib.test.mjs': 'the same second-occurrence rule',
+  '.claude/workflows/ci-triage.workflow.mjs':
+    'a pointer to the rule file in general, not to a shape',
+}
+
+const RULE_FILE_FLAKE_CITATION = /integrator-flow\.md.{0,60}(?:shape|flake)/
+
+function nonMarkdownFlakeCitations(): string[] {
+  const hits: string[] = []
+  for (const file of trackedFiles()) {
+    if (!SOURCE_FILE.test(file) || file === 'tools/arch-lint/src/comment-file-pointers.test.ts') {
+      continue
+    }
+    const text = unwrapped(readFileSync(join(REPO_ROOT, file), 'utf8'))
+    if (RULE_FILE_FLAKE_CITATION.test(text)) hits.push(file)
+  }
+  return hits
+}
+
+describe('a flake shape is cited by the name of its heading in flake-shapes.md', () => {
+  const taxonomy = readFileSync(join(REPO_ROOT, FLAKE_SHAPES), 'utf8')
+  const names = [...taxonomy.matchAll(/^### ([a-z][a-z-]+)$/gm)].map((m) => m[1] ?? '')
+
+  it('read the taxonomy', () => {
+    // Fourteen when written. Fewer means the heading shape changed under the
+    // scan, which reads as every citation below resolving to nothing.
+    expect(names.length).toBeGreaterThanOrEqual(14)
+  })
+
+  it('has no comment that sends a reader to the rule file for a flake shape', () => {
+    const cited = nonMarkdownFlakeCitations().filter((file) => !(file in RULE_FILE_FLAKE_MENTIONS))
+    expect(cited).toEqual([])
+  })
+
+  it('holds no exemption for a file that no longer cites the rule file that way', () => {
+    const live = new Set(nonMarkdownFlakeCitations())
+    expect(Object.keys(RULE_FILE_FLAKE_MENTIONS).filter((file) => !live.has(file))).toEqual([])
+  })
+
+  it('names, wherever a comment cites flake-shapes.md by name, a shape that exists', () => {
+    const unknown: string[] = []
+    let citations = 0
+    for (const file of trackedFiles()) {
+      if (!SOURCE_FILE.test(file) || file === 'tools/arch-lint/src/comment-file-pointers.test.ts') {
+        continue
+      }
+      const text = unwrapped(readFileSync(join(REPO_ROOT, file), 'utf8'))
+      for (const match of text.matchAll(/flake-shapes\.md['’]s `([a-z][a-z-]+)`/g)) {
+        citations += 1
+        if (!names.includes(match[1] ?? '')) unknown.push(`${file}: \`${match[1]}\``)
+      }
+    }
+    // The subject is present: a citation regex that matched nothing reports
+    // every name as resolving.
+    expect(citations).toBeGreaterThan(10)
+    expect(unknown).toEqual([])
+  })
+})

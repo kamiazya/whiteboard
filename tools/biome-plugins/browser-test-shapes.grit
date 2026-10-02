@@ -5,7 +5,7 @@ language js
 // types the same string is deterministic and has nothing to fix.
 // Guarded by .claude/scripts/biome-plugin.test.mjs (fixture pair).
 any {
-  // The eighth flake shape's companion (.claude/rules/integrator-flow.md):
+  // The companion of flake-shapes.md's `timed-out-browser-test-keeps-typing`:
   // userEvent.keyboard / userEvent.type synthesize one key event per
   // character, except that a character with no keycode (CJK, an em dash, a
   // curly quote) is synthesized OUT OF BAND from the plain keystrokes around

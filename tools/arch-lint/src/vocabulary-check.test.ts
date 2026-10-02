@@ -232,8 +232,8 @@ function listSourceFiles(dir: string): string[] {
  * machine is doing: ~255ms with the tree in page cache, 6315ms measured under
  * the full parallel suite — past vitest's 5000ms default. A per-test timeout
  * does not bound module evaluation, so the cost lands in the collection phase
- * where nothing is racing it, the same reason `.claude/rules/integrator-flow.md`
- * says to hoist a heavy `await import()` out of a test body.
+ * where nothing is racing it, the same reason flake-shapes.md's
+ * `in-body-dynamic-import` says to hoist a heavy `await import()` out of a test body.
  *
  * It also fixes what the failure SAID. A timed-out `it` named `no source file
  * says "slug"` reports a retired word and a five-second budget in one message,

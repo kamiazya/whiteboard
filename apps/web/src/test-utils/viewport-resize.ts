@@ -16,7 +16,7 @@
  * A ceiling sized on a measurement, not a delay. `page.viewport` reads 5-8ms
  * over six consecutive calls on an idle machine; the browser projects' own
  * worst case under a full parallel run is ~26x its isolated cost
- * (`integrator-flow.md`'s 1.5s -> 39s), which puts a loaded resize near 200ms.
+ * (flake-shapes.md's `browser-project-in-flight`, 1.5s -> 39s), which puts a loaded resize near 200ms.
  * 5s is ~600x the idle reading and ~25x the loaded estimate — ample for a slow
  * machine, and 12x faster than the 60s per-test budget it replaces.
  */

@@ -43,7 +43,7 @@ describe('focusEditable', () => {
   })
 
   it('names the frozen-resolver case instead of timing out on a dead node', async () => {
-    // A reference held across a re-render, the repo's sixth flake shape. A
+    // A reference held across a re-render, flake-shapes.md's `held-element-across-remount`. A
     // detached node cannot take focus and never will, so waiting is the one
     // thing that cannot help — say so rather than spend the budget.
     const el = editable()

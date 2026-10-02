@@ -5,7 +5,7 @@ lives in `reference/flake-shapes.md` (the flake taxonomy) and
 `.claude/rules/integrator-flow.md` (the always-on rules) — this file exists
 so a symptom string can be recognised before it is investigated. One entry
 points elsewhere, and says so in the row: a test-infrastructure defect with no
-PR attached belongs beside the technique, not in the CI-flakes section.
+PR attached belongs beside the technique, not in the flake taxonomy.
 
 Contents: browser suites · property tests · measured thresholds · environment ·
 order effects.

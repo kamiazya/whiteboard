@@ -65,7 +65,7 @@ async function openRenameFromMenu() {
   await userEvent.click(within(menu).getByRole('menuitem', { name: /Rename/ }))
   // The menu has to be GONE before the dialog is driven: a click landing
   // while it dismisses is consumed, which reads as a field that will not
-  // take input (integrator-flow.md's seventh flake shape).
+  // take input (flake-shapes.md's `menu-still-dismissing`).
   await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
   return screen.findByRole('dialog')
 }

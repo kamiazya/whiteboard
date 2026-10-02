@@ -46,8 +46,8 @@ import {
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 // The lazy WorkspaceTopBar chunk, transformed in the collection phase so a
-// findBy* on its controls never pays the load (integrator-flow.md's
-// lazy()-vs-findBy* family; see BrowserDocumentPage.test.tsx).
+// findBy* on its controls never pays the load (flake-shapes.md's
+// `lazy-import-race`; see BrowserDocumentPage.test.tsx).
 import '../components/WorkspaceTopBar.js'
 import { navigateTo, renderPage } from '../test-utils/daemon-page-harness.js'
 
