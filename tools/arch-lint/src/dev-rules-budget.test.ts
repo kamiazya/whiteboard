@@ -464,7 +464,13 @@ const ALWAYS_ON_TOTAL_BUDGET = 20
 // sits beside the composer and not in `nodes/`, and that it reaches the
 // entry through a seam — plus two sentences that named the old file for
 // code that moved. Written as the minimum that keeps the rule true.
-const CANVAS_RENDER_BUDGET = 144
+//
+// 144 -> 108 when the measurements, the rejected alternatives and the incident
+// narratives moved to `docs/contributing/architecture/canvas-render-decisions.md`
+// (~37 KB). The rule keeps each decision's standing statement, the invariants
+// and the names of the guards that hold them; a passage is in one file or the
+// other, never both. Pins only go down on a cut.
+const CANVAS_RENDER_BUDGET = 108
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
