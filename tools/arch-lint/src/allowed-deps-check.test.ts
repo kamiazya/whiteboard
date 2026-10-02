@@ -20,7 +20,20 @@ describe('checkAllowedDependencies', () => {
     ])
   })
 
-  it('ignores devDependencies entirely (only "dependencies" is inspected)', () => {
+  it('inspects peerDependencies and optionalDependencies like dependencies', () => {
+    const violations = checkAllowedDependencies({
+      name: '@kamiazya/whiteboard-model',
+      dependencies: { zod: '^4.0.0' },
+      peerDependencies: { react: '^19' },
+      optionalDependencies: { lodash: '^4.17.0' },
+    })
+    expect(violations).toEqual([
+      { packageName: '@kamiazya/whiteboard-model', dependencyName: 'react' },
+      { packageName: '@kamiazya/whiteboard-model', dependencyName: 'lodash' },
+    ])
+  })
+
+  it('ignores devDependencies entirely (dependencies, peers and optionals are inspected)', () => {
     const violations = checkAllowedDependencies({
       name: '@kamiazya/whiteboard-model',
       dependencies: {},

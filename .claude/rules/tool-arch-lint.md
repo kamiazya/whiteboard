@@ -135,6 +135,47 @@ boundary exemptions` fails an entry whose file is gone or no longer contains
 that kind. It is file-granular, not line-granular: a second `process` use in
 the exempt file passes, which is the cost of not scanning for the line.
 
+The `test-framework-import` kind (`vitest`, `vitest/*`, `@vitest/*`,
+`fast-check`, `@fast-check/*` from a file that ships) is the same mechanism:
+five files import one on purpose today — three `canvas-render` benches, a
+`search` bench and `facet-engine`'s `./testing` entry — and each is a per-file
+entry with its reason, so a sixth fails instead of arriving unannounced. A
+`test-utils/` directory and a `.test.ts` are never walked, which is why the
+kind has nothing to say about them.
+
+## Named blind spots in the scanner and the resolver
+
+Each of these has zero instances today, was probed by planting one, and is
+recorded rather than closed because closing it costs more than it catches.
+They are named so a clean result is not read as covering them.
+
+- **A computed specifier.** `import(\`node:${name}\`)`, `import(name)` and
+  `createRequire(...)('x')` name no module statically; only a string or a
+  template with NO substitution is read (`collectModuleSpecifiers`).
+- **`import.meta.glob` and path-built reads.** A glob's pattern and a
+  `new URL('../x', import.meta.url)` carry a path no specifier scan sees; the
+  relative-import escape guard reads import specifiers only.
+- **The DOM list is a deny-list of thirteen names.** `location` and `Image` are
+  left out on purpose: the scan matches identifiers without scope analysis, and
+  `daemon-client`'s `WindowLike` declares a `location` property. A read of
+  either in a shared package passes. `globalThis['document']` (element access)
+  and `const { document } = globalThis` are not read either, only
+  `globalThis.document`.
+- **Type-only is syntactic.** An un-annotated named import of an interface reads
+  as a value edge, so the value cycle scan can over-report, never under-report.
+- **The test-framework kind names two frameworks.** `@testing-library/*`,
+  `msw` and `playwright` from shipped source are not a kind.
+- **The cycle resolver is intra-package.** It follows relative specifiers and
+  declared aliases and drops anything else, so a cross-package cycle through a
+  subpath is `package-cycle-check.ts`'s job and only at manifest level.
+
+What WAS closed in the same pass: a template-literal dynamic import, `require()`
+and `import x = require()`, `globalThis.<banned name>`, `inversify/…` and
+`@inversifyjs/*`, `from '.'` / `'..'` / `'../'` and an explicit `.ts` in the
+cycle resolver, and `peerDependencies` / `optionalDependencies` in the direction
+and allowed-dependency checks (neither field was read, so a reversing edge
+declared in one passed).
+
 ## `port-conformance-ledger.test.ts`: every store implementer runs its suite
 
 The three `describe*Conformance` suites make the browser's and the daemon's

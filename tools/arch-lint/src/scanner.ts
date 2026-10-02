@@ -7,6 +7,7 @@ export type BoundaryViolationKind =
   | 'loro-crdt-import'
   | 'dom-global'
   | 'node-ambient-global'
+  | 'test-framework-import'
 
 export interface BoundaryViolation {
   readonly kind: BoundaryViolationKind
@@ -16,6 +17,12 @@ export interface BoundaryViolation {
 
 const NODE_BUILTIN_NAMES = new Set(builtinModules)
 
+// A deny-list, not a model of the DOM lib: a name outside it passes. It holds
+// names with no everyday meaning as a local or a property key, because this
+// scan matches identifiers without scope analysis. `location` and `Image` are
+// left out for that reason — `daemon-client`'s `WindowLike` declares a
+// `location` property — so a read of either in a shared package is a named
+// blind spot (see `.claude/rules/tool-arch-lint.md`), not a pass.
 const DOM_GLOBAL_IDENTIFIERS = new Set([
   'window',
   'document',
@@ -24,6 +31,9 @@ const DOM_GLOBAL_IDENTIFIERS = new Set([
   'sessionStorage',
   'indexedDB',
   'HTMLElement',
+  'HTMLCanvasElement',
+  'HTMLImageElement',
+  'OffscreenCanvas',
   'customElements',
   'requestAnimationFrame',
   'cancelAnimationFrame',
@@ -43,6 +53,31 @@ function isNodeBuiltinSpecifier(specifier: string): boolean {
   return NODE_BUILTIN_NAMES.has(rootPackage) || specifier.startsWith('node:')
 }
 
+function isInversifySpecifier(specifier: string): boolean {
+  return (
+    specifier === 'inversify' ||
+    specifier.startsWith('inversify/') ||
+    specifier.startsWith('@inversifyjs/')
+  )
+}
+
+/**
+ * A test framework in a file that ships. Vitest and fast-check are
+ * devDependencies, so a production import of either resolves in the workspace
+ * and fails only in a consumer's install — or drags the framework into a
+ * bundle. Benches and a `testing/` entry import them on purpose; those are
+ * ledgered per file in `architecture-map.ts`.
+ */
+function isTestFrameworkSpecifier(specifier: string): boolean {
+  return (
+    specifier === 'vitest' ||
+    specifier.startsWith('vitest/') ||
+    specifier.startsWith('@vitest/') ||
+    specifier === 'fast-check' ||
+    specifier.startsWith('@fast-check/')
+  )
+}
+
 export interface ModuleSpecifierReference {
   readonly specifier: string
   // Whole edge is erased at emit and carries no runtime value: a whole-
@@ -54,72 +89,146 @@ export interface ModuleSpecifierReference {
   readonly line: number
 }
 
+/** A string, or a template with no substitution — both name a module statically. */
+function staticStringText(node: ts.Node | undefined): string | undefined {
+  if (node === undefined) return undefined
+  return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
+    ? node.text
+    : undefined
+}
+
+function isImportClauseTypeOnly(clause: ts.ImportClause): boolean {
+  if (clause.isTypeOnly) return true
+  // A default import (`import Foo, { type X } from`) is always a value,
+  // regardless of the named bindings beside it.
+  if (clause.name !== undefined) return false
+  const bindings = clause.namedBindings
+  if (bindings === undefined) return false
+  // `import * as ns from` is a value edge.
+  if (ts.isNamespaceImport(bindings)) return false
+  return bindings.elements.length > 0 && bindings.elements.every((el) => el.isTypeOnly)
+}
+
+function isExportDeclarationTypeOnly(node: ts.ExportDeclaration): boolean {
+  if (node.isTypeOnly) return true
+  const clause = node.exportClause
+  if (clause === undefined || ts.isNamespaceExport(clause)) return false
+  return clause.elements.length > 0 && clause.elements.every((el) => el.isTypeOnly)
+}
+
+/**
+ * The module a `require(...)` or a dynamic `import(...)` names. Both always
+ * evaluate their target, so each is a value edge by construction — there is no
+ * `import type(...)`.
+ */
+function callSpecifier(node: ts.CallExpression): string | undefined {
+  const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword
+  const isRequire = ts.isIdentifier(node.expression) && node.expression.text === 'require'
+  return isDynamicImport || isRequire ? staticStringText(node.arguments[0]) : undefined
+}
+
+interface NodeSpecifier {
+  readonly specifier: string
+  readonly typeOnly: boolean
+}
+
+/** The specifier one node contributes, if it is a form that names a module. */
+function specifierOfNode(node: ts.Node): NodeSpecifier | undefined {
+  if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+    const typeOnly = node.importClause !== undefined && isImportClauseTypeOnly(node.importClause)
+    return { specifier: node.moduleSpecifier.text, typeOnly }
+  }
+  if (
+    ts.isExportDeclaration(node) &&
+    node.moduleSpecifier !== undefined &&
+    ts.isStringLiteral(node.moduleSpecifier)
+  ) {
+    return { specifier: node.moduleSpecifier.text, typeOnly: isExportDeclarationTypeOnly(node) }
+  }
+  if (
+    ts.isImportEqualsDeclaration(node) &&
+    ts.isExternalModuleReference(node.moduleReference) &&
+    ts.isStringLiteral(node.moduleReference.expression)
+  ) {
+    return { specifier: node.moduleReference.expression.text, typeOnly: node.isTypeOnly }
+  }
+  if (ts.isCallExpression(node)) {
+    const specifier = callSpecifier(node)
+    if (specifier !== undefined) return { specifier, typeOnly: false }
+  }
+  return undefined
+}
+
 /**
  * Every place a module specifier can appear in source text: a static
- * `import`/`export ... from`, or a dynamic `import(...)` call. Missing any
- * one of these would let a banned import back in through a form the AST
- * walk never visits.
+ * `import`/`export ... from`, a dynamic `import(...)` call, a `require(...)`
+ * call or an `import x = require(...)`. Missing any one of these would let a
+ * banned import back in through a form the AST walk never visits. A specifier
+ * written as a template literal with no substitution is read like a string;
+ * one WITH a substitution names no module statically and is a named blind
+ * spot (`.claude/rules/tool-arch-lint.md`).
  */
 export function collectModuleSpecifiers(sourceFile: ts.SourceFile): ModuleSpecifierReference[] {
   const specifiers: ModuleSpecifierReference[] = []
 
-  function isImportClauseTypeOnly(clause: ts.ImportClause): boolean {
-    if (clause.isTypeOnly) return true
-    // A default import (`import Foo, { type X } from`) is always a value,
-    // regardless of the named bindings beside it.
-    if (clause.name !== undefined) return false
-    const bindings = clause.namedBindings
-    if (bindings === undefined) return false
-    // `import * as ns from` is a value edge.
-    if (ts.isNamespaceImport(bindings)) return false
-    return bindings.elements.length > 0 && bindings.elements.every((el) => el.isTypeOnly)
-  }
-
-  function isExportDeclarationTypeOnly(node: ts.ExportDeclaration): boolean {
-    if (node.isTypeOnly) return true
-    const clause = node.exportClause
-    if (clause === undefined || ts.isNamespaceExport(clause)) return false
-    return clause.elements.length > 0 && clause.elements.every((el) => el.isTypeOnly)
-  }
-
   function visit(node: ts.Node): void {
-    if (
-      ts.isImportDeclaration(node) &&
-      node.moduleSpecifier !== undefined &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
+    const found = specifierOfNode(node)
+    if (found !== undefined) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      const typeOnly = node.importClause !== undefined && isImportClauseTypeOnly(node.importClause)
-      specifiers.push({ specifier: node.moduleSpecifier.text, typeOnly, line: line + 1 })
-    }
-    if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier !== undefined &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      specifiers.push({
-        specifier: node.moduleSpecifier.text,
-        typeOnly: isExportDeclarationTypeOnly(node),
-        line: line + 1,
-      })
-    }
-    if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length > 0 &&
-      ts.isStringLiteral(node.arguments[0])
-    ) {
-      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      // A dynamic `import()` call always evaluates the target module, so it
-      // is a value edge by construction — there is no `import type(...)`.
-      specifiers.push({ specifier: node.arguments[0].text, typeOnly: false, line: line + 1 })
+      specifiers.push({ ...found, line: line + 1 })
     }
     ts.forEachChild(node, visit)
   }
 
   visit(sourceFile)
   return specifiers
+}
+
+/**
+ * Whether an identifier node is a NAME being declared or a property key rather
+ * than a read of the ambient global it spells. A property access like
+ * `foo.window` (banned name as the *property*, i.e. the right side of the
+ * access) or a declared local named `process` is not a use of the ambient
+ * global — only a bare identifier reference counts. `window.location.href` and
+ * `process.env.FOO` must still be flagged: there `window`/`process` is the
+ * *object* side (`.expression`), not the `.name`, of the PropertyAccessExpression.
+ */
+function isNameNotARead(node: ts.Identifier): boolean {
+  const parent = node.parent
+  return (
+    (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+    ((ts.isVariableDeclaration(parent) ||
+      ts.isFunctionDeclaration(parent) ||
+      ts.isParameter(parent) ||
+      ts.isBindingElement(parent)) &&
+      parent.name === node) ||
+    (ts.isImportSpecifier(parent) && parent.name === node) ||
+    (ts.isPropertyAssignment(parent) && parent.name === node) ||
+    // `declare global { … }` — the TypeScript ambient-augmentation
+    // keyword, a type-level construct — is not a read of Node's `global`
+    // object. The identifier is the ModuleDeclaration's NAME there.
+    (ts.isModuleDeclaration(parent) && parent.name === node)
+  )
+}
+
+/**
+ * The banned global a node reads, if it reads one: a bare identifier, or
+ * `globalThis.<name>`, which reaches the same global and has no bare
+ * identifier to match.
+ */
+function bannedGlobalRead(node: ts.Node, bannedNames: ReadonlySet<string>): string | undefined {
+  if (ts.isIdentifier(node) && bannedNames.has(node.text) && !isNameNotARead(node)) {
+    return node.text
+  }
+  if (
+    ts.isPropertyAccessExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === 'globalThis' &&
+    bannedNames.has(node.name.text)
+  ) {
+    return node.name.text
+  }
+  return undefined
 }
 
 function collectBannedGlobalIdentifierUsages(
@@ -130,33 +239,10 @@ function collectBannedGlobalIdentifierUsages(
   const violations: BoundaryViolation[] = []
 
   function visit(node: ts.Node): void {
-    // A property access like `foo.window` (banned name as the *property*,
-    // i.e. the right side of the access) or a declared local named
-    // `process` is not a use of the ambient global — only a bare identifier
-    // reference (not the name being declared, and not the property side of
-    // a member access) counts. `window.location.href` and `process.env.FOO`
-    // must still be flagged: there `window`/`process` is the *object* side
-    // (`.expression`), not the `.name`, of the PropertyAccessExpression.
-    if (
-      ts.isIdentifier(node) &&
-      bannedNames.has(node.text) &&
-      !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
-      !(
-        (ts.isVariableDeclaration(node.parent) ||
-          ts.isFunctionDeclaration(node.parent) ||
-          ts.isParameter(node.parent) ||
-          ts.isBindingElement(node.parent)) &&
-        node.parent.name === node
-      ) &&
-      !(ts.isImportSpecifier(node.parent) && node.parent.name === node) &&
-      !(ts.isPropertyAssignment(node.parent) && node.parent.name === node) &&
-      // `declare global { … }` — the TypeScript ambient-augmentation
-      // keyword, a type-level construct — is not a read of Node's `global`
-      // object. The identifier is the ModuleDeclaration's NAME there.
-      !(ts.isModuleDeclaration(node.parent) && node.parent.name === node)
-    ) {
+    const name = bannedGlobalRead(node, bannedNames)
+    if (name !== undefined) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      violations.push({ kind, name: node.text, line: line + 1 })
+      violations.push({ kind, name, line: line + 1 })
     }
     ts.forEachChild(node, visit)
   }
@@ -176,8 +262,11 @@ export function scanSourceForBoundaryViolations(
     if (isNodeBuiltinSpecifier(specifier)) {
       violations.push({ kind: 'node-builtin-import', name: specifier, line })
     }
-    if (specifier === 'inversify') {
+    if (isInversifySpecifier(specifier)) {
       violations.push({ kind: 'inversify-import', name: specifier, line })
+    }
+    if (isTestFrameworkSpecifier(specifier)) {
+      violations.push({ kind: 'test-framework-import', name: specifier, line })
     }
     if (specifier === 'loro-crdt' || specifier.startsWith('loro-crdt/')) {
       violations.push({ kind: 'loro-crdt-import', name: specifier, line })

@@ -9,6 +9,22 @@ export interface PackageManifest {
   readonly name: string
   readonly dependencies?: Readonly<Record<string, string>>
   readonly devDependencies?: Readonly<Record<string, string>>
+  readonly peerDependencies?: Readonly<Record<string, string>>
+  readonly optionalDependencies?: Readonly<Record<string, string>>
+}
+
+/**
+ * The dependency objects that put a package in a consumer's install: a peer is
+ * the consumer's to provide and an optional one is installed when it can be,
+ * so both are runtime couplings exactly as `dependencies` is, and a check that
+ * read only that field passed a reversing edge declared in either.
+ */
+export function runtimeDependencyNames(manifest: PackageManifest): string[] {
+  return [
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}),
+    ...Object.keys(manifest.optionalDependencies ?? {}),
+  ]
 }
 
 export interface DirectionOptions {
@@ -27,7 +43,9 @@ export interface DirectionOptions {
  * Only a dependency that names ANOTHER package in the architecture map is a
  * candidate direction violation — third-party deps (zod, unified, ...)
  * aren't part of this table at all and are always allowed.
- * `devDependencies` are inspected only when `includeDevDependencies` is set.
+ * `peerDependencies` and `optionalDependencies` always count (see
+ * {@link runtimeDependencyNames}); `devDependencies` only when
+ * `includeDevDependencies` is set.
  */
 export function checkDependencyDirection(
   manifest: PackageManifest,
@@ -36,7 +54,7 @@ export function checkDependencyDirection(
   const violations: DirectionViolation[] = []
   const allowed = new Set(allowedDependencies(manifest.name))
   const declared = [
-    ...Object.keys(manifest.dependencies ?? {}),
+    ...runtimeDependencyNames(manifest),
     ...(options.includeDevDependencies ? Object.keys(manifest.devDependencies ?? {}) : []),
   ]
 

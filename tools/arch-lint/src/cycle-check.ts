@@ -2,7 +2,7 @@
 // compiler-API traversal rather than a new dependency (madge et al.) — the
 // repo's own simplicity ladder: reuse the AST walk that already exists.
 //
-// Scope, deliberately: relative (`./`, `../`) specifiers, plus any bare
+// Scope, deliberately: relative (`.`, `..`, `./x`, `../x`) specifiers, plus any bare
 // prefix a caller declares as a path ALIAS for an intra-package directory.
 // Cross-package/workspace specifiers stay direction-check.ts's job, and
 // every cycle this check exists to catch is intra-package — an alias is
@@ -15,6 +15,11 @@
 import { posix } from 'node:path'
 import ts from '@typescript/typescript6'
 import { collectModuleSpecifiers } from './scanner.js'
+import {
+  isRelativeSpecifier,
+  resolveRelativeSource,
+  sourceCandidates,
+} from './value-import-closure.js'
 
 export interface ImportEdge {
   readonly specifier: string
@@ -30,14 +35,12 @@ export interface ImportEdge {
  */
 export type PathAliases = Readonly<Record<string, string>>
 
-function isRelative(specifier: string): boolean {
-  return specifier.startsWith('./') || specifier.startsWith('../')
-}
-
 /** Relative-specifier subset of scanner.ts's module-specifier walk. */
 export function collectRelativeImportEdges(fileName: string, sourceText: string): ImportEdge[] {
   const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true)
-  return collectModuleSpecifiers(sourceFile).filter(({ specifier }) => isRelative(specifier))
+  return collectModuleSpecifiers(sourceFile).filter(({ specifier }) =>
+    isRelativeSpecifier(specifier),
+  )
 }
 
 /**
@@ -54,16 +57,8 @@ function collectResolvableImportEdges(
   const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true)
   return collectModuleSpecifiers(sourceFile).filter(
     ({ specifier }) =>
-      isRelative(specifier) || prefixes.some((prefix) => specifier.startsWith(prefix)),
+      isRelativeSpecifier(specifier) || prefixes.some((prefix) => specifier.startsWith(prefix)),
   )
-}
-
-function candidatePaths(resolved: string): string[] {
-  if (resolved.endsWith('.js') || resolved.endsWith('.jsx')) {
-    const base = resolved.slice(0, resolved.lastIndexOf('.'))
-    return [`${base}.ts`, `${base}.tsx`]
-  }
-  return [`${resolved}.ts`, `${resolved}.tsx`, `${resolved}/index.ts`, `${resolved}/index.tsx`]
 }
 
 /**
@@ -102,14 +97,11 @@ function resolveSpecifier(
   // An alias is already repo-relative once swapped, so it must NOT be joined
   // against the importing file's directory the way a `./` specifier is.
   const aliasPrefix = Object.keys(aliases).find((prefix) => specifier.startsWith(prefix))
-  const resolved =
-    aliasPrefix === undefined
-      ? posix.normalize(posix.join(posix.dirname(fromPath), specifier))
-      : posix.normalize(aliases[aliasPrefix] + specifier.slice(aliasPrefix.length))
-  for (const candidate of candidatePaths(resolved)) {
-    if (fileSet.has(candidate)) return candidate
+  if (aliasPrefix === undefined) {
+    return resolveRelativeSource(fromPath, specifier, (path) => fileSet.has(path))
   }
-  return null
+  const resolved = posix.normalize(aliases[aliasPrefix] + specifier.slice(aliasPrefix.length))
+  return sourceCandidates(resolved).find((candidate) => fileSet.has(candidate)) ?? null
 }
 
 function buildGraph(

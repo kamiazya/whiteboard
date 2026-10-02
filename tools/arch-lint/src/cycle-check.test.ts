@@ -100,6 +100,14 @@ describe('collectRelativeImportEdges: value-awareness', () => {
     expect(edges[0]?.typeOnly).toBe(false)
   })
 
+  it('reads `.` and `..` as relative, and a template-literal dynamic import as an edge', () => {
+    const edges = collectRelativeImportEdges(
+      'a.ts',
+      "import { a } from '.'\nimport { b } from '..'\nconst c = () => import(`./c.js`)",
+    )
+    expect(edges.map((edge) => edge.specifier)).toEqual(['.', '..', './c.js'])
+  })
+
   it('ignores a bare (non-relative) specifier', () => {
     const edges = collectRelativeImportEdges('a.ts', "import { z } from 'zod'")
     expect(edges).toHaveLength(0)
@@ -123,6 +131,40 @@ describe('buildValueImportGraph: path resolution', () => {
     expect(graph.get('src/a.ts')).toEqual(['src/b.ts'])
     expect(graph.get('src/c.tsx')).toEqual(['src/d.tsx'])
     expect(graph.get('src/e.ts')).toEqual(['src/views/index.ts'])
+  })
+
+  // A directory import, and an explicit extension, are the two spellings the
+  // resolver used to drop silently — an edge that is missing from the graph
+  // reads as an acyclic one.
+  it("resolves `from '.'`, `from '..'`, `from '../'` and an explicit .ts to the file they load", () => {
+    const files = [
+      file(
+        'src/views/a.ts',
+        "import { i } from '.'\nimport { p } from '..'\nimport { q } from '../'",
+      ),
+      file('src/views/index.ts', 'export const i = 1'),
+      file('src/index.ts', 'export const p = 1'),
+      file('src/c.ts', "import { d } from './d.ts'\nimport { e } from './e.tsx'"),
+      file('src/d.ts', 'export const d = 1'),
+      file('src/e.tsx', 'export const e = 1'),
+    ]
+    const graph = buildValueImportGraph(files)
+    expect(graph.get('src/views/a.ts')).toEqual([
+      'src/views/index.ts',
+      'src/index.ts',
+      'src/index.ts',
+    ])
+    expect(graph.get('src/c.ts')).toEqual(['src/d.ts', 'src/e.tsx'])
+  })
+
+  it('closes a cycle that exists only through a directory import', () => {
+    const files = [
+      file('src/views/index.ts', "import { a } from './a.js'"),
+      file('src/views/a.ts', "import { i } from '.'"),
+    ]
+    expect(findImportCycles(buildValueImportGraph(files))).toEqual([
+      ['src/views/a.ts', 'src/views/index.ts'],
+    ])
   })
 
   it('does not throw on an unresolvable relative specifier', () => {

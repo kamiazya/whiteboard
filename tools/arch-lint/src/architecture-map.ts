@@ -109,6 +109,20 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // scope-to-role table written out three times. Pure JS, no DOM and no
     // `node:*`, so it holds on Node, the browser and a Worker alike.
     allowedThirdParty: ['zod', 'css-line-break', 'lowlight', 'highlight.js'],
+    exemptBoundaryFiles: {
+      'layout/edges/spatial-edges.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+      'layout/nodes/mdast-blocks.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+      'layout/spatial-canvas.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+    },
   },
   '@kamiazya/whiteboard-ports': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
@@ -126,6 +140,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   '@kamiazya/whiteboard-facet-engine': {
     allowedInternalDeps: [],
     allowedThirdParty: ['zod'],
+    exemptBoundaryFiles: {
+      'testing/facet-arbitraries.ts': {
+        kinds: ['test-framework-import'],
+        reason:
+          "the package's `./testing` entry: fast-check generators over the registry, imported " +
+          "only by test files and kept out of the default entry, so no consumer's bundle loads it",
+      },
+    },
   },
   // Lexical search: a dictionary-free tokenizer (latin words, CJK bigrams),
   // BM25 ranking, snippets, and the ONE definition of what text a document
@@ -137,6 +159,12 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   '@kamiazya/whiteboard-search': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: [],
+    exemptBoundaryFiles: {
+      'snippet.bench.ts': {
+        kinds: ['test-framework-import'],
+        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
+      },
+    },
   },
   // What the documents of a workspace point at, as a graph: the facts one
   // document contributes, the aggregate that answers backlinks and unlinked

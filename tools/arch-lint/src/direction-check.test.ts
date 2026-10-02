@@ -35,6 +35,19 @@ describe('checkDependencyDirection', () => {
     ])
   })
 
+  it('fails a reversing peerDependency and a reversing optionalDependency', () => {
+    expect(
+      checkDependencyDirection({
+        name: '@kamiazya/whiteboard-model',
+        peerDependencies: { '@kamiazya/whiteboard-codec': 'workspace:*' },
+        optionalDependencies: { '@kamiazya/whiteboard-ports': 'workspace:*' },
+      }),
+    ).toEqual([
+      { packageName: '@kamiazya/whiteboard-model', dependencyName: '@kamiazya/whiteboard-codec' },
+      { packageName: '@kamiazya/whiteboard-model', dependencyName: '@kamiazya/whiteboard-ports' },
+    ])
+  })
+
   it('ignores a reversing devDependency by default', () => {
     const violations = checkDependencyDirection({
       name: '@kamiazya/whiteboard-model',

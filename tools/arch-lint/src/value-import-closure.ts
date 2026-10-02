@@ -79,26 +79,46 @@ export function walkValueImportClosure(
   return { files: [...parent.keys()].sort(), imports, chainTo }
 }
 
+/** `.`, `..`, `./x`, `../x` — every spelling of a path relative to the importing file. */
+export function isRelativeSpecifier(specifier: string): boolean {
+  return (
+    specifier === '.' ||
+    specifier === '..' ||
+    specifier.startsWith('./') ||
+    specifier.startsWith('../')
+  )
+}
+
 /**
- * Resolve a relative specifier to a file that exists, the way a bundler does
- * for this repo's sources: a .js specifier names the .ts file beside it, a bare one tries both
- * extensions and then an index file.
+ * The files a resolved (extension-bearing or bare) path could name, the way a
+ * bundler reads this repo's sources: a `.js`/`.jsx` specifier names the `.ts`/
+ * `.tsx` beside it, an explicit `.ts`/`.tsx` names itself, and a bare one tries
+ * both extensions and then an index file.
+ */
+export function sourceCandidates(resolved: string): string[] {
+  if (resolved.endsWith('.js') || resolved.endsWith('.jsx')) {
+    const base = resolved.slice(0, resolved.lastIndexOf('.'))
+    return [`${base}.ts`, `${base}.tsx`]
+  }
+  if (resolved.endsWith('.ts') || resolved.endsWith('.tsx')) return [resolved]
+  return [`${resolved}.ts`, `${resolved}.tsx`, `${resolved}/index.ts`, `${resolved}/index.tsx`]
+}
+
+/**
+ * Resolve a relative specifier to a file that exists. A trailing slash
+ * (`from '../'`) is dropped first: `posix.normalize` keeps it, and the
+ * candidates would then carry an empty file stem.
  */
 export function resolveRelativeSource(
   fromPath: string,
   specifier: string,
   exists: (path: string) => boolean,
 ): string | null {
-  if (!specifier.startsWith('./') && !specifier.startsWith('../')) return null
-  const resolved = posix.normalize(posix.join(posix.dirname(fromPath), specifier))
-  const candidates =
-    resolved.endsWith('.js') || resolved.endsWith('.jsx')
-      ? [
-          `${resolved.slice(0, resolved.lastIndexOf('.'))}.ts`,
-          `${resolved.slice(0, resolved.lastIndexOf('.'))}.tsx`,
-        ]
-      : [`${resolved}.ts`, `${resolved}.tsx`, `${resolved}/index.ts`, `${resolved}/index.tsx`]
-  return candidates.find(exists) ?? null
+  if (!isRelativeSpecifier(specifier)) return null
+  const resolved = posix
+    .normalize(posix.join(posix.dirname(fromPath), specifier))
+    .replace(/\/$/, '')
+  return sourceCandidates(resolved).find(exists) ?? null
 }
 
 /** The part of a workspace manifest that decides which file a specifier loads. */
