@@ -47,10 +47,7 @@ export function facetEntries(registry: FacetRegistry, target: FacetTarget): read
 }
 
 /** A payload the registry accepts for one facet. */
-export function facetPayloadArbitrary(
-  registry: FacetRegistry,
-  entry: FacetEntry,
-): fc.Arbitrary<unknown> {
+function facetPayloadArbitrary(registry: FacetRegistry, entry: FacetEntry): fc.Arbitrary<unknown> {
   const refs = new Map<string, fc.Arbitrary<unknown>>()
   for (const [field, kind] of Object.entries(entry.assetRefs ?? {})) {
     const ids = registry.assetIds(kind)
