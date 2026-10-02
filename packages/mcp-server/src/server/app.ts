@@ -52,6 +52,7 @@ import {
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
+import { routeServerCoreLogs } from './server-core-logs.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
 import { storeScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
@@ -276,6 +277,9 @@ function appWiring(options: AppOptions) {
 }
 
 export function createApp(options: AppOptions) {
+  // Both HTTP roots build their app here, so this is where server-core's
+  // fail-open records are given somewhere to go; see `routeServerCoreLogs`.
+  routeServerCoreLogs()
   const membership = membershipWiring(options)
   if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
     throw new Error('local-daemon mode must not receive authStrategy')

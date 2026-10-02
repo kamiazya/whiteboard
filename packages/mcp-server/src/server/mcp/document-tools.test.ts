@@ -1,12 +1,13 @@
-import { getLogger as getServerCoreLogger } from '@kamiazya/whiteboard-server-core'
+import {
+  getLogger as getServerCoreLogger,
+  setLogSink as setServerCoreLogSink,
+} from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { captureLogsForTests } from '../log.js'
 import { registerDocumentTools } from './document-tools.js'
-// Side-effect import: registering these tools also installs the server-core
-// log-sink wiring at module scope (see document-tools.ts).
 import { CANVAS_VIEW_RESOURCE_URI, RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { UI_LINKED_TOOLS } from './mcp-smoke-coverage.js'
 
@@ -84,32 +85,20 @@ describe('registerDocumentTools', () => {
     }
   })
 
-  it("forwards a server-core log record to this composition root's logger", () => {
-    // Registering the tools (via the side-effect import above) installs
-    // the module-scope setServerCoreLogSink wiring in document-tools.ts.
-    // Without it, any record a server-core call site logs (via its own
-    // injectable getLogger) would be silently dropped instead of reaching
-    // an operator — see server-core/src/log.ts's doc comment on why this
-    // shared layer cannot reach for mcp-server's pino logger directly.
-    const server = fakeServer()
-    registerDocumentTools(server, fakeDeps())
+  it('does not arm the server-core log sink as a side effect of being loaded', () => {
+    // Arming is each root's explicit startup act (`routeServerCoreLogs`); a
+    // sink installed by importing the tool registry would be armed or not
+    // depending on which modules a root happened to load.
+    setServerCoreLogSink(() => {})
+    registerDocumentTools(fakeServer(), fakeDeps())
 
     const capture = captureLogsForTests('debug')
     try {
-      getServerCoreLogger('some-server-core-scope').error('something failed', {
-        workspaceId: 'ws-1',
-      })
+      getServerCoreLogger('some-server-core-scope').error('something failed')
     } finally {
       capture.restore()
     }
 
-    expect(capture.records).toContainEqual(
-      expect.objectContaining({
-        scope: 'some-server-core-scope',
-        level: 'error',
-        msg: 'something failed',
-        data: expect.objectContaining({ workspaceId: 'ws-1' }),
-      }),
-    )
+    expect(capture.records).toEqual([])
   })
 })

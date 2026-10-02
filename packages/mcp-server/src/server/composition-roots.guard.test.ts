@@ -35,6 +35,12 @@ import { describe, expect, it } from 'vitest'
  *   the workers back up, sweep and compact a directory, and a root that gave
  *   them the process's while serving another's deps backed up the wrong tree
  *   and reported success.
+ * - **server-core's log sink.** server-core drops every record until a root
+ *   installs a sink, and its fail-open sites log a warning and carry on — so a
+ *   root that never arms one is invisible. `createApp` arms it for both HTTP
+ *   roots (read off its source below), and the stdio root, which builds no
+ *   app, calls `routeServerCoreLogs` itself. It used to be a side effect of
+ *   importing the tool registry, armed only because `app.ts` happened to.
  * - **Tracing.** Every root initialises OpenTelemetry itself — an HTTP root
  *   through `startHttpRootTracing` (the one helper that names its role), the
  *   stdio root through `initTracing`. The process entries differ (`daemon
@@ -80,6 +86,11 @@ function sharesBootScope(code: string): boolean {
   return booted && given === 'scope'
 }
 
+/** Whether `code` installs a server-core log sink, directly or through this package's helper. */
+function armsServerCoreLogSink(code: string): boolean {
+  return /\b(routeServerCoreLogs|setLogSink|setServerCoreLogSink)\(/.test(code)
+}
+
 interface RootRule {
   readonly missing: string
   readonly kinds: readonly RootKind[]
@@ -111,6 +122,11 @@ const ROOT_RULES: readonly RootRule[] = [
     missing: 'initTracing',
     kinds: ['stdio'],
     satisfied: (code) => /\binitTracing\(/.test(code),
+  },
+  {
+    missing: "server-core's log sink (routeServerCoreLogs / setLogSink)",
+    kinds: ['stdio'],
+    satisfied: armsServerCoreLogSink,
   },
   {
     missing: 'startBackgroundWork',
@@ -280,12 +296,39 @@ describe('composition roots share one boot sequence and one live audience', () =
       [
         '// initTracing(',
         'bootSelfHostDeps(dir)',
+        'routeServerCoreLogs()',
         'startBackgroundWork(stdioBackgroundWork())',
         'handle.stopAll()',
         'serveStdio(server)',
       ].join('\n'),
     )
     expect(findings).toEqual({ kind: 'stdio', missing: ['initTracing'] })
+  })
+
+  it('flags a stdio root that never arms the server-core log sink', () => {
+    const findings = inspectRoot(
+      [
+        'initTracing()',
+        'bootSelfHostDeps(dir)',
+        'startBackgroundWork(stdioBackgroundWork())',
+        'handle.stopAll()',
+        'serveStdio(server)',
+      ].join('\n'),
+    )
+    expect(findings).toEqual({
+      kind: 'stdio',
+      missing: ["server-core's log sink (routeServerCoreLogs / setLogSink)"],
+    })
+  })
+
+  it('holds createApp to arming the sink, and does not read a comment as the call', async () => {
+    const armed = stripComments('export function createApp(o) {\n  routeServerCoreLogs()\n}')
+    expect(armsServerCoreLogSink(armed)).toBe(true)
+    const commented = stripComments('// routeServerCoreLogs(\nexport function createApp(o) {}')
+    expect(armsServerCoreLogSink(commented)).toBe(false)
+    // The real one: the HTTP roots' share of the contract is read off app.ts.
+    const app = stripComments(await readFile(join(SERVER_DIR, 'app.ts'), 'utf8'))
+    expect(armsServerCoreLogSink(app)).toBe(true)
   })
 
   it('finds both HTTP roots and the stdio root, and each meets the shared contract', async () => {
