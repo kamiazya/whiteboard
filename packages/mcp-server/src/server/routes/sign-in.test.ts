@@ -54,7 +54,7 @@ let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let idp: FakeOidcProvider
 
-function appFor(admission: object, fetchFn: CustomFetch = idp.fetch) {
+function appFor(admission: object, fetchFn: CustomFetch = idp.fetch, now?: () => number) {
   const db = handle.db
   const signIn = createCompleteSignInDeps(db, HOUR)
   const app = new Hono()
@@ -71,6 +71,7 @@ function appFor(admission: object, fetchFn: CustomFetch = idp.fetch) {
         configured: [],
       }),
       publicBaseUrl: BASE,
+      ...(now === undefined ? {} : { now }),
     }),
   )
   return { app, signIn }
@@ -81,10 +82,16 @@ function cookieFrom(res: Response, name: string): string | undefined {
   return header?.slice(name.length + 1).split(';')[0]
 }
 
-async function signInThrough(app: Hono, query = '', cookieOverride?: string) {
+async function signInThrough(
+  app: Hono,
+  query = '',
+  cookieOverride?: string,
+  beforeCallback?: () => void,
+) {
   const started = await app.request(`${BASE}/auth/sign-in/corp${query}`)
   const binding = cookieFrom(started, '__Host-wb_signin')
   const callback = idp.authorize(started.headers.get('location') as string)
+  beforeCallback?.()
   const cookie = cookieOverride ?? `__Host-wb_signin=${binding}`
   return app.request(callback, { headers: { cookie } })
 }
@@ -177,6 +184,41 @@ describe('sign-in through an OIDC provider', () => {
     const { app } = appFor({ createAccounts: true })
     const res = await app.request(`${BASE}/auth/reauthenticate`)
     expect(res.headers.get('location')).toBe('/sign-in?error=reauthentication_unavailable')
+  })
+
+  // The attempt is the only thing between a callback and a session, so its
+  // lifetime is what bounds a stolen `state`. The routes' own default is under
+  // test here: the stores are handed no lifetime by the caller.
+  describe('the attempt lifetime', () => {
+    const TEN_MINUTES = 10 * 60 * 1000
+
+    it('is ten minutes: the callback one millisecond short of that still signs in', async () => {
+      let clock = Date.parse('2030-01-01T00:00:00Z')
+      const { app } = appFor({ createAccounts: true }, idp.fetch, () => clock)
+      idp.next({ sub: 'ada-1' })
+      const res = await signInThrough(app, '', undefined, () => {
+        clock += TEN_MINUTES - 1
+      })
+      expect(cookieFrom(res, SESSION_COOKIE)).toBeTruthy()
+    })
+
+    it('is ten minutes: the callback at that moment is refused as an unknown attempt', async () => {
+      let clock = Date.parse('2030-01-01T00:00:00Z')
+      const { app } = appFor({ createAccounts: true }, idp.fetch, () => clock)
+      idp.next({ sub: 'ada-1' })
+      const res = await signInThrough(app, '', undefined, () => {
+        clock += TEN_MINUTES
+      })
+      expect(res.headers.get('location')).toBe('/sign-in?error=sign_in_attempt_unknown')
+      expect(cookieFrom(res, SESSION_COOKIE)).toBeUndefined()
+    })
+
+    it('is the lifetime of the cookie that carries the browser binding', async () => {
+      const { app } = appFor({ createAccounts: true })
+      const started = await app.request(`${BASE}/auth/sign-in/corp`)
+      const line = started.headers.getSetCookie().find((c) => c.startsWith('__Host-wb_signin='))
+      expect(line?.split('; ')).toContain(`Max-Age=${TEN_MINUTES / 1000}`)
+    })
   })
 
   it('refuses a callback from a browser that did not begin the attempt', async () => {

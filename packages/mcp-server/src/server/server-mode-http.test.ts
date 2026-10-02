@@ -212,6 +212,28 @@ describe('startServerModeHttp', () => {
     expect(passedOptions?.people?.bearerProvisioning?.providers).toEqual([provider])
   })
 
+  // The session cookie's Max-Age and the session row's expiry both come from
+  // this one value, and no option reaches it: the shipped default is the
+  // whole answer to how long a sign-in lasts.
+  it('signs a person in for seven days', async () => {
+    const provider = {
+      id: 'corp',
+      kind: 'oidc' as const,
+      issuer: 'https://idp.test',
+      clientId: 'wb',
+      clientSecret: { env: 'CORP_SECRET' },
+      scopes: ['openid'],
+      admission: { createAccounts: true, honourEmailInvitations: false },
+      clientSecretValue: 's3cret',
+    }
+    const startPromise = startServerModeHttp({ ...makeOptions(), signInProviders: [provider] })
+    const server = await serverOnceServing()
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    expect(lastServerModeOptions()?.signIn?.signIn.sessionTtlMs).toBe(7 * 24 * 60 * 60 * 1000)
+  })
+
   /**
    * Server mode is the MULTI-INSTANCE deployment, and until this it was the
    * one taking no garbage collection at all — uploads that no document

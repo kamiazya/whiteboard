@@ -158,6 +158,33 @@ describe('createBackupScheduler', () => {
     ])
   })
 
+  // Nothing a deployment configures here names a count, so the shipped default
+  // is how many nights of backups an operator has to go back to.
+  it('keeps the newest seven when no count is configured', async () => {
+    const backupDir = join(root, 'backups')
+    const older = Array.from(
+      { length: 9 },
+      (_, day) => `2026-01-${String(day + 1).padStart(2, '0')}T00-00-00.000Z`,
+    )
+    for (const name of older) await mkdir(join(backupDir, name), { recursive: true })
+
+    const scheduler = createBackupScheduler({
+      dataDir: join(root, 'data'),
+      backupDir,
+      now: () => new Date('2026-01-10T00:00:00.000Z'),
+      runBackup: async (_dataDir, outputDir) => {
+        await mkdir(outputDir, { recursive: true })
+        return BACKED_UP
+      },
+    })
+    await scheduler.runOnceForTests()
+
+    expect((await readdir(backupDir)).sort()).toEqual([
+      ...older.slice(3),
+      '2026-01-10T00-00-00.000Z',
+    ])
+  })
+
   /**
    * A failed pass must not take the previous good backups with it. Deleting
    * on the way to a backup that then fails is how an operator ends up with
@@ -482,6 +509,41 @@ describe('createBackupScheduler leader lease', () => {
 
       expect(taken).toEqual(['instance-a', 'instance-b'])
     } finally {
+      await handle.dispose()
+    }
+  })
+
+  // The row is what another instance reads, so its expiry is the lease's
+  // lifetime. Long enough that a slow pass is not taken over, and bounded so a
+  // crashed holder does not lock the others out for good.
+  it('holds the lease for five minutes while a pass runs', async () => {
+    const handle = await createIsolatedDb({ dataDir: join(root, 'data') })
+    const startedAt = Date.parse('2026-03-04T03:00:00.000Z')
+    vi.useFakeTimers({ toFake: ['Date'], now: startedAt })
+    try {
+      let heldUntil: number | undefined
+      const scheduler = createBackupScheduler({
+        dataDir: join(root, 'data'),
+        backupDir: join(root, 'backups'),
+        now: () => new Date(startedAt),
+        runExclusively: createBackupLease({ holder: 'instance-a', getDb: async () => handle.db }),
+        runBackup: async (_dataDir, outputDir) => {
+          const row = await handle.db
+            .selectFrom('leases')
+            .select('expiresAt')
+            .where('name', '=', 'backup')
+            .executeTakeFirst()
+          heldUntil = row?.expiresAt
+          await mkdir(outputDir, { recursive: true })
+          return BACKED_UP
+        },
+      })
+
+      await scheduler.runOnceForTests()
+
+      expect(heldUntil).toBe(startedAt + 5 * 60 * 1000)
+    } finally {
+      vi.useRealTimers()
       await handle.dispose()
     }
   })

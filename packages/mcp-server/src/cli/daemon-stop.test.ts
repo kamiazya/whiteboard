@@ -268,3 +268,35 @@ describe('runDaemonStop: the default SIGTERM window', () => {
     }
   })
 })
+
+// After SIGKILL the process only has to be reaped, so the wait is short. It is
+// still a bound: a process that never goes (an uninterruptible one) must not
+// hold the command past it. Read off the default path — nothing here passes
+// `killWaitMs`.
+describe('runDaemonStop: the default wait after SIGKILL', () => {
+  it('gives up on a process that stays alive after 200 ms', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    vi.useFakeTimers()
+    try {
+      let killedAt: number | null = null
+      const { exitCode } = await runDaemonStop({
+        dataDir: '/fake',
+        isPidAlive: () => true,
+        killFn: (_pid, signal) => {
+          if (signal === 'SIGKILL') killedAt = Date.now()
+        },
+        sleep: async (ms) => {
+          vi.advanceTimersByTime(ms)
+        },
+        stopTimeoutMs: 0,
+        removeRecord: async () => undefined,
+      })
+
+      expect(killedAt).not.toBeNull()
+      expect(Date.now() - (killedAt as unknown as number)).toBe(200)
+      expect(exitCode).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

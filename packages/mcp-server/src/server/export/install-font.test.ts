@@ -17,7 +17,8 @@ import {
   fontCatalogueEntry,
   fontDownloadUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { opentypeApi } from '../../shared/opentype.js'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { FontInstallError, installFont, MAX_FONT_BYTES } from './install-font.js'
@@ -30,6 +31,41 @@ let fontsDir: string
 beforeEach(() => {
   fontsDir = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-font-install-')))
 })
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+/** A file that parses as a font and declares zero glyphs: `maxp.numGlyphs` is the uint16 at byte 4 of that table. */
+function fontDeclaringNoGlyphs(): ReturnType<typeof syntheticFont> {
+  const bytes = syntheticFont(COVERED)
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  for (let i = 0; i < view.getUint16(4); i++) {
+    const entry = 12 + i * 16
+    const tag = String.fromCharCode(...[0, 1, 2, 3].map((k) => view.getUint8(entry + k)))
+    if (tag === 'maxp') view.setUint16(view.getUint32(entry + 8) + 4, 0)
+  }
+  // Guards the fixture: the file must still parse, or the test below would
+  // pass for the wrong reason (the parse failing, not the glyph count).
+  const parsed = opentypeApi.parse(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  )
+  expect(parsed.numGlyphs).toBe(0)
+  return bytes
+}
+
+/** A body of `total` zero bytes, streamed in 1 MiB pieces so none is held at once. */
+function zeroStream(total: number): ReadableStream<Uint8Array> {
+  const piece = new Uint8Array(1024 * 1024)
+  let sent = 0
+  return new ReadableStream({
+    pull(controller) {
+      const size = Math.min(piece.byteLength, total - sent)
+      if (size === 0) return controller.close()
+      controller.enqueue(piece.subarray(0, size))
+      sent += size
+    },
+  })
+}
 
 /** Records what the installer asked for, and answers with `body`. */
 function recordingFetch(body: BodyInit | null, init?: ResponseInit) {
@@ -127,6 +163,17 @@ describe('installFont', () => {
     expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal)
   })
 
+  // The wait is bounded for the largest face on a slow connection, and long
+  // enough that it never cuts a real download short.
+  it('gives the download five minutes before it is abandoned', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    const { impl } = recordingFetch(syntheticFont(COVERED))
+
+    await installFont(known().id, { fontsDir, fetchImpl: impl })
+
+    expect(timeout).toHaveBeenCalledWith(5 * 60 * 1000)
+  })
+
   it('refuses an id that is not in the catalogue, without fetching anything', async () => {
     const { impl, calls } = recordingFetch(syntheticFont(COVERED))
 
@@ -146,6 +193,24 @@ describe('installFont', () => {
     // Not merely "no .ttf": a leftover temp file would be an unbounded litter
     // of failed downloads in the user's data directory.
     expect(await readdir(fontsDir).catch(() => [])).toEqual([])
+  })
+
+  it('keeps nothing from a font that declares no glyphs', async () => {
+    const { impl } = recordingFetch(fontDeclaringNoGlyphs())
+
+    await expect(installFont(known().id, { fontsDir, fetchImpl: impl })).rejects.toMatchObject({
+      reason: 'not-a-font',
+    })
+    expect(await installedNames()).toEqual([])
+  })
+
+  it('treats an answer with no body as an unreachable source', async () => {
+    const { impl } = recordingFetch(null)
+
+    await expect(installFont(known().id, { fontsDir, fetchImpl: impl })).rejects.toMatchObject({
+      reason: 'unreachable',
+    })
+    expect(await installedNames()).toEqual([])
   })
 
   it('keeps nothing when the source answers an error status', async () => {
@@ -173,6 +238,43 @@ describe('installFont', () => {
       installFont(known().id, { fontsDir, fetchImpl: impl, maxBytes: 4 * 1024 }),
     ).rejects.toMatchObject({ reason: 'too-large' })
     expect(await installedNames()).toEqual([])
+  })
+
+  // The cap is on what was read, so a download of exactly the cap is within it.
+  it('keeps a download of exactly the size cap and refuses one byte more', async () => {
+    const font = syntheticFont(COVERED)
+
+    await expect(
+      installFont(known().id, {
+        fontsDir,
+        fetchImpl: recordingFetch(font).impl,
+        maxBytes: font.byteLength,
+      }),
+    ).resolves.toMatchObject({ bytes: font.byteLength })
+    await expect(
+      installFont(known().id, {
+        fontsDir,
+        fetchImpl: recordingFetch(font).impl,
+        maxBytes: font.byteLength - 1,
+      }),
+    ).rejects.toMatchObject({ reason: 'too-large' })
+  })
+
+  // Nothing in the catalogue overrides the cap, so the shipped default is the
+  // limit every real install runs under. Sized from literals: the constant
+  // cannot vouch for itself.
+  it('allows a download of 32 MiB and refuses one byte more, with no override', async () => {
+    const limit = 32 * 1024 * 1024
+    const atLimit = recordingFetch(zeroStream(limit)).impl
+    const overLimit = recordingFetch(zeroStream(limit + 1)).impl
+
+    // Zeros are not a font, so reaching the parse is what "within the cap" means.
+    await expect(installFont(known().id, { fontsDir, fetchImpl: atLimit })).rejects.toMatchObject({
+      reason: 'not-a-font',
+    })
+    await expect(installFont(known().id, { fontsDir, fetchImpl: overLimit })).rejects.toMatchObject(
+      { reason: 'too-large' },
+    )
   })
 
   it('replaces an earlier install of the same font rather than accumulating files', async () => {
