@@ -679,6 +679,62 @@ export const ADAPTER_HELPER_FILES: readonly string[] = ['workspace-handle.ts']
  */
 export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data', 'store-scope']
 
+/**
+ * A published subpath that only some importers may load from SHIPPED source.
+ *
+ * The manifest checks judge a package, and a package can be a legal dependency
+ * while one of its entries is not: `plugin-visual` is allowed to
+ * `canvas-render`, whose `/ui` entry is React; `facet-engine` is allowed to it
+ * too, and its `/testing` entry pulls `fast-check`, a devDependency. Neither
+ * shows in a dependency list, and only a built bundle (bigger, or missing a
+ * module) shows the import.
+ *
+ * `consumers` are workspace directories whose non-test source may import the
+ * subpath; empty means no shipped file may, only tests. Keyed by the specifier
+ * as written. `subpath-consumers.test.ts` reads every manifest's `exports` and
+ * fails an entry that names no export, an export that carries a test-only
+ * marker or a `.tsx` target without an entry here, and a consumer that no
+ * longer imports the subpath — so this table cannot outlive what it records.
+ */
+export interface SubpathPolicy {
+  readonly consumers: readonly string[]
+  readonly reason: string
+}
+
+const TEST_ONLY_HELPER =
+  'doubles and conformance suites for tests; they import vitest or fast-check'
+
+export const SUBPATH_POLICY: Readonly<Record<string, SubpathPolicy>> = {
+  '@kamiazya/whiteboard-plugin-visual/ui': {
+    consumers: ['apps/web'],
+    reason:
+      'the React half of the plugin; every other entry is data or render and is loaded by Node and the layout worker, which this one would put React into',
+  },
+  '@kamiazya/whiteboard-facet-engine/testing': {
+    consumers: [],
+    reason: `fast-check arbitraries for a plugin author's own facet tests (fast-check is a devDependency of the engine); ${TEST_ONLY_HELPER}`,
+  },
+  '@kamiazya/whiteboard-model/test-utils': { consumers: [], reason: TEST_ONLY_HELPER },
+  '@kamiazya/whiteboard-ports/test-utils': { consumers: [], reason: TEST_ONLY_HELPER },
+  '@kamiazya/whiteboard-canvas-render/test-utils': { consumers: [], reason: TEST_ONLY_HELPER },
+  '@kamiazya/whiteboard-server-core/test-utils/embedder-contract': {
+    consumers: [],
+    reason: TEST_ONLY_HELPER,
+  },
+  '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract': {
+    consumers: [],
+    reason: TEST_ONLY_HELPER,
+  },
+  '@kamiazya/whiteboard-daemon-client/test-utils/sse-stream-source-contract': {
+    consumers: [],
+    reason: TEST_ONLY_HELPER,
+  },
+  '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper': {
+    consumers: [],
+    reason: TEST_ONLY_HELPER,
+  },
+}
+
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []
 }
