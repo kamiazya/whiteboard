@@ -33,4 +33,16 @@ describe('resolveToken', () => {
       'custom-token',
     )
   })
+
+  it('refuses an empty --token= rather than leaving the daemon open', () => {
+    expect(() => resolveToken(['--token='], {})).toThrow(/empty/i)
+  })
+
+  it('refuses an empty WHITEBOARD_TOKEN rather than leaving the daemon open', () => {
+    expect(() => resolveToken([], { WHITEBOARD_TOKEN: '' })).toThrow(/empty/i)
+  })
+
+  it('lets a non-empty --token= override an empty WHITEBOARD_TOKEN', () => {
+    expect(resolveToken(['--token=arg'], { WHITEBOARD_TOKEN: '' })).toBe('arg')
+  })
 })

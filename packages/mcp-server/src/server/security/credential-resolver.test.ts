@@ -172,4 +172,12 @@ describe('createCredentialResolver — an open daemon still identifies a real cr
 
     expect((await resolver.resolve(bearer('anything at all')))?.kind).toBe('anonymous')
   })
+
+  it('resolves no grant at all for an empty configured token, rather than opening the daemon', async () => {
+    const resolver = createCredentialResolver({ daemonToken: '' })
+
+    expect(await resolver.resolve(bearer('guess'))).toBeNull()
+    expect(await resolver.resolve(bearer(''))).toBeNull()
+    expect(await resolver.resolve(bearer(null))).toBeNull()
+  })
 })

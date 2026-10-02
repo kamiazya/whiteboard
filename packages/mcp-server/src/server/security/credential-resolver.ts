@@ -66,7 +66,11 @@ export interface CredentialResolver {
 }
 
 export interface CredentialResolverConfig {
-  /** Absent means an OPEN daemon: every caller resolves to `anonymous`. */
+  /**
+   * Absent means an OPEN daemon: every caller resolves to `anonymous`. An empty
+   * string is NOT absent — it is a configured token no bearer can match, so
+   * nothing resolves.
+   */
   daemonToken?: string
   /** Absent until a composition root supplies one (ADR-0043 decision 9). */
   macaroonRootKey?: Uint8Array

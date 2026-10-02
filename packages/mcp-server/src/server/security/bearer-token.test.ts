@@ -32,6 +32,13 @@ describe('isAuthorized', () => {
     expect(isAuthorized('Bearer anything', undefined)).toBe(true)
   })
 
+  it('refuses every bearer when the configured token is the empty string', () => {
+    // An empty value is a configuration slip, not "no authentication": only an
+    // ABSENT token opens the daemon.
+    expect(isAuthorized('Bearer guess', '')).toBe(false)
+    expect(isAuthorized(undefined, '')).toBe(false)
+  })
+
   it('requires a strict Bearer token match when configured', () => {
     expect(isAuthorized(undefined, 'secret')).toBe(false)
     expect(isAuthorized('Bearer nope', 'secret')).toBe(false)

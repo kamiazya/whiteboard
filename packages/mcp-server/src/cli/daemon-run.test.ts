@@ -258,6 +258,16 @@ describe('runDaemonRun token source conflict', () => {
     )
   })
 
+  it('refuses to start when WHITEBOARD_DAEMON_TOKEN is set but empty, as it does for an empty stdin token', async () => {
+    const outcome = await runDaemonRun({
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_DAEMON_TOKEN: '' },
+    })
+    expect(outcome.kind).toBe('input-error')
+    expect(startHttpServerMock).not.toHaveBeenCalled()
+  })
+
   it('still reads the token from stdin when only --token-stdin is set (no env token)', async () => {
     const fakeStdin = new EventEmitter() as EventEmitter & { setEncoding: (enc: string) => void }
     fakeStdin.setEncoding = vi.fn()

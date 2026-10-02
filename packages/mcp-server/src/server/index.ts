@@ -36,6 +36,9 @@ function readArg(name: string, fallback?: string): string | undefined {
  * --token=<value> takes precedence so packaged scripts that bake in a
  * default value work predictably; WHITEBOARD_TOKEN lets the daemon and
  * whatever spawned it stay in sync from a single shell export.
+ *
+ * A source that is set but empty throws: treating it as unset would start an
+ * OPEN daemon for an operator who believes they configured a token.
  */
 export function resolveToken(
   argv: readonly string[],
@@ -48,7 +51,11 @@ export function resolveToken(
   // so that token values containing '=' are preserved in full.
   const prefix = '--token='
   const match = [...argv].reverse().find((arg) => arg.startsWith(prefix))
-  return match !== undefined ? match.slice(prefix.length) : env.WHITEBOARD_TOKEN
+  const token = match !== undefined ? match.slice(prefix.length) : env.WHITEBOARD_TOKEN
+  if (token === '') {
+    throw new Error(match !== undefined ? '--token= is empty' : 'WHITEBOARD_TOKEN is set but empty')
+  }
+  return token
 }
 
 // Loads the nearest whiteboard config file (if any) and layers its values
@@ -169,7 +176,16 @@ async function prewarmExporter(dataDir: string): Promise<void> {
 export async function main() {
   applyLoadedConfigFileForServerEntrypoint()
 
-  const token = resolveToken(process.argv, process.env)
+  let token: string | undefined
+  try {
+    token = resolveToken(process.argv, process.env)
+  } catch (err) {
+    getLogger('server-index').error(
+      { message: messageOf(err, String(err)) },
+      'empty daemon token; refusing to start',
+    )
+    process.exit(1)
+  }
   const idleTimeoutMs = parseInt(
     readArg('idle-timeout-ms', `${15 * 60_000}`) ?? `${15 * 60_000}`,
     10,
