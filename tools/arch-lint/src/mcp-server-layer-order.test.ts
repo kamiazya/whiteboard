@@ -80,6 +80,7 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   // backup mechanics, and the identity/workspace resolution the stores and
   // `di/` build on.
   'server/log.ts': 'mechanics',
+  'server/server-core-logs.ts': 'mechanics',
   'server/config.ts': 'mechanics',
   'server/config-file.ts': 'mechanics',
   'server/startup-env.ts': 'mechanics',
