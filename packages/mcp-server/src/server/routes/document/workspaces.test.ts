@@ -65,7 +65,7 @@ const { createSelfHostStoreLocalModule } = await import('../../../di/store-local
 // the route no longer calls. `Object.create` rather than a spread: the index
 // is a class instance, and spreading one drops every method it inherits from
 // its prototype.
-async function depsWithFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
+async function routerFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   // A Proxy that binds every untouched method to the REAL instance:
@@ -81,7 +81,10 @@ async function depsWithFailing(method: 'deleteDocument' | 'moveDocument', err: u
         : value
     },
   }) as typeof deps.documentIndex
-  return { ...deps, documentIndex: index }
+  return createDocumentRouter({
+    dataLayout: testDataLayout(),
+    serverDeps: { ...deps, documentIndex: index },
+  })
 }
 
 beforeEach(() => {
@@ -316,13 +319,10 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const corrupt = createDocumentRouter({
-      dataLayout: testDataLayout(),
-      serverDeps: await depsWithFailing(
-        'deleteDocument',
-        corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
-      ),
-    })
+    const corrupt = await routerFailing(
+      'deleteDocument',
+      corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
+    )
     const res = await corrupt.request('/api/workspaces/session1/documents/canvas-a', {
       method: 'DELETE',
     })
@@ -334,10 +334,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 
     // Mutation guard: a non-corruption throw must NOT hit the same branch —
     // proves the mapping checks the error type, not "any throw".
-    const plain = createDocumentRouter({
-      dataLayout: testDataLayout(),
-      serverDeps: await depsWithFailing('deleteDocument', new Error('disk exploded')),
-    })
+    const plain = await routerFailing('deleteDocument', new Error('disk exploded'))
     const res2 = await plain.request('/api/workspaces/session1/documents/canvas-a', {
       method: 'DELETE',
     })
@@ -664,13 +661,10 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     await saveDocument('session1', 'a', new LoroDoc())
     const body = JSON.stringify({ path: 'b' })
     const headers = { 'Content-Type': 'application/json' }
-    const corrupt = createDocumentRouter({
-      dataLayout: testDataLayout(),
-      serverDeps: await depsWithFailing(
-        'moveDocument',
-        corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
-      ),
-    })
+    const corrupt = await routerFailing(
+      'moveDocument',
+      corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
+    )
     const res = await corrupt.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
       headers,
@@ -684,10 +678,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
     // Mutation guard: a non-corruption throw must NOT hit the same branch —
     // proves the mapping checks the error type, not "any throw".
-    const plain = createDocumentRouter({
-      dataLayout: testDataLayout(),
-      serverDeps: await depsWithFailing('moveDocument', new Error('disk exploded')),
-    })
+    const plain = await routerFailing('moveDocument', new Error('disk exploded'))
     const res2 = await plain.request('/api/workspaces/session1/documents/a/path', {
       method: 'PUT',
       headers,
