@@ -17,6 +17,7 @@
  * means the same thing on both platforms.
  */
 import { describe, expect, it } from 'vitest'
+import { stripComments } from './test-utils/strip-comments.js'
 
 const sources = import.meta.glob('./**/*.test.{ts,tsx}', {
   query: '?raw',
@@ -30,22 +31,12 @@ const PLATFORM_DEPENDENT_CHORDS: readonly { pattern: RegExp; use: string }[] = [
   { pattern: /\{Meta>\}a\{\/Meta\}/, use: 'userEvent.clear(element)' },
 ]
 
-/**
- * Comments are stripped before scanning: a test explaining WHY it avoids a
- * chord has to be able to name it, and this file itself is nothing but
- * such an explanation. Crude enough to mangle a comment marker inside a
- * string literal, which costs nothing here — the result is only ever fed
- * to these two chord patterns.
- */
-function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
-
+// Comments are stripped so a test explaining WHY it avoids a chord can name it.
 describe('test sources', () => {
   it('drive no platform-dependent browser shortcut', () => {
     const offenders: string[] = []
     for (const [path, source] of Object.entries(sources)) {
-      const code = withoutComments(source)
+      const code = stripComments(source)
       for (const { pattern, use } of PLATFORM_DEPENDENT_CHORDS) {
         if (pattern.test(code)) offenders.push(`${path}: ${pattern.source} — use ${use}`)
       }

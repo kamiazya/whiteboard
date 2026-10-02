@@ -14,6 +14,7 @@
  * `web-app-boundary.test.ts` enforces it.
  */
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../test-utils/strip-comments.js'
 
 const sources = import.meta.glob(
   ['../**/*.ts', '../**/*.tsx', '!../**/*.test.*', '!../test-utils/**'],
@@ -27,12 +28,8 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
 
 const ACCESS = /\blocalStorage\s*\??\.\s*(?:getItem|setItem|removeItem|clear|key|length)\b/
 
-function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
-}
-
 const touching = Object.entries(sources)
-  .filter(([, source]) => ACCESS.test(withoutComments(source)))
+  .filter(([, source]) => ACCESS.test(stripComments(source)))
   .map(([path]) => path)
   .sort()
 

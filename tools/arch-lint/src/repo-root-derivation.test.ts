@@ -29,9 +29,9 @@
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
+import { stripComments } from './strip-comments.js'
 
 const SCANNED_TREES = ['packages/mcp-server/src', 'packages/mcp-server/scripts']
 
@@ -51,27 +51,9 @@ function upFrom(dir: string, segments: number): string {
   return resolve(dir, ...Array.from({ length: segments }, () => '..'))
 }
 
-/** `raw` with every comment blanked to spaces: same length, same line breaks. */
-function withoutComments(raw: string): string {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, raw)
-  let out = raw
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (
-      token !== ts.SyntaxKind.SingleLineCommentTrivia &&
-      token !== ts.SyntaxKind.MultiLineCommentTrivia
-    ) {
-      continue
-    }
-    const start = scanner.getTokenStart()
-    const end = scanner.getTokenEnd()
-    out = out.slice(0, start) + raw.slice(start, end).replace(/[^\n]/g, ' ') + out.slice(end)
-  }
-  return out
-}
-
 /** The `../` counts in `raw` that land on `root` when taken from `fileDir`. */
 function rootDerivations(raw: string, fileDir: string, root: string): string[] {
-  const source = withoutComments(raw)
+  const source = stripComments(raw)
   const found: string[] = []
   for (const match of source.matchAll(DOTDOT_LITERAL)) {
     if (MODULE_SPECIFIER_BEFORE.test(source.slice(0, match.index))) continue

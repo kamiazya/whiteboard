@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../../../shared/test-utils/strip-comments.js'
 
 /**
  * The tenant boundary holds because stores are handed a tenant-bound handle
@@ -37,17 +38,13 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return out
 }
 
-function withoutComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
-}
-
 describe('who may reach the database around the tenant-bound handle', () => {
   it('only the files listed, and each listed file still does', async () => {
     const files = await sourceFiles(SRC)
     expect(files.length).toBeGreaterThan(200)
     const callers: string[] = []
     for (const file of files) {
-      if (DOORS.test(withoutComments(await readFile(file, 'utf8')))) {
+      if (DOORS.test(stripComments(await readFile(file, 'utf8')))) {
         callers.push(relative(SRC, file))
       }
     }

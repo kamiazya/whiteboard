@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { stripComments } from '../shared/test-utils/strip-comments.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 
 /**
@@ -50,7 +51,7 @@ const COMPOSITION_ROOTS = [
 function bypassedStartCalls(source: string): string[] {
   // Comments first: the composition roots discuss `.start()` in prose, and so
   // does this file.
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  const code = stripComments(source)
   const registry = registrySpan(code)
   return [...code.matchAll(/(\w[\w.?]*)\.start\(\)/g)]
     .filter((match) => {
@@ -152,10 +153,6 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return found
 }
 
-function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-}
-
 /**
  * The other bypass, and the one `.start()` cannot see: a module that owns a
  * timer arms itself the moment something calls into it, so it is a background
@@ -185,7 +182,7 @@ describe('a timer-owning store module is a declared worker', () => {
     const storeDir = join(SERVER_SRC, 'store')
     const owners: string[] = []
     for (const file of await sourceFiles(storeDir)) {
-      const code = withoutComments(await readFile(file, 'utf8'))
+      const code = stripComments(await readFile(file, 'utf8'))
       if (/\b(setTimeout|setInterval)\(/.test(code)) owners.push(relative(storeDir, file))
     }
     return owners.sort()
@@ -226,7 +223,7 @@ describe('the auto-compact scheduler is reached only where it is declared', () =
   it('has exactly the importers it declares', async () => {
     const importers: string[] = []
     for (const file of await sourceFiles(PACKAGE_SRC)) {
-      const code = withoutComments(await readFile(file, 'utf8'))
+      const code = stripComments(await readFile(file, 'utf8'))
       if (/\/auto-compact(\.js)?['"]/.test(code) && !file.endsWith('store/auto-compact.ts')) {
         importers.push(relative(PACKAGE_SRC, file))
       }

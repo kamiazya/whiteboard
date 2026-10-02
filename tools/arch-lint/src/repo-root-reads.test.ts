@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
+import { stripComments } from './strip-comments.js'
 
 // A test under `packages/*/src` that reads a file at the REPO ROOT — a
 // workflow, the Dockerfile, a docs page, the rule corpus — is a repo-policy
@@ -44,19 +45,10 @@ const BARE_ROOT_LITERAL =
 const REPO_ROOT_HELPER_IMPORT = /from\s+['"][^'"]*\/repo-root(?:\.js)?['"]/
 const DOTDOT_LITERAL = /['"`]((?:\.\.\/)+)([^'"`\s]*)['"`]/g
 
-/**
- * Source with comments removed: a rule file named in prose (`.claude/rules/…`
- * between backticks) is a pointer, not a read, and read as one in four files.
- * Line comments are matched only at the start of a line, so a `//` inside a
- * string literal on a code line is left alone.
- */
-function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-}
-
 /** Why `source` (the test at repo-relative `file`) reads a repo-root file; empty when it does not. */
 export function repoRootReads(file: string, rawSource: string): string[] {
-  const source = withoutComments(rawSource)
+  // A rule file named in prose between backticks is a pointer, not a read.
+  const source = stripComments(rawSource)
   const reasons: string[] = []
   if (REPO_ROOT_HELPER_IMPORT.test(source)) reasons.push('imports the repo-root helper')
   if (BARE_ROOT_LITERAL.test(source)) reasons.push('names a repo-root file in a path literal')

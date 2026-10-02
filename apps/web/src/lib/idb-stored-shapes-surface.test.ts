@@ -25,6 +25,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { assertScannedLedger } from '../test-utils/coverage-ledger.js'
+import { stripComments } from '../test-utils/strip-comments.js'
 
 const sources = import.meta.glob('./*.ts', {
   query: '?raw',
@@ -107,15 +108,11 @@ const SCHEMA_PARSE = /[A-Za-z]+Schema\.(?:safeParse|parse)\(/
  * a module that only mentions the subject teaches people to write an entry
  * to quiet the scan.
  */
-function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
-}
-
 function scanStoredShapeModules(): string[] {
   return Object.entries(sources)
     .filter(([path]) => !path.includes('.test.'))
     .filter(([, source]) => {
-      const body = withoutComments(source)
+      const body = stripComments(source)
       return STORE_CONSTANT.test(body) && SCHEMA_PARSE.test(body)
     })
     .map(([path]) => path.replace('./', ''))
