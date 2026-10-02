@@ -35,9 +35,20 @@ static-analysis-only, which is why it cannot see a cross-package cycle at all.
 
 It runs over the `src` of every entry in `repo-coverage.test.ts`'s
 `CYCLE_SCAN_PACKAGES` — every package the `SHARED_LAYER_PACKAGES` list names,
-plus both composition roots — over `.ts` and `.tsx` alike, which the boundary
-scans beside it do not. Test files and `test-utils/` are out, the same line
-those scans draw.
+plus both composition roots — over `.ts` and `.tsx` alike. Test files and
+`test-utils/` are out, the same line the boundary scans draw.
+
+**Which packages those scans run on is `SHARED_LAYER_PACKAGES`, and nothing
+used to say it was complete**: `scene` and `reference-graph` were in
+`ARCHITECTURE_MAP` and rule 1 for months while no per-package scan ran on
+either (a `node:fs` import in `reference-graph` passed). `every workspace is in
+a per-package scan list` now fails on any `packages/*` or `apps/*` manifest in
+neither that list nor `COMPOSITION_ROOTS`, unless `NOT_BOUNDARY_SCANNED` gives
+it a reason (empty today, guarded from both sides). The boundary scan also reads
+`.tsx`, for the `node-builtin-import` and `inversify-import` kinds only — a
+component may touch the DOM, but not `node:*`. Scanning `.tsx` for every kind
+would be clean today too (measured: only `dom-global` hits, all exempt), so
+`.ts`-only was never what protected `plugin-visual`'s react-free data half.
 
 **It follows path aliases, and had to before `apps/web` could join**: that
 package wrote 115 of its 554 intra-package value edges as `@/...`, a fifth of

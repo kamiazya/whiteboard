@@ -11,7 +11,11 @@ import {
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection } from './direction-check.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
+import {
+  type BoundaryViolationKind,
+  collectModuleSpecifiers,
+  scanSourceForBoundaryViolations,
+} from './scanner.js'
 import { findTypeOnlyCycles } from './type-cycle-check.js'
 
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
@@ -27,19 +31,19 @@ const SHARED_LAYER_PACKAGES = [
   'packages/server-core',
   'packages/workspace-index',
   'packages/history',
+  'packages/scene',
+  'packages/reference-graph',
   // Browser-runtime UI package, not a "shared" model/codec/... layer package
   // in the architecture-map.md sense, but scanned the same way — see its
   // `exemptBoundaryViolationKinds` entry in architecture-map.ts for why DOM
   // globals and one build-time `Buffer` use don't trip the scan.
   'packages/canvas-viewer',
   // React packages, scanned for the same reason and with the same caveat as
-  // canvas-viewer. The scan's `.ts`-only default is load-bearing here rather
-  // than incidental: it covers `plugin-visual`'s react-free DATA half
-  // (`data.ts`, `icons/`), which `canvas-render` imports and which therefore
-  // must not reach for `node:*`, while leaving each package's `.tsx` alone.
-  // Registering a package in `architecture-map.ts` does NOT scan it —
-  // verified by a `node:fs` import in `plugin-visual` passing a full
-  // arch-lint run before both of these were listed here.
+  // canvas-viewer. Registering a package in `architecture-map.ts` does NOT
+  // scan it — a `node:fs` import in `plugin-visual` once passed a full
+  // arch-lint run for exactly that reason, and `every workspace is in a
+  // per-package scan list` below is what now keeps the next package from
+  // repeating it.
   'packages/facet-ui',
   'packages/plugin-visual',
 ]
@@ -114,6 +118,58 @@ const CYCLE_SCAN_DIRS = CYCLE_SCAN_PACKAGES.map((packageDir) => join(REPO_ROOT, 
  */
 const CYCLE_SCAN_ALIASES = {} as const
 
+/**
+ * Workspaces under `packages/` and `apps/` that are in NEITHER list above, each
+ * with why a scan of them would be wrong rather than missing.
+ *
+ * Empty today, and guarded from both sides below: an entry naming a workspace
+ * that is gone, or one a list already covers, fails — so an exemption cannot
+ * outlive the reason it records, and a package cannot be left out of every
+ * per-package scan by simply not being listed anywhere.
+ */
+const NOT_BOUNDARY_SCANNED: Readonly<Record<string, string>> = {}
+
+/** Every directory under `packages/` and `apps/` that carries a package.json. */
+function workspaceManifestDirs(): string[] {
+  return ['packages', 'apps'].flatMap((root) =>
+    readdirSync(join(REPO_ROOT, root), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `${root}/${entry.name}`)
+      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
+  )
+}
+
+describe('every workspace is in a per-package scan list', () => {
+  const listed = new Set([...SHARED_LAYER_PACKAGES, ...COMPOSITION_ROOTS])
+
+  it('finds the workspaces it is meant to check', () => {
+    expect(
+      workspaceManifestDirs().length,
+      'the workspace walk found almost nothing',
+    ).toBeGreaterThan(15)
+  })
+
+  it('lists every workspace in SHARED_LAYER_PACKAGES or COMPOSITION_ROOTS, or exempts it with a reason', () => {
+    const unscanned = workspaceManifestDirs().filter(
+      (dir) => !listed.has(dir) && NOT_BOUNDARY_SCANNED[dir] === undefined,
+    )
+    expect(
+      unscanned,
+      'a workspace is in no per-package scan, so a node: import or a banned dependency in it passes ' +
+        'arch-lint. Registering it in architecture-map.ts does NOT scan it. Add it to ' +
+        'SHARED_LAYER_PACKAGES (or COMPOSITION_ROOTS), or to NOT_BOUNDARY_SCANNED with the reason.',
+    ).toEqual([])
+  })
+
+  it('keeps every NOT_BOUNDARY_SCANNED entry a real, otherwise unlisted workspace with a reason', () => {
+    const dirs = new Set(workspaceManifestDirs())
+    const stale = Object.entries(NOT_BOUNDARY_SCANNED).filter(
+      ([dir, reason]) => !dirs.has(dir) || listed.has(dir) || reason.trim().length <= 20,
+    )
+    expect(stale, 'drop the entry, or give it a reason of substance').toEqual([])
+  })
+})
+
 describe('composition-root dependency direction', () => {
   for (const packageDir of COMPOSITION_ROOTS) {
     it(`${packageDir}/package.json dependency direction is clean`, () => {
@@ -125,7 +181,20 @@ describe('composition-root dependency direction', () => {
   }
 })
 
+const TSX_BANNED_KINDS: ReadonlySet<BoundaryViolationKind> = new Set([
+  'node-builtin-import',
+  'inversify-import',
+])
+
 describe('shared-layer boundary lint (real source coverage)', () => {
+  // A walk that finds no `.tsx` reports every package clean over nothing.
+  it('finds the .tsx files the import scan is meant to read', () => {
+    const tsxFiles = SHARED_LAYER_PACKAGES.flatMap((packageDir) =>
+      listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.tsx']),
+    )
+    expect(tsxFiles.length, 'the .tsx walk found almost nothing').toBeGreaterThanOrEqual(6)
+  })
+
   for (const packageDir of SHARED_LAYER_PACKAGES) {
     it(`${packageDir}/src has zero boundary violations`, () => {
       const manifest = JSON.parse(
@@ -144,6 +213,23 @@ describe('shared-layer boundary lint (real source coverage)', () => {
       for (const file of files) {
         const allViolations = scanSourceForBoundaryViolations(file, readFileSync(file, 'utf-8'))
         const violations = allViolations.filter((v) => !exemptKinds.has(v.kind))
+        expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
+      }
+    })
+
+    // `.tsx` is scanned for the two import kinds only: a component legitimately
+    // reaches for `window`/`document`, but a `node:*` or `inversify` import in
+    // one breaks the browser and the Worker exactly as it does in a `.ts`.
+    it(`${packageDir}/src .tsx files import no node builtin and no inversify`, () => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
+      )
+      const exemptKinds = exemptedBoundaryViolationKinds(manifest.name)
+      for (const file of listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.tsx'])) {
+        const violations = scanSourceForBoundaryViolations(
+          file,
+          readFileSync(file, 'utf-8'),
+        ).filter((v) => TSX_BANNED_KINDS.has(v.kind) && !exemptKinds.has(v.kind))
         expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
       }
     })
