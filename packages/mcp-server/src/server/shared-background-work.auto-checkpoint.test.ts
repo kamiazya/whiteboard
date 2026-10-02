@@ -76,7 +76,7 @@ describe('the auto-checkpoint declaration both kinds of root arm', () => {
   })
 
   it('is declared by the stdio set as well, beside the compaction it waits out', async () => {
-    const declared = stdioBackgroundWork()
+    const declared = stdioBackgroundWork(globalStoreScope)
     expect(declared.map((entry) => entry.name)).toEqual(['auto-checkpoint', 'auto-compact'])
     expect(declared.every((entry) => entry.worker !== null)).toBe(true)
   })

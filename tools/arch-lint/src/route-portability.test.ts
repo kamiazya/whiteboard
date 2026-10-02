@@ -50,7 +50,7 @@ const ROUTES_DIR = join(REPO_ROOT, 'packages/mcp-server/src/server/routes')
 
 /** A relative import that lands in this root's own mechanics or composition. */
 const NODE_BOUND_LOCAL =
-  /^\.\.?\/(?:.*\/)?(?:(?:store|daemon|di|export)\/|security\/[a-z0-9-]+-store\.js$|tenant\/data-layout\.js$|mcp\/index\.js$)/
+  /^\.\.?\/(?:.*\/)?(?:(?:store|daemon|di|export)\/|security\/[a-z0-9-]+-store\.js$|tenant\/data-layout\.js$)/
 
 /**
  * A specifier naming one of this root's own mechanics. `MECHANICS_NOT_SCANNED`
@@ -122,6 +122,8 @@ interface PortableRoute {
 
 const LOG = 'seam log.ts'
 const HANDLE = 'seam workspace-handle.ts'
+const MCP_SERVER = 'seam mcp/server.ts'
+const PROCESS_IN_HELPERS = 'process in app-helpers.ts'
 const OS_IN_SHARED = 'node:os in routes/document/_shared.ts'
 const CRYPTO_IN_TIMING = 'node:crypto in security/timing-safe.ts'
 const BUFFER_IN_TIMING = 'Buffer in security/timing-safe.ts'
@@ -152,6 +154,7 @@ const PORTABLE_ROUTES_IN_MCP_SERVER: Readonly<Record<string, PortableRoute>> = {
   'document/restore.ts': { role: 'router', blockedBy: [HANDLE, OS_IN_SHARED] },
   'document/trash.ts': { role: 'router', blockedBy: [HANDLE, LOG] },
   'document/workspaces.ts': { role: 'router', blockedBy: [HANDLE, LOG, OS_IN_SHARED] },
+  'mcp.ts': { role: 'router', blockedBy: [LOG, MCP_SERVER, PROCESS_IN_HELPERS] },
   'status.ts': { role: 'router', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
   'sync-audience.ts': { role: 'registry', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
   'viewport-requests.ts': { role: 'registry', blockedBy: [] },
@@ -167,6 +170,9 @@ const PORTABLE_ROUTES_IN_MCP_SERVER: Readonly<Record<string, PortableRoute>> = {
 const CUT_SEAMS: Readonly<Record<string, string>> = {
   'log.ts':
     'the daemon logger writes through pino and Node streams; a lifted route is handed a logger',
+  'mcp/server.ts':
+    'builds an McpServer over the widget bundle on disk and the package manifest (node:fs, ' +
+    'node:module); a lifted `/mcp` route is handed the factory',
   'workspace-handle.ts':
     'resolves an address through the store registry held at module level (a ledgered ' +
     'adapter-mechanic edge); a lifted route is handed the resolved workspace',
@@ -178,7 +184,7 @@ const CUT_SEAMS: Readonly<Record<string, string>> = {
  * it is lowered, so the number keeps saying where the lift stands. The same
  * shape as `ADAPTERS_REACHING_MECHANICS_CEILING`.
  */
-const PORTABLE_ROUTES_CEILING = 12
+const PORTABLE_ROUTES_CEILING = 13
 
 /**
  * What the closure says, pinned by equality for the same reason: a file

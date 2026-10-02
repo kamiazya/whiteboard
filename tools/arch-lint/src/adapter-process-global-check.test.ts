@@ -32,10 +32,8 @@ const SRC_DIR = join(REPO_ROOT, 'packages/mcp-server/src')
 const STILL_READ_BY_ADAPTERS: Record<string, string> = {
   'export/installed-fonts.ts -> getDataDir':
     'the installed-font directory is read by the headless exporter and the text measurer, both process singletons keyed by nothing, so a directory cannot reach them without keying those first (a measurer per fonts dir, an exporter per measurer)',
-  'mcp/index.ts -> getDataDir':
-    'the stdio entry is a composition root with nobody above it to hand it a layout: it resolves the data dir once and boots its deps and its signing identity from it',
 }
-const LEDGER_SIZE = 2
+const LEDGER_SIZE = 1
 
 const actual = findAdapterGlobalReads(SERVER_DIR)
 
@@ -236,12 +234,10 @@ describe('a layer that builds stores does not read the process data dir or tenan
 const STILL_DEFAULTED_BY_ADAPTERS: Record<string, string> = {
   'app.ts -> storeScope':
     'createApp derives the scope every router is handed from the layout its root booted the deps over, once; this is the one place an adapter-layer file builds one',
-  'shared-background-work.ts -> globalStoreScope':
-    "stdioBackgroundWork's default: the stdio root is the process's one keeper and resolves getDataDir() once, so it has no scope to hand until mcp/index.ts builds one from that directory",
   'workspace-handle.ts -> workspaceRegistry':
     'a handle is resolved against the process registry for nine routes, the membership gate, the sync stream and the people routes, none of which is handed the registry; threading it through the path-route helpers and the security middleware is its own increment',
 }
-const DEFAULTED_LEDGER_SIZE = 3
+const DEFAULTED_LEDGER_SIZE = 2
 
 const defaulted = findAdapterScopeDefaults(SRC_DIR)
 

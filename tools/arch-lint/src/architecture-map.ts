@@ -641,10 +641,10 @@ export const ADAPTERS_REACHING_MECHANICS_CEILING = 23
  * The same reasoning already excludes `corrupt-stored-data` below.
  */
 export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
-  // Empty: `mcp/index.ts`, the McpServer factory and stdio entry, stood here
-  // while it called the store's own boot functions. It now boots through
-  // `di/boot-self-host-deps.ts` like every other root, so nothing needs the
-  // exemption. A file that does must be added with its reason.
+  // Empty: no composition root sits inside an adapter tree. The stdio root is
+  // `server/stdio-root.ts`, beside the other roots, and `mcp/server.ts` is a
+  // library that takes the deps it is handed. A file that does must be added
+  // with its reason.
 ]
 
 /**

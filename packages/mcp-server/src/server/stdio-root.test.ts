@@ -7,67 +7,40 @@ import { describe, expect, it, vi } from 'vitest'
 // module's own lifecycle handler is installed would otherwise be silently
 // swallowed. This test locks in the fix: installStdioLifecycle() must run
 // before initTracing() so a startup-window signal is always handled.
-vi.mock('./logging.js', () => ({
-  wireMcpLogging: vi.fn(() => ({ restore: vi.fn() })),
-}))
-vi.mock('../current-workspace.js', () => ({
-  ensureWorkspaceId: vi.fn(async () => 'ws_test'),
-}))
-vi.mock('./standalone-help.js', () => ({
-  buildDrawDiagramPrompt: vi.fn(() => ''),
-  getStandaloneHelpText: vi.fn(() => ''),
-  WHITEBOARD_DRAW_PROMPT: 'draw-diagram',
-}))
-vi.mock('../config.js', () => ({
+vi.mock('./config.js', () => ({
   getDataDir: vi.fn(() => '/tmp/whiteboard-index-test'),
   WHITEBOARD_ROOT: '/tmp/whiteboard-index-test-root',
 }))
-vi.mock('../observability/tracing.js', () => ({
+vi.mock('./observability/tracing.js', () => ({
   initTracing: vi.fn(async () => null),
   shutdownTracing: vi.fn(async () => undefined),
 }))
-vi.mock('../store/db/prepare.js', () => ({
-  prepareDataDir: vi.fn(async () => undefined),
+const booted = { serverDeps: { marker: 'deps' }, scope: { marker: 'scope' } }
+vi.mock('../di/boot-self-host-deps.js', () => ({
+  bootSelfHostDeps: vi.fn(async () => booted),
 }))
-vi.mock('./stdio-lifecycle.js', () => ({
+vi.mock('./shared-background-work.js', () => ({
+  stdioBackgroundWork: vi.fn(() => ['declared-work']),
+}))
+vi.mock('./background-work.js', () => ({
+  startBackgroundWork: vi.fn(() => ({ stopAll: vi.fn(async () => undefined) })),
+}))
+vi.mock('./mcp/stdio-lifecycle.js', () => ({
   installStdioLifecycle: vi.fn(() => () => undefined),
-}))
-vi.mock('./document-tools.js', () => ({
-  registerDocumentTools: vi.fn(),
-}))
-vi.mock('../store/db/index.js', () => ({
-  getDb: vi.fn(async () => ({})),
-  registerDbDisposeHook: vi.fn(),
-}))
-vi.mock('../../di/store-local.module.js', () => ({
-  createStoreLocalModule: vi.fn(() => 'fake-store-local-module'),
-}))
-vi.mock('../../di/container.js', () => ({
-  createContainer: vi.fn(() => 'fake-container'),
-  resolveServerDeps: vi.fn(() => ({
-    documentStore: {},
-    blobStore: {},
-  })),
-}))
-vi.mock('@modelcontextprotocol/server', () => ({
-  McpServer: vi.fn(function FakeMcpServer(this: Record<string, unknown>) {
-    this.server = { registerCapabilities: vi.fn() }
-    this.registerResource = vi.fn()
-    this.registerPrompt = vi.fn()
-    this.connect = vi.fn(async () => undefined)
-    this.close = vi.fn(async () => undefined)
-  }),
 }))
 vi.mock('@modelcontextprotocol/server/stdio', () => ({
   serveStdio: vi.fn(() => ({ close: vi.fn(async () => undefined) })),
 }))
 
+const { main } = await import('./stdio-root.js')
+const { installStdioLifecycle } = await import('./mcp/stdio-lifecycle.js')
+const { initTracing } = await import('./observability/tracing.js')
+const { serveStdio } = await import('@modelcontextprotocol/server/stdio')
+const { stdioBackgroundWork } = await import('./shared-background-work.js')
+const { startBackgroundWork } = await import('./background-work.js')
+
 describe('main()', () => {
   it('installs the stdio lifecycle handler before initTracing so a startup-window signal is never swallowed', async () => {
-    const { main } = await import('./index.js')
-    const { installStdioLifecycle } = await import('./stdio-lifecycle.js')
-    const { initTracing } = await import('../observability/tracing.js')
-
     await main()
 
     const installCallOrder = vi.mocked(installStdioLifecycle).mock.invocationCallOrder[0]
@@ -78,9 +51,6 @@ describe('main()', () => {
   })
 
   it('serves stdio through serveStdio with a per-connection factory', async () => {
-    const { main } = await import('./index.js')
-    const { serveStdio } = await import('@modelcontextprotocol/server/stdio')
-
     await main()
 
     // serveStdio owns the connection's era decision; main() must hand it a
@@ -89,5 +59,14 @@ describe('main()', () => {
     expect(serveStdio).toHaveBeenCalled()
     const [factory] = vi.mocked(serveStdio).mock.calls.at(-1) ?? []
     expect(typeof factory).toBe('function')
+  })
+})
+
+describe('the stdio root serves the directory it booted', () => {
+  it('runs its background work over the scope its deps were booted over', async () => {
+    await main()
+
+    expect(stdioBackgroundWork).toHaveBeenLastCalledWith(booted.scope)
+    expect(startBackgroundWork).toHaveBeenLastCalledWith(['declared-work'])
   })
 })

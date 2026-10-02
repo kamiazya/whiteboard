@@ -12,5 +12,5 @@ register()
 const here = dirname(fileURLToPath(import.meta.url))
 // The entry serves only when it is the process's direct entry point, so an
 // import has to start it by hand.
-const { main } = await import(resolve(here, '../../../src/server/mcp/index.ts'))
+const { main } = await import(resolve(here, '../../../src/server/stdio-root.ts'))
 await main()

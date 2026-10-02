@@ -28,8 +28,7 @@
  *
  * Measured before writing this: eight upward edges (see `UPWARD_EDGES`), none
  * of them a surprise once the layers were named — each is a module filed in the
- * wrong directory (a scheduler under `routes/`, a stdio root inside the library
- * that composes the HTTP server) rather than a design that wants the edge. They
+ * wrong directory (a scheduler under `routes/`) rather than a design that wants the edge. They
  * are ledgered rather than moved here because each is a relocation with its own
  * importers, and the count may only fall.
  *
@@ -67,8 +66,12 @@ const MECHANIC_DIRS: ReadonlySet<string> = new Set([
   'release',
 ])
 
-/** MCP files that are a process entry, not a tool registration. */
-const MCP_ENTRY_FILES: ReadonlySet<string> = new Set(['server/mcp/index.ts', 'server/mcp/stdio.ts'])
+/**
+ * The one file under `server/mcp/` that is a process entry rather than a tool
+ * registration: it starts the stdio root (`server/stdio-root.ts`), so it sits
+ * above it.
+ */
+const MCP_PROCESS_ENTRY = 'server/mcp/stdio.ts'
 
 /**
  * Top-level `server/*.ts`, each named. Named rather than guessed so a new one
@@ -110,6 +113,7 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   // Process entries.
   'server/index.ts': 'entry',
   'server/daemon-entry.ts': 'entry',
+  'server/stdio-root.ts': 'entry',
 }
 
 /** The layer of a path relative to `src/`, or `undefined` when it belongs to none. */
@@ -122,7 +126,7 @@ function layerOf(path: string): Layer | undefined {
   if (top !== 'server') return undefined
   if (path.split('/').length === 2) return TOP_LEVEL[path]
   if (second === 'routes') return 'adapters'
-  if (second === 'mcp') return MCP_ENTRY_FILES.has(path) ? 'entry' : 'adapters'
+  if (second === 'mcp') return path === MCP_PROCESS_ENTRY ? 'entry' : 'adapters'
   return MECHANIC_DIRS.has(second as string) ? 'mechanics' : undefined
 }
 
@@ -168,13 +172,6 @@ const UPWARD_EDGES: Readonly<Record<string, string>> = {
   'daemon/purge-legacy-trust-file.ts -> server/log.ts':
     'the one daemon module that logs through the server logger; a logger seam the daemon is ' +
     'handed, or the logger moving below `daemon/`, retires it',
-  'server/app.ts -> server/mcp/index.ts':
-    '`createMcpServer` lives in the file that is also the stdio root and its `main()`; splitting ' +
-    '`mcp/index.ts` into a library module and a stdio root retires this, the next entry and the ' +
-    'three places that exempt `mcp/index.ts` by name',
-  'server/routes/mcp.ts -> server/mcp/index.ts':
-    'the same file as the entry above: the route mounts `createMcpServer` from the module that ' +
-    'also starts stdio',
   'server/canvas-client-notifier.ts -> server/routes/sync-audience.ts':
     'the audience registry is a mechanic filed under `routes/`; moving `sync-audience.ts` out of ' +
     'it retires this and the shared-background-work edge below',
@@ -193,7 +190,7 @@ const UPWARD_EDGES: Readonly<Record<string, string>> = {
 }
 
 /** How many entries {@link UPWARD_EDGES} may hold — pinned by equality, a ratchet and not a budget. */
-const UPWARD_EDGES_CEILING = 8
+const UPWARD_EDGES_CEILING = 6
 
 describe('what counts as an upward edge', () => {
   const edgesOf = (files: Record<string, string>): string[] =>
@@ -252,9 +249,10 @@ describe('what counts as an upward edge', () => {
     ).toEqual([])
   })
 
-  it('treats the stdio root as an entry, above the app that composes the library', () => {
-    expect(layerOf('server/mcp/index.ts')).toBe('entry')
+  it('treats the stdio root and its process entry as entries, above the library the app composes', () => {
+    expect(layerOf('server/stdio-root.ts')).toBe('entry')
     expect(layerOf('server/mcp/stdio.ts')).toBe('entry')
+    expect(layerOf('server/mcp/server.ts')).toBe('adapters')
     expect(layerOf('server/mcp/document-tools.ts')).toBe('adapters')
   })
 })

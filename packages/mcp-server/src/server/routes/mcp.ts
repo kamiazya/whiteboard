@@ -20,7 +20,7 @@ import {
   shouldLogMcpHttpDebug,
 } from '../app-helpers.js'
 import { getLogger } from '../log.js'
-import { createMcpServer } from '../mcp/index.js'
+import { createMcpServer } from '../mcp/server.js'
 
 /** The same logger name the wiring used, so a record reads the same. */
 const httpLog = getLogger('mcp-http')
@@ -113,15 +113,16 @@ async function jsonBodyOf(c: Context): Promise<unknown> {
 /**
  * The legacy transport: a FRESH server per request, because the MCP SDK
  * throws 'Already connected' if one Server is connected to more than one
- * transport. The heavy workspace-id file IO is memoized inside
- * `createMcpServer`, so concurrent `/mcp` requests stay cheap and race-free.
+ * transport. Everything expensive lives in the `serverDeps` the root built
+ * once, so a server per request stays cheap and concurrent requests race on
+ * nothing.
  */
 async function handleLegacy(
   c: Context,
   parsedBody: unknown,
   startedAt: number,
   trace: McpHttpTrace,
-  serverDeps: ServerDeps | undefined,
+  serverDeps: ServerDeps,
 ): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true })
   let response: Response | undefined

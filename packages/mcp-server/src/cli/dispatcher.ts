@@ -264,7 +264,7 @@ async function dispatchMcp(): Promise<number> {
   // surface on stderr only, then the process exits non-zero.
   // Dynamic import keeps the MCP module (and its server/config
   // mkdir + daemon side effects) out of the read-only command path.
-  const { main: runMcp } = await import('../server/mcp/index.js')
+  const { main: runMcp } = await import('../server/stdio-root.js')
   try {
     await runMcp()
   } catch (err) {

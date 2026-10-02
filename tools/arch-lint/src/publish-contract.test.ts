@@ -71,24 +71,24 @@ describe('publish contract', () => {
       registry: 'https://registry.npmjs.org',
       access: 'public',
     })
-    expect(mcpPackage.main).toBe('./dist/server/mcp/index.js')
-    expect(mcpPackage.types).toBe('./dist/server/mcp/index.d.ts')
+    expect(mcpPackage.main).toBe('./dist/server/mcp/server.js')
+    expect(mcpPackage.types).toBe('./dist/server/mcp/server.d.ts')
     // The browser-safe client half lives in @kamiazya/whiteboard-daemon-client
     // now; the published surface is the MCP server alone. A client subpath
     // reappearing here means someone re-published the client through the
     // server package — that split is deliberate (0.0.x, no consumers to keep).
     expect(mcpPackage.exports).toEqual({
       '.': {
-        types: './dist/server/mcp/index.d.ts',
-        import: './dist/server/mcp/index.js',
+        types: './dist/server/mcp/server.d.ts',
+        import: './dist/server/mcp/server.js',
       },
       './package.json': './package.json',
     })
     // publishConfig.exports is the shape pnpm substitutes on npm publish.
     expect(mcpPackage.publishConfig.exports).toEqual({
       '.': {
-        types: './dist/server/mcp/index.d.ts',
-        import: './dist/server/mcp/index.js',
+        types: './dist/server/mcp/server.d.ts',
+        import: './dist/server/mcp/server.js',
       },
       './package.json': './package.json',
     })

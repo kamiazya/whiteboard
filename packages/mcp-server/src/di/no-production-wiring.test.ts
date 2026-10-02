@@ -55,7 +55,7 @@ const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
   { name: 'bare storeMemoryModule identifier', pattern: /\bstoreMemoryModule\b/ },
 ]
 
-// The boot path (server/mcp/index.ts) must construct stores only through the
+// The boot path (server/stdio-root.ts) must construct stores only through the
 // DI container (createContainer + createStoreLocalModule), never by
 // importing a concrete store class directly — that would let a manual
 // `new LibsqlDocumentStore(...)` construction bypass the container and
@@ -87,7 +87,9 @@ describe('DI/in-memory composition stays out of production wiring', () => {
     }
   })
 
-  const bootPathEntries = productionEntries.filter(([path]) => path.includes('server/mcp/index.ts'))
+  const bootPathEntries = productionEntries.filter(([path]) =>
+    path.includes('server/stdio-root.ts'),
+  )
 
   it('scans the mcp boot path entrypoint', () => {
     expect(bootPathEntries.length).toBe(1)

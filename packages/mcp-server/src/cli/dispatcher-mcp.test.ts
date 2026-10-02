@@ -9,14 +9,14 @@ import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 // `StdioServerTransport` reads from process.stdin and never resolves
 // — so we mock the imported `main()` and assert routing only.
 
-vi.mock('../server/mcp/index.js', () => ({
+vi.mock('../server/stdio-root.js', () => ({
   main: vi.fn(async () => {
     // Default: pretend the stdio loop completed cleanly. Individual
     // tests override via `vi.mocked(...).mockImplementation(...)`.
   }),
 }))
 
-const mcpModule = await import('../server/mcp/index.js')
+const mcpModule = await import('../server/stdio-root.js')
 const { main } = await import('./dispatcher.js')
 
 // Drive `main(['mcp'])` and capture stdout/stderr while running, but
@@ -47,7 +47,7 @@ async function runMcpAndCapture(
     // the dispatcher writes to stdout BEFORE that branch ran (or
     // tries to write later) will land in stdoutChunks.
     void main(argv)
-    // dispatchMcp dynamically imports `../server/mcp/index.js` which
+    // dispatchMcp dynamically imports `../server/stdio-root.js` which
     // is itself an async hop, so settle through a real timer tick to
     // guarantee `main()` (the mocked one) has been invoked AND the
     // never-resolving branch has registered before we sample stdout.

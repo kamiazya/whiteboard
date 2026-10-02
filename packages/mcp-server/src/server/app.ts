@@ -8,7 +8,7 @@ import { setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
-import { createMcpServer } from './mcp/index.js'
+import { createMcpServer } from './mcp/server.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'

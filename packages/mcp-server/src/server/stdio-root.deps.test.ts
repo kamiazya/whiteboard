@@ -1,11 +1,11 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../routes/_test-helpers.js'
+import { withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-stdio-deps-')
 
-vi.mock('../config.js', () => ({
+vi.mock('./config.js', () => ({
   get DATA_DIR() {
     return join(tmp.dir, 'data')
   },
@@ -16,7 +16,7 @@ vi.mock('../config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
 
-const { stdioRootServerDeps } = await import('./index.js')
+const { bootStdioRoot } = await import('./stdio-root.js')
 
 describe('the stdio root', () => {
   beforeEach(async () => {
@@ -29,7 +29,7 @@ describe('the stdio root', () => {
     // streams that exist only in the daemon's process. Until the two are
     // bridged, the honest answer is none: `wb_viewport_set` reports
     // `delivered: false` rather than a delivery nobody received.
-    const deps = await stdioRootServerDeps()
+    const { serverDeps: deps } = await bootStdioRoot()
     expect(deps.clientNotifier).toBeUndefined()
   })
 })

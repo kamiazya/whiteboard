@@ -24,7 +24,7 @@ vi.mock('../config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
 
-const { createMcpServer } = await import('./index.js')
+const { createMcpServer } = await import('./server.js')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 
 const NOTES = ['alpha', 'bravo', 'charlie', 'delta'] as const

@@ -1,6 +1,6 @@
 {
   "files": {
-    "src/server/mcp/index.stdio-checkpoint.test.ts": ["TS2322"],
-    "src/server/routes/sync-audience.test.ts": ["TS2694", "TS2694", "TS2694"]
+    "src/server/stdio-root.checkpoint.test.ts": ["TS2322"],
+    "src/server/sync-audience.test.ts": ["TS2694", "TS2694", "TS2694"]
   }
 }
