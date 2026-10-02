@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { daemonSocketPath } from '../daemon/daemon-socket.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
@@ -71,7 +72,7 @@ function applyLoadedConfigFileForServerEntrypoint(): void {
   try {
     loaded = loadConfigFile()
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = messageOf(err, String(err))
     getLogger('server-index').error(
       { message },
       'invalid whiteboard config file; refusing to start',

@@ -17,7 +17,9 @@
  * scoped-screen-state.test.ts, whose DaemonDocumentPage scan reads this file
  * too: the state moved HERE, not away.
  */
+
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { useEffect, useState } from 'react'
 import { kindNoun } from '../lib/kind-noun.js'
 
@@ -62,9 +64,7 @@ export function useDeleteDocument({
     try {
       await deleteDocument()
     } catch (err) {
-      setDeleteError(
-        err instanceof Error ? err.message : `Failed to delete ${kindNoun(documentKind)}.`,
-      )
+      setDeleteError(messageOf(err, `Failed to delete ${kindNoun(documentKind)}.`))
     }
   }
 

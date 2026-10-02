@@ -11,6 +11,7 @@
  * switches workspaces calls `reset` so a standing dialog cannot carry the
  * departed workspace's path to the one now on screen.
  */
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useRef, useState } from 'react'
 import type { DeleteDocumentsDialogProps } from '../components/document-list/DeleteDocumentsDialog.js'
 import type { DestructiveActionId } from '../lib/destructive-copy.js'
@@ -94,7 +95,7 @@ async function attempt(
   } catch (err) {
     // daemon-api-client errors are already sanitized (problem-details title
     // or a generic status message), and the browser's are its own.
-    return { pending, error: err instanceof Error ? err.message : FALLBACK[keeper] }
+    return { pending, error: messageOf(err, FALLBACK[keeper]) }
   }
 }
 

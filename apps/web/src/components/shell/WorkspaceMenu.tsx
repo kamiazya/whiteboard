@@ -11,6 +11,7 @@
  * `[mark] ALPHA <spacer> gear`.
  */
 
+import { messageOf } from '@kamiazya/whiteboard-model'
 import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useId, useRef, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
@@ -40,10 +41,6 @@ export interface WorkspaceMenuProps {
    * free.
    */
   readonly onCounted?: (counts: ReadonlyMap<string, number>) => void
-}
-
-function messageOf(cause: unknown, fallback: string): string {
-  return cause instanceof Error ? cause.message : fallback
 }
 
 /**

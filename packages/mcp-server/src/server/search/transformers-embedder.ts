@@ -1,3 +1,4 @@
+import { messageOf } from '@kamiazya/whiteboard-model'
 import type { Embedder } from '@kamiazya/whiteboard-server-core'
 import { getLogger } from '../log.js'
 
@@ -98,7 +99,7 @@ export type EmbedderLoadFailure = 'runtime-missing' | 'weights-missing' | 'load-
 export function classifyEmbedderLoadFailure(err: unknown): EmbedderLoadFailure {
   const code = (err as NodeJS.ErrnoException | undefined)?.code
   if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') return 'runtime-missing'
-  const message = err instanceof Error ? err.message : String(err)
+  const message = messageOf(err, String(err))
   // transformers.js reports a cache miss under `allowRemoteModels = false`
   // by naming the file it could not produce; there is no error code to read.
   if (/could not locate file|no such file|unauthorized access to file/i.test(message)) {

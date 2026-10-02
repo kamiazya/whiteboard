@@ -1,4 +1,5 @@
 import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
+import { messageOf } from '@kamiazya/whiteboard-model'
 /**
  * Lays a spatial canvas out off the main thread.
  *
@@ -150,7 +151,7 @@ function fail(id: number, cause: unknown): void {
   const failed: WorkerFailure = {
     type: 'failed',
     id,
-    reason: cause instanceof Error ? cause.message : String(cause),
+    reason: messageOf(cause, String(cause)),
   }
   self.postMessage(failed)
 }

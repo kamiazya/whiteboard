@@ -2,6 +2,7 @@ import type {
   DocumentSummary,
   WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createDocument as createCanvasApi,
@@ -65,9 +66,7 @@ export interface DaemonDocumentController {
   retry: () => void
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'The daemon request failed.'
-}
+const DAEMON_REQUEST_FAILED = 'The daemon request failed.'
 
 /**
  * Resolves workspace/canvas defaults and owns the canvas-switcher list state
@@ -94,7 +93,7 @@ function reportResolveFailure(
     setRefusal({ code, workspaceId: knownWorkspaceId })
     return
   }
-  setLoadError(errorMessage(err))
+  setLoadError(messageOf(err, DAEMON_REQUEST_FAILED))
 }
 
 export function useDaemonDocumentController(
@@ -212,7 +211,7 @@ export function useDaemonDocumentController(
         setDocuments(refreshed)
         setPath(created.path)
       } catch (err) {
-        setCreateError(errorMessage(err))
+        setCreateError(messageOf(err, DAEMON_REQUEST_FAILED))
         // The caller derives its next path from `documents`. A failure often means that list is
         // already stale (another client took the path) — without a refresh, a retry re-derives
         // the SAME losing path from the same stale list and collides forever. Best-effort:
