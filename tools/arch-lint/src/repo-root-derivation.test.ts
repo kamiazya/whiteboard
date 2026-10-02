@@ -21,17 +21,23 @@
  *
  * arch-lint cannot import the helper (tools read packages, packages do not
  * import tools), so `scan-roots.ts` keeps the one fixed count a tool needs.
+ *
+ * Comments are blanked before any matcher runs: a comment that spells the old
+ * count as an example is prose about a derivation, not one. The blanking keeps
+ * every offset and line break, so the module-specifier check still sees what
+ * precedes a literal.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
 
 const SCANNED_TREES = ['packages/mcp-server/src', 'packages/mcp-server/scripts']
 
-// A literal that starts with `..` segments, optionally followed by a path:
-// '../../../..', '../../../../', '../../../../tools/x.mjs'.
-const DOTDOT_LITERAL = /['"]((?:\.\.\/)*\.\.)(?:\/[^'"]*)?['"]/g
+// A literal that starts with `..` segments, optionally followed by a path, in
+// any of the three quotes: '../../../..', "../../../../", `../../../../tools/x.mjs`.
+const DOTDOT_LITERAL = /['"`]((?:\.\.\/)*\.\.)(?:\/[^'"`]*)?['"`]/g
 // The same count spelled as arguments: resolve(dir, '..', '..', '..').
 const DOTDOT_ARGUMENTS = /(?:['"]\.\.['"]\s*,\s*)+['"]\.\.['"]/g
 // A module specifier is resolved by the loader from the importing file, so a
@@ -45,8 +51,27 @@ function upFrom(dir: string, segments: number): string {
   return resolve(dir, ...Array.from({ length: segments }, () => '..'))
 }
 
-/** The `../` counts in `source` that land on `root` when taken from `fileDir`. */
-function rootDerivations(source: string, fileDir: string, root: string): string[] {
+/** `raw` with every comment blanked to spaces: same length, same line breaks. */
+function withoutComments(raw: string): string {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, raw)
+  let out = raw
+  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+    if (
+      token !== ts.SyntaxKind.SingleLineCommentTrivia &&
+      token !== ts.SyntaxKind.MultiLineCommentTrivia
+    ) {
+      continue
+    }
+    const start = scanner.getTokenStart()
+    const end = scanner.getTokenEnd()
+    out = out.slice(0, start) + raw.slice(start, end).replace(/[^\n]/g, ' ') + out.slice(end)
+  }
+  return out
+}
+
+/** The `../` counts in `raw` that land on `root` when taken from `fileDir`. */
+function rootDerivations(raw: string, fileDir: string, root: string): string[] {
+  const source = withoutComments(raw)
   const found: string[] = []
   for (const match of source.matchAll(DOTDOT_LITERAL)) {
     if (MODULE_SPECIFIER_BEFORE.test(source.slice(0, match.index))) continue
@@ -92,6 +117,30 @@ describe('rootDerivations (self-test)', () => {
       rootDerivations("join(__dirname, '../../../../tools/check.mjs')", server, REPO_ROOT),
     ).toHaveLength(1)
     expect(rootDerivations("resolve(packageRoot, '../..')", release, REPO_ROOT)).toHaveLength(1)
+    expect(
+      rootDerivations('resolve(import.meta.dirname, `../../../../`)', server, REPO_ROOT),
+    ).toEqual(['`../../../../`'])
+  })
+
+  it('leaves a count that only a comment spells alone', () => {
+    expect(
+      rootDerivations(
+        "// was resolve(__dirname, '../../../..')\nconst r = repoRoot()",
+        server,
+        REPO_ROOT,
+      ),
+    ).toEqual([])
+    expect(
+      rootDerivations(
+        "/* resolve(__dirname, '..', '..', '..', '..') */ repoRoot()",
+        server,
+        REPO_ROOT,
+      ),
+    ).toEqual([])
+    // A blanked comment keeps its length, so the specifier check still sees `from`.
+    expect(
+      rootDerivations("/* note */ import x from '../../../../vitest.shared.js'", server, REPO_ROOT),
+    ).toEqual([])
   })
 
   it('leaves a path that reaches the package or a sibling in the tree alone', () => {
