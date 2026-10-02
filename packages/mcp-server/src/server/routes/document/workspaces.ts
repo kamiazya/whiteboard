@@ -352,8 +352,8 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     }
   })
 
-  // Delete a canvas: row (branches/versions cascade via FK), .loro blob,
-  // version thumbnails, and doc-cache entry. Idempotent-shaped 404 for a
+  // Delete a document: row (versions cascade via FK), .loro blob, and
+  // doc-cache entry. Idempotent-shaped 404 for a
   // missing canvas rather than a throw.
   //
   // An ADAPTER over `wbDocumentDelete` (ADR-0018), not a second

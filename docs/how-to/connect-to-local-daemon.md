@@ -5,11 +5,6 @@ documents are stored in IndexedDB and never leave the device. This guide
 covers connecting it to a local daemon (started with `whiteboard daemon run`),
 and moving a workspace kept in your browser onto it.
 
-The web app UI calls these "variations" and "combining changes," but the
-underlying MCP tools your AI agent calls keep their own names — the UI
-vocabulary is a presentation-layer choice and does not change the tool
-contract.
-
 ## How the app reaches the daemon
 
 The hosted app reaches a local daemon only through the **whiteboard browser
