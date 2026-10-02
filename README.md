@@ -157,8 +157,8 @@ Already have the browser canvas open (see [Get started](docs/tutorials/getting-s
 and a local daemon running? The hosted app reaches it through the
 **whiteboard browser extension** and a native messaging host that
 `whiteboard native-host install --json` registers with your browser (run it
-from a global install, not `npx`; see "Get the `whiteboard` command" in
-[Connect to a local daemon](docs/how-to/connect-to-local-daemon.md)).
+from a global install, not `npx`; see
+[Get the `whiteboard` command](docs/how-to/connect-to-local-daemon.md#get-the-whiteboard-command)).
 The daemon listens on an owner-only local socket and no network port, so no
 web page can reach it directly, and nothing needs pasting or approving: once
 connected, the tab works on the daemon's workspaces with live sync,
