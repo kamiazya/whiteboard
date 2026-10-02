@@ -10,7 +10,8 @@ Two rules hold for the whole table:
   empty-space menu, or the bottom dock — a shortcut is an accelerator,
   never the only way in.
 - **Shortcuts never fire while you are typing.** Inside a node's text
-  editor or a dialog field, the keys belong to the text.
+  editor or a dialog field, the keys belong to the text — except
+  `Cmd/Ctrl + Enter`, whose whole job is to save what you typed.
 
 ## Tools
 
@@ -35,7 +36,8 @@ pinch zooms in every tool.
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected edge |
 | Double-click | Edit a node's text, an edge's label, or a group's label |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
-| `Esc` | Cancel the current gesture or clear the selection |
+| `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
+| `Esc` | Cancel the current gesture; in a text edit, discard what you typed |
 
 **Align and distribute** have no shortcut — they live in the right-click
 menu of a multi-node selection, as **Align** (six edges and centre lines)
@@ -105,7 +107,7 @@ between those two is not a number you have to manage.
 | Shortcut | Action |
 |---|---|
 | `Cmd/Ctrl + Z` | Undo |
-| `Cmd/Ctrl + Shift + Z` | Redo |
+| `Cmd/Ctrl + Shift + Z` / `Cmd/Ctrl + Y` | Redo |
 | `Cmd/Ctrl + S` | Save a version |
 
 One action is one undo step: pasting twenty nodes, duplicating a

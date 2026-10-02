@@ -23,6 +23,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { registeredTools } from './registered-tools.js'
 import { REPO_ROOT } from './scan-roots.js'
 
 const MANIFESTS = ['.codex-plugin/plugin.json', 'gemini-extension.json', 'server.json'] as const
@@ -45,16 +46,6 @@ const manifests = MANIFESTS.map((file) => ({
   file,
   strings: stringsOf(JSON.parse(readFileSync(join(REPO_ROOT, file), 'utf-8'))),
 }))
-
-/** The registered tool names, read from the list the live server is held to. */
-function registeredTools(): string[] {
-  const source = readFileSync(
-    join(REPO_ROOT, 'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts'),
-    'utf-8',
-  )
-  const body = /export const ALL_REGISTERED_TOOLS = \[([^\]]*)\]/.exec(source)?.[1] ?? ''
-  return [...body.matchAll(/'([^']+)'/g)].map((match) => match[1] as string)
-}
 
 /** Tool-shaped names a prompt mentions that no server registers. */
 function unregisteredToolsIn(prompt: string, registered: readonly string[]): string[] {
