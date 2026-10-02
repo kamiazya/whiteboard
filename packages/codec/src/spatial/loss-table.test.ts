@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { censusSpatialModel } from './census.js'
 import { jsonCanvasLossTable, ocifLossTable } from './loss-table.js'
 import { OCIF_PROJECTION } from './ocif-projection.js'
-import { JSON_CANVAS_PROJECTION, jsonCanvasLoss } from './projection.js'
+import { JSON_CANVAS_PROJECTION } from './projection.js'
 
 describe('the published JSON Canvas loss table', () => {
   it('docs/reference/json-canvas-loss.md matches the ledger', async () => {
@@ -34,9 +34,9 @@ describe('the published JSON Canvas loss table', () => {
     // the rows that owe a real sentence are the other two — the ones where a
     // reader gets something ELSE rather than nothing.
     const table = jsonCanvasLossTable()
-    for (const entry of jsonCanvasLoss()) {
-      if (entry.projection.kind === 'degraded') expect(table).toContain(entry.projection.to)
-      if (entry.projection.kind === 'dropped') expect(table).toContain(entry.projection.why)
+    for (const projection of Object.values(JSON_CANVAS_PROJECTION)) {
+      if (projection.kind === 'degraded') expect(table).toContain(projection.to)
+      if (projection.kind === 'dropped') expect(table).toContain(projection.why)
     }
   })
 

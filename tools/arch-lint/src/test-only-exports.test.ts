@@ -48,15 +48,6 @@ const NO_USE_BESIDE_TESTS: readonly string[] = [
   'packages/canvas-render/src/layout/seed.ts#createStyleRandom',
   'packages/canvas-render/src/scene-entry-keys.ts#sceneEntryKeys',
   'packages/canvas-viewer/src/scene.ts#serializeViewerScene',
-  'packages/codec/src/markdown/normalize.ts#normalizeMdast',
-  'packages/codec/src/markdown/pipeline.ts#stringifyMarkdownBody',
-  'packages/codec/src/references/resolve-for-export.ts#resolveReferencesForExport',
-  'packages/codec/src/spatial/codecs.ts#foreignRoundTrip',
-  'packages/codec/src/spatial/json-schema.ts#xWhiteboardJsonSchema',
-  'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable',
-  'packages/codec/src/spatial/loss-table.ts#ocifLossTable',
-  'packages/codec/src/spatial/projection.ts#jsonCanvasLoss',
-  'packages/codec/src/spatial/projection.ts#valueLeafPaths',
   'packages/daemon-client/src/api-contracts/document.ts#CreateWorkspaceRequest',
   'packages/daemon-client/src/api-contracts/document.ts#PurgeResult',
   'packages/daemon-client/src/api-contracts/document.ts#RestoreVersionRequest',
@@ -460,6 +451,20 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
 const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/canvas-render/src/quality/drawing-score.ts#FRAME_CLEARANCE_FLOOR_PX':
     'part of the `scoring` subpath’s published surface, whose name list scoring-subpath.test.ts pins',
+  'packages/codec/src/markdown/normalize.ts#normalizeMdast':
+    'the equivalence the markdown round-trip contract is stated modulo, read by the codec and editor round-trip properties and named in package-codec.md',
+  'packages/codec/src/markdown/pipeline.ts#stringifyMarkdownBody':
+    'the inverse half of parseMarkdownBody that the markdown round-trip properties hold the codec to, documented as the pipeline scope in package-codec.md',
+  'packages/codec/src/references/resolve-for-export.ts#resolveReferencesForExport':
+    'the export seam ADR-0017 decision 2 holds ready for the bundle export, waiting only on an injected resolver',
+  'packages/codec/src/spatial/codecs.ts#foreignRoundTrip':
+    'the foreign-reader trip of the codec registry that codecs.property.test.ts checks every projection ledger against',
+  'packages/codec/src/spatial/json-schema.ts#xWhiteboardJsonSchema':
+    'generates the committed x-whiteboard JSON Schema, which json-schema.test.ts holds equal to the docs artifact',
+  'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable':
+    'generates the published JSON Canvas loss table that loss-table.test.ts holds equal to the committed docs page',
+  'packages/codec/src/spatial/loss-table.ts#ocifLossTable':
+    'generates the published OCIF loss table that loss-table.test.ts holds equal to the committed docs page',
   'packages/mcp-server/src/server/security/macaroon.ts#attenuateMacaroon':
     'the other half of that core: attenuation by arithmetic is the property the file exists for',
   'packages/mcp-server/src/server/security/macaroon.ts#mintMacaroon':
@@ -493,7 +498,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the two debt lists hold, pinned by equality. */
-const DEBT_CEILING = 418
+const DEBT_CEILING = 409
 
 const DIRS = [
   'apps',

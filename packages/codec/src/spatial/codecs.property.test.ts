@@ -8,9 +8,9 @@ import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { fullyPopulatedCanvas } from '../test-utils/fully-populated-canvas.js'
+import { valueLeafPaths } from '../test-utils/value-leaf-paths.js'
 import { censusSpatialModel } from './census.js'
 import { foreignRoundTrip, roundTrip, SPATIAL_CODECS, type SpatialCodec, settle } from './codecs.js'
-import { valueLeafPaths } from './projection.js'
 
 const census = censusSpatialModel([])
 const modelPaths = [...census.paths, ...census.facetBuckets].sort()
