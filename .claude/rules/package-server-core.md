@@ -226,3 +226,13 @@ Two of the criteria are debt this package owns today: every input parameter
 carries a `.describe()` (299 do not), and a tool is registered with its Zod
 OBJECT rather than its `.shape`, so `.strict()` reaches the boundary and a
 typo'd key is refused rather than stripped (15 tools strip).
+
+A tool that mutates a document takes the workspace write lock through
+tools/write-lock.ts's withWorkspaceWrite, which owns the rationale (ADR-0018
+§4) so no tool re-states it. arch-lint's write-lock-completeness scan derives
+which tools must call it from mcp-server's TOOL_PROFILES (every profile that is
+not READ_ONLY), joined with the server-core files that call the helper, and
+names one that does not. A mutating tool that holds no bracket of its own
+(`wb_viewport_set`, `wb_workspace_edit`, `wb_version_restore`) is exempted
+there with a reason, checked from both sides. write-lock.test.ts stays the
+behavioural half and must carry a row for every caller.

@@ -239,3 +239,23 @@ secret-bearing object wholesale in the first place; redaction is the net,
 not the plan. Redaction also cannot help when a secret is interpolated
 directly into a message *string* (e.g. `` log.info(`token=${token}`) ``)
 rather than passed as a structured field — do not do that.
+
+`mcp/tool-profiles.ts` is read textually by arch-lint's write-lock-completeness
+scan: a new non-READ_ONLY profile whose tool lives in server-core must call
+withWorkspaceWrite or be listed there as exempt. Keep each profile entry in the
+shape `name: { …, profile: X, … }` so the scan sees it.
+
+The CLI loads the config file once, in `main()`, for the commands
+the CLI's daemon-locating predicate selects (`daemon *`, `mcp`, `native-host`, `search`);
+`server *` is flag/env only. arch-lint's data-dir-resolution ledger classifies
+every `resolveDefaultDataDir` caller, so a new command cannot skip the load
+unnoticed.
+
+A write tool states `destructiveHint` explicitly (`tool-profiles.ts`); an
+unprofiled tool falls back to the destructive profile, and `tool-profiles.test.ts`
+checks the real `tools/list`. The auth-marker patterns live in
+shared/diagnostics/redact.ts only; arch-lint's redaction-one-place scan is the
+executable half.
+
+The daemon keeps no log file (records go to stderr): there is no log command,
+prune route or `logs.jsonl` bundle section.

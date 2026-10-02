@@ -116,7 +116,7 @@ preference; the tag is what makes it a criterion.
 | C3 | Every input parameter, at every depth, carries a description | rung 1 | FAIL: 299 undescribed |
 | C4 | A description says WHEN to reach for the tool relative to its neighbours, not only what it does — the errand-level "use this over that" | review, and the `names` column of rung 1 as a hint | 3 of 18 name a neighbour |
 | C5 | A tool corresponds to an errand step someone would name, not to a storage operation; two tools that read or write the same thing differently are merged or one is retired | rung 3 decides; review proposes | open, §4 |
-| C6 | One risk level per tool: a tool is annotated for its worst op, and a tool that cannot be honestly given one `destructiveHint` is two tools | `tool-profiles.ts` + review | pass, with `wb_canvas_edit` and `wb_workspace_edit` DESTRUCTIVE for one op each |
+| C6 | One risk level per tool: a tool is annotated for its worst op, and a tool that cannot be honestly given one `destructiveHint` is two tools | `tool-profiles.ts` + review | pass, with `wb_canvas_edit`, `wb_workspace_edit` and `wb_version_restore` DESTRUCTIVE for one op each; every write states `destructiveHint` explicitly, because the annotation schema reads an absent one as true |
 | C7 | Every tool carries `title` and explicit `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` where they apply | `tool-naming.test.ts`, `tool-profiles.test.ts` | pass |
 | C8 | Tool names are `wb_<entity>_<action>` (ADR-0009) and within SEP-986's format | `tool-naming.test.ts` | pass |
 | C9 | A schema-invalid call is answered as a tool error naming the field, never as a protocol error | rung 1 | pass |
