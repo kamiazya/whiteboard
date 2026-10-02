@@ -9,7 +9,6 @@ import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.j
 import { startHttpServer } from './http-server.js'
 import { getLogger } from './log.js'
 import { resolveReplicaEnv } from './replica-env.js'
-import { resolveMcpProtectedResourceMetadataFromEnv } from './security/mcp-auth.js'
 import { collectStartupEnvIssues } from './startup-env.js'
 
 /**
@@ -180,9 +179,6 @@ export async function main() {
   checkStartupConfig()
 
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
-  // Only the discovery metadata travels from here. The strategy that checks
-  // the credential is built inside `createApp`, over the one resolver.
-  const mcpProtectedResourceMetadata = resolveMcpProtectedResourceMetadataFromEnv(process.env)
 
   // Block startup until the schema is migrated so route handlers never see
   // a half-initialized data directory.
@@ -207,7 +203,6 @@ export async function main() {
 
   const running = await startHttpServer({
     token,
-    mcpProtectedResourceMetadata,
     idleTimeoutMs,
     replicaTier: replicaEnv.tier,
     replicaLeaseTtlMs: replicaEnv.leaseTtlMs,

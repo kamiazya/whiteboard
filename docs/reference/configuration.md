@@ -32,9 +32,6 @@ enumerate which spellings of true it accepts.
 | `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
 | `WHITEBOARD_CHROME_PATH` | Override the Chromium binary used for browser automation and doc-snapshot regeneration. No current MCP tool depends on this binary — `wb_scene_render` and the OKF/JSON Canvas export tools are all rendered headlessly. | unset (Playwright-managed Chromium) |
 | `WHITEBOARD_DEV` | When set to `1`, the dev-launch wrapper enables source-tree watching so a `tsx watch` change restarts the daemon in place. | unset |
-| `WHITEBOARD_MCP_AUTHORIZATION_SERVERS` | Comma-separated Authorization Server URLs exposed in MCP Protected Resource Metadata, in preparation for remote OAuth 2.1. `WHITEBOARD_MCP_AUTHORIZATION_SERVER` (singular) is read as a fallback when this is unset. | unset |
-| `WHITEBOARD_MCP_RESOURCE` | Canonical MCP resource URL exposed in metadata. If unset, `/mcp` is derived from the incoming request URL. | unset |
-| `WHITEBOARD_MCP_SCOPES_SUPPORTED` | Comma-separated list of scopes exposed in metadata. | unset |
 | `WHITEBOARD_LOG_LEVEL` | Minimum severity the server emits, using the RFC 5424 names (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). `warn` is accepted for `warning`, matching the wider Node ecosystem, and the value is case-insensitive with surrounding whitespace trimmed. Any other value **aborts startup**: it used to become `warning` silently, so an operator who set `debug` to investigate an incident got no debug output and no reason. `MCP_HTTP_DEBUG=1` lowers this to `info` on its own. Clients can also adjust their own view at runtime via MCP `logging/setLevel`. | `warning` |
 | `MCP_HTTP_DEBUG` | When set to `1`, the HTTP MCP server emits `mcp-http:init` / `mcp-http` log records (JSON lines on stderr, `scope` `mcp-http`) to help diagnose request flow. | unset |
 | `WHITEBOARD_OTEL` | Turns on OpenTelemetry tracing for the local daemon (`whiteboard daemon run`), server mode (`whiteboard server run`) and the stdio MCP entry. On for `1`, `true` or `yes`; anything else is off. Without `OTEL_EXPORTER_OTLP_ENDPOINT`, each span is written to **stderr** as one JSON line (`scope` `otel`), which is safe beside stdio JSON-RPC. Off, the tracing SDK is never loaded, so there is no cost. A failure to start the SDK is logged (`initTracing failed; tracing disabled`) and the process carries on untraced rather than refusing to start. See [Observability](../contributing/observability.md) for what is traced. | unset (off) |
@@ -166,8 +163,8 @@ Two scoped exceptions worth knowing:
 
 **Security note:** a `token` value in a config file is a dev-only
 convenience — treat it like a `.env` file with a secret in it (do not commit
-it, restrict its file permissions). Prefer `WHITEBOARD_TOKEN` /
-`WHITEBOARD_DAEMON_TOKEN` for anything beyond local development.
+it, restrict its file permissions). Prefer `WHITEBOARD_DAEMON_TOKEN` (or
+`--token-stdin`) for anything beyond local development.
 
 ## Codex sandbox constraints
 
