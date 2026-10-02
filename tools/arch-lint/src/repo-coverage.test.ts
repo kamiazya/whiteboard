@@ -12,13 +12,14 @@ import {
 } from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection, type PackageManifest } from './direction-check.js'
-import { COMPOSITION_ROOTS, listTsFiles, SHARED_LAYER_PACKAGES } from './scan-packages.js'
-import { REPO_ROOT } from './scan-roots.js'
 import {
-  type BoundaryViolationKind,
-  collectModuleSpecifiers,
-  scanSourceForBoundaryViolations,
-} from './scanner.js'
+  BOUNDARY_SCAN_PACKAGES,
+  COMPOSITION_ROOTS,
+  listTsFiles,
+  SHARED_LAYER_PACKAGES,
+} from './scan-packages.js'
+import { REPO_ROOT } from './scan-roots.js'
+import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 import { findTypeOnlyCycles } from './type-cycle-check.js'
 
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
@@ -37,7 +38,12 @@ const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-m
  * `cycle-check.test.ts` pins a cycle that exists ONLY through an alias so
  * the capability cannot be dropped silently.
  */
-const CYCLE_SCAN_PACKAGES = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/web']
+const CYCLE_SCAN_PACKAGES = [
+  ...SHARED_LAYER_PACKAGES,
+  'packages/mcp-server',
+  'apps/web',
+  'apps/extension',
+]
 const CYCLE_SCAN_DIRS = CYCLE_SCAN_PACKAGES.map((packageDir) => join(REPO_ROOT, packageDir, 'src'))
 
 /**
@@ -103,21 +109,21 @@ describe('composition-root dependency direction', () => {
 /** `file`'s path under `srcDir`, `/`-separated — the key `exemptBoundaryFiles` uses. */
 const inSrc = (srcDir: string, file: string): string => relative(srcDir, file).split(sep).join('/')
 
-const TSX_BANNED_KINDS: ReadonlySet<BoundaryViolationKind> = new Set([
-  'node-builtin-import',
-  'inversify-import',
-])
-
 describe('shared-layer boundary lint (real source coverage)', () => {
   // A walk that finds no `.tsx` reports every package clean over nothing.
   it('finds the .tsx files the import scan is meant to read', () => {
-    const tsxFiles = SHARED_LAYER_PACKAGES.flatMap((packageDir) =>
+    const tsxFiles = BOUNDARY_SCAN_PACKAGES.flatMap((packageDir) =>
       listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.tsx']),
     )
     expect(tsxFiles.length, 'the .tsx walk found almost nothing').toBeGreaterThanOrEqual(6)
   })
 
-  for (const packageDir of SHARED_LAYER_PACKAGES) {
+  // Every violation kind is read from `.ts` and `.tsx` alike. A component
+  // that touches `window` is a legitimate use only where the package or the
+  // file says so (`exemptBoundaryViolationKinds`, `exemptBoundaryFiles`) — a
+  // blanket "components may use the DOM" left `plugin-visual` and `facet-ui`
+  // exempt package-wide for a use that lived in one file or in none.
+  for (const packageDir of BOUNDARY_SCAN_PACKAGES) {
     it(`${packageDir}/src has zero boundary violations`, () => {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
@@ -127,7 +133,7 @@ describe('shared-layer boundary lint (real source coverage)', () => {
       // used here, so allow it" heuristic, so an unmapped package still fails
       // loudly.
       const srcDir = join(REPO_ROOT, packageDir, 'src')
-      const files = listTsFiles(srcDir)
+      const files = listTsFiles(srcDir, ['.ts', '.tsx'])
       expect(files.length).toBeGreaterThan(0)
 
       for (const file of files) {
@@ -138,24 +144,9 @@ describe('shared-layer boundary lint (real source coverage)', () => {
         expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
       }
     })
+  }
 
-    // `.tsx` is scanned for the two import kinds only: a component legitimately
-    // reaches for `window`/`document`, but a `node:*` or `inversify` import in
-    // one breaks the browser and the Worker exactly as it does in a `.ts`.
-    it(`${packageDir}/src .tsx files import no node builtin and no inversify`, () => {
-      const manifest = JSON.parse(
-        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
-      )
-      const exemptKinds = exemptedBoundaryViolationKinds(manifest.name)
-      for (const file of listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.tsx'])) {
-        const violations = scanSourceForBoundaryViolations(
-          file,
-          readFileSync(file, 'utf-8'),
-        ).filter((v) => TSX_BANNED_KINDS.has(v.kind) && !exemptKinds.has(v.kind))
-        expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
-      }
-    })
-
+  for (const packageDir of SHARED_LAYER_PACKAGES) {
     it(`${packageDir}/package.json dependency direction is clean`, () => {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),

@@ -223,7 +223,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // does. `react-dom` is deliberately absent: this package renders
     // elements and never mounts them.
     allowedThirdParty: ['lucide-react', 'react'],
-    exemptBoundaryViolationKinds: ['dom-global'],
+    exemptBoundaryFiles: {
+      'catalog-popover.tsx': {
+        kinds: ['dom-global'],
+        reason:
+          'positions and dismisses a popover against the viewport (`window`, `document`, ' +
+          '`HTMLElement.showPopover`); every other file here renders elements and touches no DOM',
+      },
+    },
   },
   // The bundled `visual` plugin, as an ORDINARY plugin package. The engine
   // does not import it and nothing here is privileged; "bundled" means only
@@ -248,8 +255,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-model',
       '@kamiazya/whiteboard-scene',
     ],
+    // No `dom-global` exemption: its default entry and `/render` run in Node
+    // and the layout worker (canvas-render imports them), and it has no use
+    // of a DOM global to excuse.
     allowedThirdParty: ['react', 'zod'],
-    exemptBoundaryViolationKinds: ['dom-global'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {
     allowedInternalDeps: [
@@ -291,7 +300,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // version's leading-zero branches are unreachable from this package's one
     // call site and so could never be covered by a test here.
     allowedThirdParty: ['zod', '@opentelemetry/api', 'multiformats'],
-    exemptBoundaryViolationKinds: ['dom-global'],
+    exemptBoundaryFiles: {
+      'api-client.ts': {
+        kinds: ['dom-global'],
+        reason:
+          "reads the embedding page's `window` (its origin and injected runtime config) through a " +
+          'structural type, so the file compiles with or without the DOM lib; nothing else in the ' +
+          'package reaches a DOM global',
+      },
+    },
   },
   // Composition root (Node CLI/daemon), never a runtime dependency of any
   // shared-layer package. Registered here so direction-check.ts flags the
@@ -328,9 +345,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // runtime, relaying the hosted app to the native host. It reads only the
   // names the browser checks from daemon-client, and is registered so a
   // shared package that took a dependency on it would be flagged.
+  //
+  // Its source IS boundary-scanned (`BOUNDARY_SCANNED_ROOTS`): it runs in the
+  // browser and a service worker, so a `node:*` import is as much a defect here
+  // as in a shared package, and a page script touching `window` is its job.
   '@kamiazya/whiteboard-extension': {
     allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
     allowedThirdParty: [],
+    exemptBoundaryViolationKinds: ['dom-global'],
   },
   // The OTHER composition root (browser). Registered for the same reason
   // `@kamiazya/whiteboard-mcp` is — being in this table is what makes

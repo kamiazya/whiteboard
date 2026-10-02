@@ -2,7 +2,11 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ARCHITECTURE_MAP } from './architecture-map.js'
-import { COMPOSITION_ROOTS, SHARED_LAYER_PACKAGES } from './scan-packages.js'
+import {
+  BOUNDARY_SCAN_PACKAGES,
+  COMPOSITION_ROOTS,
+  SHARED_LAYER_PACKAGES,
+} from './scan-packages.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { scanSourceForBoundaryViolations } from './scanner.js'
 
@@ -13,19 +17,32 @@ import { scanSourceForBoundaryViolations } from './scanner.js'
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
 
 /**
- * Workspaces under `packages/` and `apps/` that are in NEITHER list above, each
- * with why a scan of them would be wrong rather than missing.
+ * Workspaces under `packages/`, `apps/` and `tools/` that are in NEITHER list
+ * above, each with why a scan of them would be wrong rather than missing.
  *
- * Empty today, and guarded from both sides below: an entry naming a workspace
- * that is gone, or one a list already covers, fails — so an exemption cannot
- * outlive the reason it records, and a package cannot be left out of every
- * per-package scan by simply not being listed anywhere.
+ * `tools/*` is a workspace glob in `pnpm-workspace.yaml` beside the other two,
+ * and `package-cycle-check.ts` reads it, so a workspace added there joins the
+ * manifest graph — and was in no per-package scan list and no guard that said
+ * so. Both tools are Node programs that read the repo's files, which is what
+ * the boundary scan exists to keep OUT of the shared layer.
+ *
+ * Guarded from both sides below: an entry naming a workspace that is gone, or
+ * one a list already covers, fails — so an exemption cannot outlive the reason
+ * it records, and a package cannot be left out of every per-package scan by
+ * simply not being listed anywhere.
  */
-const NOT_BOUNDARY_SCANNED: Readonly<Record<string, string>> = {}
+const NOT_BOUNDARY_SCANNED: Readonly<Record<string, string>> = {
+  'tools/arch-lint':
+    "a Node program that reads every other package's source from the filesystem — `node:fs` " +
+    'is its whole job, and it is the scan, not something the scan polices',
+  'tools/checks':
+    'the CI gate aggregation: a Node script that calls the GitHub API and reads workflow ' +
+    'results, outside every runtime the shared layer has to hold on',
+}
 
-/** Every directory under `packages/` and `apps/` that carries a package.json. */
+/** Every directory under `packages/`, `apps/` and `tools/` that carries a package.json. */
 function workspaceManifestDirs(): string[] {
-  return ['packages', 'apps'].flatMap((root) =>
+  return ['packages', 'apps', 'tools'].flatMap((root) =>
     readdirSync(join(REPO_ROOT, root), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => `${root}/${entry.name}`)
@@ -65,15 +82,17 @@ describe('every workspace is in a per-package scan list', () => {
 })
 
 describe('per-file boundary exemptions (exemptBoundaryFiles)', () => {
-  const entries = SHARED_LAYER_PACKAGES.flatMap((packageDir) => {
+  const entries = BOUNDARY_SCAN_PACKAGES.flatMap((packageDir) => {
     const name = JSON.parse(readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8')).name
     return Object.entries(ARCHITECTURE_MAP[name]?.exemptBoundaryFiles ?? {}).map(
       ([file, exemption]) => ({ packageDir, file, ...exemption }),
     )
   })
 
-  it('finds the exemption it exists to guard', () => {
-    expect(entries.length, 'canvas-viewer exempts build-fonts-module.ts').toBeGreaterThanOrEqual(1)
+  it('finds the exemptions it exists to guard', () => {
+    // canvas-viewer's build-time module, facet-ui's popover, daemon-client's
+    // api-client: three files that used to be package-wide kinds.
+    expect(entries.length, 'the per-file exemptions were not found').toBeGreaterThanOrEqual(3)
   })
 
   // The same both-sided contract as every allowlist here: an exemption whose

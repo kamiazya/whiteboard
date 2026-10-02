@@ -35,7 +35,7 @@ static-analysis-only, which is why it cannot see a cross-package cycle at all.
 
 It runs over the `src` of every entry in `repo-coverage.test.ts`'s
 `CYCLE_SCAN_PACKAGES` — every package the `SHARED_LAYER_PACKAGES` list names,
-plus both composition roots — over `.ts` and `.tsx` alike. Test files and
+plus `mcp-server`, `apps/web` and `apps/extension` — over `.ts` and `.tsx` alike. Test files and
 `test-utils/` are out, the same line the boundary scans draw.
 
 **Which packages those scans run on is `scan-packages.ts`'s
@@ -43,13 +43,30 @@ plus both composition roots — over `.ts` and `.tsx` alike. Test files and
 `ARCHITECTURE_MAP` and rule 1 for months while no per-package scan ran on
 either (a `node:fs` import in `reference-graph` passed).
 `workspace-scan-coverage.test.ts` (`every workspace is in a per-package scan
-list`) now fails on any `packages/*` or `apps/*` manifest in
+list`) now fails on any `packages/*`, `apps/*` or `tools/*` manifest in
 neither that list nor `COMPOSITION_ROOTS`, unless `NOT_BOUNDARY_SCANNED` gives
-it a reason (empty today, guarded from both sides). The boundary scan also reads
-`.tsx`, for the `node-builtin-import` and `inversify-import` kinds only — a
-component may touch the DOM, but not `node:*`. Scanning `.tsx` for every kind
-would be clean today too (measured: only `dom-global` hits, all exempt), so
-`.ts`-only was never what protected `plugin-visual`'s react-free data half.
+it a reason (`tools/arch-lint` and `tools/checks`: Node programs whose job is
+the filesystem and the GitHub API; guarded from both sides). `tools/*` is a
+workspace glob in `pnpm-workspace.yaml` and the manifest cycle check reads it,
+so a list that stopped at `packages` and `apps` left a new tool in no scan and
+no guard that said so.
+
+`apps/extension` is the one composition root whose SOURCE is boundary-scanned
+(`BOUNDARY_SCANNED_ROOTS`, which `BOUNDARY_SCAN_PACKAGES` adds to the shared
+layer): it runs only in a page and a service worker, so a `node:*` import in
+its relay is a defect as much as in `model`, and a planted one passed every
+guard while the root was unread. It is exempt from `dom-global` (a page script
+touching `window` is its job) and not from anything else; its direction and
+dependency list stay with the composition-root checks.
+
+The boundary scan reads `.ts` and `.tsx` for EVERY kind. It used to read
+`.tsx` for the two import kinds only, on the premise that a component may touch
+the DOM, and that premise is what left `facet-ui` and `plugin-visual` exempt
+from `dom-global` package-wide: a `document.title` planted in `plugin-visual`'s
+data half passed. A DOM use is now excused where it lives — `facet-ui`'s
+`catalog-popover.tsx` and `daemon-client`'s `api-client.ts` by per-file entry,
+`canvas-viewer` (seven files) still package-wide — and `plugin-visual`, whose
+default entry runs in Node and the layout worker, has none.
 
 **It follows path aliases, and had to before `apps/web` could join**: that
 package wrote 115 of its 554 intra-package value edges as `@/...`, a fifth of
@@ -108,8 +125,8 @@ import of the renderer of ANY kind.
 ## An exemption is per FILE when only one file needs it
 
 `exemptBoundaryViolationKinds` exempts a kind for a whole package, which is
-right for `dom-global` in a UI package and wrong for a use that lives in one
-build-time module. `canvas-viewer` carried `node-ambient-global` package-wide
+right for `dom-global` in a package that is DOM code throughout (`canvas-viewer`,
+`apps/extension`) and wrong for a use that lives in one file. `canvas-viewer` carried `node-ambient-global` package-wide
 for a single `Buffer` in `widget/build-fonts-module.ts`, while the rule said
 one file: `process.env.X` or `__dirname` in `mount.ts` or `widget-entry.ts` —
 which ship into the browser and the widget iframe — passed (measured, both).
@@ -152,10 +169,11 @@ check ignores. `mcp-server` declares all twelve workspace packages it uses there
 (tsdown's `noExternal` inlines them), so a `dependencies`-only read passed
 `@kamiazya/whiteboard-web` added to it: measured. Each root's allowed set must
 equal what its manifest declares (an unused allowance fails) and no root may
-depend on another. `mcp-server` and `apps/web` also have their `src` in the
-cycle scan. What stays unscanned for any of them is the BOUNDARY scan (banned imports/globals) — they are the packages allowed
-`node:*`, DOM and inversify — and their third-party surface is open by design,
-so none carries an allowed-third-party list.
+depend on another. `mcp-server`, `apps/web` and `apps/extension` also have their
+`src` in the cycle scan. What stays unscanned for `mcp-server` and `apps/web` is
+the BOUNDARY scan (banned imports/globals) — they are the packages allowed
+`node:*`, DOM and inversify — while `apps/extension` is scanned (see above). Their
+third-party surface is open by design, so none carries an allowed-third-party list.
 
 `apps/web`'s own source is policed by a separate enforcer BESIDE this tool's
 scans: `web-app-boundary.test.ts` fails the build when it imports a Node

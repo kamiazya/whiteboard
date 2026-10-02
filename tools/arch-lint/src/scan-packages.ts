@@ -39,14 +39,29 @@ export const SHARED_LAYER_PACKAGES = [
 ]
 
 /**
- * Composition roots. Their SOURCE is deliberately unscanned — they are the
- * packages allowed `node:*`, DOM globals and inversify — and their
- * third-party surface is open by design, so they cannot join the list above.
- * Their dependency DIRECTION is still a rule, and it was the one thing
- * nothing checked: `apps/web` was absent from the map entirely, so a shared
- * package taking a dependency on it would have passed.
+ * Composition roots. Their SOURCE is deliberately unscanned for the Node-side
+ * ones (`packages/mcp-server`) and the DOM-side one `web-app-boundary.test.ts`
+ * polices (`apps/web`) — they are the packages allowed `node:*`, DOM globals
+ * and inversify — and their third-party surface is open by design, so they
+ * cannot join the list above. Their dependency DIRECTION is still a rule, and
+ * it was the one thing nothing checked: `apps/web` was absent from the map
+ * entirely, so a shared package taking a dependency on it would have passed.
  */
 export const COMPOSITION_ROOTS = ['apps/extension', 'apps/web', 'packages/mcp-server']
+
+/**
+ * Composition roots whose source is boundary-scanned like a shared package's:
+ * they run only in the browser (a page script and an extension service
+ * worker), so a `node:*` or inversify import is a defect in them exactly as in
+ * `model`. `apps/extension` was the one root nothing read — a planted
+ * `import 'node:fs'` in its relay passed every guard. Its direction and
+ * dependency list stay with the composition-root checks, and its DOM globals
+ * are exempt in `architecture-map.ts`.
+ */
+export const BOUNDARY_SCANNED_ROOTS = ['apps/extension']
+
+/** Every package whose own source `repo-coverage.test.ts` scans for boundary violations. */
+export const BOUNDARY_SCAN_PACKAGES = [...SHARED_LAYER_PACKAGES, ...BOUNDARY_SCANNED_ROOTS]
 
 // `extensions` defaults to `.ts` only, so the existing boundary/direction/
 // allowed-deps scans below keep collecting exactly what they always did; the
