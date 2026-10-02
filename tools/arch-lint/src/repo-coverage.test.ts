@@ -4,12 +4,14 @@ import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
 import {
+  ARCHITECTURE_MAP,
+  allowedDependencies,
   exemptedBoundaryViolationKinds,
   KNOWN_IMPORT_CYCLES,
   KNOWN_TYPE_CYCLES,
 } from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
-import { checkDependencyDirection } from './direction-check.js'
+import { checkDependencyDirection, type PackageManifest } from './direction-check.js'
 import { REPO_ROOT } from './scan-roots.js'
 import {
   type BoundaryViolationKind,
@@ -171,12 +173,46 @@ describe('every workspace is in a per-package scan list', () => {
 })
 
 describe('composition-root dependency direction', () => {
+  const readManifest = (packageDir: string): PackageManifest =>
+    JSON.parse(readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'))
+  const workspaceDeclarations = (manifest: PackageManifest): string[] =>
+    [
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.devDependencies ?? {}),
+    ].filter((name) => name in ARCHITECTURE_MAP)
+
   for (const packageDir of COMPOSITION_ROOTS) {
-    it(`${packageDir}/package.json dependency direction is clean`, () => {
-      const manifest = JSON.parse(
-        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
+    // devDependencies count: mcp-server bundles every workspace package it
+    // uses (tsdown `noExternal`) and declares them all there, so a check over
+    // `dependencies` alone never saw a single one of its edges.
+    it(`${packageDir}/package.json dependency direction is clean, devDependencies included`, () => {
+      expect(
+        checkDependencyDirection(readManifest(packageDir), { includeDevDependencies: true }),
+      ).toHaveLength(0)
+    })
+
+    // The other half of the ledger: an allowance no manifest declares is a
+    // door left open for the next dependency to walk through unannounced.
+    it(`${packageDir} allows exactly the workspace packages its manifest declares`, () => {
+      const manifest = readManifest(packageDir)
+      const allowed = [...allowedDependencies(manifest.name)].sort()
+      expect(allowed.length, 'a composition root must be in ARCHITECTURE_MAP').toBeGreaterThan(0)
+      expect(workspaceDeclarations(manifest).sort()).toEqual(allowed)
+    })
+
+    it(`${packageDir} depends on no other composition root`, () => {
+      const manifest = readManifest(packageDir)
+      const otherRoots = COMPOSITION_ROOTS.filter((other) => other !== packageDir).map(
+        (other) => readManifest(other).name,
       )
-      expect(checkDependencyDirection(manifest)).toHaveLength(0)
+      const declared = new Set([
+        ...Object.keys(manifest.dependencies ?? {}),
+        ...Object.keys(manifest.devDependencies ?? {}),
+      ])
+      expect(otherRoots.filter((name) => declared.has(name))).toEqual([])
+      expect(
+        otherRoots.filter((name) => allowedDependencies(manifest.name).includes(name)),
+      ).toEqual([])
     })
   }
 })

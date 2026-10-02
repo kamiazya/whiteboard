@@ -106,11 +106,16 @@ import of the renderer of ANY kind.
 
 ## What the composition roots do and do not get
 
-`mcp-server` and `apps/web` are registered for the dependency-direction guard,
-and both have their `src` in the cycle scan. What stays unscanned for them is
-the BOUNDARY scan (banned imports/globals) — they are the packages allowed
+`mcp-server`, `apps/web` and `apps/extension` are registered for the
+dependency-direction guard — over `devDependencies` too, which a shared package's
+check ignores. `mcp-server` declares all twelve workspace packages it uses there
+(tsdown's `noExternal` inlines them), so a `dependencies`-only read passed
+`@kamiazya/whiteboard-web` added to it: measured. Each root's allowed set must
+equal what its manifest declares (an unused allowance fails) and no root may
+depend on another. `mcp-server` and `apps/web` also have their `src` in the
+cycle scan. What stays unscanned for any of them is the BOUNDARY scan (banned imports/globals) — they are the packages allowed
 `node:*`, DOM and inversify — and their third-party surface is open by design,
-so neither carries an allowed-third-party list.
+so none carries an allowed-third-party list.
 
 `apps/web`'s own source is policed by a separate enforcer BESIDE this tool's
 scans: `web-app-boundary.test.ts` fails the build when it imports a Node

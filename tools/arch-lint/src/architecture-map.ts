@@ -6,8 +6,9 @@ import type { BoundaryViolationKind } from './scanner.js'
  * third-party (non-workspace) dependencies. `allowedInternalDeps` feeds
  * `direction-check.ts` (internal-package direction); `allowedThirdParty`
  * feeds `allowed-deps-check.ts` (everything else a `dependencies` entry
- * could name). `devDependencies` are exempt from both — tooling, not
- * runtime coupling — per the same doc.
+ * could name). `devDependencies` are exempt from both for a shared-layer
+ * package — tooling, not runtime coupling — but a composition root that
+ * bundles its workspace packages is direction-checked over them too.
  *
  * `exemptBoundaryViolationKinds` opts a package OUT of specific
  * `scanner.ts` violation kinds it legitimately needs — e.g. canvas-viewer
@@ -270,17 +271,34 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     exemptBoundaryViolationKinds: ['dom-global'],
   },
   // Composition root (Node CLI/daemon), never a runtime dependency of any
-  // shared-layer package. Registered here with an empty allowedInternalDeps
-  // so direction-check.ts flags the reverse import if a shared package ever
-  // adds it as a dependency; its own source is NOT scanned by
-  // repo-coverage.test.ts (it is allowed node:*/inversify — see
-  // architecture-map.md rule 2).
+  // shared-layer package. Registered here so direction-check.ts flags the
+  // reverse import if a shared package ever adds it as a dependency; its own
+  // source is NOT scanned by repo-coverage.test.ts (it is allowed
+  // node:*/inversify — see architecture-map.md rule 2).
+  //
+  // The set is every workspace package its manifest declares, which is all
+  // under `devDependencies`: tsdown's `noExternal` inlines them into the
+  // published dist, so they are runtime couplings that merely are not
+  // installed by a consumer. `repo-coverage.test.ts` therefore direction-
+  // checks a composition root's devDependencies too, and holds this list equal
+  // to what the manifest declares. Composition roots under `apps/` are
+  // deliberately absent: a root depending on the other is what this entry
+  // exists to flag.
   '@kamiazya/whiteboard-mcp': {
-    // daemon-client: the browser-safe client half extracted from this
-    // package's own src/shared. The re-export shims and the published client
-    // subpaths are retired; the server imports the package directly and tsup
-    // noExternal inlines it into the published dist.
-    allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-canvas-render',
+      '@kamiazya/whiteboard-canvas-viewer',
+      '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-daemon-client',
+      '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-history',
+      '@kamiazya/whiteboard-loro-adapter',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-plugin-visual',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-server-core',
+      '@kamiazya/whiteboard-workspace-index',
+    ],
     allowedThirdParty: [],
   },
   // The browser extension (ADR-0050): a composition root for the extension
