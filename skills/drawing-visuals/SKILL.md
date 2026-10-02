@@ -10,9 +10,11 @@ Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the document and can be revisited and refined later.
 
 **Coverage note.** The whiteboard MCP surface is deliberately small: edit nodes and edges,
-tidy the layout, render SVG, save/restore versions. There is no icon or template library, no
-align/distribute, and no viewport control. Plan the diagram with that ceiling in mind rather than
-assuming a full-featured drawing-app tool set.
+tidy the layout, render SVG, save/restore versions. There is no icon or template library and no
+align/distribute. `wb_viewport_set` exists, but through this stdio entry it answers
+`delivered: false`, because no browser is in the same process: do not promise the user that the
+view moved, tell them to open or refresh the document. Plan the diagram with that ceiling in mind
+rather than assuming a full-featured drawing-app tool set.
 
 Use these tools:
 

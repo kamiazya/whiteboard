@@ -17,8 +17,12 @@ This project is split into three main runtime layers:
 - **stdio MCP server**
   - Entry point: `dist/server/mcp/index.js`
   - Registers tools, prompts, and resources
-  - Opens the data directory's store directly, in its own process. It does
-    not reach the daemon, so it has no live audience: a browser on the
+  - Opens the data directory's store directly, in its own process. It runs
+    the same automatic checkpoint and compaction as the daemon: a History
+    row after five quiet minutes and at process exit, and the op-log folded
+    once a version row exists. It does not reach the daemon, so only the
+    live path is absent (the notifier, viewport delivery, the agent-activity
+    highlight, the version-created and restore overlays): a browser on the
     daemon sees a stdio edit when the daemon's workspace tail reads it, and
     `wb_viewport_set` answers `delivered: false`. A client that wants the
     live path connects to the daemon's `/mcp` on its socket instead

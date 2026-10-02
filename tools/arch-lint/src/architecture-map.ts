@@ -476,10 +476,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * seams. The edges left are the unscheduled adapters — each still a
  * candidate for the same treatment, none yet ordered.
  *
- * `routes/document.ts -> auto-checkpoint` went, 21 -> 20, when the root began
- * installing the checkpoint scheduler through its background-work
- * declaration instead of the router doing it as a side effect of being built.
- *
  * Two of the 21 went when ADR-0029 retired the branch: `routes/branches.ts`
  * reached both `branch-merge` and `branches-store`, and the route no longer
  * exists. A third went with the version row's thumbnail —
@@ -500,9 +496,12 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * when `routes/workspace-people.ts` stopped holding the workspace-level
  * decisions (`isUser` before an add, the role and removal refusals) and the
  * member store they act on: they are `security/people-administration`'s now,
- * and the operator's `grant-member` runs the same ones.
+ * and the operator's `grant-member` runs the same ones. And 20 -> 19, when
+ * `routes/document.ts -> auto-checkpoint` went: the root installs the
+ * checkpoint scheduler through its background-work declaration instead of
+ * the router doing it as a side effect of being built.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 20
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 19
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

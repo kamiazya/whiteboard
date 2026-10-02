@@ -224,6 +224,7 @@ The agent returns the `wb_scene_render` result so the next turn can reason about
 
 - No MCP tool currently returns a raster (PNG) image or `ImageContent` — `wb_scene_render` is the closest equivalent for handing a rendered canvas back to an LLM.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
+- The published `stdio` entry opens the store in its own process: it takes the same automatic History checkpoints and compaction as the daemon, but it has no live path — nobody is told of an edit until they open or refresh the document, and `wb_viewport_set` answers `delivered: false`.
 
 See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.
 
