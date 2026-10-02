@@ -15,7 +15,7 @@ import {
   createCredentialResolver,
 } from '../security/credential-resolver.js'
 import { mintMacaroon } from '../security/macaroon.js'
-import { testDataLayout } from './_test-helpers.js'
+import { testDataLayout, testStoreScope } from './_test-helpers.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR) and the helpers behind
@@ -93,6 +93,7 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
     instanceId: 'test-instance-id',
     identity: testIdentity,
     dataLayout: testDataLayout(LAYOUT_DIR),
+    scope: testStoreScope(LAYOUT_DIR),
     touch,
     getStatus: () => STATUS,
   })
