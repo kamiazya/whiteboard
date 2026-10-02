@@ -228,6 +228,25 @@ const BANNED = [
       'apps/web/src/lib/user-settings-store.test.ts',
     ],
   },
+  // The keeper was once named by a `dataMode: 'daemon' | 'local'` prop pair —
+  // the same retired `local` on the same axis, spelled as a prop. It is
+  // `keeper: 'browser' | 'daemon'` now. Scoped to apps/web/src, where the
+  // prop lived; `reaches` names files that carried it, so the scan is proven
+  // to cover the ground it once failed on.
+  {
+    pattern: /\bdataMode\b/,
+    word: 'dataMode',
+    instead: "`keeper` ('browser' | 'daemon') — the keeper is named by WHO holds the workspace",
+    dirs: ['apps/web/src'],
+    exempt: [],
+    reaches: [
+      'apps/web/src/components/WorkspaceTopBar.tsx',
+      'apps/web/src/lib/browser-versions-backend.ts',
+      'apps/web/src/pages/BrowserDocumentPage.tsx',
+      'apps/web/src/pages/DocumentPage.tsx',
+      'apps/web/src/pages/document-page-model.ts',
+    ],
+  },
 ] as const
 
 /**
@@ -239,6 +258,7 @@ const BANNED = [
  */
 let fileReadCount = 0
 let scannedFileCount = 0
+const scannedFilesByWord = new Map<string, Set<string>>()
 const lineCache = new Map<string, string[]>()
 
 function linesOf(file: string): string[] {
@@ -298,6 +318,8 @@ function listSourceFiles(dir: string): string[] {
  */
 const hitsByWord = BANNED.map((entry) => {
   const { pattern } = entry
+  const scanned = new Set<string>()
+  scannedFilesByWord.set(entry.word, scanned)
   // A word retired only within one package scans only that package, so the
   // guard never claims coverage it does not have.
   const dirs: readonly string[] = 'dirs' in entry ? entry.dirs : SCAN_DIRS
@@ -312,6 +334,7 @@ const hitsByWord = BANNED.map((entry) => {
       if (relativePath in EXEMPT_FILES || exempt.includes(relativePath)) continue
       if (productionOnly && isTestSource(relativePath)) continue
       scannedFileCount += 1
+      scanned.add(relativePath)
       for (const [index, line] of linesOf(file).entries()) {
         if (pattern.test(line)) hits.push(`${relativePath}:${index + 1}: ${line.trim()}`)
       }
@@ -339,6 +362,16 @@ describe('retired vocabulary', () => {
         (path) => !linesOf(join(REPO_ROOT, path)).some((line) => pattern.test(line)),
       )
       expect(stale).toEqual([])
+    })
+  }
+
+  // A word whose entry names files it must reach: the scan covering them is
+  // the subject-present half of a guard that otherwise passes on zero hits.
+  for (const entry of BANNED) {
+    if (!('reaches' in entry)) continue
+    it(`the "${entry.word}" scan reaches the files that used to carry it`, () => {
+      const scanned = scannedFilesByWord.get(entry.word) ?? new Set<string>()
+      expect(entry.reaches.filter((path) => !scanned.has(path))).toEqual([])
     })
   }
 
