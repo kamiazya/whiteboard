@@ -21,6 +21,11 @@
  *              written: the steady state, which is nearly every pass.
  *   gain pass  the same with one remote one-node edit in each workspace.
  *
+ * Each pass is measured twice: `bare`, over store access with a document held
+ * per workspace (what a tail cost before the cache followed the record), and
+ * `daemon`, wired as the daemon wires it, over the cache every request is
+ * served from.
+ *
  * THE PREFLIGHT IS NOT CEREMONY. A harness whose passes silently do nothing
  * keeps printing small, plausible numbers, so the gain pass must emit and the
  * idle pass must not, or the run exits 1.
@@ -39,7 +44,14 @@ import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index
 import { sql } from 'kysely'
 import { LoroDoc, VersionVector } from 'loro-crdt'
 import { createIsolatedDb } from '../../src/server/store/db/test-helpers.ts'
+import {
+  cacheBackedWorkspaceDocs,
+  emitWorkspaceDocUpdated,
+  getWorkspaceDoc,
+  onWorkspaceDocUpdated,
+} from '../../src/server/store/document-store.ts'
 import { LibsqlDocumentStore } from '../../src/server/store/libsql/libsql-document-store.ts'
+import { storeScope } from '../../src/server/store/store-scope.ts'
 import { createWorkspaceTail } from '../../src/server/store/workspace-tail.ts'
 import { measureLoopAvailability } from '../../src/shared/test-utils/loop-availability.ts'
 
@@ -107,22 +119,43 @@ async function timed(run) {
   return { median: median(samples), p99: percentile(samples, 0.99) }
 }
 
+/**
+ * The two ways a tail can be wired: over bare store access with a document
+ * per workspace held here (what every tail was before the cache followed the
+ * record), and as the daemon wires it, over the cache every request is served
+ * from.
+ */
+function wiring(kind, docs, scope, held) {
+  if (kind === 'bare') {
+    return { docs, liveDoc: async (id) => held.get(id), emit: () => {} }
+  }
+  return {
+    docs: cacheBackedWorkspaceDocs(scope),
+    liveDoc: (id) => getWorkspaceDoc(id, scope),
+    emit: emitWorkspaceDocUpdated,
+  }
+}
+
 /** Idle passes, then passes after a remote edit in every subscribed workspace. */
-async function measurePasses(docs, count) {
-  const live = new Map()
+async function measurePasses(kind, docs, scope, count) {
+  const held = new Map()
   const subscribed = []
   for (let i = 0; i < count; i += 1) {
-    const id = `ws-${count}-${i}`
-    live.set(id, await seed(docs, id))
+    const id = `ws-${kind}-${count}-${i}`
+    held.set(id, await seed(docs, id))
     subscribed.push(id)
   }
   let emitted = 0
+  const stopCounting = onWorkspaceDocUpdated(() => {
+    emitted += 1
+  })
+  const seams = wiring(kind, docs, scope, held)
   const tail = createWorkspaceTail({
     subscribedWorkspaces: () => subscribed,
-    docs,
-    liveDoc: async (id) => live.get(id),
-    emit: () => {
-      emitted += 1
+    ...seams,
+    emit: (id, update) => {
+      if (kind === 'bare') emitted += 1
+      seams.emit(id, update)
     },
     intervalMs: 1000,
   })
@@ -143,6 +176,7 @@ async function measurePasses(docs, count) {
   const idle = await run(false)
   const emittedWhenIdle = emitted
   const gain = await run(true)
+  stopCounting()
   return { idle, gain, emittedWhenIdle, emittedWithEdits: emitted - emittedWhenIdle }
 }
 
@@ -174,14 +208,23 @@ try {
   }
 
   // The copy this process holds is level with what it just saved: 0, not stale.
+  const scope = storeScope(join(root, 'data'))
   let failed = stampOrder !== 0
-  for (const count of COUNTS) {
-    const { idle, gain, emittedWhenIdle, emittedWithEdits } = await measurePasses(docs, count)
-    console.log(
-      `N=${count}: idle pass median ${idle.elapsed.toFixed(2)}ms (worst stall ${idle.worst.toFixed(2)}ms), ` +
-        `with a remote edit in each ${gain.elapsed.toFixed(2)}ms (worst stall ${gain.worst.toFixed(2)}ms)`,
-    )
-    if (emittedWhenIdle !== 0 || emittedWithEdits === 0) failed = true
+  for (const kind of ['bare', 'daemon']) {
+    for (const count of COUNTS) {
+      const { idle, gain, emittedWhenIdle, emittedWithEdits } = await measurePasses(
+        kind,
+        docs,
+        scope,
+        count,
+      )
+      console.log(
+        `${kind.padEnd(6)} N=${String(count).padEnd(2)} idle pass median ${idle.elapsed.toFixed(2)}ms ` +
+          `(worst stall ${idle.worst.toFixed(2)}ms), with a remote edit in each ` +
+          `${gain.elapsed.toFixed(2)}ms (worst stall ${gain.worst.toFixed(2)}ms)`,
+      )
+      if (emittedWhenIdle !== 0 || emittedWithEdits === 0) failed = true
+    }
   }
   if (failed) {
     console.error(

@@ -82,30 +82,28 @@ describe('agent and daemon over one data dir', () => {
       ops: [{ op: 'node.add', node: { id: 'n1', type: 'text', text: DRAWN } }],
     })
 
-    // The agent -> browser half. Every observation is taken on every try, so a
-    // failure names which of them the browser is still missing.
-    const live = daemon
-    const browserSees = async () => {
-      const pushed = stream.frames().filter((frame) => frame.event === 'update')
-      const record = await live.fetch(`/api/w/${workspaceId}/workspace-document/snapshot`)
-      const projection = await live.fetch(`/api/w/${workspaceId}/document/sketch/snapshot`)
-      return {
-        updateFrameForWorkspaceRecord: pushed.some(
-          (frame) => (frame.data as { doc: string }).doc === `workspace:${workspaceId}`,
-        ),
-        workspaceRecordHasTheDrawing: readsAs(record.bytes).includes(DRAWN),
-        documentSnapshotHasTheDrawing: readsAs(projection.bytes).includes(DRAWN),
-      }
-    }
+    // The agent -> browser half. The first wait makes NO request of the
+    // daemon: a browser that is only watching asks it nothing, so a frame that
+    // arrives is the daemon's own doing (the tail), and an access that happened
+    // to notice the edit first would have hidden a tail that never ran.
     await vi.waitFor(
-      async () =>
-        expect(await browserSees()).toEqual({
-          updateFrameForWorkspaceRecord: true,
-          workspaceRecordHasTheDrawing: true,
-          documentSnapshotHasTheDrawing: true,
-        }),
-      { timeout: 20_000, interval: 200 },
+      () =>
+        expect(
+          stream
+            .frames()
+            .filter((frame) => frame.event === 'update')
+            .map((frame) => (frame.data as { doc: string }).doc),
+        ).toContain(`workspace:${workspaceId}`),
+      { timeout: 20_000, interval: 100 },
     )
+
+    // Then what the browser reads, on its first request rather than a retry.
+    const record = await daemon.fetch(`/api/w/${workspaceId}/workspace-document/snapshot`)
+    const projection = await daemon.fetch(`/api/w/${workspaceId}/document/sketch/snapshot`)
+    expect({
+      workspaceRecordHasTheDrawing: readsAs(record.bytes).includes(DRAWN),
+      documentSnapshotHasTheDrawing: readsAs(projection.bytes).includes(DRAWN),
+    }).toEqual({ workspaceRecordHasTheDrawing: true, documentSnapshotHasTheDrawing: true })
 
     // The browser -> agent half, on a stdio process that has been running all along.
     const made = await daemon.fetch(`/api/v1/workspaces/${workspaceId}/documents`, {

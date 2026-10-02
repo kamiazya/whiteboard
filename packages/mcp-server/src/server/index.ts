@@ -10,6 +10,7 @@ import { startHttpServer } from './http-server.js'
 import { getLogger } from './log.js'
 import { resolveReplicaEnv } from './replica-env.js'
 import { collectStartupEnvIssues } from './startup-env.js'
+import { armLocalDaemonTail } from './store/workspace-tail.js'
 
 /**
  * Reads a `--name=value` flag out of an argv list. When the same flag is
@@ -196,6 +197,10 @@ export async function main() {
   )
 
   await prewarmExporter()
+
+  // The dev daemon is the same local keeper `whiteboard daemon run` starts,
+  // so it follows the record the agent's stdio process writes the same way.
+  armLocalDaemonTail()
 
   // Read once here, after the startup-issue gate above already validated it
   // — never re-read process.env inside a route.

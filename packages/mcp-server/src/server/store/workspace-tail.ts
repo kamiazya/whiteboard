@@ -24,10 +24,12 @@ const log = getLogger('workspace-tail')
  * lowers the latency and nothing else, so it is worth adding when the latency
  * is measured to matter rather than before.
  *
- * Off unless an operator turns it on. One daemon needs none of this, and
- * polling the database for every subscribed workspace on a fixed interval is
- * pure waste there — the same empty-by-default shape the hosted-origin
- * allowlist uses.
+ * Off unless something arms it. `resolveWorkspaceTailIntervalMs` reads the
+ * operator's setting and nothing else, so server mode leaves it to them; the
+ * local daemon's entry points arm it themselves (`armLocalDaemonTail`),
+ * because there the second writer is not an operator's second instance but the
+ * stdio entry the agent runs beside it, over the same data directory — which
+ * is the headline flow, not a deployment choice.
  */
 export interface WorkspaceTail {
   /** One pass over every subscribed workspace. The unit under test; `start`
@@ -58,12 +60,12 @@ export const WORKSPACE_TAIL_INTERVAL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
 /**
  * How often to follow, or `null` for "do not".
  *
- * Unset means OFF, not a default interval. One daemon is the ordinary
- * deployment and needs none of this; polling the database for every
- * subscribed workspace on a timer would be pure cost there. An operator
- * running more than one instance against one data directory turns it on,
- * which is also the moment they can pick a latency they are willing to pay
- * for.
+ * Unset means OFF, not a default interval: this answers what the OPERATOR
+ * said, and an embedded or hosted root with no second writer would pay for
+ * polling it never needs. An operator running more than one instance against
+ * one data directory turns it on, which is also the moment they can pick a
+ * latency they are willing to pay for. The local daemon is the one root that
+ * arms it for them.
  *
  * Parsing is strict — a bare non-negative base-10 integer — so a mistyped
  * value is OFF rather than an interval nobody intended. `0` is an explicit
@@ -77,6 +79,34 @@ export function resolveWorkspaceTailIntervalMs(
   // direction and is unreachable in a started server.
   const parsed = parseWorkspaceTailMs(env)
   return parsed.ok ? parsed.value : null
+}
+
+/**
+ * How often the LOCAL daemon follows the record when its operator set nothing.
+ *
+ * Half a second is the latency a person watching an agent draw can read as
+ * live (an edit reaches an open browser within it, 250ms on average), and what
+ * it costs was measured rather than argued, in
+ * `scripts/measure/workspace-follow-cost.mjs`: a pass over a workspace nothing
+ * wrote to is one frontier read, 0.5ms for the usual single subscribed
+ * workspace, 2-3ms for ten and 12-20ms for fifty — 0.1%, 0.5% and 2.4-4% of a core
+ * at this interval. Only workspaces a browser is subscribed to are followed,
+ * so a daemon with no page open pays nothing. A pass that catches an edit up
+ * pays that workspace's import, which `LOOP_COSTS['workspace-tail']` bounds.
+ */
+export const LOCAL_DAEMON_TAIL_INTERVAL_MS = 500
+
+/**
+ * Arm the tail for the local daemon unless the operator already said
+ * something, including `0` for off — a set value is never overwritten, and an
+ * unparseable one is left for the startup check that refuses it.
+ *
+ * Written to the environment because the shared workers read the operator's
+ * setting from there: it is the one seam both HTTP roots resolve it through,
+ * and the config-file layer already feeds it the same way.
+ */
+export function armLocalDaemonTail(env: NodeJS.ProcessEnv = process.env): void {
+  env[WORKSPACE_TAIL_INTERVAL_ENV] ??= String(LOCAL_DAEMON_TAIL_INTERVAL_MS)
 }
 
 /** "Where this document stands is not known" — `catchUp` re-reads the record. */

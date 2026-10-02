@@ -19,6 +19,7 @@ import { startHttpServer } from '../server/http-server.js'
 import { getLogger } from '../server/log.js'
 import { resolveReplicaEnv } from '../server/replica-env.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
+import { armLocalDaemonTail } from '../server/store/workspace-tail.js'
 import {
   type DaemonRunReadyResult,
   daemonRunReadyResultSchema,
@@ -112,6 +113,10 @@ function configError(
  * let an operator's script think stdin (or the env var) took effect when the
  * other one actually did. Checked by PRESENCE only, so no token's value is
  * ever read here and nothing can leak into the message.
+ *
+ * What passes both is also where the daemon's own default for the workspace
+ * tail is applied: it has to come after the first gate and before anything
+ * reads the setting.
  */
 function startupEnvRefusal(
   env: NodeJS.ProcessEnv,
@@ -136,6 +141,9 @@ function startupEnvRefusal(
     )
   }
 
+  // Only once the gates passed, so an interval nobody can read is refused
+  // above rather than replaced here.
+  armLocalDaemonTail()
   return null
 }
 
