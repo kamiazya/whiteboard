@@ -84,11 +84,9 @@ function identityNamedBy(body: unknown): ApiErrorBody | undefined {
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono<{ Variables: { workspaceId: string } }>()
-  // One stamp-validated content-facts cache per deps, not per server: the
-  // daemon's /mcp builds a server per request, and a cache owned by the
-  // server would be empty at every search. Backlinks/mentions, tags, and
-  // search all read through it, so a request after a quiet period reloads
-  // only what changed — regardless of which write path changed it.
+  // The stamp-validated facts cache is held by the deps, not this server: /mcp
+  // builds a server per request, which would otherwise search from an empty
+  // cache. Backlinks, tags and search share it, whichever write path changed a document.
   const factsCache = factsCacheFor(deps)
 
   /**

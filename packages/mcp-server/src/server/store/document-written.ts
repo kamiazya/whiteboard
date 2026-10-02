@@ -17,10 +17,8 @@ import { FileVersionStore } from './version-store.js'
  * path (`wb_canvas_edit` -> `saveDocumentBodySnapshot` ->
  * `saveDocumentSnapshot`) reached the store directly and fired nothing, so
  * a canvas only an agent ever touched grew its op-log without bound. Worse
- * in stdio MCP: `installAutoCompact` is called from the HTTP route
- * registration, which stdio never runs — traced from the stdio entry, 76
- * modules are reachable and `auto-compact.ts` is not among them, so there
- * was no emitter AND no subscriber.
+ * in stdio MCP: the save subscription is armed by the HTTP roots' background
+ * work, which stdio never runs, so there was no emitter AND no subscriber.
  *
  * Compaction needs only the workspace: it folds the WORKSPACE record, which
  * every document shares. The checkpoint is per document, so the path and doc

@@ -2,6 +2,11 @@ import type { BackgroundWork, BackgroundWorker } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
 import { subscribedWorkspaceIds } from './routes/sync-audience.js'
+import {
+  disposeAutoCompact,
+  installAutoCompact,
+  uninstallAutoCompact,
+} from './store/auto-compact.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import {
   cacheBackedWorkspaceDocs,
@@ -10,6 +15,7 @@ import {
 } from './store/document-store.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
+import { FileVersionStore } from './store/version-store.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 
 /**
@@ -184,31 +190,62 @@ export interface SharedWorkerArming {
   fileGc: BackgroundWorker
 }
 
-/** The four declarations, each answering the registry's three questions once. */
+function autoCheckpointWork(flushCheckpoints: () => Promise<void>): BackgroundWork {
+  return {
+    name: 'auto-checkpoint',
+    trigger: 'a document update, taken once that document has been quiet for five minutes',
+    instances: {
+      runs: 'every-instance',
+      because:
+        'the debounce is about documents THIS process is holding edits for — another ' +
+        'instance has neither the pending timer nor the LoroDoc the checkpoint would be ' +
+        'taken from, so a leader could not take it',
+    },
+    loop: LOOP_COSTS['auto-checkpoint'],
+    // Nothing to arm: the trigger schedules itself from the update that
+    // signalled it, which is why it is declared here for its STOP rather
+    // than its start. A trailing debounce loses exactly the checkpoint it
+    // exists to take if the process goes away without flushing — the one
+    // at the pause where editing stopped — so shutting down TAKES the
+    // pending checkpoints instead of dropping them.
+    worker: { start: () => {}, stop: flushCheckpoints },
+  }
+}
+
+function autoCompactWork(): BackgroundWork {
+  return {
+    name: 'auto-compact',
+    trigger: 'a document write, folded once that workspace has been quiet for thirty seconds',
+    instances: {
+      runs: 'every-instance',
+      because:
+        'the debounce is about writes THIS process saw, and a leader could not know which ' +
+        "those were. Two instances folding one record is covered by ADR-0020's generation " +
+        "fence: the second fold is refused ('raced') and costs a compaction, never an edit.",
+    },
+    loop: LOOP_COSTS['auto-compact'],
+    // `start` subscribes to saves; each save then arms its own debounce. The
+    // agent write path schedules through `documentWritten` and so does not
+    // depend on it. `stop` cancels the pending debounces and waits for a fold
+    // already running, so shutdown never closes the database under one.
+    worker: {
+      start: () => installAutoCompact(new FileVersionStore()),
+      stop: async () => {
+        uninstallAutoCompact()
+        await disposeAutoCompact()
+      },
+    },
+  }
+}
+
+/** The declarations both roots run, each answering the registry's three questions once. */
 export function sharedBackgroundWork(
   workers: SharedWorkers,
   arming: SharedWorkerArming,
 ): BackgroundWork[] {
   return [
-    {
-      name: 'auto-checkpoint',
-      trigger: 'a document update, taken once that document has been quiet for five minutes',
-      instances: {
-        runs: 'every-instance',
-        because:
-          'the debounce is about documents THIS process is holding edits for — another ' +
-          'instance has neither the pending timer nor the LoroDoc the checkpoint would be ' +
-          'taken from, so a leader could not take it',
-      },
-      loop: LOOP_COSTS['auto-checkpoint'],
-      // Nothing to arm: the trigger schedules itself from the update that
-      // signalled it, which is why it is declared here for its STOP rather
-      // than its start. A trailing debounce loses exactly the checkpoint it
-      // exists to take if the process goes away without flushing — the one
-      // at the pause where editing stopped — so shutting down TAKES the
-      // pending checkpoints instead of dropping them.
-      worker: { start: () => {}, stop: arming.flushCheckpoints },
-    },
+    autoCheckpointWork(arming.flushCheckpoints),
+    autoCompactWork(),
     {
       name: 'file-gc-sweeper',
       trigger: 'every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it',

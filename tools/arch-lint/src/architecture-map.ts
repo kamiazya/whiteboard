@@ -422,7 +422,7 @@ export const KNOWN_PACKAGE_CYCLES: readonly {
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
-  'routes/document.ts -> auto-compact',
+  'routes/document.ts -> auto-checkpoint',
   'routes/document.ts -> version-store',
   'routes/document/auto-version.ts -> version-store',
   'routes/document/maintenance.ts -> document-store',

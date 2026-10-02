@@ -20,8 +20,9 @@ import { compactWorkspace, setDocumentSavedListener } from './document-store.js'
 import type { VersionStore } from './version-store.js'
 
 // ── auto-compact debouncer ────────────────────────────────────────────
-// saveDocument calls a registered trigger after every write. The route layer
-// wires that trigger to scheduleAutoCompact below; tests can register a spy
+// saveDocument calls a registered trigger after every write. The shared
+// background work (`shared-background-work.ts`) wires that trigger to
+// scheduleAutoCompact below; tests can register a spy
 // instead to verify call ordering. One timer per WORKSPACE coalesces a burst
 // of edits — to any of its documents, since they all live in the one record
 // compaction folds — into a single compaction once the pause exceeds

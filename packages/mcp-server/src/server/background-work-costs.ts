@@ -77,6 +77,24 @@ export const LOOP_COSTS = {
       'what a shutdown flush pays for every document an edit left pending.',
     measuredOn: '2026-09-03',
   },
+  'auto-compact': {
+    runs: 'in-process',
+    // No yield to add: the fold is one shallow-snapshot export of the whole
+    // workspace record, a single call that cannot be subdivided, so this is
+    // the pass rather than a slice of it. The debounce is what keeps it off
+    // the path a person waits on: it lands thirty seconds after the last
+    // write to the workspace, not during an edit.
+    stallCeilingMs: 800,
+    fixture:
+      'asserted by auto-compact-loop-availability.test.ts, which rewrites one document 100 ' +
+      'times behind a version floor and reads 34-200ms there, in ONE unbroken stall. It ' +
+      "tracks the record's history rather than how many documents there are — by hand, " +
+      'median of three: 400 rewrites 425ms (281-660), 1000 rewrites 840ms (705-2080). A ' +
+      'workspace with that much history behind its earliest version is the case this ' +
+      'ceiling does not cover, and the way lower is folding more often (a later floor), not ' +
+      'yielding.',
+    measuredOn: '2026-10-01',
+  },
   'backup-scheduler': {
     runs: 'subprocess',
     because:
