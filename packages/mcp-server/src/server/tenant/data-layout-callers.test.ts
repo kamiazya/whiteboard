@@ -10,10 +10,9 @@ import { describe, expect, it } from 'vitest'
  * entry whose file stopped naming one.
  */
 const NAMES_A_STORE_DIRECTORY: Record<string, string> = {
-  'server/store/backup-blob-mirror.ts':
-    'the mirror is FLAT and shared by design: a blob path there is its digest, so it carries no tenant',
-  'server/backup-restore.ts':
-    'reads that flat mirror (its live side goes through data-layout) and lists the mirror store dirs',
+  // Empty: the backup mirror is flat and shared by design (a blob path there is
+  // its digest, so it carries no tenant) and names the same two stores, but
+  // through `BLOBS_DIRNAME` / `FILES_DIRNAME`, which data-layout exports.
 }
 
 const SRC = join(import.meta.dirname, '../..')
