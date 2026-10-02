@@ -80,7 +80,7 @@
       "fromNode": "mcp",
       "toNode": "browser",
       "toEnd": "arrow",
-      "label": "HTTP / WS"
+      "label": "extension"
     },
     {
       "id": "human-to-browser",

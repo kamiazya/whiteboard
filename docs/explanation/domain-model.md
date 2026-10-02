@@ -118,11 +118,11 @@ That split is **gone**, in four steps recorded in the migration log:
 ## Practical consequences today
 
 - An agent and a human work on the same document through whichever surface
-  they prefer: an MCP tool call, the daemon's HTTP API, and the WebSocket
-  session all read and write one stored document.
+  they prefer: an MCP tool call, the daemon's HTTP API, and the live-sync
+  stream all read and write one stored document.
 - A workspace's documents live in **one workspace record** (a single Loro
   document holding the tree and every document's content), and live sync
-  runs at that granularity: a WebSocket or SSE session receives the
+  runs at that granularity: a sync stream (SSE) receives the
   workspace record's snapshot and its updates, scoped in the client to the
   open document by its `documentId`. Text events (version created, restore,
   viewport) stay addressed per path.

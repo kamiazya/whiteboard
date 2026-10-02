@@ -38,7 +38,7 @@ identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub
 You and your agent both reach the same whiteboard — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser through the whiteboard extension.
 
 <p align="center">
-  <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP controls the Browser Canvas via HTTP/WS." width="780" />
+  <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP syncs the Browser Canvas through the whiteboard extension." width="780" />
   <br />
   <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.canvas">architecture.canvas</a> to open it as a JSON Canvas document and remix.</i></sub>
 </p>

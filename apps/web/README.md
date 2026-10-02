@@ -32,8 +32,10 @@ This package is a **deploy target**, not an npm distribution artifact.
 ## Runtime config
 
 `src/runtime-config.ts` provides a Zod schema seam for resolving public origin and
-daemon base URL at startup. Cloudflare Pages deployment and daemon pairing are
-future work — the seam is intentionally minimal today.
+daemon base URL at startup. The app deploys to Cloudflare Pages (`wrangler.toml`,
+`.github/workflows/deploy-preview.yml`) and reaches a local daemon through the
+browser extension ([ADR-0050](../../docs/contributing/adr/0050-local-daemon-trust.md));
+the seam is intentionally minimal.
 
 Local fixed-origin HTTPS development via `wrangler pages dev` is a candidate future
 option for testing Cloudflare-specific behavior locally. It is not currently implemented
