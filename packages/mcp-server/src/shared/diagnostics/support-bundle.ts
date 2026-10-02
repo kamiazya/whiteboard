@@ -61,33 +61,52 @@ function assertIsoTimestamp(value: string, label: string): string {
 
 export const SUPPORT_BUNDLE_SCHEMA_VERSION = 1
 
-const supportBundleSectionSchema = z.enum([
+const daemonBundleSectionSchema = z.enum([
   'manifest.json',
   'status.json',
   'doctor.json',
   'logs.jsonl',
 ])
 
-export const supportBundleManifestSchema = z
-  .object({
-    schemaVersion: z.literal(SUPPORT_BUNDLE_SCHEMA_VERSION),
-    // ISO 8601 datetime with timezone offset. Same shape the JSONL
-    // surface enforces; consumers ordering bundles by createdAt
-    // should never see a malformed value.
-    createdAt: z.string().datetime({ offset: true }),
-    packageVersion: z.string(),
-    platform: z
-      .object({
-        os: z.string(),
-        nodeVersion: z.string(),
-      })
-      .strict(),
-    // Names of the files included in this bundle (excluding the
-    // manifest itself). Pinned to the section enum so a new section
-    // requires explicit schema acknowledgement.
-    sections: z.array(supportBundleSectionSchema),
-  })
-  .strict()
+// Server mode has no safe log source, and carries the record it was started
+// from instead.
+const serverBundleSectionSchema = z.enum(['status.json', 'doctor.json', 'record.json'])
+
+const manifestCommon = {
+  schemaVersion: z.literal(SUPPORT_BUNDLE_SCHEMA_VERSION),
+  // ISO 8601 datetime with timezone offset. Same shape the JSONL
+  // surface enforces; consumers ordering bundles by createdAt
+  // should never see a malformed value.
+  createdAt: z.string().datetime({ offset: true }),
+  packageVersion: z.string(),
+  platform: z
+    .object({
+      os: z.string(),
+      nodeVersion: z.string(),
+    })
+    .strict(),
+}
+
+// The one declaration of what `manifest.json` may hold, whichever command
+// wrote it: `mode` says which bundle this is, and with it which sections.
+// Names of the files included in a bundle (excluding the manifest itself),
+// pinned to an enum so a new section requires explicit schema acknowledgement.
+export const supportBundleManifestSchema = z.discriminatedUnion('mode', [
+  z
+    .object({
+      ...manifestCommon,
+      mode: z.literal('daemon'),
+      sections: z.array(daemonBundleSectionSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ...manifestCommon,
+      mode: z.literal('server-mode'),
+      sections: z.array(serverBundleSectionSchema),
+    })
+    .strict(),
+])
 type SupportBundleManifest = z.infer<typeof supportBundleManifestSchema>
 
 // Redacted status section. Mirrors `DaemonStatusResult` but only the
@@ -157,18 +176,27 @@ export interface SupportBundleDoctorInput {
   status: 'ok' | 'warning' | 'error' | 'skipped'
   checks: SupportBundleDoctorCheckInput[]
 }
-export interface SupportBundleDoctorSection {
-  schemaVersion: 1
-  ok: boolean
-  status: 'ok' | 'warning' | 'error' | 'skipped'
-  checks: Array<{
-    id: string
-    status: 'ok' | 'warning' | 'error' | 'skipped'
-    summary: string
-    detail: string | null
-    remediation: string | null
-  }>
-}
+const doctorStatusSchema = z.enum(['ok', 'warning', 'error', 'skipped'])
+
+export const supportBundleDoctorSectionSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    ok: z.boolean(),
+    status: doctorStatusSchema,
+    checks: z.array(
+      z
+        .object({
+          id: z.string(),
+          status: doctorStatusSchema,
+          summary: z.string(),
+          detail: z.string().nullable(),
+          remediation: z.string().nullable(),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+export type SupportBundleDoctorSection = z.infer<typeof supportBundleDoctorSectionSchema>
 
 export function buildDoctorSection(input: SupportBundleDoctorInput): SupportBundleDoctorSection {
   return {
@@ -224,6 +252,7 @@ export function buildSupportBundle(input: SupportBundleInput): SupportBundle {
   // value.
   const manifestParsed = supportBundleManifestSchema.safeParse({
     schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION,
+    mode: 'daemon',
     createdAt: input.createdAt,
     packageVersion: input.packageVersion,
     platform: input.platform,

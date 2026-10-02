@@ -189,6 +189,19 @@ describe('support bundle v0', () => {
     ).toThrow()
   })
 
+  it('names the bundle it describes, and holds each mode to its own sections', () => {
+    const { manifest } = buildSupportBundle(minimalInput)
+    expect(manifest.mode).toBe('daemon')
+    const server = { ...manifest, mode: 'server-mode', sections: ['status.json', 'record.json'] }
+    expect(supportBundleManifestSchema.parse(server).mode).toBe('server-mode')
+    expect(() =>
+      supportBundleManifestSchema.parse({ ...server, sections: ['logs.jsonl'] }),
+    ).toThrow()
+    expect(() =>
+      supportBundleManifestSchema.parse({ ...manifest, sections: ['record.json'] }),
+    ).toThrow()
+  })
+
   it('fail-closed on invalid timestamp: throws SupportBundleError with a generic message that does not echo input', () => {
     let caught: unknown
     try {

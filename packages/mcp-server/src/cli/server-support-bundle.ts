@@ -18,10 +18,17 @@
 
 import { lstat, mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { z } from 'zod'
 import { hasAncestorSymlink } from '../server/backup-restore.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
-import { buildDoctorSection } from '../shared/diagnostics/support-bundle.js'
+import {
+  buildDoctorSection,
+  SUPPORT_BUNDLE_SCHEMA_VERSION,
+  supportBundleDoctorSectionSchema,
+  supportBundleManifestSchema,
+} from '../shared/diagnostics/support-bundle.js'
+import { operatorJsonLine } from './operator-json.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
 import type { RunServerStatusOutcome } from './server-status.js'
 
@@ -101,11 +108,58 @@ async function defaultRunDoctor(opts: {
   return runServerDoctor({ flags, env: effectiveEnv })
 }
 
-function buildStatusSection(outcome: RunServerStatusOutcome): object {
+const sectionVersion = z.literal(SUPPORT_BUNDLE_SCHEMA_VERSION)
+
+// What `status.json` and `record.json` may hold. Declared so the bundle a
+// tool reads back is the one the writer was held to.
+export const serverSupportBundleStatusSectionSchema = z.discriminatedUnion('ok', [
+  z
+    .object({
+      schemaVersion: sectionVersion,
+      state: z.literal('running'),
+      ok: z.literal(true),
+      pid: z.number(),
+      port: z.number(),
+      authStrategy: z.literal('oauth-jwt'),
+      startedAt: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      schemaVersion: sectionVersion,
+      state: z.enum(['missing', 'unreadable', 'stale', 'malformed', 'unverifiable']),
+      ok: z.literal(false),
+    })
+    .strict(),
+])
+
+export const serverSupportBundleRecordSectionSchema = z.union([
+  z
+    .object({
+      schemaVersion: sectionVersion,
+      kind: z.enum(['missing', 'unreadable', 'malformed']),
+    })
+    .strict(),
+  z
+    .object({
+      schemaVersion: sectionVersion,
+      kind: z.enum(['ok', 'stale']),
+      pid: z.number(),
+      port: z.number(),
+      authStrategy: z.literal('oauth-jwt'),
+      startedAt: z.string(),
+      publicBaseUrlHost: z.string().optional(),
+    })
+    .strict(),
+])
+
+function buildStatusSection(
+  outcome: RunServerStatusOutcome,
+): z.infer<typeof serverSupportBundleStatusSectionSchema> {
   const r = outcome.result
   if (r.ok && r.state === 'running') {
     return {
-      schemaVersion: 1,
+      schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION,
       state: 'running',
       ok: true,
       pid: r.pid,
@@ -114,18 +168,15 @@ function buildStatusSection(outcome: RunServerStatusOutcome): object {
       startedAt: r.startedAt,
     }
   }
-  return { schemaVersion: 1, state: r.state, ok: false }
+  return { schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION, state: r.state, ok: false }
 }
 
 function buildRecordSection(
   readResult: ServerModeRecordReadResult,
   statusOutcome: RunServerStatusOutcome,
-): object {
-  if (readResult.kind === 'missing') {
-    return { schemaVersion: 1, kind: 'missing' }
-  }
-  if (readResult.kind === 'unreadable' || readResult.kind === 'malformed') {
-    return { schemaVersion: 1, kind: readResult.kind }
+): z.infer<typeof serverSupportBundleRecordSectionSchema> {
+  if (readResult.kind !== 'ok') {
+    return { schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION, kind: readResult.kind }
   }
   const r = readResult.record
   // Derive liveness from the identity-verified status outcome so PID reuse
@@ -138,7 +189,7 @@ function buildRecordSection(
     /* empty */
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION,
     kind,
     pid: r.pid,
     port: r.port,
@@ -219,20 +270,20 @@ export async function runServerSupportBundle(
   const doctorSection = buildDoctorSection(doctorOutcome.result)
   const recordSection = buildRecordSection(readResult, statusOutcome)
 
-  const sectionContents: Record<string, string> = {
-    'status.json': `${JSON.stringify(statusSection)}\n`,
-    'doctor.json': `${JSON.stringify(doctorSection)}\n`,
-    'record.json': `${JSON.stringify(recordSection)}\n`,
+  const sectionContents: Record<(typeof SECTION_WRITE_ORDER)[number], string> = {
+    'status.json': operatorJsonLine(serverSupportBundleStatusSectionSchema, statusSection),
+    'doctor.json': operatorJsonLine(supportBundleDoctorSectionSchema, doctorSection),
+    'record.json': operatorJsonLine(serverSupportBundleRecordSectionSchema, recordSection),
   }
 
-  const manifest = {
-    schemaVersion: 1 as const,
+  const manifestContent = operatorJsonLine(supportBundleManifestSchema, {
+    schemaVersion: SUPPORT_BUNDLE_SCHEMA_VERSION,
+    mode: 'server-mode',
     createdAt: now(),
     packageVersion,
     platform,
-    mode: 'server-mode' as const,
     sections: [...SECTION_WRITE_ORDER],
-  }
+  })
 
   // ── Write to disk (manifest last, wx race guard) ─────────────────
 
@@ -242,7 +293,7 @@ export async function runServerSupportBundle(
         writeFile(join(outputDir, name), sectionContents[name], { encoding: 'utf-8', flag: 'wx' }),
       ),
     )
-    await writeFile(join(outputDir, 'manifest.json'), `${JSON.stringify(manifest)}\n`, {
+    await writeFile(join(outputDir, 'manifest.json'), manifestContent, {
       encoding: 'utf-8',
       flag: 'wx',
     })
