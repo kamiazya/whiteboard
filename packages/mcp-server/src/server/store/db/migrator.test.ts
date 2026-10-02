@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { sql } from 'kysely'
 import { Migrator } from 'kysely/migration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../../shared/test-utils/can-deny-file-read.js'
@@ -16,7 +17,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getDb, closeDb, clearDbCache } = await import('./index.js')
+const { getDb, getRawDb, closeDb, clearDbCache } = await import('./index.js')
 const { runMigrations } = await import('./migrator.js')
 const { IncompatibleDatabaseError } = await import('./incompatible-database.js')
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
@@ -74,36 +75,60 @@ describe('runMigrations', () => {
     await expect(runMigrations(db)).resolves.toBeUndefined()
   })
 
-  // Graceful-failure: a DB whose migration log records a name the current code
-  // does not ship (e.g. a newer release's migration, opened by an older build)
-  // makes kysely throw a cryptic "corrupted migrations" error. runMigrations
-  // must surface this as a typed, actionable IncompatibleDatabaseError that
-  // points at the disposable-DB recovery docs — not the raw kysely message.
-  it('throws an actionable IncompatibleDatabaseError when the DB log has an unknown migration', async () => {
-    await prepareDataDir(tempDir)
-    const db = await getDb(tempDir)
-
-    // Seed a migration name the current provider does NOT know about, so the
-    // current runMigrations sees an applied-but-missing migration = corrupted.
-    const { migrations } = await import('./migrations/index.js')
-    const futureMigrator = new Migrator({
+  // Inserted directly: kysely's own Migrator refuses to record a name that
+  // sorts before one already executed, and a renamed migration is exactly that.
+  async function seedUnknownMigration(name: string) {
+    const db = await getRawDb(tempDir)
+    await sql`insert into kysely_migration (name, timestamp) values (${name}, ${new Date().toISOString()})`.execute(
       db,
-      provider: {
-        getMigrations: async () => ({
-          ...migrations,
-          '9999-from-a-newer-release': { up: async () => {}, down: async () => {} },
-        }),
-      },
-    })
-    const seed = await futureMigrator.migrateToLatest()
-    expect(seed.error).toBeUndefined()
+    )
+    return db
+  }
 
-    await expect(runMigrations(db)).rejects.toThrow(IncompatibleDatabaseError)
-    // The message must be actionable: name the recovery path, not kysely internals.
-    await expect(runMigrations(db)).rejects.toThrow(/whiteboard\.db|re-create|mcp-debugging/)
-    // The typed guard recognizes it.
-    const err = await runMigrations(db).catch((e: unknown) => e)
+  // A DB whose migration log records a name AFTER the last one this build
+  // ships was written by a newer release. The remedy is to upgrade the older
+  // build; deleting the database would destroy documents that a newer build
+  // reads fine.
+  it('tells an older build to upgrade, never to delete, when the database records a newer migration', async () => {
+    await prepareDataDir(tempDir)
+    const db = await seedUnknownMigration('0099-from-a-newer-release')
+
+    const err = await runMigrations(db, '/srv/wb-data/whiteboard.db').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(IncompatibleDatabaseError)
+    const message = (err as Error).message
+    expect(message).toMatch(/newer/i)
+    expect(message).toMatch(/upgrade/i)
+    expect(message).toContain('@kamiazya/whiteboard-mcp')
+    expect(message).toContain('0099-from-a-newer-release')
+    expect(message).toContain('/srv/wb-data/whiteboard.db')
+    expect(message).not.toMatch(/remov|delet|re-create|disposable/i)
+    expect(message).not.toContain('~/.whiteboard')
+  })
+
+  // A name in the middle of the published list is a renamed or dropped
+  // migration: nothing newer would read this database, so re-creating it is the
+  // documented pre-1.0 remedy, and it must name the database actually in use.
+  it('names the real database when a published-range migration is missing from this build', async () => {
+    await prepareDataDir(tempDir)
+    const db = await seedUnknownMigration('0005-renamed-in-a-later-release')
+
+    const err = await runMigrations(db, '/srv/wb-data/whiteboard.db').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(IncompatibleDatabaseError)
+    const message = (err as Error).message
+    expect(message).toContain('0005-renamed-in-a-later-release')
+    expect(message).toContain('/srv/wb-data/whiteboard.db')
+    expect(message).toMatch(/re-create/i)
+    expect(message).not.toContain('~/.whiteboard')
+    expect(message).not.toMatch(/upgrade/i)
+  })
+
+  it('prepareDataDir names the data dir database in the incompatibility message', async () => {
+    await prepareDataDir(tempDir)
+    await seedUnknownMigration('0099-from-a-newer-release')
+    clearPrepareCache()
+    const err = await prepareDataDir(tempDir).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(IncompatibleDatabaseError)
+    expect((err as Error).message).toContain(join(tempDir, 'whiteboard.db'))
   })
 
   // 0011-import-fs-blobs walks {dataDir}/blobs/<workspaceId>/canvas — an

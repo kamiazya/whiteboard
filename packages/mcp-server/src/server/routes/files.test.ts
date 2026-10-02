@@ -208,6 +208,50 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     expect(new Uint8Array(buf)[0]).toBe(0x89)
   })
 
+  // An uploaded SVG is attacker-authored markup that can carry script. The
+  // editor reads it through fetch() into a blob, which these headers do not
+  // touch, but a top-level navigation to the URL would run it in the app's
+  // origin — which in server mode carries the session.
+  it('serves an uploaded SVG sandboxed with no script allowed and as an attachment', async () => {
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    const put = await app.request('/api/w/session1/document/canvas-a/file/file-svg', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/svg+xml' },
+      body: svg,
+    })
+    expect(put.status).toBe(204)
+
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-svg')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('image/svg+xml')
+    const csp = res.headers.get('Content-Security-Policy') ?? ''
+    expect(csp).toMatch(/(^|;\s*)sandbox(\s*;|$)/)
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).not.toContain('allow-scripts')
+    expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="file-svg.svg"')
+    // The bytes are served as stored: the defence is the headers, not a rewrite.
+    expect(await res.text()).toBe(svg)
+
+    // The app-wide baseline fills the CSP only when a route left it unset, so
+    // it must not replace this one with the frame-ancestors-only default.
+    const { setBaselineSecurityHeaders } = await import('../app-helpers.js')
+    setBaselineSecurityHeaders(res.headers)
+    expect(res.headers.get('Content-Security-Policy')).toBe(csp)
+  })
+
+  it('serves a raster image without a sandbox policy or download disposition', async () => {
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(
+      join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    )
+    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
+    expect(res.headers.get('Content-Security-Policy')).toBeNull()
+    expect(res.headers.get('Content-Disposition')).toBeNull()
+  })
+
   // A JSON 404, like every other refusal on this surface: the browser
   // client reads the body, and a plain-text one is a refusal it cannot read.
   it('returns a JSON 404 for a missing fileId', async () => {

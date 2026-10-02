@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const doctorCheckStatusSchema = z.enum(['ok', 'warning', 'error', 'skipped'])
+export const doctorCheckStatusSchema = z.enum(['ok', 'warning', 'error', 'skipped'])
 
 export type DaemonDoctorOverallStatus = z.infer<typeof doctorCheckStatusSchema>
 
