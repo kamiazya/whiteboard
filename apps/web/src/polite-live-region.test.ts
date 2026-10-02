@@ -27,15 +27,6 @@ const sourceModules = import.meta.glob('./**/*.tsx', {
 }) as Record<string, string>
 
 /**
- * A live region whose CONTENT is a layout placeholder rather than a
- * sentence. Mounting an empty skeleton grid permanently would put an
- * invisible four-cell scaffold in every list page to announce nothing; the
- * arrival of the real content is what these tell someone about, and that is
- * a DOM replacement they perceive either way.
- */
-const SKELETON_EXCEPTIONS = ['./pages/BrowserIndexPage.tsx', './pages/DaemonIndexPage.tsx']
-
-/**
  * `{cond && <el ... role="status"`, across the line breaks a formatter puts
  * between the opening brace and the role. Deliberately loose about what sits
  * between: any conditional that gates a status element is the bug, whatever
@@ -88,7 +79,7 @@ describe('polite live regions are mounted before they speak', () => {
 
   it('has no role="status" element behind a conditional render', () => {
     const offenders = Object.entries(sourceModules)
-      .filter(([path]) => !path.includes('.test.') && !SKELETON_EXCEPTIONS.includes(path))
+      .filter(([path]) => !path.includes('.test.'))
       .flatMap(([path, source]) => offendingLines(source).map((line) => `${path}:${line}`))
 
     expect(

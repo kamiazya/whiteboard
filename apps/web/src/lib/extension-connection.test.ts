@@ -4,12 +4,13 @@
  * whole trust chain — so connecting is asking whether the daemon answers.
  */
 import { describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { CONNECT_TIMEOUT_MS, connectThroughExtension } from './extension-connection.js'
 
 describe('connectThroughExtension', () => {
   it('pairs with the bridged daemon when it answers the ping, holding no token', async () => {
-    const fetchFn = vi.fn<typeof fetch>(async () => new Response('{"ok":true}', { status: 200 }))
+    const fetchFn = vi.fn<typeof fetch>(async () => jsonResponse({ ok: true }))
     expect(await connectThroughExtension(fetchFn)).toEqual({
       status: 'connected',
       daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,

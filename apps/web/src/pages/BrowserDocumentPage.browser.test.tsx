@@ -7,7 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { IdbDefaultDocumentPointer, listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
@@ -28,7 +28,13 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     await clearWhiteboardDb()
   })
 
+  // Restored here rather than after the assertion that reads it, so a failing
+  // assertion cannot leave `window.fetch` spied for the next test.
+  let fetchSpy: MockInstance<typeof window.fetch> | undefined
+
   afterEach(() => {
+    fetchSpy?.mockRestore()
+    fetchSpy = undefined
     cleanup()
   })
 
@@ -184,7 +190,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
   it('network-negative: no fetch to /api/ or daemon endpoints during editing', async () => {
     const calls: string[] = []
     const original = window.fetch.bind(window)
-    const spy = vi.spyOn(window, 'fetch').mockImplementation((...args) => {
+    fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((...args) => {
       const url =
         typeof args[0] === 'string'
           ? args[0]
@@ -207,7 +213,6 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
       (url) => url.includes('/api/') || url.includes('localhost:3') || url.includes('127.0.0.1'),
     )
     expect(daemonCalls).toHaveLength(0)
-    spy.mockRestore()
   })
 
   it('does not render an "Add rectangle" button', async () => {

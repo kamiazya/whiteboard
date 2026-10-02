@@ -149,7 +149,7 @@ function daemonHarness(): VersionsBackendHarness {
     if (restore && init?.method === 'POST') {
       const id = restore[1] as string
       const past = content.get(id)
-      if (past === undefined) return new Response('{}', { status: 404 })
+      if (past === undefined) return jsonResponse({}, 404)
       current = past
       // The merge point the operation records; see restore-version.ts.
       versions.unshift(entry(`v-restore-${++seq}`, undefined, id))
@@ -161,7 +161,7 @@ function daemonHarness(): VersionsBackendHarness {
     if (document) {
       const id = document[1] as string
       // The refusal: an id alone must not read another document's history.
-      if (id === OTHER || !content.has(id)) return new Response('{}', { status: 404 })
+      if (id === OTHER || !content.has(id)) return jsonResponse({}, 404)
       return jsonResponse({
         kind: 'spatial',
         canvas: {

@@ -30,6 +30,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const { daemonApiClientMock, daemonWithOneDocument } = await import(
@@ -74,7 +75,7 @@ afterEach(() => {
 it('keeps a passage attached through one burst that also edits inside it', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response('{}', { status: 404 })),
+    vi.fn(async () => jsonResponse({}, 404)),
   )
   const backend = new FakeDocumentBackend(noteSnapshot)
   renderPage(

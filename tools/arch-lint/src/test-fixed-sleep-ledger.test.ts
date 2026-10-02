@@ -1,13 +1,17 @@
 /**
  * A fixed-duration sleep in a test — `await new Promise((r) => setTimeout(r,
- * N))` with N > 0 — is a wait for TIME standing in for a wait for a
- * CONDITION. It is wrong in both directions at once: under a saturated run
+ * N))` with N > 0, however N is spelled (`PAUSE_MS + 50` is as fixed as `50`),
+ * or a call to a local `sleep`/`delay` helper that wraps it — is a wait for
+ * TIME standing in for a wait for a CONDITION. It is wrong in both directions at once: under a saturated run
  * the condition has not arrived when the sleep ends, so the test fails on a
  * machine it passed on yesterday; on an idle one it waited for nothing, and
  * the suite carries every such sleep as pure cost. The repo already has the
  * condition-shaped tools (`vi.waitFor` 428 call sites, `waitFor` 824,
  * `expect.poll` 14 when this was written), and fake timers with
  * `advanceTimersByTime` for code that itself waits on a timer.
+ *
+ * What counts, and what is left alone (a fake's injected latency), is
+ * `fixed-sleep-count.ts`.
  *
  * A zero-millisecond sleep is not this shape: `setTimeout(r, 0)` yields one
  * macrotask turn and waits for no duration, so it is left alone.
@@ -27,25 +31,22 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { countFixedSleeps } from './fixed-sleep-count.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
 
-/** `new Promise((resolve) => setTimeout(resolve, 50))`, any callback name, N > 0. */
-const FIXED_SLEEP = /new Promise\(\s*\(?\w*\)?\s*=>\s*setTimeout\(\w+,\s*[1-9][0-9]*\s*\)/g
-
-export function countFixedSleeps(source: string): number {
-  return [...source.matchAll(FIXED_SLEEP)].length
-}
-
 /** Repo-relative file -> fixed sleeps it held when last pinned. */
 const LEDGER: Record<string, number> = {
-  'apps/web/src/components/StorageReportCard.test.tsx': 1,
+  // The second waits out the real STATUS_CLEAR_MS timer so it fires after the window is gone.
+  'apps/web/src/components/StorageReportCard.test.tsx': 2,
   'apps/web/src/components/document-editor/canvas-verb-bar.browser.test.tsx': 1,
   'apps/web/src/components/markdown-editor/touch-formatting-bar.browser.test.tsx': 1,
   'apps/web/src/components/markdown-editor/verb-bar-measure.browser.test.tsx': 1,
   'apps/web/src/components/markdown-editor/wiki-link-completion.browser.test.tsx': 3,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2,
   'apps/web/src/components/spatial-editor/comment-move.browser.test.tsx': 3,
+  // Each waits out STROKE_GROUP_PAUSE_MS on the wall clock so the next stroke opens its own group.
+  'apps/web/src/components/spatial-editor/freehand-ink.browser.test.tsx': 3,
   'apps/web/src/components/spatial-editor/image-node.browser.test.tsx': 1,
   'apps/web/src/components/spatial-editor/inspector-reserves-space.browser.test.tsx': 1,
   'apps/web/src/components/spatial-editor/keyboard-avoidance.browser.test.tsx': 3,
@@ -74,9 +75,15 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/pages/DaemonDocumentPage.surface-outlives-document.test.tsx': 1,
   'apps/web/src/pages/ReplicaReadPage.browser.test.tsx': 1,
   'packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.script.test.ts': 1,
+  // One is the poll interval of a hand-rolled deadline loop (a vi.waitFor in all but name); two
+  // are settle windows, since "nothing was opened" can only be shown by letting time pass.
+  'packages/mcp-server/src/cli/daemon-run-auto-open-launch.test.ts': 3,
   'packages/mcp-server/src/cli/dispatcher-mcp.test.ts': 1,
   'packages/mcp-server/src/cli/dispatcher.routing.test.ts': 1,
   'packages/mcp-server/src/server/http-server.test.ts': 1,
+  // A local `sleep` helper, called per wait: the subject is WHEN a debounced checkpoint lands, on
+  // the real clock. Fake timers (`advanceTimersByTimeAsync`) can express every case.
+  'packages/mcp-server/src/server/routes/document/auto-version-timing.test.ts': 6,
   'packages/mcp-server/src/server/routes/document/auto-version.test.ts': 1,
   'packages/mcp-server/src/server/routes/document/restore-race.test.ts': 2,
   'packages/mcp-server/src/server/routes/document/versions.test.ts': 2,
@@ -88,6 +95,9 @@ const LEDGER: Record<string, number> = {
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 6,
   'packages/mcp-server/src/server/store/lease.test.ts': 1,
   'packages/mcp-server/src/shared/mkdir-lock.test.ts': 2,
+  // The instrument is calibrated against stalls of known duration; the sleeps are the free-loop
+  // controls and the quiet stretches around a blocked one.
+  'packages/mcp-server/src/shared/test-utils/loop-availability.test.ts': 4,
 }
 
 describe('fixed-duration sleeps in test files', () => {
@@ -98,6 +108,64 @@ describe('fixed-duration sleeps in test files', () => {
     expect(countFixedSleeps('await new Promise((resolve) => setTimeout(resolve, 0))')).toBe(0)
     expect(countFixedSleeps('await vi.waitFor(() => expect(x).toBe(1))')).toBe(0)
     expect(countFixedSleeps('setTimeout(tick, 100)')).toBe(0)
+  })
+
+  it('counts a constant-offset delay, a local sleep helper and a timers/promises call', () => {
+    expect(countFixedSleeps('await new Promise((r) => setTimeout(r, PAUSE_MS + 50))')).toBe(1)
+    expect(countFixedSleeps('await new Promise((r) => { setTimeout(r, SETTLE_MS) })')).toBe(1)
+    const helper = 'const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))\n'
+    expect(countFixedSleeps(`${helper}await sleep(30)\nawait sleep(300)`)).toBe(2)
+    expect(countFixedSleeps(`${helper}await sleep(0)`)).toBe(0)
+    const timers = "import { setTimeout as delay } from 'node:timers/promises'\n"
+    expect(countFixedSleeps(`${timers}await delay(50)`)).toBe(1)
+    expect(countFixedSleeps(`${timers}await Promise.race([p, delay(5000, 'timeout')])`)).toBe(0)
+  })
+
+  it('counts a call by what the name resolves to, not by the name', () => {
+    const timers = "import { setTimeout as delay } from 'node:timers/promises'\n"
+    // A parameter named like the import is whatever was passed in.
+    expect(
+      countFixedSleeps(`${timers}function invoke(delay: (v: number) => void) { delay(50) }`),
+    ).toBe(0)
+    const helper = 'const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))\n'
+    expect(countFixedSleeps(`${helper}it('x', (sleep: Fn) => { sleep(50) })`)).toBe(0)
+    expect(countFixedSleeps(`${helper}it('x', () => { sleep(50) })`)).toBe(1)
+    expect(
+      countFixedSleeps(
+        `${helper}async function wait(ms: number) { await sleep(ms) }\nawait wait(50)`,
+      ),
+    ).toBe(0)
+  })
+
+  it('registers a helper only when the sleep is its whole body', () => {
+    // A fake that sleeps and then answers is a latency injection; its literal is configuration.
+    const fake =
+      "async function fakePut(ms: number) {\n  await new Promise((r) => setTimeout(r, ms))\n  return 'stored'\n}\n"
+    expect(countFixedSleeps(`${fake}await fakePut(50)`)).toBe(0)
+    const block =
+      'async function sleep(ms: number) {\n  await new Promise((r) => setTimeout(r, ms))\n}\n'
+    expect(countFixedSleeps(`${block}await sleep(50)`)).toBe(1)
+    const returned =
+      'function sleep(ms: number) {\n  return new Promise((r) => setTimeout(r, ms))\n}\n'
+    expect(countFixedSleeps(`${returned}await sleep(50)`)).toBe(1)
+  })
+
+  it('leaves a fake latency read from a parameter, this or a property alone', () => {
+    expect(
+      countFixedSleeps(
+        'const slow = (ms: number) => async () => { await new Promise((r) => setTimeout(r, ms)) }',
+      ),
+    ).toBe(0)
+    expect(
+      countFixedSleeps(
+        'class F { async go() { await new Promise((r) => setTimeout(r, this.delayMs)) } }',
+      ),
+    ).toBe(0)
+    expect(
+      countFixedSleeps(
+        'if (opts.putDelayMs) await new Promise((r) => setTimeout(r, opts.putDelayMs))',
+      ),
+    ).toBe(0)
   })
 
   it('matches the ledger exactly: no file gained a sleep, and every entry is still earned', () => {

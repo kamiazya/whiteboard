@@ -44,5 +44,7 @@ The write-time rules, so the skill is a lookup rather than a prerequisite:
 Executable rungs already hold most of these (`pnpm lint`'s GritQL plugin, `arch-lint`'s scans,
 the jsdom setup's teardown). A shape that costs a real defect twice moves up the ladder —
 `testing-techniques/resources/executable-rungs.md` says how, fixture pair included.
-Browser `describe` + `it` titles stay under 155 characters combined; timeouts are ceilings
+Browser `describe` + `it` titles stay under their project's budget (166 minus the project
+name's length: 155 for `web-browser`, 145 for the canvas projects, 142 for the window-state
+one); timeouts are ceilings
 sized on a recorded measurement, never delays.

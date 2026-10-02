@@ -585,7 +585,7 @@ describe('SettingsPage — storage evidence wiring', () => {
             },
           })
         }
-        return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } })
+        return jsonResponse({}, 404)
       }),
     )
     renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })

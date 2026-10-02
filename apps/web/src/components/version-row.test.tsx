@@ -19,6 +19,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import VersionTimeline from './VersionTimeline.js'
 
 vi.mock('../lib/app-logger.js', () => ({
@@ -77,7 +78,7 @@ function renderTimeline(backend: VersionsBackend) {
 beforeEach(() => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response('{}', { status: 200 })),
+    vi.fn(async () => jsonResponse({})),
   )
 })
 

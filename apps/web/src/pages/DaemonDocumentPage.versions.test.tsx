@@ -135,7 +135,7 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
-          return Promise.resolve(new Response('{}', { status: 200 }))
+          return Promise.resolve(jsonResponse({}))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -195,7 +195,7 @@ describe('DaemonDocumentPage versions', () => {
             // Malformed 200: missing the `version` envelope the schema requires.
             return Promise.resolve(jsonResponse({ id: 'v-manual' }))
           }
-          return Promise.resolve(new Response('{}', { status: 200 }))
+          return Promise.resolve(jsonResponse({}))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -243,7 +243,7 @@ describe('DaemonDocumentPage versions', () => {
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(new Response('nope', { status: 500 }))
           }
-          return Promise.resolve(new Response('{}', { status: 200 }))
+          return Promise.resolve(jsonResponse({}))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -316,7 +316,7 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
-          return Promise.resolve(new Response('{}', { status: 200 }))
+          return Promise.resolve(jsonResponse({}))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -364,7 +364,7 @@ describe('DaemonDocumentPage versions', () => {
           if (url.includes('/versions')) {
             return Promise.resolve(jsonResponse({ versions: [] }))
           }
-          return Promise.resolve(new Response('{}', { status: 200 }))
+          return Promise.resolve(jsonResponse({}))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -429,7 +429,7 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
-          return Promise.resolve(new Response('{}', { status: 200 }))
+          return Promise.resolve(jsonResponse({}))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -523,7 +523,7 @@ describe('DaemonDocumentPage versions', () => {
         if (url.includes('/versions')) {
           return jsonResponse({ versions: [] })
         }
-        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        return jsonResponse({})
       })
       vi.stubGlobal('fetch', fetchMock)
 

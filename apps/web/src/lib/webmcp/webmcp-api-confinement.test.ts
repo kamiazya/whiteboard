@@ -20,9 +20,6 @@ const ALLOWED_FILES = new Set([
   // prove the registry is mounted, for BOTH keepers — the same proof the
   // per-page `.webmcp.test.tsx` files below give, run from one place.
   'test-utils/document-page.contract.tsx',
-  // This guard's own source necessarily spells out the banned strings to
-  // scan for them.
-  'lib/webmcp/webmcp-api-confinement.test.ts',
 ])
 
 // Page-level wiring regression tests (e.g. DaemonDocumentPage.webmcp.test.tsx)
@@ -66,5 +63,12 @@ describe('WebMCP ambient API confinement', () => {
     const offendersWithNoAllowList = findOffenders(new Set())
 
     expect(offendersWithNoAllowList).toContain('hooks/use-browser-tool-registry.ts')
+  })
+
+  it('keeps no allow-list entry for a file that no longer references the ambient API', () => {
+    const referencing = new Set(findOffenders(new Set()))
+    const stale = [...ALLOWED_FILES].filter((path) => !referencing.has(path))
+
+    expect(stale).toEqual([])
   })
 })

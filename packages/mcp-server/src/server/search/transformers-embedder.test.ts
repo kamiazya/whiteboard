@@ -1,3 +1,4 @@
+import { embedderContract } from '@kamiazya/whiteboard-server-core/test-utils/embedder-contract'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type CapturedLogsHandle, captureLogsForTests } from '../log.js'
@@ -6,6 +7,7 @@ import {
   createTransformersEmbedder,
   DEFAULT_MODEL,
   EMBEDDER_LOAD_REMEDY,
+  EMBEDDING_DIMENSIONS,
 } from './transformers-embedder.js'
 
 const pipeline = vi.hoisted(() => vi.fn())
@@ -17,6 +19,31 @@ vi.mock('@huggingface/transformers', () => ({ pipeline, env }))
 function extractorReturning(data: number[]) {
   return vi.fn(async () => ({ data: Float32Array.from(data) }))
 }
+
+/**
+ * A stand-in for the runtime that honours `normalize` the way the real one
+ * does: raw mean-pooled rows have an arbitrary length, and only the option
+ * makes them unit vectors. A stub that always returned unit rows would let
+ * the option be dropped unnoticed.
+ */
+function poolingRuntime() {
+  return vi.fn(async (texts: string[], options: { normalize: boolean }) => {
+    const rows = texts.map((text, row) => {
+      const raw = Array.from(
+        { length: EMBEDDING_DIMENSIONS },
+        (_, col) => ((text.length + row + col) % 7) + 1,
+      )
+      const length = options.normalize ? Math.hypot(...raw) : 1
+      return raw.map((component) => component / length)
+    })
+    return { data: Float32Array.from(rows.flat()) }
+  })
+}
+
+embedderContract('the transformers embedder over a pooling stub', () => {
+  pipeline.mockResolvedValue(poolingRuntime())
+  return createTransformersEmbedder({ cacheDir: '/tmp/cache' })
+})
 
 describe('createTransformersEmbedder', () => {
   let logs: CapturedLogsHandle
@@ -42,6 +69,18 @@ describe('createTransformersEmbedder', () => {
 
     await embedder.embed(['reconnect'], 'document')
     expect(extractor).toHaveBeenLastCalledWith(['passage: reconnect'], expect.anything())
+  })
+
+  it('asks the runtime for mean pooling and unit-length rows, as the port promises', async () => {
+    const extractor = extractorReturning([1, 0, 0])
+    pipeline.mockResolvedValue(extractor)
+
+    await createTransformersEmbedder({ cacheDir: '/tmp/cache' }).embed(['x'], 'document')
+
+    expect(extractor).toHaveBeenCalledWith(expect.anything(), {
+      pooling: 'mean',
+      normalize: true,
+    })
   })
 
   it('slices one vector per input out of the flat tensor the runtime returns', async () => {

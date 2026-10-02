@@ -9,6 +9,7 @@
  * path gets an error to act on (resolve by id, or rename one), never a
  * silent pick of whichever sibling tree order favors.
  */
+import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { DocumentPathContestedError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -48,7 +49,6 @@ function singleDocWorkspaceDocs(doc: LoroDoc): WorkspaceDocs {
 const unusedBlobStore = {} as BlobStore
 
 async function contestedIndex(): Promise<LoroWorkspaceDocumentIndex> {
-  const { createWorkspaceDocumentAtPath } = await import('@kamiazya/whiteboard-loro-adapter')
   // Two replicas each create 'design' concurrently; both survive the merge
   // — the arrangement no local uniqueness check can prevent.
   const doc = new LoroDoc()
@@ -94,7 +94,6 @@ describe('contested paths', () => {
   })
 
   it('an uncontested path still resolves normally', async () => {
-    const { createWorkspaceDocumentAtPath } = await import('@kamiazya/whiteboard-loro-adapter')
     const doc = new LoroDoc()
     createWorkspaceDocumentAtPath(doc, { path: 'solo', documentId: OWNER_ID, kind: 'spatial' })
     const index = new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {

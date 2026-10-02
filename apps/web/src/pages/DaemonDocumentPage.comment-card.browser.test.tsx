@@ -17,6 +17,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const { daemonApiClientMock, daemonWithOneDocument } = await import(
@@ -73,7 +74,7 @@ it('a press on a bubble opens the card, Close shuts it, and a reply joins the co
   sessionStorage.setItem('wb.lastTool', 'select')
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response('{}', { status: 404 })),
+    vi.fn(async () => jsonResponse({}, 404)),
   )
   renderPage(
     <DaemonDocumentPage

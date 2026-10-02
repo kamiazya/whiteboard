@@ -134,12 +134,16 @@ died on a twelve-file run at 1.6s. The full reasoning is the comment on `testTim
 
 ## Titles
 
-Keep a browser test's `describe` + `it` titles under **155 characters combined**. A failing
+Keep a browser test's `describe` + `it` titles under **its project's budget**: 166 minus the
+project name's length, since the name is part of the attachment filename — 155 characters
+combined for `web-browser`, 145 for `canvas-viewer-browser` and `canvas-render-browser`, 142
+for `web-browser-window-state`. A failing
 test's trace is copied under a name flattened from its path, and past the filesystem's
 255-byte limit the copy throws `ENAMETOOLONG` in teardown — so vitest abandons the REST OF THE
 FILE and the summary reports a smaller total that reads like good news (measured: `1 failed |
 2 passed (6)` against `1 failed | 5 passed (6)`). Non-alphanumeric characters each become one
-ASCII `-`, so `導線` costs two. `apps/web/src/browser-test-name-length.test.ts` enforces it,
+ASCII `-`, so `導線` costs two. `tools/arch-lint/src/browser-test-name-length.test.ts` enforces it
+for every browser project, each budget read off the vitest configs,
 and its arithmetic was re-measured against a real 5.0.0 attachment name (repo-root
 `.vitest/attachments/`, 186 characters for an 86-character title).
 

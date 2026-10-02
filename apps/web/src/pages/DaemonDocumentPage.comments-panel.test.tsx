@@ -75,7 +75,7 @@ function stubDaemonFetch(): void {
           head: 'main',
         })
       }
-      return new Response('{}', { status: 404 })
+      return jsonResponse({}, 404)
     }),
   )
 }

@@ -81,7 +81,7 @@ describe('CanvasViewer (real browser)', () => {
     expect(longer).toBeGreaterThanOrEqual(shorter)
   })
 
-  it('measures VIEWER_FONT_FAMILY differently from a deliberately bogus family once loaded — this is the guard against silent Canvas 2D font fallback', async () => {
+  it('measures VIEWER_FONT_FAMILY differently from a bogus family once loaded, guarding against silent font fallback', async () => {
     const status = await ensureViewerFontLoaded()
     expect(status).toBe('loaded')
 

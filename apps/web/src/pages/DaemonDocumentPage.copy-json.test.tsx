@@ -82,7 +82,7 @@ describe('copying a daemon-kept board as JSON Canvas', () => {
         if (url.includes('/names')) {
           return jsonResponse({ documents: {}, pinned: [] })
         }
-        return new Response('{}', { status: 404 })
+        return jsonResponse({}, 404)
       }),
     )
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })

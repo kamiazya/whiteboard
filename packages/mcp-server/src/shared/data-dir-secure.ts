@@ -96,6 +96,31 @@ export function assertDataDirOwnedByUser(
 }
 
 /**
+ * Whether an opened record file is one this user can trust, judged from its
+ * stat alone so the verdict can be exercised without a file another user
+ * owns — which a test run as an ordinary user cannot create.
+ */
+export function refuseForeignRecordFile(
+  stat: { uid: number; nlink: number },
+  path: string,
+  uid: number | undefined,
+): { kind: 'not-owned'; message: string } | undefined {
+  if (uid === undefined) return undefined
+  // The record is only ever written by rename, so a second name means a
+  // file of this user's was linked in from somewhere else.
+  if (stat.nlink > 1) {
+    return { kind: 'not-owned', message: `${path} has another hard link; refusing to read it.` }
+  }
+  if (stat.uid !== uid) {
+    return {
+      kind: 'not-owned',
+      message: `${path} is owned by uid ${stat.uid}, not this user (uid ${uid}).`,
+    }
+  }
+  return undefined
+}
+
+/**
  * A file's text, judged on the OPENED handle: `not-owned` when another user
  * owns it, `missing` when there is none. Checking the handle rather than the
  * path first is what closes the window where a directory missing at
@@ -126,19 +151,8 @@ export async function readFileOwnedByUser(
     } catch (err) {
       return { kind: 'not-owned', message: (err as Error).message }
     }
-    const stat = await handle.stat()
-    const owner = stat.uid
-    // The record is only ever written by rename, so a second name means a
-    // file of this user's was linked in from somewhere else.
-    if (uid !== undefined && stat.nlink > 1) {
-      return { kind: 'not-owned', message: `${path} has another hard link; refusing to read it.` }
-    }
-    if (uid !== undefined && owner !== uid) {
-      return {
-        kind: 'not-owned',
-        message: `${path} is owned by uid ${owner}, not this user (uid ${uid}).`,
-      }
-    }
+    const refusal = refuseForeignRecordFile(await handle.stat(), path, uid)
+    if (refusal !== undefined) return refusal
     return { kind: 'text', text: await handle.readFile('utf-8') }
   } finally {
     await handle.close()

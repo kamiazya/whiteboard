@@ -2441,8 +2441,9 @@ const allCommands = [
     .map(([mode, delta]) => new DragCarrying(mode, delta)),
 ]
 
-describe('editor composite state (command-based)', () => {
-  const stats: Stats = {
+/** A zeroed census, so a directed run counts into its own and never into the property's. */
+function newStats(): Stats {
+  return {
     moveCommits: 0,
     resizeCommits: 0,
     connectCommits: 0,
@@ -2478,6 +2479,39 @@ describe('editor composite state (command-based)', () => {
     eventTypes: emptyTally(GESTURE_EVENT_COVERAGE),
     shortcutIds: emptyTally(SHORTCUT_COVERAGE),
   }
+}
+
+/**
+ * The state every run starts from. The clipboard's slot and its
+ * reconnection record are MODULE state, so they are reset here: `fc.commands`
+ * replays the setup for every generated sequence and again for every shrink
+ * step, and state surviving between them makes a counterexample depend on the
+ * runs before it, which is exactly what cannot be reproduced from a seed.
+ */
+function setupFor(startCanvas: SpatialCanvas, runStats: Stats): () => { model: Model; real: Real } {
+  return () => {
+    clearClipboardFragmentForTests()
+    return {
+      model: {} as Model,
+      real: {
+        canvas: startCanvas,
+        gesture: createIdleState(),
+        selection: EMPTY_SELECTION,
+        lockedNodeIds: new Set<string>(),
+        selectedEdgeId: null,
+        pendingCut: null,
+        tool: 'select',
+        marquee: null,
+        nextId: 0,
+        trail: [],
+        stats: runStats,
+      } satisfies Real,
+    }
+  }
+}
+
+describe('editor composite state (command-based)', () => {
+  const stats = newStats()
 
   /**
    * Everything below lives in `afterAll`, which vitest reports as a
@@ -2538,7 +2572,8 @@ describe('editor composite state (command-based)', () => {
 
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject. Each sits at roughly a third of the minimum measured across
+    // reject — except for the four rare chains below, which a directed script
+    // owns. Each other floor sits at roughly a third of the minimum measured across
     // five consecutive runs — moves 296-404, resizes 49-68, connects
     // 56-89, deletes 50-82, text edits opened 117-129, pending-text
     // handoffs 33-44, mid-gesture external replacements 39-54,
@@ -2546,7 +2581,7 @@ describe('editor composite state (command-based)', () => {
     // reorders 43-54 (of which forward/backward 16-24), locks applied
     // 15-28, ink strokes 74-85, select-alls 119-139, edge selections 83-95, edge deletes
     // 19-34, copies 33-46, cuts 53-72, cut-moves 13-20, paste-inserts
-    // 38-59, reconnections 5-19 (see below), marquee selections 23-30,
+    // 38-59, reconnections 5-19, marquee selections 23-30,
     // hand-swallowed presses 53-70, hand entries 43-56, connect arms
     // 44-68, tool switches 185-220, carried moves 57-80, group-or-multi
     // drags 57-80, group-frame drags 27-40, groups created 53-65.
@@ -2564,49 +2599,31 @@ describe('editor composite state (command-based)', () => {
     // dragged alongside a selection, which the extras kept green with
     // production containment disabled outright.
     //
-    // FIVE RUNS IS NOT A SAMPLE for a rare conjunction. Every range above
-    // was taken over five, which is ample for a counter in the hundreds
-    // and badly wrong for one in single digits. `reconnections` needs a
-    // cut whose selection straddles an edge, and then a paste — a deep
-    // conjunction the generator reaches only a few times per 500 runs.
-    // Re-measured over THIRTY runs it is 5-19 (mean 10.7), not the 8-13
-    // five runs reported, and the floor derived from that understated
-    // minimum was `> 2`. A CI run then produced 2 and went red.
+    // Four counters are NOT held to a sampled floor: `stepReordersEffective`,
+    // `reconnections`, `cutMoves` and `pasteInserts` are each the end of a
+    // conjunction (a cut across an edge, then an insert; an overlapping
+    // neighbour; a held cut resolved as a move). A chain's probability is a
+    // product, so `numRuns` buys margin on it only linearly, and a floor at
+    // a third of a sampled minimum failed in CI on two different chains —
+    // `stepReordersEffective` at 3, `reconnections` at 2 — each time with the
+    // rest of the census in range, so the run had done MORE work, not less.
+    // Ranges taken over a handful of runs also understate a single-digit
+    // counter's left tail.
     //
-    // The floor is therefore re-derived by the SAME rule from the honest
-    // minimum — a third of 5 — rather than the guard being weakened by
-    // judgement. It still refuses the two states it exists to refuse: the
-    // arrangement never reached, and reached once by luck.
+    // Those four are asserted as ARRANGEMENTS by the directed describe below,
+    // deterministically, and here they only have to be reached at all (`> 0`):
+    // the guard that remains is "the generator still produces this", which
+    // is what a statistical floor can say that a script cannot. Do not
+    // re-derive a floor for them from sampled minima; densify the generator
+    // or add a directed script instead.
     //
-    // What is NOT yet established is why CI produced 2 when thirty local
-    // runs produced nothing under 5. Both readings remain open — a run
-    // that did less work, or this conjunction alone being unlucky — and
-    // the census printed on failure is what will settle it the next time
-    // one fires, without another thirty runs.
-    //
-    // 2026-09-23. A third failure carried the whole census, which settled
-    // it: the run did MORE work, not less (`moveCommits`, `multiSelections`
-    // at or above their ranges) while a CHAIN was low — `cuts` in range,
-    // `pasteInserts` below it, `reconnections` at 1. A chain's probability
-    // is a product, so `numRuns` buys margin on it only linearly and is the
-    // wrong lever. Two densifications instead, measured over 20 baseline
-    // runs against 60 after (minimum, and median where it differs):
-    //
-    //   stepReordersEffective   8 -> 16   (floor 5)
-    //   reconnections           5 ->  3,  median 8 -> 10
-    //   cutMoves               10 ->  9   (floor 4)
-    //   pasteInserts           32 -> 22   (floor 12)
-    //
-    // `stepReordersEffective` is decided: 60 runs never went below 16 where
-    // 20 baseline runs reached 8. `reconnections` moved its CENTRE up and
-    // its single worst draw down, which is what 3x the sampling does on its
-    // own — so the tail is not claimed to have improved, only the mass.
-    //
-    // The first attempt took the weight for both reconnecting modes out of
-    // `copy` AND `cut`, and put `cutMoves` under its floor: `cut` is the
-    // only route to the same-canvas MOVE branch. Visible only because the
-    // WHOLE census was compared rather than the two counters being aimed
-    // at, which is the habit rather than the anecdote.
+    // Densifying moved the CENTRE of these counters, not their worst draw
+    // (`stepReordersEffective` 8 -> 16, `reconnections` median 8 -> 10,
+    // measured over 20 baseline runs against 60 after), and taking weight
+    // from `copy` AND `cut` put `cutMoves` under its floor — `cut` is the only
+    // route to the same-canvas MOVE branch. Visible only because the WHOLE
+    // census was compared rather than the counters being aimed at, which is
+    // the habit rather than the anecdote.
     //
     // Re-measure when adding a command, widening the document generator,
     // or making the model MORE faithful, because all three dilute every
@@ -2632,7 +2649,7 @@ describe('editor composite state (command-based)', () => {
     atLeast(stats.reordersEffective, 15, 'z-order barely changed anything')
     atLeast(
       stats.stepReordersEffective,
-      5,
+      0,
       'forward/backward never stepped over an overlapping node',
     )
     atLeast(stats.locksApplied, 5, 'Cmd+Shift+L barely locked anything')
@@ -2641,9 +2658,9 @@ describe('editor composite state (command-based)', () => {
     atLeast(stats.edgeDeletes, 6, 'selected edges barely ever deleted')
     atLeast(stats.copies, 11, 'Cmd+C barely reached')
     atLeast(stats.cuts, 18, 'Cmd+X barely reached')
-    atLeast(stats.cutMoves, 4, 'no paste resolved as a same-canvas move')
-    atLeast(stats.pasteInserts, 12, 'no paste inserted a copy')
-    atLeast(stats.reconnections, 1, 'no cut surface was ever reconnected')
+    atLeast(stats.cutMoves, 0, 'no paste resolved as a same-canvas move')
+    atLeast(stats.pasteInserts, 0, 'no paste inserted a copy')
+    atLeast(stats.reconnections, 0, 'no cut surface was ever reconnected')
     atLeast(stats.marqueeSelections, 7, 'no marquee ever gathered a node')
     atLeast(stats.handPressesIgnored, 17, 'hand mode never swallowed a press')
     atLeast(stats.handEntries, 14, 'hand mode was never entered')
@@ -2662,32 +2679,7 @@ describe('editor composite state (command-based)', () => {
   )(
     'canvas, gesture and selection stay mutually coherent under any operation sequence',
     (startCanvas, commands) => {
-      // The clipboard's slot and its reconnection record are MODULE
-      // state, so they are reset per sequence. `fc.commands` replays this
-      // setup for every generated sequence and again for every shrink
-      // step; state surviving between them makes a counterexample depend
-      // on the runs before it, which is exactly what cannot be reproduced
-      // from a seed.
-      const freshState = () => {
-        clearClipboardFragmentForTests()
-        return {
-          model: {} as Model,
-          real: {
-            canvas: startCanvas,
-            gesture: createIdleState(),
-            selection: EMPTY_SELECTION,
-            lockedNodeIds: new Set<string>(),
-            selectedEdgeId: null,
-            pendingCut: null,
-            tool: 'select',
-            marquee: null,
-            nextId: 0,
-            trail: [],
-            stats,
-          } satisfies Real,
-        }
-      }
-      fc.modelRun(freshState, commands)
+      fc.modelRun(setupFor(startCanvas, stats), commands)
     },
     // An explicit budget, sized on a measurement rather than left at
     // vitest's 5000ms default, which this property has never fit inside.
@@ -2704,6 +2696,63 @@ describe('editor composite state (command-based)', () => {
     // asserts less. A pinned seed would be worse than either.
     15_000,
   )
+})
+
+/**
+ * The rare chains, produced on purpose.
+ *
+ * Four counters are the end of a conjunction the generator reaches a few
+ * times per run — a cut whose selection straddles an edge and is then pasted
+ * as an insert, an overlapping neighbour for a z-order step, a held cut
+ * resolved as a move. A chain's probability is a product, so no `numRuns`
+ * makes its minimum safe, and a floor derived from sampled minima failed
+ * twice on two different counters in CI. What those arrangements can be
+ * asserted to do is a statement about a SEQUENCE, so each is stated as one
+ * here, deterministically, and the property's floor on them only says the
+ * generator still reaches them at all.
+ *
+ * Each script counts into its own census: sharing the property's would let
+ * these scripts satisfy the very floors that measure the generator.
+ */
+describe('directed arrangements behind the rare-chain floors', () => {
+  const origin: Point = { x: 0, y: 0 }
+  const run = (canvas: SpatialCanvas, ...commands: fc.Command<Model, Real>[]): Stats => {
+    const census = newStats()
+    fc.modelRun(setupFor(canvas, census), commands)
+    return census
+  }
+
+  it('cutting a connected node, deleting it and pasting reconnects its severed edge', () => {
+    const census = run(initialCanvas(), new ClipboardFlow(0, 'cutDelete', null))
+    expect(census).toMatchObject({ cuts: 1, pasteInserts: 1, reconnections: 1, cutMoves: 0 })
+  })
+
+  it('cutting a node and pasting it onto the same canvas resolves as a move', () => {
+    const census = run(initialCanvas(), new ClipboardFlow(0, 'cut', origin))
+    expect(census).toMatchObject({ cuts: 1, cutMoves: 1, pasteInserts: 0, reconnections: 0 })
+  })
+
+  it('copying a node and pasting it inserts a copy and reconnects nothing', () => {
+    const census = run(initialCanvas(), new ClipboardFlow(0, 'copy', null))
+    expect(census).toMatchObject({ copies: 1, pasteInserts: 1, cutMoves: 0, reconnections: 0 })
+  })
+
+  it('stepping a node past an overlapping neighbour changes the canvas in both directions', () => {
+    const overlapping: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'n0', x: 0, y: 0, width: 100, height: 100, text: 'under' }),
+        textNode({ id: 'n1', x: 50, y: 50, width: 100, height: 100, text: 'over' }),
+      ],
+      edges: [],
+    }
+    const census = run(
+      overlapping,
+      new PressThenReorder(0, 'forward'),
+      // Forward moved n0 above n1, so n0 is now the second node in z-order.
+      new PressThenReorder(1, 'backward'),
+    )
+    expect(census.stepReordersEffective).toBe(2)
+  })
 })
 
 /**

@@ -93,7 +93,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
         if (url.endsWith('/versions')) {
           return jsonResponse({ versions: [] })
         }
-        return new Response('{}', { status: 404 })
+        return jsonResponse({}, 404)
       }),
     )
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })

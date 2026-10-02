@@ -73,7 +73,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
         if (url.includes('/names')) {
           return jsonResponse({ documents: {}, pinned: [] })
         }
-        return new Response('{}', { status: 404 })
+        return jsonResponse({}, 404)
       }),
     )
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })

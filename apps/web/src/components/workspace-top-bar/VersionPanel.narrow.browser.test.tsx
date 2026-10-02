@@ -40,7 +40,7 @@ beforeEach(() => {
       )
     }
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-    return Promise.resolve(new Response('{}', { status: 200 }))
+    return Promise.resolve(jsonResponse({}))
   })
   vi.stubGlobal('fetch', fetchMock)
 })
