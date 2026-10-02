@@ -590,7 +590,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
   // 435 -> 182: the four workers both HTTP roots run are built and declared
   // in shared-background-work.ts; what is left here is the daemon's own.
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 133,
+  // 133 -> 119: the sweeper's capped stop and the checkpoint-trigger holder
+  // moved there too.
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 119,
   'packages/mcp-server/src/server/index.ts#main': 81,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
@@ -646,12 +648,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // belongs beside keyFor/setTier for the same reason.
   'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 78,
   // 202 -> 132: the same move; server mode declares nothing of its own.
-  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 128,
-  // The shared set: four declarations, each carrying the rationale that
-  // used to be copied in both roots, and the construction of the workers
-  // they wrap. Long because a declaration list is long, not because it
-  // branches — a reader shrinking it would be deleting the reasons.
-  'packages/mcp-server/src/server/shared-background-work.ts#createSharedWorkers': 61,
+  // 128 -> 103: the holder and the sweeper's capped stop moved there as well.
+  'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 103,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 52,
   // 53 -> 58: the refresh interval's in-flight write is now held and awaited
   // before the marker is removed. `clearInterval` cancels the next tick and
