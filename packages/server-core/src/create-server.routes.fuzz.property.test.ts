@@ -22,6 +22,7 @@ import { arbitraryForSchema, sameSchema } from '@kamiazya/whiteboard-model/test-
 import { afterAll, describe, expect } from 'vitest'
 import type { z } from 'zod'
 import { apiErrorBodySchema } from './api-errors.js'
+import { type SearchQueryInput, searchQueryString } from './search-query.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import {
   MISSING_DOCUMENT_ID,
@@ -136,15 +137,9 @@ function bodyArb(schema: z.ZodTypeAny, pathFields: readonly string[]): fc.Arbitr
 }
 
 /** The search route reads its input off the query string; this draws the string from the schema. */
-const searchQueryArb = arbitraryForSchema(documentSearchInputSchema, { override }).map((drawn) => {
-  const input = drawn as { query?: string; kind?: string; tags?: string[]; limit?: number }
-  const params = new URLSearchParams()
-  if (input.query !== undefined) params.set('q', input.query)
-  if (input.kind !== undefined) params.set('kind', input.kind)
-  for (const tag of input.tags ?? []) params.append('tag', tag)
-  if (input.limit !== undefined) params.set('limit', String(input.limit))
-  return params.toString()
-})
+const searchQueryArb = arbitraryForSchema(documentSearchInputSchema, { override }).map((drawn) =>
+  searchQueryString(drawn as SearchQueryInput),
+)
 
 interface Route {
   readonly name: string

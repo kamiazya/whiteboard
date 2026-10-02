@@ -18,7 +18,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
+import { createTestDocument, resolveTestServerDeps, seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
 // The deps a router is handed by its root; here, the test wiring over the
@@ -125,12 +125,8 @@ it('a version of a tree-served document restores correctly after a simulated res
   expect(readSpatialCanvas(after).nodes.map((n) => n.id)).toEqual(['n-a'])
 })
 
-async function createDoc(app: ReturnType<typeof createDocumentRouter>, path: string) {
-  await app.request('/api/workspaces/session1/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  })
+async function createDoc(path: string) {
+  await createTestDocument(serverDeps, { workspaceId: 'session1', path })
 }
 
 it('subtree rollback reverts the document AND its descendants, and evacuates documents created after the version', async () => {
@@ -140,8 +136,8 @@ it('subtree rollback reverts the document AND its descendants, and evacuates doc
   // Created through the create route, so the rows carry a kind and the
   // documents live on the workspace tree — the plane whose versions are
   // workspace-scoped.
-  await createDoc(app, 'c')
-  await createDoc(app, 'c/child')
+  await createDoc('c')
+  await createDoc('c/child')
   await push(app, parent, ['p-1'])
   await app.request('/api/w/session1/document/c%2Fchild/update', {
     method: 'POST',
@@ -159,7 +155,7 @@ it('subtree rollback reverts the document AND its descendants, and evacuates doc
     body: canvasUpdate(child, ['c-1', 'c-2']),
   })
   const late = new LoroDoc()
-  await createDoc(app, 'c/late')
+  await createDoc('c/late')
   await app.request('/api/w/session1/document/c%2Flate/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },

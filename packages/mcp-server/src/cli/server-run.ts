@@ -9,6 +9,7 @@
 // credentials, hostnames, or tokens — only codes and field names reach callers.
 
 import { resolve } from 'node:path'
+import type { z } from 'zod'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { getLogger } from '../server/log.js'
 import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
@@ -30,29 +31,15 @@ import {
 } from '../server/security/server-mode-record.js'
 import { loadSignInConfig, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
+import {
+  OPERATOR_JSON_SCHEMA_VERSION,
+  type serverRunDryRunOutputSchema,
+  type serverRunReadyOutputSchema,
+} from './operator-json.js'
 import { mergeCliFlagsIntoEnv, type ServerRunArgs } from './server-run-args.js'
 
-const SERVER_RUN_SCHEMA_VERSION = 1 as const
-
-interface ServerRunDryRunResult {
-  readonly schemaVersion: typeof SERVER_RUN_SCHEMA_VERSION
-  readonly ok: true
-  readonly dryRun: true
-  readonly publicBaseUrl: string
-  readonly allowedOrigins: readonly string[]
-  readonly authStrategy: 'oauth-jwt'
-}
-
-interface ServerRunReadyResult {
-  readonly schemaVersion: typeof SERVER_RUN_SCHEMA_VERSION
-  readonly ok: true
-  readonly pid: number
-  readonly host: string
-  readonly port: number
-  readonly publicBaseUrl: string
-  readonly authStrategy: 'oauth-jwt'
-  readonly startedAt: string
-}
+type ServerRunDryRunResult = z.infer<typeof serverRunDryRunOutputSchema>
+type ServerRunReadyResult = z.infer<typeof serverRunReadyOutputSchema>
 
 interface StartServerOptions {
   host: string
@@ -172,11 +159,11 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     return {
       kind: 'dry-run-ok',
       result: {
-        schemaVersion: SERVER_RUN_SCHEMA_VERSION,
+        schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
         ok: true,
         dryRun: true,
         publicBaseUrl: plan.publicBaseUrl,
-        allowedOrigins: plan.allowedOrigins,
+        allowedOrigins: [...plan.allowedOrigins],
         authStrategy: parsed.config.authStrategy,
       },
     }
@@ -248,7 +235,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
   return {
     kind: 'running',
     result: {
-      schemaVersion: SERVER_RUN_SCHEMA_VERSION,
+      schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
       ok: true,
       pid: process.pid,
       host: running.host,

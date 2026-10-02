@@ -1,5 +1,13 @@
 // Public barrel for the `./api-contracts` package subpath.
 //
+// Version skew: the hosted app updates itself behind a service worker and
+// the daemon is installed separately, so the two are rarely the same
+// version. A schema the browser parses an ANSWER with therefore tolerates a
+// field it does not know (Zod strips it), while a schema the daemon parses a
+// REQUEST with is `.strict()`. `api-contract-response-tolerance.test.ts` in
+// arch-lint holds the line by declaration name (`*RequestSchema`), and
+// docs/contributing/architecture/wire-protocol.md carries the reasoning.
+//
 // Deliberately narrow: only the schemas below are re-exported here.
 // document-runtime.ts, daemon-doctor.ts, export.ts, libraries.ts, and the
 // rest of runtime.ts stay off the published npm surface — widening this
@@ -47,6 +55,7 @@ export {
   linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
   wbDocumentCreateOutputSchema as createDocumentV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core/contracts'
+export * from './daemon-urls.js'
 export * from './document.js'
 export * from './document-url.js'
 export * from './fonts.js'

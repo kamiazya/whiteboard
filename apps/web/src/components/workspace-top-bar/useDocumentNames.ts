@@ -1,6 +1,7 @@
 import {
-  documentsApiUrl,
+  documentNameApiUrl,
   type WorkspaceNames,
+  workspaceNamesApiUrl,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useState } from 'react'
@@ -36,7 +37,7 @@ export function useDocumentNames({
     let active = true
     ;(async () => {
       try {
-        const res = await daemonFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/names`)
+        const res = await daemonFetch(workspaceNamesApiUrl(workspaceId))
         if (res.ok && active) setNames(workspaceNamesSchema.parse(await res.json()))
       } catch {
         /* best-effort */
@@ -58,7 +59,7 @@ export function useDocumentNames({
   const renameDocument = useCallback(
     async (targetPath: string, name: string): Promise<boolean> => {
       try {
-        const res = await daemonFetch(documentsApiUrl(workspaceId, targetPath, 'name'), {
+        const res = await daemonFetch(documentNameApiUrl(workspaceId, targetPath), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name }),

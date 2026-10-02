@@ -7,6 +7,7 @@ import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { BackupError } from '../server/server-mode-backup-restore.js'
 import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
+import { serverRestoreOutputSchema } from './operator-json.js'
 import { runServerRestore } from './server-restore.js'
 
 let tmpRoot: string
@@ -59,7 +60,7 @@ describe('runServerRestore', () => {
 
     expect(outcome.kind).toBe('ok')
     if (outcome.kind === 'ok') {
-      expect(outcome.result).toMatchObject({
+      expect(serverRestoreOutputSchema.parse(outcome.result)).toEqual({
         schemaVersion: 1,
         ok: true,
         operation: 'restore',

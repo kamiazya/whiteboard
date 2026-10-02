@@ -110,23 +110,24 @@ describe('createApp daemon mutation auth', () => {
     const debugRes = await app.request('/api/debug')
     expect(debugRes.status).toBe(401)
 
-    const createRes = await app.request('/api/workspaces/session1/documents', {
+    const createBody = JSON.stringify({ path: 'demo', kind: 'spatial', createWorkspace: true })
+    const createRes = await app.request('/api/v1/workspaces/session1/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'demo' }),
+      body: createBody,
     })
     expect(createRes.status).toBe(401)
 
-    const authedCreateRes = await app.request('/api/workspaces/session1/documents', {
+    const authedCreateRes = await app.request('/api/v1/workspaces/session1/documents', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer secret',
       },
-      body: JSON.stringify({ path: 'demo' }),
+      body: createBody,
     })
-    expect(authedCreateRes.status).toBe(200)
-    await expect(authedCreateRes.json()).resolves.toEqual({ path: 'demo' })
+    expect(authedCreateRes.status).toBe(201)
+    await expect(authedCreateRes.json()).resolves.toMatchObject({ path: 'demo' })
 
     const authedDebugRes = await app.request('/api/debug', {
       headers: {

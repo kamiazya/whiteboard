@@ -4,7 +4,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
+import { createTestDocument, resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -610,10 +610,10 @@ describe('overwrite restore reconciles instead of replacing', () => {
   it('restoring a markdown-kind canvas into a new target path carries the source kind forward, not the spatial default', async () => {
     const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
-    await app.request('/api/workspaces/session1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'canvas-a', kind: 'markdown' }),
+    await createTestDocument(serverDeps, {
+      workspaceId: 'session1',
+      path: 'canvas-a',
+      kind: 'markdown',
     })
 
     const sourceDoc = new LoroDoc()
@@ -652,15 +652,15 @@ describe('overwrite restore reconciles instead of replacing', () => {
   it('restoring a markdown-kind canvas onto an existing spatial-kind target syncs the target kind to match the restored content', async () => {
     const app = createDocumentRouter({ serverDeps, autoVersionQuietMs: 60_000 })
 
-    await app.request('/api/workspaces/session1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'canvas-a', kind: 'markdown' }),
+    await createTestDocument(serverDeps, {
+      workspaceId: 'session1',
+      path: 'canvas-a',
+      kind: 'markdown',
     })
-    await app.request('/api/workspaces/session1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'canvas-b', kind: 'spatial' }),
+    await createTestDocument(serverDeps, {
+      workspaceId: 'session1',
+      path: 'canvas-b',
+      kind: 'spatial',
     })
 
     const sourceDoc = new LoroDoc()

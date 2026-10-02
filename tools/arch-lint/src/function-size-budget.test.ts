@@ -619,7 +619,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // +3: the rename route is an adapter over `wbDocumentMove` now, and the
   // address translation it owes — path to id, absent to 404 — is three lines
   // the port call did not need.
-  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 326,
+  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 267,
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 67,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 127,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,

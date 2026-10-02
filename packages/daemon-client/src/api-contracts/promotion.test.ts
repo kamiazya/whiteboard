@@ -35,6 +35,9 @@ describe('promotion schemas', () => {
     }
     expect(roundtrip(promoteWorkspaceResponseSchema, valid)).toEqual(valid)
     expect(promoteWorkspaceResponseSchema.safeParse({ ...valid, ok: false }).success).toBe(false)
+    // A landed move must not read as failed because a newer daemon says more.
+    const withExtra = promoteWorkspaceResponseSchema.safeParse({ ...valid, mergedAt: 'later' })
+    expect(withExtra.success && withExtra.data).toEqual(valid)
   })
 
   it('the challenge input is one JSON array with the tag first, so parts cannot run together', () => {

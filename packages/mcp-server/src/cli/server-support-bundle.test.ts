@@ -11,9 +11,17 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  supportBundleDoctorSectionSchema,
+  supportBundleManifestSchema,
+} from '../shared/diagnostics/support-bundle.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
 import type { RunServerStatusOutcome } from './server-status.js'
-import { runServerSupportBundle } from './server-support-bundle.js'
+import {
+  runServerSupportBundle,
+  serverSupportBundleRecordSectionSchema,
+  serverSupportBundleStatusSectionSchema,
+} from './server-support-bundle.js'
 
 let tmpRoot: string
 
@@ -120,6 +128,55 @@ describe('runServerSupportBundle', () => {
     expect(manifest.platform).toEqual({ os: 'linux', nodeVersion: 'v22.0.0' })
     expect(manifest.mode).toBe('server-mode')
     expect(manifest.sections).toEqual(['status.json', 'doctor.json', 'record.json'])
+  })
+
+  // A tool validating a bundle reads each file through the schema that
+  // defines it; a section the writer builds loosely is invisible to every
+  // other check here, which read fields by name.
+  it.each([
+    ['running server, live record', 'running', 'ok'],
+    ['stopped server, stale record', 'stale', 'ok'],
+    ['no record at all', 'missing', 'missing'],
+    ['unreadable record', 'missing', 'unreadable'],
+    ['malformed record', 'malformed', 'malformed'],
+  ] as const)('every file of the bundle parses through its schema: %s', async (_name, state, recordKind) => {
+    const outputDir = join(tmpRoot, 'schema-check')
+    const record = {
+      pid: 42,
+      host: '127.0.0.1',
+      port: 3099,
+      publicBaseUrl: 'https://whiteboard.example.com',
+      authStrategy: 'oauth-jwt' as const,
+      startedAt: FIXED_TS,
+      schemaVersion: 1 as const,
+      instanceId: 'instance-1',
+    }
+
+    const outcome = await runServerSupportBundle({
+      dataDir: join(tmpRoot, 'data'),
+      outputDir,
+      now: () => FIXED_TS,
+      packageVersion: '0.0.4-test',
+      platform: { os: 'linux', nodeVersion: 'v22.0.0' },
+      doRunStatus: vi.fn(async () => makeStatusOutcome(state)),
+      doRunDoctor: vi.fn(async () => makeDoctorOutcome(false)),
+      doReadRecord: vi.fn(() =>
+        recordKind === 'ok' ? { kind: 'ok' as const, record } : { kind: recordKind },
+      ),
+    })
+    expect(outcome.exitCode).toBe(0)
+
+    const read = async (name: string) =>
+      JSON.parse(await readFile(join(outputDir, name), 'utf-8')) as unknown
+    const manifest = supportBundleManifestSchema.parse(await read('manifest.json'))
+    expect(manifest.mode).toBe('server-mode')
+    serverSupportBundleStatusSectionSchema.parse(await read('status.json'))
+    supportBundleDoctorSectionSchema.parse(await read('doctor.json'))
+    serverSupportBundleRecordSectionSchema.parse(await read('record.json'))
+    // The manifest lists exactly the files beside it.
+    expect([...manifest.sections].sort()).toEqual(
+      (await readdir(outputDir)).filter((name) => name !== 'manifest.json').sort(),
+    )
   })
 
   it('success: existing empty output dir is accepted', async () => {

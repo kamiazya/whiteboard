@@ -7,10 +7,20 @@ import {
   type DocumentSearchResponse,
   deleteDocumentResponseSchema,
   documentApiUrl,
+  documentBacklinksApiUrl,
   documentBacklinksResponseSchema,
+  documentNameApiUrl,
+  documentOkfApiUrl,
   documentOkfV1ResponseSchema,
+  documentPathApiUrl,
+  documentPinApiUrl,
+  documentRecordApiUrl,
   documentSearchResponseSchema,
-  documentsApiUrl,
+  documentsV1ApiUrl,
+  documentTagsApiUrl,
+  fontFileApiUrl,
+  fontInstallApiUrl,
+  fontsApiUrl,
   type InstallFontResponse,
   installFontResponseSchema,
   type LinkifyMentionsResponse,
@@ -18,6 +28,7 @@ import {
   type ListFontsResponse,
   type ListTrashResponse,
   type ListWorkspacesResponse,
+  linkifyMentionsApiUrl,
   linkifyMentionsResponseSchema,
   listDocumentsResponseSchema,
   listFontsResponseSchema,
@@ -29,6 +40,7 @@ import {
   type RestoreTrashResponse,
   renameDocumentPathResponseSchema,
   restoreTrashResponseSchema,
+  searchApiUrl,
   trashApiUrl,
   trashRestoreApiUrl,
   type UpdateDocumentResponse,
@@ -36,9 +48,13 @@ import {
   type WorkspaceDocumentTagsResponse,
   type WorkspaceNames,
   type WorkspaceSummary,
+  workspaceApiUrl,
+  workspaceDocumentsApiUrl,
   workspaceDocumentTagsResponseSchema,
+  workspaceNamesApiUrl,
   workspaceNamesSchema,
   workspaceSummarySchema,
+  workspacesApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
@@ -94,7 +110,11 @@ export function listWorkspaces(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
 ): Promise<ListWorkspacesResponse> {
-  return fetchAndParse(fetchFn, `${daemonBaseUrl}/api/workspaces`, listWorkspacesResponseSchema)
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${workspacesApiUrl()}`,
+    listWorkspacesResponseSchema,
+  )
 }
 
 /**
@@ -110,7 +130,7 @@ export function createWorkspace(
   daemonBaseUrl: string,
   displayName: string,
 ): Promise<WorkspaceSummary> {
-  return fetchAndParse(fetchFn, `${daemonBaseUrl}/api/workspaces`, workspaceSummarySchema, {
+  return fetchAndParse(fetchFn, `${daemonBaseUrl}${workspacesApiUrl()}`, workspaceSummarySchema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ displayName }),
@@ -133,7 +153,7 @@ export function renameWorkspace(
 ): Promise<WorkspaceSummary> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(handle)}`,
+    `${daemonBaseUrl}${workspaceApiUrl(handle)}`,
     workspaceSummarySchema,
     {
       method: 'PATCH',
@@ -150,7 +170,7 @@ export function listDocuments(
 ): Promise<ListDocumentsResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/documents`,
+    `${daemonBaseUrl}${workspaceDocumentsApiUrl(workspaceId)}`,
     listDocumentsResponseSchema,
   )
 }
@@ -177,7 +197,7 @@ export function createDocument(
 ): Promise<z.infer<typeof createDocumentV1ResponseSchema>> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents`,
+    `${daemonBaseUrl}${documentsV1ApiUrl(workspaceId)}`,
     createDocumentV1ResponseSchema,
     {
       method: 'POST',
@@ -208,7 +228,7 @@ export function renameDocumentPath(
 ): Promise<RenameDocumentPathResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path, 'path')}`,
+    `${daemonBaseUrl}${documentPathApiUrl(workspaceId, path)}`,
     renameDocumentPathResponseSchema,
     {
       method: 'PUT',
@@ -226,7 +246,7 @@ export function deleteDocument(
 ): Promise<DeleteDocumentResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path)}`,
+    `${daemonBaseUrl}${documentRecordApiUrl(workspaceId, path)}`,
     deleteDocumentResponseSchema,
     { method: 'DELETE' },
   )
@@ -271,7 +291,7 @@ export function getWorkspaceNames(
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/names`,
+    `${daemonBaseUrl}${workspaceNamesApiUrl(workspaceId)}`,
     workspaceNamesSchema,
   )
 }
@@ -311,7 +331,7 @@ export function setDocumentPinned(
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path, 'pin')}`,
+    `${daemonBaseUrl}${documentPinApiUrl(workspaceId, path)}`,
     workspaceNamesSchema,
     {
       method: 'PUT',
@@ -330,7 +350,7 @@ export function setDocumentDisplayName(
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path, 'name')}`,
+    `${daemonBaseUrl}${documentNameApiUrl(workspaceId, path)}`,
     workspaceNamesSchema,
     {
       method: 'PUT',
@@ -351,7 +371,7 @@ export function getDocumentBacklinks(
 ): Promise<DocumentBacklinksResponse> {
   return fetchAndParse(
     fetchImpl,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/backlinks`,
+    `${daemonBaseUrl}${documentBacklinksApiUrl(workspaceId, documentId)}`,
     documentBacklinksResponseSchema,
   )
 }
@@ -364,10 +384,9 @@ export function searchWorkspaceDocuments(
   query: string,
   limit: number,
 ): Promise<DocumentSearchResponse> {
-  const params = new URLSearchParams({ q: query, limit: String(limit) })
   return fetchAndParse(
     fetchImpl,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/search?${params}`,
+    `${daemonBaseUrl}${searchApiUrl(workspaceId, { query, limit })}`,
     documentSearchResponseSchema,
   )
 }
@@ -380,7 +399,7 @@ export function getWorkspaceDocumentTags(
 ): Promise<WorkspaceDocumentTagsResponse> {
   return fetchAndParse(
     fetchImpl,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/document-tags`,
+    `${daemonBaseUrl}${documentTagsApiUrl(workspaceId)}`,
     workspaceDocumentTagsResponseSchema,
   )
 }
@@ -395,7 +414,7 @@ export function linkifyDocumentMentions(
 ): Promise<LinkifyMentionsResponse> {
   return fetchAndParse(
     fetchImpl,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(sourceDocumentId)}/linkify-mentions`,
+    `${daemonBaseUrl}${linkifyMentionsApiUrl(workspaceId, sourceDocumentId)}`,
     linkifyMentionsResponseSchema,
     {
       method: 'POST',
@@ -413,7 +432,7 @@ export function getDocumentOkfV1(
 ): Promise<DocumentOkfV1Response> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/okf`,
+    `${daemonBaseUrl}${documentOkfApiUrl(workspaceId, documentId)}`,
     documentOkfV1ResponseSchema,
   )
 }
@@ -424,7 +443,7 @@ export function listFonts(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
 ): Promise<ListFontsResponse> {
-  return fetchAndParse(fetchFn, `${daemonBaseUrl}/api/fonts`, listFontsResponseSchema)
+  return fetchAndParse(fetchFn, `${daemonBaseUrl}${fontsApiUrl()}`, listFontsResponseSchema)
 }
 
 /**
@@ -441,7 +460,7 @@ export function installFont(
 ): Promise<InstallFontResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/fonts/${encodeURIComponent(fontId)}/install`,
+    `${daemonBaseUrl}${fontInstallApiUrl(fontId)}`,
     installFontResponseSchema,
     { method: 'POST' },
   )
@@ -456,7 +475,7 @@ export async function fetchFontFile(
   daemonBaseUrl: string,
   fontId: string,
 ): Promise<ArrayBuffer> {
-  const res = await fetchFn(`${daemonBaseUrl}/api/fonts/${encodeURIComponent(fontId)}/file`)
+  const res = await fetchFn(`${daemonBaseUrl}${fontFileApiUrl(fontId)}`)
   if (!res.ok) {
     const { message, body } = await parseProblemDetails(res)
     throw new DaemonApiError(message, res.status, body)

@@ -1,9 +1,14 @@
 import {
   compactWorkspaceResultSchema,
+  logsPruneApiUrl,
+  optimizeAllApiUrl,
+  pruneSandwichedApiUrl,
   pruneSandwichedVersionsResponseSchema,
+  purgeDanglingApiUrl,
   purgeResultSchema,
   type StorageCategory,
   type StorageReportPayload,
+  storageReportApiUrl,
   storageReportPayloadSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
@@ -82,7 +87,7 @@ async function readStorageReport(
   fetchApi: typeof globalThis.fetch,
 ): Promise<{ report: StorageReportPayload } | { error: string }> {
   try {
-    const res = await fetchApi('/api/runtime/storage')
+    const res = await fetchApi(storageReportApiUrl())
     if (!res.ok) return { error: `HTTP ${res.status}` }
     return { report: storageReportPayloadSchema.parse(await res.json()) }
   } catch (err) {
@@ -193,7 +198,7 @@ export function StorageReportCard() {
         run: async () => {
           const swept = await sweepWorkspaces(
             fetchApi,
-            (workspaceId) => `/api/workspaces/${workspaceId}/documents/optimize-all`,
+            optimizeAllApiUrl,
             (saved, body) => {
               const parsed = compactWorkspaceResultSchema.parse(body)
               return saved + (parsed.beforeBytes - parsed.afterBytes)
@@ -223,7 +228,7 @@ export function StorageReportCard() {
         running: 'Pruning…',
         failed: 'Prune failed',
         run: async () => {
-          const res = await fetchApi('/api/runtime/logs/prune', { method: 'POST' })
+          const res = await fetchApi(logsPruneApiUrl(), { method: 'POST' })
           if (!res.ok) return null
           const body = purgeResultSchema.parse(await res.json())
           return body.purgedCount > 0
@@ -249,7 +254,7 @@ export function StorageReportCard() {
         run: async () => {
           const swept = await sweepWorkspaces(
             fetchApi,
-            (workspaceId) => `/api/workspaces/${workspaceId}/versions/prune-sandwiched`,
+            pruneSandwichedApiUrl,
             (deleted, body) =>
               deleted + pruneSandwichedVersionsResponseSchema.parse(body).totalDeleted,
             0,
@@ -279,7 +284,7 @@ export function StorageReportCard() {
         run: async () => {
           const swept = await sweepWorkspaces(
             fetchApi,
-            (workspaceId) => `/api/workspaces/${workspaceId}/files/purge-dangling`,
+            purgeDanglingApiUrl,
             (acc, body) => {
               const parsed = purgeResultSchema.parse(body)
               return {

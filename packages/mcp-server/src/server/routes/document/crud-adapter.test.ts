@@ -76,9 +76,8 @@ function spyIndex<T extends object>(inner: T, overrides: Partial<T>): T {
   }) as T
 }
 
-async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
+async function depsRecordingList(): Promise<{
   deps: Awaited<ReturnType<typeof resolveServerDeps>>
-  created: string[]
   listed: string[]
 }> {
   // The delete cases reach a migrated schema through `saveDocument`'s own
@@ -86,26 +85,21 @@ async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
-  if (bootstrapWorkspace) await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
-  const created: string[] = []
+  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
   const listed: string[] = []
   const inner = deps.documentIndex
   const index = spyIndex(inner, {
-    createDocument: async (input) => {
-      created.push(`${input.workspaceId}:${input.path}`)
-      return await inner.createDocument(input)
-    },
     listDocuments: async (input) => {
       listed.push(input.workspaceId)
       return await inner.listDocuments(input)
     },
   })
-  return { deps: { ...deps, documentIndex: index }, created, listed }
+  return { deps: { ...deps, documentIndex: index }, listed }
 }
 
 describe('GET /api/workspaces', () => {
   it('lists through the injected index rather than the module store', async () => {
-    const { deps } = await depsRecordingCreate()
+    const { deps } = await depsRecordingList()
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-2' })
     const listed: string[] = []
     const inner = deps.documentIndex
@@ -130,7 +124,7 @@ describe('GET /api/workspaces', () => {
 
 describe('GET /api/workspaces/:workspaceId/documents', () => {
   it('lists through the injected operation, carrying kind and updatedAt', async () => {
-    const { deps, listed } = await depsRecordingCreate()
+    const { deps, listed } = await depsRecordingList()
     await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
     const app = createWorkspacesRouter({ serverDeps: deps })
 
@@ -151,7 +145,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('carries a shadowed marker into the response — the collision badge is dead without it', async () => {
-    const { deps } = await depsRecordingCreate()
+    const { deps } = await depsRecordingList()
     const app = createWorkspacesRouter({
       serverDeps: {
         ...deps,
@@ -179,123 +173,12 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   // is what let a stale pairing render as an empty workspace with a Create
   // button. The operation raises it; this surface translates it.
   it('answers 404 for a workspace that was never registered', async () => {
-    const { deps } = await depsRecordingCreate()
+    const { deps } = await depsRecordingList()
     const app = createWorkspacesRouter({ serverDeps: deps })
 
     const res = await app.request('/api/workspaces/never-made/documents')
 
     expect(res.status).toBe(404)
-  })
-})
-
-describe('POST /api/workspaces/:workspaceId/documents', () => {
-  // Same reasoning as the delete below: creating a document twice over — once
-  // in the route, once in `wbDocumentCreate` — is how the two drifted the
-  // first time. Asserted through the index the operation writes through,
-  // because the resulting row looks identical either way.
-  it('creates through the injected operation rather than its own sequence', async () => {
-    const { deps, created } = await depsRecordingCreate()
-    const app = createWorkspacesRouter({ serverDeps: deps })
-
-    const res = await app.request('/api/workspaces/ws-1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'fresh', kind: 'spatial' }),
-    })
-
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ path: 'fresh' })
-    expect(created).toEqual(['ws-1:fresh'])
-
-    // Reaching the injected index is necessary but not sufficient: a route
-    // calling `documentIndex.createDocument` directly would satisfy the line
-    // above and leave a placement with no document under it. Only the
-    // operation persists the bytes, so the snapshot is what says the whole
-    // operation ran rather than its first step.
-    const entry = await deps.documentIndex.resolveDocument({
-      workspaceId: 'ws-1',
-      path: 'fresh',
-    })
-    const snapshot = await deps.documentStore.loadSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-1', documentId: entry?.documentId ?? 'missing' },
-    })
-    expect(snapshot).not.toBeNull()
-  })
-
-  // The workspace bootstrap is this surface's own long-standing behaviour:
-  // `saveDocument` upserted the workspace row on the way past, so posting
-  // into one that does not exist yet has always worked here. The operation
-  // makes it an explicit flag, and a flag nothing exercises is a flag that
-  // gets dropped — removing `createWorkspace: true` left every other case in
-  // this file green.
-  it('creates the workspace on the way past, keyed canonically with the posted handle as its segment', async () => {
-    const { deps } = await depsRecordingCreate(false)
-    const app = createWorkspacesRouter({ serverDeps: deps })
-
-    const res = await app.request('/api/workspaces/ws-1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'first-ever', kind: 'spatial' }),
-    })
-
-    expect(res.status).toBe(200)
-    // This surface has always created the workspace on the way past. What
-    // ADR-0019 changes is WHICH id it gets: the server mints a canonical one
-    // and files `ws-1` as the segment, so the caller's address keeps working
-    // through segment-first resolution while the id underneath is canonical.
-    const workspaces = await deps.documentIndex.listWorkspaces()
-    expect(workspaces).toHaveLength(1)
-    expect(workspaces[0]?.workspaceId).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
-    expect(workspaces[0]?.segment).toBe('ws-1')
-
-    const entries = await deps.documentIndex.listDocuments({
-      workspaceId: workspaces[0]?.workspaceId ?? '',
-    })
-    expect(entries.map((e) => e.path)).toEqual(['first-ever'])
-  })
-
-  it('answers 409 for a path already taken', async () => {
-    const { deps } = await depsRecordingCreate()
-    const app = createWorkspacesRouter({ serverDeps: deps })
-    const body = JSON.stringify({ path: 'twice', kind: 'spatial' })
-    const headers = { 'Content-Type': 'application/json' }
-
-    const first = await app.request('/api/workspaces/ws-1/documents', {
-      method: 'POST',
-      headers,
-      body,
-    })
-    expect(first.status).toBe(200)
-
-    const second = await app.request('/api/workspaces/ws-1/documents', {
-      method: 'POST',
-      headers,
-      body,
-    })
-    expect(second.status).toBe(409)
-  })
-
-  // A blank name means "no name" — the rule `setDocumentDisplayName` held
-  // before the route delegated. Measured rather than assumed: passing a blank
-  // through does not fail, it STORES an empty name, which `DocumentEntry.name`
-  // declares as `z.string().min(1)` and so is a value the port says cannot
-  // exist. The adapter has to trim and omit.
-  it('creates an unnamed document for a blank name instead of storing an empty one', async () => {
-    const { deps } = await depsRecordingCreate()
-    const app = createWorkspacesRouter({ serverDeps: deps })
-
-    const res = await app.request('/api/workspaces/ws-1/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'blank-name', kind: 'spatial', name: '   ' }),
-    })
-
-    expect(res.status).toBe(200)
-    const entry = await deps.documentIndex.resolveDocument({
-      workspaceId: 'ws-1',
-      path: 'blank-name',
-    })
-    expect(entry?.name).toBeUndefined()
   })
 })
 

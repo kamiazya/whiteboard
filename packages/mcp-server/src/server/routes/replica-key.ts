@@ -107,7 +107,7 @@ export function createReplicaKeyRouter({
     }
 
     const { key, salt, keyId } = await keys.keyFor(workspaceId)
-    const response: ReplicaKeyResponse = replicaKeyResponseSchema.parse({
+    const response: ReplicaKeyResponse = replicaKeyResponseSchema.strict().parse({
       workspaceKey: bytesToBase64Url(key),
       workspaceKeySalt: bytesToBase64Url(salt),
       tier,
@@ -134,7 +134,7 @@ export function createReplicaKeyRouter({
     // the fact, under the DEFAULT WHITEBOARD_LOG_LEVEL. Only the id, never
     // the key or salt bytes.
     log.warning({ workspaceId, keyId: rotated.keyId }, 'replica-key rotated')
-    const response: RotateReplicaKeyResponse = rotateReplicaKeyResponseSchema.parse({
+    const response: RotateReplicaKeyResponse = rotateReplicaKeyResponseSchema.strict().parse({
       keyId: rotated.keyId,
     })
     return c.json(response, 200)
@@ -168,7 +168,7 @@ export function createReplicaKeyRouter({
     // for after the fact to learn a read-plane protection was lifted and by
     // when — a `notice` record would be silent under the default level.
     log.warning({ workspaceId, tier: parsed.data.tier, effectiveTier }, 'replica-tier changed')
-    const response: SetReplicaTierResponse = setReplicaTierResponseSchema.parse({
+    const response: SetReplicaTierResponse = setReplicaTierResponseSchema.strict().parse({
       tier: parsed.data.tier,
       effectiveTier,
     })

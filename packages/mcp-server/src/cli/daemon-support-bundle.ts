@@ -18,6 +18,11 @@ import { writeSupportBundle } from '../shared/diagnostics/support-bundle-writer.
 import { runDaemonDoctor } from './daemon-doctor.js'
 import { runDaemonLogs } from './daemon-logs.js'
 import { runDaemonStatus } from './daemon-status.js'
+import {
+  daemonSupportBundleOutputSchema,
+  OPERATOR_JSON_SCHEMA_VERSION,
+  operatorJsonLine,
+} from './operator-json.js'
 
 export interface DaemonSupportBundleOptions {
   dataDir: string
@@ -46,11 +51,14 @@ export interface DaemonSupportBundleOutcome {
   exitCode: 0 | 1
 }
 
-interface SupportBundleResultJson {
-  schemaVersion: 1
-  ok: true
-  outputDir: string
-  files: string[]
+function succeeded(written: { outputDir: string; files: string[] }): DaemonSupportBundleOutcome {
+  const stdout = operatorJsonLine(daemonSupportBundleOutputSchema, {
+    schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+    ok: true,
+    outputDir: written.outputDir,
+    files: written.files,
+  })
+  return { stdout, stderr: '', exitCode: 0 }
 }
 
 function fail(message: string): DaemonSupportBundleOutcome {
@@ -180,11 +188,5 @@ export async function runDaemonSupportBundle(
     throw err
   }
 
-  const result: SupportBundleResultJson = {
-    schemaVersion: 1,
-    ok: true,
-    outputDir: writeResult.outputDir,
-    files: writeResult.files,
-  }
-  return { stdout: `${JSON.stringify(result)}\n`, stderr: '', exitCode: 0 }
+  return succeeded(writeResult)
 }

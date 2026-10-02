@@ -17,8 +17,10 @@ import { z } from 'zod'
  * A single document's own epoch lives beside that document's ciphertext
  * (`read-plane.ts`'s `sealedEnvelopeSchema`), not here — folding a
  * per-document number into a per-workspace response would let one field
- * mean two different rotation scopes. `.strict()` below is what refuses a
- * future caller that tries to thread one through.
+ * mean two different rotation scopes. The browser tolerates an answer field
+ * it does not know (api-contracts' policy: see `index.ts`), so the refusal of
+ * one that tries to thread an epoch through is the daemon's, at the point it
+ * builds the answer (`routes/replica-key.ts`).
  */
 
 export const replicaTierSchema = z.enum(['no-offline', 'offline', 'bounded'])
@@ -49,7 +51,6 @@ export const replicaKeyResponseSchema = z
      *  key and must be dropped and re-pulled, never partially decrypted. */
     keyId: BASE64URL_16_BYTES_SCHEMA.optional(),
   })
-  .strict()
   .refine((r) => (r.tier === 'bounded') === (r.leaseExpiresAt !== undefined), {
     message: 'leaseExpiresAt must be present iff tier is bounded',
   })
@@ -66,9 +67,7 @@ export type ReplicaKeyResponse = z.infer<typeof replicaKeyResponseSchema>
  * No request body: rotation takes no parameters, so there is nothing to
  * validate on the way in.
  */
-export const rotateReplicaKeyResponseSchema = z
-  .object({ keyId: BASE64URL_16_BYTES_SCHEMA })
-  .strict()
+export const rotateReplicaKeyResponseSchema = z.object({ keyId: BASE64URL_16_BYTES_SCHEMA })
 export type RotateReplicaKeyResponse = z.infer<typeof rotateReplicaKeyResponseSchema>
 
 /**
@@ -81,8 +80,8 @@ export type RotateReplicaKeyResponse = z.infer<typeof rotateReplicaKeyResponseSc
  * `tier: null` is the explicit clear, back to the process's
  * `WHITEBOARD_REPLICA_TIER` default — one route and one verb express both
  * set and clear rather than a second endpoint for "unset". `.strict()`
- * refuses a caller that tries to thread a lease TTL or an epoch through,
- * the same guard `replicaKeyResponseSchema` applies for the same reason.
+ * refuses a caller that tries to thread a lease TTL or an epoch through;
+ * the daemon applies the same refusal to what it emits.
  */
 export const setReplicaTierRequestSchema = z.object({ tier: replicaTierSchema.nullable() }).strict()
 export type SetReplicaTierRequest = z.infer<typeof setReplicaTierRequestSchema>
@@ -90,7 +89,8 @@ export type SetReplicaTierRequest = z.infer<typeof setReplicaTierRequestSchema>
 /** Echoes both the raw override (`null` once cleared) and what it resolves
  *  to — an operator reads "cleared -> falls back to the default" from one
  *  response instead of a second request. */
-export const setReplicaTierResponseSchema = z
-  .object({ tier: replicaTierSchema.nullable(), effectiveTier: replicaTierSchema })
-  .strict()
+export const setReplicaTierResponseSchema = z.object({
+  tier: replicaTierSchema.nullable(),
+  effectiveTier: replicaTierSchema,
+})
 export type SetReplicaTierResponse = z.infer<typeof setReplicaTierResponseSchema>

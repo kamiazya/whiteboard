@@ -17,6 +17,7 @@
  * correct once a replica can also carry offline edits.
  */
 
+import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
@@ -66,9 +67,7 @@ export async function cacheDaemonWorkspace(
   // only from the second pull on, once the registry entry exists.
   markReplica(workspaceId, daemonBaseUrl)
   try {
-    const res = await fetch(
-      `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/snapshot`,
-    )
+    const res = await fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'snapshot')}`)
     if (!res.ok) {
       return { kind: 'failed', reason: `Snapshot request failed (${res.status}).` }
     }

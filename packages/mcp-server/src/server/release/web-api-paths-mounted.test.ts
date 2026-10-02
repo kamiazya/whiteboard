@@ -38,6 +38,15 @@ import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helper
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
 const WEB_SRC = join(ROOT, 'apps/web/src')
+/**
+ * Most of apps/web's requests are built by daemon-client's URL builders now
+ * rather than spelled inline, so the builders are read as part of what the
+ * app asks for: a literal moving from a component into `daemon-urls.ts` must
+ * not drop out of this guard's subject. (`daemon-client-urls.routes.test.ts`
+ * also requests every builder against the app; this scan is the one that
+ * sees a path spelled in either place.)
+ */
+const DAEMON_CLIENT_CONTRACTS = join(ROOT, 'packages/daemon-client/src/api-contracts')
 
 const tempDirs: string[] = []
 let dbHandle: IsolatedDbHandle | null = null
@@ -55,12 +64,22 @@ afterAll(async () => {
  * Paths a literal can carry that are not a request target.
  *
  * `/api/v1` is a prefix a caller concatenates onto, never fetched whole.
+ * Entries are in the NORMALIZED spelling (`:p` for a segment), matched
+ * after normalization.
  * (Prose inside a doc comment used to need an entry here too — `/api/...` —
  * until comments were stripped before matching below; a doc comment that
  * spells a real backtick-quoted route would otherwise be read as a literal
  * request this app makes and fail as an unmounted route.)
  */
-const NOT_A_REQUEST_TARGET = new Set(['/api/v1'])
+const NOT_A_REQUEST_TARGET = new Set([
+  '/api/v1',
+  // daemon-urls' v1 workspace stem, normalized: every builder over it appends a segment.
+  '/api/v1/workspaces/:p',
+  // The action segment is a closed union the builder's signature types, and
+  // `daemon-client-urls.routes.test.ts` requests each member against the
+  // app; a scan reads the template as one `:p` route no server mounts.
+  '/api/w/:p/workspace-document/:p',
+])
 
 /**
  * Matches `keeper-parity.test.ts`'s own fix for the same trap: a module
@@ -98,7 +117,7 @@ interface WebPath {
 
 function webApiPaths(): WebPath[] {
   const seen = new Map<string, WebPath>()
-  for (const file of sourceFiles(WEB_SRC)) {
+  for (const file of [...sourceFiles(WEB_SRC), ...sourceFiles(DAEMON_CLIENT_CONTRACTS)]) {
     const text = code(readFileSync(file, 'utf-8'))
     // All three quotings, matched with a backreference so the closing quote is
     // the opening one. Double quotes are not hypothetical here: biome.json sets
@@ -107,10 +126,10 @@ function webApiPaths(): WebPath[] {
     // most likely to be written inline.
     for (const match of text.matchAll(/(['"`])(\/api\/[^'"`]*)\1/g)) {
       const raw = match[2]
-      if (NOT_A_REQUEST_TARGET.has(raw)) continue
       // A literal broken across an interpolation boundary is not a whole path.
       if (raw.includes('${') && !raw.includes('}')) continue
       const normalized = normalize(raw)
+      if (NOT_A_REQUEST_TARGET.has(normalized)) continue
       if (!seen.has(normalized)) {
         seen.set(normalized, { raw, normalized, file: file.replace(`${ROOT}/`, '') })
       }

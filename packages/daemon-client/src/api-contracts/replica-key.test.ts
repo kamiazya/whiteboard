@@ -92,18 +92,20 @@ describe('replicaKeyResponseSchema', () => {
     )
   })
 
-  // ADR-0043 decision 3: a document's epoch lives beside its own ciphertext
-  // (read-plane.ts's sealedEnvelopeSchema), never on the workspace key —
-  // .strict() is what refuses a caller that tries to fold one in here.
-  it('rejects a response carrying an epoch field', () => {
-    expect(replicaKeyResponseSchema.safeParse({ ...offline, epoch: 0 }).success).toBe(false)
+  // A newer daemon may add a field; an older bundle that refused it would lock
+  // a replica the daemon had unlocked. The field is dropped, not kept: the
+  // browser derives nothing from what it was not written to read. The daemon
+  // refuses to EMIT an epoch (ADR-0043 decision 3), in routes/replica-key.ts.
+  it('reads a response carrying a field it does not know, and drops that field', () => {
+    const parsed = replicaKeyResponseSchema.safeParse({ ...offline, epoch: 0 })
+    expect(parsed.success && parsed.data).toEqual(offline)
   })
 
   // keyId is OPTIONAL, not required: a daemon that predates rotation
   // answers this route with no keyId at all, and a browser bundle newer
-  // than that daemon must still parse the response (the reverse skew — an
-  // older bundle against a keyId-carrying daemon — is the accepted cost;
-  // see the ADR-0042 addendum).
+  // than that daemon must still parse the response, and the reverse skew — an
+  // older bundle against a keyId-carrying daemon — is the extra-field case
+  // above.
   it('roundtrips a response with keyId, and parses one with keyId absent', () => {
     expect(roundtrip(replicaKeyResponseSchema, { ...offline, keyId: KEY_ID_22 })).toEqual({
       ...offline,
@@ -135,10 +137,9 @@ describe('rotateReplicaKeyResponseSchema', () => {
     )
   })
 
-  it('rejects an undeclared field (.strict()) — no key bytes or salt may ride along', () => {
-    expect(
-      rotateReplicaKeyResponseSchema.safeParse({ keyId: KEY_ID_22, workspaceKey: KEY_43 }).success,
-    ).toBe(false)
+  it('reads the keyId of an answer a newer daemon gave an extra field', () => {
+    const parsed = rotateReplicaKeyResponseSchema.safeParse({ keyId: KEY_ID_22, extra: 1 })
+    expect(parsed.success && parsed.data).toEqual({ keyId: KEY_ID_22 })
   })
 })
 

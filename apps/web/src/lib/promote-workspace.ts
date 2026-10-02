@@ -40,6 +40,7 @@ import {
   apiErrorReason,
   documentFileApiUrl,
   promoteWorkspaceResponseSchema,
+  workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   collectImageRefIds,
@@ -176,14 +177,11 @@ async function promoteWorkspaceUnsafe(
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
   // plus the explicit checkpoints a person's move leaves behind.
-  const res = await fetch(
-    `${keeperBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/promote`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),
-    },
-  )
+  const res = await fetch(`${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),
+  })
   if (!res.ok) {
     return { kind: 'failed', reason: await failureReason(res) }
   }

@@ -37,7 +37,9 @@ SigNoz, Grafana Cloud, etc.
 | MCP tool call   | `mcp.tool.call {name}`                 | `mcp.method.name`, `mcp.tool.name`, `mcp.request.id`            |
 | Service info    | (resource)                             | `service.name=whiteboard-mcp`, `service.version`, `whiteboard.role` |
 
-`whiteboard.role` distinguishes the entrypoint:
+`whiteboard.role` distinguishes the entrypoint, and `WHITEBOARD_OTEL_ROLE`
+sets it for a process whose entrypoint does not name its own (it falls back
+to `unknown` when neither is given):
 
 - `http` — HTTP-only mode (`pnpm mcp:http`)
 - `daemon` — same binary in `--daemon` mode

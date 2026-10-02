@@ -8,7 +8,6 @@ import {
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
-import { WorkspaceSegmentUnusableError } from '@kamiazya/whiteboard-server-core'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
 import { validationErrorBody } from '../../validators.js'
 
@@ -105,15 +104,6 @@ export const pathTakenAs =
 /** A refusal, not a failure: the caller has to name what it destroys. */
 export const hasDescendants: ErrorAnswer = (err) =>
   err instanceof DocumentHasDescendantsError ? { status: 409, body: { title: err.message } } : null
-
-/**
- * A handle that names nothing and cannot be a workspace SEGMENT is the
- * caller's to change, not a failure of ours.
- */
-export const segmentUnusable: ErrorAnswer = (err) =>
-  err instanceof WorkspaceSegmentUnusableError
-    ? { status: 400, body: { title: err.message } }
-    : null
 
 /**
  * Nothing at that address. The WORKSPACE being absent and the DOCUMENT being

@@ -29,13 +29,14 @@ describe('membershipRefusal', () => {
     expect(membershipRefusal(err)).toBeNull()
   })
 
-  it('answers null for a body that fails the strict schema (an extra key)', () => {
+  // The daemon may be newer than this bundle and say more than it knows.
+  it('still reads the code of a refusal that carries a key it does not know', () => {
     const err = new DaemonApiError('irrelevant text', 403, {
       error: 'not_a_member',
       message: 'm',
-      extra: 'nope',
+      extra: 'from a newer daemon',
     })
-    expect(membershipRefusal(err)).toBeNull()
+    expect(membershipRefusal(err)).toBe('not_a_member')
   })
 
   it('answers null for a 404 DaemonApiError', () => {

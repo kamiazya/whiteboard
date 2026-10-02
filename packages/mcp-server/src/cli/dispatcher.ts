@@ -15,9 +15,20 @@
 // (which mkdirs on load) or the rest of the daemon startup chain.
 
 import { resolve } from 'node:path'
+import type { z } from 'zod'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from '../server/config-file.js'
 import { getLogger } from '../server/log.js'
+import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
+import {
+  daemonRotateReplicaKeyResultSchema,
+  daemonSetReplicaTierResultSchema,
+} from '../shared/api-contracts/daemon-replica-posture.js'
+import { daemonRunReadyResultSchema } from '../shared/api-contracts/daemon-run.js'
+import { daemonStatusResultSchema } from '../shared/api-contracts/daemon-status.js'
+import { daemonStopResultSchema } from '../shared/api-contracts/daemon-stop.js'
+import { serverStatusResultSchema } from '../shared/api-contracts/server-status.js'
+import { serverStopResultSchema } from '../shared/api-contracts/server-stop.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
   parseDaemonReplicaKeyArgs,
@@ -32,6 +43,13 @@ import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-rep
 import { runDaemonStatus } from './daemon-status.js'
 import { runDaemonStop } from './daemon-stop.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
+import {
+  operatorJsonLine,
+  searchFetchModelOutputSchema,
+  serverRestoreOutputSchema,
+  serverRunDryRunOutputSchema,
+  serverRunReadyOutputSchema,
+} from './operator-json.js'
 import { parseServerBackupArgs } from './server-backup-args.js'
 import { parseServerLifecycleArgs } from './server-lifecycle-args.js'
 import { parseServerRestoreArgs } from './server-restore-args.js'
@@ -49,9 +67,9 @@ whiteboard daemon rotate-replica-key --json --workspace=<id> [--data-dir=<path>]
 whiteboard daemon set-replica-tier   --json --workspace=<id> --tier=<no-offline|offline|bounded|default> [--data-dir=<path>]
 whiteboard daemon run            --json [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
 whiteboard server status         --json [--data-dir=<path>]
-whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [options...]
+whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--trusted-proxy] [--data-dir=<path>]
 whiteboard server stop           --json [--data-dir=<path>]
-whiteboard server run            --json --dry-run [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [options...]
+whiteboard server run            --json [--dry-run] [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--trusted-proxy] [--data-dir=<path>]
 whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
 whiteboard server grant-member   --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]
@@ -63,8 +81,9 @@ whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
 whiteboard native-host install   --json [--data-dir=<path>] [--manifest-dir=<path>] [--firefox-manifest-dir=<path>]
 `
 
-function writeJsonObject(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value)}\n`)
+/** The one way an output reaches stdout: parsed by the schema that declares it. */
+function writeJsonObject<S extends z.ZodType>(schema: S, value: z.input<S>): void {
+  process.stdout.write(operatorJsonLine(schema, value))
 }
 
 /**
@@ -91,15 +110,18 @@ const isDaemonSubcommand = (value: string | undefined): value is DaemonSubcomman
  * and `satisfies` is what keeps the table in step with the union above.
  */
 const JSON_DAEMON_COMMANDS = {
-  status: runDaemonStatus,
-  doctor: runDaemonDoctor,
-  stop: runDaemonStop,
+  status: { run: runDaemonStatus, schema: daemonStatusResultSchema },
+  doctor: { run: runDaemonDoctor, schema: daemonDoctorResultSchema },
+  stop: { run: runDaemonStop, schema: daemonStopResultSchema },
 } satisfies Record<
   Exclude<
     DaemonSubcommand,
     'logs' | 'run' | 'support-bundle' | 'rotate-replica-key' | 'set-replica-tier'
   >,
-  (options: { dataDir: string }) => Promise<{ result: unknown; exitCode: number }>
+  {
+    run: (options: { dataDir: string }) => Promise<{ result: unknown; exitCode: number }>
+    schema: z.ZodType
+  }
 >
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -208,8 +230,9 @@ async function dispatchDaemon(subcommand: DaemonSubcommand, rest: readonly strin
     return exitCode
   }
 
-  const { result, exitCode } = await JSON_DAEMON_COMMANDS[subcommand]({ dataDir })
-  writeJsonObject(result)
+  const command = JSON_DAEMON_COMMANDS[subcommand]
+  const { result, exitCode } = await command.run({ dataDir })
+  writeJsonObject(command.schema, result)
   return exitCode
 }
 
@@ -271,7 +294,7 @@ async function dispatchReplicaPosture(
       dataDir: parsed.dataDir ?? resolveDefaultDataDir(process.env),
       workspaceId: parsed.workspaceId,
     })
-    writeJsonObject(result)
+    writeJsonObject(daemonRotateReplicaKeyResultSchema, result)
     return exitCode
   }
   const parsed = parseDaemonReplicaTierArgs(rest)
@@ -281,7 +304,7 @@ async function dispatchReplicaPosture(
     workspaceId: parsed.workspaceId,
     tier: parsed.tier,
   })
-  writeJsonObject(result)
+  writeJsonObject(daemonSetReplicaTierResultSchema, result)
   return exitCode
 }
 
@@ -331,7 +354,7 @@ async function dispatchSearch(
     cacheDir: searchModelCacheDir(dataDir),
     dtype: full ? 'fp32' : 'q8',
   })
-  writeJsonObject(result)
+  writeJsonObject(searchFetchModelOutputSchema, result)
   return exitCode
 }
 
@@ -390,7 +413,7 @@ async function dispatchServerDoctor(rest: readonly string[]): Promise<number> {
   // Dynamic import keeps server-mode dependencies out of the read-only command path.
   const { runServerDoctor } = await import('./server-doctor.js')
   const { result, exitCode } = await runServerDoctor({ flags: parsed, env: process.env })
-  writeJsonObject(result)
+  writeJsonObject(daemonDoctorResultSchema, result)
   return exitCode
 }
 
@@ -406,7 +429,7 @@ async function dispatchServerRun(rest: readonly string[]): Promise<number> {
   const outcome = await runServerRun({ flags: parsed, env: process.env })
   switch (outcome.kind) {
     case 'dry-run-ok':
-      writeJsonObject(outcome.result)
+      writeJsonObject(serverRunDryRunOutputSchema, outcome.result)
       return 0
     case 'config-error':
       process.stderr.write(
@@ -420,7 +443,7 @@ async function dispatchServerRun(rest: readonly string[]): Promise<number> {
       process.stderr.write('server failed to start\n')
       return 1
     case 'running': {
-      writeJsonObject(outcome.result)
+      writeJsonObject(serverRunReadyOutputSchema, outcome.result)
       const gracefulShutdown = async () => {
         try {
           await outcome.close()
@@ -448,7 +471,7 @@ async function dispatchServerStatus(rest: readonly string[]): Promise<number> {
   const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
   const { runServerStatus } = await import('./server-status.js')
   const { result, exitCode } = await runServerStatus({ dataDir })
-  writeJsonObject(result)
+  writeJsonObject(serverStatusResultSchema, result)
   return exitCode
 }
 
@@ -461,7 +484,7 @@ async function dispatchServerStop(rest: readonly string[]): Promise<number> {
   const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
   const { runServerStop } = await import('./server-stop.js')
   const { result, exitCode } = await runServerStop({ dataDir })
-  writeJsonObject(result)
+  writeJsonObject(serverStopResultSchema, result)
   return exitCode
 }
 
@@ -472,10 +495,11 @@ async function dispatchServerBackup(rest: readonly string[]): Promise<number> {
     return 64
   }
   const { runServerBackup } = await import('./server-backup.js')
+  const { serverBackupResultSchema } = await import('../server/store/backup-pass.js')
   const outcome = await runServerBackup({ args: parsed, env: process.env })
   switch (outcome.kind) {
     case 'ok':
-      writeJsonObject(outcome.result)
+      writeJsonObject(serverBackupResultSchema, outcome.result)
       // A store the product does not cover is named in words as well as in
       // the JSON (ADR-0021 decision 2). An operator reading a terminal should
       // not have to notice a nested `captured: false` to learn that their
@@ -514,7 +538,7 @@ async function dispatchServerRestore(rest: readonly string[]): Promise<number> {
   const outcome = await runServerRestore({ args: parsed, env: process.env })
   switch (outcome.kind) {
     case 'ok':
-      writeJsonObject(outcome.result)
+      writeJsonObject(serverRestoreOutputSchema, outcome.result)
       return 0
     case 'running-target':
       process.stderr.write(
@@ -632,7 +656,7 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
     return 1
   }
   // Ready: emit the JSON ready line, then stay up until the server closes.
-  writeJsonObject(outcome.result)
+  writeJsonObject(daemonRunReadyResultSchema, outcome.result)
   // Best-effort UX on top of an already-successful startup: a browser that
   // fails to open (no display, sandboxed environment, …) must never affect
   // the ready-JSON contract or the daemon's exit code, so this runs after

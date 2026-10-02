@@ -61,7 +61,7 @@ beforeEach(async () => {
   )
   app.get('/api/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
   app.post('/api/runtime/logs/prune', (c) => c.json({ reached: true }))
-  app.post('/api/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
+  app.post('/api/v1/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
 })
 afterEach(async () => {
   await handle.dispose()
@@ -151,7 +151,7 @@ describe('server mode — a session changes nothing from another origin', () => 
       Date.now(),
       60_000,
     )
-    return app.request(`/api/workspaces/${WS}/documents`, {
+    return app.request(`/api/v1/workspaces/${WS}/documents`, {
       method: 'POST',
       headers: {
         cookie: `${SESSION_COOKIE}=${token}`,

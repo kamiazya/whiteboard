@@ -7,15 +7,16 @@
 // search keep working, and never learn that the half they turned on had
 // silently not engaged.
 
+import type { z } from 'zod'
 import {
   classifyEmbedderLoadFailure,
   DEFAULT_MODEL,
   EMBEDDER_LOAD_REMEDY,
   EMBEDDING_DIMENSIONS,
-  type EmbedderLoadFailure,
   loadEmbeddingPipeline,
 } from '../server/search/transformers-embedder.js'
 import { redactDiagnosticText } from '../shared/diagnostics/redact.js'
+import { OPERATOR_JSON_SCHEMA_VERSION, type searchFetchModelOutputSchema } from './operator-json.js'
 
 export interface SearchFetchModelOptions {
   /** Where weights are written. The daemon reads the same directory. */
@@ -30,35 +31,20 @@ export interface SearchFetchModelOptions {
   model?: string
 }
 
-export type SearchFetchModelResult =
-  | {
-      ok: true
-      cacheDir: string
-      model: string
-      dtype: 'q8' | 'fp32'
-      dimensions: number
-      elapsedMs: number
-    }
-  | {
-      ok: false
-      cacheDir: string
-      model: string
-      dtype: 'q8' | 'fp32'
-      failure: EmbedderLoadFailure | 'unexpected-dimensions'
-      remedy: string
-      /**
-       * The underlying message, redacted. `load-failed` is the bucket for
-       * everything the classifier could not name — a blocked proxy, a
-       * corrupt download, an onnx init fault — and a remedy alone reduces
-       * all of them to "it failed", which is precisely the unhelpfulness
-       * this command exists to end. Present only when there is something to
-       * say beyond the remedy.
-       */
-      detail?: string
-    }
+export type SearchFetchModelResult = z.infer<typeof searchFetchModelOutputSchema>
 
 const UNEXPECTED_DIMENSIONS_REMEDY =
   'the model loaded but produced vectors of the wrong width — the cache may be from a different model; delete it and re-run'
+
+/** What every outcome says about the fetch it describes. */
+function fetchTarget(options: SearchFetchModelOptions) {
+  return {
+    schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
+    cacheDir: options.cacheDir,
+    model: options.model ?? DEFAULT_MODEL,
+    dtype: options.dtype ?? 'q8',
+  }
+}
 
 /**
  * Verifies by USE, not by the presence of files: the download is only worth
@@ -70,8 +56,8 @@ const UNEXPECTED_DIMENSIONS_REMEDY =
 export async function runSearchFetchModel(
   options: SearchFetchModelOptions,
 ): Promise<{ result: SearchFetchModelResult; exitCode: number }> {
-  const model = options.model ?? DEFAULT_MODEL
-  const dtype = options.dtype ?? 'q8'
+  const target = fetchTarget(options)
+  const { model, dtype } = target
   const startedAt = Date.now()
 
   let extractor: Awaited<ReturnType<typeof loadEmbeddingPipeline>>
@@ -83,10 +69,9 @@ export async function runSearchFetchModel(
     const raw = err instanceof Error ? err.message : String(err)
     return {
       result: {
+        ...target,
+        kind: 'failed',
         ok: false,
-        cacheDir: options.cacheDir,
-        model,
-        dtype,
         failure,
         remedy: EMBEDDER_LOAD_REMEDY[failure],
         // Paths and tokens can appear in a transformers.js or undici message,
@@ -107,10 +92,9 @@ export async function runSearchFetchModel(
   if (output.data.length !== EMBEDDING_DIMENSIONS) {
     return {
       result: {
+        ...target,
+        kind: 'failed',
         ok: false,
-        cacheDir: options.cacheDir,
-        model,
-        dtype,
         failure: 'unexpected-dimensions',
         remedy: UNEXPECTED_DIMENSIONS_REMEDY,
       },
@@ -120,10 +104,9 @@ export async function runSearchFetchModel(
 
   return {
     result: {
+      ...target,
+      kind: 'ok',
       ok: true,
-      cacheDir: options.cacheDir,
-      model,
-      dtype,
       dimensions: EMBEDDING_DIMENSIONS,
       elapsedMs: Date.now() - startedAt,
     },

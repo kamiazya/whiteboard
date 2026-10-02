@@ -13,12 +13,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   type CompactWorkspaceResult,
-  type CreateDocumentRequest,
-  type CreateDocumentResponse,
   type CreateWorkspaceRequest,
   compactWorkspaceResultSchema,
-  createDocumentRequestSchema,
-  createDocumentResponseSchema,
   createWorkspaceRequestSchema,
   type DocumentSummary,
   documentSummarySchema,
@@ -53,44 +49,6 @@ import {
   workspaceSummarySchema,
 } from './document.js'
 import { roundtrip } from './roundtrip.test-helper.js'
-
-describe('createDocumentRequestSchema', () => {
-  const valid: CreateDocumentRequest = { path: 'my-canvas', kind: 'spatial' }
-
-  it('parses a well-formed value', () => {
-    const result: CreateDocumentRequest = createDocumentRequestSchema.parse(valid)
-    expect(result.path).toBe('my-canvas')
-  })
-
-  it('roundtrip preserves fields', () => {
-    const result: CreateDocumentRequest = roundtrip(createDocumentRequestSchema, valid)
-    expect(result).toEqual(valid)
-  })
-
-  it('trims whitespace from path', () => {
-    const result = createDocumentRequestSchema.parse({ path: '  canvas  ' })
-    expect(result.path).toBe('canvas')
-  })
-
-  it('rejects empty path', () => {
-    expect(createDocumentRequestSchema.safeParse({ path: '' }).success).toBe(false)
-    expect(createDocumentRequestSchema.safeParse({ path: '   ' }).success).toBe(false)
-  })
-
-  it('accepts an explicit kind: markdown', () => {
-    const result = createDocumentRequestSchema.parse({ path: 'notes', kind: 'markdown' })
-    expect(result.kind).toBe('markdown')
-  })
-
-  it('defaults kind to spatial when absent — back-compat for existing callers', () => {
-    const result = createDocumentRequestSchema.parse({ path: 'legacy' })
-    expect(result.kind).toBe('spatial')
-  })
-
-  it('rejects an unknown kind', () => {
-    expect(createDocumentRequestSchema.safeParse({ path: 'x', kind: 'bogus' }).success).toBe(false)
-  })
-})
 
 describe('setNameRequestSchema', () => {
   it('parses a non-empty name', () => {
@@ -339,24 +297,6 @@ describe('saveVersionResponseSchema', () => {
 
   it('rejects missing version', () => {
     expect(saveVersionResponseSchema.safeParse({}).success).toBe(false)
-  })
-})
-
-describe('createDocumentResponseSchema', () => {
-  const valid: CreateDocumentResponse = { path: 'new-canvas' }
-
-  it('parses a well-formed value', () => {
-    const result: CreateDocumentResponse = createDocumentResponseSchema.parse(valid)
-    expect(result.path).toBe('new-canvas')
-  })
-
-  it('roundtrip preserves path', () => {
-    const result: CreateDocumentResponse = roundtrip(createDocumentResponseSchema, valid)
-    expect(result).toEqual(valid)
-  })
-
-  it('rejects missing path', () => {
-    expect(createDocumentResponseSchema.safeParse({}).success).toBe(false)
   })
 })
 

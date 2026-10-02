@@ -16,6 +16,7 @@
  * imports loro-crdt, so nothing on the entry path may import this file
  * statically (entry-graph-loro-free.test.ts guards the closure).
  */
+import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
@@ -62,14 +63,11 @@ export async function pushReplicaEdits(
       payload = doc.export({ mode: 'update', from: synced })
     }
 
-    const res = await fetch(
-      `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/update`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: payload as BodyInit,
-      },
-    )
+    const res = await fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'update')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: payload as BodyInit,
+    })
     if (!res.ok) return { kind: 'failed', reason: `Update request failed (${res.status}).` }
     return {
       kind: 'ok',

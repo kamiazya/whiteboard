@@ -24,6 +24,7 @@
 import {
   apiErrorReason,
   promoteWorkspaceResponseSchema,
+  workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
@@ -74,7 +75,7 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
   }
   const { promotedDocumentIds, imagesMissing } = arriving
 
-  const res = await fetch(`/api/w/${encodeURIComponent(workspaceId)}/workspace-document/promote`, {
+  const res = await fetch(workspaceDocumentApiUrl(workspaceId, 'promote'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),

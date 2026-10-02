@@ -59,6 +59,13 @@ non-zero exit code if any are missing or invalid.
 |---|---|
 | `WHITEBOARD_SERVER_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins. Defaults to `WHITEBOARD_SERVER_EXTERNAL_URL` when unset. Each entry must be an explicit `https://` origin **or** a `https://*.example.com` leftmost-label wildcard subdomain pattern (e.g. for Cloudflare Pages branch previews); bare `*` is never permitted. See [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns). |
 | `WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS` | `true`/`false` (default `false`). By default the server rejects a JWT that doesn't self-identify as an access token (RFC 9068 `typ: at+jwt` header or `token_use: access` claim), to stop an ID token from the same IdP being replayed as an access token. Set `true` only if your IdP's access tokens carry neither discriminator. See [Security model](../explanation/security-model.md#server-mode-trust-boundary). |
+| `WHITEBOARD_SERVER_HOST` | Address the server binds. Defaults to `0.0.0.0` (all interfaces) inside the container; the provided Compose file publishes the port on loopback only, so what is reachable from outside is decided there and by your reverse proxy. Flag: `--host`. |
+| `WHITEBOARD_SERVER_PORT` | Port the server binds, 1–65535. Defaults to `3099`. A value outside the range or not a plain integer **aborts startup**. Flag: `--port`. |
+| `WHITEBOARD_SERVER_TRUSTED_PROXY` | `true`/`false` (default `false`). Set `true` when a reverse proxy in front sets `X-Forwarded-For`, so access decisions use the forwarded client address; see [Reverse proxy and TLS](#reverse-proxy-and-tls). Flag: `--trusted-proxy`. |
+| `WHITEBOARD_SERVER_JWT_CLOCK_SKEW_SECONDS` | How many seconds of clock drift between your IdP and this server a token's `exp`/`nbf` tolerates. A bare non-negative integer; defaults to `60`. Anything else **aborts startup**. Flag: `--jwt-clock-skew`. |
+| `WHITEBOARD_SERVER_JWT_SCOPE_CLAIM` | Which JWT claim carries the granted scopes: `scope` (space-separated string, the RFC 9068 form) or `scp` (the form some IdPs, such as Microsoft Entra, use). Defaults to `scope`. Any other value **aborts startup**. Flag: `--jwt-scope-claim`. |
+
+Each of these can also be given to `whiteboard server run` and `whiteboard server doctor` as the flag named in its row, and a flag takes precedence over the environment.
 
 See `.env.server.example` for a filled-in template.
 
@@ -748,6 +755,16 @@ reach the shared database skips the pass rather than assuming it is alone.
 - Raw JWT values, Authorization/Bearer headers, filesystem paths, and stack
   traces are never written to stdout, stderr, or the backup archive.
 
+Each command prints one JSON line with its own `schemaVersion`, bumped when a
+field is lost or renamed, so a script should check the version it was written
+against:
+
+| Command | `operation` | `schemaVersion` |
+|---------|-------------|-----------------|
+| `server backup` | `backup` | 2 |
+| `server restore` | `restore` | 1 |
+| `server support-bundle` | `support-bundle` | 1 |
+
 **Backup** — run host-side after stopping the container:
 
 ```sh
@@ -758,9 +775,10 @@ whiteboard server backup --json \
   --output-dir=/data/backups/2025-01-01
 ```
 
-Success: stdout contains `{"schemaVersion":1,"ok":true,"operation":"backup"}`,
-stderr is empty, exit 0. On any error, stdout is empty, stderr carries a generic
-safe message, exit 1.
+Success: stdout contains
+`{"schemaVersion":2,"ok":true,"operation":"backup","stores":{"database":{"captured":true},"blobs":{"captured":true}}}`,
+exit 0; `stores` says what was captured, as described above. On any error,
+stdout is empty, stderr carries a generic safe message, exit 1.
 
 **Restore** — into a fresh or empty target directory:
 
@@ -796,7 +814,7 @@ deployment state with maintainers without exposing credentials or raw paths.
 | `status.json` | Server running/stale/missing/malformed state, PID, port, authStrategy |
 | `doctor.json` | Config, exposure, JWKS, data-dir, record, and runtime checks |
 | `record.json` | Allow-listed server-mode record summary (publicBaseUrl → hostname only) |
-| `manifest.json` | Bundle metadata: createdAt, packageVersion, platform, mode |
+| `manifest.json` | Bundle metadata: createdAt, packageVersion, platform, `mode` (`server-mode`), and the sections listed |
 
 **What the bundle never contains:**
 
@@ -821,7 +839,7 @@ whiteboard server support-bundle --json \
 ```
 
 Success: stdout contains
-`{"schemaVersion":1,"ok":true,"operation":"support-bundle","files":[...]}`,
+`{"schemaVersion":1,"ok":true,"operation":"support-bundle","files":["status.json","doctor.json","record.json","manifest.json"]}`,
 stderr is empty, exit 0. On any error, stdout is empty, stderr carries a
 generic safe message, exit 1.
 

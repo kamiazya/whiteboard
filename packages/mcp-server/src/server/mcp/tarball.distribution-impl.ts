@@ -1,8 +1,10 @@
-import { spawnSync } from 'node:child_process'
+import { type SpawnSyncReturns, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import type { z } from 'zod'
 
+import { searchFetchModelOutputSchema } from '../../cli/operator-json.js'
 import { runE2eCheckpointSmoke } from './mcp-e2e-checkpoint.smoke-impl.js'
 
 interface RunPackedTarballSmokeOptions {
@@ -30,6 +32,31 @@ function spawnChecked(
       }`,
     )
   }
+}
+
+// The command's stdout is a documented scripting contract, so the smoke reads
+// it through the same schema the command prints through.
+function readFetchModelOutput(
+  result: SpawnSyncReturns<string>,
+): z.infer<typeof searchFetchModelOutputSchema> {
+  const stdout = result.stdout ?? ''
+  let json: unknown
+  try {
+    json = JSON.parse(stdout.trim())
+  } catch {
+    throw new Error(
+      `[tarball-smoke] \`search fetch-model\` did not emit a JSON object. stdout=${JSON.stringify(
+        stdout,
+      )} stderr=${JSON.stringify(result.stderr ?? '')}`,
+    )
+  }
+  const parsed = searchFetchModelOutputSchema.safeParse(json)
+  if (!parsed.success) {
+    throw new Error(
+      `[tarball-smoke] \`search fetch-model\` printed something its schema does not describe: ${parsed.error.message}`,
+    )
+  }
+  return parsed.data
 }
 
 // R5 of the MCP-UI retirement (ADR 0001): the retired legacy browser-app
@@ -150,25 +177,15 @@ export function assertSemanticSearchOptIn(options: {
         '[tarball-smoke] `search fetch-model` reported success with no embedding runtime installed',
       )
     }
-    const stdout = (result.stdout as string) ?? ''
-    let reported: { failure?: string; remedy?: string }
-    try {
-      reported = JSON.parse(stdout.trim()) as { failure?: string; remedy?: string }
-    } catch {
-      throw new Error(
-        `[tarball-smoke] \`search fetch-model\` did not emit a JSON object. stdout=${JSON.stringify(
-          stdout,
-        )} stderr=${JSON.stringify((result.stderr as string) ?? '')}`,
-      )
-    }
-    if (reported.failure !== 'runtime-missing') {
+    const reported = readFetchModelOutput(result)
+    if (reported.kind !== 'failed' || reported.failure !== 'runtime-missing') {
       throw new Error(
         `[tarball-smoke] \`search fetch-model\` reported ${JSON.stringify(
-          reported.failure,
+          reported.kind === 'failed' ? reported.failure : reported.kind,
         )} instead of runtime-missing; the user is not being told what to install`,
       )
     }
-    if (!reported.remedy?.includes('@huggingface/transformers')) {
+    if (!reported.remedy.includes('@huggingface/transformers')) {
       throw new Error(
         `[tarball-smoke] the remedy does not name the package to install: ${JSON.stringify(
           reported.remedy,

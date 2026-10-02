@@ -106,6 +106,12 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'sbom-fingerprint.test.ts already asserts that every sidecar that writer can produce parses ' +
       'through the shared schema — the same round trip, from the writer end',
   ),
+  'server/mcp/tarball.distribution-impl.ts': notModelled(
+    "the packaged CLI's own `search fetch-model --json` line, read back by the distribution " +
+      'smoke through the schema the command printed it with (operator-json.ts parses every ' +
+      'operator line before it is written, and operator-json-sink.test.ts holds that). Nothing ' +
+      'is stored: the smoke IS the round trip, from the published artifact end',
+  ),
   'cli/daemon-replica-posture.ts': notModelled(
     "the running daemon's HTTP answer to a rotate or a tier change, parsed through the same " +
       'daemon-client contract the routes emit with (replica-key.ts calls .parse on the way out). ' +
