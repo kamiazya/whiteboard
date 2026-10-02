@@ -6,11 +6,9 @@
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
+import { type Kysely, sql } from 'kysely'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { migrations } from './index.js'
+import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../../config.js', () => ({
@@ -24,25 +22,8 @@ const PRE_0032 = '0031-tenants'
 
 type Db = Kysely<Record<string, Record<string, unknown>>>
 
-async function openDb(): Promise<{ db: Db; migrateTo(name: string): Promise<void> }> {
-  const db: Db = new Kysely({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(
-        join(dataDir, 'whiteboard.db'),
-      ) as unknown as ConstructorParameters<typeof SqliteDialect>[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  const migrator = new Migrator({ db: db as never, provider })
-  return {
-    db,
-    async migrateTo(name: string) {
-      const { error } =
-        name === 'head' ? await migrator.migrateToLatest() : await migrator.migrateTo(name)
-      expect(error).toBeUndefined()
-    },
-  }
+async function openDb(): Promise<MigrationHarness> {
+  return openMigrationHarness(dataDir)
 }
 
 async function seedProfiles(db: Db): Promise<void> {
@@ -71,7 +52,7 @@ it('turns each profile into one account and each of its credentials into a bindi
   const handle = await openDb()
   await handle.migrateTo(PRE_0032)
   await seedProfiles(handle.db)
-  await handle.migrateTo('head')
+  await handle.migrateToHead()
 
   const profiles = await handle.db
     .selectFrom('memberProfiles')
@@ -103,7 +84,7 @@ it('round-trips down to the credentials it started from', async () => {
   const handle = await openDb()
   await handle.migrateTo(PRE_0032)
   await seedProfiles(handle.db)
-  await handle.migrateTo('head')
+  await handle.migrateToHead()
   await handle.migrateTo(PRE_0032)
 
   const credentials = await handle.db

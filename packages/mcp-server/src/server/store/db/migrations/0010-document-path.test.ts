@@ -1,28 +1,13 @@
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
+import { type Kysely, sql } from 'kysely'
 import { describe, expect, it } from 'vitest'
 import type { DatabaseSchema } from '../schema.js'
-import { migrations } from './index.js'
+import { migratorFor, openMigrationHarness } from '../test-helpers.js'
 
 const BEFORE = '0009-document-vocabulary'
 const THIS_ONE = '0010-document-path'
 
 async function memoryDb(): Promise<Kysely<DatabaseSchema>> {
-  const db = new Kysely<DatabaseSchema>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(':memory:') as unknown as ConstructorParameters<
-        typeof SqliteDialect
-      >[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  return db
-}
-
-function migratorFor(db: Kysely<DatabaseSchema>): Migrator {
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  return new Migrator({ db: db as never, provider })
+  return (await openMigrationHarness<DatabaseSchema>()).db
 }
 
 async function seedDocument(db: Kysely<DatabaseSchema>, column: 'slug' | 'path'): Promise<void> {

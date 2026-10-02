@@ -2,13 +2,12 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
+import type { Kysely } from 'kysely'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../../../shared/test-utils/can-deny-file-read.js'
 import type { DatabaseSchema } from '../schema.js'
+import { migratorFor, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../../config.js', () => ({
@@ -19,27 +18,13 @@ vi.mock('../../../config.js', () => ({
 }))
 
 const { captureLogsForTests } = await import('../../../log.js')
-const { migrations } = await import('./index.js')
 const { importFsBlobs, migration } = await import('./0011-import-fs-blobs.js')
 
 const BEFORE = '0010-document-path'
 const THIS_ONE = '0011-import-fs-blobs'
 
 async function memoryDb(): Promise<Kysely<DatabaseSchema>> {
-  const db = new Kysely<DatabaseSchema>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(':memory:') as unknown as ConstructorParameters<
-        typeof SqliteDialect
-      >[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  return db
-}
-
-function migratorFor(db: Kysely<DatabaseSchema>): Migrator {
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  return new Migrator({ db: db as never, provider })
+  return (await openMigrationHarness<DatabaseSchema>()).db
 }
 
 async function seedWorkspace(db: Kysely<DatabaseSchema>, workspaceId: string): Promise<void> {

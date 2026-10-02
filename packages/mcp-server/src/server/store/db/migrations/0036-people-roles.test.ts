@@ -6,11 +6,8 @@
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { migrations } from './index.js'
+import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../../config.js', () => ({
@@ -22,27 +19,8 @@ vi.mock('../../../config.js', () => ({
 
 const PRE_0036 = '0035-sign-in-attempts'
 
-type Db = Kysely<Record<string, Record<string, unknown>>>
-
-async function openDb(): Promise<{ db: Db; migrateTo(name: string): Promise<void> }> {
-  const db: Db = new Kysely({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(
-        join(dataDir, 'whiteboard.db'),
-      ) as unknown as ConstructorParameters<typeof SqliteDialect>[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  const migrator = new Migrator({ db: db as never, provider })
-  return {
-    db,
-    async migrateTo(name: string) {
-      const { error } =
-        name === 'head' ? await migrator.migrateToLatest() : await migrator.migrateTo(name)
-      expect(error).toBeUndefined()
-    },
-  }
+async function openDb(): Promise<MigrationHarness> {
+  return openMigrationHarness(dataDir)
 }
 
 beforeEach(async () => {
@@ -50,7 +28,7 @@ beforeEach(async () => {
 })
 
 it("makes each workspace's earliest member its owner, per tenant", async () => {
-  const { db, migrateTo } = await openDb()
+  const { db, migrateTo, migrateToHead } = await openDb()
   await migrateTo(PRE_0036)
   await db
     .insertInto('workspaceMemberships')
@@ -61,7 +39,7 @@ it("makes each workspace's earliest member its owner, per tenant", async () => {
       { workspaceId: 'ws-1', profileId: 'p-cy', createdAt: 30, tenantId: 't2' },
     ])
     .execute()
-  await migrateTo('head')
+  await migrateToHead()
   const rows = await db
     .selectFrom('workspaceMemberships')
     .select(['tenantId', 'workspaceId', 'profileId', 'role'])
@@ -81,7 +59,7 @@ it("makes each workspace's earliest member its owner, per tenant", async () => {
 // createdAt is milliseconds, so two memberships can share it; the store makes
 // exactly one owner per workspace, and so must the backfill.
 it('makes exactly one owner when the earliest memberships share a timestamp', async () => {
-  const { db, migrateTo } = await openDb()
+  const { db, migrateTo, migrateToHead } = await openDb()
   await migrateTo(PRE_0036)
   await db
     .insertInto('workspaceMemberships')
@@ -90,7 +68,7 @@ it('makes exactly one owner when the earliest memberships share a timestamp', as
       { workspaceId: 'ws-1', profileId: 'p-ada', createdAt: 10, tenantId: 't1' },
     ])
     .execute()
-  await migrateTo('head')
+  await migrateToHead()
   const rows = await db
     .selectFrom('workspaceMemberships')
     .select(['profileId', 'role'])

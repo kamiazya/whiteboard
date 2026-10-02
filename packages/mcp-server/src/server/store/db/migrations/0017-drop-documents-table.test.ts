@@ -1,12 +1,10 @@
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Kysely, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
-import LibsqlNativeDatabase from 'libsql'
+import type { Kysely } from 'kysely'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../../log.js'
-import { migrations } from './index.js'
+import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../../config.js', () => ({
@@ -25,28 +23,7 @@ interface Handle {
 }
 
 async function openDb(): Promise<Handle> {
-  const dbPath = join(dataDir, 'whiteboard.db')
-  const db = new Kysely<Record<string, Record<string, unknown>>>({
-    dialect: new SqliteDialect({
-      database: new LibsqlNativeDatabase(dbPath) as unknown as ConstructorParameters<
-        typeof SqliteDialect
-      >[0]['database'],
-    }),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  const migrator = new Migrator({ db: db as never, provider })
-  return {
-    db,
-    async migrateTo(name: string) {
-      const { error } = await migrator.migrateTo(name)
-      expect(error).toBeUndefined()
-    },
-    async migrateToHead() {
-      const { error } = await migrator.migrateToLatest()
-      expect(error).toBeUndefined()
-    },
-  }
+  return openMigrationHarness(dataDir)
 }
 
 async function seedWorkspace(db: Handle['db']): Promise<void> {
