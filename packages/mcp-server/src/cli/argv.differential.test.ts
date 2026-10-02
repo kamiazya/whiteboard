@@ -223,8 +223,17 @@ const FLAGS = [
 const argLists = fc.array(fc.constantFrom(...FLAGS), { minLength: 0, maxLength: 5 })
 
 describe('the argv parsers answer exactly what the loops they replaced answered', () => {
+  // `daemon run` is the one command a person types, so `--json` became optional
+  // there: a list the old loop refused ONLY for lacking it must now parse as the
+  // same list with `--json` added, reported as the human form.
   fcTest.prop([argLists], withDefaults())('daemon run', (args) => {
-    expect(parseDaemonRunArgs(args)).toEqual(oldParseDaemonRunArgs(args))
+    const old = oldParseDaemonRunArgs(args)
+    const refusedOnlyForLackingJson =
+      old.kind === 'usage-error' && String(old.message).startsWith('Only --json is supported')
+    const expected = refusedOnlyForLackingJson
+      ? { ...oldParseDaemonRunArgs([...args, '--json']), json: false }
+      : old
+    expect(parseDaemonRunArgs(args)).toEqual(expected)
   })
 
   fcTest.prop([argLists, fc.constantFrom('daemon status', 'daemon stop')], withDefaults())(

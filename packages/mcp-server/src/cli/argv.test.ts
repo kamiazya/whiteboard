@@ -145,9 +145,20 @@ describe('parseDaemonRunArgs', () => {
     expect((result as { kind: string; message: string }).message).toContain('--no-open')
   })
 
-  it('returns usage-error when --json is missing', () => {
-    const result = parseDaemonRunArgs([])
-    expect(result).toMatchObject({ kind: 'usage-error' })
+  it('runs for a person without --json, keeping every other flag', () => {
+    expect(parseDaemonRunArgs([])).toEqual({
+      kind: 'ok',
+      json: false,
+      dataDir: undefined,
+      tokenStdin: false,
+      noOpen: false,
+    })
+    expect(parseDaemonRunArgs(['--no-open', '--data-dir=/tmp/d'])).toMatchObject({
+      kind: 'ok',
+      json: false,
+      noOpen: true,
+      dataDir: '/tmp/d',
+    })
   })
 
   it('returns usage-error when --json is duplicated', () => {
@@ -229,7 +240,7 @@ describe('parseDaemonReplicaKeyArgs', () => {
     })
     expect(parseDaemonReplicaKeyArgs(['--json'])).toEqual({
       kind: 'usage-error',
-      message: '--workspace=<id> is required',
+      message: '--workspace=<id|segment> is required',
     })
   })
 

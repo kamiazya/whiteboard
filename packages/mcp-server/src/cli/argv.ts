@@ -36,7 +36,8 @@ export function parseDaemonSubcommandArgs(
 export type DaemonRunArgs =
   | {
       kind: 'ok'
-      json: true
+      /** The machine form: one JSON ready line. Absent, the ready line is prose for a person. */
+      json: boolean
       dataDir?: string
       tokenStdin: boolean
       noOpen: boolean
@@ -57,15 +58,9 @@ const RUN_FLAGS: FlagTable<'dataDir'> = {
 export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
   const scan = scanFlags(args, RUN_FLAGS)
   if (scan.kind === 'usage-error') return scan
-  if (!scan.seen.has('--json')) {
-    return {
-      kind: 'usage-error',
-      message: 'Only --json is supported. Re-run with: whiteboard daemon run --json',
-    }
-  }
   return {
     kind: 'ok',
-    json: true,
+    json: scan.seen.has('--json'),
     dataDir: scan.values.dataDir,
     tokenStdin: scan.seen.has('--token-stdin'),
     noOpen: scan.seen.has('--no-open'),
@@ -88,11 +83,11 @@ export function parseDaemonReplicaKeyArgs(args: readonly string[]): DaemonReplic
     return {
       kind: 'usage-error',
       message:
-        'Only --json is supported. Re-run with: whiteboard daemon rotate-replica-key --json --workspace=<id>',
+        'Only --json is supported. Re-run with: whiteboard daemon rotate-replica-key --json --workspace=<id|segment>',
     }
   }
   if (scan.values.workspaceId === undefined) {
-    return { kind: 'usage-error', message: '--workspace=<id> is required' }
+    return { kind: 'usage-error', message: '--workspace=<id|segment> is required' }
   }
   return {
     kind: 'ok',
@@ -128,11 +123,11 @@ export function parseDaemonReplicaTierArgs(args: readonly string[]): DaemonRepli
     return {
       kind: 'usage-error',
       message:
-        'Only --json is supported. Re-run with: whiteboard daemon set-replica-tier --json --workspace=<id> --tier=<no-offline|offline|bounded|default>',
+        'Only --json is supported. Re-run with: whiteboard daemon set-replica-tier --json --workspace=<id|segment> --tier=<no-offline|offline|bounded|default>',
     }
   }
   if (scan.values.workspaceId === undefined) {
-    return { kind: 'usage-error', message: '--workspace=<id> is required' }
+    return { kind: 'usage-error', message: '--workspace=<id|segment> is required' }
   }
   const tier = scan.values.tier
   if (tier === undefined) {

@@ -82,6 +82,8 @@ const STAYS_IN_PACKAGE: Readonly<Record<string, string>> = {
     "snapshots the package's own generated JSON schema into docs/reference; a file snapshot only rejects in a CI-mode run of the package's project",
   'packages/codec/src/spatial/loss-table.test.ts':
     "snapshots the package's own loss ledger into docs/reference, the same generated-artifact shape as json-schema.test.ts",
+  'packages/mcp-server/src/cli/docs-commands.test.ts':
+    "feeds every `whiteboard ...` command the docs, the README and the app show to the CLI's own dispatcher, which this project cannot import",
   'packages/mcp-server/src/server/docs-operator-output-examples.test.ts':
     "parses a docs page's JSON through the daemon's own output schemas, which this project cannot import",
   'packages/mcp-server/src/server/docs-sign-in-config-examples.test.ts':

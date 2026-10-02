@@ -6,6 +6,9 @@
 // Output contract:
 //   stdout  -> exactly one JSON object terminated by '\n', EXCEPT:
 //              - `--version` / `-v` emits a bare semver string (not JSON)
+//              - `daemon run` without `--json` emits one line of prose: it is
+//                the command a person types to start the daemon, and every
+//                script that reads its ready line passes `--json`
 //   stderr  -> diagnostics / usage / errors only
 //
 // `run` is dispatched via a dynamic import so the read-only commands
@@ -59,9 +62,9 @@ whiteboard daemon status         --json [--data-dir=<path>]
 whiteboard daemon doctor         --json [--data-dir=<path>]
 whiteboard daemon stop           --json [--data-dir=<path>]
 whiteboard daemon support-bundle --json --output-dir=<path> [--data-dir=<path>]
-whiteboard daemon rotate-replica-key --json --workspace=<id> [--data-dir=<path>]
-whiteboard daemon set-replica-tier   --json --workspace=<id> --tier=<no-offline|offline|bounded|default> [--data-dir=<path>]
-whiteboard daemon run            --json [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
+whiteboard daemon rotate-replica-key --json --workspace=<id|segment> [--data-dir=<path>]
+whiteboard daemon set-replica-tier   --json --workspace=<id|segment> --tier=<no-offline|offline|bounded|default> [--data-dir=<path>]
+whiteboard daemon run            [--json] [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
 whiteboard server status         --json [--data-dir=<path>]
 whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--trusted-proxy] [--data-dir=<path>]
 whiteboard server stop           --json [--data-dir=<path>]
@@ -630,6 +633,10 @@ function applyLoadedConfigFileToDispatcherEnv(): ConfigFileEnvResult {
   return { kind: 'ok', openBrowser: loaded.config.openBrowser }
 }
 
+function describeDaemonReady(ready: z.infer<typeof daemonRunReadyResultSchema>): string {
+  return `whiteboard daemon ${ready.version} is running (pid ${ready.pid}, socket ${ready.socketPath}). Stop it with: whiteboard daemon stop --json`
+}
+
 async function dispatchRun(
   rest: readonly string[],
   configOpenBrowser: boolean | undefined,
@@ -669,7 +676,8 @@ async function dispatchRun(
     return 1
   }
   // Ready: emit the JSON ready line, then stay up until the server closes.
-  writeJsonObject(daemonRunReadyResultSchema, outcome.result)
+  if (parsed.json) writeJsonObject(daemonRunReadyResultSchema, outcome.result)
+  else process.stdout.write(`${describeDaemonReady(outcome.result)}\n`)
   // Best-effort UX on top of an already-successful startup: a browser that
   // fails to open (no display, sandboxed environment, …) must never affect
   // the ready-JSON contract or the daemon's exit code, so this runs after
