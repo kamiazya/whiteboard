@@ -16,9 +16,8 @@ import { z } from 'zod'
  *    written back into any LoroDoc — a cross-document edge stored as CRDT
  *    content would need merge semantics of its own. This aggregate is a
  *    projection, rebuildable from the store at any time.
- * 2. **Extraction happens at the persistence boundary.** An event carries a
- *    whole document's replacement facts, extracted from a persisted
- *    snapshot — CRDT concurrency is resolved inside Loro before anything
+ * 2. **Extraction happens at the persistence boundary.** A document's facts
+ *    are extracted whole from a persisted snapshot — CRDT concurrency is resolved inside Loro before anything
  *    reaches this layer, so the aggregate never observes a mid-merge state.
  * 3. **Global joins stay outside the CRDT.** `[[Name]]` resolution depends
  *    on the workspace's name table (a document gains a backlink when a
@@ -27,16 +26,11 @@ import { z } from 'zod'
  *    current table, never at extraction time — an extracted fact can stay
  *    cached while its resolution changes under it.
  *
- * Events are per-document replacements tagged with a caller-supplied `seq`:
- * a stale event (lower seq than what the aggregate holds for that document,
- * tombstones included) is ignored, a duplicate is a no-op. That makes event
- * delivery order-tolerant and idempotent — the properties the command-based
- * PBT in reference-semantics.property.test.ts pins.
- *
- * `computeBacklinks` builds one of these from a full scan per request (the
- * non-incremental mode). Incremental wiring — save paths emitting events
- * into a long-lived instance — reuses this same class, so the two modes
- * cannot drift.
+ * Fed one upsert per listed document and queried while the listing is still
+ * in hand: `backlinksIn` builds one per request over cached facts. There is
+ * no event stream to order, so nothing here carries a sequence or a
+ * tombstone; the incremental alternative (ADR-0014) landed as a cache of
+ * content facts, not as a feed into this class.
  */
 
 const rawReferenceSchema = z
@@ -71,42 +65,21 @@ export type DocumentReferenceFacts = z.infer<typeof documentReferenceFactsSchema
 
 import type { BacklinkEntry } from './backlink-entry.js'
 
-interface Held {
-  readonly seq: number
-  /** null is a tombstone: the document was removed at `seq`. */
-  readonly facts: DocumentReferenceFacts | null
-}
-
 export class ReferenceAggregate {
-  private readonly docs = new Map<string, Held>()
+  private readonly docs = new Map<string, DocumentReferenceFacts>()
 
-  /** Replace a document's facts. Ignored when `seq` is older than what is held. */
-  upsert(documentId: string, seq: number, facts: DocumentReferenceFacts): void {
-    const held = this.docs.get(documentId)
-    if (held !== undefined && held.seq >= seq) return
-    this.docs.set(documentId, { seq, facts })
+  /** Replace a document's facts. */
+  upsert(documentId: string, facts: DocumentReferenceFacts): void {
+    this.docs.set(documentId, facts)
   }
 
-  /** Remove a document. The tombstone keeps `seq` so a late upsert stays dead. */
-  remove(documentId: string, seq: number): void {
-    const held = this.docs.get(documentId)
-    if (held !== undefined && held.seq >= seq) return
-    this.docs.set(documentId, { seq, facts: null })
-  }
-
-  /** The documents currently alive in the aggregate. */
+  /** The documents held, by id. */
   entries(): ReadonlyMap<string, DocumentReferenceFacts> {
-    const alive = new Map<string, DocumentReferenceFacts>()
-    for (const [id, held] of this.docs) if (held.facts !== null) alive.set(id, held.facts)
-    return alive
-  }
-
-  has(documentId: string): boolean {
-    return this.docs.get(documentId)?.facts != null
+    return new Map(this.docs)
   }
 
   /**
-   * Every live document referencing `documentId`, resolved against the
+   * Every held document referencing `documentId`, resolved against the
    * aggregate's CURRENT path table — the reader's rule exactly: `[[...]]`
    * may name a path or a document id, and nothing else (mirrors apps/web's
    * daemonLinkEntries + the codec resolver).
@@ -259,7 +232,7 @@ export function backlinksIn(
   const aggregate = new ReferenceAggregate()
   for (const entry of entries) {
     const facts = content.get(entry.documentId)
-    aggregate.upsert(entry.documentId, 0, {
+    aggregate.upsert(entry.documentId, {
       path: entry.path,
       ...(entry.name === undefined ? {} : { name: entry.name }),
       ...(entry.kind === undefined ? {} : { kind: entry.kind }),

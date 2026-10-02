@@ -1,13 +1,19 @@
 /**
- * Convergence properties for the event-fed half of the aggregate: the
- * guarantees an incremental feed will lean on before it exists. Events are
- * per-document replacements tagged with seq, so:
+ * Properties of the aggregate over the feed production gives it: one upsert
+ * per listed document, built fresh for each query (`backlinksIn`). So the
+ * questions are about a SET of documents, not a stream of events:
  *
- *   - applying a stream SHUFFLED and WITH DUPLICATES must converge to the
- *     same state as applying it in order (per-document last-seq-wins);
- *   - a remove is a tombstone: a late (stale-seq) upsert cannot resurrect.
+ *   - the answer does not depend on the order the documents were fed in, and
+ *     feeding one twice changes nothing;
+ *   - the backlinks of a document are exactly the inverse of the forward
+ *     references the other documents carry, resolved by the reader's rule.
+ *
+ * The inverse is judged by an oracle written from the rule itself (an id
+ * names a document, a path names a document only if exactly one owns it, a
+ * name names nothing) and shares no code with the aggregate.
  */
 
+import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { fc, fcTest, withDefaults } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import type { DocumentReferenceFacts } from './reference-aggregate.js'
@@ -18,96 +24,138 @@ const IDS = [
   '01BX5ZZKBKACTAV9WEVGEMMVRZ',
   '01CX5ZZKBKACTAV9WEVGEMMVRA',
 ] as const
-const PATHS = ['alpha', 'beta', 'gamma'] as const
+// Up to three documents over two paths, so a shared path is common and the
+// ambiguity arm is not a corner the generator reaches by luck.
+const PATHS = ['alpha', 'dir/beta'] as const
+const ULID_SHAPE = /^[0-9A-HJKMNP-TV-Z]{26}$/
 
-type Event =
-  | { t: 'upsert'; id: string; facts: DocumentReferenceFacts }
-  | { t: 'remove'; id: string }
+type Via = 'wikilink' | 'embed-node' | 'file-node'
 
 const factsArb: fc.Arbitrary<DocumentReferenceFacts> = fc.record(
   {
     path: fc.constantFrom<string>(...PATHS),
     name: fc.option(fc.constantFrom('Plan', 'Note'), { nil: undefined }),
+    kind: fc.option(fc.constantFrom(...documentKindSchema.options), { nil: undefined }),
     texts: fc.array(fc.constantFrom('Plan の話', 'plain prose'), { maxLength: 2 }),
     refs: fc.array(
       fc.record({
         target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),
-        via: fc.constantFrom('wikilink' as const, 'embed-node' as const, 'file-node' as const),
-        context: fc.constant('ctx'),
+        via: fc.constantFrom<Via>('wikilink', 'embed-node', 'file-node'),
+        context: fc.string({ minLength: 1, maxLength: 3 }),
       }),
-      { maxLength: 3 },
+      { maxLength: 4 },
     ),
   },
   { noNullPrototype: true },
 ) as fc.Arbitrary<DocumentReferenceFacts>
 
-const eventArb: fc.Arbitrary<Event> = fc.oneof(
-  {
-    weight: 3,
-    arbitrary: fc.record({
-      t: fc.constant('upsert' as const),
-      id: fc.constantFrom<string>(...IDS),
-      facts: factsArb,
-    }),
-  },
-  {
-    weight: 1,
-    arbitrary: fc.record({
-      t: fc.constant('remove' as const),
-      id: fc.constantFrom<string>(...IDS),
-    }),
-  },
-)
+/** The documents of one query: each id at most once, as a listing gives them. */
+const feedArb: fc.Arbitrary<readonly (readonly [string, DocumentReferenceFacts])[]> = fc
+  .uniqueArray(fc.constantFrom<string>(...IDS), { minLength: 2, maxLength: IDS.length })
+  .chain((ids) => fc.tuple(...ids.map((id) => factsArb.map((facts) => [id, facts] as const))))
 
-function apply(aggregate: ReferenceAggregate, event: Event, seq: number): void {
-  if (event.t === 'upsert') aggregate.upsert(event.id, seq, event.facts)
-  else aggregate.remove(event.id, seq)
+function feed(documents: readonly (readonly [string, DocumentReferenceFacts])[]) {
+  const aggregate = new ReferenceAggregate()
+  for (const [id, facts] of documents) aggregate.upsert(id, facts)
+  return aggregate
 }
 
 function stateOf(aggregate: ReferenceAggregate): unknown {
   return IDS.map((id) => ({ id, backlinks: aggregate.backlinksOf(id) }))
 }
 
-describe('ReferenceAggregate convergence', () => {
+function expectedBacklinks(
+  documents: readonly (readonly [string, DocumentReferenceFacts])[],
+  targetId: string,
+) {
+  const target = documents.find(([id]) => id === targetId)
+  if (target === undefined) return []
+  const targetPath = target[1].path
+  const ownersOf = (path: string) => documents.filter(([, facts]) => facts.path === path)
+  const points = (ref: DocumentReferenceFacts['refs'][number]): boolean => {
+    if (ref.via === 'embed-node') return ref.target === targetId
+    if (ref.via === 'file-node') return ref.target === targetPath
+    if (ULID_SHAPE.test(ref.target)) return ref.target === targetId
+    const owners = ownersOf(ref.target)
+    return owners.length === 1 && owners[0]?.[0] === targetId
+  }
+  return (
+    documents
+      .filter(([id]) => id !== targetId)
+      .map(([id, facts]) => ({
+        id,
+        facts,
+        contexts: facts.refs.filter(points).map((r) => r.context),
+      }))
+      .filter((hit) => hit.contexts.length > 0)
+      // Single-segment or one-level paths, so plain string order is the
+      // segment-wise order the index contract fixes.
+      .sort((a, b) => {
+        if (a.facts.path !== b.facts.path) return a.facts.path < b.facts.path ? -1 : 1
+        return a.id < b.id ? -1 : 1
+      })
+      .map(({ id, facts, contexts }) => ({
+        documentId: id,
+        path: facts.path,
+        ...(facts.name === undefined ? {} : { name: facts.name }),
+        ...(facts.kind === undefined ? {} : { kind: facts.kind }),
+        contexts,
+      }))
+  )
+}
+
+describe('ReferenceAggregate over a listing', () => {
   fcTest.prop(
     [
-      fc.array(eventArb, { minLength: 1, maxLength: 12 }).chain((events) =>
+      feedArb.chain((documents) =>
         fc.record({
-          events: fc.constant(events),
-          // A delivery order over the seq-tagged stream: every event
-          // delivered (a dropped event is a DIFFERENT stream, out of
-          // scope), each duplicated exactly once, the whole thing shuffled.
+          documents: fc.constant(documents),
           order: fc.shuffledSubarray(
-            events.flatMap((_, i) => [i, i]),
-            { minLength: events.length * 2, maxLength: events.length * 2 },
+            documents.flatMap((_, i) => [i, i]),
+            { minLength: documents.length * 2, maxLength: documents.length * 2 },
           ),
         }),
       ),
     ],
     withDefaults({ numRuns: 300 }),
-  )('shuffled + duplicated delivery converges to in-order state', ({ events, order }) => {
-    const ordered = new ReferenceAggregate()
-    events.forEach((event, seq) => {
-      apply(ordered, event, seq)
-    })
-
-    const scrambled = new ReferenceAggregate()
-    for (const index of order) {
-      const event = events[index]
-      if (event !== undefined) apply(scrambled, event, index)
-    }
-    expect(stateOf(scrambled)).toEqual(stateOf(ordered))
-  })
-
-  fcTest.prop([factsArb], withDefaults())(
-    'a stale upsert cannot resurrect a tombstone',
-    (facts) => {
-      const aggregate = new ReferenceAggregate()
-      aggregate.upsert(IDS[0], 1, facts)
-      aggregate.remove(IDS[0], 5)
-      aggregate.upsert(IDS[0], 3, facts) // late delivery of an old write
-      expect(aggregate.has(IDS[0])).toBe(false)
-      expect(aggregate.backlinksOf(IDS[0])).toEqual([])
+  )(
+    'feeding the documents in any order, each twice, gives the in-order answer',
+    ({ documents, order }) => {
+      const scrambled = new ReferenceAggregate()
+      for (const index of order) {
+        const document = documents[index]
+        if (document !== undefined) scrambled.upsert(document[0], document[1])
+      }
+      expect(stateOf(scrambled)).toEqual(stateOf(feed(documents)))
     },
   )
+
+  fcTest.prop([feedArb], withDefaults({ numRuns: 300 }))(
+    'a document is a backlink exactly when its references resolve to the target',
+    (documents) => {
+      const aggregate = feed(documents)
+      for (const id of IDS) {
+        expect(aggregate.backlinksOf(id)).toEqual(expectedBacklinks(documents, id))
+      }
+    },
+  )
+
+  // A property that never reaches a backlink, or never reaches an ambiguous
+  // path, passes by asserting on empty lists.
+  fcTest('the feed generator reaches resolving, ambiguous and absent references', () => {
+    const sample = fc.sample(feedArb, { numRuns: 400 })
+    const withBacklink = sample.filter((documents) =>
+      IDS.some((id) => expectedBacklinks(documents, id).length > 0),
+    ).length
+    const ambiguous = sample.filter((documents) => {
+      const paths = documents.map(([, facts]) => facts.path)
+      return documents.some(([, facts]) =>
+        facts.refs.some(
+          (ref) => ref.via === 'wikilink' && paths.filter((p) => p === ref.target).length > 1,
+        ),
+      )
+    }).length
+    expect(withBacklink, 'feeds with a backlink').toBeGreaterThan(150)
+    expect(ambiguous, 'feeds with a wikilink to a shared path').toBeGreaterThan(40)
+  })
 })
