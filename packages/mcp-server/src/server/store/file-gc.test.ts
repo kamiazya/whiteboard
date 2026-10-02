@@ -513,12 +513,14 @@ describe('purgeDanglingFiles', () => {
 
 /**
  * ADR-0020. GC judges "referenced" from `listDocuments` / `loadDocument`,
- * which read `openWorkspaceDocIfStored` — and that answers the CACHED
- * workspace document when there is one. With one daemon the cache is
- * authoritative, because every write goes through it. With two it is not,
- * and this is not a narrow race: a pass on instance A cannot see a document
- * instance B created, so it unlinks B's blobs as dangling. The window is
- * "however long since A last caught up", which is forever if nothing does.
+ * which read `openWorkspaceDocIfStored`. That answers the cached workspace
+ * document, and a cache that trusted itself was authoritative only while one
+ * process wrote: a pass on instance A could not see a document instance B
+ * created, and unlinked B's blobs as dangling, for as long as nothing caught
+ * A up. The cache now follows the record on every access, so the view a pass
+ * judges from is current; the explicit catch-up the pass takes first is what
+ * covers the writes a read-through cannot, because it reads the log rather
+ * than trusting a stamp.
  */
 describe('purgeDanglingFiles across instances', () => {
   it('does not delete a blob referenced only by another instance', async () => {
@@ -535,10 +537,9 @@ describe('purgeDanglingFiles across instances', () => {
       makeSpatialDocWithImage('theirs'),
     )
 
-    // The precondition, asserted rather than assumed: this instance still
-    // serves its stale view, so a pass that trusted it would judge the blob
-    // dangling.
-    expect((await listDocuments(workspaceId)).map((entry) => entry.path)).not.toContain('theirs')
+    // The view a pass judges from has followed the record, so the document
+    // that references the blob is in it.
+    expect((await listDocuments(workspaceId)).map((entry) => entry.path)).toContain('theirs')
 
     await purgeDanglingFiles(workspaceId, { graceMs: 0 })
     expect(await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId))).toContain(

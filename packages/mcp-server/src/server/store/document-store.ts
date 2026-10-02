@@ -329,12 +329,17 @@ export async function getDoc(
   path: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc> {
-  // No staleness refresh: every served document is a tree projection that
-  // each write path mutates in place (saveDocument diffs against the live
-  // workspace doc), so a cache hit IS the current state. The legacy
+  // A cached projection is current while the workspace record it was cut
+  // from is: every write THIS process makes mutates it in place (saveDocument
+  // diffs against the live workspace doc), and what another process writes
+  // reaches it only through the record. So the record is asked first —
+  // reading it through is what evicts the projections a foreign write
+  // outdated — and the cache then serves what is left. The legacy
   // per-document delta replay that used to run here died with the legacy
   // plane — replaying that other oplog into a projection resurrected
   // pre-fold state over current content.
+  validateWorkspaceId(workspaceId)
+  await openWorkspaceDocIfStored(workspaceId, scope)
   return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path, scope), scope)
 }
 
