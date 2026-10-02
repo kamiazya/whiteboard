@@ -437,12 +437,29 @@ assumed `createServer(deps)` held the keeper protocol and it holds `/api/v1`
 only; whether to lift the portable routes is that ADR's open decision, and the
 scan states the count without deciding anything.
 
-**Direct imports only**: a portable route still reaches `../log.js`,
-the security gates and `workspace-handle.ts` (its registry read is a ledgered
-`adapter-mechanic-check` edge), so the number is the lower bound on the work. It
-owns its own matcher on purpose and shares nothing with the mechanic check, so
-each can fail alone. `NODE_ONLY_PACKAGES` is a short list; a Node-only package
-missing from it shows up as an unlisted portable route.
+**Two readings.** The class above is judged on a file's OWN imports, which is a
+lower bound and was once the whole guard: `import 'node:fs'` planted in
+`server/validators.ts`, imported by three of the "portable" routes, left it
+18/18 green. Each ledgered file is therefore also classified over the
+transitive closure of its VALUE imports (`route-closure.ts`, on
+`value-import-closure.ts`'s walk; type-only edges are erased and not followed),
+with two named cut seams — `log.ts`, `workspace-handle.ts` — that a lift would
+replace with a handed-in dependency. A seam must itself be Node-bound and be
+reached by a ledgered file, or it is a fake cut. Each ledger entry states its
+`role` (a `router` is a file that mounts `new Hono(`; six of the twelve were
+middleware, helpers and registries) and its `blockedBy`, which is checked
+against the closure, so Node arriving through a helper edits an entry instead of
+passing. Three counts are pinned by equality in `CLOSURE_COUNTS` (clean files,
+files held only by the seams, routers among those), measured 3 / 6 / 2.
+
+The auditor's closure said nine of twelve once the seams were cut; this says six
+because it counts an ambient `Buffer` (in `routes/sync-sse.ts`, reached through
+the audience registry, and in `security/timing-safe.ts`) the way the direct
+class always has. `store/corrupt-stored-data` is entered, not called a
+mechanic, for the reason `MECHANICS_NOT_SCANNED` gives. It owns its own matcher
+on purpose and shares nothing with the mechanic check, so each can fail alone.
+`NODE_ONLY_PACKAGES` is a short list; a Node-only package missing from it shows
+up as an unlisted portable route.
 
 ## `adapter-process-global-check.ts`: an adapter is handed its data layout
 
