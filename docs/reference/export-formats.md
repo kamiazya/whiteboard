@@ -224,11 +224,13 @@ without it gets a smaller file.
 document on the clipboard as plain text — the quickest way to hand the exact
 canvas to another tool or a debugging session from any device.
 
-**PNG exports are editable images**: the file embeds the canvas's JSON Canvas
+**PNG exports carry their document**: the file embeds the canvas's JSON Canvas
 document (extended mode, `x-whiteboard` included) in a PNG `iTXt` chunk under
-the `whiteboard` keyword — the same pattern draw.io uses. A shared PNG
-therefore carries its exact node coordinates and edges, not just pixels; any
-PNG chunk reader can recover the document, and image viewers ignore the chunk.
+the `whiteboard` keyword — the same pattern
+draw.io uses. A shared PNG therefore carries its exact node coordinates and edges, not just
+pixels; any PNG chunk reader can recover the document, and image viewers ignore
+the chunk. Unlike draw.io, the app does not yet open such a PNG back as an
+editable canvas: a PNG dropped into the editor is inserted as an image.
 
 There is currently no raster (PNG) export tool and no tool that returns image
 bytes as MCP `ImageContent` — `wb_scene_render` is the closest equivalent for
