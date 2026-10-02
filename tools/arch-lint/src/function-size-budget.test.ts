@@ -180,7 +180,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // editor's complexity rather than its structure.
   'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 80,
   'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 53,
-  'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 88,
+  'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 60,
   'apps/web/src/components/markdown-editor/MinimapRail.tsx#MinimapRail': 80,
   'apps/web/src/components/markdown-editor/PassageProposalCard.tsx#PassageProposalCard': 63,
   'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 52,
