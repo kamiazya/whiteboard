@@ -16,7 +16,7 @@
  *      not partition ALL_REGISTERED_TOOLS exactly.
  *   3. TOOL_PROFILES (tool-profiles.ts) — tool-naming.test.ts fails if it
  *      does not cover ALL_REGISTERED_TOOLS exactly. A registered tool with
- *      no profile silently downgrades to MUTATING with its name as its title.
+ *      no profile falls back to the destructive profile, with its name as its title.
  *   4. EXPECTED_TOOLS in scripts/smoke/mcp-e2e-smoke.mjs. Deliberately a
  *      separate copy: that smoke drives the server as a subprocess, so
  *      importing this list would make it agree with itself instead of

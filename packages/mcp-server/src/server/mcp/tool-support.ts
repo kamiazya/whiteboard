@@ -4,7 +4,7 @@ import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { getTracer } from '../observability/tracing.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
-import { MUTATING, TOOL_PROFILES } from './tool-profiles.js'
+import { TOOL_PROFILES, UNPROFILED_TOOL_PROFILE } from './tool-profiles.js'
 
 // MCP tracer. Calls into the no-op API when tracing is disabled.
 const mcpTracer = (): ReturnType<typeof getTracer> => getTracer('whiteboard.mcp')
@@ -80,12 +80,12 @@ export function registerToolWithAnnotations<
 ): unknown {
   const profile = TOOL_PROFILES[name]
   if (!profile) {
-    // Fall back conservatively to MUTATING and emit a warning so it is noticed.
-    getLogger('mcp').warning({ name }, 'tool has no annotations profile; defaulting to MUTATING')
+    // Fall back to the destructive profile and emit a warning so it is noticed.
+    getLogger('mcp').warning({ name }, 'tool has no annotations profile; announced as destructive')
   }
   const annotations = profile
     ? { ...profile.profile, title: profile.title }
-    : { ...MUTATING, title: name }
+    : { ...UNPROFILED_TOOL_PROFILE, title: name }
   // Mirror the modern `_meta.ui.resourceUri` MCP Apps (SEP-1865) linkage
   // into the deprecated `_meta["ui/resourceUri"]` key too, matching what
   // the ext-apps package's own registerAppTool does — a host built before

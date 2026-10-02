@@ -17,12 +17,7 @@
 // consolidation that folds three tools into one can halve the count and
 // double `visibleBytes`, and the pair is what says which happened.
 
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
-import { Client } from '@modelcontextprotocol/client'
-import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it } from 'vitest'
-import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import {
   crossReferences,
   descriptionWords,
@@ -31,31 +26,8 @@ import {
   parameterCoverage,
   wireBytes,
 } from '../../shared/test-utils/tool-surface-metrics.js'
-import { liveDocuments } from '../store/live-documents.js'
-import { registerDocumentTools } from './document-tools.js'
+import { connectDocumentTools as connect } from './_test-document-tools-client.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
-
-async function connect(): Promise<{ client: Client; tools: readonly ListedTool[] }> {
-  const server = new McpServer({ name: 'whiteboard-surface', version: '0.0.0' })
-  // Only `tools/list` is read here, which touches no seam: the version
-  // history is the one seam a registration reaches at construction, and
-  // the rest are stated absent rather than faked with no behaviour.
-  registerDocumentTools(server, {
-    documentStore: new InMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
-    versions: new InMemoryVersionHistory(),
-    // The daemon's own seam: every mutating tool takes its write lock.
-    liveDocuments: liveDocuments(),
-    facetRegistry: bundledFacetRegistry,
-  } as never)
-  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
-  await server.connect(serverSide)
-  const client = new Client({ name: 'surface', version: '0.0.0' })
-  await client.connect(clientSide)
-  const { tools } = await client.listTools()
-  return { client, tools: tools as readonly ListedTool[] }
-}
 
 const firstText = (result: { content?: unknown }): string => {
   const content = result.content as { type?: string; text?: string }[] | undefined
@@ -244,7 +216,9 @@ describe('what the tool table costs to read', () => {
         // unattributed drop above), and `ExtensionFacets` is a registered
         // composite the echo repeats per element. Visible bytes still
         // unmoved, which is what makes both safe on a table a model reads.
-        wireBytes: 17670,
+        // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
+        // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
+        wireBytes: 17694,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -654,7 +628,9 @@ describe('what the tool table costs to read', () => {
         // `wb_canvas_edit` — and the sentence is what a model needs to read
         // the vocabulary before being refused by it.
         visibleBytes: 3330,
-        wireBytes: 4238,
+        // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
+        // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
+        wireBytes: 4262,
         descriptionWords: 176,
         parameters: 12,
         undescribed: 1,
@@ -672,7 +648,9 @@ describe('what the tool table costs to read', () => {
       },
       wb_thread_edit: {
         visibleBytes: 3375,
-        wireBytes: 3942,
+        // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
+        // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
+        wireBytes: 3966,
         descriptionWords: 122,
         parameters: 32,
         undescribed: 25,
@@ -692,7 +670,9 @@ describe('what the tool table costs to read', () => {
       },
       wb_version_restore: {
         visibleBytes: 1504,
-        wireBytes: 2156,
+        // +23 wire: `destructiveHint: true` stated — its `subtree` mode deletes the
+        // documents created since the version. Client-side only; visible bytes unmoved.
+        wireBytes: 2179,
         descriptionWords: 41,
         parameters: 6,
         undescribed: 0,
@@ -701,7 +681,9 @@ describe('what the tool table costs to read', () => {
       },
       wb_version_save: {
         visibleBytes: 982,
-        wireBytes: 2052,
+        // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
+        // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
+        wireBytes: 2076,
         descriptionWords: 54,
         parameters: 3,
         undescribed: 0,
@@ -710,7 +692,9 @@ describe('what the tool table costs to read', () => {
       },
       wb_viewport_set: {
         visibleBytes: 900,
-        wireBytes: 1298,
+        // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
+        // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
+        wireBytes: 1322,
         descriptionWords: 52,
         parameters: 8,
         undescribed: 8,
@@ -939,7 +923,10 @@ describe('what the tool table costs to read', () => {
       // parameters and undescribed do not move at all, because a bare-body
       // arm reuses a parameter this table already counted.
       // Then -1,442 for wb_pairing_link_create's retirement.
-      wireBytes: 109476,
+      // Then +143 for stating `destructiveHint` on the six writes that left it
+      // to the default (five `false` at +24, wb_version_restore `true` at +23):
+      // the annotation is client-side, so visibleBytes does not move.
+      wireBytes: 109619,
       parameters: 343,
       undescribed: 219,
     })
