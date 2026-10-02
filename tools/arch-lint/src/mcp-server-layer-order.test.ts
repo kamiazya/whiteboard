@@ -89,6 +89,7 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   'server/startup-env.ts': 'mechanics',
   'server/replica-env.ts': 'mechanics',
   'server/data-dir-writable.ts': 'mechanics',
+  'server/data-dir-fallback.ts': 'mechanics',
   'server/atomic-write.ts': 'mechanics',
   'server/validators.ts': 'mechanics',
   'server/output-path.ts': 'mechanics',

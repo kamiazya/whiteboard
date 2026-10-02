@@ -115,7 +115,7 @@ export function classifyEmbedderLoadFailure(err: unknown): EmbedderLoadFailure {
  */
 export const EMBEDDER_LOAD_REMEDY: Record<EmbedderLoadFailure, string> = {
   'runtime-missing':
-    'semantic search needs the optional @huggingface/transformers runtime — install it beside the server',
+    'semantic search needs the optional @huggingface/transformers runtime — install it in the same node_modules tree as @kamiazya/whiteboard-mcp (npm install -g @kamiazya/whiteboard-mcp @huggingface/transformers); a copy in your project directory is not found',
   'weights-missing':
     'the embedding model has not been downloaded yet — run `whiteboard search fetch-model`',
   'load-failed': 'the embedding model failed to load',

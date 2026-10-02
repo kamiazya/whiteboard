@@ -7,14 +7,14 @@
  * `run` itself (stdin to the daemon and back) is `native-host.subprocess.test.ts`,
  * which needs a real child process; the relay is `daemon/native-host`'s own.
  */
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { main } from './dispatcher.js'
 // The dispatcher imports this lazily; resolving it here puts the module
 // graph's load in collection, not in the first test's timeout.
-import './native-host.js'
+import { transientInstallWarning } from './native-host.js'
 
 let scratch: string
 let stdout: string
@@ -101,4 +101,38 @@ describe('whiteboard native-host install', () => {
       expect(stdout.trimEnd().split('\n')).toHaveLength(1)
     },
   )
+})
+
+describe('a native host installed from npx', () => {
+  it.each([
+    '/home/u/.npm/_npx/323b5192267f46e3/node_modules/@kamiazya/whiteboard-mcp/dist/cli/index.js',
+    'C:\\Users\\u\\AppData\\Local\\npm-cache\\_npx\\3231\\node_modules\\whiteboard\\index.js',
+  ])('is flagged as pointing into a cache npx replaces: %s', (entry) => {
+    expect(transientInstallWarning(entry)).toMatch(/npm install -g/)
+  })
+
+  it('is not flagged for a durable install', () => {
+    expect(
+      transientInstallWarning('/usr/lib/node_modules/@kamiazya/whiteboard-mcp/dist/cli/index.js'),
+    ).toBeUndefined()
+    expect(transientInstallWarning('/home/u/my_npx_notes/cli.js')).toBeUndefined()
+  })
+
+  it('says so on stderr while still answering ok on stdout', async () => {
+    const entry = join(scratch, '_npx', 'abc', 'cli.js')
+    mkdirSync(join(scratch, '_npx', 'abc'), { recursive: true })
+    writeFileSync(entry, '')
+    const argv = [...process.argv]
+    vi.spyOn(process, 'argv', 'get').mockReturnValue([argv[0] ?? '', entry])
+    const code = await main([
+      'native-host',
+      'install',
+      '--json',
+      `--data-dir=${join(scratch, 'data')}`,
+      `--manifest-dir=${join(scratch, 'hosts')}`,
+    ])
+    expect(code, stderr).toBe(0)
+    expect(stderr).toContain('npx')
+    expect(JSON.parse(stdout)).toMatchObject({ ok: true })
+  })
 })

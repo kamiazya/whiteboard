@@ -1,7 +1,7 @@
 // Pure helper behind `whiteboard server status --json`.
 //
 // Reads the server-mode record, checks pid liveness, then verifies process
-// identity via /api/runtime/ping (pid in response must match record). This
+// identity via /api/runtime/ping (the response's instanceId must match the record's). This
 // two-factor check prevents PID-reuse races from misidentifying an unrelated
 // process as the managed server.
 //
@@ -24,7 +24,7 @@ export interface RunServerStatusOptions {
   dataDir?: string
   isPidAlive?: (pid: number) => boolean
   /** Injection seam: confirm the running process is the managed server.
-   *  Default: HTTP GET /api/runtime/ping, compare returned pid to record.pid. */
+   *  Default: HTTP GET /api/runtime/ping, compare the returned instanceId to record.instanceId. */
   verifyIdentity?: (record: ServerModeRecord) => Promise<boolean>
 }
 
