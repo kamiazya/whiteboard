@@ -132,25 +132,6 @@ const DELIBERATE: Record<string, string> = {
   'packages/canvas-render/src/theme/spatial-theme.ts#spatial-scene-appearance.ts': 'same list',
   'packages/mcp-server/src/daemon/purge-legacy-trust-file.ts#web-origin-trust-store.ts':
     'names the legacy file this module exists to purge; correcting it would erase the reason',
-  // Stale pointers the bare-name scan found in files other lanes owned when
-  // it landed; each lane repoints its own, and the entry goes with it.
-  'apps/web/src/lib/daemon-auth-fetch.ts#packages/mcp-server/src/shared/api-client.ts':
-    'stale (now daemon-client api-client.ts); W7 lane C owns the file, repoint next wave',
-  'apps/web/src/lib/document-sync-types.ts#hooks/use-identity-event.ts':
-    'stale; W7 lane C owns the file, repoint next wave',
-  'packages/daemon-client/src/api-client.ts#daemon-connection-payload.ts':
-    'stale; W7 lane C owns the package, repoint next wave',
-  'packages/daemon-client/src/api-contracts/index.ts#libraries.ts':
-    'stale; W7 lane C owns the package, repoint next wave',
-  'packages/mcp-server/src/server/store/document-store.test.ts#ws.ts':
-    'stale (the sync routes replaced it); W7 lane A owns the store, repoint next wave',
-  // Stale directory-qualified pointers the suffix rule exposed in files other
-  // lanes owned when it landed; each is repointed by the lane that owns the
-  // file, and the entry goes with it (guarded from both sides below).
-  'apps/web/src/pages/DaemonIndexPage.test.tsx#references/extract.ts':
-    'stale pointer in an apps/web page test; repoint when that area is next touched, then drop this entry',
-  'packages/server-core/src/tools/viewport-set.ts#routes/viewport.ts':
-    'stale pointer in a server-core tool; the route is routes/viewport-requests.ts — repoint, then drop this entry',
 
   // The `.claude/**/*.md` half. Every one of these is a sentence whose
   // SUBJECT is the file's absence — a rule explaining why a surface went.

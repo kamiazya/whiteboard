@@ -11,7 +11,7 @@ import type {
 // never lib -> hooks.
 
 // Dispatched on window as CustomEvent<DirtyEventDetail> by
-// dispatchIdentityEvent below; consumed through hooks/use-identity-event.ts.
+// dispatchIdentityEvent below; listened for by `useDocumentOutline` as DOCUMENT_SYNC_CHANGED_EVENT.
 export interface DirtyEventDetail {
   workspaceId: string
   path: string
