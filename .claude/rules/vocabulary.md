@@ -109,15 +109,13 @@ a later sweep does not "fix" them.
   answers with a `SpatialCanvas`, so `Canvas` is correct even though a
   document-shaped object owns the method.
 - **Window-event VALUES** are `'whiteboard:doc_changed'` (the one left: the
-  version-saved and merge-committed events went with their last listeners),
-  and the WS subprotocol is `'whiteboard-v1'`. The `excalidraw:*` / `excalidraw-v1`
-  spellings were retired in one coordinated rename (2026-08-28, 0.0.x
-  no-compat policy): window events never leave the bundle and are not
-  persisted, and both ends of the WS subprotocol ship from this repo — a
-  stale cached bundle fails the handshake until it updates, which is the
-  accepted cost. `document-sync-types.test.ts` still pins the event value so
-  a rename of the constant cannot split it from the listener matching the raw
-  string.
+  version-saved and merge-committed events went with their last listeners).
+  The `excalidraw:*` spellings were retired in one coordinated rename
+  (2026-08-28, 0.0.x no-compat policy): window events never leave the bundle
+  and are not persisted. `document-sync-types.test.ts` still pins the event
+  value so a rename of the constant cannot split it from the listener
+  matching the raw string. Sync runs over SSE frames (`daemon-client`'s
+  `sync-frames.ts`); there is no WebSocket and no subprotocol to name.
   What still legitimately spells `excalidraw`: assertions about foreign
   formats (`.excalidrawlib` packs, the Excalidraw clipboard payload), the
   sbom/import guards proving the old deps stay gone, and history in ADRs.

@@ -15,11 +15,10 @@ paths:
 - Hand-written TS port interfaces wired to those DTOs via `z.infer`:
   `DocumentStore`, `BlobStore`, `PresenceChannel`.
 - The Symbol `TOKENS` aggregate (`defineToken`, `Token<T>`) for DI wiring.
-- Three canonical pure helpers, a **deliberate exception** to the
+- Two canonical pure helpers, a **deliberate exception** to the
   contracts-only rule because they are model-only and loro-independent:
   `chunkSnapshot`, `reassembleSnapshot` (fails via the named
-  `SnapshotReassemblyError` with a discriminated `code`), and
-  `negotiateProtocolVersion`.
+  `SnapshotReassemblyError` with a discriminated `code`).
 
 ## What does NOT belong here
 
@@ -51,7 +50,7 @@ paths:
 - `workspaceIdSchema` (added to `model`) is a path-safe **slug**
   (`/^[a-zA-Z0-9_-]+$/`, non-empty) — NOT a ULID. It codifies the
   workspace-ID contract already enforced at runtime by mcp-server's
-  `SAFE_WORKSPACE_ID`. Do not conflate it with `canvasIdSchema`.
+  `WORKSPACE_ID_PATTERN` (`validators.ts`). Do not conflate it with a document id.
 - `PresenceChannel.publish`/`subscribe` are control-plane operations
   (Promise-returning method, callback function, unsubscribe function) and
   are the one documented DTO-rule exemption; the callback's *payload*
