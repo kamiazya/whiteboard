@@ -102,9 +102,10 @@ Rules:
 
 ## Config file (local daemon)
 
-As an alternative to exporting env vars by hand, the local daemon (`whiteboard
-daemon run`, and the `server/index.ts` HTTP entrypoint) auto-loads a config
-file. Only the current working directory is searched — ancestor directories
+As an alternative to exporting env vars by hand, every command that locates the
+local daemon — `whiteboard daemon *`, `whiteboard mcp`, `whiteboard native-host`
+and `whiteboard search fetch-model` — and the `server/index.ts` HTTP entrypoint
+auto-load a config file. Only the current working directory is searched — ancestor directories
 are deliberately NOT walked up, so a config file planted in a parent
 directory (e.g. the root of an untrusted cloned repo) can never inject a
 token. The first match wins, searched in this
@@ -120,7 +121,8 @@ order in the current directory:
 8. `package.json` (`"whiteboard"` field)
 
 If nothing is found in the current directory, `~/.whiteboard/config.yaml`
-is consulted as a per-machine fallback. Only declarative JSON/YAML/rc formats
+is consulted as a per-machine fallback — so a `dataDir` in it redirects every
+command run from a directory with no file of its own. Only declarative JSON/YAML/rc formats
 are supported — `whiteboard.config.js` and similar JS loaders are deliberately
 NOT searched, so a config file can never execute code at daemon startup.
 
@@ -140,21 +142,26 @@ listener the daemon no longer has, now land there too; an invalid value
 (wrong type, unknown level, etc.) aborts
 startup with an error naming the file path and the offending key.
 
-**Precedence: environment variable > config file > built-in default.** Any
-`WHITEBOARD_*` env var that is already set always wins over the same value
-in a config file. The daemon logs which config file it loaded (path only,
-never the token value) at startup.
+**Precedence: command-line flag > environment variable > config file > built-in
+default.** Any `WHITEBOARD_*` env var that is already set always wins over the
+same value in a config file, and `--data-dir` wins over both. The file is read
+once per command, so `whiteboard daemon run` and the commands that look for the
+daemon it started (`status`, `stop`, `doctor`, `support-bundle`, …) agree on
+the data directory. A malformed file stops each of these commands with exit
+code 1 and the file path, rather than letting one of them look in a different
+directory from the rest. The daemon logs which config file it loaded (path
+only, never the token value) at startup.
 
 Two scoped exceptions worth knowing:
 
-- **`dataDir`**: honored on the `whiteboard daemon run` CLI path only. The
-  `server/index.ts` HTTP entrypoint resolves its data directory at module
-  import time, before a config file can be loaded, so a `dataDir` key there
-  produces a startup warning instead of silently doing nothing — use
+- **`dataDir`** is not honored by `whiteboard server *` (server mode takes
+  `--data-dir` or `WHITEBOARD_DATA_DIR`; a container has no daemon config file)
+  or by the `server/index.ts` HTTP entrypoint, which resolves its data directory
+  at module import time, before a config file can be loaded — a `dataDir` key
+  there produces a startup warning instead of silently doing nothing; use
   `WHITEBOARD_DATA_DIR` on that entrypoint instead.
-- **`openBrowser`**: also honored on the `whiteboard daemon run` CLI path
-  only, for the same reason `dataDir` is scoped there — see
-  [Auto-opening the browser](#auto-opening-the-browser-whiteboard-daemon-run).
+- **`openBrowser`** is honored on the `whiteboard daemon run` CLI path only —
+  see [Auto-opening the browser](#auto-opening-the-browser-whiteboard-daemon-run).
   An explicit `--no-open` flag always wins over this key.
 
 **Security note:** a `token` value in a config file is a dev-only

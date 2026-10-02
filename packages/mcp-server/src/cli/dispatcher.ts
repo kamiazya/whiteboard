@@ -116,19 +116,54 @@ const JSON_DAEMON_COMMANDS = {
   }
 >
 
-export async function main(argv: readonly string[]): Promise<number> {
-  // no-arg: published MCP configs invoke the package as
-  // `npx -y @kamiazya/whiteboard-mcp@latest` with no subcommand.
-  // Preserve the original stdio-MCP behavior for backward compatibility.
-  if (argv.length === 0) {
-    return await dispatchMcp()
-  }
+/**
+ * The commands that locate the LOCAL daemon by its data directory: the stdio
+ * server, the `daemon` family, the extension's native host and the search
+ * model cache the daemon reads. Server mode is configured by flags and
+ * environment (a container's cwd holds no daemon config), so `server *` is
+ * deliberately not here.
+ */
+function locatesLocalDaemon(argv: readonly string[]): boolean {
+  const [command, subcommand] = argv
+  if (argv.length === 0 || command === 'search' || command === 'native-host') return true
+  if (command === 'mcp') return subcommand === undefined
+  return command === 'daemon' && isDaemonSubcommand(subcommand)
+}
 
+export async function main(argv: readonly string[]): Promise<number> {
   // Handle --version / -v anywhere in argv so the flag works regardless
   // of position and never falls through to the unknown-command path.
   if (argv.includes('--version') || argv.includes('-v')) {
     process.stdout.write(`${PACKAGE_VERSION}\n`)
     return 0
+  }
+
+  // Loaded once, here, for every command that locates the daemon by its data
+  // directory: a file `dataDir` honoured by `daemon run` alone put the daemon
+  // where no other command looked for it. Layered under process.env, so
+  // flag > env > file > default holds for all of them.
+  let configOpenBrowser: boolean | undefined
+  if (locatesLocalDaemon(argv)) {
+    const configFileResult = applyLoadedConfigFileToDispatcherEnv()
+    if (configFileResult.kind === 'error') {
+      process.stderr.write(`${configFileResult.message}\n`)
+      return 1
+    }
+    configOpenBrowser = configFileResult.openBrowser
+  }
+
+  return await route(argv, configOpenBrowser)
+}
+
+async function route(
+  argv: readonly string[],
+  configOpenBrowser: boolean | undefined,
+): Promise<number> {
+  // no-arg: published MCP configs invoke the package as
+  // `npx -y @kamiazya/whiteboard-mcp@latest` with no subcommand.
+  // Preserve the original stdio-MCP behavior for backward compatibility.
+  if (argv.length === 0) {
+    return await dispatchMcp()
   }
 
   const [command, subcommand, ...rest] = argv
@@ -156,7 +191,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   if (command === 'daemon' && isDaemonSubcommand(subcommand)) {
-    return await dispatchDaemon(subcommand, rest).catch((err: unknown) =>
+    return await dispatchDaemon(subcommand, rest, configOpenBrowser).catch((err: unknown) =>
       reportDaemonRefusal(subcommand, err),
     )
   }
@@ -185,9 +220,13 @@ function reportDaemonRefusal(subcommand: DaemonSubcommand, err: unknown): number
   return 1
 }
 
-async function dispatchDaemon(subcommand: DaemonSubcommand, rest: readonly string[]) {
+async function dispatchDaemon(
+  subcommand: DaemonSubcommand,
+  rest: readonly string[],
+  configOpenBrowser: boolean | undefined,
+) {
   if (subcommand === 'run') {
-    return await dispatchRun(rest)
+    return await dispatchRun(rest, configOpenBrowser)
   }
 
   if (subcommand === 'support-bundle') {
@@ -571,7 +610,7 @@ type ConfigFileEnvResult =
 // Loads the nearest whiteboard config file (if any), layers its values
 // under process.env (env-over-file precedence, see config-file.ts), logs
 // the file path at info level, and returns the file's `openBrowser` (if set)
-// so the caller can thread it into daemon-run's own precedence chain — it is
+// so `main` can thread it into daemon-run's own precedence chain — it is
 // a boolean with a `--no-open`-first override, not an env var at all.
 // loadConfigFile throws on a malformed file (by design, see config-file.ts);
 // that throw is caught here and turned into the same structured
@@ -593,7 +632,10 @@ function applyLoadedConfigFileToDispatcherEnv(): ConfigFileEnvResult {
   return { kind: 'ok', openBrowser: loaded.config.openBrowser }
 }
 
-async function dispatchRun(rest: readonly string[]): Promise<number> {
+async function dispatchRun(
+  rest: readonly string[],
+  configOpenBrowser: boolean | undefined,
+): Promise<number> {
   const parsed = parseDaemonRunArgs(rest)
   if (parsed.kind === 'usage-error') {
     process.stderr.write(`${parsed.message}\n`)
@@ -608,18 +650,9 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   // disagreeing with `runtime.storage.dataDir`.
   const runDataDir = parsed.dataDir === undefined ? undefined : resolve(parsed.dataDir)
   if (runDataDir !== undefined) {
+    // Overwrites what `main` layered from the file (and any env value), so
+    // the flag wins over both.
     process.env.WHITEBOARD_DATA_DIR = runDataDir
-  }
-
-  // Load+apply the config file AFTER the --data-dir env write above and
-  // BEFORE the dynamic daemon-run import below, so file dataDir only wins
-  // when neither --data-dir nor WHITEBOARD_DATA_DIR is already set, and the
-  // shared/data-dir-secure.ts import-time DATA_DIR snapshot (pulled in via
-  // daemon-run.js) sees the layered value.
-  const configFileResult = applyLoadedConfigFileToDispatcherEnv()
-  if (configFileResult.kind === 'error') {
-    process.stderr.write(`${configFileResult.message}\n`)
-    return 1
   }
 
   // Dynamic import keeps `server/config` (and its mkdirSync probe
@@ -646,7 +679,7 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   const { maybeOpenDaemonBrowser } = await import('./daemon-run-auto-open.js')
   await maybeOpenDaemonBrowser({
     noOpenFlag: parsed.noOpen,
-    configOpenBrowser: configFileResult.openBrowser,
+    configOpenBrowser,
   })
   // A signal's handler exits the process itself; only the server's own idle
   // close comes back here, and it is a clean stop rather than a failure.
