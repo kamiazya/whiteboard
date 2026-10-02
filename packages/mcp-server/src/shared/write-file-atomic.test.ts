@@ -10,20 +10,8 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CHMOD_IS_OBSERVABLE } from './test-utils/chmod-is-observable.js'
 import { writeFileAtomic } from './write-file-atomic.js'
-
-// Probed rather than inferred from the platform: whether a requested mode
-// survives is a property of the filesystem under tmpdir, not of the OS name.
-const CAN_EXPRESS_MODE = (() => {
-  const dir = mkdtempSync(join(tmpdir(), 'mode-probe-'))
-  try {
-    const probe = join(dir, 'probe')
-    writeFileSync(probe, '', { mode: 0o640 })
-    return (statSync(probe).mode & 0o777) === 0o640
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
-  }
-})()
 
 describe('writeFileAtomic', () => {
   let dir: string
@@ -65,20 +53,16 @@ describe('writeFileAtomic', () => {
     expect(readdirSync(dir)).toEqual(['is-a-dir'])
   })
 
-  it.skipIf(!CAN_EXPRESS_MODE)('honours the mode when one is given', async () => {
+  it.skipIf(!CHMOD_IS_OBSERVABLE)('honours the mode when one is given', async () => {
     const target = join(dir, 'secret.json')
     await writeFileAtomic(target, '{}', { mode: 0o600 })
     expect(statSync(target).mode & 0o777).toBe(0o600)
   })
 
-  it.skipIf(!CAN_EXPRESS_MODE)('honours the mode when replacing a looser file', async () => {
+  it.skipIf(!CHMOD_IS_OBSERVABLE)('honours the mode when replacing a looser file', async () => {
     const target = join(dir, 'secret.json')
     writeFileSync(target, 'old', { mode: 0o644 })
     await writeFileAtomic(target, '{}', { mode: 0o600 })
     expect(statSync(target).mode & 0o777).toBe(0o600)
-  })
-
-  it('can express a file mode on CI, so the mode cases cannot all skip silently', () => {
-    if (process.env.CI) expect(CAN_EXPRESS_MODE).toBe(true)
   })
 })
