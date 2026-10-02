@@ -16,12 +16,8 @@ vi.mock('../lib/app-logger.js', () => ({
   getAppLogger: () => mockLog,
 }))
 
-// Cover the current VersionTimeline contract:
-// - filter versions by the active branch (HEAD)
-// - render the mini-graph lane for each row
-// - place the "variation ->" label at the matching baseVersionId row
-//
-// Branch actions and save controls live in the header now, so VersionTimeline should not render tabs or save buttons.
+// The version list and its restore flow. Save controls live in the header, so the
+// timeline renders no tabs or save buttons.
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
 
@@ -74,7 +70,7 @@ function mkVersionsResponse(): Response {
         createdAt: '2026-04-23T01:30:00Z',
         elementCount: 4,
         auto: true,
-        branchName: 'feature', // hidden from the main branch view
+        branchName: 'feature', // the row records its lane; History lists every row regardless
       },
     ],
   })
@@ -239,12 +235,6 @@ describe('VersionTimeline', () => {
     })
     expect(screen.queryByText(/-\d+s ago/)).toBeNull()
   })
-
-  // REPLACES 'filters cards and mini-graph rows to the active branch'. That
-  // test pinned the rule this increment moves, so it is rewritten rather than
-  // adjusted until it passes — the two are indistinguishable in a diff
-  // otherwise. What it asserted (v-feat absent, two lanes) was true of a
-  // timeline that showed one lane; the timeline now shows them all.
 
   it('renders operator affordances', async () => {
     const preview = capturePreview()

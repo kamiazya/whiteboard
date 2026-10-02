@@ -40,15 +40,6 @@ beforeEach(() => {
           pinned: [],
         }),
       )
-    if (url.includes('/branches'))
-      return Promise.resolve(
-        jsonResponse({
-          head: 'main',
-          branches: [
-            { name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '2026-04-23T00:00:00Z' },
-          ],
-        }),
-      )
     if (url.includes('/versions')) return Promise.resolve(jsonResponse({ versions: [] }))
     return Promise.resolve(jsonResponse({}))
   })

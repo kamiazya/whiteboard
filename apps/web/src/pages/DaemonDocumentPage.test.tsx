@@ -728,9 +728,6 @@ describe('DaemonDocumentPage', () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
-          if (url.includes('/branches')) {
-            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
-          }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all reached `versionsResponseSchema` and this
           // test quietly exercised a schema failure it is not about.

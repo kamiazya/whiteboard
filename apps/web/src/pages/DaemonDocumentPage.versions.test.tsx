@@ -108,9 +108,6 @@ describe('DaemonDocumentPage versions', () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
-          if (url.includes('/branches')) {
-            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
-          }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
@@ -178,9 +175,6 @@ describe('DaemonDocumentPage versions', () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
-          if (url.includes('/branches')) {
-            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
-          }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
@@ -227,9 +221,6 @@ describe('DaemonDocumentPage versions', () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
-          if (url.includes('/branches')) {
-            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
-          }
           // The panel LISTS versions on mount, and this mock only answered the
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
@@ -297,9 +288,6 @@ describe('DaemonDocumentPage versions', () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
-          if (url.includes('/branches')) {
-            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
-          }
           if (url.includes('/versions')) {
             return Promise.resolve(
               jsonResponse({
@@ -358,9 +346,6 @@ describe('DaemonDocumentPage versions', () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
-          if (url.includes('/branches')) {
-            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
-          }
           if (url.includes('/versions')) {
             return Promise.resolve(jsonResponse({ versions: [] }))
           }
@@ -404,9 +389,6 @@ describe('DaemonDocumentPage versions', () => {
           const url = String(input)
           if (url.includes('/restore')) {
             return Promise.resolve(jsonResponse({ ok: true }))
-          }
-          if (url.includes('/branches')) {
-            return Promise.resolve(jsonResponse({ head: 'main', branches: [] }))
           }
           if (url.endsWith('/document')) {
             return Promise.resolve(
@@ -517,9 +499,6 @@ describe('DaemonDocumentPage versions', () => {
       })
       const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
-        if (url.includes('/branches')) {
-          return jsonResponse({ head: 'main', branches: [{ name: 'main' }] })
-        }
         if (url.includes('/versions')) {
           return jsonResponse({ versions: [] })
         }

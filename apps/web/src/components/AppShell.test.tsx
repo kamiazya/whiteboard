@@ -248,7 +248,7 @@ describe('AppShell', () => {
 describe('AppShell — the mark as the connection carrier', () => {
   // Matched loosely: the CTA is two sentences across JSX lines, so an exact
   // string match would be asserting the source's line breaks, not the copy.
-  const CTA = /Connect a daemon \(MCP\) for automatic checkpoints/i
+  const CTA = /Connect a daemon \(MCP\) so AI agents can work in this workspace/i
   const CTA_LIMIT = /move this workspace to it from Settings/i
 
   it('carries no state until a page publishes a live session', () => {

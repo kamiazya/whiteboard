@@ -70,9 +70,8 @@ function BrowserKeeperConnect({
   return (
     <>
       <p className="text-muted-foreground">
-        Connect a daemon (MCP) for automatic checkpoints, variations and merging. Once connected,
-        you can move this workspace to it from Settings — documents, their history and images
-        together.
+        Connect a daemon (MCP) so AI agents can work in this workspace. Once connected, you can move
+        this workspace to it from Settings — documents, their history and images together.
       </p>
       <PromotedElsewhereNotice settingsStore={settingsStore} />
       <ExtensionConnectEntry settingsStore={settingsStore} />

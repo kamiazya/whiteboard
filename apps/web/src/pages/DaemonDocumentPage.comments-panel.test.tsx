@@ -49,10 +49,9 @@ const mockGetDocumentBacklinks = vi.mocked(daemonApiClient.getDocumentBacklinks)
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 /**
- * Serves `/names` (the workspace's display-name surface) and `/branches`
- * (`useBranches`, always enabled on the daemon page's `DAEMON_HISTORY_
- * CAPABILITIES`) so the History panel used by the preview test below has
- * something real to render; everything else answers 404 rather than hang.
+ * Serves `/names` (the workspace's display-name surface) so the History panel
+ * used by the preview test below has something real to render; everything else
+ * answers 404 rather than hang.
  */
 function stubDaemonFetch(): void {
   vi.stubGlobal(
@@ -61,19 +60,6 @@ function stubDaemonFetch(): void {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/names')) {
         return jsonResponse({ documents: {}, pinned: [] })
-      }
-      if (url.includes('/branches')) {
-        return jsonResponse({
-          branches: [
-            {
-              name: 'main',
-              tipFrontiers: '',
-              color: '#3b82f6',
-              createdAt: '2026-01-01T00:00:00.000Z',
-            },
-          ],
-          head: 'main',
-        })
       }
       return jsonResponse({}, 404)
     }),

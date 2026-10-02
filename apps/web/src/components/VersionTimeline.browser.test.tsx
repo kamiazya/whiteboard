@@ -10,29 +10,6 @@ type FetchArgs = [RequestInfo | URL, RequestInit?]
 // is safe because nothing fetches until that body renders.
 let scenario: 'one-lane' | 'two-lanes' = 'one-lane'
 
-const MAIN_COLOR = '#1971c2'
-const FEATURE_COLOR = '#e8590c'
-
-function mkBranchesResponse(): Response {
-  const main = {
-    name: 'main',
-    tipFrontiers: '',
-    color: MAIN_COLOR,
-    createdAt: '2026-04-23T00:00:00Z',
-  }
-  const feature = {
-    name: 'feature',
-    tipFrontiers: '',
-    color: FEATURE_COLOR,
-    createdAt: '2026-04-24T00:00:00Z',
-    baseBranch: 'main',
-  }
-  return jsonResponse({
-    head: 'main',
-    branches: scenario === 'two-lanes' ? [main, feature] : [main],
-  })
-}
-
 function mkVersionsResponse(count = 24): Response {
   // Three rows, the last on another lane, so the ring rule has a subject.
   if (scenario === 'two-lanes') {
@@ -77,7 +54,6 @@ beforeEach(() => {
   const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
     if (url.endsWith('/document')) {
       return Promise.resolve(jsonResponse({ kind: 'spatial', canvas: { nodes: [], edges: [] } }))
     }
