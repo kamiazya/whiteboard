@@ -1,5 +1,4 @@
 import {
-  apiErrorReason,
   documentVersionsApiUrl,
   listVersionsResponseSchema,
   saveVersionResponseSchema,
@@ -8,6 +7,7 @@ import {
   versionDocumentResponseSchema,
   versionRestoreApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**
@@ -49,7 +49,7 @@ export interface VersionsBackend {
 /**
  * A refusal the daemon answered with a status, kept so a caller can log it.
  *
- * `reason` is the daemon's OWN display copy, read through `apiErrorReason` —
+ * `reason` is the daemon's OWN display copy, read through `refusalReasonOf` —
  * the only thing that tells a reader why a restore did not happen (`a document
  * already exists there`, and the rest of the route's { error, message }
  * family). It has to travel on the error because the UI's fallback copy
@@ -67,11 +67,6 @@ export class VersionsRequestError extends Error {
     this.name = 'VersionsRequestError'
     this.reason = reason
   }
-}
-
-/** The refusal the daemon authored for this response, if it authored one. */
-async function refusalReason(res: Response): Promise<string | undefined> {
-  return apiErrorReason(await res.json().catch(() => undefined))
 }
 
 /** The daemon's history, over its documents routes. */
@@ -108,7 +103,11 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
         method: 'POST',
       })
       if (!res.ok) {
-        throw new VersionsRequestError(res.status, 'restore request', await refusalReason(res))
+        throw new VersionsRequestError(
+          res.status,
+          'restore request',
+          (await refusalReasonOf(res, `Request failed (${res.status}).`)).reason,
+        )
       }
     },
   }

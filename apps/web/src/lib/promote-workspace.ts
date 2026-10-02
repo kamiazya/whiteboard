@@ -37,11 +37,11 @@
  */
 
 import {
-  apiErrorReason,
   documentFileApiUrl,
   promoteWorkspaceResponseSchema,
   workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import {
   collectImageRefIds,
   documentContainers,
@@ -109,13 +109,7 @@ export type PromoteWorkspaceResult =
   | { kind: 'failed'; reason: string }
 
 async function failureReason(res: Response): Promise<string> {
-  try {
-    const reason = apiErrorReason(await res.json())
-    if (reason !== undefined) return reason
-  } catch {
-    // fall through to the generic message below
-  }
-  return `Request failed (${res.status}).`
+  return (await refusalReasonOf(res, `Request failed (${res.status}).`)).reason
 }
 
 export async function promoteWorkspace(

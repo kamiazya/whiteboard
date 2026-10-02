@@ -257,6 +257,26 @@ describe('promoteWorkspace', () => {
     expect(result.reason).toContain('not found')
   })
 
+  it('a refusal with no readable reason is a structured failure naming the status', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'doc',
+      kind: 'markdown',
+    })
+    const fetch502 = (async () =>
+      new Response('<html>bad gateway</html>', { status: 502 })) as typeof globalThis.fetch
+
+    const result = await promoteWorkspace({
+      fetch: fetch502,
+      keeperBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+    })
+    expect(result).toEqual({ kind: 'failed', reason: 'Request failed (502).' })
+  })
+
   it('a thrown fetch is a structured network failure, never a rejection', async () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
