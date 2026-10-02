@@ -13,12 +13,9 @@
  * address it derives has to be unique — within this browser, since the
  * registry is IndexedDB and cannot collide with anyone else's.
  */
-import {
-  deriveWorkspaceSegment,
-  generateDocumentId,
-  workspaceSegmentSchema,
-} from '@kamiazya/whiteboard-model'
+import { deriveWorkspaceSegment, generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import { firstFreeSegment } from '@kamiazya/whiteboard-workspace-index'
 
 export interface CreateBrowserWorkspaceInput {
   readonly displayName: string
@@ -46,7 +43,13 @@ export async function createBrowserWorkspace(
 
   const workspaceId = generateDocumentId()
   const base = deriveWorkspaceSegment(name)
-  const segment = base === undefined ? undefined : await firstFreeSegment(index, base)
+  const segment =
+    base === undefined
+      ? undefined
+      : await firstFreeSegment(
+          base,
+          async (candidate) => (await index.resolveWorkspace(candidate)) !== null,
+        )
 
   const entry: WorkspaceEntry = {
     workspaceId,
@@ -55,21 +58,4 @@ export async function createBrowserWorkspace(
   }
   await index.createWorkspace(entry)
   return entry
-}
-
-async function firstFreeSegment(index: DocumentIndex, base: string): Promise<string | undefined> {
-  if ((await index.resolveWorkspace(base)) === null) return base
-  // Starts at 2 because the unsuffixed segment IS the first one. A `-1` would
-  // read as the first of a series whose first member is spelled differently.
-  for (let n = 2; n < 1000; n++) {
-    const candidate = `${base}-${n}`
-    // Re-checked against the schema: a base near the length ceiling can grow
-    // out of it, and a suffixed segment nothing validates is a segment the
-    // address layer will refuse later, somewhere less obvious.
-    if (!workspaceSegmentSchema.safeParse(candidate).success) return undefined
-    if ((await index.resolveWorkspace(candidate)) === null) return candidate
-  }
-  // A thousand workspaces sharing one display name is not a case to invent
-  // machinery for; the canonical id addresses this one.
-  return undefined
 }

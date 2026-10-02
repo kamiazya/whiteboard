@@ -9,11 +9,7 @@ import {
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
-import {
-  deriveWorkspaceSegment,
-  generateDocumentId,
-  workspaceSegmentSchema,
-} from '@kamiazya/whiteboard-model'
+import { deriveWorkspaceSegment, generateDocumentId } from '@kamiazya/whiteboard-model'
 import { type DocumentIndex, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
@@ -23,6 +19,7 @@ import {
   wbDocumentList,
   wbDocumentMove,
 } from '@kamiazya/whiteboard-server-core'
+import { firstFreeSegment } from '@kamiazya/whiteboard-workspace-index'
 import { type Context, Hono } from 'hono'
 import { getLogger } from '../../log.js'
 import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate.js'
@@ -46,36 +43,6 @@ import {
   workspaceNotFoundAs,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
-
-/**
- * The first segment nobody holds, starting from the candidate a display name
- * derived. Reads the registry rather than counting from a stored number:
- * what makes a segment unavailable is another row holding it, and asking is
- * the only thing that stays true after a delete or a rename.
- *
- * Advisory, not authoritative — two creates can both find the same candidate
- * free. The registry's unique index is what actually decides, and the caller
- * translates its refusal.
- */
-async function firstFreeSegment(index: DocumentIndex, base: string): Promise<string | undefined> {
-  const taken = new Set((await index.listWorkspaces()).map((w) => w.segment))
-  if (!taken.has(base)) return base
-  // Starts at 2 because the unsuffixed segment IS the first one. A `-1` would
-  // read as the first of a series whose first member is spelled differently.
-  //
-  // Bounded, and each candidate re-validated — both mirrored from the
-  // browser's `createBrowserWorkspace`, which is the same decision one keeper
-  // over: a suffix can push a long base out of the segment charset, and a
-  // segment nothing validated is one the address layer refuses later,
-  // somewhere less obvious. Past the bound the workspace is addressed by its
-  // canonical id, which is what that layer is for.
-  for (let n = 2; n < 1000; n++) {
-    const candidate = `${base}-${n}`
-    if (!workspaceSegmentSchema.safeParse(candidate).success) return undefined
-    if (!taken.has(candidate)) return candidate
-  }
-  return undefined
-}
 
 /**
  * How many documents one workspace holds, for the listing.
@@ -183,7 +150,10 @@ async function createWorkspaceRow(
 ): Promise<WorkspaceSummary> {
   const workspaceId = generateDocumentId()
   const base = deriveWorkspaceSegment(displayName)
-  const segment = base === undefined ? undefined : await firstFreeSegment(deps.documentIndex, base)
+  // Advisory: the registry's unique index decides, and the caller translates
+  // its refusal when two creates both found the same candidate free.
+  const taken = new Set((await deps.documentIndex.listWorkspaces()).map((w) => w.segment))
+  const segment = base === undefined ? undefined : await firstFreeSegment(base, (s) => taken.has(s))
   await deps.documentIndex.createWorkspace({
     workspaceId,
     ...(segment === undefined ? {} : { segment }),
