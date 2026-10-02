@@ -472,6 +472,16 @@ const ALWAYS_ON_TOTAL_BUDGET = 20
 // other, never both. Pins only go down on a cut.
 const CANVAS_RENDER_BUDGET = 108
 
+// The rule that loads for every edit under `tools/arch-lint/**` — 119-odd test
+// files, so every session that adds a guard reads it, and it grows in exactly
+// those sessions. It is the second-largest rule and was the only large scoped
+// one nobody held: it went from 19.7K to 41K characters in six increments, each
+// of which was a reasonable addition. Pinned at the 1000 grain like its
+// neighbour above, so an addition says in its diff that it is one. A cut
+// lowers the pin; moving measurement history to `docs/contributing/architecture/`
+// is the cut `package-canvas-render.md` took.
+const TOOL_ARCH_LINT_BUDGET = 40
+
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
     // A new always-on rule file, or one that gains or loses `paths:`, moves
@@ -502,6 +512,13 @@ describe('always-on rule context budget', () => {
     const chars = read('.claude/rules/package-canvas-render.md').length
     expect(bucket(chars), `package-canvas-render.md is ${describeSize(chars, 1000)}`).toBe(
       CANVAS_RENDER_BUDGET,
+    )
+  })
+
+  it('holds tool-arch-lint.md at its pinned size', () => {
+    const chars = read('.claude/rules/tool-arch-lint.md').length
+    expect(bucket(chars), `tool-arch-lint.md is ${describeSize(chars, 1000)}`).toBe(
+      TOOL_ARCH_LINT_BUDGET,
     )
   })
 })
