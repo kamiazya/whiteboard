@@ -428,12 +428,12 @@ try {
     }
 
     // Auth contract: unauthenticated → 401, wrong scope → 403.
-    const noAuthRes = await fetch(
+    const anonymousRes = await fetch(
       `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`,
     )
-    if (noAuthRes.status !== 401)
-      fail(`scenario 5: expected 401 for no-auth, got ${noAuthRes.status}`)
-    assertNoLeak('scenario 5 no-auth body', await noAuthRes.text(), SMOKE_LITERALS)
+    if (anonymousRes.status !== 401)
+      fail(`scenario 5: expected 401 for no-auth, got ${anonymousRes.status}`)
+    assertNoLeak('scenario 5 no-auth body', await anonymousRes.text(), SMOKE_LITERALS)
 
     killProc(serverMode)
     serverMode = null

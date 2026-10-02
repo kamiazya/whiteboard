@@ -643,11 +643,12 @@ try {
     const _jwt = makeJwt(privateKey, SEED_SCOPES)
 
     // No auth → 401.
-    const noAuthRes = await fetch(
+    const anonymousRes = await fetch(
       `${serverBaseUrl}/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
     )
-    if (noAuthRes.status !== 401) fail(`scenario 8: no-auth expected 401, got ${noAuthRes.status}`)
-    assertNoLeak('scenario 8 no-auth body', await noAuthRes.text(), SMOKE_PATH_LITERALS)
+    if (anonymousRes.status !== 401)
+      fail(`scenario 8: no-auth expected 401, got ${anonymousRes.status}`)
+    assertNoLeak('scenario 8 no-auth body', await anonymousRes.text(), SMOKE_PATH_LITERALS)
 
     // Wrong scope → 403.
     const wrongJwt = makeJwt(privateKey, 'workspace:read')

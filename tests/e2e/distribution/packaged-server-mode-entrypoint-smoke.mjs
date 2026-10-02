@@ -419,11 +419,11 @@ const REQUIRED_FLAGS = [
     }
 
     // Protected route with no auth → 401
-    const noAuthResp = await fetch(`${baseUrl}/api/w/test-ws/document/test-canvas/viewport`)
-    if (noAuthResp.status !== 401)
-      fail(`scenario 8: no-auth protected route expected 401, got ${noAuthResp.status}`)
-    const noAuthBody = await noAuthResp.text()
-    assertNoServerRunLeak('scenario 8 no-auth response body', noAuthBody)
+    const anonymousResp = await fetch(`${baseUrl}/api/w/test-ws/document/test-canvas/viewport`)
+    if (anonymousResp.status !== 401)
+      fail(`scenario 8: no-auth protected route expected 401, got ${anonymousResp.status}`)
+    const anonymousBody = await anonymousResp.text()
+    assertNoServerRunLeak('scenario 8 no-auth response body', anonymousBody)
 
     // Valid JWT with correct scope → auth passes (not 401 or 403)
     const now = Math.floor(Date.now() / 1000)
