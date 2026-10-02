@@ -15,7 +15,7 @@ export const WORKSPACE_ID = 'eval'
 // is the one field OKF requires.
 const okf = (frontmatter, body) => ['---', ...frontmatter, '---', ...body].join('\n')
 
-export const ONBOARDING = okf(
+const ONBOARDING = okf(
   ['type: note', 'tags:', '  - process', '  - people'],
   [
     '# Onboarding',
@@ -33,7 +33,7 @@ export const ONBOARDING = okf(
   ],
 )
 
-export const STYLE_GUIDE = okf(
+const STYLE_GUIDE = okf(
   ['type: note', 'tags:', '  - process'],
   [
     '# Style guide',
@@ -48,7 +48,7 @@ export const STYLE_GUIDE = okf(
   ],
 )
 
-export const RETRO = okf(
+const RETRO = okf(
   ['type: note', 'tags:', '  - retro'],
   [
     '# Retrospective, August 2026',
@@ -64,7 +64,7 @@ export const RETRO = okf(
   ],
 )
 
-export const MEETING = okf(
+const MEETING = okf(
   ['type: note', 'tags:', '  - meeting'],
   [
     '# Meeting, 1 September 2026',
@@ -85,7 +85,7 @@ export const MEETING = okf(
  * its prose is where a team says what its vocabulary is for; the stencils
  * themselves are the facet written just after it is created.
  */
-export const STENCILS = okf(
+const STENCILS = okf(
   ['type: note'],
   [
     '# Our box styles',

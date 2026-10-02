@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 export const LAUNCHER = resolve(here, 'server-launcher.mjs')
 
 /** @param {string} dataDir */
-export function serverSpec(dataDir) {
+function serverSpec(dataDir) {
   return {
     command: process.execPath,
     args: [LAUNCHER],

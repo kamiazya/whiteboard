@@ -27,7 +27,7 @@ function clampNonNegative(value: number): number {
 }
 
 /** CSS-style face selection: 600+ is bold, per the numeric weight scale. */
-export function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
+function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
   const bold = descriptor.weight >= 600
   const italic = descriptor.style === 'italic'
   if (bold && italic) return 'boldItalic'

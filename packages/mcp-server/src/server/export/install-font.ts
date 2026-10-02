@@ -28,7 +28,7 @@ export const MAX_FONT_BYTES = 32 * 1024 * 1024
  */
 const FETCH_TIMEOUT_MS = 5 * 60 * 1000
 
-export const fontInstallFailureSchema = z.enum([
+const fontInstallFailureSchema = z.enum([
   /** No catalogue entry has this id. The only failure that is the caller's fault. */
   'unknown-font',
   'unreachable',

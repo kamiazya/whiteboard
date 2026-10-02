@@ -50,9 +50,6 @@ export function resolveToken(
   return match !== undefined ? match.slice(prefix.length) : env.WHITEBOARD_TOKEN
 }
 
-export { createApp } from './app.js'
-export { startHttpServer } from './http-server.js'
-
 // Loads the nearest whiteboard config file (if any) and layers its values
 // under process.env before any other startup reads (allowlist, token,
 // logLevel). Must run first: log.ts freezes its level at import time, so a
