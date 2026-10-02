@@ -16,7 +16,7 @@ import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { ReactNode } from 'react'
 
 /** What a plugin-supplied editor receives. `undefined` value = facet absent. */
-export interface FacetEditorProps {
+interface FacetEditorProps {
   readonly value: unknown
   /** Already validated: see `createFacetWriter`. `undefined` clears the facet. */
   readonly write: (payload: unknown) => void
@@ -24,7 +24,7 @@ export interface FacetEditorProps {
 
 export type FacetEditor = (props: FacetEditorProps) => ReactNode
 
-export interface PluginUiSection {
+interface PluginUiSection {
   /** Heading a person reads. Not the facet's name — a plugin may group. */
   readonly title: string
   /** Facet NAME within this plugin, not the full versioned key. */
