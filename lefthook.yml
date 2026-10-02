@@ -89,5 +89,13 @@ pre-push:
     # invariant is "this is the slowest command and adds tens of seconds", not
     # any one reading. It stays because the failure it prevents is a push CI
     # rejects, and a push is rarer than a commit.
+    #
+    # The project now runs with `isolate: false` (its config says why that is
+    # safe here and how it was checked). Three interleaved plain/no-isolate
+    # pairs of the whole project, load average 17-27 on 4 cores: CPU time
+    # (user + sys) 102.1s -> 54.2s, wall 145.6s -> 65.8s. The ~45s quiet and
+    # 103-138s pre-push figures above predate it and were NOT re-taken, because
+    # this box never went quiet: read them as upper bounds, and re-measure
+    # before quoting any of them.
     arch-lint:
       run: pnpm vitest run --project arch-lint-node
