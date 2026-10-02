@@ -1,4 +1,7 @@
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readSpatialCanvasWithSkipped,
+  reconcileSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
@@ -6,7 +9,10 @@ import {
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
+import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
+
+const log = getLogger('document-io')
 
 /**
  * Thrown when a document has no saved snapshot. Not a Zod schema — only
@@ -53,7 +59,18 @@ export async function loadDocument(
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
-  return { doc, canvas: readSpatialCanvas(doc) }
+  const { canvas, skipped } = readSpatialCanvasWithSkipped(doc)
+  if (skipped > 0) {
+    // Not an error: a client newer than this daemon may have written a field
+    // it does not know. The save that follows leaves those records alone, and
+    // this is how an operator learns the daemon is the older side.
+    log.warning('canvas holds records this build cannot read; they are left as stored', {
+      workspaceId,
+      documentId,
+      skipped,
+    })
+  }
+  return { doc, canvas }
 }
 
 /**
@@ -131,10 +148,13 @@ async function placementOf(
 }
 
 /**
- * Saves a patched canvas doc. `canvas` must be the FULL `nodes`/`edges`
- * arrays (one entry replaced) — `writeSpatialCanvas` deletes any id
- * present in the doc but absent from `canvas`, so passing a lone patched
- * node/edge would silently drop every other element.
+ * Saves a patched canvas doc. `prev` is the canvas the patch started from
+ * (what `loadDocument` answered) and `next` the whole canvas after it.
+ *
+ * The write is a visible diff of the two (`reconcileSpatialCanvas`), never a
+ * resync from `next` alone: `readSpatialCanvas` skips every stored record its
+ * strict schema refuses — typically one a newer client wrote — and a resync
+ * would delete each of them as an op that ships to every replica.
  *
  * This is a read-modify-write with no optimistic-concurrency check: two
  * concurrent patches against the same canvas race, and the later
@@ -150,8 +170,9 @@ export async function saveDocumentBodySnapshot(
   workspaceId: string,
   documentId: DocumentId,
   doc: LoroDoc,
-  canvas: SpatialCanvas,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
 ): Promise<void> {
-  writeSpatialCanvas(doc, canvas)
+  reconcileSpatialCanvas(doc, prev, next)
   await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
 }

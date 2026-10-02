@@ -3,7 +3,7 @@ import {
   type DocumentContainers,
   MARKDOWN_BODY_KEY,
   readSpatialCanvas,
-  writeSpatialCanvas,
+  reconcileSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
@@ -49,10 +49,10 @@ export function linkMarkupFor(target: LinkifyTarget): string {
  *
  * A canvas rewrites TEXT NODES only: a `[[link]]` in a label renders as
  * literal brackets, so labels are mention-detected and never rewritten. The
- * canvas write is a full resync that deletes whatever the canvas it is handed
- * leaves out, so the canvas is written back WHOLE with only its nodes
- * replaced — lines, tags, facets and comments are not this operation's to
- * touch.
+ * canvas is written as a visible diff against the canvas that was read, so
+ * only the rewritten nodes are touched: lines, tags, facets and comments are
+ * not this operation's to change, and a record the reader skipped (a newer
+ * client's) is not this operation's to delete.
  */
 export function linkifyMentionsIn(
   doc: DocumentContainers,
@@ -80,7 +80,8 @@ export function linkifyMentionsIn(
     linked += result.count
     return result.count === 0 ? node : withNodeText(node, result.text)
   })
-  if (linked > 0) writeSpatialCanvas(doc, spatialCanvasSchema.parse({ ...canvas, nodes }))
+  if (linked > 0)
+    reconcileSpatialCanvas(doc, canvas, spatialCanvasSchema.parse({ ...canvas, nodes }))
   return linked
 }
 

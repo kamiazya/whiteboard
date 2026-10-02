@@ -341,6 +341,23 @@ export function createCanvasEditTool(deps: ServerDeps) {
   }
 }
 
+/**
+ * The canvas after the batch: the session's working copy of what ops reach,
+ * with the envelope ops cannot reach (the canvas's own facets and tags) carried
+ * over — the save diffs against what was loaded, so a field left out here is a
+ * field the save deletes.
+ */
+function editedCanvas(canvas: SpatialCanvas, s: CanvasEditSession): SpatialCanvas {
+  return {
+    nodes: s.nodes,
+    edges: s.edges,
+    ...(canvas.facets !== undefined && { facets: canvas.facets }),
+    ...(canvas.tags !== undefined && { tags: canvas.tags }),
+    ...(s.lines.length > 0 && { lines: s.lines }),
+    ...(s.comments.length > 0 && { comments: s.comments }),
+  }
+}
+
 async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<CanvasEditOutput> {
   const facetRegistry = await resolveEditRegistry(deps, input)
   const proposing = decideProposing(input)
@@ -365,16 +382,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
     applyCanvasOp(ctx, op, index)
   })
 
-  // The batch writes back the WHOLE canvas, so the canvas's own facets —
-  // and every comment the batch did not touch — must ride along, or the
-  // save deletes them (writeSpatialCanvas resyncs by omission).
-  const candidate: SpatialCanvas = {
-    nodes: s.nodes,
-    edges: s.edges,
-    ...(canvas.facets !== undefined && { facets: canvas.facets }),
-    ...(s.lines.length > 0 && { lines: s.lines }),
-    ...(s.comments.length > 0 && { comments: s.comments }),
-  }
+  const candidate = editedCanvas(canvas, s)
   const parsed = spatialCanvasSchema.safeParse(candidate)
   if (!parsed.success) {
     throw new CanvasEditError(
@@ -394,7 +402,14 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   // working-copy comment above.
   for (const node of parsed.data.nodes) setNodeLock(doc, node.id, s.nodeLocks.has(node.id))
   for (const edge of parsed.data.edges) setEdgeLock(doc, edge.id, s.edgeLocks.has(edge.id))
-  await saveDocumentBodySnapshot(deps, input.workspaceId, input.documentId, doc, parsed.data)
+  await saveDocumentBodySnapshot(
+    deps,
+    input.workspaceId,
+    input.documentId,
+    doc,
+    canvas,
+    parsed.data,
+  )
 
   const touched = {
     nodes: [...s.touchedNodes].sort(),
