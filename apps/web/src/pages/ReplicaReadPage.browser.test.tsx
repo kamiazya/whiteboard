@@ -28,11 +28,12 @@ import {
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { saveOfflinePasskey } from '../lib/replica-offline-passkey.js'
-import { REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
+import { REPLICA_SAVE_FAILED_COPY, REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
 import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
 import { REPLICA_TIER_COPY } from '../lib/replica-tier-copy.js'
 import { rememberReplicaKey } from '../lib/replica-unlock.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
@@ -369,6 +370,39 @@ describe('ReplicaReadPage', () => {
     // Decision 3's boundary: a data-plane edit files NOTHING in any index —
     // no phantom document rows under either workspace id.
     await expect(new IdbDocumentIndex().listDocuments({ workspaceId: DAEMON_WS })).rejects.toThrow()
+  })
+
+  it('a markdown edit the store refuses leaves a not-saved alert and a logged failure', async () => {
+    const logged = expectLoggedFailures()
+    await seedReplica()
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        syncedAt={SYNCED}
+        daemonBaseUrl={DAEMON}
+        onReconnect={noopReconnect}
+      />,
+    )
+    await userEvent.click(await screen.findByText('plan'))
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
+
+    // The quota refusal a full disk gives: every readwrite transaction throws.
+    const realTransaction = IDBDatabase.prototype.transaction
+    IDBDatabase.prototype.transaction = function (
+      this: IDBDatabase,
+      ...args: Parameters<IDBDatabase['transaction']>
+    ) {
+      if (args[1] === 'readwrite') throw new DOMException('disk full', 'QuotaExceededError')
+      return realTransaction.apply(this, args)
+    } as typeof realTransaction
+    try {
+      await userEvent.keyboard('{Control>}{End}{/Control} offline addition')
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toContain(REPLICA_SAVE_FAILED_COPY.title)
+      expect(logged.some((record) => record.includes('replica save failed'))).toBe(true)
+    } finally {
+      IDBDatabase.prototype.transaction = realTransaction
+    }
   })
 })
 
