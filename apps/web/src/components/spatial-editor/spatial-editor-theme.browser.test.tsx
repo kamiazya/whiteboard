@@ -5,6 +5,7 @@
  * "not #737373", which would pass for any wrong color too).
  */
 
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
@@ -21,9 +22,7 @@ function hexToRgb(hex: string): string {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-function fakeMeasure() {
-  return { advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 }
-}
+const fakeMeasure = createFixedMeasure({ advance: 30, ascent: 10, descent: 2 })
 
 function twoNodeCanvasWithEdge(): SpatialCanvas {
   return {

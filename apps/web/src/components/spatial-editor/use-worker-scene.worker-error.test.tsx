@@ -12,6 +12,7 @@
  * test; this covers what the EDITOR does if that class of failure ever ships.
  */
 
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, renderHook } from '@testing-library/react'
@@ -23,7 +24,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const fakeMeasure = () => ({ advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 })
+const fakeMeasure = createFixedMeasure({ advance: 30, ascent: 10, descent: 2 })
 
 /** Past the offload threshold, no function seams — the worker path engages. */
 const canvasWith = (marker: string): SpatialCanvas => ({

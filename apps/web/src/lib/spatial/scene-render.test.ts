@@ -1,14 +1,17 @@
 // @vitest-environment node
 
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import { renderCanvasForExport, renderCanvasToSvg } from './scene-render.js'
 
-function fakeMeasure(text: string) {
-  return { advanceWidth: text.length * 6, ascent: 10, descent: 2, lineGap: 0 }
-}
+const fakeMeasure = createFixedMeasure({
+  advance: (text) => text.length * 6,
+  ascent: 10,
+  descent: 2,
+})
 
 function canvas(): SpatialCanvas {
   return {

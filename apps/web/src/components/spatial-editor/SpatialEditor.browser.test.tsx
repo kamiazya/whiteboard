@@ -3,6 +3,7 @@
  * unmount-mid-gesture are exactly what jsdom cannot exercise faithfully.
  */
 
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -19,9 +20,7 @@ import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { fillNodeEditor, nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
-function fakeMeasure() {
-  return { advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 }
-}
+const fakeMeasure = createFixedMeasure({ advance: 30, ascent: 10, descent: 2 })
 
 function twoNodeCanvas(): SpatialCanvas {
   return {

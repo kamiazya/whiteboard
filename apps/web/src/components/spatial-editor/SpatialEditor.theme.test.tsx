@@ -5,6 +5,7 @@
 // board every other surface pictures cannot disagree.
 
 import { resolveCanvasPalette, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
@@ -13,9 +14,11 @@ import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-function fakeMeasure(text: string) {
-  return { advanceWidth: text.length * 6, ascent: 10, descent: 2, lineGap: 0 }
-}
+const fakeMeasure = createFixedMeasure({
+  advance: (text) => text.length * 6,
+  ascent: 10,
+  descent: 2,
+})
 
 function themed(theme: string): SpatialCanvas {
   return {

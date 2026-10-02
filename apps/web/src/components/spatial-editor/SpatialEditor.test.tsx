@@ -5,6 +5,7 @@
  * distinction on a mid-gesture canvas prop swap.
  */
 
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
@@ -14,9 +15,7 @@ import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
-function fakeMeasure() {
-  return { advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 }
-}
+const fakeMeasure = createFixedMeasure({ advance: 30, ascent: 10, descent: 2 })
 
 function twoNodeCanvas(): SpatialCanvas {
   return {
