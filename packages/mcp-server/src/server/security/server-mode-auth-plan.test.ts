@@ -201,7 +201,7 @@ describe('planServerModeAuth — server-mode plan content', () => {
   it('wildcard allowedOrigin survives normalization as a matchable pattern', () => {
     // Regression: new URL('https://*.example.com').origin does NOT throw —
     // it round-trips to the same string — but the plan must still carry the
-    // pattern so isOriginAllowedForServerMode can admit real subdomains
+    // pattern so the per-request matcher can admit real subdomains
     // downstream, not just tolerate the literal string.
     const result = makeServerPlan({
       allowedOrigins: ['https://*.example.com'],
