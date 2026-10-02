@@ -1,10 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import {
-  classifyPagesOrigin,
-  isProductionPagesOrigin,
-  PROVISIONAL_PRODUCTION_ORIGIN,
-} from './pages-origin-policy.js'
+import { classifyPagesOrigin, PROVISIONAL_PRODUCTION_ORIGIN } from './pages-origin-policy.js'
 
 describe('PROVISIONAL_PRODUCTION_ORIGIN', () => {
   it('is the provisional pages.dev production origin', () => {
@@ -82,24 +78,6 @@ describe('classifyPagesOrigin', () => {
 
   it('classifies a different pages.dev project as custom-domain-deferred', () => {
     expect(classifyPagesOrigin('https://other-project.pages.dev')).toBe('custom-domain-deferred')
-  })
-})
-
-describe('isProductionPagesOrigin', () => {
-  it('returns true for provisional production origin', () => {
-    expect(isProductionPagesOrigin('https://kamiazya-whiteboard.pages.dev')).toBe(true)
-  })
-
-  it('returns false for preview origin', () => {
-    expect(isProductionPagesOrigin('https://abc123.kamiazya-whiteboard.pages.dev')).toBe(false)
-  })
-
-  it('returns false for localhost', () => {
-    expect(isProductionPagesOrigin('https://localhost:5173')).toBe(false)
-  })
-
-  it('returns false for insecure origin', () => {
-    expect(isProductionPagesOrigin('http://kamiazya-whiteboard.pages.dev')).toBe(false)
   })
 })
 

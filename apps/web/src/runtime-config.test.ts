@@ -1,6 +1,6 @@
 import { runtimeConfigSchema as sharedRuntimeConfigSchema } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { describe, expect, it } from 'vitest'
-import { isProductionPagesOrigin } from './lib/pages-origin-policy.js'
+import { classifyPagesOrigin } from './lib/pages-origin-policy.js'
 import {
   EMPTY_RUNTIME_CONFIG,
   RuntimeConfigPolicyError,
@@ -178,13 +178,13 @@ describe('runtimeConfigSchema + pages origin policy cross-reference', () => {
     expect(config.publicOrigin).toBe('https://abc123.kamiazya-whiteboard.pages.dev')
   })
 
-  it('preview origin is rejected by isProductionPagesOrigin', () => {
-    expect(isProductionPagesOrigin('https://abc123.kamiazya-whiteboard.pages.dev')).toBe(false)
+  it('preview origin is classified as a preview, never production', () => {
+    expect(classifyPagesOrigin('https://abc123.kamiazya-whiteboard.pages.dev')).toBe('preview')
   })
 
   it('production origin passes both schema and pages policy', () => {
     const config = resolveRuntimeConfig({ publicOrigin: 'https://kamiazya-whiteboard.pages.dev' })
     expect(config.publicOrigin).toBe('https://kamiazya-whiteboard.pages.dev')
-    expect(isProductionPagesOrigin('https://kamiazya-whiteboard.pages.dev')).toBe(true)
+    expect(classifyPagesOrigin('https://kamiazya-whiteboard.pages.dev')).toBe('production')
   })
 })

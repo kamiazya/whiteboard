@@ -1,5 +1,4 @@
 import type { StateCommand } from '@codemirror/state'
-import { Ellipsis } from 'lucide-react'
 import { type MouseEvent as ReactMouseEvent, useEffect, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
@@ -54,8 +53,6 @@ export interface MarkdownVerbBarProps {
    * to pick from, so the verb falls back to its plain bracket wrap.
    */
   readonly openLinkPicker?: () => boolean
-  /** Doorway for what the width could not hold. Absent -> no "…" is drawn. */
-  readonly onOpenOverflow?: (anchor: { x: number; y: number }) => void
   readonly className?: string
 }
 
@@ -77,12 +74,7 @@ export interface MarkdownVerbBarProps {
  * slot that CYCLES rather than a band of four, so every verb is one slot
  * wide and `layoutVerbBar` has a uniform run to fit.
  */
-export function MarkdownVerbBar({
-  run,
-  openLinkPicker,
-  onOpenOverflow,
-  className,
-}: MarkdownVerbBarProps) {
+export function MarkdownVerbBar({ run, openLinkPicker, className }: MarkdownVerbBarProps) {
   const [ref, width] = useMeasuredWidth()
   // Before the first measurement, showing nothing beats showing a bar that
   // reflows on the next frame.
@@ -139,29 +131,6 @@ export function MarkdownVerbBar({
           </div>
         )
       })}
-      {onOpenOverflow !== undefined && layout.overflow.length > 0 && (
-        <>
-          <span aria-hidden="true" className="bg-border mx-[3px] h-4 w-px" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="More formatting"
-                aria-haspopup="menu"
-                onMouseDown={keepCaret}
-                onClick={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  onOpenOverflow({ x: rect.left, y: rect.bottom })
-                }}
-                className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <Ellipsis aria-hidden className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>More formatting</TooltipContent>
-          </Tooltip>
-        </>
-      )}
     </div>
   )
 }

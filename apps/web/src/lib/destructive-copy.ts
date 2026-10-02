@@ -97,24 +97,3 @@ export const DESTRUCTIVE_COPY = {
   'delete-replica-copy': (name) =>
     `This device's copy of ${name} is removed. Anything in it that has not reached the daemon yet is lost; the daemon keeps the workspace, so a copy can be pulled again.`,
 } satisfies Record<DestructiveActionId, DestructiveDescription>
-
-/**
- * A subject no copy would ever contain, so splitting on it recovers a
- * sentence's static halves without anyone writing them down a second time.
- */
-const SUBJECT_HOLE = '\u0000'
-
-/**
- * The static text a description is built from — the halves either side of
- * the subject.
- *
- * Derived by calling the builder rather than listed by hand: a listed
- * fragment is one more copy to keep in step, which is the defect this module
- * exists to remove.
- */
-export function destructiveCopyFragments(build: DestructiveDescription): string[] {
-  return build(SUBJECT_HOLE)
-    .split(SUBJECT_HOLE)
-    .map((fragment) => fragment.trim())
-    .filter((fragment) => fragment.length > 0)
-}

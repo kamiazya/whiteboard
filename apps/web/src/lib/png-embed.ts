@@ -123,7 +123,11 @@ export function embedTextInPng(png: Uint8Array, keyword: string, text: string): 
   return writeChunks(kept)
 }
 
-/** The text stored under `keyword`, or null when absent or not a PNG. */
+/**
+ * The text stored under `keyword`, or null when absent or not a PNG. The
+ * reading half of the format: the export tests use it to prove a shared PNG
+ * carries its document, and a reader outside the app does the same.
+ */
 export function extractTextFromPng(png: Uint8Array, keyword: string): string | null {
   const chunks = readChunks(png)
   if (chunks === null) return null

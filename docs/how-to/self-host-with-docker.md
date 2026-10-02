@@ -302,7 +302,7 @@ The first administrator is named by you, the operator, in one of two ways:
 
   ```yaml
   administrators:
-    - { provider: corp, subject: "00u1abcd" }
+    - { provider: google, subject: "00u1abcd" }
   ```
 
   The keeper reads this list when it starts. Removing a name takes effect at

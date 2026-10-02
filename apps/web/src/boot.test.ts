@@ -8,6 +8,7 @@ import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { servedByServerKeeper, startBootSequence } from './boot.js'
 import { DB_VERSION, setWhiteboardDbNameForTests } from './lib/browser-idb.js'
+import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './lib/browser-workspace-docs.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
@@ -15,7 +16,6 @@ import {
   setBrowserWorkspaceIdForTests,
 } from './lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
-import { loadWorkspaceDocumentProjection } from './lib/workspace-content.js'
 import { clearNamedDb } from './test-utils/browser-document.js'
 import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
@@ -98,9 +98,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
       // the production function is written, so it would stay green against a
       // consumer that reads the id as a call ARGUMENT — where the throw
       // precedes the promise and escapes the `.catch` entirely.
-      await expect(
-        loadWorkspaceDocumentProjection('01ARZ3NDEKTSV4RRFFQ69G5FAV'),
-      ).resolves.toBeNull()
+      await expect(openWorkspaceOrNull(new BrowserWorkspaceDocs())).resolves.toBeNull()
     } finally {
       window.removeEventListener('unhandledrejection', onUnhandled)
       stubborn.close()

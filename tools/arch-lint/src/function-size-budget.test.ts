@@ -180,7 +180,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // editor's complexity rather than its structure.
   'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 80,
   'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 53,
-  'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 88,
+  'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 60,
   'apps/web/src/components/markdown-editor/MinimapRail.tsx#MinimapRail': 80,
   'apps/web/src/components/markdown-editor/PassageProposalCard.tsx#PassageProposalCard': 63,
   'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 52,
@@ -606,22 +606,22 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/observability/http-tracing.ts#tracingMiddleware': 51,
   'packages/mcp-server/src/server/observability/tracing.ts#initTracing': 85,
   // 80 -> 81 (ADR-0041 S8 slice 2): threads the membership admit to the workspaces router.
-  'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 86,
-  'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
+  'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 73,
+  'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 60,
   // 101 -> 66: the per-document compact route went, and optimize-all is one
   // fold of the workspace record rather than a loop over documents.
-  'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 66,
-  'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 88,
-  'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 82,
+  'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 54,
+  'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 76,
+  'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 68,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 101,
-  'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 127,
+  'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 105,
   // 406 -> 412 (ADR-0041 S8 slice 2): the workspace list filters rows the caller is not admitted to.
   // +3: the rename route is an adapter over `wbDocumentMove` now, and the
   // address translation it owes — path to id, absent to 404 — is three lines
   // the port call did not need.
-  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 267,
-  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 64,
-  'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 127,
+  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 266,
+  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 54,
+  'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 108,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
   // same router as POST .../replica-key — one seam for a workspace's whole

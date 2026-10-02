@@ -1,5 +1,4 @@
 import {
-  apiErrorReason,
   createDocumentV1ResponseSchema,
   type DeleteDocumentResponse,
   type DocumentBacklinksResponse,
@@ -56,6 +55,7 @@ import {
   workspaceSummarySchema,
   workspacesApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 // Re-exported so existing callers keep one import site; the implementation
@@ -83,8 +83,8 @@ export class DaemonApiError extends Error {
 }
 
 async function parseProblemDetails(res: Response): Promise<{ message: string; body: unknown }> {
-  const body: unknown = await res.json().catch(() => undefined)
-  return { message: apiErrorReason(body) ?? `Request failed (${res.status}).`, body }
+  const { reason, body } = await refusalReasonOf(res, `Request failed (${res.status}).`)
+  return { message: reason, body }
 }
 
 async function fetchAndParse<T>(

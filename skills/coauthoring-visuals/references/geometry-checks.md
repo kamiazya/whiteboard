@@ -31,8 +31,8 @@ But if the meaning is already solid, geometry failures are usually the fastest t
 - overlap: widen the gap, shift one node down a row, or shorten the label — a `node.patch` op (or
   just a `tidy` op, which separates overlaps for you, inside a group too, growing it to fit)
 - clipped label: widen the node (`width`/`height`) or shorten the text
-- dangling connection: nudge the node it targets, or `edge.patch` a `fromSide`/`toSide` the author
-  named back to nothing so the router chooses the face
+- dangling connection: nudge the node it targets, or `edge.patch` the `from`/`to` end again without the `side` the author
+  named, so the router chooses the face
 - edge-through-node: move the intervening node aside, or `edge.patch` `bends` — a list of points
   the line is drawn through — to route it around by hand. Prefer moving the node: a bend is a
   fixed point that stops following the boxes when they move next.

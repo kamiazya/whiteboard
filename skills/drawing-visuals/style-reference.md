@@ -14,7 +14,7 @@ Its job is to keep you from hand-calculating coordinates ad hoc or redrawing the
 **Do:**
 - state the diagram type and actors in 1-2 sentences
 - place nodes on a rigid grid
-- connect edges by node id (an `edge.add` op's `fromNode`/`toNode`)
+- connect edges by node id (an `edge.add` op's `from.node`/`to.node`)
 
 There is no coordinate math for the edge itself — `wb_scene_render` computes the drawn path from the
 two node ids. Node placement is the only math you might own, and only if you choose to: geometry is
@@ -74,17 +74,17 @@ wb_canvas_edit({
   workspaceId, documentId,
   mode: "apply",
   ops: [
-    { op: "edge.add", edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" } },
+    { op: "edge.add", edge: { id: "req", from: { node: "client" }, to: { node: "server", end: "arrow" }, label: "request" } },
   ],
 })
 ```
 
-- both `fromNode` and `toNode` must be on the canvas by the time the op runs — a node added earlier
-  in the SAME `wb_canvas_edit` call counts, anything else refuses the whole batch
-- `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) name which face of the node the edge leaves
-  from; leave them out unless the drawing needs that face — the router then picks the side that
-  keeps the line clear of other boxes, and a side you name is kept even through one
-- `fromEnd`/`toEnd` (`none`/`arrow`) control arrowheads independently on each end
+- the nodes named by `from.node` and `to.node` must be on the canvas by the time the op runs — a
+  node added earlier in the SAME `wb_canvas_edit` call counts, anything else refuses the whole batch
+- `side` (`top`/`right`/`bottom`/`left`) on `from` or `to` names which face of the node the edge
+  leaves from or arrives at; leave it out unless the drawing needs that face — the router then picks
+  the side that keeps the line clear of other boxes, and a side you name is kept even through one
+- `end` (`none`/`arrow`) on `from` or `to` controls the arrowhead independently on each end
 - there is no dash/line-style field on an edge — a distinction like "async vs sync" has to be carried
   by color or label, not by stroke style
 

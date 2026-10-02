@@ -5,8 +5,7 @@ import type {
 import { Hono } from 'hono'
 import { compactWorkspace, listDocuments } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'
-import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
-import { workspaceIdFromHandle } from '../../workspace-handle.js'
+import { parseWorkspaceHandle } from '../../workspace-handle.js'
 import { handleCorruptStoredData } from './_shared.js'
 
 export interface MaintenanceRouterOptions {
@@ -24,15 +23,9 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   // rollback value once both bracket points exist. Loops over every document
   // in the workspace and aggregates totals.
   app.post('/api/workspaces/:workspaceId/versions/prune-sandwiched', async (c) => {
-    const handle = c.req.param('workspaceId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    const workspaceId = await workspaceIdFromHandle(c, handle)
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
     try {
       const documents = await listDocuments(workspaceId)
       const results: Array<{ path: string; deletedCount: number }> = []
@@ -60,15 +53,9 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   // live workspace document and writes its own frontier back, so the cached
   // instance and its per-document projections stay coherent with the store.
   app.post('/api/workspaces/:workspaceId/documents/optimize-all', async (c) => {
-    const handle = c.req.param('workspaceId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    const workspaceId = await workspaceIdFromHandle(c, handle)
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
     try {
       const result: CompactWorkspaceResult = await compactWorkspace(workspaceId, versionStore)
       return c.json(result)

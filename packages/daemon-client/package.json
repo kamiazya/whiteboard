@@ -50,6 +50,10 @@
       "types": "./src/api-contracts/promotion.ts",
       "import": "./src/api-contracts/promotion.ts"
     },
+    "./api-contracts/refusal-reason": {
+      "types": "./src/api-contracts/refusal-reason.ts",
+      "import": "./src/api-contracts/refusal-reason.ts"
+    },
     "./api-contracts/replica-key": {
       "types": "./src/api-contracts/replica-key.ts",
       "import": "./src/api-contracts/replica-key.ts"

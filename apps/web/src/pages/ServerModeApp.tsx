@@ -7,6 +7,11 @@
  * open one in the editor (`ServerModeWorkspace`), or sign out.
  */
 import {
+  authProvidersUrl,
+  authSessionUrl,
+  authSignInUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
+import {
   type SignInProvidersResponse,
   type SignInSessionResponse,
   signInProvidersResponseSchema,
@@ -36,7 +41,7 @@ function useProviders(fetchFn: Fetch): Providers | null {
   const [providers, setProviders] = useState<Providers | null>(null)
   useEffect(() => {
     let live = true
-    void fetchFn('/auth/providers')
+    void fetchFn(authProvidersUrl())
       .then(async (res) => (res.ok ? signInProvidersResponseSchema.parse(await res.json()) : null))
       .catch(() => null)
       .then((body) => {
@@ -59,7 +64,7 @@ function refusalMessage(search: string): string | null {
 function signInHref(providerId: string, invitation: string | undefined): string {
   const query = new URLSearchParams({ return: '/' })
   if (invitation !== undefined) query.set('invitation', invitation)
-  return `/auth/sign-in/${encodeURIComponent(providerId)}?${query}`
+  return `${authSignInUrl(providerId)}?${query}`
 }
 
 function Page({ children }: { children: React.ReactNode }) {
@@ -121,7 +126,7 @@ interface Signed {
 }
 
 async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
-  const session = signInSessionResponseSchema.parse(await (await fetchFn('/auth/session')).json())
+  const session = signInSessionResponseSchema.parse(await (await fetchFn(authSessionUrl())).json())
   if (!session.signedIn) return null
   return { user: session.user, workspaces: await listMemberWorkspaces(fetchFn) }
 }
@@ -198,7 +203,7 @@ function SignedInOnly({
   const [who, setWho] = useState<SessionUser | null | undefined>(undefined)
   useEffect(() => {
     let live = true
-    void fetchFn('/auth/session')
+    void fetchFn(authSessionUrl())
       .then(async (res) => {
         const session = signInSessionResponseSchema.parse(await res.json())
         return session.signedIn ? session.user : null

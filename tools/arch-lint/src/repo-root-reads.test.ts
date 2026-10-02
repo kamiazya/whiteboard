@@ -84,6 +84,8 @@ const STAYS_IN_PACKAGE: Readonly<Record<string, string>> = {
     "snapshots the package's own loss ledger into docs/reference, the same generated-artifact shape as json-schema.test.ts",
   'packages/mcp-server/src/server/docs-operator-output-examples.test.ts':
     "parses a docs page's JSON through the daemon's own output schemas, which this project cannot import",
+  'packages/mcp-server/src/server/docs-sign-in-config-examples.test.ts':
+    "parses the how-to's sign-in YAML through the daemon's own signInConfigSchema, which this project cannot import",
   'packages/mcp-server/src/server/env-docs-contract.test.ts':
     'the env vars the server reads are computed by importing its own config schema; the docs are only the comparison',
   'packages/mcp-server/src/server/mcp/codex-config.distribution.test.ts':
@@ -114,6 +116,8 @@ const STAYS_IN_PACKAGE: Readonly<Record<string, string>> = {
     "tests the daemon's docs-corpus loader against the real docs tree",
   'packages/mcp-server/src/server/skills-tool-surface.test.ts':
     "imports the daemon's registered tool list to hold the skills against it",
+  'packages/mcp-server/src/server/tool-call-examples.contract.test.ts':
+    "parses every tool call a skill, the README or a docs page shows through the input schema the daemon's own createServer registers for that tool",
   'packages/mcp-server/src/shared/test-utils/repo-root.test.ts':
     'tests the helper that finds the repo root',
 }

@@ -92,8 +92,8 @@ its format from the first write.
 Every tool above operates on the persisted document and never requires a
 connected browser tab — canvas rendering and export are headless. `wb_workspace_edit`'s
 `document.create` op is the only thing that lazily creates a canvas on first touch; the patch/render/export/
-version tools all fail with an explicit error if `canvasId` does not resolve to an
-existing canvas, instead of silently creating a new, empty one. The same discipline
+version tools all fail with an explicit error if `workspaceId`/`documentId` does not resolve to an
+existing document, instead of silently creating a new, empty one. The same discipline
 applies one level up: an unknown `workspaceId` is an error, never an implicit new
 workspace — bootstrapping a genuinely new workspace requires passing
 `createWorkspace: true` to `wb_workspace_edit`.

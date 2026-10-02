@@ -443,7 +443,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   // single read or write with no rule of its own around it.
   'routes/invitation-link.ts -> security/invitation-store',
   'routes/replica-key.ts -> security/workspace-replica-key-store',
-  'routes/workspace-people.ts -> security/member-profile-store',
   // The sign-in routes drive the attempt and session stores around a
   // provider redirect: the attempt row carries the state/nonce across it, and
   // the session cookie name is the one constant the route shares with the
@@ -494,9 +493,13 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * decisions and the stores they act on, and one more, 22 -> 21, when
  * `routes/files.ts` took the data layout `createApp` is handed instead of
  * joining `tenant/data-layout`'s paths from the process data dir itself. That
- * was a measurement catching up with the code, not new debt.
+ * was a measurement catching up with the code, not new debt. Then 21 -> 20,
+ * when `routes/workspace-people.ts` stopped holding the workspace-level
+ * decisions (`isUser` before an add, the role and removal refusals) and the
+ * member store they act on: they are `security/people-administration`'s now,
+ * and the operator's `grant-member` runs the same ones.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 21
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 20
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

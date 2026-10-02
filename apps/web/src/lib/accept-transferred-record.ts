@@ -22,10 +22,10 @@
  * increment.
  */
 import {
-  apiErrorReason,
   promoteWorkspaceResponseSchema,
   workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
@@ -128,11 +128,5 @@ function readArrivingRecord(
 }
 
 async function failureReason(res: Response): Promise<string> {
-  try {
-    const reason = apiErrorReason(await res.json())
-    if (reason !== undefined) return reason
-  } catch {
-    // fall through to the generic message
-  }
-  return `This keeper refused the merge (${res.status}).`
+  return (await refusalReasonOf(res, `This keeper refused the merge (${res.status}).`)).reason
 }

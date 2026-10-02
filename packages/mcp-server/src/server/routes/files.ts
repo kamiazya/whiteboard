@@ -1,7 +1,6 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
 import { errorMessage } from '../../shared/error-message.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
 import {
@@ -13,8 +12,9 @@ import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file
 import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
-import { validateFileId, validateWorkspaceId, validationErrorBody } from '../validators.js'
-import { workspaceIdFromHandle } from '../workspace-handle.js'
+import { validateFileId, validationErrorBody } from '../validators.js'
+import { parseWorkspaceHandle } from '../workspace-handle.js'
+import { limitBody } from './body-limit.js'
 import { onDocumentFile } from './document/path-route.js'
 
 // Per-file size limit. Loro thumbnails are around 2 MiB and assets pasted into
@@ -130,17 +130,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
       })
       return c.body(null, 204)
     },
-    bodyLimit({
-      maxSize: MAX_FILE_UPLOAD_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Upload exceeds ${MAX_FILE_UPLOAD_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
+    limitBody(MAX_FILE_UPLOAD_BYTES, 'Upload'),
   )
 
   // GET /api/w/:workspaceId/document/<path>/file/:fileId
@@ -176,15 +166,9 @@ export function createFilesRouter(options: FilesRouterOptions) {
   // only ever removed once nothing across that full reference set points
   // at it, so branch/version restore never regresses to a broken image.
   app.post('/api/workspaces/:workspaceId/files/purge-dangling', async (c) => {
-    const handle = c.req.param('workspaceId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    const workspaceId = await workspaceIdFromHandle(c, handle)
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
     try {
       const result = await purgeDanglingFiles(workspaceId, {
         versionStore: options.versionStore,

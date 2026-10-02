@@ -12,11 +12,11 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
+import { limitBody } from '../body-limit.js'
 import { defaultHumanDisplayName } from './_shared.js'
 
 // Same ceiling as the per-document update path: a workspace-granularity
@@ -64,6 +64,9 @@ async function admittedWorkspace(
   // and an empty handle refuses through the same validator as any other
   // unusable one rather than through a second path.
   const handle = c.req.param('workspaceId') ?? ''
+  // Validated here, not through `parseWorkspaceHandle`: this surface is read
+  // by the page, which speaks Problem Details (`{ title }`), where the helper
+  // answers the `{ error, message }` family.
   try {
     validateWorkspaceId(handle)
   } catch (err) {
@@ -116,17 +119,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
 
   app.post(
     '/api/w/:workspaceId/workspace-document/update',
-    bodyLimit({
-      maxSize: WORKSPACE_DOC_UPDATE_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Update exceeds ${WORKSPACE_DOC_UPDATE_LIMIT_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
+    limitBody(WORKSPACE_DOC_UPDATE_LIMIT_BYTES, 'Update'),
     async (c) => {
       const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal
@@ -172,17 +165,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
   // POST /api/w/:workspaceId/workspace-document/promote
   app.post(
     '/api/w/:workspaceId/workspace-document/promote',
-    bodyLimit({
-      maxSize: WORKSPACE_DOC_PROMOTE_LIMIT_BYTES,
-      onError: (c) =>
-        c.json(
-          {
-            error: 'payload_too_large',
-            message: `Promotion exceeds ${WORKSPACE_DOC_PROMOTE_LIMIT_BYTES} bytes limit.`,
-          },
-          413,
-        ),
-    }),
+    limitBody(WORKSPACE_DOC_PROMOTE_LIMIT_BYTES, 'Promotion'),
     async (c) => {
       const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal

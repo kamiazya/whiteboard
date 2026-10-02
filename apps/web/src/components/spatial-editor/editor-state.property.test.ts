@@ -2572,19 +2572,10 @@ describe('editor composite state (command-based)', () => {
 
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject — except for the four rare chains below, which a directed script
-    // owns. Each other floor sits at roughly a third of the minimum measured across
-    // five consecutive runs — moves 296-404, resizes 49-68, connects
-    // 56-89, deletes 50-82, text edits opened 117-129, pending-text
-    // handoffs 33-44, mid-gesture external replacements 39-54,
-    // multi-selections 430-515, nudges 70-98, duplicates 18-30, effective
-    // reorders 43-54 (of which forward/backward 16-24), locks applied
-    // 15-28, ink strokes 74-85, select-alls 119-139, edge selections 83-95, edge deletes
-    // 19-34, copies 33-46, cuts 53-72, cut-moves 13-20, paste-inserts
-    // 38-59, reconnections 5-19, marquee selections 23-30,
-    // hand-swallowed presses 53-70, hand entries 43-56, connect arms
-    // 44-68, tool switches 185-220, carried moves 57-80, group-or-multi
-    // drags 57-80, group-frame drags 27-40, groups created 53-65.
+    // reject — except for the counters below that a directed script owns.
+    // Each other floor is roughly a third of a sampled minimum; the census
+    // line above is the distribution NOW, and any range quoted here goes
+    // stale the first time an arm moves weight.
     //
     // Three rules, all learned by getting them wrong here.
     //
@@ -2599,18 +2590,18 @@ describe('editor composite state (command-based)', () => {
     // dragged alongside a selection, which the extras kept green with
     // production containment disabled outright.
     //
-    // Four counters are NOT held to a sampled floor: `stepReordersEffective`,
-    // `reconnections`, `cutMoves` and `pasteInserts` are each the end of a
-    // conjunction (a cut across an edge, then an insert; an overlapping
-    // neighbour; a held cut resolved as a move). A chain's probability is a
-    // product, so `numRuns` buys margin on it only linearly, and a floor at
-    // a third of a sampled minimum failed in CI on two different chains —
-    // `stepReordersEffective` at 3, `reconnections` at 2 — each time with the
-    // rest of the census in range, so the run had done MORE work, not less.
-    // Ranges taken over a handful of runs also understate a single-digit
-    // counter's left tail.
+    // Seven counters are NOT held to a sampled floor. Four are each the end of
+    // a conjunction (`stepReordersEffective`, `reconnections`, `cutMoves`,
+    // `pasteInserts`: a cut across an edge, then an insert; an overlapping
+    // neighbour; a held cut resolved as a move), and three — `copies`,
+    // `edgeDeletes`, `groupFrameDrags` — sat about three standard deviations
+    // above their floors over thirty runs, chains too. A chain's probability
+    // is a product, so `numRuns` buys margin on it only linearly, and a
+    // floor at a third of a sampled minimum failed in CI on two chains
+    // (`stepReordersEffective` at 3, `reconnections` at 2) with the rest of
+    // the census in range, so the run had done MORE work, not less.
     //
-    // Those four are asserted as ARRANGEMENTS by the directed describe below,
+    // Those seven are asserted as ARRANGEMENTS by the directed describe below,
     // deterministically, and here they only have to be reached at all (`> 0`):
     // the guard that remains is "the generator still produces this", which
     // is what a statistical floor can say that a script cannot. Do not
@@ -2655,8 +2646,8 @@ describe('editor composite state (command-based)', () => {
     atLeast(stats.locksApplied, 5, 'Cmd+Shift+L barely locked anything')
     atLeast(stats.selectAlls, 40, 'Cmd+A barely reached')
     atLeast(stats.edgeSelections, 28, 'edges barely ever selected')
-    atLeast(stats.edgeDeletes, 6, 'selected edges barely ever deleted')
-    atLeast(stats.copies, 11, 'Cmd+C barely reached')
+    atLeast(stats.edgeDeletes, 0, 'no selected edge was ever deleted')
+    atLeast(stats.copies, 0, 'Cmd+C was never reached')
     atLeast(stats.cuts, 18, 'Cmd+X barely reached')
     atLeast(stats.cutMoves, 0, 'no paste resolved as a same-canvas move')
     atLeast(stats.pasteInserts, 0, 'no paste inserted a copy')
@@ -2669,7 +2660,7 @@ describe('editor composite state (command-based)', () => {
     atLeast(stats.toolSwitches, 60, 'the tool never changed')
     atLeast(stats.carriedMoves, 18, 'no drag ever carried a second node')
     atLeast(stats.groupOrMultiDrags, 18, 'no group or multi-selection was ever dragged')
-    atLeast(stats.groupFrameDrags, 9, 'a dragged group frame never carried anything it contained')
+    atLeast(stats.groupFrameDrags, 0, 'a dragged group frame never carried anything it contained')
     atLeast(stats.groupsCreated, 17, 'no group frame was ever made from a selection')
   })
 
@@ -2701,15 +2692,14 @@ describe('editor composite state (command-based)', () => {
 /**
  * The rare chains, produced on purpose.
  *
- * Four counters are the end of a conjunction the generator reaches a few
+ * Seven counters are the end of a conjunction the generator reaches a few
  * times per run — a cut whose selection straddles an edge and is then pasted
  * as an insert, an overlapping neighbour for a z-order step, a held cut
- * resolved as a move. A chain's probability is a product, so no `numRuns`
- * makes its minimum safe, and a floor derived from sampled minima failed
- * twice on two different counters in CI. What those arrangements can be
- * asserted to do is a statement about a SEQUENCE, so each is stated as one
- * here, deterministically, and the property's floor on them only says the
- * generator still reaches them at all.
+ * resolved as a move, a copy, an edge Delete, a grabbed group frame. A
+ * chain's probability is a product, so no `numRuns` makes its minimum safe,
+ * and a floor derived from sampled minima failed twice in CI. Each is
+ * stated here as a SEQUENCE, deterministically, and the property's floor on
+ * them only says the generator still reaches them at all.
  *
  * Each script counts into its own census: sharing the property's would let
  * these scripts satisfy the very floors that measure the generator.
@@ -2735,6 +2725,16 @@ describe('directed arrangements behind the rare-chain floors', () => {
   it('copying a node and pasting it inserts a copy and reconnects nothing', () => {
     const census = run(initialCanvas(), new ClipboardFlow(0, 'copy', null))
     expect(census).toMatchObject({ copies: 1, pasteInserts: 1, cutMoves: 0, reconnections: 0 })
+  })
+
+  it('pressing an edge and then Delete removes that edge', () => {
+    const census = run(initialCanvas(), new PressEdgeThen(0, 'delete', [], false))
+    expect(census).toMatchObject({ edgeSelections: 1, edgeDeletes: 1 })
+  })
+
+  it('dragging a group frame made from a selection carries the nodes it contains', () => {
+    const census = run(initialCanvas(), new DragCarrying('group', { x: 20, y: 10 }))
+    expect(census).toMatchObject({ groupsCreated: 1, groupFrameDrags: 1 })
   })
 
   it('stepping a node past an overlapping neighbour changes the canvas in both directions', () => {

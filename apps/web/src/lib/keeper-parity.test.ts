@@ -70,6 +70,18 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "manages a server-mode keeper's people — its users, administrators, workspace owners and invitations (ADR-0049); a browser keeper has one person, who is every workspace's owner, so there is nobody to manage and nothing to mirror",
   },
+  'src/components/server-mode/ServerModeShell.tsx': {
+    reach: 'daemon-itself',
+    why: 'signs the person out of a server-mode keeper through its `/auth/sign-out` route; a Browser keeper has no sign-in, so there is no session to end and nothing to mirror',
+  },
+  'src/pages/ServerModeApp.tsx': {
+    reach: 'daemon-itself',
+    why: "the server-mode keeper's own entrance: it reads `/auth/providers` and `/auth/session` to sign the person in before any workspace opens; a Browser keeper has no sign-in, so there is no entrance to mirror",
+  },
+  'src/pages/ServerModePeoplePage.tsx': {
+    reach: 'daemon-itself',
+    why: "sends the person to a server-mode keeper's `/auth/reauthenticate` before it manages people; a Browser keeper has no sign-in and one person, so there is nobody to re-authenticate and nothing to mirror",
+  },
   'src/lib/accept-transferred-record.ts': {
     reach: 'daemon-itself',
     why: 'merges a workspace record arriving from ANOTHER origin into a workspace this keeper holds — it runs on the page a keeper serves at its own address, and a browser keeper serves no address anyone could send a transfer to, so there is no receiving side to mirror',
@@ -245,7 +257,9 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
  * daemon's URLs from the shared helpers (`documentsApiUrl`,
  * `documentFileApiUrl`, `trashApiUrl`, … — any `*ApiUrl(` call), it holds one
  * of the two fetches that reach it, it writes an `/api/` path by hand, or it
- * calls the daemon client's request functions.
+ * calls the daemon client's request functions. A keeper's own `/auth/` routes
+ * count too, spelled by hand or built by an `auth*Url(` helper: sign-in is a thing only a server-mode keeper has, and a module
+ * that reaches it is exactly one that has to say what a Browser keeper does.
  *
  * The `/api/` arm takes no quote in front of it, because a path built as a
  * template (`${base}/api/…`) starts with an interpolation, not a quote.
@@ -259,7 +273,7 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
  * browser for.
  */
 const DAEMON_REACH_PATTERN =
-  /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|\/api\/|\w+ApiUrl\(/
+  /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|\/api\/|\/auth\/|\w+ApiUrl\(|\bauth\w*Url\(/
 
 const CLIENT_MODULE = String.raw`['"][^'"]*\/daemon-api-client(?:\.js)?['"]`
 const CLIENT_DYNAMIC_IMPORT = new RegExp(String.raw`import\(\s*${CLIENT_MODULE}`)
@@ -317,6 +331,17 @@ function daemonReachingModules(): string[] {
 
 describe('every module that reaches the daemon says what the browser keeper does', () => {
   const scanned = daemonReachingModules()
+
+  it.each([
+    ["fetch('/auth/session')", true],
+    ['fetchFn(authSessionUrl())', true],
+    ['fetch(base + "/auth/sign-out")', true],
+    ["fetch('/api/workspaces')", true],
+    ["// fetch('/auth/session') in a comment", false],
+    ["const author = '/authors/x'", false],
+  ])('recognises %s as reaching a keeper: %s', (text, reaches) => {
+    expect(reachesDaemon(text)).toBe(reaches)
+  })
 
   it('finds a plausible number of daemon-reaching modules', () => {
     // A regex that stopped matching would otherwise report itself below as
