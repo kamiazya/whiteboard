@@ -1,5 +1,6 @@
 import {
   createDocumentV1ResponseSchema,
+  type createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
   type DocumentBacklinksResponse,
   type DocumentOkfV1Response,
@@ -40,6 +41,8 @@ import {
   renameDocumentPathResponseSchema,
   restoreTrashResponseSchema,
   searchApiUrl,
+  type setNameRequestSchema,
+  type setPinnedRequestSchema,
   trashApiUrl,
   trashRestoreApiUrl,
   type UpdateDocumentResponse,
@@ -133,7 +136,7 @@ export function createWorkspace(
   return fetchAndParse(fetchFn, `${daemonBaseUrl}${workspacesApiUrl()}`, workspaceSummarySchema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({ displayName } satisfies z.infer<typeof createWorkspaceRequestSchema>),
   })
 }
 
@@ -336,7 +339,7 @@ export function setDocumentPinned(
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pinned }),
+      body: JSON.stringify({ pinned } satisfies z.infer<typeof setPinnedRequestSchema>),
     },
   )
 }
@@ -355,7 +358,7 @@ export function setDocumentDisplayName(
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name } satisfies z.infer<typeof setNameRequestSchema>),
     },
   )
 }

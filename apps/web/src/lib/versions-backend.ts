@@ -1,6 +1,7 @@
 import {
   documentVersionsApiUrl,
   listVersionsResponseSchema,
+  type saveVersionRequestSchema,
   saveVersionResponseSchema,
   type VersionEntry,
   versionDocumentApiUrl,
@@ -9,6 +10,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { z } from 'zod'
 
 /**
  * A document's version history as the UI reads and writes it — the seam
@@ -92,7 +94,7 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       const res = await fetchFn(documentVersionsApiUrl(workspaceId, path), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label }),
+        body: JSON.stringify({ label } satisfies z.infer<typeof saveVersionRequestSchema>),
       })
       if (!res.ok) throw new VersionsRequestError(res.status, 'save version')
       const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
