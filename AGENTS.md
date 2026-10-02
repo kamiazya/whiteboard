@@ -90,7 +90,7 @@ pnpm run test:browser:trace  # same, plus a trace for EVERY test and its DOM sna
   FILE. Measured: one forced failure with a 194-char title reported
   `1 failed | 2 passed (6)`, the same failure with a 58-char title reported
   `1 failed | 5 passed (6)`. Three tests silently did not run, and the smaller
-  total reads like good news. `apps/web/src/browser-test-name-length.test.ts`
+  total reads like good news. `tools/arch-lint/src/browser-test-name-length.test.ts`
   enforces the budget.
 - Remove temporary debug overlays, logging, and instrumentation before finishing.
 

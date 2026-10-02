@@ -10,17 +10,17 @@ import {
 import { renderSceneToSvg } from './backend.js'
 
 describe('renderSceneToSvg — cross-platform determinism (browser)', () => {
-  it('matches the same committed golden SVG string byte-for-byte as the node project', () => {
+  it('matches the committed golden SVG byte-for-byte as the node project', () => {
     const svg = renderSceneToSvg(buildDeterminismGoldenScene())
     expect(svg).toBe(DETERMINISM_GOLDEN_SVG)
   })
 
-  it('matches the same committed document-envelope golden SVG string byte-for-byte as the node project', () => {
+  it('matches the committed document-envelope golden SVG byte-for-byte as the node project', () => {
     const svg = renderSceneToSvg(buildDeterminismGoldenScene(), DETERMINISM_DOCUMENT_OPTIONS)
     expect(svg).toBe(DETERMINISM_GOLDEN_DOCUMENT_SVG)
   })
 
-  it('matches the same committed shape/appearance golden SVG string byte-for-byte as the node project', () => {
+  it('matches the committed shape/appearance golden SVG byte-for-byte as the node project', () => {
     const svg = renderSceneToSvg(buildShapeAppearanceGoldenScene())
     expect(svg).toBe(SHAPE_APPEARANCE_GOLDEN_SVG)
   })
