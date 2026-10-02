@@ -330,7 +330,7 @@ people, session, key and invitation rows), anything under the daemon's own
 the font modules join the data directory, so an operation welded to storage, the
 shape ADR-0018 names. It is matched whole, so a new module there is judged; a
 pure renderer an adapter needs goes in `MECHANICS_NOT_SCANNED`. Their edges are spelled with the
-directory (`security/member-profile-store`, `daemon/log-rotation`,
+directory (`security/member-profile-store`, `daemon/<module>`,
 `tenant/data-layout`) so they cannot be read as a same-named `store/` module.
 Policy beside them (`bearer-token`, `credential-resolver`, the tenant id) is
 translation an adapter is entitled to, and is not matched. A `_test-*` helper
@@ -419,9 +419,9 @@ composes (`mcp/index.ts`, two edges), the audience registry and the auto-version
 scheduler filed under `routes/` (three), a distribution-smoke impl under the
 adapter tree reaching the CLI, the membership gate reaching an adapter helper,
 and a daemon module logging through the server logger. None is a design that
-wants the edge; each is a module in the wrong directory. They were measured
-against an independent directory-level matrix (every one of the six the audit
-named is in it) and are not moved here. Type-only edges count, as in the web guard.
+wants the edge; each is a module in the wrong directory. They were
+cross-checked against an independent directory-level import matrix and are not
+moved here. Type-only edges count, as in the web guard.
 
 ## `route-portability.test.ts`: which routes could leave Node
 
@@ -452,10 +452,10 @@ against the closure, so Node arriving through a helper edits an entry instead of
 passing. Three counts are pinned by equality in `CLOSURE_COUNTS` (clean files,
 files held only by the seams, routers among those), measured 3 / 6 / 2.
 
-The auditor's closure said nine of twelve once the seams were cut; this says six
-because it counts an ambient `Buffer` (in `routes/sync-sse.ts`, reached through
-the audience registry, and in `security/timing-safe.ts`) the way the direct
-class always has. `store/corrupt-stored-data` is entered, not called a
+A closure over import specifiers alone says nine of twelve once the seams are
+cut; this says six because it counts an ambient `Buffer` (in `routes/sync-sse.ts`,
+reached through the audience registry, and in `security/timing-safe.ts`) the way
+the direct class always has. `store/corrupt-stored-data` is entered, not called a
 mechanic, for the reason `MECHANICS_NOT_SCANNED` gives. It owns its own matcher
 on purpose and shares nothing with the mechanic check, so each can fail alone.
 `NODE_ONLY_PACKAGES` is a short list; a Node-only package missing from it shows
