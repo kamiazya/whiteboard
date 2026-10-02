@@ -15,10 +15,11 @@
  * `notice` level precisely because misdirected persistence is expensive to
  * spot afterwards. This is the rung above that log.
  */
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -45,8 +46,6 @@ function startsTheDaemon(command: string): boolean {
 const UNWRAPPED_ON_PURPOSE: Record<string, string> = {
   daemon:
     'the PACKAGED daemon (`dist/`), which is what an installed copy runs — its data dir is the install’s, not a checkout’s',
-  'daemon:dev':
-    'the watched daemon the `whiteboard-mcp-smoke` skill names for verifying against the REAL `~/.whiteboard`; which data that flow should see is a decision for the skill, not a detail of this guard',
 }
 
 describe('dev scripts that start the daemon', () => {
@@ -55,7 +54,9 @@ describe('dev scripts that start the daemon', () => {
   // Without this, a rename of the entry point leaves every assertion below
   // passing over an empty set — which reads exactly like a clean tree.
   it('reaches the scripts that start it at all', () => {
-    expect(starting.length).toBeGreaterThanOrEqual(3)
+    expect(starting.map(([name]) => name)).toEqual(
+      expect.arrayContaining(['daemon', 'mcp:http:dev']),
+    )
   })
 
   it('routes each one through with-dev-data-dir.mjs, or records why not', () => {
@@ -82,5 +83,68 @@ describe('dev scripts that start the daemon', () => {
     )
 
     expect(thin).toEqual([])
+  })
+})
+
+/**
+ * A skill or contributor doc that tells a reader to run a package script that
+ * is not there. A dev-daemon script deleted from `package.json` stayed in the
+ * smoke skill — the page a session loads on "verify behavior" — because
+ * nothing read prose against the script list, and the daemon it started was
+ * not the one the registered proxy reaches. ADRs are history and say so in
+ * dated notes, so they are not read.
+ */
+describe('prose that tells a reader to run an mcp-server script', () => {
+  const REPO_ROOT = repoRoot()
+  // pnpm's own commands, which `pnpm --filter <pkg> <word>` also accepts.
+  const PNPM_COMMANDS = new Set([
+    'exec',
+    'run',
+    'add',
+    'remove',
+    'install',
+    'dlx',
+    'pack',
+    'publish',
+  ])
+
+  function markdownUnder(dir: string): string[] {
+    return readdirSync(join(REPO_ROOT, dir), { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory()
+        ? markdownUnder(join(dir, entry.name))
+        : entry.name.endsWith('.md')
+          ? [join(dir, entry.name)]
+          : [],
+    )
+  }
+
+  const docs = [
+    ...markdownUnder('.claude/skills'),
+    ...readdirSync(join(REPO_ROOT, 'docs/contributing'))
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => join('docs/contributing', name)),
+    'CONTRIBUTING.md',
+  ]
+
+  const named = docs.flatMap((file) =>
+    [
+      ...readFileSync(join(REPO_ROOT, file), 'utf8').matchAll(
+        /pnpm --filter @kamiazya\/whiteboard-mcp +([a-zA-Z][\w:-]*)/g,
+      ),
+    ].map((match) => ({ file, script: match[1] ?? '' })),
+  )
+
+  // A scan over nothing finds no dangling name, which reads as a clean tree.
+  it('reaches the skills and docs, and finds scripts they name', () => {
+    expect(docs.length).toBeGreaterThan(30)
+    expect(named.length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('names only scripts that package.json declares', () => {
+    const dangling = named
+      .filter(({ script }) => !(script in scripts) && !PNPM_COMMANDS.has(script))
+      .map(({ file, script }) => `${file}: ${script}`)
+
+    expect(dangling).toEqual([])
   })
 })
