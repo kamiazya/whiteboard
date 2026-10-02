@@ -1,11 +1,5 @@
 import type { CodecParseError, CodecParseResult } from '@kamiazya/whiteboard-codec'
-import {
-  fromJsonCanvas,
-  jsonCanvasDocumentSchema,
-  parseSpatial,
-  type SpatialSerializeMode,
-  serializeSpatial,
-} from '@kamiazya/whiteboard-codec'
+import { fromJsonCanvas, jsonCanvasDocumentSchema, parseSpatial } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**
@@ -42,9 +36,4 @@ export function parseViewerScene(input: unknown): CodecParseResult<ViewerScene> 
     return { ok: false, error }
   }
   return { ok: true, value: fromJsonCanvas(parsed.data) }
-}
-
-/** Thin delegation to codec's serializer — no separate viewer-side logic. */
-export function serializeViewerScene(canvas: ViewerScene, mode: SpatialSerializeMode): string {
-  return serializeSpatial(canvas, mode)
 }

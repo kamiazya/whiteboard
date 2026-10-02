@@ -133,6 +133,22 @@ describe('installRelay', () => {
     expect(extensionHelloReplySchema.parse(reply)).toEqual(reply)
   })
 
+  // Chromium already filters `externally_connectable`; this check mirrors it,
+  // so a page the manifest does not list is not told the extension exists.
+  it.each([
+    'https://evil.example',
+    'http://kamiazya-whiteboard.pages.dev',
+    undefined,
+  ])('does not answer a hello from %s', async (origin) => {
+    const fake = fakeApi()
+    installRelay(fake.api, MATCHES)
+    const reply = await Promise.race([
+      fake.message({ type: 'hello' }, origin as string),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 0)),
+    ])
+    expect(reply).toBeUndefined()
+  })
+
   // The hello is read by hand so the background script does not carry zod;
   // this holds that reader to `extensionHelloSchema`.
   it.each([

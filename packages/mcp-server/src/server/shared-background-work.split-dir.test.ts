@@ -30,8 +30,8 @@ import {
 } from './shared-background-work.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { type BackupSchedulerOptions, createBackupScheduler } from './store/backup-scheduler.js'
-import { clearDbCache, closeDb, getDb } from './store/db/index.js'
-import { clearCache } from './store/doc-cache.js'
+import { clearDbCacheForTests, closeDb, getDb } from './store/db/index.js'
+import { clearDocCacheForTests } from './store/doc-cache.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
 
@@ -52,11 +52,11 @@ afterEach(async () => {
   vi.useRealTimers()
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearCache()
+  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(served)
   await closeDb(ambient)
-  clearDbCache()
+  clearDbCacheForTests()
   resetDataDirForTests()
   vi.unstubAllEnvs()
   await rm(served, { recursive: true, force: true })

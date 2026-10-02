@@ -39,13 +39,11 @@ export type { JsonCanvasDocument, XWhiteboard } from './spatial/json-canvas.js'
 export { jsonCanvasDocumentSchema } from './spatial/json-canvas.js'
 export { xWhiteboardJsonSchema } from './spatial/json-schema.js'
 export { parseSpatial } from './spatial/parse.js'
-export type { FieldProjection, LossEntry } from './spatial/projection.js'
+export type { FieldProjection } from './spatial/projection.js'
 export {
   fromJsonCanvas,
   JSON_CANVAS_PROJECTION,
-  jsonCanvasLoss,
   toJsonCanvas,
-  valueLeafPaths,
 } from './spatial/projection.js'
 export type { SpatialSerializeMode } from './spatial/serialize.js'
 export { serializeSpatial } from './spatial/serialize.js'

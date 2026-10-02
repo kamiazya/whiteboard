@@ -19,7 +19,7 @@ vi.mock('./config.js', () => ({
 
 import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 import { createSharedWorkers, sharedBackgroundWork } from './shared-background-work.js'
-import { checkpointAfterWrite, uninstallAutoCheckpoint } from './store/auto-checkpoint.js'
+import { checkpointAfterWrite, uninstallAutoCheckpointForTests } from './store/auto-checkpoint.js'
 import type { FileGcSweeper } from './store/file-gc-sweeper.js'
 import { globalStoreScope } from './store/store-scope.js'
 
@@ -44,7 +44,7 @@ function fakeScheduler() {
   return { scheduler, signalled, flush }
 }
 
-afterEach(() => uninstallAutoCheckpoint())
+afterEach(() => uninstallAutoCheckpointForTests())
 
 describe('the file-GC worker the shared set builds', () => {
   it('starts the sweeper and stops it with the shutdown cap, never its default', async () => {

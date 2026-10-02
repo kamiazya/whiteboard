@@ -5,7 +5,7 @@
  * LoroDoc standing in as the daemon's record behind the update route.
  */
 
-import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
@@ -29,7 +29,7 @@ const DOC_B = '01ARZ3NDEKTSV4RRFFQ69G5FA2'
 
 afterEach(() => {
   connectReplicaKeeper(null)
-  forgetAll()
+  forgetAllForTests()
 })
 
 /**

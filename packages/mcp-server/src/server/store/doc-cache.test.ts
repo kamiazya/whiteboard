@@ -15,7 +15,7 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so the module loads after the mocks resolve.
-const { clearCache } = await import('./doc-cache.js')
+const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { getDoc } = await import('./document-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -26,13 +26,13 @@ describe('getDoc', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-cache-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
     handle = await createIsolatedDb({ dataDir: tempDir })
-    clearCache()
+    clearDocCacheForTests()
   })
 
   afterEach(async () => {
     await handle.dispose()
     await rm(tempDir, { recursive: true, force: true })
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('returns an empty LoroDoc on cache miss when the file does not exist', async () => {

@@ -22,8 +22,8 @@ import { wbDocumentCreate, wbDocumentDelete } from '@kamiazya/whiteboard-server-
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
-import { clearDbCache, closeDb, getDb } from '../server/store/db/index.js'
-import { clearCache } from '../server/store/doc-cache.js'
+import { clearDbCacheForTests, closeDb, getDb } from '../server/store/db/index.js'
+import { clearDocCacheForTests } from '../server/store/doc-cache.js'
 import { purgeDanglingFiles } from '../server/store/file-gc.js'
 import { createFileGcSweeper } from '../server/store/file-gc-sweeper.js'
 import { loadWorkspaceNames, setWorkspaceName } from '../server/store/names-store.js'
@@ -45,10 +45,10 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearCache()
+  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(served)
-  clearDbCache()
+  clearDbCacheForTests()
   resetDataDirForTests()
   vi.useRealTimers()
   vi.unstubAllEnvs()

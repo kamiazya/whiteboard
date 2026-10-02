@@ -10,7 +10,7 @@
 import { beforeEach, expect, it } from 'vitest'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from './layout-worker-pool.js'
 import type { MarkdownRenderResponse } from './layout-worker-protocol.js'
-import { clearRenderStore, readRenderEntry, writeRenderEntry } from './render-store.js'
+import { clearRenderStoreForTests, readRenderEntry, writeRenderEntry } from './render-store.js'
 
 // Costly on purpose: text shaping is the pipeline the measurements say
 // persistence is FOR — 21.8ms at 20 sections against a 2.2ms read, where a
@@ -54,7 +54,7 @@ async function entryWithin(key: string, ms: number): Promise<unknown | null> {
 }
 
 beforeEach(async () => {
-  await clearRenderStore()
+  await clearRenderStoreForTests()
 })
 
 // The decisive one: what comes back is what the STORE held, not what the

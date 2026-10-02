@@ -6,7 +6,7 @@
  * visit that edits nothing leaves the record byte-identical.
  */
 
-import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -147,13 +147,13 @@ async function forgetEverythingButTheBlob(): Promise<void> {
   })
   saveOfflinePasskey(DAEMON, DAEMON_WS, { credentialId: bytesToBase64Url(RAW_ID), prfSalt: 'AAAA' })
   connectReplicaKeeper(null)
-  forgetAll()
+  forgetAllForTests()
 }
 
 beforeEach(clearWhiteboardDb)
 afterEach(() => {
   connectReplicaKeeper(null)
-  forgetAll()
+  forgetAllForTests()
   localStorage.removeItem(SEALED_KEYS)
   localStorage.removeItem(OFFLINE_PASSKEYS)
   cleanup()
@@ -412,7 +412,7 @@ describe('ReplicaReadPage states', () => {
     // Cold start: nobody has asked S4a for this workspace's key yet in
     // THIS render — clearing it reproduces a fresh tab that never held it.
     connectReplicaKeeper(null)
-    forgetAll()
+    forgetAllForTests()
 
     const onReconnect = vi.fn(async () => {
       connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
@@ -494,7 +494,7 @@ describe('ReplicaReadPage states', () => {
   it('removed (key refusal not_a_member): no tree, no editor, no button', async () => {
     await seedReplica()
     connectReplicaKeeper(null)
-    forgetAll()
+    forgetAllForTests()
     connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: refusalKeyFetch('not_a_member') })
 
     render(
@@ -537,7 +537,7 @@ describe('ReplicaReadPage states', () => {
   it('the reason reaches the page: unknown_credential is locked, not removed', async () => {
     await seedReplica()
     connectReplicaKeeper(null)
-    forgetAll()
+    forgetAllForTests()
     connectReplicaKeeper({
       baseUrl: DAEMON,
       token: 'tok',
@@ -577,7 +577,7 @@ describe('ReplicaReadPage states', () => {
   it('loading and reconnecting lines are status regions', async () => {
     await seedReplica()
     connectReplicaKeeper(null)
-    forgetAll()
+    forgetAllForTests()
     let releaseReconnect: () => void = () => {}
     const onReconnect = vi.fn(
       () =>

@@ -381,6 +381,63 @@ describe('workspace tree', () => {
       expect(again).toBeNull()
       expect(doc.oplogVersion().encode()).toEqual(before)
     })
+
+    it('answers null without writing when the id is already in the tree at another path', () => {
+      // The path-taken guard cannot see this one: the new path is free, so
+      // only the id check stands between a re-run after a rename and two
+      // nodes carrying one documentId.
+      const doc = workspace()
+      createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ID_A, kind: 'markdown' })
+      const before = doc.oplogVersion().encode()
+
+      const adopted = adoptWorkspaceDocument(
+        doc,
+        { path: 'b', documentId: ID_A, kind: 'markdown' },
+        new LoroDoc(),
+      )
+
+      expect(adopted).toBeNull()
+      expect(doc.oplogVersion().encode()).toEqual(before)
+      expect(
+        readWorkspaceDocuments(doc).map((entry) => `${entry.documentId}@${entry.path}`),
+      ).toEqual([`${ID_A}@a`])
+    })
+  })
+
+  describe('creating a document at a path', () => {
+    it('refuses an occupied path and leaves the first document in place', () => {
+      const doc = workspace()
+      createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ID_A, kind: 'markdown' })
+
+      const again = createWorkspaceDocumentAtPath(doc, {
+        path: 'a',
+        documentId: ID_B,
+        kind: 'markdown',
+      })
+
+      // Reusing the occupied node would silently replace the first
+      // document's identity; the refusal is what keeps one document per path.
+      expect(again).toBeNull()
+      expect(readWorkspaceDocuments(doc).map((entry) => entry.documentId)).toEqual([ID_A])
+    })
+
+    it('turns an implied folder into the document without adding a second node at its path', () => {
+      const doc = workspace()
+      createWorkspaceDocumentAtPath(doc, { path: 'a/b', documentId: ID_B, kind: 'markdown' })
+
+      const folderTaken = createWorkspaceDocumentAtPath(doc, {
+        path: 'a',
+        documentId: ID_A,
+        kind: 'markdown',
+      })
+
+      expect(folderTaken?.path).toBe('a')
+      expect(
+        readWorkspaceDocuments(doc)
+          .map((entry) => `${entry.documentId}@${entry.path}`)
+          .sort(),
+      ).toEqual([`${ID_A}@a`, `${ID_B}@a/b`])
+    })
   })
 
   describe('what convergence decides, not this code', () => {

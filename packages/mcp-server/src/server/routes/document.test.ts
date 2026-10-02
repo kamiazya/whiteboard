@@ -25,7 +25,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearCache } = await import('../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 
 // Dynamically import the Hono app.
 const { createDocumentRouter } = await import('./document.js')
@@ -39,10 +39,10 @@ const { createDocumentRouter } = await import('./document.js')
 // in one request sequence.
 describe('createDocumentRouter composition', () => {
   beforeEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
   afterEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('serves a nested document path at /api/w/:workspaceId/document/*', async () => {

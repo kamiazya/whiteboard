@@ -41,7 +41,7 @@ deprecated for lazy map-child creation; migrate those call sites to
 `ContainerID` derived from `(parent, key, kind)`, so the two peers were
 editing one container all along.
 
-**Use `openMergeableMap` / `openMergeableText` /
+**Use `openMergeableMap` /
 `openMergeableMovableList` from
 `packages/loro-adapter/src/mergeable-containers.ts`**, never the raw
 method. Four things the helper exists for, each measured:

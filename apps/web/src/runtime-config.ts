@@ -12,14 +12,8 @@ export type { RuntimeConfig }
 // here (hosted-origin allowlisting).
 export { runtimeConfigSchema }
 
-export function resolveRuntimeConfig(raw: unknown): RuntimeConfig {
-  return runtimeConfigSchema.parse(raw)
-}
-
-export const EMPTY_RUNTIME_CONFIG: RuntimeConfig = {}
-
 // Thrown only for known-safe, hand-authored, user-facing copy — never built by
-// interpolating the rejected origin. resolveProviderStateFromRaw callers rely
+// interpolating the rejected origin. resolveHostedProviderStateFromRaw callers rely
 // on this type to distinguish trusted policy copy from Zod/unknown errors,
 // which must keep their generic non-reflective message instead.
 export class RuntimeConfigPolicyError extends Error {}

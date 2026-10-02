@@ -359,7 +359,7 @@ fallbacks, so a break in the wiring fails a test rather than only a type.
 
 What DID stay here, because it is a property of where a bend lives rather
 than of any facet: the midpoint of an edge run is already spoken for.
-`edgeLabelAnchor` draws an edge's label there and double-pressing there opens
+`edgeLabelPlacement` draws an edge's label there and double-pressing there opens
 its editor, so the add-a-bend ghosts sit at a third and two thirds of each
 run instead. Placed at the midpoint they swallowed the second press and
 failed every case in `edge-label-edit.browser.test.tsx` while the bend tests

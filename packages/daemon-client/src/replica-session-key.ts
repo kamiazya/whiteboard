@@ -223,7 +223,7 @@ export async function sessionKey(
   // `promise` is read inside its own settlement handlers below. That is
   // safe — a `.then` handler only runs as a microtask, strictly after this
   // `const` has been assigned — and it is what lets each handler tell
-  // whether it is still the CURRENT request for `key`: forget()/forgetAll()
+  // whether it is still the CURRENT request for `key`: forget()/forgetAllForTests()
   // may remove (or replace) this entry while the request is outstanding, and
   // a request that settles after that must not resurrect what was just
   // forgotten, nor leave a rejected request stuck in `inFlight` forever.
@@ -295,8 +295,8 @@ export function forget(daemonBaseUrl: string, workspaceId: string): void {
   unreachableAt.delete(key)
 }
 
-/** Drops every held key — used on logout. */
-export function forgetAll(): void {
+/** Drops every held key, so a test starts from none. */
+export function forgetAllForTests(): void {
   cache.clear()
   inFlight.clear()
   derivedKeyMemo.clear()
@@ -309,7 +309,7 @@ export interface ReplicaKeyProvider {
 
 // Non-extractable derived CryptoKeys, memoised per (daemon, workspace,
 // documentId) so a repeat read is O(1) rather than a fresh HKDF derive.
-// Cleared by forget()/forgetAll() alongside the session key they derive from.
+// Cleared by forget()/forgetAllForTests() alongside the session key they derive from.
 const derivedKeyMemo = new Map<string, Map<string, CryptoKey>>()
 
 // v1 derives every document at epoch 0 — a document's own epoch, once
@@ -339,7 +339,7 @@ export function replicaKeyProviderFor(
         documentId,
         epoch: EPOCH,
       })
-      // forget()/forgetAll() may have run while the request or the derive
+      // forget()/forgetAllForTests() may have run while the request or the derive
       // was outstanding. The entry this derive came from is then no longer
       // the held one, and memoising it would resurrect what was just
       // forgotten — so the answer is the same as if the key had never been

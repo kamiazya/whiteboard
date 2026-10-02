@@ -1,5 +1,4 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import type { z } from 'zod'
 
 /**
  * Thrown when a write is in a format the document is not in.
@@ -57,19 +56,6 @@ export class EdgeNotFoundError extends Error {
   ) {
     super(`edge not found: ${edgeId} in canvas ${documentId}`)
     this.name = 'EdgeNotFoundError'
-  }
-}
-
-/**
- * Thrown when a patch's merged result fails `spatialCanvasSchema`
- * validation — e.g. an edge patch retargets `fromNode`/`toNode` to a
- * nonexistent node id. Reuses the schema's own cross-field invariant
- * instead of a parallel hand-rolled existence check.
- */
-export class PatchValidationError extends Error {
-  constructor(public readonly issues: z.ZodIssue[]) {
-    super(`patch produced an invalid canvas: ${issues.map((issue) => issue.message).join('; ')}`)
-    this.name = 'PatchValidationError'
   }
 }
 

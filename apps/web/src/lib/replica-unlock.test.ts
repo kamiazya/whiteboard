@@ -9,7 +9,10 @@
  * them rather than leaving an unopenable artefact on disk.
  */
 
-import { adoptSessionKey, forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import {
+  adoptSessionKey,
+  forgetAllForTests,
+} from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type OfflinePasskeyCredentials, saveOfflinePasskey } from './replica-offline-passkey.js'
@@ -49,12 +52,12 @@ function credentialsYielding(prf?: Uint8Array): OfflinePasskeyCredentials {
 
 beforeEach(() => {
   localStorage.clear()
-  forgetAll()
+  forgetAllForTests()
   keepOfflinePasskey()
 })
 
 afterEach(() => {
-  forgetAll()
+  forgetAllForTests()
 })
 
 describe('rememberReplicaKey', () => {

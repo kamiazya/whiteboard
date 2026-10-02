@@ -20,7 +20,11 @@ import {
   POINT_SECTIONS,
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
-import { DerivedFacetForm, type FacetEditor } from '@kamiazya/whiteboard-facet-ui'
+import {
+  createFacetWriter,
+  DerivedFacetForm,
+  type FacetEditor,
+} from '@kamiazya/whiteboard-facet-ui'
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 
@@ -144,11 +148,7 @@ export function FacetFormPanel({
               // Straight through the registry, exactly like the derived
               // form's own writer — a hand-written editor gets no shorter
               // path to storage than a declared one.
-              write={(payload) => {
-                if (payload === undefined) return onWrite(facet.key, undefined)
-                const result = registry.validateFacetWrite(facet.key, payload)
-                if (result.ok) onWrite(facet.key, result.value)
-              }}
+              write={createFacetWriter(registry, facet.key, onWrite)}
             />
           </div>
         ) : (

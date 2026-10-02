@@ -35,11 +35,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import {
-  openMergeableMap,
-  openMergeableMovableList,
-  openMergeableText,
-} from './mergeable-containers.js'
+import { openMergeableMap, openMergeableMovableList } from './mergeable-containers.js'
 
 /**
  * Files allowed to open a REGULAR child container, with why and how many.
@@ -50,7 +46,7 @@ import {
  */
 const REGULAR_CONTAINER_SITES: Record<string, { calls: number; reason: string }> = {
   'mergeable-containers.ts': {
-    calls: 3,
+    calls: 2,
     reason:
       'the helper itself: an occupied key keeps the behaviour it had, because ensureMergeable* throws on one',
   },
@@ -162,19 +158,6 @@ describe('openMergeable*', () => {
 
     expect(a.toJSON().m.k).toEqual({ a: 'a', b: 'b' })
     expect(b.toJSON().m.k).toEqual({ a: 'a', b: 'b' })
-  })
-
-  it('merges a text two replicas created at once', () => {
-    const [a, b] = twoReplicas()
-    openMergeableText(a.getMap('m'), 'k').insert(0, 'a')
-    openMergeableText(b.getMap('m'), 'k').insert(0, 'b')
-
-    exchange(a, b)
-
-    // Both characters survive; which order the two concurrent inserts take
-    // is Loro's to decide, so only the SET is asserted.
-    expect([...String(a.toJSON().m.k)].sort()).toEqual(['a', 'b'])
-    expect(a.toJSON().m.k).toEqual(b.toJSON().m.k)
   })
 
   it('merges a movable list two replicas created at once', () => {

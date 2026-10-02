@@ -4,7 +4,6 @@ export {
   sandwichedAutoVersionIds,
 } from './checkpoints/retention.js'
 export {
-  CHECKPOINT_CEILING_MS,
   CHECKPOINT_QUIET_MS,
   type CheckpointScheduler,
   createCheckpointScheduler,

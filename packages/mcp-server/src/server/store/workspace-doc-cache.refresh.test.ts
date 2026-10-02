@@ -40,7 +40,7 @@ const { saveDocument, getDoc, listDocuments, getWorkspaceDoc, onWorkspaceDocUpda
   await import('./document-store.js')
 const { cacheBackedWorkspaceDocs, catchUpWorkspaceDoc, _clearWorkspaceDocCacheForTests } =
   await import('./workspace-doc-cache.js')
-const { clearCache } = await import('./doc-cache.js')
+const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
@@ -51,7 +51,7 @@ const WS = 'ws-follow'
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-refresh-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearCache()
+  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
 })
 afterEach(async () => {

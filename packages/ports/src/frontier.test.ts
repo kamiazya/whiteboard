@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { frontierSchema, protocolVersionSchema } from './frontier.js'
+import { frontierSchema } from './frontier.js'
 
 describe('frontierSchema', () => {
   it('accepts a non-empty Uint8Array', () => {
@@ -25,19 +25,5 @@ describe('frontierSchema', () => {
   it('rejects null and undefined', () => {
     expect(frontierSchema.safeParse(null).success).toBe(false)
     expect(frontierSchema.safeParse(undefined).success).toBe(false)
-  })
-})
-
-describe('protocolVersionSchema', () => {
-  it('accepts positive integers', () => {
-    for (const value of [1, 2, 7]) {
-      expect(protocolVersionSchema.safeParse(value).success).toBe(true)
-    }
-  })
-
-  it('rejects zero, negative, non-integer, NaN, and non-number values', () => {
-    for (const value of [0, -1, 1.5, Number.NaN, '1']) {
-      expect(protocolVersionSchema.safeParse(value).success).toBe(false)
-    }
   })
 })

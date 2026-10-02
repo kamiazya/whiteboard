@@ -21,7 +21,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getDb, getRawDb, closeDb, clearDbCache, registerDbDisposeHook, runDbDisposeHooks } =
+const { getDb, getRawDb, closeDb, clearDbCacheForTests, registerDbDisposeHook, runDbDisposeHooks } =
   await import('./index.js')
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
 const { readDatabaseLocationRecord } = await import('./location-record.js')
@@ -51,7 +51,7 @@ registerDbDisposeHook(() => {
 describe('getDb / closeDb', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-index-test-'))
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
     activeHookRun = null
     throwSynchronouslyOnDispose = false
@@ -59,7 +59,7 @@ describe('getDb / closeDb', () => {
 
   afterEach(async () => {
     await closeDb(tempDir).catch(() => {})
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
     activeHookRun = null
     throwSynchronouslyOnDispose = false
@@ -133,7 +133,7 @@ describe('getDb / closeDb', () => {
 describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-index-hooks-test-'))
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
     activeHookRun = null
     throwSynchronouslyOnDispose = false
@@ -141,7 +141,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
 
   afterEach(async () => {
     await closeDb(tempDir).catch(() => {})
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
     activeHookRun = null
     throwSynchronouslyOnDispose = false
@@ -187,7 +187,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
     await expect(closeDb(tempDir)).resolves.toBeUndefined()
   })
 
-  it('clearDbCache() runs registered dispose hooks before destroying the cached connection', async () => {
+  it('clearDbCacheForTests() runs registered dispose hooks before destroying the cached connection', async () => {
     const db = await getRawDb(tempDir)
     let queriedDuringHook = false
     activeHookRun = async () => {
@@ -195,7 +195,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
       queriedDuringHook = true
     }
 
-    clearDbCache()
+    clearDbCacheForTests()
 
     await vi.waitFor(() => {
       expect(queriedDuringHook).toBe(true)
@@ -205,30 +205,30 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
     })
   })
 
-  it('clearDbCache() keeps the cache entry live while hooks run, so a re-entrant getDb() reuses the disposing connection instead of building a replacement', async () => {
+  it('clearDbCacheForTests() keeps the cache entry live while hooks run, so a re-entrant getDb() reuses the disposing connection instead of building a replacement', async () => {
     const db = await getDb(tempDir)
     let reentrantDb: Awaited<ReturnType<typeof getDb>> | null = null
     activeHookRun = async () => {
       reentrantDb = await getDb(tempDir)
     }
 
-    clearDbCache()
+    clearDbCacheForTests()
 
     await vi.waitFor(() => {
       expect(reentrantDb).toBe(db)
     })
   })
 
-  it('clearDbCache() tolerates a throwing/rejecting dispose hook and still destroys the connection', async () => {
+  it('clearDbCacheForTests() tolerates a throwing/rejecting dispose hook and still destroys the connection', async () => {
     const db = await getRawDb(tempDir)
     activeHookRun = async () => {
       throw new Error('boom')
     }
 
-    clearDbCache()
+    clearDbCacheForTests()
 
     // runDbDisposeHooks() (Promise.allSettled internally) must swallow the
-    // throw so clearDbCache's chain still reaches destroy() instead of
+    // throw so clearDbCacheForTests's chain still reaches destroy() instead of
     // leaving the connection cached and alive forever.
     await vi.waitFor(async () => {
       await expect(sql`SELECT 1`.execute(db)).rejects.toThrow()
@@ -241,14 +241,14 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
     await expect(runDbDisposeHooks()).resolves.toBeUndefined()
   })
 
-  it('clearDbCache() still destroys the connection when a dispose hook throws synchronously', async () => {
+  it('clearDbCacheForTests() still destroys the connection when a dispose hook throws synchronously', async () => {
     const db = await getRawDb(tempDir)
     throwSynchronouslyOnDispose = true
 
-    clearDbCache()
+    clearDbCacheForTests()
 
     // A hook that throws synchronously (rather than returning a rejected
-    // promise) must not make clearDbCache's chain reject before reaching
+    // promise) must not make clearDbCacheForTests's chain reject before reaching
     // db.destroy() — that would leave the connection cached-but-orphaned.
     await vi.waitFor(async () => {
       await expect(sql`SELECT 1`.execute(db)).rejects.toThrow()
@@ -274,7 +274,7 @@ describe('getDb honours WHITEBOARD_DATABASE_URL', () => {
   afterEach(async () => {
     if (previous === undefined) delete process.env[ENV]
     else process.env[ENV] = previous
-    await clearDbCache()
+    await clearDbCacheForTests()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -306,7 +306,7 @@ describe('getDb honours WHITEBOARD_DATABASE_URL', () => {
 describe('the database location record getDb leaves behind', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-location-record-test-'))
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
   })
 
@@ -382,7 +382,7 @@ describe('the database location record getDb leaves behind', () => {
 describe('the journal mode a database is opened in', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-journal-test-'))
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
   })
 

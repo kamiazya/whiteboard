@@ -27,8 +27,8 @@ paths:
   returns instead of throwing (`errors.ts`).
 - The JSON Canvas PROJECTION ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)):
   the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
-  `JSON_CANVAS_PROJECTION` ledger and the `jsonCanvasLoss()` table it derives
-  (`spatial/projection.ts`), plus `censusSpatialModel` — how far the format reaches into the
+  `JSON_CANVAS_PROJECTION` ledger and the loss tables generated from it
+  (`spatial/projection.ts`, `spatial/loss-table.ts`), plus `censusSpatialModel` — how far the format reaches into the
   model, counted from the schemas (`spatial/census.ts`).
 
 ## What does NOT belong here

@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   adoptSessionKey,
-  forgetAll,
+  forgetAllForTests,
   type ReplicaSource,
   sessionKey,
   sessionKeyStatus,
@@ -44,7 +44,7 @@ function sourceWith(fetchImpl: typeof fetch): ReplicaSource {
 }
 
 afterEach(() => {
-  forgetAll()
+  forgetAllForTests()
 })
 
 describe('adoptSessionKey', () => {

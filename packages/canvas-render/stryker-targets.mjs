@@ -93,13 +93,16 @@ export const MUTATED = [
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:
-  // 7 tests, against the 458 that cover `svg/format.ts`. In that narrow
-  // selection its runtime mutants come back SURVIVED even when the same edit
-  // applied by hand fails the suite — verified on `/ 4294967296` ->
-  // `* 4294967296`, which Stryker called a survivor while `every draw is
-  // finite and in [0, 1)` goes red on it in a plain `vitest run`. A file whose
-  // report is known wrong does not belong in a lane whose whole output is a
-  // list of survivors to trust.
+  // 7 tests, against the 458 that cover `svg/format.ts`. Its runtime mutants
+  // came back SURVIVED even when the same edit applied by hand failed the
+  // suite — verified on `/ 4294967296` -> `* 4294967296`, which Stryker called
+  // a survivor while `every draw is finite and in [0, 1)` goes red on it in a
+  // plain `vitest run`. The cause was not the narrowness but the property's
+  // title, which carries a fresh seed per process (`vitest.stryker-setup.ts`
+  // pins it now; the decisions doc has the re-measurement, where that mutant
+  // is Killed). The exclusion stands until the lane's pinned counts are
+  // revisited on purpose: what survives there now is the FNV-1a arithmetic,
+  // which no known vector pins.
 ]
 
 /**
@@ -162,6 +165,20 @@ export const KNOWN_EQUIVALENT = {
   'src/tags/declared-colours.ts': {
     'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
     'ConditionalExpression: Object.keys(library).length === 0 -> false': 1,
+  },
+  // Three guards the ink cannot be made to notice. `String(-0)` is already
+  // `'0'`, so the guard that spells a negative zero as `0` drops a
+  // normalisation the string conversion performs on its own. An arc's
+  // midpoints stop one short of its vertices, and the chord loop reads only
+  // the first `n - 1`, so admitting the extra one pushes a midpoint nothing
+  // reads. And `strokeCurve`'s empty-input return is dead: every outline
+  // that reaches it carries 13 or 24 sampled vertices. Each hand-verified by
+  // applying the edit and running the ink suites, which stay green.
+  'src/layout/ink/sketch.ts': {
+    'ConditionalExpression: rounded === 0 -> false': 1,
+    'ConditionalExpression: n === 0 -> false': 1,
+    'ConditionalExpression: i < ARC_SAMPLES -> true': 1,
+    'EqualityOperator: i < ARC_SAMPLES -> i <= ARC_SAMPLES': 1,
   },
   // Every one of these makes `mayCluster` answer TRUE more often, which buys
   // the segmenter path — the correct one everywhere — at the price of walking

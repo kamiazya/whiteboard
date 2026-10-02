@@ -25,11 +25,6 @@ export interface BoundingBox {
   readonly h: number
 }
 
-export interface Dimensions {
-  readonly w: number
-  readonly h: number
-}
-
 /**
  * Resolved paint attributes for a shape, text run, or edge. Optional and
  * assigned, never invented: layout produces geometry and semantics only,

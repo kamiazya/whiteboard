@@ -10,7 +10,7 @@
  * read-plane smoke drives Chromium's virtual authenticator for the real thing.
  */
 
-import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -84,13 +84,13 @@ beforeEach(async () => {
       displayName: 'Field notes',
     }),
   )
-  forgetAll()
+  forgetAllForTests()
 })
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
-  forgetAll()
+  forgetAllForTests()
 })
 
 it('says why the action waits while the daemon is not connected', async () => {

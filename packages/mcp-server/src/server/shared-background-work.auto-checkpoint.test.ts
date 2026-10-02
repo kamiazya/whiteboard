@@ -20,7 +20,9 @@ vi.mock('./config.js', () => ({
 const { createSharedWorkers, sharedBackgroundWork, stdioBackgroundWork } = await import(
   './shared-background-work.js'
 )
-const { checkpointAfterWrite, uninstallAutoCheckpoint } = await import('./store/auto-checkpoint.js')
+const { checkpointAfterWrite, uninstallAutoCheckpointForTests } = await import(
+  './store/auto-checkpoint.js'
+)
 const { disposeAutoCompact } = await import('./store/auto-compact.js')
 
 function fakeScheduler() {
@@ -40,7 +42,7 @@ describe('the auto-checkpoint declaration both kinds of root arm', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'wb-shared-checkpoint-'))
   })
   afterEach(async () => {
-    uninstallAutoCheckpoint()
+    uninstallAutoCheckpointForTests()
     await disposeAutoCompact()
     await rm(tempDir, { recursive: true, force: true })
   })

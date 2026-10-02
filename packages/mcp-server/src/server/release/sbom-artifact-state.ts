@@ -9,7 +9,6 @@
 
 import { sbomFingerprintSidecarSchema } from './sbom-fingerprint-schema.js'
 
-export const SBOM_ARTIFACT_REL_PATH = 'packages/mcp-server/_artifacts/npm-sbom.cdx.json'
 export const SBOM_SIDECAR_REL_PATH = 'packages/mcp-server/_artifacts/npm-sbom.inputs.json'
 export const SBOM_REGENERATE_COMMAND = 'pnpm --filter @kamiazya/whiteboard-mcp generate:sbom:npm'
 

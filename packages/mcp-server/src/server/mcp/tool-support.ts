@@ -2,7 +2,7 @@ import { messageOf } from '@kamiazya/whiteboard-model'
 import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
-import { getTracer } from '../observability/tracing.js'
+import { getTracer, MCP_ATTR } from '../observability/tracing.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { TOOL_PROFILES, UNPROFILED_TOOL_PROFILE } from './tool-profiles.js'
 
@@ -115,9 +115,9 @@ export function registerToolWithAnnotations<
       {
         kind: 1, // SpanKind.SERVER (avoid importing the enum here to keep the dispatch path slim)
         attributes: {
-          'mcp.method.name': 'tools/call',
-          'mcp.tool.name': name,
-          ...(requestId === undefined ? {} : { 'mcp.request.id': requestId }),
+          [MCP_ATTR.METHOD_NAME]: 'tools/call',
+          [MCP_ATTR.TOOL_NAME]: name,
+          ...(requestId === undefined ? {} : { [MCP_ATTR.REQUEST_ID]: requestId }),
         },
       },
       async (span) => {

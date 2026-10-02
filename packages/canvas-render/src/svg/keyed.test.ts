@@ -5,7 +5,7 @@ import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
-import { sceneEntryKeys } from '../scene-entry-keys.js'
+import { sceneEntries } from '../scene-entry-keys.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { renderSceneToSvg } from './backend.js'
 import { renderSceneToKeyedSvg } from './keyed.js'
@@ -42,7 +42,9 @@ const scene: Scene = {
   ],
 }
 
-describe('sceneEntryKeys', () => {
+const sceneEntryKeys = (scene: Scene) => sceneEntries(scene).map((entry) => entry.key)
+
+describe('scene entry keys', () => {
   it('keys identified entries by id and content entries by owner and ordinal', () => {
     expect(sceneEntryKeys(scene)).toEqual(['node-a', 'node-a#1', 'node-b', 'edge-1'])
   })

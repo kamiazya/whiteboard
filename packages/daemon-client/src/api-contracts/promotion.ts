@@ -25,7 +25,6 @@ export const promoteWorkspaceRequestSchema = z
     attestation: attestationSchema.optional(),
   })
   .strict()
-export type PromoteWorkspaceRequest = z.infer<typeof promoteWorkspaceRequestSchema>
 
 export const promoteWorkspaceResponseSchema = z.object({
   ok: z.literal(true),
@@ -35,23 +34,3 @@ export const promoteWorkspaceResponseSchema = z.object({
   shadowed: z.array(z.string()),
 })
 export type PromoteWorkspaceResponse = z.infer<typeof promoteWorkspaceResponseSchema>
-
-/**
- * The bytes both sides hash (SHA-256) to get the WebAuthn challenge a
- * promotion is signed over: a domain tag, the TARGET workspace, and the
- * digest of the exact snapshot bytes being sent. JSON-array encoding gives
- * unambiguous part boundaries, the same convention `buildSignedPayload`
- * uses for the daemon's own signatures. Binding the snapshot's digest is
- * what makes the assertion evidence about THIS content: a replay can only
- * re-promote the same bytes into the same workspace, which is the same
- * idempotent merge.
- */
-export function promotionChallengeInput(input: {
-  workspaceId: string
-  /** SHA-256 of the snapshot bytes, base64url. */
-  snapshotDigest: string
-}): Uint8Array {
-  return new TextEncoder().encode(
-    JSON.stringify(['wb-promote-v1', input.workspaceId, input.snapshotDigest]),
-  )
-}

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { acquireLease, releaseLease, withLease } from './lease.js'
 
@@ -13,6 +13,7 @@ beforeEach(async () => {
   handle = await createIsolatedDb({ dataDir: root })
 })
 afterEach(async () => {
+  vi.useRealTimers()
   await handle.dispose()
   await rm(root, { recursive: true, force: true })
 })
@@ -257,5 +258,81 @@ describe('the leader lease', () => {
       )
       expect(released).toBe(false)
     })
+  })
+
+  /**
+   * Production never passes `renewEveryMs` (the backup scheduler gives only a
+   * TTL), so the derived cadence is what keeps a long pass the leader. Only the
+   * interval is faked, and the renewal is observed in the lease row itself, so
+   * it is the cadence that is measured and not a real wait.
+   */
+  describe('with the renewal cadence left to its default', () => {
+    const expiryOf = async (): Promise<number | undefined> =>
+      (
+        await handle.db
+          .selectFrom('leases')
+          .select('expiresAt')
+          .where('name', '=', 'backup')
+          .executeTakeFirst()
+      )?.expiresAt
+
+    // A third of the TTL, floored at a second: two renewals can be lost before
+    // the lease is.
+    it.each([
+      { ttlMs: 60_000, cadenceMs: 20_000 },
+      { ttlMs: 1_500, cadenceMs: 1_000 },
+    ])('renews every $cadenceMs ms for a $ttlMs ms ttl, and not before', async ({
+      ttlMs,
+      cadenceMs,
+    }) => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      let clock = T0
+      let beforeCadence: number | undefined
+      let atCadence: number | undefined
+      await withLease(
+        handle.db,
+        { name: 'backup', holder: 'a', ttlMs, nowMs: () => clock },
+        async () => {
+          // Moved off the grant, so a renewal is distinguishable from it.
+          clock = T0 + 100
+          await vi.advanceTimersByTimeAsync(cadenceMs - 1)
+          beforeCadence = await expiryOf()
+          await vi.advanceTimersByTimeAsync(1)
+          // Bounded by an attempt count: the renewal is an async write, and a
+          // cadence that never fires must fall through to the assertion.
+          for (let attempt = 0; attempt < 2_000; attempt += 1) {
+            atCadence = await expiryOf()
+            if (atCadence !== T0 + ttlMs) break
+          }
+        },
+      )
+      expect(beforeCadence).toBe(T0 + ttlMs)
+      expect(atCadence).toBe(T0 + 100 + ttlMs)
+    })
+  })
+
+  /**
+   * An interval left running after the body ends would re-acquire the lease it
+   * has just given back, so the finished holder stays the leader and starves
+   * every other instance until the process exits.
+   */
+  it('stops renewing once the body has ended', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    let during = 0
+    await withLease(handle.db, { name: 'backup', holder: 'a', ttlMs: 60_000 }, async () => {
+      during = vi.getTimerCount()
+    })
+    expect(during).toBe(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('stops renewing when the body throws', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    await expect(
+      withLease(handle.db, { name: 'backup', holder: 'a', ttlMs: 60_000 }, async () => {
+        throw new Error('pass failed')
+      }),
+    ).rejects.toThrow('pass failed')
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

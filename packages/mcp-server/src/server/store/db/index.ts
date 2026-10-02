@@ -175,13 +175,13 @@ export function registerDbDisposeHook(fn: () => Promise<void>): () => void {
 // Never rejects: a misbehaving hook must not block driver teardown. Exported
 // so the test-only createIsolatedDb() teardown path (test-helpers.ts) can
 // run the same hooks before destroying its db, matching production's
-// closeDb()/clearDbCache() behavior.
+// closeDb()/clearDbCacheForTests() behavior.
 //
 // Hooks are invoked through a wrapper that catches synchronous throws, not
 // just rejected promises. A hook that throws before returning a promise would
 // otherwise make the `disposeHooks.map((fn) => fn())` call itself throw,
 // which propagates past Promise.allSettled entirely and breaks the
-// never-rejects contract for callers like clearDbCache() that depend on it to
+// never-rejects contract for callers like clearDbCacheForTests() that depend on it to
 // still reach db.destroy().
 export async function runDbDisposeHooks(): Promise<void> {
   await Promise.allSettled(
@@ -204,17 +204,17 @@ export async function closeDb(dataDir: string = getDataDir()): Promise<void> {
   if (db) await db.destroy()
 }
 
-// Tests mutate getDataDir() via vi.mock; clearDbCache removes every cached instance
+// Tests mutate getDataDir() via vi.mock; clearDbCacheForTests removes every cached instance
 // without awaiting destroy() so the test setup can swap getDataDir() without leaking
 // connections. Production code should prefer closeDb() to release the underlying
 // libsql connection cleanly.
 //
 // This function is itself synchronous and fire-and-forget, so a caller that
-// only calls clearDbCache() still cannot await quiescence of the disposed
+// only calls clearDbCacheForTests() still cannot await quiescence of the disposed
 // connections or their dispose hooks — use closeDb() (or, in tests,
 // createIsolatedDb's handle.dispose()) when the caller needs to await
 // teardown completing before proceeding.
-export function clearDbCache(): void {
+export function clearDbCacheForTests(): void {
   // Snapshot the entries and remove each one only after its own dispose
   // hooks have run (not eagerly via a synchronous cache.clear()). Clearing
   // the whole cache up front would let a hook's re-entrant getDb() call for

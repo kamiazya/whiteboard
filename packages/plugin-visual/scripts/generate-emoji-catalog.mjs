@@ -190,8 +190,6 @@ await writeFile(
  * search keywords, not a heading.
  */
 
-export const EMOJI_VERSION = ${JSON.stringify(version)}
-
 export const EMOJI_GROUPS: ReadonlyArray<readonly [string, string]> = [
 ${body}
 ]
@@ -213,8 +211,6 @@ await writeFile(
  * not a label set: what the picker shows is still the English short name,
  * because the UI around it is English.
  */
-
-export const EMOJI_JA_TAG = ${JSON.stringify(CLDR_TAG)}
 
 export const EMOJI_JA = ${JSON.stringify(japanese.join('\n'))}
 `,

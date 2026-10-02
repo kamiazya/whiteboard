@@ -25,8 +25,8 @@ import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-sec
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
-import { clearDbCache, closeDb } from './store/db/index.js'
-import { clearCache } from './store/doc-cache.js'
+import { clearDbCacheForTests, closeDb } from './store/db/index.js'
+import { clearDocCacheForTests } from './store/doc-cache.js'
 import { loadWorkspaceNames } from './store/names-store.js'
 import { storeScope } from './store/store-scope.js'
 import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
@@ -49,11 +49,11 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearCache()
+  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(served)
   await closeDb(ambient)
-  clearDbCache()
+  clearDbCacheForTests()
   resetDataDirForTests()
   vi.unstubAllEnvs()
   await rm(served, { recursive: true, force: true })

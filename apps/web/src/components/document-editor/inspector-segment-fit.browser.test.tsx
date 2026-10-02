@@ -20,7 +20,8 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import '../../index.css'
-import { headerControlSizesPx } from '../ui/header-button.js'
+import { controlHeightsPx } from '../../test-utils/control-heights-px.js'
+import { HEADER_BUTTON_CLASS } from '../ui/header-button.js'
 import { InspectorSegment } from './InspectorSegment.js'
 
 afterEach(cleanup)
@@ -56,7 +57,7 @@ it('fits the chrome row at the coarse control size, chrome and all', () => {
   const buttonBox = button.getBoundingClientRect().height
   // What the GROUP adds around its controls: its border and its padding.
   const chromeAroundControls = segmentBox - buttonBox
-  const { fine, coarse } = headerControlSizesPx()
+  const { fine, coarse } = controlHeightsPx(HEADER_BUTTON_CLASS)
 
   // The fine render is the one available, so start by confirming it is the
   // size the class promises — otherwise the derived coarse number below is

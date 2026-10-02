@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
-import { extensionBridgeFetch, extensionPresent } from './extension-bridge-fetch.js'
+import { extensionBridgeFetch, extensionHello } from './extension-bridge-fetch.js'
 import { connectThroughWindow, windowHello } from './extension-window-port.js'
 
 // The bridge is one port per page, held across calls; the port each test
@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe('the bridge without chrome.runtime', () => {
   it('asks the content script whether the extension is there', async () => {
-    expect(await extensionPresent(250)).toBe(true)
+    expect(await extensionHello(250)).toMatchObject({ type: 'hello', version: '1.0.0' })
     expect(windowHello).toHaveBeenCalledWith(250, undefined)
   })
 

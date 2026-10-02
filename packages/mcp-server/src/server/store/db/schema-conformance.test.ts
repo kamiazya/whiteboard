@@ -12,11 +12,11 @@ import { join } from 'node:path'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DatabaseSchema } from './schema.js'
-import { LEDGER, NULLABLE_IN_DATABASE, type SqlType } from './schema-ledger.js'
+import { LEDGER, NULLABLE_IN_DATABASE } from './schema-ledger.js'
 import { TENANT_SCOPED_TABLES } from './tenant-scope.js'
 import { createIsolatedDb, type IsolatedDbHandle } from './test-helpers.js'
 
-type SqlTypeClaim = { readonly type: SqlType; readonly nullable: boolean }
+type SqlTypeClaim = { readonly type: string; readonly nullable: boolean }
 
 interface PhysicalColumn {
   readonly type: string

@@ -95,7 +95,7 @@ export async function createIsolatedDb(
       // Drain registered dispose hooks (e.g. document-store's pending
       // auto-compact timers/in-flight compactions) before removing the cache
       // entry or destroying the driver, matching production's
-      // closeDb()/clearDbCache() ordering. Removing the cache entry first
+      // closeDb()/clearDbCacheForTests() ordering. Removing the cache entry first
       // would let a hook's re-entrant getDb(dataDir) call race a replacement
       // connection into the cache while this one is still being drained.
       await runDbDisposeHooks()

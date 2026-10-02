@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 // document-store has to stand up a database to reach it. Nothing is mocked,
 // so every import is static.
 import {
-  clearCache,
+  clearDocCacheForTests,
   evictDoc,
   evictWorkspaceDocs,
   getCacheKeys,
@@ -16,7 +16,7 @@ import {
 import { storeScope } from './store-scope.js'
 
 afterEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 
 /** A loader the test releases by hand, counting how often it was entered. */
@@ -114,7 +114,7 @@ describe('getOrLoad is single-flight per key', () => {
 
   it('a key pushed out by the LRU reloads instead of replaying its old flight', async () => {
     // The `finally` that clears the pending entry is only reachable this way.
-    // Every explicit eviction (`evictDoc`, `evictWorkspaceDocs`, `clearCache`)
+    // Every explicit eviction (`evictDoc`, `evictWorkspaceDocs`, `clearDocCacheForTests`)
     // deletes the pending entry ITSELF, so a test that evicts by hand leaves
     // the `finally` unexercised — measured: removing it left five such cases
     // green. Capacity eviction is the one path that deletes from `cache`

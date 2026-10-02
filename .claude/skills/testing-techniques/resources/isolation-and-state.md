@@ -100,7 +100,7 @@ export rather than falling through to the real implementation. `vi.mock('./modul
   request. Note the direction: only a LATER open breaks a "most recent" handle, so a
   reproduction has to get the order right (the first attempt did not, and its mutation check
   passed against the unfixed code).
-- Module-level state in production code (`clearCache`, `clearWorkspaceIdCache`) is reset
+- Module-level state in production code (`clearDocCacheForTests`, `clearWorkspaceIdCacheForTests`) is reset
   explicitly by the tests that depend on it; a test that forgets inherits the previous file's
   cache.
 

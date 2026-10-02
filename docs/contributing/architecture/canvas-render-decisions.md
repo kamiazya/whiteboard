@@ -482,6 +482,55 @@ sticky comment's `judged by` column is the mutant's own `testsCompleted`,
 so the weak signal is visible on the row rather than inferred from knowing
 which files import what.
 
+#### A property's title carries its seed: the selection miss
+
+Stryker's vitest runner records which tests cover a mutant by TITLE on the
+dry run and re-selects them by title for each mutant, and `@fast-check/vitest`
+writes the run's seed into a property's title — `... (with seed=-114829609)` —
+drawn fresh per process unless fast-check has a global seed. So every property
+in the lane had a title the mutant runs could not find. Measured on
+`layout/ink/sketch.ts` (478 mutants): three survivors judged by 0 tests (the
+`case 'polygon':` arm and its two literals, each listed as covered by the two
+properties that draw a polygon), 46 judged by three or fewer, 184 survivors in
+all. `vitest.stryker-setup.ts` now pins the seed for the lane's config alone
+and `mutation-lane-selection.test.ts` asserts a property's title carries it:
+184 -> 144 survivors, none judged by 0 tests, from that change by itself.
+
+This is the cause of the "false survivor" the `seed.ts` and `scene-digest.ts`
+sections describe — a property that catches an edit 6 times out of 6 by hand
+yet comes back Survived from a run that lists it as covering. Re-measured on
+`seed.ts` after the pin: the `/ 4294967296` -> `* 4294967296` mutant is
+Killed, judged by 1 test, where the file was excluded for reporting it as a
+survivor. The twelve that remain there are real: the FNV-1a hash's own
+arithmetic is pinned by no known vector. Re-listing the file is a decision for
+`mutation-lane-coverage.test.ts`'s pinned counts, not made here.
+
+The price of the pin: every run of the lane draws the same inputs, so a
+mutant only a different draw would kill reports as a survivor and stays one
+until the generator is denser — which is the finding a survivor is meant to
+be, and now a repeatable one.
+
+#### The ink arithmetic: what was pinned, and what stays equivalent
+
+The properties on `sketch.ts` stated what ink must satisfy — reach,
+determinism, translation — and none of them moves when a jitter is drawn
+on the wrong side of zero or a bow runs along the chord, because each moves a
+stroke by less than the declared reach. What kills those is a replay: the
+test owns only the stream (`styleRandomFromSeed`) and restates what the
+module's header promises, per outline kind (rect and every bundled polygon,
+a short open edge, an arrowhead wing, an ellipse, a cylinder), and compares
+every number to two decimals. 184 -> 64 survivors; everything left between
+the jitter arithmetic and the cylinder is a recorded equivalent or the
+hatch's placement and its Cyrus-Beck clip, which have no replay yet.
+
+Three are equivalent, hand-verified: `String(-0)` is `'0'` already, so
+`rounded === 0 ? 0 : rounded` drops a normalisation the conversion performs;
+an arc's midpoints stop one short of its vertices and the chord loop reads
+only the first `n - 1`, so admitting the extra midpoint (`i < ARC_SAMPLES`
+as `true` or `<=`) pushes one nothing reads; and `strokeCurve`'s empty-input
+return is dead, since every outline reaching it carries 13 or 24 sampled
+vertices.
+
 #### The zero-test survivor: the `default` arm entry
 
 The file's one recorded equivalent went with it: the

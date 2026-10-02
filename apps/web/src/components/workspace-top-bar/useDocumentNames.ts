@@ -1,10 +1,12 @@
 import {
   documentNameApiUrl,
+  type setNameRequestSchema,
   type WorkspaceNames,
   workspaceNamesApiUrl,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useState } from 'react'
+import type { z } from 'zod'
 
 const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }
 
@@ -62,7 +64,7 @@ export function useDocumentNames({
         const res = await daemonFetch(documentNameApiUrl(workspaceId, targetPath), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name } satisfies z.infer<typeof setNameRequestSchema>),
         })
         if (res.ok) {
           setNames(workspaceNamesSchema.parse(await res.json()))

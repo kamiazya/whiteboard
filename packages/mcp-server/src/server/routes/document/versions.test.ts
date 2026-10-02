@@ -27,7 +27,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearCache } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
@@ -58,7 +58,7 @@ describe('versions router', () => {
 describe('versions API', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
+    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     // Version save refuses a path with no document; seed the canvases the
     // routes below checkpoint — the shape production always has.
@@ -66,7 +66,7 @@ describe('versions API', () => {
     await saveDocument('session1', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
   })
   afterEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('saves an auto-version immediately when autoVersionQuietMs=0', async () => {
@@ -210,7 +210,7 @@ describe('versions API', () => {
     const first = await save()
     // Drop the cached LoroDoc so the second save reads the document back off
     // disk — the state a restarted daemon is always in.
-    clearCache()
+    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     const second = await save()
 
@@ -338,13 +338,13 @@ describe('versions API', () => {
 describe('GET /versions/:id/document', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
+    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
     await saveDocument('session1', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
   })
   afterEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('answers the canvas as it stood, not as it stands', async () => {

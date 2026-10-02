@@ -1,11 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { EMPTY_RUNTIME_CONFIG } from '../runtime-config.js'
-import {
-  resolveHostedProviderStateFromRaw,
-  resolveProviderState,
-  resolveProviderStateFromRaw,
-} from './provider.js'
+import type { RuntimeConfig } from '../runtime-config.js'
+import { resolveHostedProviderStateFromRaw, resolveProviderState } from './provider.js'
+
+const EMPTY_RUNTIME_CONFIG: RuntimeConfig = {}
 
 describe('resolveProviderState', () => {
   it('returns "browser" when daemonBaseUrl is absent', () => {
@@ -49,23 +47,21 @@ describe('resolveProviderState', () => {
   })
 })
 
-describe('resolveProviderStateFromRaw', () => {
-  it('empty object returns "browser" state', () => {
-    expect(resolveProviderStateFromRaw({}).kind).toBe('browser')
-  })
-
+describe('resolveHostedProviderStateFromRaw', () => {
   it('valid daemonBaseUrl returns "daemon" state', () => {
-    expect(resolveProviderStateFromRaw({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe(
+    expect(resolveHostedProviderStateFromRaw({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe(
       'daemon',
     )
   })
 
   it('invalid URL returns invalid-config state', () => {
-    expect(resolveProviderStateFromRaw({ daemonBaseUrl: 'not-a-url' }).kind).toBe('invalid-config')
+    expect(resolveHostedProviderStateFromRaw({ daemonBaseUrl: 'not-a-url' }).kind).toBe(
+      'invalid-config',
+    )
   })
 
   it('invalid config message does not expose raw credentials or query parameters', () => {
-    const state = resolveProviderStateFromRaw({
+    const state = resolveHostedProviderStateFromRaw({
       daemonBaseUrl: 'https://user:secretpass@example.com?token=abc123',
     })
     expect(state.kind).toBe('invalid-config')
@@ -77,7 +73,9 @@ describe('resolveProviderStateFromRaw', () => {
   })
 
   it('invalid config message does not expose path component', () => {
-    const state = resolveProviderStateFromRaw({ daemonBaseUrl: 'https://example.com/secret-path' })
+    const state = resolveHostedProviderStateFromRaw({
+      daemonBaseUrl: 'https://example.com/secret-path',
+    })
     expect(state.kind).toBe('invalid-config')
     if (state.kind === 'invalid-config') {
       expect(state.message).not.toContain('/secret-path')
@@ -85,7 +83,7 @@ describe('resolveProviderStateFromRaw', () => {
   })
 
   it('credential-bearing config with unknown keys becomes invalid-config (fail-closed)', () => {
-    const state = resolveProviderStateFromRaw({
+    const state = resolveHostedProviderStateFromRaw({
       daemonBaseUrl: 'http://127.0.0.1:3099',
       token: 'secret-value',
     })
@@ -93,15 +91,13 @@ describe('resolveProviderStateFromRaw', () => {
   })
 
   it('credential-bearing config message does not expose the token value', () => {
-    const state = resolveProviderStateFromRaw({ token: 'my-bearer-token' })
+    const state = resolveHostedProviderStateFromRaw({ token: 'my-bearer-token' })
     expect(state.kind).toBe('invalid-config')
     if (state.kind === 'invalid-config') {
       expect(state.message).not.toContain('my-bearer-token')
     }
   })
-})
 
-describe('resolveHostedProviderStateFromRaw', () => {
   it('empty object returns "browser" state', () => {
     expect(resolveHostedProviderStateFromRaw({}).kind).toBe('browser')
   })

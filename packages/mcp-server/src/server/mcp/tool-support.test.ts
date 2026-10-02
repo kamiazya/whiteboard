@@ -1,5 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/server'
-import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { trace } from '@opentelemetry/api'
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { registerToolWithAnnotations } from './tool-support.js'
@@ -111,5 +117,36 @@ describe('registerToolWithAnnotations', () => {
         return { content: [] }
       },
     )
+  })
+})
+
+describe('a tool call span', () => {
+  afterEach(() => {
+    trace.disable()
+  })
+
+  it('carries the MCP semantic-convention method, tool and request attributes', async () => {
+    const exporter = new InMemorySpanExporter()
+    const provider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    })
+    trace.setGlobalTracerProvider(provider)
+    const server = fakeServer()
+    registerToolWithAnnotations(server, 'canvas_open', {}, async () => ({ content: [] }))
+
+    const traced = vi.mocked(server.registerTool).mock.calls[0]?.[2] as unknown as (
+      args: unknown,
+      extra: { requestId: number },
+    ) => Promise<unknown>
+    await traced({}, { requestId: 7 })
+
+    const [span] = exporter.getFinishedSpans()
+    await provider.shutdown()
+    expect(span?.name).toBe('mcp.tool.call canvas_open')
+    expect(span?.attributes).toEqual({
+      'mcp.method.name': 'tools/call',
+      'mcp.tool.name': 'canvas_open',
+      'mcp.request.id': '7',
+    })
   })
 })

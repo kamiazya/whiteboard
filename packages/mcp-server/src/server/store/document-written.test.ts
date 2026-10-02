@@ -20,7 +20,9 @@ const documentWritten = createDocumentWritten()
 const { saveDocument } = await import('./document-store.js')
 const { getDb } = await import('./db/index.js')
 const { prepareDataDir } = await import('./db/prepare.js')
-const { installAutoCheckpoint, uninstallAutoCheckpoint } = await import('./auto-checkpoint.js')
+const { installAutoCheckpoint, uninstallAutoCheckpointForTests } = await import(
+  './auto-checkpoint.js'
+)
 const { _autoCompactTimerCountForTests, disposeAutoCompact, uninstallAutoCompact } = await import(
   './auto-compact.js'
 )
@@ -31,7 +33,7 @@ describe('documentWritten', () => {
   })
 
   afterEach(async () => {
-    uninstallAutoCheckpoint()
+    uninstallAutoCheckpointForTests()
     await disposeAutoCompact()
     await rm(tempDir, { recursive: true, force: true })
   })

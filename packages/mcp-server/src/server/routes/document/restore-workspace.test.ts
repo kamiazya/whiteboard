@@ -42,14 +42,14 @@ const { createDocumentRouter } = await import('../document.js')
 const { loadDocument, listDocuments, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
-const { clearCache } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createIsolatedDb } = await import('../../store/db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'restore-ws-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearCache()
+  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   // The workspace exists because this fixture says so, not because the first
   // POST created it: that route passes `createWorkspace: true`, which is
@@ -125,7 +125,7 @@ it('a version of a tree-served document restores correctly after a simulated res
 
   // Restart: every in-memory doc — the per-document projections AND the
   // live workspace documents — is gone; only stored bytes remain.
-  clearCache()
+  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
 
   const res = await app.request(

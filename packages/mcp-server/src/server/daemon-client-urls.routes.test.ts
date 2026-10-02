@@ -31,7 +31,7 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
-const { clearCache } = await import('./store/doc-cache.js')
+const { clearDocCacheForTests } = await import('./store/doc-cache.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 const TOKEN = 'urls-token'
@@ -151,7 +151,7 @@ const BUILDERS = Object.entries({ ...documentUrls, ...daemonUrls })
 
 describe('daemon client URLs reach a route', () => {
   beforeEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
   afterEach(() => {
     vi.restoreAllMocks()

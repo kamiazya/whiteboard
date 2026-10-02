@@ -26,12 +26,12 @@ vi.mock('../config.js', () => ({
 
 const { createMcpServer } = await import('./server.js')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
-const { clearWorkspaceIdCache } = await import('../current-workspace.js')
+const { clearWorkspaceIdCacheForTests } = await import('../current-workspace.js')
 
 const factory = async () => createMcpServer(await resolveTestServerDeps(join(tmp.dir, 'data')))
 
 afterEach(() => {
-  clearWorkspaceIdCache()
+  clearWorkspaceIdCacheForTests()
 })
 
 it('serveStdio serves a legacy (2025) client from the createMcpServer factory', async () => {

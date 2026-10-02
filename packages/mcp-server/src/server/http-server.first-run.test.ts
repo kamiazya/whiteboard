@@ -28,16 +28,16 @@ vi.mock('./config.js', async () => {
 })
 
 const { startHttpServer } = await import('./http-server.js')
-const { clearWorkspaceIdCache } = await import('./current-workspace.js')
+const { clearWorkspaceIdCacheForTests } = await import('./current-workspace.js')
 
 describe('startHttpServer on a data dir nothing has ever written to', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-http-first-run-'))
-    clearWorkspaceIdCache()
+    clearWorkspaceIdCacheForTests()
   })
 
   afterEach(async () => {
-    clearWorkspaceIdCache()
+    clearWorkspaceIdCacheForTests()
     await rm(tempDir, { recursive: true, force: true })
   })
 

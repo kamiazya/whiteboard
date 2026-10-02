@@ -371,9 +371,9 @@ describe('renameDocumentPath', () => {
   })
 
   it('evicts every moved path from the cache, not only the two named ones', async () => {
-    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
-    clearCache()
+    clearDocCacheForTests()
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'a/child', new LoroDoc())
     await getDoc('session1', 'a/child')
@@ -387,9 +387,9 @@ describe('renameDocumentPath', () => {
   })
 
   it('evicts the old cache key so a subsequent getDoc under the old path misses the cache', async () => {
-    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
-    clearCache()
+    clearDocCacheForTests()
     try {
       await saveDocument('session1', 'a', new LoroDoc())
       await getDoc('session1', 'a')
@@ -398,14 +398,14 @@ describe('renameDocumentPath', () => {
       await renameDocumentPath('session1', 'a', 'b')
       expect(peekDoc('session1', 'a')).toBeUndefined()
     } finally {
-      clearCache()
+      clearDocCacheForTests()
     }
   })
 
   it('evicts a phantom doc-cache entry already sitting at the destination path, so the renamed content is not overwritten', async () => {
-    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
-    clearCache()
+    clearDocCacheForTests()
     try {
       // Write real content under 'a'.
       const doc = new LoroDoc()
@@ -428,7 +428,7 @@ describe('renameDocumentPath', () => {
       const reloaded = await getDoc('session1', 'b')
       expect(reloaded.getText('content').toString()).toBe('real content')
     } finally {
-      clearCache()
+      clearDocCacheForTests()
     }
   })
 })

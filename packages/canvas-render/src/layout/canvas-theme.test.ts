@@ -4,7 +4,8 @@
 // changes is paint and defaults; what it never changes is a silhouette or
 // route somebody chose explicitly (decision 4).
 
-import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import { SAMPLE_THEME_TOKENS } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {

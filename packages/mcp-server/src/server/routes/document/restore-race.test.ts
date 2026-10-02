@@ -33,7 +33,7 @@ vi.mock('../../store/document-store.js', async () => {
   return { ...actual, getDoc: vi.fn(actual.getDoc) }
 })
 
-const { clearCache } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 
 const { getDoc } = await import('../../store/document-store.js')
 const { createDocumentRouter } = await import('../document.js')
@@ -47,11 +47,11 @@ await import('../../sync-audience.js')
 
 describe('restore targetPath-overwrite vs delete race', () => {
   beforeEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   afterEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('does not resurrect deleted content when a DELETE of the overwrite target races the restore reading it', async () => {
@@ -146,11 +146,11 @@ describe('restore targetPath-overwrite vs delete race', () => {
 
 describe('restore in-place vs delete race', () => {
   beforeEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   afterEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {

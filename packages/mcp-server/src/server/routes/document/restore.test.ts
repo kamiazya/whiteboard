@@ -30,7 +30,7 @@ beforeEach(async () => {
 })
 
 const { createRestoreRouter } = await import('./restore.js')
-const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests, peekDoc } = await import('../../store/doc-cache.js')
 const { getDoc, saveDocument, getDocumentKind, loadDocument, onWorkspaceDocUpdated } = await import(
   '../../store/document-store.js'
 )
@@ -45,10 +45,10 @@ const createRouter = () =>
 await import('../../sync-audience.js')
 
 beforeEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 afterEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 
 describe('restore router', () => {

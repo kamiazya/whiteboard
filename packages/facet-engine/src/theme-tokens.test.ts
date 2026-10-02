@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { SAMPLE_THEME_TOKENS, themeTokensSchema } from './theme-tokens.js'
+import { SAMPLE_THEME_TOKENS } from './testing/sample-theme-tokens.js'
+import { themeTokensSchema } from './theme-tokens.js'
 
 describe('themeTokensSchema', () => {
   it('accepts a complete token bundle with both palettes', () => {

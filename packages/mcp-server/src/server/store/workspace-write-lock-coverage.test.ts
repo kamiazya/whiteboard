@@ -37,7 +37,7 @@ const { saveDocument, CacheCoherentDocumentIndex, cacheBackedWorkspaceDocs, work
 const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
 const { setDocumentDisplayName, setDocumentPinned } = await import('./names-store.js')
 const { FsBlobStore } = await import('./fs/fs-blob-store.js')
-const { clearCache } = await import('./doc-cache.js')
+const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -48,7 +48,7 @@ const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-lock-coverage-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearCache()
+  clearDocCacheForTests()
 })
 afterEach(async () => {
   await handle.dispose()

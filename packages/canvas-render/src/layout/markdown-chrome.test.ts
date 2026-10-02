@@ -4,7 +4,8 @@
 // board drew it in one bundled slate while the text around it took the
 // theme (package-canvas-render.md decision 15).
 
-import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import { SAMPLE_THEME_TOKENS } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_THEMES } from '@kamiazya/whiteboard-plugin-visual'

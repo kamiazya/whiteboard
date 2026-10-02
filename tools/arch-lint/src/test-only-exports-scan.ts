@@ -26,7 +26,8 @@ export interface TestOnlyExport extends ExportDef {
 export function isTestFile(path: string): boolean {
   return (
     /\.(test|spec)\.[a-z]+$/.test(path) ||
-    /(^|\/)(test-utils|testing|__tests__|fixtures|e2e)(\/|$)/.test(path) ||
+    /(^|\/)(test-utils|testing|__tests__|fixtures|e2e|docs-snapshots)(\/|$)/.test(path) ||
+    /-test-utils\.[a-z]+$/.test(path) ||
     /\.(smoke-impl|distribution-impl|stress)\./.test(path)
   )
 }
@@ -128,7 +129,7 @@ export function findTestOnlyExports(files: readonly ScannedFile[]): TestOnlyExpo
     for (const def of exportsOf(path, source)) defs.push({ ...def, counts })
   }
   return defs
-    .filter(({ name }) => !name.endsWith('ForTests') && !name.startsWith('_'))
+    .filter(({ name }) => !/(ForTests|_FOR_TESTS)$/.test(name) && !name.startsWith('_'))
     .filter(({ name, path }) => {
       const holders = production.get(name)
       const usedElsewhere = holders !== undefined && [...holders].some((holder) => holder !== path)

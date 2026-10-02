@@ -6,11 +6,17 @@ import {
   mdastTableRowArbitrary,
 } from '../test-utils/arbitraries.js'
 import { fc } from '../test-utils/fast-check.js'
-import { mdastFlowContentSchema, mdastNodeSchema, mdastRootSchema } from './index.js'
+import { mdastFlowContentSchema, mdastRootSchema } from './index.js'
 
-describe('mdastNodeSchema', () => {
+// The schema validates a node only in the place the content model allows it, so each
+// case is parsed from where the node really sits: a flow node under a root, a
+// phrasing node under a paragraph.
+const asFlow = (node: unknown) => mdastRootSchema.safeParse({ type: 'root', children: [node] })
+const asPhrasing = (node: unknown) => asFlow({ type: 'paragraph', children: [node] })
+
+describe('mdast node kinds', () => {
   it('parses a paragraph containing text, emphasis, and strong', () => {
-    const result = mdastNodeSchema.safeParse({
+    const result = asFlow({
       type: 'paragraph',
       children: [
         { type: 'text', value: 'plain ' },
@@ -24,7 +30,7 @@ describe('mdastNodeSchema', () => {
   it('parses a heading with depth 1-6', () => {
     for (const depth of [1, 2, 3, 4, 5, 6]) {
       expect(
-        mdastNodeSchema.safeParse({
+        asFlow({
           type: 'heading',
           depth,
           children: [{ type: 'text', value: 'h' }],
@@ -32,7 +38,7 @@ describe('mdastNodeSchema', () => {
       ).toBe(true)
     }
     expect(
-      mdastNodeSchema.safeParse({
+      asFlow({
         type: 'heading',
         depth: 7,
         children: [{ type: 'text', value: 'h' }],
@@ -41,7 +47,7 @@ describe('mdastNodeSchema', () => {
   })
 
   it('parses a list containing a listItem', () => {
-    const result = mdastNodeSchema.safeParse({
+    const result = asFlow({
       type: 'list',
       ordered: false,
       children: [
@@ -56,7 +62,7 @@ describe('mdastNodeSchema', () => {
   })
 
   it('parses a GFM table with tableRow/tableCell', () => {
-    const result = mdastNodeSchema.safeParse({
+    const result = asFlow({
       type: 'table',
       align: ['left', null, 'center'],
       children: [
@@ -75,7 +81,7 @@ describe('mdastNodeSchema', () => {
   it('parses a code node, including a mermaid diagram via lang', () => {
     // Diagrams ride the standard code node (lang: 'mermaid') — no dedicated
     // diagram node kind exists in this subset.
-    const result = mdastNodeSchema.safeParse({
+    const result = asFlow({
       type: 'code',
       lang: 'mermaid',
       value: 'graph TD; A-->B;',
@@ -84,38 +90,33 @@ describe('mdastNodeSchema', () => {
   })
 
   it('parses math and inlineMath nodes', () => {
-    expect(mdastNodeSchema.safeParse({ type: 'math', value: 'E = mc^2' }).success).toBe(true)
-    expect(mdastNodeSchema.safeParse({ type: 'inlineMath', value: 'x^2' }).success).toBe(true)
+    expect(asFlow({ type: 'math', value: 'E = mc^2' }).success).toBe(true)
+    expect(asPhrasing({ type: 'inlineMath', value: 'x^2' }).success).toBe(true)
   })
 
   it('parses wikiLink and embed custom nodes with a documentId', () => {
     expect(
-      mdastNodeSchema.safeParse({
+      asPhrasing({
         type: 'wikiLink',
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         alias: 'Architecture',
       }).success,
     ).toBe(true)
-    expect(
-      mdastNodeSchema.safeParse({ type: 'embed', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' })
-        .success,
-    ).toBe(true)
+    expect(asPhrasing({ type: 'embed', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }).success).toBe(
+      true,
+    )
   })
 
   it('rejects a wikiLink with a malformed documentId', () => {
-    expect(mdastNodeSchema.safeParse({ type: 'wikiLink', documentId: 'not-a-ulid' }).success).toBe(
-      false,
-    )
+    expect(asPhrasing({ type: 'wikiLink', documentId: 'not-a-ulid' }).success).toBe(false)
   })
 
   it('rejects an unsupported node type', () => {
-    expect(mdastNodeSchema.safeParse({ type: 'footnoteReference', identifier: 'x' }).success).toBe(
-      false,
-    )
+    expect(asFlow({ type: 'footnoteReference', identifier: 'x' }).success).toBe(false)
   })
 
   it('parses a code node with null lang and meta, as real parsers emit for a plain fence', () => {
-    const result = mdastNodeSchema.safeParse({
+    const result = asFlow({
       type: 'code',
       lang: null,
       meta: null,
@@ -126,7 +127,7 @@ describe('mdastNodeSchema', () => {
 
   it('parses a link and image with a null title, as real parsers emit when no title is given', () => {
     expect(
-      mdastNodeSchema.safeParse({
+      asPhrasing({
         type: 'link',
         url: 'https://example.com',
         title: null,
@@ -134,7 +135,7 @@ describe('mdastNodeSchema', () => {
       }).success,
     ).toBe(true)
     expect(
-      mdastNodeSchema.safeParse({
+      asPhrasing({
         type: 'image',
         url: 'https://example.com/a.png',
         title: null,
@@ -144,7 +145,7 @@ describe('mdastNodeSchema', () => {
   })
 
   it('parses a definition node', () => {
-    const result = mdastNodeSchema.safeParse({
+    const result = asFlow({
       type: 'definition',
       identifier: 'foo',
       label: 'Foo',
@@ -156,7 +157,7 @@ describe('mdastNodeSchema', () => {
 
   it('parses linkReference and imageReference nodes', () => {
     expect(
-      mdastNodeSchema.safeParse({
+      asPhrasing({
         type: 'linkReference',
         identifier: 'foo',
         label: 'Foo',
@@ -165,7 +166,7 @@ describe('mdastNodeSchema', () => {
       }).success,
     ).toBe(true)
     expect(
-      mdastNodeSchema.safeParse({
+      asPhrasing({
         type: 'imageReference',
         identifier: 'foo',
         label: 'Foo',
@@ -182,13 +183,11 @@ describe('mdastNodeSchema', () => {
     for (let i = 0; i < 200; i++) {
       node = { type: 'blockquote', children: [node] }
     }
-    expect(mdastNodeSchema.safeParse(node).success).toBe(true)
+    expect(asFlow(node).success).toBe(true)
   })
 
   it('parses a math node with meta:null, as mdast-util-math emits for a plain fence', () => {
-    expect(mdastNodeSchema.safeParse({ type: 'math', value: 'E=mc^2', meta: null }).success).toBe(
-      true,
-    )
+    expect(asFlow({ type: 'math', value: 'E=mc^2', meta: null }).success).toBe(true)
   })
 
   it('accepts html as both a flow child and a phrasing child (dual-category)', () => {
@@ -215,27 +214,6 @@ describe('mdastNodeSchema', () => {
       ],
     })
     expect(result.success).toBe(true)
-  })
-
-  it('still accepts a standalone structurally-valid listItem/tableRow/tableCell via mdastNodeSchema', () => {
-    expect(
-      mdastNodeSchema.safeParse({
-        type: 'listItem',
-        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'item' }] }],
-      }).success,
-    ).toBe(true)
-    expect(
-      mdastNodeSchema.safeParse({
-        type: 'tableRow',
-        children: [{ type: 'tableCell', children: [{ type: 'text', value: 'a' }] }],
-      }).success,
-    ).toBe(true)
-    expect(
-      mdastNodeSchema.safeParse({
-        type: 'tableCell',
-        children: [{ type: 'text', value: 'a' }],
-      }).success,
-    ).toBe(true)
   })
 })
 

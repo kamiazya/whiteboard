@@ -28,7 +28,7 @@ const { startBackgroundWork } = await import('./background-work.js')
 const { stdioBackgroundWork } = await import('./shared-background-work.js')
 const { FileVersionStore } = await import('./store/version-store.js')
 const { compactWorkspace } = await import('./store/document-store.js')
-const { uninstallAutoCheckpoint } = await import('./store/auto-checkpoint.js')
+const { uninstallAutoCheckpointForTests } = await import('./store/auto-checkpoint.js')
 const { disposeAutoCompact } = await import('./store/auto-compact.js')
 
 /**
@@ -44,7 +44,7 @@ describe('the stdio root takes automatic checkpoints for agent-only writes', () 
 
   afterEach(async () => {
     vi.useRealTimers()
-    uninstallAutoCheckpoint()
+    uninstallAutoCheckpointForTests()
     await disposeAutoCompact()
   })
 

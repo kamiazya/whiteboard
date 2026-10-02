@@ -2,7 +2,6 @@ import {
   type RuntimeConfig,
   RuntimeConfigPolicyError,
   resolveHostedRuntimeConfig,
-  resolveRuntimeConfig,
 } from '../runtime-config.js'
 import { classifyPagesOrigin } from './pages-origin-policy.js'
 
@@ -58,16 +57,6 @@ export function resolveProviderState(config: RuntimeConfig): ProviderState {
     return { kind: 'daemon', daemonBaseUrl: config.daemonBaseUrl }
   }
   return { kind: 'browser' }
-}
-
-export function resolveProviderStateFromRaw(raw: unknown): ProviderState {
-  try {
-    return resolveProviderState(resolveRuntimeConfig(raw))
-  } catch {
-    // Return a safe message without reflecting the raw input to avoid leaking
-    // credential, query, or path fragments in user-facing error output.
-    return { kind: 'invalid-config', message: GENERIC_INVALID_CONFIG_MESSAGE }
-  }
 }
 
 // Hosted-production variant: rejects non-production publicOrigin values;

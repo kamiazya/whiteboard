@@ -10,8 +10,6 @@
  * search keywords, not a heading.
  */
 
-export const EMOJI_VERSION = '17.0'
-
 export const EMOJI_GROUPS: ReadonlyArray<readonly [string, string]> = [
   [
     'Smileys & Emotion',
