@@ -14,6 +14,7 @@ import { startBackgroundWork } from './background-work.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { isDataDirWritable } from './data-dir-writable.js'
+import { startHttpRootTracing } from './observability/root-tracing.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
 import { syncStreamStats } from './routes/sync-sse.js'
@@ -85,6 +86,7 @@ export interface ServerModeRunning {
 export async function startServerModeHttp(
   options: StartServerModeHttpOptions,
 ): Promise<ServerModeRunning> {
+  await startHttpRootTracing('server')
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
   const instanceId = randomUUID()

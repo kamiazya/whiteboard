@@ -27,7 +27,6 @@ vi.mock('./security/mcp-auth.js', () => ({
   createLocalTokenMcpHttpAuthStrategy: vi.fn(() => ({})),
   resolveMcpProtectedResourceMetadataFromEnv: vi.fn(() => undefined),
 }))
-vi.mock('./observability/tracing.js', () => ({ initTracing: vi.fn(async () => undefined) }))
 vi.mock('./store/db/prepare.js', () => ({ prepareDataDir: vi.fn(async () => undefined) }))
 vi.mock('./export/headless-renderer.js', () => ({
   prewarmHeadlessExporter: vi.fn(async () => undefined),

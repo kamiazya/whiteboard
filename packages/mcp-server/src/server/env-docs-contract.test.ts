@@ -1,8 +1,9 @@
 // An operator can only set an environment variable they can find. The server's
 // own source is the authority on which ones it reads, so this holds the docs
 // to it: every key the deployment config declares, and every
-// `WHITEBOARD_*` / `MCP_*` the code reads straight off `process.env`, appears
-// somewhere under `docs/` or in `.env.server.example`.
+// `WHITEBOARD_*` / `MCP_*` / `OTEL_*` the code reads straight off
+// `process.env` (or through `envFlag('…')`), appears somewhere under `docs/` or
+// in `.env.server.example`.
 //
 // Keys read through a constant other than `ENV_KEYS` are not seen here; the
 // scan is a floor, and `docs/reference/configuration.md` remains where those
@@ -41,9 +42,14 @@ function markdownFiles(dir: string): string[] {
 
 function keysReadFromEnv(): Set<string> {
   const keys = new Set<string>(Object.values(ENV_KEYS))
-  const read = /\benv(?:\.|\[')((?:WHITEBOARD|MCP)_[A-Z0-9_]+)/g
+  const reads = [
+    /\benv(?:\.|\[')((?:WHITEBOARD|MCP|OTEL)_[A-Z0-9_]+)/g,
+    /\benvFlag\('((?:WHITEBOARD|MCP|OTEL)_[A-Z0-9_]+)'/g,
+  ]
   for (const file of sourceFiles(SOURCE_ROOT)) {
-    for (const match of readFileSync(file, 'utf8').matchAll(read)) keys.add(match[1] as string)
+    const source = readFileSync(file, 'utf8')
+    for (const read of reads)
+      for (const match of source.matchAll(read)) keys.add(match[1] as string)
   }
   return keys
 }
@@ -66,6 +72,11 @@ describe('environment variables the server reads are documented', () => {
     expect(keys.size).toBeGreaterThan(20)
     expect(keys.has('WHITEBOARD_SERVER_EXTERNAL_URL')).toBe(true)
     expect(keys.has('WHITEBOARD_OTEL_ROLE')).toBe(true)
+    // Read through `envFlag('…')` and as a bare `OTEL_*` off `process.env`, a
+    // shape the plain `env.WHITEBOARD_*` read does not match: the tracing
+    // switches went undocumented for operators while this scan reported clean.
+    expect(keys.has('WHITEBOARD_OTEL')).toBe(true)
+    expect(keys.has('OTEL_EXPORTER_OTLP_ENDPOINT')).toBe(true)
   })
 
   it('documents every key an operator can set', () => {

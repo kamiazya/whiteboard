@@ -11,6 +11,7 @@ import { LOOP_COSTS } from './background-work-costs.js'
 import { attachLiveAudience } from './canvas-client-notifier.js'
 import { getDataDir } from './config.js'
 import { isDataDirWritable } from './data-dir-writable.js'
+import { startHttpRootTracing } from './observability/root-tracing.js'
 import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import { openSyncStreamCount, syncStreamStats } from './routes/sync-sse.js'
@@ -74,6 +75,7 @@ export interface RunningServer {
 }
 
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
+  await startHttpRootTracing('daemon')
   const instanceId = randomUUID()
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()

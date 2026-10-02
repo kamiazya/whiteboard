@@ -23,6 +23,12 @@ import { describe, expect, it } from 'vitest'
  *   pending checkpoints are taken. The published stdio entry mounts no router
  *   and took none until it did — an agent-only workspace showed no History
  *   and compaction declined `no-versions` forever.
+ * - **Tracing.** Every root initialises OpenTelemetry itself — an HTTP root
+ *   through `startHttpRootTracing` (the one helper that names its role), the
+ *   stdio root through `initTracing`. The process entries differ (`daemon
+ *   run` and `server run` never reach the dev entry's `main`), so tracing
+ *   initialised in an entry made `WHITEBOARD_OTEL` a silent no-op on every
+ *   shipped deployment.
  *
  * A root is found by what it does — calling `createApp(` or `serveStdio(` —
  * rather than from a list, so a third one is checked the day it appears.
@@ -47,6 +53,9 @@ function inspectRoot(source: string): RootFindings {
     missing.push('boot through the shared helper, not prepareDataDir/ensureWorkspaceId')
   }
   if (kind === 'http' && !/\battachLiveAudience\(/.test(code)) missing.push('attachLiveAudience')
+  if (kind === 'http' && !/\bstartHttpRootTracing\(/.test(code))
+    missing.push('startHttpRootTracing')
+  if (kind === 'stdio' && !/\binitTracing\(/.test(code)) missing.push('initTracing')
   if (!/\bstartBackgroundWork\(/.test(code)) missing.push('startBackgroundWork')
   if (!/\b(sharedBackgroundWork|stdioBackgroundWork)\(/.test(code)) {
     missing.push('the background work that carries the auto-checkpoint')
@@ -82,7 +91,7 @@ describe('composition roots share one boot sequence and one live audience', () =
       ].join('\n'),
     )
     expect(findings.kind).toBe('http')
-    expect(findings.missing).toHaveLength(6)
+    expect(findings.missing).toHaveLength(7)
   })
 
   it('does not read a comment as a call', () => {
@@ -92,10 +101,24 @@ describe('composition roots share one boot sequence and one live audience', () =
     expect(findings.missing).toEqual([
       'shared boot',
       'attachLiveAudience',
+      'startHttpRootTracing',
       'startBackgroundWork',
       'the background work that carries the auto-checkpoint',
       'stopAll (flush the pending checkpoints)',
     ])
+  })
+
+  it('flags a stdio root that never starts tracing, and a tracing call in a comment', () => {
+    const findings = inspectRoot(
+      [
+        '// initTracing(',
+        'bootSelfHostDeps(dir)',
+        'startBackgroundWork(stdioBackgroundWork())',
+        'handle.stopAll()',
+        'serveStdio(server)',
+      ].join('\n'),
+    )
+    expect(findings).toEqual({ kind: 'stdio', missing: ['initTracing'] })
   })
 
   it('finds both HTTP roots and the stdio root, and each meets the shared contract', async () => {
