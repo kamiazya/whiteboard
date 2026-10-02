@@ -225,7 +225,7 @@ Default local pass after a change. CI runs the full matrix on every push, so a l
 
 ```bash
 pnpm test --project <area>   # the nearest project(s) for what you touched; CONTRIBUTING.md's table names them
-pnpm typecheck               # tsc --noEmit in every workspace package that defines a typecheck script
+pnpm typecheck               # tsc --noEmit in every workspace package that defines a typecheck script (mcp-server also checks its test files, which its build config excludes: tsconfig.test.json)
 pnpm smoke:e2e               # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
 pnpm check:local             # every gate CI's check job runs
 pnpm test:browser            # when the change touches real-browser behavior

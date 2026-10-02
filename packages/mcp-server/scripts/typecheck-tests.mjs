@@ -89,7 +89,7 @@ function report({ added, grew, shrunk, cleared }, output) {
     if ([...offending].some((file) => line.startsWith(`${file}(`))) console.error(line)
   }
   for (const { file, count } of added) {
-    console.error(`new type errors in ${file} (${count}): fix them; the ledger only shrinks`)
+    console.error(`new type errors in ${file} (${count}): fix them (the ledger takes no new files)`)
   }
   for (const { file, count, recorded } of grew) {
     console.error(
