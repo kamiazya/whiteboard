@@ -35,13 +35,22 @@ vi.mock('../config.js', () => ({
 const tmp = withTempDataDir('whiteboard-canvas-view-contract-')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 
-const WS = 'session1'
+// A fresh workspace id per run: the document store is module-level and keyed
+// by workspace, so a repeat that reused the id would read the previous run's
+// record and resolve none of this run's references.
+let workspaceSeq = 0
+const freshWorkspaceId = (): string => `contract-${workspaceSeq++}`
 
-async function save(deps: ServerDeps, documentId: string, doc: LoroDoc): Promise<void> {
+async function save(
+  deps: ServerDeps,
+  workspaceId: string,
+  documentId: string,
+  doc: LoroDoc,
+): Promise<void> {
   doc.commit()
   const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
   await deps.documentStore.saveSnapshot({
-    docRef: { kind: 'document', workspaceId: WS, documentId },
+    docRef: { kind: 'document', workspaceId, documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -58,20 +67,20 @@ const thread = {
 // A board that exercises every key the widget reads: a text node, a file node
 // that resolves to a markdown body, a conversation, and a theme that names a
 // family the daemon's catalogue can place.
-async function seedBoard(deps: ServerDeps): Promise<string> {
-  await deps.documentIndex.createWorkspace({ workspaceId: WS })
+async function seedBoard(deps: ServerDeps, workspaceId: string): Promise<string> {
+  await deps.documentIndex.createWorkspace({ workspaceId })
   const note = await deps.documentIndex.createDocument({
-    workspaceId: WS,
+    workspaceId,
     path: 'notes',
     kind: 'markdown',
   })
   const noteDoc = new LoroDoc()
   writeDocumentKind(noteDoc, 'markdown')
   writeMarkdownBody(noteDoc, '# Weekly notes\n\nShipped it.')
-  await save(deps, note.documentId, noteDoc)
+  await save(deps, workspaceId, note.documentId, noteDoc)
 
   const board = await deps.documentIndex.createDocument({
-    workspaceId: WS,
+    workspaceId,
     path: 'board',
     kind: 'spatial',
   })
@@ -86,17 +95,18 @@ async function seedBoard(deps: ServerDeps): Promise<string> {
     facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
   })
   writeCommentThread(boardDoc, thread)
-  await save(deps, board.documentId, boardDoc)
+  await save(deps, workspaceId, board.documentId, boardDoc)
   return board.documentId
 }
 
 describe("canvas_view's result read by the widget's reader", () => {
   it('recovers the scene, threads, references, style and theme font the tool sent', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
-    const documentId = await seedBoard(deps)
+    const workspaceId = freshWorkspaceId()
+    const documentId = await seedBoard(deps, workspaceId)
 
     const result = await createCanvasViewTool(deps).execute({
-      workspaceId: WS,
+      workspaceId,
       documentId,
       style: 'document',
     })
@@ -110,7 +120,7 @@ describe("canvas_view's result read by the widget's reader", () => {
     const wire = JSON.parse(JSON.stringify(canvasViewOutputSchema.parse(result)))
     const read = readCanvasViewResult({ structuredContent: wire })
 
-    expect(read.workspaceId).toBe(WS)
+    expect(read.workspaceId).toBe(workspaceId)
     expect(read.documentId).toBe(documentId)
     expect(parseViewerScene(read.scene)).toBeDefined()
     expect(read.scene).toEqual(wire.scene)
