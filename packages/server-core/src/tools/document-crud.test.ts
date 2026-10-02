@@ -16,6 +16,7 @@ import {
   wbDocumentResolve,
 } from './document-crud.js'
 import { exportOkf } from './export-okf.js'
+import { createFacetSetTool } from './facet-set.js'
 
 const WS = 'ws-1'
 
@@ -728,6 +729,30 @@ describe('wb_document_create accepts a body without frontmatter', () => {
     // `note` rather than nothing: the schema requires a `type`, this tool has
     // no parameter for one, and a caller who wants another sends full OKF.
     expect(exported.markdown).toContain('type: note')
+  })
+
+  // A document with no body is still a markdown document, and the read that
+  // follows must say so rather than invent a type from the other kind's
+  // vocabulary — and what it shows must be something the writer accepts.
+  it('records the same type when no body is sent, so the document reads and tags as a note', async () => {
+    const deps = await makeDeps()
+
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'notes/empty',
+      kind: 'markdown',
+    })
+
+    const exported = await exportOkf(deps, { workspaceId: WS, documentId: created.documentId })
+    expect(exported.frontmatter?.type).toBe('note')
+    expect(exported.markdown).not.toContain('canvas')
+
+    const tagged = await createFacetSetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [created.documentId],
+      tags: { add: ['alpha'] },
+    })
+    expect(tagged.updated[0]?.tags).toEqual(['alpha'])
   })
 
   it('leaves a full OKF string alone, frontmatter and all', async () => {

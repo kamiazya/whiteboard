@@ -7,6 +7,7 @@ import {
   readTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { ServerDeps } from '../server-deps.js'
+import { BARE_BODY_TYPE } from './document-crud.js'
 import { loadDocument } from './document-io.js'
 
 /**
@@ -29,20 +30,6 @@ export {
   exportOkfInputSchema,
   exportOkfOutputSchema,
 } from './export-okf.schemas.js'
-
-/**
- * `coreFacetsSchema.type` is required, but a spatial (JSON Canvas) doc has
- * no notion of an OKF core-facet `type` of its own — the two formats are
- * deliberately distinct document shapes (package-codec.md). `canvas`
- * is the fallback value used ONLY when no core meta was ever persisted for
- * this doc (every canvas created before this bridge existed, or a
- * spatial-only canvas that never went through `wb_document_set`). Once a
- * doc has stored core meta (via `writeCoreFacets`), that stored `type`
- * (and `title`/`tags`/`view`/`facetsRaw`) is echoed back instead — this is
- * what makes the `wb_document_set` -> OKF export round-trip
- * faithful.
- */
-const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
 
 /**
  * Serialise a document as OKF Markdown (YAML frontmatter plus body).
@@ -68,7 +55,10 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   // projection `title` gets from the workspace name.
   const trust = readTrustFacets(doc)
   const frontmatter: OkfMarkdownFrontmatter = {
-    ...(coreFacets ?? { type: OKF_EXPORT_PLACEHOLDER_TYPE }),
+    // `coreFacetsSchema.type` is required. Every markdown document is born
+    // with one, so this only answers for a row that predates that, and says
+    // what a body with no declared type is.
+    ...(coreFacets ?? { type: BARE_BODY_TYPE }),
     ...(entry?.name === undefined ? {} : { title: entry.name }),
     ...(trust ?? {}),
     facets,

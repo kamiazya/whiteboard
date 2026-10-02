@@ -111,7 +111,7 @@ async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> 
  * `note` because that is what a markdown document someone wrote a body into
  * is; the repo's own ticketing already uses `note` and `issue` this way.
  */
-const BARE_BODY_TYPE = 'note'
+export const BARE_BODY_TYPE = 'note'
 
 /** A body with the minimal frontmatter that makes it a document. */
 const asOkfBody = (body: string): string => `---\ntype: ${BARE_BODY_TYPE}\n---\n\n${body}`
@@ -154,7 +154,11 @@ export async function wbDocumentCreate(
   // Narrowed once, because the spatial arm of the union has no `markdown`
   // at all and a ternary that reaches for it in the else branch does not
   // typecheck.
-  const sent = input.kind === 'markdown' ? input.markdown : undefined
+  //
+  // No body at all is the bare case with nothing in it, not a document with no
+  // type: a markdown document always has one, so the read-back and the tag
+  // writer agree that it has frontmatter.
+  const sent = input.kind === 'markdown' ? (input.markdown ?? '') : undefined
   const markdown = sent !== undefined && !hasOkfFrontmatter(sent) ? asOkfBody(sent) : sent
 
   if (markdown !== undefined) {
