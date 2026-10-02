@@ -8,8 +8,8 @@ paths:
 ## What belongs here
 
 - `scene.ts`: `ViewerScene` (model's `SpatialCanvas`, re-exported —
-  never redeclared), the total `parseViewerScene`/`serializeViewerScene`
-  pair delegating to codec's `parseSpatial`/`serializeSpatial`.
+  never redeclared), the total `parseViewerScene`, delegating to
+  codec's `parseSpatial`.
 - This package no longer owns its own `SpatialAppearanceResolver`.
   `viewer-appearance.ts` was deleted by the theme-layer slice
   (package-canvas-render.md decision #8): `CanvasViewer.tsx` now calls

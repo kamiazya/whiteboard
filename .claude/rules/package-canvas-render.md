@@ -1491,7 +1491,7 @@ column exists so that a change to the side choice is judged by it.
 **An edge label that would lie over a box slides off the line** —
 `edgeLabelPlacement` in `edge-label-anchor.ts`, the ONE producer for the
 renderer's label box and the editor's inline label editor alike, as
-`edgeLabelAnchor` already was for the midpoint. The midpoint stays unless a
+`edgeLabelPlacement` already was for the midpoint. The midpoint stays unless a
 label of that size centred there overlaps a non-container node (its own
 endpoints included); then the nearest clear offset along the segment's
 normal wins, above or left before below or right, 8px steps to 128px, and

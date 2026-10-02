@@ -250,9 +250,8 @@ paths:
   grammar: `parseScopedTag` answers `key:value` for a well-formed scoped tag and `undefined` for a
   PLAIN one (`Machine Learning`, `v1.2`, `foo:Bar`, `a:b:c` — all preserved verbatim). The check
   is two-sided on purpose: `storedTagsSchema` reads any list of strings (`.catch(undefined)`, so a
-  malformed value costs the tags and not the element), while `tagWriteSchema` / `tagsWriteSchema`
-  refuse a colon-bearing tag that is not `key:value` — and a duplicate — with the rule in the
-  message. Every writer takes the write schema; nothing widens the stored one. Several values
+  malformed value costs the tags and not the element), while `tagWriteSchema`
+  refuses a colon-bearing tag that is not `key:value`, with the rule in the message. Every writer takes the write schema; nothing widens the stored one. Several values
   under one key are allowed by construction, and each consumer says what it does with them.
   `edgePatchFieldsSchema` omits `tags` beside `id`: the inline canvas-op field is PRICED before it
   is published (decision 7), and that schema reaches `wb_canvas_edit` as it stands.

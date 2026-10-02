@@ -28,9 +28,9 @@ history.
 Three modules, and `src/index.ts` is the whole published surface:
 
 - `checkpoints/scheduler.ts`: the trailing debounce with a ceiling, over an
-  injected `save`. `CHECKPOINT_QUIET_MS` (5min) and `CHECKPOINT_CEILING_MS`
-  (30min) are the cadence both keepers share, which is the point of them
-  living here rather than twice.
+  injected `save`. `CHECKPOINT_QUIET_MS` (5min) is the cadence both keepers
+  share, which is the point of it living here rather than twice; the 30min
+  ceiling is the scheduler's own default and is not exported.
 - `checkpoints/retention.ts`: which automatic checkpoints may go —
   `autoVersionsOverCap` over `MAX_AUTO_PER_DOCUMENT` sparing lineage, and
   `sandwichedAutoVersionIds` for the run between two manual saves.
