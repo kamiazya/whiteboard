@@ -18,11 +18,12 @@ function patternToRegExp(pattern: string): RegExp {
     .replace(/^\//, '')
     .replace(/\/$/, '')
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    // `/**/` is zero or more directories (gitignore syntax), so `/a/**/b.ts`
-    // owns `a/b.ts` too; it is held apart from the bare `**` and `*` below.
-    .replace(/\/\*\*\//g, '/\u0000')
+    // A doubled star between two slashes is zero or more directories
+    // (gitignore syntax), so the file directly under the left side is owned
+    // too; it is parked under a token the bare-star pass below cannot see.
+    .replace(/\/\*\*\//g, '/<dirs>')
     .replace(/\*\*|\*/g, (glob) => (glob === '**' ? '.*' : '[^/]*'))
-    .replace(/\u0000/g, '(?:.*/)?')
+    .replace(/<dirs>/g, '(?:.*/)?')
   // A bare name matches at any depth, and a path with no glob also owns what is under it.
   return new RegExp(`^${anchored ? '' : '(?:.*/)?'}${body}(?:/.*)?$`)
 }

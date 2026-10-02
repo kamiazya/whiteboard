@@ -48,7 +48,7 @@ const VITEST_INVOCATION = /vitest|pnpm test/
 // each entry is checked from the other side below, so it cannot outlive it.
 const NOT_PROJECT_NAMES: Readonly<Record<string, string>> = {
   '.claude/scripts/stale-issues-lib.test.mjs':
-    'fixture issue slugs such as mcp-node-tests-use-real-data-dir name a project only by accident',
+    'fixture issue ids such as mcp-node-tests-use-real-data-dir name a project only by accident',
 }
 
 const scanned = [...trackedFiles(ROOT, '.claude', '.github'), ...trackedFiles(ROOT, '*.md')]
