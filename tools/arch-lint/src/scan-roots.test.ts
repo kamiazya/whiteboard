@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -9,15 +9,26 @@ import {
   SCRIPT_SCAN_ROOTS,
   WORKTREES_PATH,
   walk,
+  workspaceDirs,
 } from './scan-roots.js'
 
 describe('scan roots', () => {
-  it('reaches every package and tool source tree, plus the web app', () => {
+  it('reaches every app, package and tool source tree', () => {
     // A derivation that matched nothing would leave every size scan reading an
     // empty tree, which reports as a clean one.
     expect(SCAN_ROOTS).toContain('apps/web/src')
     expect(SCAN_ROOTS).toContain(join('tools', 'arch-lint', 'src'))
     expect(SCAN_ROOTS.length).toBeGreaterThan(15)
+  })
+
+  it('reaches the src tree of every workspace that has one, whichever group it is in', () => {
+    // `apps/web` was named and `apps/*` was not derived, so a second app's
+    // source sat outside every size and import-position scan that walks these.
+    const unreached = workspaceDirs()
+      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'src')))
+      .map((dir) => join(dir, 'src'))
+      .filter((root) => !SCAN_ROOTS.includes(root))
+    expect(unreached).toEqual([])
   })
 
   it('reaches the end-to-end tree and every package scripts directory', () => {

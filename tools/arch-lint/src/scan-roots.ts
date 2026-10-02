@@ -52,7 +52,7 @@ function groupSubdirs(group: string, sub: string): string[] {
 
 /** The source trees the size ledgers scan, relative to the repo root. */
 export const SCAN_ROOTS: readonly string[] = [
-  'apps/web/src',
+  ...groupSubdirs('apps', 'src'),
   ...groupSubdirs('packages', 'src'),
   ...groupSubdirs('tools', 'src'),
 ]
