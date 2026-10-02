@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, parse } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { canonicalizeWithMissingTail, isWithinAllowedRoots } from './path-containment.js'
+import {
+  canonicalizeWithMissingTail,
+  isSafePathSegment,
+  isSafeRelativePosixPath,
+  isStrictlyInside,
+  isWithinAllowedRoots,
+} from './path-containment.js'
 
 let base: string
 
@@ -65,5 +71,58 @@ describe('isWithinAllowedRoots', () => {
     expect(
       await isWithinAllowedRoots(join(base, 'real', 'new', 'x'), [join(base, 'link', 'new')]),
     ).toBe(true)
+  })
+})
+
+describe('isStrictlyInside', () => {
+  it('accepts a path below the root, one whose directories do not exist yet included', async () => {
+    expect(await isStrictlyInside(join(base, 'root'), join(base, 'root', 'a', 'b.txt'))).toBe(true)
+  })
+
+  it('refuses the root itself, however it is spelled', async () => {
+    expect(await isStrictlyInside(join(base, 'root'), join(base, 'root'))).toBe(false)
+    expect(await isStrictlyInside(join(base, 'root'), join(base, 'root', 'a', '..'))).toBe(false)
+  })
+
+  it('refuses a path that climbs out, and a sibling sharing the root name as a prefix', async () => {
+    expect(await isStrictlyInside(join(base, 'root'), join(base, 'root', '..', 'x'))).toBe(false)
+    expect(await isStrictlyInside(join(base, 'root'), join(base, 'root-other', 'x'))).toBe(false)
+  })
+
+  it('judges a path through a symlink by where it lands', async () => {
+    await mkdir(join(base, 'root'))
+    await mkdir(join(base, 'outside'))
+    await symlink(join(base, 'outside'), join(base, 'root', 'link'))
+    expect(await isStrictlyInside(join(base, 'root'), join(base, 'root', 'link', 'x'))).toBe(false)
+  })
+})
+
+describe('the safe-name predicates', () => {
+  it('takes one ordinary segment, and refuses what is not a name', () => {
+    expect(isSafePathSegment('self-host')).toBe(true)
+    expect(isSafePathSegment('a.b')).toBe(true)
+    for (const name of ['', '.', '..', 'a/b', 'a\\b', 'a\0b', '/a']) {
+      expect(isSafePathSegment(name), JSON.stringify(name)).toBe(false)
+    }
+  })
+
+  it('takes a relative path of safe segments, and refuses anything that could leave its directory', () => {
+    expect(isSafeRelativePosixPath('thumbs/deep/a.png')).toBe(true)
+    expect(isSafeRelativePosixPath('a.png')).toBe(true)
+    for (const path of [
+      '',
+      '.',
+      '..',
+      '../a',
+      'a/..',
+      'a/../b',
+      '/a',
+      'a//b',
+      'a/./b',
+      'a/',
+      'a\\b',
+    ]) {
+      expect(isSafeRelativePosixPath(path), JSON.stringify(path)).toBe(false)
+    }
   })
 })

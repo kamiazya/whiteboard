@@ -1,5 +1,6 @@
 import { mkdir, readdir, rename, stat } from 'node:fs/promises'
 import { dirname, join, relative, sep } from 'node:path'
+import { canonicalizeWithMissingTail } from '../../shared/path-containment.js'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { getLogger } from '../log.js'
 import type { DataLayout } from './data-layout-seam.js'
@@ -52,7 +53,7 @@ declare const tenantDir: unique symbol
 export type TenantDir = string & { readonly [tenantDir]: 'tenant' }
 
 /** The directory every tenant's own directory is a direct child of. */
-export function tenantsRoot(dataDir: string): string {
+function tenantsRoot(dataDir: string): string {
   return join(dataDir, TENANTS_DIRNAME)
 }
 
@@ -62,6 +63,23 @@ export function tenantRoot(dataDir: string, tenantId: string): TenantDir {
 
 export function blobsRoot(dataDir: string, tenantId: string): string {
   return join(tenantRoot(dataDir, tenantId), BLOBS_DIRNAME)
+}
+
+/**
+ * Whether `blobsRoot(dataDir, tenantId)` really is a directory directly under
+ * `tenants/`, once both are canonical.
+ *
+ * `join` collapses `..`, so a tenant id read from an artifact (a backup
+ * manifest) that is not one path segment builds a path somewhere else
+ * entirely; this asks about the path that was built rather than trusting the
+ * string it was built from.
+ */
+export async function isTenantBlobsRootUnderTenants(
+  dataDir: string,
+  tenantId: string,
+): Promise<boolean> {
+  const tenantDirectory = dirname(await canonicalizeWithMissingTail(blobsRoot(dataDir, tenantId)))
+  return dirname(tenantDirectory) === (await canonicalizeWithMissingTail(tenantsRoot(dataDir)))
 }
 
 /**
