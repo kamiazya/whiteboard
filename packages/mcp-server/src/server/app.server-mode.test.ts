@@ -93,7 +93,6 @@ function makeServerModeOptions(
     authStrategy: makeScopeStrategy(grantedScopes),
     touch: () => {},
     getStatus: makeInternalStatus,
-    shutdown: () => Promise.resolve(),
     ...overrides,
   }
 }
@@ -111,7 +110,6 @@ describe('app — server-mode composition', () => {
         token: 'local-token',
         touch: () => {},
         getStatus: () => makeInternalStatus(),
-        shutdown: () => Promise.resolve(),
       }),
     ).not.toThrow()
   })
@@ -127,7 +125,6 @@ describe('app — server-mode composition', () => {
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
-      shutdown: () => Promise.resolve(),
     })
     const unauthedRes = await app.request('/api/workspaces')
     expect(unauthedRes.status).toBe(401)
@@ -213,7 +210,6 @@ describe('app — server-mode composition', () => {
           authStrategy: makeScopeStrategy(['canvas:read']),
           touch: () => {},
           getStatus: () => makeInternalStatus(),
-          shutdown: () => Promise.resolve(),
         }),
       ).toThrow('invalid server-mode config')
     })
@@ -229,7 +225,6 @@ describe('app — server-mode composition', () => {
           authStrategy: makeScopeStrategy(['canvas:read']),
           touch: () => {},
           getStatus: () => makeInternalStatus(),
-          shutdown: () => Promise.resolve(),
         }),
       ).toThrow('invalid server-mode config')
     })
@@ -675,7 +670,6 @@ describe('app — server-mode composition', () => {
       token: 'local-token',
       touch: () => {},
       getStatus: () => makeInternalStatus(),
-      shutdown: () => Promise.resolve(),
     })
     const localRes = await localApp.request('/api/workspaces', {
       headers: { Authorization: 'Bearer local-token' },
@@ -700,7 +694,6 @@ describe('app — server-mode composition', () => {
       authStrategy: alwaysDeny,
       touch: () => {},
       getStatus: () => makeInternalStatus(),
-      shutdown: () => Promise.resolve(),
     })
     const res = await app.request('/api/workspaces', {
       headers: { authorization: `Bearer ${SECRET}` },

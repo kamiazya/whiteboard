@@ -69,7 +69,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
         mcp: { httpEnabled: true, endpoint: 'https://example.com/mcp' },
         clients: { connected: 0, ready: 0 },
       }),
-      shutdown: () => Promise.resolve(),
       // Without this /api/v1 is not mounted, so the walk below never sees a
       // single v1 route and the whole surface is exempt from the guard by
       // accident. The in-memory container is enough: this test inspects
@@ -132,7 +131,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
         mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
         clients: { connected: 0, ready: 0 },
       }),
-      shutdown: () => Promise.resolve(),
       // Without this /api/v1 is not mounted, so the walk below never sees a
       // single v1 route and the whole surface is exempt from the guard by
       // accident. The in-memory container is enough: this test inspects

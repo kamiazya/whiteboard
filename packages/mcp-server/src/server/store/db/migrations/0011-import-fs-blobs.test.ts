@@ -6,8 +6,7 @@ import type { Kysely } from 'kysely'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../../../shared/test-utils/can-deny-file-read.js'
-import type { DatabaseSchema } from '../schema.js'
-import { migratorFor, openMigrationHarness } from '../test-helpers.js'
+import { type AnyTables, migratorFor, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../../config.js', () => ({
@@ -23,11 +22,11 @@ const { importFsBlobs, migration } = await import('./0011-import-fs-blobs.js')
 const BEFORE = '0010-document-path'
 const THIS_ONE = '0011-import-fs-blobs'
 
-async function memoryDb(): Promise<Kysely<DatabaseSchema>> {
-  return (await openMigrationHarness<DatabaseSchema>()).db
+async function memoryDb(): Promise<Kysely<AnyTables>> {
+  return (await openMigrationHarness()).db
 }
 
-async function seedWorkspace(db: Kysely<DatabaseSchema>, workspaceId: string): Promise<void> {
+async function seedWorkspace(db: Kysely<AnyTables>, workspaceId: string): Promise<void> {
   await db
     .insertInto('workspaces')
     .values({ id: workspaceId, displayName: null, createdAt: 0, updatedAt: 0 })
@@ -77,10 +76,7 @@ async function writeBlob(
   return path
 }
 
-async function reassembledRow(
-  db: Kysely<DatabaseSchema>,
-  docKey: string,
-): Promise<Uint8Array | null> {
+async function reassembledRow(db: Kysely<AnyTables>, docKey: string): Promise<Uint8Array | null> {
   const header = await db
     .selectFrom('documentSnapshots')
     .select(['chunkCount', 'totalBytes', 'maxChunkBytes'])

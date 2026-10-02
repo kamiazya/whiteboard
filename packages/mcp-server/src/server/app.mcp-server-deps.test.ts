@@ -74,7 +74,7 @@ describe('/mcp serves the ServerDeps the root composed', () => {
     })
     const client = new Client({ name: 'mcp-deps-test', version: '1.0.0' }, clientOptions)
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const headers = new Headers(init?.headers)
         headers.set('Authorization', 'Bearer secret')
         headers.set('Origin', 'http://127.0.0.1:6274')

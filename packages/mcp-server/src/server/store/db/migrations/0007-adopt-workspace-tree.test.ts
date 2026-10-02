@@ -1,16 +1,15 @@
 import type { Kysely } from 'kysely'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { DatabaseSchema } from '../schema.js'
-import { openMigrationHarness } from '../test-helpers.js'
+import { type AnyTables, openMigrationHarness } from '../test-helpers.js'
 import { migration as migration0001 } from './0001-init.js'
 import { migration as migration0002 } from './0002-canvases-last-compacted-at.js'
 import { migration as migration0003 } from './0003-canvas-doc-store.js'
 import { migration as migration0005 } from './0005-canvases-kind.js'
 import { migration } from './0007-adopt-workspace-tree.js'
 
-async function createMemoryDb(): Promise<Kysely<DatabaseSchema>> {
-  const { db } = await openMigrationHarness<DatabaseSchema>()
+async function createMemoryDb(): Promise<Kysely<AnyTables>> {
+  const { db } = await openMigrationHarness()
   await migration0001.up(db as unknown as Kysely<unknown>)
   await migration0002.up(db as unknown as Kysely<unknown>)
   await migration0003.up(db as unknown as Kysely<unknown>)
@@ -19,7 +18,7 @@ async function createMemoryDb(): Promise<Kysely<DatabaseSchema>> {
 }
 
 /** Store a doc as ONE snapshot chunk, the way the doc store writes it. */
-async function storeDoc(db: Kysely<DatabaseSchema>, docKey: string, doc: LoroDoc): Promise<void> {
+async function storeDoc(db: Kysely<AnyTables>, docKey: string, doc: LoroDoc): Promise<void> {
   const bytes = doc.export({ mode: 'snapshot' })
   const frontier = new Uint8Array([0])
   await db

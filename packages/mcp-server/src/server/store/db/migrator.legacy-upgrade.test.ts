@@ -76,8 +76,8 @@ it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob fol
   }
   await expect(
     db
-      .selectFrom('sqlite_master' as never)
-      .select(['name' as never])
+      .selectFrom('sqlite_master')
+      .select('name')
       .where('name', '=', 'documents')
       .executeTakeFirst(),
   ).resolves.toBeUndefined()
@@ -222,8 +222,8 @@ it('the REAL migrator upgrades a third-site nanoid row that postdates 0008: zero
   }
   await expect(
     db
-      .selectFrom('sqlite_master' as never)
-      .select(['name' as never])
+      .selectFrom('sqlite_master')
+      .select('name')
       .where('name', '=', 'documents')
       .executeTakeFirst(),
   ).resolves.toBeUndefined()

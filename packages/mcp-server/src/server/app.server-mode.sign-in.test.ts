@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
+import { DENY_ALL_STRATEGY, oidcProviders } from './security/_test-helpers.js'
 import { signInConfigSchema } from './security/sign-in-config.js'
 
 let tempDir: string
@@ -43,9 +44,7 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
     // The root's deps, over the memory store: nothing here reads a document.
     serverDeps: resolveServerDeps(createContainer()),
     dataLayout: testDataLayout(),
-    authStrategy: {
-      authorize: async () => ({ ok: false, status: 401, code: 'auth.required' }),
-    },
+    authStrategy: DENY_ALL_STRATEGY,
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')
@@ -55,17 +54,19 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
 }
 
 describe('app — server-mode sign-in (ADR-0046)', () => {
-  const [provider] = signInConfigSchema.parse({
-    providers: [
-      {
-        id: 'corp',
-        kind: 'oidc',
-        issuer: 'https://idp.test',
-        clientId: 'wb',
-        clientSecret: { env: 'X' },
-      },
-    ],
-  }).providers
+  const [provider] = oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'corp',
+          kind: 'oidc',
+          issuer: 'https://idp.test',
+          clientId: 'wb',
+          clientSecret: { env: 'X' },
+        },
+      ],
+    }).providers,
+  )
   if (provider === undefined) throw new Error('unreachable')
 
   const signIn = {

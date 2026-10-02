@@ -13,6 +13,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
+import { oidcProviders } from './security/_test-helpers.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { createInvitationStore } from './security/invitation-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
@@ -22,6 +23,7 @@ import { signInConfigSchema } from './security/sign-in-config.js'
 import { createSignInSessionStore } from './security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
 import { createUserDeactivation } from './security/user-deactivation.js'
+import { createUserDeletion } from './security/user-deletion.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
@@ -55,16 +57,18 @@ beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'wb-server-mode-mcp-membership-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
   const members = createMemberProfileStore(handle.db)
-  const providers = signInConfigSchema.parse({
-    providers: [
-      {
-        id: 'corp',
-        kind: 'oidc',
-        issuer: ISSUER,
-        admission: { createAccounts: true, bearerClients: ['claude-code'] },
-      },
-    ],
-  }).providers
+  const providers = oidcProviders(
+    signInConfigSchema.parse({
+      providers: [
+        {
+          id: 'corp',
+          kind: 'oidc',
+          issuer: ISSUER,
+          admission: { createAccounts: true, bearerClients: ['claude-code'] },
+        },
+      ],
+    }).providers,
+  )
   const options: ServerModeAppOptions = {
     authMode: 'server-mode',
     publicBaseUrl: PUBLIC_URL,
@@ -91,6 +95,7 @@ beforeEach(async () => {
         }),
         appointments: createTenantAdministratorStore(handle.db),
         deactivation: createUserDeactivation(handle.db),
+        deletion: createUserDeletion(handle.db, async () => {}),
       },
       origin: PUBLIC_URL,
       bearerProvisioning: { providers, members },
@@ -119,7 +124,7 @@ async function agentOf(sub: string) {
     .sign(privateKey)
   const client = new Client({ name: `agent-${sub}`, version: '1.0.0' })
   const transport = new StreamableHTTPClientTransport(new URL(`${PUBLIC_URL}/mcp`), {
-    fetch: (input, init) => {
+    fetch: async (input, init) => {
       const headers = new Headers(init?.headers)
       headers.set('Authorization', `Bearer ${token}`)
       return app.request(input instanceof URL ? input.toString() : String(input), {

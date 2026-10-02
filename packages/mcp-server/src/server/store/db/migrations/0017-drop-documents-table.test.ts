@@ -55,8 +55,8 @@ async function seedDocumentRow(db: Handle['db'], id: string): Promise<void> {
 
 async function tableExists(db: Handle['db'], name: string): Promise<boolean> {
   const row = await db
-    .selectFrom('sqlite_master' as never)
-    .select(['name' as never])
+    .selectFrom('sqlite_master')
+    .select('name')
     .where('type', '=', 'table')
     .where('name', '=', name)
     .executeTakeFirst()

@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createApp } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
+import { DENY_ALL_STRATEGY } from '../security/_test-helpers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -40,10 +41,9 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
       authMode: 'server-mode',
       publicBaseUrl: 'https://example.com',
       allowedOrigins: ['https://example.com'],
-      authStrategy: () => ({ ok: false as const, status: 401 as const, error: 'denied' }),
+      authStrategy: DENY_ALL_STRATEGY,
       touch: () => {},
       getStatus: () => ({}) as never,
-      shutdown: () => Promise.resolve(),
       serverDeps: resolveServerDeps(createContainer()),
       dataLayout: testDataLayout(),
     })

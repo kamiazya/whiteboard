@@ -1,16 +1,15 @@
 import { type Kysely, sql } from 'kysely'
 import { describe, expect, it } from 'vitest'
-import type { DatabaseSchema } from '../schema.js'
-import { migratorFor, openMigrationHarness } from '../test-helpers.js'
+import { type AnyTables, migratorFor, openMigrationHarness } from '../test-helpers.js'
 
 const BEFORE = '0009-document-vocabulary'
 const THIS_ONE = '0010-document-path'
 
-async function memoryDb(): Promise<Kysely<DatabaseSchema>> {
-  return (await openMigrationHarness<DatabaseSchema>()).db
+async function memoryDb(): Promise<Kysely<AnyTables>> {
+  return (await openMigrationHarness()).db
 }
 
-async function seedDocument(db: Kysely<DatabaseSchema>, column: 'slug' | 'path'): Promise<void> {
+async function seedDocument(db: Kysely<AnyTables>, column: 'slug' | 'path'): Promise<void> {
   await sql`insert into workspaces (id, createdAt, updatedAt) values ('ws', 0, 0)`.execute(db)
   await sql`
     insert into documents (id, workspaceId, ${sql.ref(column)}, isPinned, currentBranch, createdAt, updatedAt)
