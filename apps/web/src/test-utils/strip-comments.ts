@@ -119,74 +119,104 @@ function endOfTemplateText(source: string, from: number): { end: number; interpo
   return { end: source.length, interpolates: false }
 }
 
-export function stripComments(source: string): string {
-  let out = ''
-  let i = 0
-  let previous = ''
-  let word = ''
-  let depth = 0
+/** Where a walk over `source` has got to, and what the last token was. */
+interface Walk {
+  readonly source: string
+  out: string
+  at: number
+  // The last significant character and the identifier it ended, which decide
+  // whether a `/` divides or opens a regex.
+  previous: string
+  word: string
+  depth: number
   // The brace depth each open `${` returns to when its `}` arrives.
-  const interpolations: number[] = []
+  readonly interpolations: number[]
+}
 
-  const copyTemplateText = (from: number): void => {
-    const { end, interpolates } = endOfTemplateText(source, from)
-    out += source.slice(from, end)
-    i = end
-    previous = interpolates ? '' : '`'
-    if (interpolates) interpolations.push(depth)
-  }
+/** Copies `source` from the walk's position up to `end`, unchanged. */
+function copyTo(walk: Walk, end: number): void {
+  walk.out += walk.source.slice(walk.at, end)
+  walk.at = end
+}
 
-  while (i < source.length) {
-    const ch = source[i] as string
-    const next = source[i + 1]
-    if (ch === '/' && (next === '/' || next === '*')) {
-      const end = endOfComment(source, i)
-      out += blank(source.slice(i, end))
-      i = end
-      continue
-    }
-    if (ch === '/' && (REGEX_MAY_FOLLOW.has(previous) || REGEX_MAY_FOLLOW_WORD.has(word))) {
-      const end = endOfRegex(source, i)
-      out += source.slice(i, end)
-      i = end
-      previous = ')'
-      word = ''
-      continue
-    }
-    if (ch === "'" || ch === '"') {
-      const end = endOfString(source, i)
-      out += source.slice(i, end)
-      i = end
-      previous = ch
-      word = ''
-      continue
-    }
-    if (ch === '`') {
-      out += ch
-      word = ''
-      copyTemplateText(i + 1)
-      continue
-    }
-    if (ch === '{') depth += 1
-    if (ch === '}') {
-      if (interpolations[interpolations.length - 1] === depth) {
-        interpolations.pop()
-        out += ch
-        word = ''
-        copyTemplateText(i + 1)
-        continue
-      }
-      depth -= 1
-    }
-    out += ch
-    i += 1
-    if (IDENTIFIER_CHAR.test(ch)) {
-      word = IDENTIFIER_CHAR.test(previous) ? word + ch : ch
-      previous = ch
-    } else if (!/\s/.test(ch)) {
-      previous = ch
-      word = ''
-    }
+function finishToken(walk: Walk, previous: string): void {
+  walk.previous = previous
+  walk.word = ''
+}
+
+/** Copies template text from the walk's position to the end of the template or its next `${`. */
+function copyTemplateText(walk: Walk): void {
+  const { end, interpolates } = endOfTemplateText(walk.source, walk.at)
+  copyTo(walk, end)
+  finishToken(walk, interpolates ? '' : '`')
+  if (interpolates) walk.interpolations.push(walk.depth)
+}
+
+/** Consumes the comment, regex, string or template opener at the walk's position, if there is one. */
+function consumeToken(walk: Walk): boolean {
+  const { source, at } = walk
+  const ch = source[at]
+  const next = source[at + 1]
+  if (ch === '/' && (next === '/' || next === '*')) {
+    const end = endOfComment(source, at)
+    walk.out += blank(source.slice(at, end))
+    walk.at = end
+    return true
   }
-  return out
+  if (ch === '/' && (REGEX_MAY_FOLLOW.has(walk.previous) || REGEX_MAY_FOLLOW_WORD.has(walk.word))) {
+    copyTo(walk, endOfRegex(source, at))
+    finishToken(walk, ')')
+    return true
+  }
+  if (ch === "'" || ch === '"') {
+    copyTo(walk, endOfString(source, at))
+    finishToken(walk, ch)
+    return true
+  }
+  if (ch === '`') {
+    copyTo(walk, at + 1)
+    walk.word = ''
+    copyTemplateText(walk)
+    return true
+  }
+  return false
+}
+
+/** Consumes one character of code, tracking braces so a `}` can close a template's `${`. */
+function consumeCode(walk: Walk): void {
+  const ch = walk.source[walk.at] as string
+  if (ch === '{') walk.depth += 1
+  if (ch === '}') {
+    if (walk.interpolations[walk.interpolations.length - 1] === walk.depth) {
+      walk.interpolations.pop()
+      copyTo(walk, walk.at + 1)
+      walk.word = ''
+      copyTemplateText(walk)
+      return
+    }
+    walk.depth -= 1
+  }
+  copyTo(walk, walk.at + 1)
+  if (IDENTIFIER_CHAR.test(ch)) {
+    walk.word = IDENTIFIER_CHAR.test(walk.previous) ? walk.word + ch : ch
+    walk.previous = ch
+  } else if (!/\s/.test(ch)) {
+    finishToken(walk, ch)
+  }
+}
+
+export function stripComments(source: string): string {
+  const walk: Walk = {
+    source,
+    out: '',
+    at: 0,
+    previous: '',
+    word: '',
+    depth: 0,
+    interpolations: [],
+  }
+  while (walk.at < source.length) {
+    if (!consumeToken(walk)) consumeCode(walk)
+  }
+  return walk.out
 }
