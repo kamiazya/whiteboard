@@ -49,7 +49,14 @@ describe('a store scope', () => {
     const theirs = await storeScope(dir, 'tenant-two').db()
     await theirs
       .insertInto('memberProfiles')
-      .values({ id: 'p-two', displayName: 'Two', createdAt: 1, updatedAt: 1 })
+      .values({
+        id: 'p-two',
+        displayName: 'Two',
+        accountId: 'a-two',
+        createdAt: 1,
+        updatedAt: 1,
+        deactivatedAt: null,
+      })
       .execute()
 
     expect(await mine.selectFrom('memberProfiles').select('id').execute()).toEqual([])
@@ -62,7 +69,14 @@ describe('a store scope', () => {
     const [a, b] = [await storeScope(dir).db(), await storeScope(other).db()]
     await a
       .insertInto('memberProfiles')
-      .values({ id: 'p-a', displayName: 'A', createdAt: 1, updatedAt: 1 })
+      .values({
+        id: 'p-a',
+        displayName: 'A',
+        accountId: 'a-a',
+        createdAt: 1,
+        updatedAt: 1,
+        deactivatedAt: null,
+      })
       .execute()
 
     expect(await b.selectFrom('memberProfiles').select('id').execute()).toEqual([])
