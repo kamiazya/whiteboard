@@ -2573,11 +2573,9 @@ describe('editor composite state (command-based)', () => {
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
     // reject — except for the counters below that a directed script owns.
-    // Each other floor was set at roughly a third of a sampled minimum; the
-    // census line above is what the distribution is NOW, and the only
-    // source worth reading, because the arms have moved weight between each
-    // other more than once and any range quoted here goes stale the first
-    // time one does.
+    // Each other floor is roughly a third of a sampled minimum; the census
+    // line above is the distribution NOW, and any range quoted here goes
+    // stale the first time an arm moves weight.
     //
     // Three rules, all learned by getting them wrong here.
     //
@@ -2592,27 +2590,23 @@ describe('editor composite state (command-based)', () => {
     // dragged alongside a selection, which the extras kept green with
     // production containment disabled outright.
     //
-    // Seven counters are NOT held to a sampled floor: `stepReordersEffective`,
-    // `reconnections`, `cutMoves` and `pasteInserts` are each the end of a
-    // conjunction (a cut across an edge, then an insert; an overlapping
-    // neighbour; a held cut resolved as a move), and `copies`, `edgeDeletes`
-    // and `groupFrameDrags` sat about three standard deviations above the
-    // floors they once had — measured over thirty runs, one unlucky draw in
-    // a few hundred from a flake — because each is a chain too (an edge
-    // selection that survives to a Delete; a frame made from a selection
-    // and then grabbed). A chain's probability is a product, so `numRuns`
-    // buys margin on it only linearly, and a floor at a third of a sampled
-    // minimum failed in CI on two different chains — `stepReordersEffective`
-    // at 3, `reconnections` at 2 — each time with the rest of the census in
-    // range, so the run had done MORE work, not less. Ranges taken over a
-    // handful of runs also understate a single-digit counter's left tail.
+    // Seven counters are NOT held to a sampled floor. Four are each the end of
+    // a conjunction (`stepReordersEffective`, `reconnections`, `cutMoves`,
+    // `pasteInserts`: a cut across an edge, then an insert; an overlapping
+    // neighbour; a held cut resolved as a move), and three — `copies`,
+    // `edgeDeletes`, `groupFrameDrags` — sat about three standard deviations
+    // above their floors over thirty runs, chains too. A chain's probability
+    // is a product, so `numRuns` buys margin on it only linearly, and a
+    // floor at a third of a sampled minimum failed in CI on two chains
+    // (`stepReordersEffective` at 3, `reconnections` at 2) with the rest of
+    // the census in range, so the run had done MORE work, not less.
     //
-    // Those seven are asserted as ARRANGEMENTS by the directed describe
-    // below, deterministically, and here they only have to be reached at all
-    // (`> 0`): the guard that remains is "the generator still produces
-    // this", which is what a statistical floor can say that a script cannot.
-    // Do not re-derive a floor for them from sampled minima; densify the
-    // generator or add a directed script instead.
+    // Those seven are asserted as ARRANGEMENTS by the directed describe below,
+    // deterministically, and here they only have to be reached at all (`> 0`):
+    // the guard that remains is "the generator still produces this", which
+    // is what a statistical floor can say that a script cannot. Do not
+    // re-derive a floor for them from sampled minima; densify the generator
+    // or add a directed script instead.
     //
     // Densifying moved the CENTRE of these counters, not their worst draw
     // (`stepReordersEffective` 8 -> 16, `reconnections` median 8 -> 10,
@@ -2701,14 +2695,11 @@ describe('editor composite state (command-based)', () => {
  * Seven counters are the end of a conjunction the generator reaches a few
  * times per run — a cut whose selection straddles an edge and is then pasted
  * as an insert, an overlapping neighbour for a z-order step, a held cut
- * resolved as a move, a copy that finds a selection, an edge selection that
- * survives to its Delete, a group frame that is grabbed with its members
- * inside. A chain's probability is a product, so no `numRuns` makes its
- * minimum safe, and a floor derived from sampled minima failed twice on two
- * different counters in CI. What those arrangements can be asserted to do is
- * a statement about a SEQUENCE, so each is stated as one here,
- * deterministically, and the property's floor on them only says the
- * generator still reaches them at all.
+ * resolved as a move, a copy, an edge Delete, a grabbed group frame. A
+ * chain's probability is a product, so no `numRuns` makes its minimum safe,
+ * and a floor derived from sampled minima failed twice in CI. Each is
+ * stated here as a SEQUENCE, deterministically, and the property's floor on
+ * them only says the generator still reaches them at all.
  *
  * Each script counts into its own census: sharing the property's would let
  * these scripts satisfy the very floors that measure the generator.
