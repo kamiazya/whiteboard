@@ -54,7 +54,7 @@ Check:
 ### 4. Focus management around dialogs and overlays
 
 The modal and non-modal patterns differ, and applying the modal rule to
-everything is its own bug — this repo's `ContextMenu`, `CanvasDropdown`, and
+everything is its own bug — this repo's `ContextMenu` and
 `SelectionOverlay` are non-modal and must not trap.
 
 Check:

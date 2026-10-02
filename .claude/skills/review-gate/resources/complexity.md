@@ -31,7 +31,7 @@ numbers in a finding. Never measure by editing `biome.json` in the tree under re
 
 Check:
 - Does the diff add a path to the `noExcessiveCognitiveComplexity` override's
-  negations in `biome.json`, or raise `EXEMPT_COUNT`? A function moved into an
+  negations in `biome.json`, or raise `EXEMPT_CEILING`? A function moved into an
   exempt file, or pushed over the threshold inside one, is the same thing with
   less noise.
 - If so, does the diff or PR body name the structural alternative considered
