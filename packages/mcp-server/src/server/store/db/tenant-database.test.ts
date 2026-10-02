@@ -141,14 +141,13 @@ describe('a tenant-bound handle', () => {
   )
 })
 
-/** A member profile with every column the schema type requires, whatever the table defaults. */
+/** A member profile with every column the schema type requires an insert to name. */
 const profileRow = (id: string, displayName: string) => ({
   id,
   displayName,
   accountId: `account-${id}`,
   createdAt: 1,
   updatedAt: 1,
-  deactivatedAt: null,
 })
 
 describe('what a tenant-bound handle scopes beyond a plain statement', () => {

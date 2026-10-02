@@ -55,7 +55,6 @@ describe('a store scope', () => {
         accountId: 'a-two',
         createdAt: 1,
         updatedAt: 1,
-        deactivatedAt: null,
       })
       .execute()
 
@@ -75,7 +74,6 @@ describe('a store scope', () => {
         accountId: 'a-a',
         createdAt: 1,
         updatedAt: 1,
-        deactivatedAt: null,
       })
       .execute()
 
