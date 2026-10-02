@@ -14,11 +14,13 @@
  * socket and the token, exactly as the native host reaches it.
  */
 import { request as httpRequest } from 'node:http'
+import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   type ReplicaTier,
   rotateReplicaKeyResponseSchema,
   setReplicaTierResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType } from 'zod'
 import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
@@ -33,7 +35,7 @@ import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 
 export interface DaemonRequest {
   readonly record: DaemonRecord
-  readonly method: 'POST' | 'PUT'
+  readonly method: 'GET' | 'POST' | 'PUT'
   readonly path: string
   readonly body?: unknown
 }
@@ -139,20 +141,56 @@ function refusalMessage(body: unknown, status: number): string {
 }
 
 /**
+ * The canonical id for a handle the operator typed. The daemon's posture
+ * routes take canonical ids only, while every other surface (and the server
+ * commands) accepts the segment an operator sees in a URL (ADR-0019); the
+ * listing is asked rather than the store opened, for the reason the module
+ * header gives. A handle the listing does not resolve, or a listing this
+ * version cannot read, is passed through as typed so the daemon's own answer
+ * stays the authority on what exists.
+ */
+async function canonicalWorkspaceId(
+  options: PostureOptions,
+  record: DaemonRecord,
+): Promise<string> {
+  try {
+    const answer = await (options.request ?? requestDaemon)({
+      record,
+      method: 'GET',
+      path: '/api/workspaces',
+    })
+    const listing = listWorkspacesResponseSchema.safeParse(answer.body)
+    if (answer.status !== 200 || !listing.success) return options.workspaceId
+    return (
+      resolveWorkspaceHandle(listing.data.workspaces, options.workspaceId)?.workspaceId ??
+      options.workspaceId
+    )
+  } catch {
+    // The request that follows reports an unreachable daemon in its own words.
+    return options.workspaceId
+  }
+}
+
+/**
  * Asks the daemon, and answers either the parsed 2xx body or the refusal —
  * the daemon's own, a transport failure, or a 2xx the contract refuses.
  */
 async function askDaemon<T>(
   options: PostureOptions,
-  req: Omit<DaemonRequest, 'record'>,
+  req: { method: 'POST' | 'PUT'; pathFor: (workspaceId: string) => string; body?: unknown },
   schema: ZodType<T>,
-): Promise<{ answer: T } | { refusal: Refused }> {
+): Promise<{ answer: T; workspaceId: string } | { refusal: Refused }> {
   const daemon = await runningDaemon(options)
   if ('refusal' in daemon) return daemon
-  const { workspaceId } = options
+  const workspaceId = await canonicalWorkspaceId(options, daemon.record)
   let answer: DaemonAnswer
   try {
-    answer = await (options.request ?? requestDaemon)({ record: daemon.record, ...req })
+    answer = await (options.request ?? requestDaemon)({
+      record: daemon.record,
+      method: req.method,
+      path: req.pathFor(workspaceId),
+      ...(req.body === undefined ? {} : { body: req.body }),
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return { refusal: refused(workspaceId, 'unreachable', message) }
@@ -166,14 +204,20 @@ async function askDaemon<T>(
     const message = `the daemon answered ${answer.status} with a body this version cannot read`
     return { refusal: refused(workspaceId, 'malformed-response', message, answer.status) }
   }
-  return { answer: parsed.data }
+  return { answer: parsed.data, workspaceId }
 }
 
 export async function runDaemonRotateReplicaKey(
   options: PostureOptions,
 ): Promise<{ result: DaemonRotateReplicaKeyResult; exitCode: 0 | 1 }> {
-  const path = `/api/workspaces/${encodeURIComponent(options.workspaceId)}/replica-key/rotate`
-  const asked = await askDaemon(options, { method: 'POST', path }, rotateReplicaKeyResponseSchema)
+  const asked = await askDaemon(
+    options,
+    {
+      method: 'POST',
+      pathFor: (id) => `/api/workspaces/${encodeURIComponent(id)}/replica-key/rotate`,
+    },
+    rotateReplicaKeyResponseSchema,
+  )
   if ('refusal' in asked) {
     return { result: daemonRotateReplicaKeyResultSchema.parse(asked.refusal), exitCode: 1 }
   }
@@ -181,7 +225,7 @@ export async function runDaemonRotateReplicaKey(
     result: daemonRotateReplicaKeyResultSchema.parse({
       schemaVersion: 1,
       ok: true,
-      workspaceId: options.workspaceId,
+      workspaceId: asked.workspaceId,
       keyId: asked.answer.keyId,
     }),
     exitCode: 0,
@@ -191,10 +235,13 @@ export async function runDaemonRotateReplicaKey(
 export async function runDaemonSetReplicaTier(
   options: PostureOptions & { tier: ReplicaTier | null },
 ): Promise<{ result: DaemonSetReplicaTierResult; exitCode: 0 | 1 }> {
-  const path = `/api/workspaces/${encodeURIComponent(options.workspaceId)}/replica-tier`
   const asked = await askDaemon(
     options,
-    { method: 'PUT', path, body: { tier: options.tier } },
+    {
+      method: 'PUT',
+      pathFor: (id) => `/api/workspaces/${encodeURIComponent(id)}/replica-tier`,
+      body: { tier: options.tier },
+    },
     setReplicaTierResponseSchema,
   )
   if ('refusal' in asked) {
@@ -204,7 +251,7 @@ export async function runDaemonSetReplicaTier(
     result: daemonSetReplicaTierResultSchema.parse({
       schemaVersion: 1,
       ok: true,
-      workspaceId: options.workspaceId,
+      workspaceId: asked.workspaceId,
       tier: asked.answer.tier,
       effectiveTier: asked.answer.effectiveTier,
     }),
