@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, posix, relative } from 'node:path'
 import { adapterFiles } from './adapter-files.js'
+import { isAdapterForbiddenMechanic } from './adapter-reach.js'
 import { collectRelativeImportEdges } from './cycle-check.js'
 
 /**
@@ -21,13 +22,17 @@ import { collectRelativeImportEdges } from './cycle-check.js'
 /**
  * Where a mechanic lives, and how its edge is spelled.
  *
- * `store/` holds most of them and is named by its path beneath it, unprefixed,
- * which is how the allowlist has always read. The others are the same kind of
- * thing kept elsewhere: a `*-store` under `security/` (people, sessions, keys
- * and invitations are rows in the keeper's database), the daemon's own
- * housekeeping under `daemon/`, and the tenant data layout that places every
- * file on disk. They are prefixed with their directory so `security/x-store`
- * cannot be read as a same-named `store/` module.
+ * What counts is `adapter-reach.ts`'s one definition of the mechanics layer,
+ * minus what an adapter is entitled to import (policy, values, live state) and
+ * plus the daemon's housekeeping. `store/` holds most of them and is named by
+ * its path beneath it, unprefixed, which is how the allowlist has always read.
+ * The others are the same kind of thing kept elsewhere: a `*-store` under
+ * `security/` (people, sessions, keys and invitations are rows in the keeper's
+ * database), the daemon's own housekeeping under `daemon/`, the tenant data
+ * layout that places every file on disk, and the top-level mechanisms
+ * (`atomic-write`, `output-path`, `config`, ...). Those are prefixed with their
+ * directory — `server/` for a top-level module — so `security/x-store` cannot
+ * be read as a same-named `store/` module.
  *
  * `export/` is the keeper rendering a stored document and keeping the fonts a
  * render may use. `headless-export` reads the document through the store's
@@ -38,30 +43,32 @@ import { collectRelativeImportEdges } from './cycle-check.js'
  * modules that touch storage today, so a new module there is judged rather than
  * missed; a pure renderer an adapter legitimately needs goes in
  * `MECHANICS_NOT_SCANNED` by its `export/<module>` name.
- *
- * What the others under `security/` and `tenant/` hold — bearer parsing,
- * credential resolution, the tenant id — is policy or a value an adapter is
- * entitled to read, and is deliberately not matched.
  */
-const MECHANIC_SPECIFIERS: readonly { readonly pattern: RegExp; readonly prefix: string }[] = [
-  { pattern: /^\.\.?\/(?:.*\/)?store\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\.js$/, prefix: '' },
-  { pattern: /^\.\.?\/(?:.*\/)?security\/([a-z0-9-]+-store)\.js$/, prefix: 'security/' },
-  { pattern: /^\.\.?\/(?:.*\/)?daemon\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\.js$/, prefix: 'daemon/' },
-  { pattern: /^\.\.?\/(?:.*\/)?tenant\/(data-layout)\.js$/, prefix: 'tenant/' },
-  { pattern: /^\.\.?\/(?:.*\/)?export\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\.js$/, prefix: 'export/' },
-]
+function mechanicNameOf(fromPath: string, specifier: string): string | undefined {
+  const resolved = posix
+    .normalize(posix.join(posix.dirname(fromPath), specifier))
+    .replace(/\.js$/, '')
+  // A specifier that climbs out of `server/` (`../../daemon/...`) names a
+  // sibling tree; its tail is what identifies the module.
+  const outside = resolved.startsWith('..')
+  const modulePath = outside
+    ? specifier.replace(/^(?:\.\.?\/)+/, '').replace(/\.js$/, '')
+    : resolved
+  if (!/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(modulePath)) return undefined
+  if (!isAdapterForbiddenMechanic(modulePath)) return undefined
+  if (modulePath.startsWith('store/')) return modulePath.slice('store/'.length)
+  return modulePath.includes('/') ? modulePath : `server/${modulePath}`
+}
 
 // The specifiers come from the AST walk every other import scan uses, so a
 // dynamic `import()`, a side-effect `import '...'` and a re-export count and
 // a commented-out import does not. Matching `from '...'` in raw text missed
 // the first three shapes and flagged the last.
-function mechanicsImportedBy(fileName: string, source: string): Set<string> {
+function mechanicsImportedBy(fileName: string, fromPath: string, source: string): Set<string> {
   const found = new Set<string>()
   for (const { specifier } of collectRelativeImportEdges(fileName, source)) {
-    for (const { pattern, prefix } of MECHANIC_SPECIFIERS) {
-      const match = pattern.exec(specifier)
-      if (match !== null) found.add(`${prefix}${match[1] as string}`)
-    }
+    const name = mechanicNameOf(fromPath, specifier)
+    if (name !== undefined) found.add(name)
   }
   return found
 }
@@ -110,7 +117,7 @@ export function findAdapterMechanicEdges(
   for (const file of files) {
     const from = relative(serverDir, file).split('\\').join('/')
     if (exempt.has(from)) continue
-    for (const mechanic of mechanicsImportedBy(file, readFileSync(file, 'utf8'))) {
+    for (const mechanic of mechanicsImportedBy(file, from, readFileSync(file, 'utf8'))) {
       if (!excluded.has(mechanic)) edges.add(`${from} -> ${mechanic}`)
     }
   }

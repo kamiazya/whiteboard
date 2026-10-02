@@ -552,6 +552,18 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/export.ts -> export/headless-export',
   'routes/fonts.ts -> export/install-font',
   'routes/fonts.ts -> export/installed-fonts',
+  // Top-level mechanisms kept beside the server's roots, counted since the
+  // finder took the mechanics layer's own definition (`adapter-reach.ts`) for
+  // what a mechanic is. `files.ts` writes an upload through `atomic-write` and
+  // the export routes resolve a caller-chosen path through `output-path`, the
+  // storage rules an operation over files would own; `mcp-apps.ts` reads the
+  // daemon's `config` for the widget it serves. The type-only edge from
+  // `document-output-path-error.ts` is the error shape of that same resolution.
+  'mcp/mcp-apps.ts -> server/config',
+  'routes/document-output-path-error.ts -> server/output-path',
+  'routes/document/export-svg.ts -> server/output-path',
+  'routes/export.ts -> server/output-path',
+  'routes/files.ts -> server/atomic-write',
   // The one helper every address-parsing route shares. Its own reach is the
   // workspace registry the store holds at module level; handing it the registry
   // the way `createApp` hands routes everything else retires the entry.
@@ -614,8 +626,14 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Then 24 -> 23, when `routes/runtime.ts -> daemon/log-rotation` went with
  * the route: the daemon keeps no log file, so the prune had nothing to delete.
+ *
+ * Then 23 -> 28, and again measurement and not new debt: the finder now takes
+ * the mechanics layer from `adapter-reach.ts`, the one definition
+ * `mcp-server-layer-order.test.ts` also reads, so the top-level mechanisms
+ * (`atomic-write`, `output-path`, `config`) count where only the directories
+ * did. Five edges that already existed.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 23
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 28
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
@@ -663,9 +681,11 @@ export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
  * Named, not discovered: following every `server/*.ts` an adapter imports also
  * reaches `shared-background-work.ts`, a composition root's wiring whose edges
  * are not debt, and a guess at which helpers count would hide the decision. A
- * new helper that reaches a mechanic is a blind spot until it is listed here.
+ * new helper that reaches a mechanic is a blind spot until it is listed here —
+ * `mcp-server-layer-order.test.ts` holds this list to the top-level files it
+ * files in the adapters layer, so the two cannot name different helpers.
  */
-export const ADAPTER_HELPER_FILES: readonly string[] = ['workspace-handle.ts']
+export const ADAPTER_HELPER_FILES: readonly string[] = ['workspace-handle.ts', 'app-helpers.ts']
 
 /**
  * `store-scope` is a value an adapter is HANDED, not a mechanic it reaches for:
@@ -683,11 +703,11 @@ export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data', 
  * A published subpath that only some importers may load from SHIPPED source.
  *
  * The manifest checks judge a package, and a package can be a legal dependency
- * while one of its entries is not: `plugin-visual` is allowed to
- * `canvas-render`, whose `/ui` entry is React; `facet-engine` is allowed to it
- * too, and its `/testing` entry pulls `fast-check`, a devDependency. Neither
- * shows in a dependency list, and only a built bundle (bigger, or missing a
- * module) shows the import.
+ * while one of its entries is not: `canvas-render` may depend on
+ * `plugin-visual`, whose `/ui` entry is React, and on `facet-engine`, whose
+ * `/testing` entry pulls `fast-check`, a devDependency. Neither shows in a
+ * dependency list, and only a built bundle (bigger, or missing a module) shows
+ * the import.
  *
  * `consumers` are workspace directories whose non-test source may import the
  * subpath; empty means no shipped file may, only tests. Keyed by the specifier
