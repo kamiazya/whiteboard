@@ -578,6 +578,17 @@ describe('what counts as an export only a test uses, on fixture files', () => {
     ).toEqual([])
   })
 
+  it('does not read the ledger that lists a name as a test using it', () => {
+    // The ledger spells every listed key as `path#name`; counting those words
+    // would keep an export reported after its last real test was deleted.
+    expect(
+      found({
+        [lib]: 'export const gone = 1\n',
+        'tools/arch-lint/src/test-only-exports.test.ts': `const debt = ['${lib}#gone']\n`,
+      }),
+    ).toEqual([])
+  })
+
   it('reads a path as a test by what it is called and where it sits', () => {
     for (const path of [
       'a/x.test.ts',

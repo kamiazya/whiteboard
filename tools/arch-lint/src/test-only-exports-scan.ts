@@ -32,6 +32,12 @@ export function isTestFile(path: string): boolean {
   )
 }
 
+/**
+ * The ledger that lists these names. It is a test file by its path and spells
+ * every listed key, so reading its words would count each one as a test using it.
+ */
+const LEDGER_FILE = 'tools/arch-lint/src/test-only-exports.test.ts'
+
 /** A file whose exports are test scaffolding by name, or a tool that polices the repo. */
 function isExemptDefiner(path: string): boolean {
   return (
@@ -111,6 +117,7 @@ export function findTestOnlyExports(files: readonly ScannedFile[]): TestOnlyExpo
   const defs: (ExportDef & { counts: Map<string, number> })[] = []
   for (const { path, text } of files) {
     if (isTestFile(path)) {
+      if (path === LEDGER_FILE) continue
       // A test is only asked whether it names a symbol, so its words are read
       // without a parse: a comment mentioning one is a name worth a second look
       // rather than a miss, and tests are most of the tree.
