@@ -7,8 +7,12 @@ import {
   WORKSPACE_DOCUMENT_API_ACTIONS,
   type WorkspaceDocumentApiAction,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
+import { IDP, PUBLIC_URL, serverModeSignIn } from './_test-server-mode-harness.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
+import { createRelyingParty } from './security/oidc-relying-party.js'
+import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-client-urls-')
 
@@ -194,5 +198,73 @@ describe('daemon client URLs reach a route', () => {
     const unmatched =
       res.status === 404 && (res.headers.get('content-type') ?? '').startsWith('text/plain')
     expect(unmatched, `${method} ${url} -> ${res.status}`).toBe(false)
+  })
+})
+
+// The `/auth` routes exist only in server mode, and only when a provider is
+// configured (ADR-0046), so they are requested against that app. Their builders
+// do not end in `ApiUrl`: that suffix marks a route the browser keeper must
+// also answer, and these have no browser-keeper counterpart.
+const AUTH_SAMPLES: Record<string, readonly Sample[]> = {
+  authProvidersUrl: [{ label: 'providers', method: 'GET', url: daemonUrls.authProvidersUrl() }],
+  authSignInUrl: [{ label: 'begin', method: 'GET', url: daemonUrls.authSignInUrl('corp') }],
+  authSessionUrl: [{ label: 'session', method: 'GET', url: daemonUrls.authSessionUrl() }],
+  authSignOutUrl: [{ label: 'sign out', method: 'POST', url: daemonUrls.authSignOutUrl() }],
+  authReauthenticateUrl: [
+    { label: 'reauthenticate', method: 'GET', url: daemonUrls.authReauthenticateUrl() },
+  ],
+}
+
+const AUTH_BUILDERS = Object.entries(daemonUrls)
+  .filter(([name, value]) => /^auth\w*Url$/.test(name) && typeof value === 'function')
+  .map(([name]) => name)
+
+describe('daemon client /auth URLs reach a server-mode route', () => {
+  let db: IsolatedDbHandle
+  let app: ReturnType<typeof createApp>
+
+  beforeAll(async () => {
+    db = await createIsolatedDb({ dataDir: join(tmp.dir, 'auth-db') })
+    const idp = await fakeOidcProvider(IDP, 'wb')
+    app = createApp({
+      authMode: 'server-mode',
+      publicBaseUrl: PUBLIC_URL,
+      allowedOrigins: [PUBLIC_URL],
+      serverDeps: resolveServerDeps(createContainer()),
+      dataLayout: testDataLayout(),
+      authStrategy: () => ({ ok: false as const, status: 401 as const, error: 'denied' }),
+      touch: () => {},
+      getStatus: () => ({}) as never,
+      signIn: serverModeSignIn(db.db, createRelyingParty({ fetch: idp.fetch })),
+    } as never)
+  })
+  afterAll(async () => {
+    await db.dispose()
+  })
+
+  it('has a sample for exactly the builders the module exports', () => {
+    expect(AUTH_BUILDERS.length).toBeGreaterThan(3)
+    expect([...AUTH_BUILDERS].sort()).toEqual(Object.keys(AUTH_SAMPLES).sort())
+  })
+
+  // The control: an `/auth` path no route serves is answered by the UI's
+  // catch-all, so "not a plain-text 404" would hold for a renamed route too.
+  it('tells a mounted route from the catch-all that answers every other path', async () => {
+    const res = await app.request(`${PUBLIC_URL}/auth/no-such-route`)
+    expect(res.headers.get('content-type') ?? '').not.toMatch(/json/)
+    expect(res.status).not.toBe(302)
+  })
+
+  const rows = Object.entries(AUTH_SAMPLES).flatMap(([builder, samples]) =>
+    samples.map((sample) => ({ builder, ...sample })),
+  )
+
+  it.each(rows)('$builder $label ($method) is served by a route', async ({ method, url }) => {
+    const res = await app.request(`${PUBLIC_URL}${url}`, { method })
+    const contentType = res.headers.get('content-type') ?? ''
+    // Each route answers JSON, a redirect, or nothing at all (sign-out); the
+    // catch-all answers HTML.
+    const served = [204, 302].includes(res.status) || contentType.startsWith('application/json')
+    expect(served, `${method} ${url} -> ${res.status} ${contentType}`).toBe(true)
   })
 })

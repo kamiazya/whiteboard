@@ -6,6 +6,7 @@
  * back to the workspace list, the open document's sync state, and who is
  * signed in.
  */
+import { authSignOutUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
@@ -22,7 +23,7 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
   const navigate = useNavigate()
   const [failed, setFailed] = useState(false)
   const signOut = async () => {
-    const res = await fetchFn('/auth/sign-out', { method: 'POST' }).catch(() => null)
+    const res = await fetchFn(authSignOutUrl(), { method: 'POST' }).catch(() => null)
     if (res?.ok) navigate('/sign-in', { replace: true })
     else setFailed(true)
   }

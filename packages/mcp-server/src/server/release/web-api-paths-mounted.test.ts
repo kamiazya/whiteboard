@@ -1,4 +1,4 @@
-// Every `/api/...` path apps/web asks for must be a route the daemon mounts.
+// Every `/api/...` or `/auth/...` path apps/web asks for must be a route the daemon mounts.
 //
 // Nothing checked this, and the gap was live: `StorageReportCard` fetched
 // `/api/user-libraries` and offered a Remove button posting DELETE to
@@ -25,12 +25,14 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { serverModeSignIn } from '../_test-server-mode-harness.js'
 import { createApp } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
 import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-route.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createInvitationStore } from '../security/invitation-store.js'
 import { createMemberProfileStore } from '../security/member-profile-store.js'
+import { createRelyingParty } from '../security/oidc-relying-party.js'
 import { createSignInSessionStore } from '../security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import { createUserDeactivation } from '../security/user-deactivation.js'
@@ -104,9 +106,13 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out
 }
 
-/** `${...}` interpolations and `:name` segments both stand for one segment. */
+/**
+ * `${...}` interpolations and `:name` segments both stand for one segment, and
+ * a query string is not part of the route a request is matched against.
+ */
 function normalize(path: string): string {
   return path
+    .replace(/\?.*$/, '')
     .replace(/\$\{[^}]*\}/g, ':p')
     .replace(/:[A-Za-z_][\w]*/g, ':p')
     .replace(/\/+$/, '')
@@ -126,8 +132,9 @@ function webApiPaths(): WebPath[] {
     // the opening one. Double quotes are not hypothetical here: biome.json sets
     // `jsxQuoteStyle: "double"`, so a JSX `src="/api/…"` is the style the
     // linter ENFORCES — a scan blind to it would miss the one place a path is
-    // most likely to be written inline.
-    for (const match of text.matchAll(/(['"`])(\/api\/[^'"`]*)\1/g)) {
+    // most likely to be written inline. `/auth/` is server mode's sign-in
+    // family: a second prefix a hand-spelled path can hide behind.
+    for (const match of text.matchAll(/(['"`])(\/(?:api|auth)\/[^'"`]*)\1/g)) {
       const raw = match[2]
       // A literal broken across an interpolation boundary is not a whole path.
       if (raw.includes('${') && !raw.includes('}')) continue
@@ -142,7 +149,8 @@ function webApiPaths(): WebPath[] {
 }
 
 // Server mode mounts its people routes (ADR-0049) only when it has people to
-// manage, as server-mode-http composes it.
+// manage, and its sign-in routes (ADR-0046) only with a provider, as
+// server-mode-http composes it.
 function serverModeApp(
   db: IsolatedDbHandle['db'],
   members: ReturnType<typeof createMemberProfileStore>,
@@ -158,6 +166,8 @@ function serverModeApp(
     shutdown: () => Promise.resolve(),
     serverDeps: resolveServerDeps(createContainer()),
     dataLayout: testDataLayout(),
+    // The `/auth` routes mount only with a provider configured (ADR-0046).
+    signIn: serverModeSignIn(db, createRelyingParty()),
     people: {
       members,
       sessions: createSignInSessionStore(db),
@@ -204,7 +214,7 @@ async function mountedApiRoutes(): Promise<string[]> {
     ...new Set(
       [...serverMode.routes, ...localDaemon.routes]
         .map((route) => route.path)
-        .filter((path) => path.startsWith('/api/')),
+        .filter((path) => path.startsWith('/api/') || path.startsWith('/auth/')),
     ),
   ]
 }
@@ -245,7 +255,7 @@ function isMounted(webPath: string, routes: readonly string[]): boolean {
   })
 }
 
-describe('apps/web only asks for /api routes the daemon mounts', () => {
+describe('apps/web only asks for /api and /auth routes the daemon mounts', () => {
   let routes: string[] = []
   const paths = webApiPaths()
   beforeAll(async () => {
@@ -259,6 +269,7 @@ describe('apps/web only asks for /api routes the daemon mounts', () => {
     expect(routes.some((route) => route.startsWith('/api/v1/'))).toBe(true)
     expect(routes).toContain('/api/workspaces/:workspaceId/replica-key')
     expect(routes).toContain('/api/workspaces/:workspace/people')
+    expect(routes).toContain('/auth/session')
   })
 
   it('finds the paths apps/web asks for', () => {
@@ -276,6 +287,7 @@ describe('apps/web only asks for /api routes the daemon mounts', () => {
   it('does not report an unserved path as mounted', () => {
     expect(isMounted('/api/definitely-not-a-route', routes)).toBe(false)
     expect(isMounted('/api/runtime/not-a-real-endpoint', routes)).toBe(false)
+    expect(isMounted('/auth/definitely-not-a-route', routes)).toBe(false)
   })
 
   it('every one of them resolves', () => {

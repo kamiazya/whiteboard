@@ -4,8 +4,9 @@
 // the one test that requests each builder against the real app
 // (mcp-server's `daemon-client-urls.routes.test.ts`).
 //
-// Each builder ends in `ApiUrl`: that suffix is how both that test and the
-// keeper-parity scan in apps/web recognise a module that reaches the daemon.
+// Each `/api` builder ends in `ApiUrl`: that suffix is how both that test and
+// the keeper-parity scan in apps/web recognise a module that reaches the
+// daemon. The `/auth` builders at the end are the one exception, and say why.
 //
 // Segments are encoded one by one; the separators between them are structure.
 // Paths come back relative — the caller prefixes the daemon's base URL.
@@ -153,4 +154,31 @@ export function fontInstallApiUrl(fontId: string): string {
 
 export function fontFileApiUrl(fontId: string): string {
   return `${fontsApiUrl()}/${enc(fontId)}/file`
+}
+
+// ---- /auth: the sign-in routes a server-mode keeper mounts (ADR-0046) ----
+//
+// Not `*ApiUrl`: that suffix marks a route the browser keeper must also
+// answer, and these exist only on a server keeper, which has no browser-keeper
+// twin. They are pinned the same way, against a server-mode app, by
+// `daemon-client-urls.routes.test.ts`. A caller appends its own query string.
+
+export function authProvidersUrl(): string {
+  return '/auth/providers'
+}
+
+export function authSignInUrl(providerId: string): string {
+  return `/auth/sign-in/${enc(providerId)}`
+}
+
+export function authSessionUrl(): string {
+  return '/auth/session'
+}
+
+export function authSignOutUrl(): string {
+  return '/auth/sign-out'
+}
+
+export function authReauthenticateUrl(): string {
+  return '/auth/reauthenticate'
 }

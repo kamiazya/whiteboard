@@ -3,14 +3,19 @@
 // that names its own subject, and the people stores over one tenant database.
 // Test support only — production composes these in `di/`.
 
+import type { SignInRoutesDeps } from './routes/sign-in.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
+import { createCompleteSignInDeps } from './security/complete-sign-in.js'
 import { createInvitationStore } from './security/invitation-store.js'
 import {
   createMemberProfileStore,
   type MemberProfileStore,
 } from './security/member-profile-store.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
+import type { RelyingParty } from './security/oidc-relying-party.js'
+import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
+import { signInConfigSchema } from './security/sign-in-config.js'
 import {
   createSignInSessionStore,
   type SignInSessionStore,
@@ -67,4 +72,37 @@ export function serverModePeople(db: TenantDb, dataDir: string) {
     origin: PUBLIC_URL,
   }
   return { members, sessions, people }
+}
+
+/**
+ * The `signIn` option server mode's `createApp` takes, which is what mounts
+ * the `/auth` routes (ADR-0046): one OIDC provider, `corp`, over `db`. The
+ * relying party is the caller's, since a test that only needs the routes
+ * mounted has no provider to talk to.
+ */
+export function serverModeSignIn(db: TenantDb, rp: RelyingParty): SignInRoutesDeps {
+  const signIn = createCompleteSignInDeps(db, 60 * 60 * 1000)
+  const { providers } = signInConfigSchema.parse({
+    providers: [
+      {
+        id: 'corp',
+        kind: 'oidc',
+        issuer: IDP,
+        clientId: 'wb',
+        clientSecret: { env: 'CORP_SECRET' },
+      },
+    ],
+  })
+  return {
+    providers: providers.map((provider) => ({ ...provider, clientSecretValue: 's3cret' })),
+    rp,
+    attempts: createSignInAttemptStore(db),
+    signIn,
+    administrators: createAdministratorCheck({
+      admins: createTenantAdministratorStore(db),
+      members: signIn.members,
+      configured: [],
+    }),
+    publicBaseUrl: PUBLIC_URL,
+  }
 }
