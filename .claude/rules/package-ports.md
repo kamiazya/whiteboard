@@ -8,7 +8,7 @@ paths:
 ## What belongs here
 
 - Named `z.infer` DTO schemas for every request/result payload crossing a
-  store/sync boundary: `DocRef`, `Frontier`, `ProtocolVersion`,
+  store/sync boundary: `DocRef`, `Frontier`, `protocolVersionSchema`,
   `SnapshotChunk`, `SnapshotManifest`, `DeltaBatch`, the five sync messages
   (`hello`/`welcome`/`resume`/`catchUp`/`update`), `PresenceState`,
   `BlobRef`, plus every port method's input and result DTO.

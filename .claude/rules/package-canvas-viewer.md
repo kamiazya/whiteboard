@@ -164,7 +164,8 @@ paths:
 
 ## Common mistakes (append as review finds them)
 
-- Redeclaring a spatial-canvas schema here instead of re-exporting
-  model's `spatialCanvasSchema` as `viewerSceneSchema`.
+- Redeclaring the JSON Canvas wire schema here instead of using codec's
+  `jsonCanvasDocumentSchema`, which `parseViewerScene` validates
+  already-parsed input against.
 - Reaching for a DOM-based HTML sanitizer instead of relying on
   canvas-render's own escaping guarantee.
