@@ -30,10 +30,10 @@ import {
 import {
   ensureDevDataDirSecured,
   resolveDevDataDirEnv,
-  resolveRepoRootFromGit,
+  resolveHookProjectRoot,
 } from './with-dev-data-dir-lib.mjs'
 
-const REPO_ROOT = resolveRepoRootFromGit(process.cwd())
+const REPO_ROOT = resolveHookProjectRoot(process.env, process.cwd())
 const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
 // Upper bound on how long we'll wait for `pnpm mcp:http:dev` to answer.
 // Defaults to 30s (tsx + happy-dom + canvas + resvg cold start +

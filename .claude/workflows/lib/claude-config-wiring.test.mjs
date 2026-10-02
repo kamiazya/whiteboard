@@ -6,6 +6,7 @@
 // degrades silently — the lane still runs, just with the wrong criteria or none at all — so this
 // test is the guard, mirroring dev-loop-design-schema-sync.test.mjs's role for DESIGN_SCHEMA.
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -216,4 +217,108 @@ test('a namespaced skill needs its plugin declared in settings.json', () => {
     undeclaredSkills(['local', 'declared:any', 'ghost:any', 'absent', 'disabled:any'], world),
     ['ghost:any', 'absent', 'disabled:any'],
   )
+})
+
+// A hook command is run by a shell in the SESSION's working directory, which is a package
+// directory as often as the repo root. `node .claude/scripts/x.mjs` there dies with a module-load
+// error, exit 1 — a non-blocking hook failure — so the PreToolUse blockers silently did not run
+// for a session working from `packages/mcp-server`. `$CLAUDE_PROJECT_DIR` names the project the
+// session was opened on whatever the cwd is. A hook with no test beside it is the second hole: a
+// hook fails open by design, so a broken one reads exactly like one with nothing to say.
+const settings = JSON.parse(readFileSync(path.join(repoRoot, '.claude', 'settings.json'), 'utf8'))
+const HOOK_COMMAND = /^node "\$CLAUDE_PROJECT_DIR\/([^"]+)"( .*)?$/
+
+function trackedFiles() {
+  return execFileSync('git', ['ls-files'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    maxBuffer: 1 << 26,
+  })
+    .split('\n')
+    .filter(Boolean)
+}
+
+function hookCommands() {
+  return Object.values(settings.hooks)
+    .flat()
+    .flatMap((group) => group.hooks)
+    .map((hook) => hook.command)
+}
+
+/** Hooks whose own test is named for their library, with the reason it has no `<name>.test.mjs`. */
+const TESTED_THROUGH_LIBRARY = {
+  '.claude/scripts/hooks/pre-merge-show-comments.mjs': {
+    test: '.claude/scripts/pre-merge-comments-lib.test.mjs',
+    reason: 'the decision logic is the library; the hook is its stdin/stdout shell',
+  },
+}
+
+/** Files in `.claude/scripts/hooks/` that no settings.json entry runs, with the reason. */
+const UNREFERENCED_HOOK_FILES = {}
+
+function testCandidates(hookPath) {
+  const dir = path.posix.dirname(hookPath)
+  const base = path.posix.basename(hookPath, '.mjs')
+  return [
+    `.claude/scripts/${base}.test.mjs`,
+    `.claude/scripts/${base}-lib.test.mjs`,
+    `${dir}/${base}.script.test.ts`,
+    `${dir}/${base}.test.ts`,
+  ]
+}
+
+test('every settings.json hook runs a tracked script through $CLAUDE_PROJECT_DIR', () => {
+  const commands = hookCommands()
+  assert.ok(commands.length >= 9, `expected the nine hooks, read ${commands.length}`)
+  const tracked = new Set(trackedFiles())
+  for (const command of commands) {
+    const match = HOOK_COMMAND.exec(command)
+    assert.ok(
+      match,
+      `hook command is cwd-relative or unquoted, and dies from a package directory: ${command}`,
+    )
+    assert.ok(tracked.has(match[1]), `hook command names an untracked script: ${match[1]}`)
+  }
+})
+
+test('every settings.json hook script has a test that a test run picks up', () => {
+  const tracked = new Set(trackedFiles())
+  for (const command of hookCommands()) {
+    const script = HOOK_COMMAND.exec(command)?.[1]
+    assert.ok(script, `unparseable hook command: ${command}`)
+    const candidates = testCandidates(script)
+    const exemption = TESTED_THROUGH_LIBRARY[script]
+    const found = candidates.find((c) => tracked.has(c)) ?? exemption?.test
+    assert.ok(found && tracked.has(found), `${script} has no test; looked for ${candidates.join(', ')}`)
+    // `test:scripts` globs `.claude/scripts/*.test.mjs` and nothing deeper; a hook test anywhere
+    // else would exist, pass, and never run there.
+    assert.ok(
+      /^\.claude\/scripts\/[^/]+\.test\.mjs$/.test(found) ||
+        /^packages\/mcp-server\/scripts\/dev\/[^/]+\.test\.ts$/.test(found),
+      `${script}'s test ${found} sits where no test project picks it up`,
+    )
+  }
+})
+
+test('a library-test exemption is still needed, and every hook file is wired or recorded', () => {
+  const tracked = new Set(trackedFiles())
+  const wired = new Set(hookCommands().map((c) => HOOK_COMMAND.exec(c)?.[1]))
+  for (const script of Object.keys(TESTED_THROUGH_LIBRARY)) {
+    assert.ok(wired.has(script), `exemption for ${script}, which no hook runs`)
+    assert.ok(
+      !testCandidates(script).some((c) => tracked.has(c)),
+      `exemption for ${script} is unneeded: it has a test named for it`,
+    )
+  }
+  const hookFiles = [...tracked].filter((f) => /^\.claude\/scripts\/hooks\/[^/]+\.mjs$/.test(f))
+  assert.ok(hookFiles.length >= 5, `expected the hook scripts, read ${hookFiles.length}`)
+  for (const file of hookFiles) {
+    assert.ok(
+      wired.has(file) || file in UNREFERENCED_HOOK_FILES,
+      `${file} is run by no settings.json hook and is not recorded as deliberate`,
+    )
+  }
+  for (const file of Object.keys(UNREFERENCED_HOOK_FILES)) {
+    assert.ok(tracked.has(file) && !wired.has(file), `stale unreferenced-hook entry: ${file}`)
+  }
 })
