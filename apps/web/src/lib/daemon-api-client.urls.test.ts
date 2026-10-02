@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import {
   deleteDocument,
   fetchFontFile,
@@ -25,7 +26,7 @@ async function urlOf(call: (fetchFn: typeof fetch) => Promise<unknown>): Promise
   let seen = ''
   const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
     seen = String(input)
-    return new Response('{}', { status: 500 })
+    return jsonResponse({}, 500)
   })
   await call(fetchFn as unknown as typeof fetch).catch(() => undefined)
   return seen
@@ -97,7 +98,7 @@ describe('daemon-api-client request URLs', () => {
     const seen: string[] = []
     const capture = createDaemonVersionsBackend((async (input: RequestInfo | URL) => {
       seen.push(String(input))
-      return new Response('{}', { status: 500 })
+      return jsonResponse({}, 500)
     }) as typeof fetch)
     await capture.list(WS, PATH).catch(() => undefined)
     await capture.loadPast(WS, PATH, 'v/1').catch(() => undefined)
