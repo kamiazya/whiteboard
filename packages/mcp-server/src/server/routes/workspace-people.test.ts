@@ -16,6 +16,7 @@ import {
   type MemberProfileStore,
 } from '../security/member-profile-store.js'
 import type { AsyncAuthStrategy } from '../security/oauth-resource-strategy.js'
+import { createWorkspacePeopleAdministration } from '../security/people-administration.js'
 import { serverModePeopleKeeper } from '../security/people-keepers.js'
 import { createServerModeApiAuthMiddleware } from '../security/server-mode-middleware.js'
 import { createSignInSessionStore } from '../security/sign-in-session-store.js'
@@ -88,7 +89,7 @@ beforeEach(async () => {
   app.route(
     '/',
     createWorkspacePeopleRouter({
-      members,
+      people: createWorkspacePeopleAdministration({ members, roles }),
       roles,
       keeper: { ...keeper, afterRemove: (id) => afterRemove(id) },
     }),

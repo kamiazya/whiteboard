@@ -17,7 +17,7 @@ import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
-import type { MemberProfileStore } from '../security/member-profile-store.js'
+import type { WorkspacePeopleAdministration } from '../security/people-administration.js'
 import type { WorkspacePeopleKeeper } from '../security/people-keepers.js'
 import type { WorkspaceMember, WorkspaceRoles } from '../security/workspace-roles.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
@@ -27,7 +27,8 @@ import { endSyncStreamsOf } from './sync-sse.js'
 const log = getLogger('workspace-people')
 
 interface WorkspacePeopleRouterOptions {
-  readonly members: MemberProfileStore
+  readonly people: WorkspacePeopleAdministration
+  /** Read-only here: every change goes through `people`. */
   readonly roles: WorkspaceRoles
   readonly keeper: WorkspacePeopleKeeper
 }
@@ -43,11 +44,6 @@ function refuse(c: Context, error: WorkspacePeopleRefusal['error']) {
   const [status, message] = REFUSALS[error]
   log.warning({ path: c.req.path, reason: error }, 'workspace people change refused')
   return c.json({ error, message } satisfies WorkspacePeopleRefusal, status)
-}
-
-// Why the roles store turned a change down, as this API says it.
-function refuseChange(c: Context, why: 'not-a-member' | 'last-owner') {
-  return refuse(c, why === 'not-a-member' ? 'not_a_member' : 'last_owner')
 }
 
 function toPerson(member: WorkspaceMember) {
@@ -85,13 +81,17 @@ async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: st
 }
 
 // ADR-0049 decision 3: an owner invites a person into the workspace.
-function mountRemoval(app: Hono, roles: WorkspaceRoles, keeper: WorkspacePeopleKeeper): void {
+function mountRemoval(
+  app: Hono,
+  people: WorkspacePeopleAdministration,
+  keeper: WorkspacePeopleKeeper,
+): void {
   app.delete('/api/workspaces/:workspace/people/:userId', async (c) => {
     const workspaceId = await ownedBy(c, keeper)
     if (workspaceId === null) return refuse(c, 'not_an_owner')
     const userId = c.req.param('userId')
-    const removed = await roles.remove(workspaceId, userId)
-    if (removed !== 'ok') return refuseChange(c, removed)
+    const removed = await people.remove(workspaceId, userId)
+    if (removed.kind === 'refused') return refuse(c, removed.reason)
     // First, before anything that can fail: a stream they already hold would
     // otherwise keep delivering the workspace (ADR-0042).
     endSyncStreamsOf(userId)
@@ -113,7 +113,7 @@ function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
 }
 
 export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOptions) {
-  const { members, roles, keeper } = options
+  const { people, roles, keeper } = options
   const app = new Hono()
   const ownedWorkspace = (c: Context) => ownedBy(c, keeper)
   const personIn = (workspaceId: string, userId: string) => findPerson(roles, workspaceId, userId)
@@ -131,8 +131,8 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
     const workspaceId = await ownedWorkspace(c)
     if (workspaceId === null) return refuse(c, 'not_an_owner')
     const { userId } = body.data
-    if (!(await roles.isUser(userId))) return refuse(c, 'unknown_user')
-    await members.addMember(workspaceId, userId)
+    const added = await people.add(workspaceId, userId)
+    if (added.kind === 'refused') return refuse(c, added.reason)
     return c.json(await personIn(workspaceId, userId), 201)
   })
 
@@ -142,12 +142,12 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
     const workspaceId = await ownedWorkspace(c)
     if (workspaceId === null) return refuse(c, 'not_an_owner')
     const userId = c.req.param('userId')
-    const changed = await roles.setRole(workspaceId, userId, body.data.role)
-    if (changed !== 'ok') return refuseChange(c, changed)
+    const changed = await people.changeRole(workspaceId, userId, body.data.role)
+    if (changed.kind === 'refused') return refuse(c, changed.reason)
     return c.json(await personIn(workspaceId, userId), 200)
   })
 
-  mountRemoval(app, roles, keeper)
+  mountRemoval(app, people, keeper)
   mountInvitations(app, keeper)
 
   return app

@@ -1,9 +1,10 @@
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
+import { createWorkspacePeopleAdministration } from '../server/security/people-administration.js'
 import { createWorkspaceRoles } from '../server/security/workspace-roles.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
-import { findNamedUser } from './named-user.js'
+import { findNamedUser, operatorRefusal } from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
 import {
   type GrantMemberOutput,
@@ -44,15 +45,11 @@ export async function grantMember(
   const found = await findNamedUser(members, user)
   if (found.kind !== 'found') return found
 
-  await members.addMember(workspaceId, found.user.id)
-  // The recovery ADR-0049 names for a workspace whose owners are all
-  // deactivated: a member could not manage the people of the workspace this
-  // was run to recover, so the person named comes out its owner.
-  const roles = createWorkspaceRoles(db)
-  const owned = (await roles.list(workspaceId)).some(
-    (member) => member.role === 'owner' && !member.deactivated,
-  )
-  if (!owned) await roles.setRole(workspaceId, found.user.id, 'owner')
+  const granted = await createWorkspacePeopleAdministration({
+    members,
+    roles: createWorkspaceRoles(db),
+  }).grant(workspaceId, found.user.id)
+  if (granted.kind === 'refused') return operatorRefusal(granted)
   return { kind: 'ok', workspaceId, user: found.user }
 }
 

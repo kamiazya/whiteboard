@@ -13,16 +13,19 @@
  * acting, which no self-refusal can ever match.
  */
 import type { TenantPeopleRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
+import type { WorkspacePeopleRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import type { AdministratorCheck } from './administrator-check.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import type { MemberProfileStore } from './member-profile-store.js'
 import type { TenantAdministratorStore } from './tenant-administrator-store.js'
 import type { UserDeactivation } from './user-deactivation.js'
 import type { UserDeletion } from './user-deletion.js'
+import type { WorkspaceMember, WorkspaceRoles } from './workspace-roles.js'
 
 type RefusalReason = TenantPeopleRefusal['error']
+type WorkspaceRefusalReason = WorkspacePeopleRefusal['error']
 
-export interface Refused<R extends RefusalReason> {
+export interface Refused<R extends RefusalReason | WorkspaceRefusalReason> {
   readonly kind: 'refused'
   readonly reason: R
 }
@@ -160,6 +163,78 @@ export function createPeopleAdministration(deps: {
       if (!(await isUser(userId))) return unknown
       if (userId === by) return { kind: 'refused', reason: 'cannot_dismiss_self' }
       await deps.appointments.dismiss(userId)
+      return { kind: 'done' }
+    },
+  }
+}
+
+type WorkspaceRole = WorkspaceMember['role']
+
+/**
+ * What may be done to one workspace's people, once the caller is known to be
+ * allowed to do it. WHETHER a caller may — an owner of this workspace, the
+ * machine's owner on the local daemon, the operator at the machine — is the
+ * keeper's authority and stays with the surface, so `not_an_owner` is not a
+ * refusal here. The rest are the rules about the people themselves, written
+ * once for the HTTP route and the operator's command line.
+ */
+export interface WorkspacePeopleAdministration {
+  /** Admits a user as a member; a workspace's first member is its owner. */
+  add(workspaceId: string, userId: string): Promise<Done | Refused<'unknown_user'>>
+  /** The product never leaves a workspace without an owner (ADR-0049). */
+  changeRole(
+    workspaceId: string,
+    userId: string,
+    role: WorkspaceRole,
+  ): Promise<Done | Refused<'not_a_member' | 'last_owner'>>
+  remove(
+    workspaceId: string,
+    userId: string,
+  ): Promise<Done | Refused<'not_a_member' | 'last_owner'>>
+  /**
+   * The operator admits a person, and when no active owner is left makes them
+   * the owner: a member could not manage the people of the workspace this was
+   * run to recover (ADR-0049).
+   */
+  grant(workspaceId: string, userId: string): Promise<Done | Refused<'unknown_user'>>
+}
+
+export function createWorkspacePeopleAdministration(deps: {
+  readonly members: Pick<MemberProfileStore, 'addMember'>
+  readonly roles: WorkspaceRoles
+}): WorkspacePeopleAdministration {
+  const { members, roles } = deps
+  const refusedChange = (why: 'not-a-member' | 'last-owner') =>
+    ({
+      kind: 'refused',
+      reason: why === 'not-a-member' ? 'not_a_member' : 'last_owner',
+    }) as const
+  const add: WorkspacePeopleAdministration['add'] = async (workspaceId, userId) => {
+    if (!(await roles.isUser(userId))) return { kind: 'refused', reason: 'unknown_user' }
+    await members.addMember(workspaceId, userId)
+    return { kind: 'done' }
+  }
+
+  return {
+    add,
+
+    async changeRole(workspaceId, userId, role) {
+      const changed = await roles.setRole(workspaceId, userId, role)
+      return changed === 'ok' ? { kind: 'done' } : refusedChange(changed)
+    },
+
+    async remove(workspaceId, userId) {
+      const removed = await roles.remove(workspaceId, userId)
+      return removed === 'ok' ? { kind: 'done' } : refusedChange(removed)
+    },
+
+    async grant(workspaceId, userId) {
+      const added = await add(workspaceId, userId)
+      if (added.kind === 'refused') return added
+      const owned = (await roles.list(workspaceId)).some(
+        (member) => member.role === 'owner' && !member.deactivated,
+      )
+      if (!owned) await roles.setRole(workspaceId, userId, 'owner')
       return { kind: 'done' }
     },
   }

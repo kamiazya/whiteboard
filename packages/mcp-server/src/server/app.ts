@@ -42,6 +42,7 @@ import {
   membershipAdmit,
   type WorkspaceAdmit,
 } from './security/membership-gate.js'
+import { createWorkspacePeopleAdministration } from './security/people-administration.js'
 import { serverModePeopleKeeper } from './security/people-keepers.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
@@ -197,7 +198,8 @@ function mountServerModeRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'server-mode' || options.people === undefined) return
   const { members, roles, invitations, origin, administration } = options.people
   const keeper = serverModePeopleKeeper({ members, invitations, origin })
-  app.route('/', createWorkspacePeopleRouter({ members, roles, keeper }))
+  const people = createWorkspacePeopleAdministration({ members, roles })
+  app.route('/', createWorkspacePeopleRouter({ people, roles, keeper }))
   app.route('/', createTenantPeopleRouter({ members, invitations, administration, origin }))
 }
 

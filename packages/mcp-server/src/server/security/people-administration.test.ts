@@ -11,8 +11,10 @@ import {
   type AdministrationAccess,
   createAdministrationAccess,
   createPeopleAdministration,
+  createWorkspacePeopleAdministration,
   deletePerson,
   type PeopleAdministration,
+  type WorkspacePeopleAdministration,
 } from './people-administration.js'
 import {
   createTenantAdministratorStore,
@@ -20,6 +22,7 @@ import {
 } from './tenant-administrator-store.js'
 import { createUserDeactivation } from './user-deactivation.js'
 import { createUserDeletion, type UserDeletion } from './user-deletion.js'
+import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
 
 const AUTHENTICATOR = 'oidc:https://idp.test'
 const NOW = 10_000_000
@@ -246,5 +249,127 @@ describe('listing people', () => {
     expect(byName.cy).toMatchObject({ administrator: true })
     expect(byName.bob).toMatchObject({ deactivated: true, administrator: false })
     expect(listed).toHaveLength(3)
+  })
+})
+
+describe('a workspace’s people', () => {
+  const WS = 'ws-1'
+  let roles: WorkspaceRoles
+  let workspacePeople: WorkspacePeopleAdministration
+
+  beforeEach(() => {
+    roles = createWorkspaceRoles(handle.db)
+    workspacePeople = createWorkspacePeopleAdministration({ members, roles })
+  })
+
+  const roleOf = async (name: string) =>
+    (await roles.list(WS)).find((m) => m.profile.id === ids[name])?.role
+
+  describe('adding', () => {
+    it('admits a user, as the workspace’s first member the owner and afterwards a member', async () => {
+      expect(await workspacePeople.add(WS, ids.ada as string)).toEqual({ kind: 'done' })
+      expect(await workspacePeople.add(WS, ids.bob as string)).toEqual({ kind: 'done' })
+      expect(await roleOf('ada')).toBe('owner')
+      expect(await roleOf('bob')).toBe('member')
+    })
+
+    it('refuses someone who is not a user here, and admits nobody', async () => {
+      expect(await workspacePeople.add(WS, 'nobody')).toEqual({
+        kind: 'refused',
+        reason: 'unknown_user',
+      })
+      expect(await roles.list(WS)).toEqual([])
+    })
+  })
+
+  describe('changing a role', () => {
+    beforeEach(async () => {
+      await workspacePeople.add(WS, ids.ada as string)
+      await workspacePeople.add(WS, ids.bob as string)
+    })
+
+    it('makes a member an owner, and an owner a member while another owner remains', async () => {
+      expect(await workspacePeople.changeRole(WS, ids.bob as string, 'owner')).toEqual({
+        kind: 'done',
+      })
+      expect(await workspacePeople.changeRole(WS, ids.ada as string, 'member')).toEqual({
+        kind: 'done',
+      })
+      expect([await roleOf('ada'), await roleOf('bob')]).toEqual(['member', 'owner'])
+    })
+
+    it('refuses someone who is not a member of this workspace', async () => {
+      expect(await workspacePeople.changeRole(WS, ids.cy as string, 'owner')).toEqual({
+        kind: 'refused',
+        reason: 'not_a_member',
+      })
+    })
+
+    it('refuses to demote the last owner', async () => {
+      expect(await workspacePeople.changeRole(WS, ids.ada as string, 'member')).toEqual({
+        kind: 'refused',
+        reason: 'last_owner',
+      })
+      expect(await roleOf('ada')).toBe('owner')
+    })
+  })
+
+  describe('removing', () => {
+    beforeEach(async () => {
+      await workspacePeople.add(WS, ids.ada as string)
+      await workspacePeople.add(WS, ids.bob as string)
+    })
+
+    it('removes a member', async () => {
+      expect(await workspacePeople.remove(WS, ids.bob as string)).toEqual({ kind: 'done' })
+      expect(await roleOf('bob')).toBeUndefined()
+    })
+
+    it('refuses someone who is not a member of this workspace', async () => {
+      expect(await workspacePeople.remove(WS, ids.cy as string)).toEqual({
+        kind: 'refused',
+        reason: 'not_a_member',
+      })
+    })
+
+    it('refuses to remove the last owner', async () => {
+      expect(await workspacePeople.remove(WS, ids.ada as string)).toEqual({
+        kind: 'refused',
+        reason: 'last_owner',
+      })
+      expect(await roleOf('ada')).toBe('owner')
+    })
+  })
+
+  // ADR-0049: the operator recovers a workspace whose owners are all
+  // deactivated, because a member could not manage the people of the very
+  // workspace the grant was run to recover.
+  describe('granting as the operator', () => {
+    it('makes the person a plain member while an active owner remains', async () => {
+      await workspacePeople.add(WS, ids.ada as string)
+      expect(await workspacePeople.grant(WS, ids.bob as string)).toEqual({ kind: 'done' })
+      expect(await roleOf('bob')).toBe('member')
+    })
+
+    it('makes the person the owner when every owner is deactivated', async () => {
+      await workspacePeople.add(WS, ids.ada as string)
+      await people.deactivate(ids.ada as string, null, NOW)
+      expect(await workspacePeople.grant(WS, ids.bob as string)).toEqual({ kind: 'done' })
+      expect(await roleOf('bob')).toBe('owner')
+      expect(await roleOf('ada')).toBe('owner')
+    })
+
+    it('makes the first person granted into a workspace its owner', async () => {
+      expect(await workspacePeople.grant(WS, ids.bob as string)).toEqual({ kind: 'done' })
+      expect(await roleOf('bob')).toBe('owner')
+    })
+
+    it('refuses someone who is not a user here, and changes nothing', async () => {
+      expect(await workspacePeople.grant(WS, 'nobody')).toEqual({
+        kind: 'refused',
+        reason: 'unknown_user',
+      })
+      expect(await roles.list(WS)).toEqual([])
+    })
   })
 })
