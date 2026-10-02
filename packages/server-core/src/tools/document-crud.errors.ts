@@ -32,9 +32,11 @@ export class WorkspaceNotFoundForCallerError extends Error {
   constructor(
     readonly workspaceId: string,
     intent: WorkspaceNotFoundIntent = 'read',
+    known: readonly string[] = [],
   ) {
     super(
       `Workspace not found: "${workspaceId}". ` +
+        (known.length === 0 ? '' : `Workspaces here: ${known.map((h) => `"${h}"`).join(', ')}. `) +
         (intent === 'create'
           ? 'Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.'
           : 'Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).'),

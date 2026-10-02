@@ -26,7 +26,7 @@ import { stdioBackgroundWork } from './shared-background-work.js'
 export function bootStdioRoot() {
   const dataDir = getDataDir()
   warnWhenDataDirIsTempFallback(dataDir)
-  return bootSelfHostDeps(dataDir)
+  return bootSelfHostDeps(dataDir, { nameKnownWorkspaces: true })
 }
 
 export async function main() {

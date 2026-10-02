@@ -149,6 +149,17 @@ export interface ServerDeps {
    */
   clientNotifier?: CanvasClientNotifier
   /**
+   * The workspace handles a refusal for an unknown workspace may name, so a
+   * model that guessed an address learns the right one: no tool lists
+   * workspaces, and a handle in the error costs it nothing.
+   *
+   * Optional, and ABSENT is the safe answer: a keeper many people sign in to
+   * refuses an unknown workspace and one the caller is not in with the same
+   * words, so that the refusal says nothing about which exist. Only a
+   * composition whose caller may already see every workspace supplies it.
+   */
+  knownWorkspaceHandles?: () => Promise<readonly string[]>
+  /**
    * The facet registry validating registered-facet writes (ADR-0013
    * decision 6): the deployment's plugin set, composed once per root.
    * Required, as every seam here is (ADR-0018): while it was optional each

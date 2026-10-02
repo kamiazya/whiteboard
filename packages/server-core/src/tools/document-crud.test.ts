@@ -112,6 +112,31 @@ describe('wbDocumentCreate', () => {
     )
   })
 
+  // A model that guessed a handle has no other channel for the right one: no
+  // tool lists workspaces. The composition decides whether naming them is safe
+  // (a deployment many people sign in to must not say what exists), so the
+  // names come through a seam that is absent by default.
+  it('names the workspaces the deployment says may be named, on create and on read', async () => {
+    const deps: ServerDeps = {
+      ...(await makeDeps()),
+      knownWorkspaceHandles: async () => ['default', 'ws-1'],
+    }
+    await expect(
+      wbDocumentCreate(deps, { workspaceId: 'main', path: 'a', kind: 'spatial' }),
+    ).rejects.toThrow(/Workspaces here: "default", "ws-1"/)
+    await expect(wbDocumentList(deps, { workspaceId: 'main' })).rejects.toThrow(
+      /Workspaces here: "default", "ws-1"/,
+    )
+  })
+
+  it('names no workspace when the deployment supplies no way to', async () => {
+    const deps = await makeDeps()
+    const refusal = await wbDocumentList(deps, { workspaceId: 'main' }).catch((err: Error) => err)
+    expect(refusal).toBeInstanceOf(WorkspaceNotFoundForCallerError)
+    expect((refusal as Error).message).not.toContain('Workspaces here')
+    expect((refusal as Error).message).not.toContain('ws-1')
+  })
+
   // The refusal is what a model reads to repair its next call, so it names
   // the parameter on the TOOL that has it. A create can carry
   // `createWorkspace: true` on the same call; a read cannot, and telling a
