@@ -97,7 +97,7 @@ type SupportBundleManifest = z.infer<typeof supportBundleManifestSchema>
 // `statusOk` are the status contract's own: `daemon status` does not ping, so
 // they are null until it does, and the section carries them so that day needs
 // no second edit.
-export type SupportBundleStatusInput = Omit<DaemonStatusResult, 'schemaVersion'>
+type SupportBundleStatusInput = Omit<DaemonStatusResult, 'schemaVersion'>
 
 const absentAsNull = <T extends z.ZodTypeAny>(field: z.ZodOptional<T>) => field.unwrap().nullable()
 
