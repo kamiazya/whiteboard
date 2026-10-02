@@ -2,15 +2,17 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { resetDataDirForTests, setDataDirForTests } from './config.js'
+import type { StartHttpServerOptions } from './http-server.js'
 import { captureLogsForTests } from './log.js'
 
 const { startHttpServerMock, saveDaemonRecordMock, deleteDaemonRecordMock } = vi.hoisted(() => ({
-  startHttpServerMock: vi.fn(async () => ({
+  startHttpServerMock: vi.fn(async (_options: StartHttpServerOptions) => ({
     socketPath: '/run/user/1000/whiteboard/d.sock',
     getRuntimeStatus: () => ({ startedAt: '2026-01-01T00:00:00.000Z' }),
   })),
-  saveDaemonRecordMock: vi.fn(async () => undefined),
+  saveDaemonRecordMock: vi.fn<typeof saveDaemonRecord>(async () => undefined),
   deleteDaemonRecordMock: vi.fn(async () => undefined),
 }))
 
