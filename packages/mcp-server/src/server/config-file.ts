@@ -72,13 +72,10 @@ const SAFE_LOADERS: LoadersSync = {
   '.ts': refuseCodeLoader,
 }
 
-const KNOWN_KEYS = ['token', 'logLevel', 'dataDir', 'openBrowser'] as const
-type KnownKey = (typeof KNOWN_KEYS)[number]
-
 // token is intentionally a plain string: file-stored tokens are a dev-only
 // convenience (the same footgun as committing a .env with a secret in it).
 // Docs must say so; this module never logs the value.
-const whiteboardConfigFileSchema = z
+export const whiteboardConfigFileSchema = z
   .object({
     token: z.string().optional(),
     logLevel: z.enum(LOG_LEVELS).optional(),
@@ -88,6 +85,12 @@ const whiteboardConfigFileSchema = z
     openBrowser: z.boolean().optional(),
   })
   .strict()
+
+// Read off the schema, so a key added there is a key the filter below keeps:
+// a second list is how one went missing, warned about as unknown and never
+// reaching validation.
+const KNOWN_KEYS = whiteboardConfigFileSchema.keyof().options
+type KnownKey = (typeof KNOWN_KEYS)[number]
 
 export type WhiteboardConfigFile = z.infer<typeof whiteboardConfigFileSchema>
 

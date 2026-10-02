@@ -6,6 +6,8 @@ import {
   applyConfigFileToEnv,
   applyConfigFileToEnvAndLogLevel,
   loadConfigFile,
+  type WhiteboardConfigFile,
+  whiteboardConfigFileSchema,
 } from './config-file.js'
 import { captureLogsForTests, getLogLevel, isLogLevelEnabled, setLogLevel } from './log.js'
 
@@ -111,6 +113,32 @@ describe('loadConfigFile', () => {
       expect(warning).toBeDefined()
       expect(warning?.data?.filepath).toBe(join(dir, '.whiteboardrc.json'))
       expect(warning?.data?.unknownKeys).toEqual(['extraKey'])
+    } finally {
+      capture.restore()
+    }
+  })
+
+  // Unknown keys are dropped before the strict schema runs, so a key the
+  // schema declares but the filter does not know would be warned about and
+  // silently ignored, never reaching validation. Every declared key must
+  // survive a load.
+  it('keeps every key the schema declares, and reports none of them as unknown', () => {
+    const samples: Required<WhiteboardConfigFile> = {
+      token: 'dev-token',
+      logLevel: 'info',
+      dataDir: '/tmp/wb',
+      openBrowser: false,
+    }
+    const declared = Object.keys(whiteboardConfigFileSchema.shape)
+    expect(declared.length).toBeGreaterThan(0)
+    for (const key of declared) {
+      expect(samples, `add a sample value for the new config key "${key}"`).toHaveProperty(key)
+    }
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify(samples))
+    const capture = captureLogsForTests()
+    try {
+      expect(loadConfigFile(dir)?.config).toEqual(samples)
+      expect(capture.records.filter((r) => r.msg.includes('unknown whiteboard config'))).toEqual([])
     } finally {
       capture.restore()
     }
