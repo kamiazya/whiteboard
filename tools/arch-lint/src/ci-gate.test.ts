@@ -320,6 +320,28 @@ describe('the gate re-reads a run the API has not caught up with', () => {
     ).toBe(true)
   })
 
+  // The stress lane's node leg is sharded, so its checks are named per shard.
+  // The gate must fail on ONE failed shard and accept the declared skip of all
+  // of them, whatever the shard count is.
+  it('judges every shard of the sharded stress job on its own', () => {
+    const legs = (conclusion: string, failing?: number): RunJob[] =>
+      [1, 2, 3].map((shard) => ({
+        name: `stress-changed-tests (node, !*-browser, ${shard}, 3)`,
+        status: 'completed',
+        conclusion: shard === failing ? 'failure' : conclusion,
+      }))
+    const base = fixture('green')
+    const gateJobs = (stress: RunJob[]) => [...base, ...stress]
+    const needed = ['stress-changed-tests', 'verify']
+    const run = (stress: RunJob[]) =>
+      gateFailures({ jobs: gateJobs(stress), needed, gateJobName: GATE_ID })
+    expect(run(legs('success'))).toEqual([])
+    expect(run(legs('skipped'))).toEqual([])
+    expect(run(legs('success', 2))).toEqual([
+      'stress-changed-tests (node, !*-browser, 2, 3): failure',
+    ])
+  })
+
   it('gives up and reports rather than waiting for ever', async () => {
     let reads = 0
     const { problems } = await readSettledJobs({

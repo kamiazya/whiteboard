@@ -261,8 +261,17 @@ jobs:
     # pass nor a failure and which `ci-gate` correctly refuses. Each leg is
     # smaller than that now and they run in parallel; the headroom stays
     # because the cost is WORKER time (92-93% of each run, one process per
-    # file) and it grows with the diff. If a leg needs more, sharding it the
-    # way `test-browser` already shards is the next step, not a bigger number.
+    # file) and it grows with the diff.
+    #
+    # The node leg is sharded the way `test-browser` is, with vitest's own
+    # `--shard=i/n`: it splits the files that survive the project filter, so
+    # no list of changed files is partitioned by hand and a browser file can
+    # never skew a node shard. Unsharded, that leg was the pull request's wall
+    # clock on most runs that touched tests — 125 changed files cost ~500s for
+    # the five fresh runs plus ~200s for the repeats on one runner, 150-560s
+    # past every other job. A shard that draws no file passes under
+    # `--passWithNoTests`; `ci-gate` judges each shard by its own conclusion.
+    # The browser leg stays one shard: its pattern is the small half.
     timeout-minutes: 60
     strategy:
       # One leg failing must not hide the other's result.
@@ -271,8 +280,20 @@ jobs:
         include:
           - leg: browser
             projects: '*-browser'
+            shard: 1
+            shards: 1
           - leg: node
             projects: '!*-browser'
+            shard: 1
+            shards: 3
+          - leg: node
+            projects: '!*-browser'
+            shard: 2
+            shards: 3
+          - leg: node
+            projects: '!*-browser'
+            shard: 3
+            shards: 3
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
@@ -338,8 +359,8 @@ jobs:
         # the first process of each job still pays full transform cost.
         run: |
           for i in 1 2 3 4 5; do
-            echo "=== stress run $i/5 (${{ matrix.leg }}) ==="
-            pnpm exec vitest run --project '${{ matrix.projects }}' --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
+            echo "=== stress run $i/5 (${{ matrix.leg }} ${{ matrix.shard }}/${{ matrix.shards }}) ==="
+            pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
           done
 
       - name: Repeat changed tests in-process (3x)
@@ -348,7 +369,7 @@ jobs:
         # SAME test in one process (a leaked timer, a module-level cache, a
         # handle that was "most recent" last time). `--repeats` runs the
         # passes too, which is what separates it from `retry`.
-        run: pnpm exec vitest run --project '${{ matrix.projects }}' --repeats=3 --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
+        run: pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --repeats=3 --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
 
   sbom-npm:
     # Standing regression job: generate:sbom:npm only ran in release.yml before
