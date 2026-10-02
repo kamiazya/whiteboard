@@ -22,9 +22,13 @@ const WS = 'ws a'
 const PATH = 'notes/a b'
 
 async function urlOf(call: (fetchFn: typeof fetch) => Promise<unknown>): Promise<string> {
-  const fetchFn = vi.fn(async () => new Response('{}', { status: 500 }))
+  let seen = ''
+  const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+    seen = String(input)
+    return new Response('{}', { status: 500 })
+  })
   await call(fetchFn as unknown as typeof fetch).catch(() => undefined)
-  return String(fetchFn.mock.calls[0]?.[0])
+  return seen
 }
 
 describe('daemon-api-client request URLs', () => {
