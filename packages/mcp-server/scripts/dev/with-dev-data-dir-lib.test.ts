@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -9,6 +10,7 @@ import {
   resolveHookProjectRoot,
   resolveRepoRootFromGit,
   resolveTsxWatchSpawn,
+  superviseChild,
 } from './with-dev-data-dir-lib.mjs'
 
 describe('resolveDevDataDirEnv', () => {
@@ -175,5 +177,52 @@ describe('resolveTsxWatchSpawn', () => {
 
     expect(result.command).not.toContain('.bin')
     expect(result.args.every((arg) => !arg.includes('.bin'))).toBe(true)
+  })
+})
+
+describe('superviseChild', () => {
+  function harness() {
+    const proc = new EventEmitter()
+    const killed: string[] = []
+    const child = Object.assign(new EventEmitter(), {
+      kill: (signal?: string) => killed.push(String(signal)),
+    })
+    const exits: Array<number | undefined> = []
+    const reraised: string[] = []
+    superviseChild(child, {
+      proc,
+      exit: (code) => exits.push(code),
+      reraise: (signal) => reraised.push(signal),
+      write: () => {},
+    })
+    return { proc, child, killed, exits, reraised }
+  }
+
+  it('forwards SIGTERM, SIGINT and SIGHUP to the child, and does not exit on its own', () => {
+    const { proc, killed, exits } = harness()
+    for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) proc.emit(signal)
+    expect(killed).toEqual(['SIGTERM', 'SIGINT', 'SIGHUP'])
+    expect(exits).toEqual([])
+  })
+
+  it("exits with the child's code and releases its listeners", () => {
+    const { proc, child, exits } = harness()
+    child.emit('exit', 3, null)
+    expect(exits).toEqual([3])
+    expect(proc.listenerCount('SIGTERM')).toBe(0)
+  })
+
+  it("re-raises the child's signal only after the listeners are gone, so it cannot be swallowed", () => {
+    const { proc, child, reraised } = harness()
+    proc.on('SIGTERM', () => {})
+    child.emit('exit', null, 'SIGTERM')
+    expect(reraised).toEqual(['SIGTERM'])
+    expect(proc.listenerCount('SIGTERM')).toBe(1) // only the unrelated listener this test added
+  })
+
+  it('reports a spawn failure and exits non-zero', () => {
+    const { child, exits } = harness()
+    child.emit('error', new Error('ENOENT'))
+    expect(exits).toEqual([1])
   })
 })

@@ -34,6 +34,7 @@
     "mcp": "pnpm --filter @kamiazya/whiteboard-mcp mcp",
     "mcp:http": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http",
     "mcp:http:dev": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev",
+    "mcp:http:stop": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http:stop",
     "mcp:inspect": "pnpm --filter @kamiazya/whiteboard-mcp mcp:inspect",
     "mcp:inspect:stdio": "pnpm --filter @kamiazya/whiteboard-mcp mcp:inspect:stdio",
     "mcp:debug:http": "pnpm --filter @kamiazya/whiteboard-mcp mcp:debug:http",

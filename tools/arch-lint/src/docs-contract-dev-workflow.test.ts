@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
+import { trackedFiles } from './tracked-files.js'
 
 // The dev workflow's own instructions (skills, hook remedies, workflow briefs,
 // contributor docs) are read by a session at the moment it acts on them, and a
@@ -45,5 +46,27 @@ describe('PR watch and triage instructions read GitHub over REST', () => {
     ]
     expect(loops.length, 'the two watch loops were not found').toBe(2)
     for (const [, loop] of loops) expect(loop).not.toMatch(/\|\|\s*echo\s+'\[\]'/)
+  })
+})
+
+// Every checkout and worktree runs `pnpm mcp:http:dev` under the same process
+// name, so a stop command that matches the name stops every lane's daemon at
+// once, not this one. A checkout is identified by its data dir, and the stop
+// command that reads it is `pnpm mcp:http:stop`.
+describe('docs never tell a reader to stop a daemon by process name', () => {
+  const docs = trackedFiles(REPO_ROOT, '*.md')
+
+  it('reads a plausible set of documents', () => {
+    expect(docs.length).toBeGreaterThan(50)
+    expect(docs).toContain('docs/contributing/development.md')
+  })
+
+  it('names no `pkill -f` anywhere', () => {
+    const offenders = docs.filter((file) => /\bpkill\s+-f\b/.test(read(file)))
+    expect(offenders, 'stop a dev daemon with `pnpm mcp:http:stop`').toEqual([])
+  })
+
+  it('names the per-checkout stop command where the daemon is documented', () => {
+    expect(read('docs/contributing/development.md')).toContain('pnpm mcp:http:stop')
   })
 })

@@ -99,6 +99,81 @@ export function reraiseSignalOrExit(
 }
 
 /**
+ * The stop signals a terminal, a supervisor or `kill` send. Anything that
+ * stops the wrapper has to stop what it runs: `pnpm`/`sh` do not relay a
+ * signal sent to one process of the chain, so a wrapper that dies alone leaves
+ * `tsx watch` and the daemon it spawned alive on the socket.
+ */
+export const FORWARDED_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP']
+
+/**
+ * Where the wrapper records its own pid while it runs. `daemon.json` names the
+ * daemon, two process levels below the wrapper; stopping the daemon alone
+ * leaves `tsx watch` and the wrapper alive to restart it, so a stop has to
+ * reach the wrapper.
+ *
+ * @param {string} dataDir
+ */
+export function devWrapperPidPath(dataDir) {
+  return resolve(dataDir, 'dev-wrapper.pid')
+}
+
+/**
+ * Ties the wrapper's lifetime to its child's: forwards the stop signals to it
+ * and ends the wrapper only when the child has. The forwarding listeners are
+ * removed before the wrapper re-raises the child's own signal, because a live
+ * SIGTERM listener would swallow that re-raise and the wrapper would never
+ * exit.
+ *
+ * @param {import('node:events').EventEmitter & { kill: (signal?: string) => unknown }} child
+ * @param {{
+ *   proc?: Pick<NodeJS.Process, 'on' | 'removeListener'>,
+ *   exit?: (code?: number) => unknown,
+ *   reraise?: (signal: string) => unknown,
+ *   write?: (text: string) => unknown,
+ *   cleanup?: () => unknown,
+ *   signals?: readonly string[],
+ * }} [seams]
+ */
+export function superviseChild(
+  child,
+  {
+    proc = process,
+    exit = process.exit,
+    reraise = reraiseSignalOrExit,
+    write = (text) => process.stderr.write(text),
+    cleanup = () => {},
+    signals = FORWARDED_SIGNALS,
+  } = {},
+) {
+  const forwarders = signals.map((signal) => {
+    const forward = () => {
+      child.kill(signal)
+    }
+    proc.on(signal, forward)
+    return { signal, forward }
+  })
+  const release = () => {
+    for (const { signal, forward } of forwarders) proc.removeListener(signal, forward)
+    cleanup()
+  }
+
+  child.on('error', (error) => {
+    release()
+    write(`[with-dev-data-dir] failed to spawn dev server: ${error.message}\n`)
+    exit(1)
+  })
+  child.on('exit', (code, signal) => {
+    release()
+    if (signal) {
+      reraise(signal)
+      return
+    }
+    exit(code ?? 1)
+  })
+}
+
+/**
  * Resolves the command + args to launch `tsx watch <entry>` cross-platform.
  *
  * `node_modules/.bin/tsx` is a POSIX shell shim (paired with `.cmd`/`.ps1`
