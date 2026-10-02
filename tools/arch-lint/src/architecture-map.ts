@@ -12,17 +12,32 @@ import type { BoundaryViolationKind } from './scanner.js'
  *
  * `exemptBoundaryViolationKinds` opts a package OUT of specific
  * `scanner.ts` violation kinds it legitimately needs — e.g. canvas-viewer
- * is a browser-runtime UI package (DOM globals are its whole job) with one
- * embedded Node-side build-time module (`widget/build-fonts-module.ts`
- * uses `Buffer` to base64-encode font bytes at build time), so it is
- * exempted from `dom-global`/`node-ambient-global` while still banned from
- * `node-builtin-import`/`inversify-import` like every other shared-layer
- * package.
+ * is a browser-runtime UI package (DOM globals are its whole job), so it is
+ * exempted from `dom-global` while still banned from `node-builtin-import`/
+ * `inversify-import` like every other shared-layer package.
+ * `exemptBoundaryFiles` does the same for one file: canvas-viewer's one
+ * embedded Node-side build-time module (`widget/build-fonts-module.ts` uses
+ * `Buffer` to base64-encode font bytes at build time) is the only place
+ * `node-ambient-global` is allowed, because the rest of the package ships
+ * into the browser and the widget iframe, where `process` does not exist.
  */
+export interface BoundaryFileExemption {
+  readonly kinds: readonly BoundaryViolationKind[]
+  readonly reason: string
+}
+
 export interface PackageArchEntry {
   readonly allowedInternalDeps: readonly string[]
   readonly allowedThirdParty: readonly string[]
   readonly exemptBoundaryViolationKinds?: readonly BoundaryViolationKind[]
+  /**
+   * Violation kinds exempt in ONE file, keyed by its path relative to the
+   * package's `src/`. For a use that is legitimate in a single build-time
+   * module and a defect anywhere else the package ships, where a package-wide
+   * kind would silently exempt every other file. `repo-coverage.test.ts` fails
+   * an entry whose file is gone or no longer contains that kind of use.
+   */
+  readonly exemptBoundaryFiles?: Readonly<Record<string, BoundaryFileExemption>>
 }
 
 export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
@@ -243,7 +258,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-render',
     ],
     allowedThirdParty: ['@modelcontextprotocol/ext-apps', 'react', 'react-dom', 'zod'],
-    exemptBoundaryViolationKinds: ['dom-global', 'node-ambient-global'],
+    exemptBoundaryViolationKinds: ['dom-global'],
+    exemptBoundaryFiles: {
+      'widget/build-fonts-module.ts': {
+        kinds: ['node-ambient-global'],
+        reason:
+          'runs at build time in Node to base64-encode font bytes (`Buffer`); the module it ' +
+          'generates is what ships, never this file',
+      },
+    },
   },
   // The daemon's browser-safe client half (extracted from mcp-server's
   // src/shared, where it was held browser-safe only by a convention scan):
@@ -576,17 +599,23 @@ export function packagesAllowedToImportLoroCrdt(): readonly string[] {
 /**
  * Every `BoundaryViolationKind` a package's own source is exempt from,
  * combining the automatic loro-crdt exemption above with each package's
- * explicit `exemptBoundaryViolationKinds`. `repo-coverage.test.ts` filters
+ * explicit `exemptBoundaryViolationKinds`, and — when `fileInSrc` (the path
+ * relative to the package's `src/`, `/`-separated) is given — that file's
+ * `exemptBoundaryFiles` entry. `repo-coverage.test.ts` filters
  * `scanSourceForBoundaryViolations` output through this before asserting
  * zero violations.
  */
 export function exemptedBoundaryViolationKinds(
   packageName: string,
+  fileInSrc?: string,
 ): ReadonlySet<BoundaryViolationKind> {
   const entry = ARCHITECTURE_MAP[packageName]
   const kinds = new Set<BoundaryViolationKind>(entry?.exemptBoundaryViolationKinds ?? [])
   if (entry?.allowedThirdParty.includes('loro-crdt')) {
     kinds.add('loro-crdt-import')
+  }
+  if (fileInSrc !== undefined) {
+    for (const kind of entry?.exemptBoundaryFiles?.[fileInSrc]?.kinds ?? []) kinds.add(kind)
   }
   return kinds
 }

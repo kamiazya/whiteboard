@@ -38,11 +38,12 @@ It runs over the `src` of every entry in `repo-coverage.test.ts`'s
 plus both composition roots — over `.ts` and `.tsx` alike. Test files and
 `test-utils/` are out, the same line the boundary scans draw.
 
-**Which packages those scans run on is `SHARED_LAYER_PACKAGES`, and nothing
-used to say it was complete**: `scene` and `reference-graph` were in
+**Which packages those scans run on is `scan-packages.ts`'s
+`SHARED_LAYER_PACKAGES`, and nothing used to say it was complete**: `scene` and `reference-graph` were in
 `ARCHITECTURE_MAP` and rule 1 for months while no per-package scan ran on
-either (a `node:fs` import in `reference-graph` passed). `every workspace is in
-a per-package scan list` now fails on any `packages/*` or `apps/*` manifest in
+either (a `node:fs` import in `reference-graph` passed).
+`workspace-scan-coverage.test.ts` (`every workspace is in a per-package scan
+list`) now fails on any `packages/*` or `apps/*` manifest in
 neither that list nor `COMPOSITION_ROOTS`, unless `NOT_BOUNDARY_SCANNED` gives
 it a reason (empty today, guarded from both sides). The boundary scan also reads
 `.tsx`, for the `node-builtin-import` and `inversify-import` kinds only — a
@@ -103,6 +104,19 @@ What replaced the allowlist is stricter than what guarded it — the entry
 needed a hand guard for a type-only import a manifest cannot see, and
 `plugin-visual/src/renderer-independence.test.ts` now pins that there is no
 import of the renderer of ANY kind.
+
+## An exemption is per FILE when only one file needs it
+
+`exemptBoundaryViolationKinds` exempts a kind for a whole package, which is
+right for `dom-global` in a UI package and wrong for a use that lives in one
+build-time module. `canvas-viewer` carried `node-ambient-global` package-wide
+for a single `Buffer` in `widget/build-fonts-module.ts`, while the rule said
+one file: `process.env.X` or `__dirname` in `mount.ts` or `widget-entry.ts` —
+which ship into the browser and the widget iframe — passed (measured, both).
+`exemptBoundaryFiles` keys the exemption by path under `src/`, and `per-file
+boundary exemptions` fails an entry whose file is gone or no longer contains
+that kind. It is file-granular, not line-granular: a second `process` use in
+the exempt file passes, which is the cost of not scanning for the line.
 
 ## The always-on table is parsed, not trusted
 

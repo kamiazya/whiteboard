@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
@@ -12,6 +12,7 @@ import {
 } from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection, type PackageManifest } from './direction-check.js'
+import { COMPOSITION_ROOTS, listTsFiles, SHARED_LAYER_PACKAGES } from './scan-packages.js'
 import { REPO_ROOT } from './scan-roots.js'
 import {
   type BoundaryViolationKind,
@@ -21,72 +22,6 @@ import {
 import { findTypeOnlyCycles } from './type-cycle-check.js'
 
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
-const SHARED_LAYER_PACKAGES = [
-  'packages/daemon-client',
-  'packages/model',
-  'packages/codec',
-  'packages/canvas-render',
-  'packages/ports',
-  'packages/facet-engine',
-  'packages/loro-adapter',
-  'packages/search',
-  'packages/server-core',
-  'packages/workspace-index',
-  'packages/history',
-  'packages/scene',
-  'packages/reference-graph',
-  // Browser-runtime UI package, not a "shared" model/codec/... layer package
-  // in the architecture-map.md sense, but scanned the same way — see its
-  // `exemptBoundaryViolationKinds` entry in architecture-map.ts for why DOM
-  // globals and one build-time `Buffer` use don't trip the scan.
-  'packages/canvas-viewer',
-  // React packages, scanned for the same reason and with the same caveat as
-  // canvas-viewer. Registering a package in `architecture-map.ts` does NOT
-  // scan it — a `node:fs` import in `plugin-visual` once passed a full
-  // arch-lint run for exactly that reason, and `every workspace is in a
-  // per-package scan list` below is what now keeps the next package from
-  // repeating it.
-  'packages/facet-ui',
-  'packages/plugin-visual',
-]
-
-/**
- * Composition roots. Their SOURCE is deliberately unscanned — they are the
- * packages allowed `node:*`, DOM globals and inversify — and their
- * third-party surface is open by design, so they cannot join the list above.
- * Their dependency DIRECTION is still a rule, and it was the one thing
- * nothing checked: `apps/web` was absent from the map entirely, so a shared
- * package taking a dependency on it would have passed.
- */
-const COMPOSITION_ROOTS = ['apps/extension', 'apps/web', 'packages/mcp-server']
-
-// `extensions` defaults to `.ts` only, so the existing boundary/direction/
-// allowed-deps scans below keep collecting exactly what they always did; the
-// cycle scan further down opts into `.tsx` explicitly instead of widening
-// this default for everyone.
-function listTsFiles(dir: string, extensions: readonly string[] = ['.ts']): string[] {
-  const files: string[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      // test-utils are dev surface, not shipping modules — the same line the
-      // manifests already draw (ports keeps fast-check, daemon-client keeps
-      // loro-crdt in devDependencies for exactly these helpers). A contract
-      // suite legitimately mints real Loro bytes; holding it to the runtime
-      // boundary would ban the test for being a good test. `.test.ts` files
-      // are excluded below for the same reason.
-      if (entry.name === 'test-utils') continue
-      files.push(...listTsFiles(full, extensions))
-      continue
-    }
-    const ext = extensions.find((candidate) => entry.name.endsWith(candidate))
-    if (ext === undefined || entry.name.endsWith(`.test${ext}`)) continue
-    files.push(full)
-  }
-  return files
-}
-
 /**
  * Scope of the circular-value-import check: every scanned package's `src`,
  * both composition roots included. `apps/web/src` was excluded while a
@@ -119,58 +54,6 @@ const CYCLE_SCAN_DIRS = CYCLE_SCAN_PACKAGES.map((packageDir) => join(REPO_ROOT, 
  * is the executable half.
  */
 const CYCLE_SCAN_ALIASES = {} as const
-
-/**
- * Workspaces under `packages/` and `apps/` that are in NEITHER list above, each
- * with why a scan of them would be wrong rather than missing.
- *
- * Empty today, and guarded from both sides below: an entry naming a workspace
- * that is gone, or one a list already covers, fails — so an exemption cannot
- * outlive the reason it records, and a package cannot be left out of every
- * per-package scan by simply not being listed anywhere.
- */
-const NOT_BOUNDARY_SCANNED: Readonly<Record<string, string>> = {}
-
-/** Every directory under `packages/` and `apps/` that carries a package.json. */
-function workspaceManifestDirs(): string[] {
-  return ['packages', 'apps'].flatMap((root) =>
-    readdirSync(join(REPO_ROOT, root), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => `${root}/${entry.name}`)
-      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
-  )
-}
-
-describe('every workspace is in a per-package scan list', () => {
-  const listed = new Set([...SHARED_LAYER_PACKAGES, ...COMPOSITION_ROOTS])
-
-  it('finds the workspaces it is meant to check', () => {
-    expect(
-      workspaceManifestDirs().length,
-      'the workspace walk found almost nothing',
-    ).toBeGreaterThan(15)
-  })
-
-  it('lists every workspace in SHARED_LAYER_PACKAGES or COMPOSITION_ROOTS, or exempts it with a reason', () => {
-    const unscanned = workspaceManifestDirs().filter(
-      (dir) => !listed.has(dir) && NOT_BOUNDARY_SCANNED[dir] === undefined,
-    )
-    expect(
-      unscanned,
-      'a workspace is in no per-package scan, so a node: import or a banned dependency in it passes ' +
-        'arch-lint. Registering it in architecture-map.ts does NOT scan it. Add it to ' +
-        'SHARED_LAYER_PACKAGES (or COMPOSITION_ROOTS), or to NOT_BOUNDARY_SCANNED with the reason.',
-    ).toEqual([])
-  })
-
-  it('keeps every NOT_BOUNDARY_SCANNED entry a real, otherwise unlisted workspace with a reason', () => {
-    const dirs = new Set(workspaceManifestDirs())
-    const stale = Object.entries(NOT_BOUNDARY_SCANNED).filter(
-      ([dir, reason]) => !dirs.has(dir) || listed.has(dir) || reason.trim().length <= 20,
-    )
-    expect(stale, 'drop the entry, or give it a reason of substance').toEqual([])
-  })
-})
 
 describe('composition-root dependency direction', () => {
   const readManifest = (packageDir: string): PackageManifest =>
@@ -217,6 +100,9 @@ describe('composition-root dependency direction', () => {
   }
 })
 
+/** `file`'s path under `srcDir`, `/`-separated — the key `exemptBoundaryFiles` uses. */
+const inSrc = (srcDir: string, file: string): string => relative(srcDir, file).split(sep).join('/')
+
 const TSX_BANNED_KINDS: ReadonlySet<BoundaryViolationKind> = new Set([
   'node-builtin-import',
   'inversify-import',
@@ -240,13 +126,13 @@ describe('shared-layer boundary lint (real source coverage)', () => {
       // architecture-map.ts explicitly lists it for — never an implicit "it's
       // used here, so allow it" heuristic, so an unmapped package still fails
       // loudly.
-      const exemptKinds = exemptedBoundaryViolationKinds(manifest.name)
-
       const srcDir = join(REPO_ROOT, packageDir, 'src')
       const files = listTsFiles(srcDir)
       expect(files.length).toBeGreaterThan(0)
 
       for (const file of files) {
+        // A kind exempt for ONE file (`exemptBoundaryFiles`) is looked up per file.
+        const exemptKinds = exemptedBoundaryViolationKinds(manifest.name, inSrc(srcDir, file))
         const allViolations = scanSourceForBoundaryViolations(file, readFileSync(file, 'utf-8'))
         const violations = allViolations.filter((v) => !exemptKinds.has(v.kind))
         expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
@@ -581,79 +467,6 @@ describe('architecture-map.md doc sync', () => {
 
   it('names the circular-value-import enforcer', () => {
     expect(doc).toContain('cycle-check.ts')
-  })
-})
-
-/**
- * The table in architecture-map.md is the contract every session reads and
- * ARCHITECTURE_MAP is what the scans enforce; they were two hand-kept copies
- * and disagreed in six rows (loro-adapter listed `ports`, plugin-visual a
- * `lucide-react` the map records as deliberately gone, and three rows spelled
- * a package by a name nothing resolves, `render` and `crdt`).
- */
-describe('architecture-map.md table agrees with ARCHITECTURE_MAP', () => {
-  const doc = readFileSync(ARCHITECTURE_MAP_DOC, 'utf-8')
-  const shortName = (name: string): string => name.replace('@kamiazya/whiteboard-', '')
-  const workspaceNames = new Set(Object.keys(ARCHITECTURE_MAP).map(shortName))
-
-  const rows = doc
-    .split('\n')
-    .filter((line) => /^\| `(?:packages|apps)\//.test(line))
-    .map((line) => {
-      const [dir, , deps] = line
-        .split('|')
-        .slice(1, -1)
-        .map((cell) => cell.trim())
-      const packageDir = (dir as string).replaceAll('`', '')
-      const manifest = JSON.parse(
-        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
-      )
-      // `zod only` is prose around one name, and a token with a space is
-      // prose outright (`port impls`): the column mixes both with names.
-      const tokens = (deps as string)
-        .split(/[,+]/)
-        .map((token) =>
-          token
-            .replaceAll('`', '')
-            .replace(/ only$/, '')
-            .trim(),
-        )
-        .filter((token) => token !== '' && !token.includes(' '))
-      return { name: manifest.name as string, tokens }
-    })
-
-  it('has one row for every package ARCHITECTURE_MAP maps', () => {
-    expect(rows.map((row) => row.name).sort()).toEqual(Object.keys(ARCHITECTURE_MAP).sort())
-  })
-
-  it('lists, per row, exactly the workspace packages the map allows', () => {
-    const drift = rows.flatMap(({ name, tokens }) => {
-      const listed = tokens.filter((token) => workspaceNames.has(token)).sort()
-      const allowed = (ARCHITECTURE_MAP[name]?.allowedInternalDeps ?? []).map(shortName).sort()
-      return JSON.stringify(listed) === JSON.stringify(allowed)
-        ? []
-        : [{ name, table: listed, map: allowed }]
-    })
-    expect(
-      drift,
-      'a "Checked dependencies" cell names workspace packages differently from allowedInternalDeps. ' +
-        'The cell spells packages by their manifest name minus `@kamiazya/whiteboard-`.',
-    ).toEqual([])
-  })
-
-  it('names only third-party packages the map records for that row', () => {
-    const unknown = rows.flatMap(({ name, tokens }) => {
-      const recorded = ARCHITECTURE_MAP[name]?.allowedThirdParty ?? []
-      return tokens
-        .filter((token) => !workspaceNames.has(token))
-        .filter((token) => !recorded.some((dep) => dep === token || dep.startsWith(`${token}-`)))
-        .map((token) => ({ name, token }))
-    })
-    expect(
-      unknown,
-      'a cell names something that is neither a workspace package nor in allowedThirdParty ' +
-        '(`remark` stands for the remark-* family)',
-    ).toEqual([])
   })
 })
 

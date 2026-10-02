@@ -69,7 +69,7 @@ eleven pointers at once.
 - Forbidden: `node:*`, DOM globals, `inversify` — it runs in both roots and a
   worker. `Buffer` is the one that was here before the move; `model`'s base64
   codec is what replaced it.
-- Enforced by `tools/arch-lint`; listed in `repo-coverage.test.ts`'s
+- Enforced by `tools/arch-lint`; listed in `scan-packages.ts`'s
   `SHARED_LAYER_PACKAGES` so the scan reaches it (registration alone does not
   scan, see `package-workspace-index.md`).
 
