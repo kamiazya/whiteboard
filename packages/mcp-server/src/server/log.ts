@@ -19,23 +19,15 @@
 //     a typed records buffer.
 
 import { Writable } from 'node:stream'
+import { LOG_LEVELS, type LogLevel } from '@kamiazya/whiteboard-server-core/log-levels'
 import pino, { type DestinationStream, type Logger as PinoLogger, stdSerializers } from 'pino'
 
-// RFC 5424 severities exposed through MCP `notifications/message`. Order
-// matters: lower index = more verbose. Pino numeric values follow the
-// same order with `× 10` spacing so future levels are easy to slot in.
-export const LOG_LEVELS = [
-  'debug',
-  'info',
-  'notice',
-  'warning',
-  'error',
-  'critical',
-  'alert',
-  'emergency',
-] as const
-
-export type LogLevel = (typeof LOG_LEVELS)[number]
+// RFC 5424 severities exposed through MCP `notifications/message`, from
+// server-core, which owns the list (it sits below this package and logs through
+// the same names). Order matters: lower index = more verbose. Pino numeric
+// values follow the same order with `× 10` spacing so future levels are easy
+// to slot in.
+export { LOG_LEVELS, type LogLevel }
 
 const LEVEL_VALUES: Record<LogLevel, number> = {
   debug: 10,

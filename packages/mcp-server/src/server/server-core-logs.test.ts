@@ -5,6 +5,7 @@ import {
   getLogger as getServerCoreLogger,
   setLogSink as setServerCoreLogSink,
 } from '@kamiazya/whiteboard-server-core'
+import { LOG_LEVELS } from '@kamiazya/whiteboard-server-core/log-levels'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
@@ -49,6 +50,19 @@ describe('routeServerCoreLogs', () => {
         level: 'warning',
         msg: 'no fields',
       }),
+    ])
+  })
+
+  // One list of levels across the seam: a level server-core can emit that this
+  // logger lacks would be forwarded under a name pino has no method for.
+  it.each(LOG_LEVELS)('forwards a %s record at the same level', (level) => {
+    routeServerCoreLogs()
+    const capture = captureLogsForTests('debug')
+    getServerCoreLogger('level-scope')[level]('at this level')
+    capture.restore()
+
+    expect(capture.records).toEqual([
+      expect.objectContaining({ scope: 'level-scope', level, msg: 'at this level' }),
     ])
   })
 
