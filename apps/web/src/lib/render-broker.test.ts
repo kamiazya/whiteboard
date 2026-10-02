@@ -1,19 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
+import { deferred } from '../test-utils/async.js'
 import { createInTabRenderBroker } from './render-broker.js'
 import { outlineKeyOf, renderKeyOf } from './render-key.js'
 
 const drawn = { svg: '<svg/>', bounds: { x: 0, y: 0, w: 1, h: 1 } }
 const keyFor = (documentId: string, state = '2026-09-03T00:00:00Z') =>
   renderKeyOf({ documentId, kind: 'spatial' as const, state }, 'light', '')
-
-/** A producer that does not settle until the test says so. */
-function deferred() {
-  let release: (value: typeof drawn | null) => void = () => {}
-  const promise = new Promise<typeof drawn | null>((resolve) => {
-    release = resolve
-  })
-  return { promise, release: (value: typeof drawn | null = drawn) => release(value) }
-}
 
 describe('the in-tab render broker', () => {
   it('produces once per key and answers the second caller from the memo', async () => {
@@ -32,14 +24,14 @@ describe('the in-tab render broker', () => {
   // worker. Memoising the RESULT is not enough — the join has to happen while
   // the work is in flight, or the second caller starts a second render.
   it('joins a caller that arrives while the same key is still rendering', async () => {
-    const pending = deferred()
+    const pending = deferred<typeof drawn | null>()
     const produce = vi.fn().mockReturnValue(pending.promise)
     const broker = createInTabRenderBroker()
     const key = keyFor('doc-1')
 
     const first = broker.render(key, produce)
     const second = broker.render(key, produce)
-    pending.release()
+    pending.resolve(drawn)
 
     expect(await first).toEqual(drawn)
     expect(await second).toEqual(drawn)
@@ -65,14 +57,14 @@ describe('the in-tab render broker', () => {
   // bytes, so the join still applies. This is the half that keeps the
   // measured double render fixed for a keeper that stamps no time.
   it('still joins concurrent callers for a document with no version', async () => {
-    const pending = deferred()
+    const pending = deferred<typeof drawn | null>()
     const produce = vi.fn().mockReturnValue(pending.promise)
     const broker = createInTabRenderBroker()
     const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light', '')
 
     const first = broker.render(key, produce)
     const second = broker.render(key, produce)
-    pending.release()
+    pending.resolve(drawn)
 
     expect(await first).toEqual(drawn)
     expect(await second).toEqual(drawn)

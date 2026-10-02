@@ -15,6 +15,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { tick } from '../../test-utils/async.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -38,7 +39,6 @@ const board: SpatialCanvas = {
  * whole press-move-release in one turn runs all three against the render from
  * before the press, and the release reduces from an idle gesture.
  */
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 async function dragFrom(
   root: HTMLElement,

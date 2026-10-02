@@ -7,6 +7,7 @@ import {
   SseStreamHub,
   workspaceIdOfDocKey,
 } from './sse-stream-hub.js'
+import { flush } from './test-utils/flush.js'
 
 function createFake() {
   const calls: { url: string; body?: string }[] = []
@@ -65,10 +66,6 @@ function createFake() {
 
 /** Retries run immediately so a reconnect test asserts behavior, not timing. */
 const noDelay = () => 0
-
-const flush = async () => {
-  for (let i = 0; i < 30; i++) await Promise.resolve()
-}
 
 describe('SseStreamHub', () => {
   it('opens exactly one stream no matter how many documents subscribe', async () => {

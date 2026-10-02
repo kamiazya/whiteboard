@@ -7,17 +7,8 @@
  * no IndexedDB involved, the contract is purely about promise ordering.
  */
 import { describe, expect, it } from 'vitest'
+import { deferred } from '../test-utils/async.js'
 import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
-
-function deferred<T = void>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
 
 describe('pending index writes', () => {
   it('a read started after a tracked write settles only after that write does', async () => {

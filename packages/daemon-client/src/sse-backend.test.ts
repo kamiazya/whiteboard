@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
+import { flush } from './test-utils/flush.js'
 
 function sseFrame(event: string, data: string): string {
   return `event: ${event}\ndata: ${data}\n\n`
@@ -70,10 +71,6 @@ function createHandlers() {
     updates,
     connectedCount: () => connected,
   }
-}
-
-const flush = async () => {
-  for (let i = 0; i < 20; i++) await Promise.resolve()
 }
 
 describe('SseBackend', () => {

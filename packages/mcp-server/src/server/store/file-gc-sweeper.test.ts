@@ -135,16 +135,7 @@ async function flushRealAsync(): Promise<void> {
   await new Promise<void>((resolve) => realSetTimeout(resolve, 5))
 }
 
-// Deferred-promise helper: lets a test control exactly when a stubbed purge
-// resolves, so overlap/single-flight scenarios are deterministic instead of
-// racing real filesystem timing.
-function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
-  let resolve!: (v: T) => void
-  const promise = new Promise<T>((r) => {
-    resolve = r
-  })
-  return { promise, resolve }
-}
+type PurgeResult = { purgedCount: number; purgedBytes: number }
 
 describe('createFileGcSweeper scheduling', () => {
   it('does not run a pass before intervalMs elapses', async () => {
@@ -168,8 +159,8 @@ describe('createFileGcSweeper scheduling', () => {
     // a gate is the explicit boundary between passes that makes the exact
     // call counts below deterministic under any scheduler load.
     const gates = [
-      deferred<{ purgedCount: number; purgedBytes: number }>(),
-      deferred<{ purgedCount: number; purgedBytes: number }>(),
+      Promise.withResolvers<PurgeResult>(),
+      Promise.withResolvers<PurgeResult>(),
     ] as const
     let passIndex = 0
     const purge = vi.fn((_workspaceId: string) => gates[Math.min(passIndex++, 1)].promise)
@@ -236,8 +227,8 @@ describe('createFileGcSweeper single-flight', () => {
     // 3. Holding pass 2's gate means no pass 3 can exist to be counted, so
     // the exact counts below hold under any amount of clock advancement.
     const gates = [
-      deferred<{ purgedCount: number; purgedBytes: number }>(),
-      deferred<{ purgedCount: number; purgedBytes: number }>(),
+      Promise.withResolvers<PurgeResult>(),
+      Promise.withResolvers<PurgeResult>(),
     ] as const
     let purgeCalls = 0
     const purge = vi.fn(() => gates[Math.min(purgeCalls++, 1)].promise)
@@ -274,7 +265,7 @@ describe('createFileGcSweeper single-flight', () => {
   })
 
   it('two direct tick() calls while a pass is in flight return the same promise (concurrency seam)', async () => {
-    const d = deferred<{ purgedCount: number; purgedBytes: number }>()
+    const d = Promise.withResolvers<PurgeResult>()
     let purgeCalls = 0
     const purge = vi.fn(async () => {
       purgeCalls += 1
@@ -319,7 +310,7 @@ describe('createFileGcSweeper stop()', () => {
   })
 
   it('awaits an in-flight pass before resolving', async () => {
-    const d = deferred<{ purgedCount: number; purgedBytes: number }>()
+    const d = Promise.withResolvers<PurgeResult>()
     const purge = vi.fn(async () => d.promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
@@ -346,7 +337,7 @@ describe('createFileGcSweeper stop()', () => {
   })
 
   it('resolves once timeoutMs elapses even though the in-flight pass has not settled', async () => {
-    const d = deferred<{ purgedCount: number; purgedBytes: number }>()
+    const d = Promise.withResolvers<PurgeResult>()
     const purge = vi.fn(async () => d.promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
@@ -374,7 +365,7 @@ describe('createFileGcSweeper stop()', () => {
   })
 
   it('clears the timeoutMs race timer once the in-flight pass finishes normally (no leaked timer)', async () => {
-    const d = deferred<{ purgedCount: number; purgedBytes: number }>()
+    const d = Promise.withResolvers<PurgeResult>()
     const purge = vi.fn(async () => d.promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
