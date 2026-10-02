@@ -4,7 +4,7 @@
  * Everything else was convention: a store importing a route, or `shared/`
  * importing the server's logger, passed every test and every guard — both were
  * planted, in `store/names-store.ts` and `shared/sha256.ts`, and the whole
- * project stayed green. `apps/web/src/layer-order.test.ts` is the same guard
+ * project stayed green. `web-layer-order.test.ts` is the same guard
  * for the other root; this is its counterpart.
  *
  * The order, bottom to top. A module may import its own layer or any layer
