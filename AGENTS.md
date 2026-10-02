@@ -191,25 +191,7 @@ against them rather than spying on `console`; `restore()` in `afterEach`.
 
 ### Redaction
 
-The root pino instance in `log.ts` redacts a fixed list of field names —
-top-level (`token`, `daemonToken`, `bootstrapToken`, `accessToken`,
-`authorization`, `cookie`, `password`, `secret`, `apiKey`) and one level of
-nesting under any key (`*.token`, `*.daemonToken`, …) — replacing the value
-with `[redacted]` before the record reaches stderr, an MCP
-`notifications/message` subscriber, or a test capture sink. This is what
-stops a call site that carelessly logs a whole request/client/config object
-(e.g. `log.error({ client }, 'request failed')`) from leaking the daemon
-bearer token or an OAuth access token.
-
-Adding a new secret-bearing field anywhere in the server means adding both
-its top-level and its `*.<name>` path to `REDACTED_PATHS` in `log.ts` — pino
-redaction does not infer field names, and `fast-redact` has no
-arbitrary-depth wildcard, so a secret nested two or more levels deep under
-an unlisted key is not caught. The safer habit is still to never log a
-secret-bearing object wholesale in the first place; redaction is the net,
-not the plan. Redaction also cannot help when a secret is interpolated
-directly into a message *string* (e.g. `` log.info(`token=${token}`) ``)
-rather than passed as a structured field — do not do that.
+The root pino instance in `log.ts` redacts a fixed list of secret-bearing field names before a record reaches stderr, an MCP subscriber, or a test sink — never log a secret-bearing object wholesale, and never interpolate a secret into a message string. The list, how to extend it, and its depth limit are `.claude/rules/package-mcp-server.md`.
 
 ## Doc Screenshots
 

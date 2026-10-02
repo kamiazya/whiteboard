@@ -114,3 +114,81 @@ read path answers a missing path with an EMPTY document it then keeps —
 without the probe every export of every workspace would mint a `tags`
 document. `headless-renderer.tag-library.test.ts` holds the threading
 through the real renderer, since the export test mocks it.
+
+## Background work is declared before it is armed
+
+**Work the daemon does on its own is declared before it is armed.**
+`packages/mcp-server/src/server/background-work.ts` is the registry, and the
+composition roots start and stop everything through it. Adding a scheduler, a
+sweeper, a poller, or a dispatcher means editing that file and answering three
+questions the diff would otherwise never ask:
+
+- **who runs it** when several instances share one record — `leader-only`
+  (naming the lease) or `every-instance` (saying why that is right, since it
+  is also what a worker gets by accident);
+- **what it costs the serving loop** — `subprocess`, or `in-process` with a
+  `stallCeilingMs` **a test asserts on every run**, taken with
+  `shared/test-utils/loop-availability.ts` rather than by hand;
+- **what triggers it**.
+
+Both of the first two were got wrong on one worker, invisibly. The backup pass
+ran on every instance (N backups a night, and N retention passes each deleting
+from a set the others were changing) and inside the serving process, where
+`VACUUM INTO` blocks the event loop for its whole duration — 1242ms at a 103MB
+database, 4767ms at 421MB, and rising with the data. Nothing in the source says
+a call blocks: an `await` on a native binding reads exactly like an `await` on a
+socket. `snapshot-blocking.test.ts` pins that one so the decision that put a
+subprocess in the way fails loudly if the call ever stops blocking.
+
+A ceiling rather than a reading, because a reading goes stale in silence. The
+field first held `0` on three declarations, each with a date and no
+measurement behind it. Naming the source test in a `fixture` string was meant
+to fix that and did not: the workspace tail then declared 283ms while citing a
+test that measures 20-29ms — the number came from a scratch script at a larger
+fixture, and the citation was written from memory. **A number with a source
+named beside it is still unbacked if nothing reads the source.** So the
+declarations live in `background-work-costs.ts` where a test can import them,
+each loop-availability test asserts its own measurement stays under its
+ceiling, and `background-work-costs.test.ts` fails on a declared ceiling no
+test asserts — with an exemption list guarded from both sides, for the one
+worker (`idle-shutdown`) that compares two timestamps and has no call to
+measure. Larger hand-measured points stay in `fixture`, said plainly to be
+hand measurements: they are what a reader sizing a deployment needs and
+exactly what a test on a small fixture cannot check.
+
+The instrument itself is calibrated against known truths in
+`loop-availability.test.ts`, which is not ceremony — it was written, trusted
+for three declarations, and only calibrated after the fact, at which point
+`worstStallMs` turned out to report **0.3ms for a 200ms stall** whenever the
+stall ran to the end of the body.
+
+The registry is load-bearing rather than advisory — an undeclared worker does
+not typecheck, and `background-work.guard.test.ts` fails on a `.start()` in a
+composition root that goes around it. What it does NOT catch is a worker that
+arms itself at module load or from somewhere else; that is what this paragraph
+is for, and prose is the weaker rung on purpose. The registry earned its keep
+on the first read: `server-mode-http.ts` — the MULTI-INSTANCE root, the one the
+backup lease was built for — was starting no background work at all, so
+scheduled backups reached only the local daemon.
+
+## Log redaction
+
+The root pino instance in `log.ts` redacts a fixed list of field names —
+top-level (`token`, `daemonToken`, `bootstrapToken`, `accessToken`,
+`authorization`, `cookie`, `password`, `secret`, `apiKey`) and one level of
+nesting under any key (`*.token`, `*.daemonToken`, …) — replacing the value
+with `[redacted]` before the record reaches stderr, an MCP
+`notifications/message` subscriber, or a test capture sink. This is what
+stops a call site that carelessly logs a whole request/client/config object
+(e.g. `log.error({ client }, 'request failed')`) from leaking the daemon
+bearer token or an OAuth access token.
+
+Adding a new secret-bearing field anywhere in the server means adding both
+its top-level and its `*.<name>` path to `REDACTED_PATHS` in `log.ts` — pino
+redaction does not infer field names, and `fast-redact` has no
+arbitrary-depth wildcard, so a secret nested two or more levels deep under
+an unlisted key is not caught. The safer habit is still to never log a
+secret-bearing object wholesale in the first place; redaction is the net,
+not the plan. Redaction also cannot help when a secret is interpolated
+directly into a message *string* (e.g. `` log.info(`token=${token}`) ``)
+rather than passed as a structured field — do not do that.

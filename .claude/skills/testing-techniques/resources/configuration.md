@@ -42,6 +42,12 @@ referenced file, so neither applies until one becomes inline.
 `-t` matches against `suite > test` joined by `' > '`, not by spaces: `-t adds` or
 `-t 'math.*adds'`, never `-t 'math adds'`. No script or CI job on this tree passes `-t`.
 
+### A filter that matches nothing beside one that matches is silent
+
+The long form of the hazard `.claude/rules/dev-flow.md` states in two sentences.
+
+The hazard this project name closes is narrower than it sounds, and the general shape survives: **vitest only errors when a `--project` filter set is empty; a project name that matches nothing alongside a sibling name that DOES match is silent** — `--project web-jsdom --project web-browser` used to run only the browser project (unnamed `web-jsdom` matched nothing), reported its ~540 tests, and exited 0. That reads exactly like both suites passing. It let a real regression reach CI twice in one session before anyone noticed the count was too small. Naming this one project retires that one instance; any future typo'd or renamed `--project` value reopens the same class. Match the local command to the CI job, and treat a test count far below CI's as evidence the filter missed, not as good news.
+
 ## Pools, isolation and caches
 
 - Timeouts per project are ceilings sized on a recorded measurement

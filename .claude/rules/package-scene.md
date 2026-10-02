@@ -98,3 +98,27 @@ prediction about what one caller's signature would force.
   behaviour to test, so what it pins is the position (the manifest, the
   absence of upward imports) and the types-only rule. Each direction is
   mutation-checked — adding a runtime export fails it.
+
+## Why the vocabulary has its own package
+
+It carried one entry: `plugin-visual` imported `canvas-render`'s scene-node
+vocabulary to build what `canvas-render` then used as its default, a
+source-level loop closed only by every import back being TYPE-ONLY. That
+property is invisible to a manifest, so it needed a hand guard, and measured,
+turning the import into a value import left the rest of arch-lint green.
+
+The dissolution this file predicted — a package below both holding the scene
+vocabulary, since it is a contract between the renderer and every plugin
+rather than the renderer's private type — landed as `packages/scene`. The
+second caller that made it worth doing was a plugin-contributed edge ROUTER.
+
+*Correction: the extraction's commit said a router "returns a scene node and
+so cannot be a type-only edge at all". The contract returns a ROUTE (points,
+and whether they curve) instead, since the renderer owns silhouettes,
+arrowheads, paint and ink for every edge. What made the extraction right was
+the second caller of the contract, and a loop no manifest could see that only
+a hand guard kept honest.*
+
+The guard did not retire with the cycle; it got stronger. `plugin-visual/src/
+renderer-independence.test.ts` now pins that there is no import of the
+renderer AT ALL, type-only or otherwise.

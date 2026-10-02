@@ -22,8 +22,8 @@ Defer rather than duplicate:
   or hand-verified fix.
 - **`dependabot-review`** — a dependency-bump PR is not this skill's job.
 - **`stacking-pull-requests`** — a PR whose base is another branch.
-- **`.claude/rules/integrator-flow.md`** — the reasoning and measurements
-  behind `reference/failure-modes.md`.
+- **`reference/flake-shapes.md`** and **`.claude/rules/integrator-flow.md`** —
+  the reasoning and measurements behind `reference/failure-modes.md`.
 
 ## Order of work on a PR event
 

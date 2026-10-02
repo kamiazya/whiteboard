@@ -24,7 +24,7 @@ What makes a title unstable, with what was found:
 - **An ordinal from an implementation's order.** `'(third candidate)'` names the position of
   a resolver step, which the next inserted step renumbers. Name the step (`via its index.ts`).
   Ordinals as fixture data (`'the second press'`) are fine. The same failure lives in prose:
-  `integrator-flow.md` numbers its flake shapes and already lists "a third" after "a fourth
+  `steward`'s `reference/flake-shapes.md` numbers its flake shapes and already lists "a third" after "a fourth
   and fifth" — refer to a shape by what it does, never by its number.
 - **Chronology.** `'(CodeRabbit #953)'`, `'PR #243'`, `'the pre-fix hardcoded #333333'` —
   AGENTS.md's Source Comment Discipline, applied to titles: a review or a PR is process

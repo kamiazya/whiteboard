@@ -63,6 +63,16 @@ const bucket = (chars: number): number => Math.floor(chars / 1000)
 const TOTAL_GRAIN = 4000
 const totalBucket = (chars: number): number => Math.floor(chars / TOTAL_GRAIN)
 
+/**
+ * "N chars = bucket B; X to the next boundary up, Y above the one below" — so
+ * a failure says how far the edit moved, and a pass that is one character from
+ * crossing is visible before it becomes someone else's failure.
+ */
+function describeSize(chars: number, grain: number): string {
+  const floor = Math.floor(chars / grain) * grain
+  return `${chars} chars = bucket ${Math.floor(chars / grain)} at a ${grain}-char grain (${floor + grain - chars} below the next boundary up, ${chars - floor} above the one below)`
+}
+
 function read(relativePath: string): string {
   return readFileSync(join(REPO_ROOT, relativePath), 'utf8')
 }
@@ -89,7 +99,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // 17 since the MCP section gained its three-line pointer at the
   // mcp-tool-surface skill; main sat 23 characters under the boundary, so
   // the bucket is bought by the pointer alone.
-  'AGENTS.md': 17,
+  //
+  // 16 when the `### Redaction` detail moved to `package-mcp-server.md`: it is
+  // the one part of the logging policy that only a session editing `log.ts`
+  // needs, and AGENTS.md keeps the rule that matters to everyone (never log a
+  // secret-bearing object wholesale). Pins only go down on a cut.
+  'AGENTS.md': 16,
   // 16 since `packages/history` joined the table — the shared mechanics both
   // keepers read a branch, a merge plan and a checkpoint out of. A package
   // that is not in the table is a package nobody can place, so the row is
@@ -105,7 +120,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // router contract then did not need. A reader who trusts a wrong reason
   // extracts the wrong thing next time, so the correction is the rule's own
   // business rather than only the commit's.
-  '.claude/rules/architecture-map.md': 17,
+  //
+  // 13 when the daemon's background-work account (~3400 characters, mcp-server
+  // scope) moved to `package-mcp-server.md`, the cycle history to
+  // `package-scene.md`, and the reference-seams detail to what
+  // `package-canvas-render.md` already said. What stays is the rule a session
+  // placing code needs and the NAMES (`background-work.ts`, `cycle-check.ts`,
+  // `web-app-boundary.test.ts`) a doc-sync guard and a grep look for.
+  '.claude/rules/architecture-map.md': 13,
   // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
   // It belongs here rather than in a skill because it changes what a session
   // must do when it shards a job: nothing, where before it had to ask a human
@@ -136,7 +158,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // `pnpm-workspace.yaml` override, where only the bound moves and
   // Dependabot opens no PR); the workflow's own header carries the
   // measurement.
-  '.claude/rules/dev-flow.md': 30,
+  //
+  // 25 when the Gates narrative moved to `steward`'s `reference/gates.md`
+  // (the decisions, every "user decision" sentence and every guard's name
+  // stay), the `ticketing` paragraph shrank to what the `ticketing` skill
+  // already carries in full, and the design-field and four-skills paragraphs
+  // became pointers at `review-gate/resources/reachability.md` and the skills
+  // themselves.
+  '.claude/rules/dev-flow.md': 25,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat
@@ -172,7 +201,13 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // symptom names git rather than the fetch. The narrative of how it was
   // found was cut to the commit message, which is where chronology belongs;
   // what stayed is the mechanism, the rule and the one-command tell.
-  '.claude/rules/integrator-flow.md': 17,
+  //
+  // 7 when the flake taxonomy (every numbered shape with its measurements,
+  // ~11000 characters) moved to `steward`'s `reference/flake-shapes.md`. What
+  // stays is what a session needs BEFORE it has a symptom: the quarantine
+  // bound, the second-occurrence rule and the pointer — the symptom index
+  // (`reference/failure-modes.md`) is how a failure finds its shape.
+  '.claude/rules/integrator-flow.md': 7,
   // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a
@@ -210,12 +245,23 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * about 700 characters carried the corpus over a grain the 3500 characters
  * accumulated since 91762 had already brought it to.
  *
+ * 25 is the entry the history above skipped: the constant moved from 24 to
+ * 25 with no recorded reason, and the corpus stood at 103818 characters when
+ * it was next measured.
+ *
+ * 20 when the movable bulk left the always-on set (82076 characters): the
+ * flake taxonomy, the gates narrative, the daemon's background-work account
+ * and the cycle history are all path-scoped or on-demand now. The corpus sat
+ * 182 characters under the 25 -> 26 boundary beforehand; it now sits 1924
+ * under the 20 -> 21 boundary, which is the point — real room for the next
+ * rule, rather than a bucket bought one sentence at a time.
+ *
  * Worth knowing when this fails on a diff that touches no rule file: the
  * total is the reading most likely to be stale, and the four `it`s below
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 25
+const ALWAYS_ON_TOTAL_BUDGET = 20
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
@@ -427,20 +473,24 @@ describe('always-on rule context budget', () => {
     const drift = alwaysOnFiles()
       .map((path) => ({ path, chars: read(path).length }))
       .filter(({ path, chars }) => bucket(chars) !== ALWAYS_ON_BUDGET[path])
-      .map(({ path, chars }) => `${path}: ${chars} chars = bucket ${bucket(chars)}`)
+      .map(
+        ({ path, chars }) =>
+          `${path}: ${describeSize(chars, 1000)}, pinned at ${ALWAYS_ON_BUDGET[path]}`,
+      )
     expect(drift).toEqual([])
   })
 
   it('holds the always-on total at its pinned size', () => {
     const chars = alwaysOnFiles().reduce((sum, path) => sum + read(path).length, 0)
-    expect(
-      totalBucket(chars),
-      `always-on corpus is ${chars} chars = bucket ${totalBucket(chars)} at a ${TOTAL_GRAIN}-char grain`,
-    ).toBe(ALWAYS_ON_TOTAL_BUDGET)
+    expect(totalBucket(chars), `always-on corpus is ${describeSize(chars, TOTAL_GRAIN)}`).toBe(
+      ALWAYS_ON_TOTAL_BUDGET,
+    )
   })
 
   it('holds package-canvas-render.md at its pinned size', () => {
     const chars = read('.claude/rules/package-canvas-render.md').length
-    expect(bucket(chars), `package-canvas-render.md is ${chars} chars`).toBe(CANVAS_RENDER_BUDGET)
+    expect(bucket(chars), `package-canvas-render.md is ${describeSize(chars, 1000)}`).toBe(
+      CANVAS_RENDER_BUDGET,
+    )
   })
 })

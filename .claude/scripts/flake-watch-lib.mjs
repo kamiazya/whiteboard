@@ -29,7 +29,7 @@ export function testIdFromTitle(title) {
 /**
  * The identity of an annotation that names no test.
  *
- * `integrator-flow.md`'s ninth, tenth and eleventh shapes all report every
+ * `flake-shapes.md`'s ninth, tenth and eleventh shapes all report every
  * test as PASSED and fail the FILE — so vitest annotates them
  * `Unhandled error`, with no project and no test path, and the run used to
  * fall into `unattributedRuns` where nothing could count it. The tenth

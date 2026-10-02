@@ -168,7 +168,8 @@ rather than a domain of our own.
 So an issue document carries `type`, a `title`, and a body — and no
 machine-readable priority or assignee. There is no evidence either is needed:
 one person works this backlog, and the Task list already carries in-flight
-state.
+state. Inventing one in passing makes it the
+convention by accident.
 
 Do not invent a replacement domain in passing. Extension facets round-trip
 unvalidated through the generic bucket, so anything you write will persist and
