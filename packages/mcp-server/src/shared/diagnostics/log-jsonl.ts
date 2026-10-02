@@ -1,11 +1,6 @@
 import { z } from 'zod'
 import { isIsoDatetime } from './iso-datetime.js'
-import {
-  type RedactionOptions,
-  redactDiagnosticText,
-  redactDiagnosticValue,
-  scrubAuthMarkers,
-} from './redact.js'
+import { redactDiagnosticText, redactDiagnosticValue, scrubAuthMarkers } from './redact.js'
 
 // Stable JSONL surface for daemon / CLI / runtime logs. The shape is
 // the contract that future `whiteboard daemon logs --json` and any
@@ -142,58 +137,46 @@ function scrubValue(value: unknown): unknown {
   return value
 }
 
-function pickAllowedFields(
-  input: Record<string, unknown> | undefined,
-  options?: RedactionOptions,
-): Record<string, unknown> {
+function pickAllowedFields(input: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!input) return {}
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input)) {
     if (DOCUMENT_PLAINTEXT_DENYLIST.has(key)) continue
     if (!OPERATIONAL_FIELD_ALLOWLIST.has(key)) continue
-    out[key] = scrubValue(redactDiagnosticValue(value, options))
+    out[key] = scrubValue(redactDiagnosticValue(value))
   }
   return out
 }
 
 // Produce a redacted, schema-shaped entry. The output is safe to
 // JSON.stringify and matches `daemonLogEntrySchema`.
-export function redactDaemonLogEntry(
-  input: DaemonLogEntryInput,
-  options?: RedactionOptions,
-): DaemonLogEntry {
+export function redactDaemonLogEntry(input: DaemonLogEntryInput): DaemonLogEntry {
   return {
     schemaVersion: 1,
     timestamp: normalizeTimestamp(input.timestamp),
     level: input.level,
     source: input.source,
-    message: scrubAuthMarkers(redactDiagnosticText(input.message, options)),
-    fields: pickAllowedFields(input.fields, options),
+    message: scrubAuthMarkers(redactDiagnosticText(input.message)),
+    fields: pickAllowedFields(input.fields),
   }
 }
 
 // Format one redacted entry as a single newline-terminated JSON line.
 // `\n` belongs to the line itself so concatenating lines yields a
 // well-formed JSONL stream without extra glue.
-export function formatDaemonLogEntryAsJsonLine(
-  input: DaemonLogEntryInput,
-  options?: RedactionOptions,
-): string {
-  const redacted = redactDaemonLogEntry(input, options)
+export function formatDaemonLogEntryAsJsonLine(input: DaemonLogEntryInput): string {
+  const redacted = redactDaemonLogEntry(input)
   return `${JSON.stringify(redacted)}\n`
 }
 
 // Format N entries as a concatenated JSONL stream. Empty input
 // produces empty output (no spurious newline). Non-empty input
 // always ends with a trailing newline.
-export function formatDaemonLogEntriesAsJsonLines(
-  inputs: readonly DaemonLogEntryInput[],
-  options?: RedactionOptions,
-): string {
+export function formatDaemonLogEntriesAsJsonLines(inputs: readonly DaemonLogEntryInput[]): string {
   if (inputs.length === 0) return ''
   let out = ''
   for (const entry of inputs) {
-    out += formatDaemonLogEntryAsJsonLine(entry, options)
+    out += formatDaemonLogEntryAsJsonLine(entry)
   }
   return out
 }
