@@ -1,3 +1,4 @@
+import { workspacesApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 
 export interface MemberWorkspace {
@@ -15,7 +16,7 @@ export interface MemberWorkspace {
 export async function listMemberWorkspaces(
   fetchFn: typeof globalThis.fetch,
 ): Promise<MemberWorkspace[] | 'unavailable'> {
-  const res = await fetchFn('/api/workspaces').catch(() => null)
+  const res = await fetchFn(workspacesApiUrl()).catch(() => null)
   const parsed = res && listWorkspacesResponseSchema.safeParse(await res.json().catch(() => null))
   if (!parsed?.success) return 'unavailable'
   return parsed.data.workspaces.map((w) => ({

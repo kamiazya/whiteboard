@@ -1,4 +1,5 @@
 import {
+  type DocumentApiAction,
   decodeSegment,
   documentPathForAction,
   documentPathForFile,
@@ -58,7 +59,7 @@ function validated(
 export function onDocumentAction(
   app: Hono,
   method: 'get' | 'post' | 'put',
-  action: string,
+  action: DocumentApiAction,
   handler: DocumentHandler,
   ...middleware: MiddlewareHandler[]
 ): void {

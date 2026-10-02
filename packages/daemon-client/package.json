@@ -10,6 +10,10 @@
       "types": "./src/api-client.ts",
       "import": "./src/api-client.ts"
     },
+    "./api-contracts/daemon-urls": {
+      "types": "./src/api-contracts/daemon-urls.ts",
+      "import": "./src/api-contracts/daemon-urls.ts"
+    },
     "./api-contracts/did-key": {
       "types": "./src/api-contracts/did-key.ts",
       "import": "./src/api-contracts/did-key.ts"

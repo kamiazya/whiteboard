@@ -17,9 +17,10 @@ export function encodeDocumentPath(path: string): string {
 }
 
 /**
- * The closed set of actions a document URL can end in. Each one has a route
- * registered by the daemon; `document-url-actions.test.ts` in mcp-server holds
- * the two lists together.
+ * The closed set of actions a document route answers. The server registers
+ * each one through `onDocumentAction`, typed by this union, so a name can be
+ * added or renamed in one place only; `document-url-actions.test.ts` in
+ * mcp-server requires a registered route behind every entry.
  */
 export const DOCUMENT_API_ACTIONS = [
   'snapshot',
@@ -44,24 +45,15 @@ export function documentFileApiUrl(workspaceId: string, path: string, fileId: st
   return `/api/w/${encodeURIComponent(workspaceId)}/document/${encodeDocumentPath(path)}/file/${encodeURIComponent(fileId)}`
 }
 
-/**
- * The `/api/workspaces/:workspaceId/documents/<document path>[/<suffix...>]`
- * family (create/list/delete/rename/name/pin/versions/thumbnails/restore/
- * compact). Same rule as documentApiUrl: each path segment is encoded, the
- * separators are not, and any suffix is appended verbatim.
- */
-export function documentsApiUrl(workspaceId: string, path: string, suffix = ''): string {
-  const base = `/api/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeDocumentPath(path)}`
-  return suffix === '' ? base : `${base}/${suffix}`
-}
+/** The workspace's own record, which a keeper moves between hosts (`snapshot`/`update`/`promote`). */
+export const WORKSPACE_DOCUMENT_API_ACTIONS = ['snapshot', 'update', 'promote'] as const
+export type WorkspaceDocumentApiAction = (typeof WORKSPACE_DOCUMENT_API_ACTIONS)[number]
 
-/** The workspace trash listing; restore appends /:documentId/restore. */
-export function trashApiUrl(workspaceId: string): string {
-  return `/api/workspaces/${encodeURIComponent(workspaceId)}/trash`
-}
-
-export function trashRestoreApiUrl(workspaceId: string, documentId: string): string {
-  return `${trashApiUrl(workspaceId)}/${encodeURIComponent(documentId)}/restore`
+export function workspaceDocumentApiUrl(
+  workspaceId: string,
+  action: WorkspaceDocumentApiAction,
+): string {
+  return `/api/w/${encodeURIComponent(workspaceId)}/workspace-document/${action}`
 }
 
 /**

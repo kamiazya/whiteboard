@@ -1,10 +1,12 @@
 import {
   apiErrorReason,
-  documentsApiUrl,
+  documentVersionsApiUrl,
   listVersionsResponseSchema,
   saveVersionResponseSchema,
   type VersionEntry,
+  versionDocumentApiUrl,
   versionDocumentResponseSchema,
+  versionRestoreApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
@@ -72,26 +74,18 @@ async function refusalReason(res: Response): Promise<string | undefined> {
   return apiErrorReason(await res.json().catch(() => undefined))
 }
 
-// `documentsApiUrl` encodes the workspace and the path, and leaves the suffix
-// to its caller — so the version id has to be encoded HERE, in the one place
-// that builds it. It was encoded at exactly one call site before (the merge
-// toast's own restore) and raw in all five of these, which is the shape a
-// per-caller responsibility takes right before it is missed.
-const versionUrl = (workspaceId: string, path: string, versionId: string, leaf: string): string =>
-  documentsApiUrl(workspaceId, path, `versions/${encodeURIComponent(versionId)}/${leaf}`)
-
 /** The daemon's history, over its documents routes. */
 export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): VersionsBackend {
   return {
     async list(workspaceId, path) {
-      const res = await fetchFn(documentsApiUrl(workspaceId, path, 'versions'))
+      const res = await fetchFn(documentVersionsApiUrl(workspaceId, path))
       if (!res.ok) throw new VersionsRequestError(res.status, 'versions request')
       const parsed = listVersionsResponseSchema.safeParse(await res.json())
       if (!parsed.success) throw new Error('versions response failed schema validation')
       return parsed.data.versions
     },
     async loadPast(workspaceId, path, versionId) {
-      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'document'))
+      const res = await fetchFn(versionDocumentApiUrl(workspaceId, path, versionId))
       if (res.status === 404) return null
       if (!res.ok) throw new VersionsRequestError(res.status, 'version document request')
       const parsed = versionDocumentResponseSchema.safeParse(await res.json())
@@ -99,7 +93,7 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       return parsed.data
     },
     async save(workspaceId, path, { label }) {
-      const res = await fetchFn(documentsApiUrl(workspaceId, path, 'versions'), {
+      const res = await fetchFn(documentVersionsApiUrl(workspaceId, path), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label }),
@@ -110,7 +104,7 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       return parsed.data.version
     },
     async restore(workspaceId, path, versionId) {
-      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'restore'), {
+      const res = await fetchFn(versionRestoreApiUrl(workspaceId, path, versionId), {
         method: 'POST',
       })
       if (!res.ok) {

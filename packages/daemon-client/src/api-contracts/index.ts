@@ -47,6 +47,7 @@ export {
   linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
   wbDocumentCreateOutputSchema as createDocumentV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core/contracts'
+export * from './daemon-urls.js'
 export * from './document.js'
 export * from './document-url.js'
 export * from './fonts.js'

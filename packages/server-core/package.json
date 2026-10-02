@@ -16,6 +16,10 @@
       "types": "./src/contracts.ts",
       "import": "./src/contracts.ts"
     },
+    "./search-query": {
+      "types": "./src/search-query.ts",
+      "import": "./src/search-query.ts"
+    },
     "./api-errors": {
       "types": "./src/api-errors.ts",
       "import": "./src/api-errors.ts"

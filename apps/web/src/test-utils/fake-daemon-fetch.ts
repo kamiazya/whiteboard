@@ -27,7 +27,19 @@ import {
   updateDocumentResponseSchema,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { createDocumentV1ResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import {
+  createDocumentV1ResponseSchema,
+  documentApiUrl,
+  documentNameApiUrl,
+  documentOkfApiUrl,
+  documentPathApiUrl,
+  documentRecordApiUrl,
+  documentsV1ApiUrl,
+  trashApiUrl,
+  workspaceDocumentsApiUrl,
+  workspaceNamesApiUrl,
+  workspacesApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { vi } from 'vitest'
 import { jsonResponse } from './json-response.js'
 
@@ -98,18 +110,37 @@ export interface FakeDaemonRoutes {
   trashByWorkspace?: Record<string, Array<{ documentId: string; path: string; deletedAt: number }>>
 }
 
-const WORKSPACES = /\/api\/workspaces$/
-const DOCUMENTS = /\/api\/(?:v1\/)?workspaces\/([^/]+)\/documents$/
-// A document path is encoded per SEGMENT (`encodeDocumentPath`), so its
-// slashes survive into the URL and the path match has to admit them.
-const DOCUMENT = /\/api\/workspaces\/([^/]+)\/documents\/(.+)$/
-const DOCUMENT_PATH = /\/api\/workspaces\/([^/]+)\/documents\/(.+)\/path$/
-const DOCUMENT_NAME = /\/api\/workspaces\/([^/]+)\/documents\/(.+)\/name$/
-const DOCUMENT_OKF = /\/api\/v1\/workspaces\/([^/]+)\/documents\/([^/]+)\/okf$/
-const TRASH = /\/api\/workspaces\/([^/]+)\/trash$/
-const NAMES = /\/api\/workspaces\/([^/]+)\/names$/
-const SNAPSHOT = /\/api\/w\/([^/]+)\/document\/(.+)\/snapshot$/
-const UPDATE = /\/api\/w\/([^/]+)\/document\/(.+)\/update$/
+// The patterns are DERIVED from the client's own builders — each is a builder
+// called with marker arguments, then opened up where a marker sits — so a
+// route a client renames is renamed here with it, instead of leaving a copy of
+// the old path answering for a request nothing sends any more.
+const WS_MARK = 'WSMARK'
+const DOC_MARK = 'DOCMARK'
+// A document path keeps its slashes (`encodeDocumentPath` encodes per
+// SEGMENT), so its match has to admit them.
+const PATH_MARK = 'PATHMARK/MORE'
+const regexEscape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const derive = (builtUrl: string) =>
+  new RegExp(
+    `${regexEscape(builtUrl)
+      .replace(WS_MARK, '([^/]+)')
+      .replace(PATH_MARK, '(.+)')
+      .replace(DOC_MARK, '([^/]+)')}$`,
+  )
+
+const WORKSPACES = derive(workspacesApiUrl())
+const DOCUMENTS = [
+  derive(workspaceDocumentsApiUrl(WS_MARK)),
+  derive(documentsV1ApiUrl(WS_MARK)),
+] as const
+const DOCUMENT = derive(documentRecordApiUrl(WS_MARK, PATH_MARK))
+const DOCUMENT_PATH = derive(documentPathApiUrl(WS_MARK, PATH_MARK))
+const DOCUMENT_NAME = derive(documentNameApiUrl(WS_MARK, PATH_MARK))
+const DOCUMENT_OKF = derive(documentOkfApiUrl(WS_MARK, DOC_MARK))
+const TRASH = derive(trashApiUrl(WS_MARK))
+const NAMES = derive(workspaceNamesApiUrl(WS_MARK))
+const SNAPSHOT = derive(documentApiUrl(WS_MARK, PATH_MARK, 'snapshot'))
+const UPDATE = derive(documentApiUrl(WS_MARK, PATH_MARK, 'update'))
 
 const isGet = (init?: RequestInit) => !init || init.method === undefined
 const seg = (match: RegExpMatchArray, index: number) => decodeURIComponent(match[index] ?? '')
@@ -180,7 +211,8 @@ function setDocumentName(
 }
 
 interface Route {
-  readonly pattern: RegExp
+  /** Several when the same handler answers more than one URL family. */
+  readonly pattern: RegExp | readonly RegExp[]
   /** The method the route answers; absent for GET-shaped reads with no init. */
   readonly method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   readonly handle: (
@@ -273,10 +305,11 @@ function methodOf(init?: RequestInit): Route['method'] {
 
 function answer(routes: FakeDaemonRoutes, url: string, init?: RequestInit): Promise<Response> {
   for (const route of ROUTES) {
-    const match = url.match(route.pattern)
-    if (match === null) continue
     if (route.method !== undefined && route.method !== methodOf(init)) continue
-    return Promise.resolve(route.handle(routes, match, init))
+    for (const pattern of [route.pattern].flat()) {
+      const match = url.match(pattern)
+      if (match !== null) return Promise.resolve(route.handle(routes, match, init))
+    }
   }
   return Promise.resolve(jsonResponse({}, 404))
 }

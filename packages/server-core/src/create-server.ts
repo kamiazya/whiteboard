@@ -8,6 +8,7 @@ import type { z } from 'zod'
 import { type ApiErrorBody, errorBody, invalidRequestBody } from './api-errors.js'
 import { factsCacheFor } from './references/content-source.js'
 import { vectorCacheFor } from './search/document-vector-cache.js'
+import { searchInputFromQuery } from './search-query.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyEditTool } from './tools/body-edit.js'
@@ -175,12 +176,10 @@ export function createServer(deps: ServerDeps) {
   app.get('/api/v1/workspaces/:workspaceId/search', async (c) => {
     const parsed = documentSearchInputSchema.safeParse({
       workspaceId: c.get('workspaceId'),
-      query: c.req.query('q'),
-      ...(c.req.query('kind') === undefined ? {} : { kind: c.req.query('kind') }),
-      ...(c.req.queries('tag') === undefined || c.req.queries('tag')?.length === 0
-        ? {}
-        : { tags: c.req.queries('tag') }),
-      ...(c.req.query('limit') === undefined ? {} : { limit: Number(c.req.query('limit')) }),
+      ...searchInputFromQuery({
+        one: (name) => c.req.query(name),
+        all: (name) => c.req.queries(name),
+      }),
     })
     if (!parsed.success) {
       return c.json(invalidRequestBody(parsed.error), 400)

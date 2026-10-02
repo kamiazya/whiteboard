@@ -14,7 +14,7 @@
 
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
-import { documentApiUrl } from './api-contracts/document-url.js'
+import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
 import {
   type SyncClientMessageRequest,
   type SyncSubscribeRequest,
@@ -218,7 +218,7 @@ function canvasDocUrl(baseUrl: string, doc: string, action: 'update' | 'snapshot
   const workspaceId = workspaceIdOfDocKey(doc)
   if (workspaceId === null) return null
   if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) {
-    return `${base}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/${action}`
+    return `${base}${workspaceDocumentApiUrl(workspaceId, action)}`
   }
   // Raw halves: documentApiUrl encodes per segment itself.
   return `${base}${documentApiUrl(workspaceId, doc.slice(workspaceId.length + 1), action)}`
