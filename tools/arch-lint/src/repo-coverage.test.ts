@@ -585,6 +585,79 @@ describe('architecture-map.md doc sync', () => {
 })
 
 /**
+ * The table in architecture-map.md is the contract every session reads and
+ * ARCHITECTURE_MAP is what the scans enforce; they were two hand-kept copies
+ * and disagreed in six rows (loro-adapter listed `ports`, plugin-visual a
+ * `lucide-react` the map records as deliberately gone, and three rows spelled
+ * a package by a name nothing resolves, `render` and `crdt`).
+ */
+describe('architecture-map.md table agrees with ARCHITECTURE_MAP', () => {
+  const doc = readFileSync(ARCHITECTURE_MAP_DOC, 'utf-8')
+  const shortName = (name: string): string => name.replace('@kamiazya/whiteboard-', '')
+  const workspaceNames = new Set(Object.keys(ARCHITECTURE_MAP).map(shortName))
+
+  const rows = doc
+    .split('\n')
+    .filter((line) => /^\| `(?:packages|apps)\//.test(line))
+    .map((line) => {
+      const [dir, , deps] = line
+        .split('|')
+        .slice(1, -1)
+        .map((cell) => cell.trim())
+      const packageDir = (dir as string).replaceAll('`', '')
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
+      )
+      // `zod only` is prose around one name, and a token with a space is
+      // prose outright (`port impls`): the column mixes both with names.
+      const tokens = (deps as string)
+        .split(/[,+]/)
+        .map((token) =>
+          token
+            .replaceAll('`', '')
+            .replace(/ only$/, '')
+            .trim(),
+        )
+        .filter((token) => token !== '' && !token.includes(' '))
+      return { name: manifest.name as string, tokens }
+    })
+
+  it('has one row for every package ARCHITECTURE_MAP maps', () => {
+    expect(rows.map((row) => row.name).sort()).toEqual(Object.keys(ARCHITECTURE_MAP).sort())
+  })
+
+  it('lists, per row, exactly the workspace packages the map allows', () => {
+    const drift = rows.flatMap(({ name, tokens }) => {
+      const listed = tokens.filter((token) => workspaceNames.has(token)).sort()
+      const allowed = (ARCHITECTURE_MAP[name]?.allowedInternalDeps ?? []).map(shortName).sort()
+      return JSON.stringify(listed) === JSON.stringify(allowed)
+        ? []
+        : [{ name, table: listed, map: allowed }]
+    })
+    expect(
+      drift,
+      'a "Checked dependencies" cell names workspace packages differently from allowedInternalDeps. ' +
+        'The cell spells packages by their manifest name minus `@kamiazya/whiteboard-`.',
+    ).toEqual([])
+  })
+
+  it('names only third-party packages the map records for that row', () => {
+    const unknown = rows.flatMap(({ name, tokens }) => {
+      const recorded = ARCHITECTURE_MAP[name]?.allowedThirdParty ?? []
+      return tokens
+        .filter((token) => !workspaceNames.has(token))
+        .filter((token) => !recorded.some((dep) => dep === token || dep.startsWith(`${token}-`)))
+        .map((token) => ({ name, token }))
+    })
+    expect(
+      unknown,
+      'a cell names something that is neither a workspace package nor in allowedThirdParty ' +
+        '(`remark` stands for the remark-* family)',
+    ).toEqual([])
+  })
+})
+
+/**
  * `dev-flow.md`: "Every PR that adds a package ships its path-scoped rule in
  * the same increment." That was prose with nothing behind it. 17 of 18
  * workspaces held one when this was written, so the convention was holding by

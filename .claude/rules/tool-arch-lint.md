@@ -104,6 +104,19 @@ needed a hand guard for a type-only import a manifest cannot see, and
 `plugin-visual/src/renderer-independence.test.ts` now pins that there is no
 import of the renderer of ANY kind.
 
+## The always-on table is parsed, not trusted
+
+`architecture-map.md`'s table is a second hand-kept copy of `ARCHITECTURE_MAP`,
+and they had drifted in six rows: loro-adapter listed `ports` the map says it
+deliberately lacks, plugin-visual a `lucide-react` the map records as gone, and
+three rows spelled a package by a name nothing resolves (`render`, `crdt`).
+`architecture-map.md table agrees with ARCHITECTURE_MAP` reads the "Checked
+dependencies" column: one row per mapped package, the workspace names in each
+cell equal to `allowedInternalDeps` (both directions), and every other token a
+recorded `allowedThirdParty` entry (`remark` stands for the `remark-*` family).
+Third-party names are checked one way only, since a cell is a summary of that
+list; a token containing a space is prose and skipped.
+
 ## What the composition roots do and do not get
 
 `mcp-server`, `apps/web` and `apps/extension` are registered for the
