@@ -11,7 +11,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
-import { Kysely, SqliteDialect, sql } from 'kysely'
+import { Kysely, type QueryExecutorProvider, SqliteDialect, sql } from 'kysely'
 import { type MigrationProvider, Migrator } from 'kysely/migration'
 // libsql ships a native better-sqlite3-shaped binding next to @libsql/client.
 // We bypass @libsql/client here because its `:memory:` path nulls the cached
@@ -162,4 +162,15 @@ export async function openMigrationHarness<DB = AnyTables>(
       return (await migrator.migrateToLatest()).error
     },
   }
+}
+
+/**
+ * Whether a physical table exists. Takes the UNSCOPED handle: the
+ * tenant-bound one refuses a raw statement, and `sqlite_master` is no tenant's.
+ */
+export async function tableExists(db: QueryExecutorProvider, name: string): Promise<boolean> {
+  const { rows } = await sql<{
+    name: string
+  }>`select name from sqlite_master where type = 'table' and name = ${name}`.execute(db)
+  return rows.length > 0
 }

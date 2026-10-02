@@ -1,9 +1,9 @@
-import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { getLogger as getServerCoreLogger } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
+import { createContainer, resolveServerDeps } from '../../di/container.js'
+import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { captureLogsForTests } from '../log.js'
-import { InMemoryBlobStore } from '../store/inmemory/in-memory-blob-store.js'
 import { registerDocumentTools } from './document-tools.js'
 // Side-effect import: registering these tools also installs the server-core
 // log-sink wiring at module scope (see document-tools.ts).
@@ -15,12 +15,8 @@ function fakeServer() {
   return { server: { registerTool }, registerTool } as unknown as McpServer
 }
 
-function fakeDeps() {
-  return {
-    documentStore: new InMemoryDocumentStore(),
-    blobStore: new InMemoryBlobStore(),
-  }
-}
+/** The in-memory composition every route and tool test over a whole `ServerDeps` shares. */
+const fakeDeps = () => resolveServerDeps(createContainer(storeMemoryModule))
 
 describe('registerDocumentTools', () => {
   it('registers wb_version_save, wb_version_list, and wb_version_restore via the server-core wiring', () => {

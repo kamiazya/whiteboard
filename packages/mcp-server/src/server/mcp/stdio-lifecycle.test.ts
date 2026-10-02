@@ -1,9 +1,10 @@
 import { EventEmitter } from 'node:events'
+import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import { GRACEFUL_SHUTDOWN_TIMEOUT_MS, installStdioLifecycle } from './stdio-lifecycle.js'
 
 function makeDeps() {
-  const stdin = new EventEmitter()
+  const stdin = new PassThrough()
   const signals = new EventEmitter()
   const exit = vi.fn()
   const closeServer = vi.fn(async () => undefined)
@@ -65,7 +66,7 @@ describe('installStdioLifecycle', () => {
   it('forces exit via an unref-ed timer when closeServer never resolves', async () => {
     vi.useFakeTimers()
     try {
-      const stdin = new EventEmitter()
+      const stdin = new PassThrough()
       const signals = new EventEmitter()
       const exit = vi.fn()
       const closeServer = vi.fn(() => new Promise<void>(() => undefined))
@@ -89,7 +90,7 @@ describe('installStdioLifecycle', () => {
   it('does not call exit twice when closeServer settles just after the hard-exit timer fires', async () => {
     vi.useFakeTimers()
     try {
-      const stdin = new EventEmitter()
+      const stdin = new PassThrough()
       const signals = new EventEmitter()
       const exit = vi.fn()
       let resolveClose: () => void = () => undefined
@@ -120,7 +121,7 @@ describe('installStdioLifecycle', () => {
   })
 
   it('awaits shutdownExtra alongside closeServer before exiting', async () => {
-    const stdin = new EventEmitter()
+    const stdin = new PassThrough()
     const signals = new EventEmitter()
     const exit = vi.fn()
     const closeServer = vi.fn(async () => undefined)
@@ -148,7 +149,7 @@ describe('installStdioLifecycle', () => {
   })
 
   it('still exits when closeServer throws synchronously instead of returning a rejected promise', async () => {
-    const stdin = new EventEmitter()
+    const stdin = new PassThrough()
     const signals = new EventEmitter()
     const exit = vi.fn()
     const closeServer = vi.fn((): never => {
@@ -157,8 +158,8 @@ describe('installStdioLifecycle', () => {
     installStdioLifecycle({
       stdin,
       signals: { on: (event, listener) => signals.on(event, listener) },
-      // @ts-expect-error -- deliberately violating the () => Promise<void> contract to
-      // simulate a caller that throws before ever returning a promise.
+      // Returns `never`, so it types as () => Promise<void> while violating the
+      // contract at runtime: a caller that throws before returning a promise.
       closeServer,
       exit,
     })

@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearDbCache, closeDb, getDb } from './index.js'
-import { createIsolatedDb } from './test-helpers.js'
+import { createIsolatedDb, tableExists } from './test-helpers.js'
 
 let scratch: string
 
@@ -35,6 +35,17 @@ describe('createIsolatedDb (memory)', () => {
         .execute()
       const rows = await handle.db.selectFrom('workspaces').select('id').execute()
       expect(rows.map((r) => r.id)).toEqual(['session-1'])
+    } finally {
+      await handle.dispose()
+    }
+  })
+
+  it('tableExists tells a migrated table from one that was never created', async () => {
+    const handle = await createIsolatedDb({ dataDir: scratch, memory: true })
+    try {
+      expect(await tableExists(handle.rawDb, 'workspaces')).toBe(true)
+      // Migration 0017 dropped it, so a false here is the answer the callers assert.
+      expect(await tableExists(handle.rawDb, 'documents')).toBe(false)
     } finally {
       await handle.dispose()
     }

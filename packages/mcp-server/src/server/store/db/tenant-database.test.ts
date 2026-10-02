@@ -96,9 +96,12 @@ describe('a tenant-bound handle', () => {
         const held = 'key' in op ? model.get(op.key) : undefined
         if (held && held.owner !== op.tenant) crossTenantTouches++
         if (op.kind === 'insert') {
-          const insert = db
-            .insertInto('workspaceMemberships')
-            .values({ workspaceId: `ws-${op.key}`, profileId: 'p', createdAt: op.value })
+          const insert = db.insertInto('workspaceMemberships').values({
+            workspaceId: `ws-${op.key}`,
+            profileId: 'p',
+            createdAt: op.value,
+            role: 'member',
+          })
           if (held) await expect(insert.execute()).rejects.toThrow()
           else {
             await insert.execute()
@@ -138,20 +141,24 @@ describe('a tenant-bound handle', () => {
   )
 })
 
+/** A member profile with every column the schema type requires, whatever the table defaults. */
+const profileRow = (id: string, displayName: string) => ({
+  id,
+  displayName,
+  accountId: `account-${id}`,
+  createdAt: 1,
+  updatedAt: 1,
+  deactivatedAt: null,
+})
+
 describe('what a tenant-bound handle scopes beyond a plain statement', () => {
   async function seedTwoTenants(): Promise<void> {
     const [a, b] = [SELF_HOST_TENANT_ID, 'tenant-two'].map((t) => tenantDatabase(handle.rawDb, t))
-    await a
-      .insertInto('memberProfiles')
-      .values({ id: 'pa', displayName: 'A', createdAt: 1, updatedAt: 1 })
-      .execute()
-    await b
-      .insertInto('memberProfiles')
-      .values({ id: 'pb', displayName: 'B', createdAt: 1, updatedAt: 1 })
-      .execute()
+    await a.insertInto('memberProfiles').values(profileRow('pa', 'A')).execute()
+    await b.insertInto('memberProfiles').values(profileRow('pb', 'B')).execute()
     await a
       .insertInto('workspaceMemberships')
-      .values({ workspaceId: 'ws-a', profileId: 'pb', createdAt: 1 })
+      .values({ workspaceId: 'ws-a', profileId: 'pb', createdAt: 1, role: 'member' })
       .execute()
   }
 
@@ -184,7 +191,7 @@ describe('what a tenant-bound handle scopes beyond a plain statement', () => {
     const b = tenantDatabase(handle.rawDb, 'tenant-two')
     await b
       .insertInto('workspaceMemberships')
-      .values({ workspaceId: 'ws-a', profileId: 'pb', createdAt: 99 })
+      .values({ workspaceId: 'ws-a', profileId: 'pb', createdAt: 99, role: 'member' })
       .onConflict((oc) => oc.columns(['workspaceId', 'profileId']).doUpdateSet({ createdAt: 99 }))
       .execute()
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)

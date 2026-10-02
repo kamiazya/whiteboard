@@ -161,6 +161,7 @@ describe('runMigrations', () => {
         operatorWorkspaceId: null,
         elementCount: 0,
         frontiers: '',
+        contentDigest: '',
         createdAt: 1,
       })
       .execute()
