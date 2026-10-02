@@ -17,8 +17,9 @@
  *
  * So the rule is structural rather than measured per change:
  * `daemon-client` reaches this package through a subpath and never its root
- * (`tools/arch-lint`'s `daemon-client-subpath.test.ts`), and this file is
- * the subpath for the tool contracts. It DECLARES nothing — every schema
+ * (`tools/arch-lint`'s `daemon-client-subpath.test.ts`), what those subpaths
+ * value-import is held light by `daemon-client-subpath-closure.test.ts`, and
+ * this file is the subpath for the tool contracts. It DECLARES nothing — every schema
  * below is re-exported from a schemas-only module beside the tool that
  * serves it, so a tool and the contract it publishes cannot drift.
  *

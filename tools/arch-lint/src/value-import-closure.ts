@@ -100,3 +100,43 @@ export function resolveRelativeSource(
       : [`${resolved}.ts`, `${resolved}.tsx`, `${resolved}/index.ts`, `${resolved}/index.tsx`]
   return candidates.find(exists) ?? null
 }
+
+/** The part of a workspace manifest that decides which file a specifier loads. */
+export interface WorkspaceManifest {
+  /** Absolute directory of the package. */
+  readonly dir: string
+  readonly exports?: Readonly<Record<string, string | { readonly import?: string }>>
+  readonly main?: string
+}
+
+function exportTarget(manifest: WorkspaceManifest, subpath: string): string | undefined {
+  if (manifest.exports === undefined) return subpath === '.' ? manifest.main : undefined
+  const entry = manifest.exports[subpath]
+  return typeof entry === 'string' ? entry : entry?.import
+}
+
+/**
+ * The source file `<package>` or `<package>/<subpath>` loads, read through the
+ * package's own `exports` map the way the bundler reads it — never by guessing
+ * a path from the name, because a subpath is exactly where a package decides
+ * what a light import is.
+ *
+ * `null` for a specifier that is not a workspace package or that names a
+ * non-source target (`./package.json`). A workspace package whose `exports`
+ * does not name the subpath THROWS: answering `null` would end the walk at an
+ * import the guard exists to follow, which reads as clean.
+ */
+export function resolveWorkspaceSource(
+  specifier: string,
+  packages: ReadonlyMap<string, WorkspaceManifest>,
+): string | null {
+  const parts = specifier.split('/')
+  const name = specifier.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] as string)
+  const manifest = packages.get(name)
+  if (manifest === undefined) return null
+  const subpath = specifier.length === name.length ? '.' : `.${specifier.slice(name.length)}`
+  const target = exportTarget(manifest, subpath)
+  if (target === undefined)
+    throw new Error(`${name} does not export '${subpath}' (from '${specifier}')`)
+  return /\.tsx?$/.test(target) ? posix.join(manifest.dir, target) : null
+}

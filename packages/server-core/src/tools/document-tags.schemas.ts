@@ -6,7 +6,7 @@
  * exists rather than being a matter of taste.
  */
 import { documentIdSchema, tagInUseSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
-import { tagLibrarySchema } from '@kamiazya/whiteboard-plugin-visual'
+import { tagLibrarySchema } from '@kamiazya/whiteboard-plugin-visual/tag-library'
 import { z } from 'zod'
 
 export const documentTagsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
