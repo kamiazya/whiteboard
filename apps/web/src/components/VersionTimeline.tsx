@@ -163,6 +163,17 @@ function reportVersionsFailure(
   return false
 }
 
+const RESTORE_FAILED_COPY = 'Restore failed. Please try again.'
+
+/**
+ * What a failed restore tells the person: the daemon's own reason when it gave
+ * one, since a refusal that will always repeat is not cured by a retry, else
+ * the generic prompt for a failure that may be transient.
+ */
+function restoreFailureCopy(err: unknown): string {
+  return (err instanceof VersionsRequestError ? err.reason : undefined) ?? RESTORE_FAILED_COPY
+}
+
 /**
  * This surface's two knobs on the shared formatter, bound once.
  *
@@ -422,7 +433,7 @@ export default function VersionTimeline({
       } else {
         log.error('restore request threw', err)
       }
-      setRestoreError('Restore failed. Please try again.')
+      setRestoreError(restoreFailureCopy(err))
       return
     } finally {
       setIsRestoring(false)
