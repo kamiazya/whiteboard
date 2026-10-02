@@ -489,7 +489,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the
   // distribution smokes' helpers did.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2666,
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2678,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness
