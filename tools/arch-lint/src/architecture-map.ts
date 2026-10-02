@@ -572,9 +572,9 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * Raising it is a decision, not a fix. Do it only when the alternative is
  * worse than the debt, and say in the PR why the operation could not go to
  * server-core instead. The ADR's scheduled burn-down is COMPLETE
- * (2026-09-02): restore.ts, live-doc.ts, workspace-document.ts and ws.ts
- * are all translation-only over the LiveDocuments/WorkspaceDocuments
- * seams. The edges left are the unscheduled adapters — each still a
+ * (2026-09-02): restore.ts, live-doc.ts, workspace-document.ts and the
+ * websocket route (since deleted) were all translation-only over the
+ * LiveDocuments/WorkspaceDocuments seams. The edges left are the unscheduled adapters — each still a
  * candidate for the same treatment, none yet ordered.
  *
  * Two of the 21 went when ADR-0029 retired the branch: `routes/branches.ts`

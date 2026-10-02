@@ -592,8 +592,8 @@ under the full parallel suite it measured 6315ms and timed out, reporting
 `no source file says "slug"` and a five-second budget in one message — which
 reads as a violation that is not there. Module evaluation is not bounded by a
 per-test timeout, so the cost now lands in the collection phase, the same move
-`.claude/rules/integrator-flow.md` prescribes for a heavy in-body
-`await import()`. The read count is pinned by its own assertion rather than
+`.claude/skills/steward/reference/flake-shapes.md` prescribes under "A third
+shape: `await import()` of a heavy module INSIDE a test body". The read count is pinned by its own assertion rather than
 left to a reader, because the redundancy was invisible in the source and
 visible only as a timeout somewhere else. Directory WALKS are still repeated
 per word and deliberately so: deduping them saves 9ms of the 255, which does
