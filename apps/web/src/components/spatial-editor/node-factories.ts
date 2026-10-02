@@ -42,7 +42,7 @@ export const IMAGE_NODE_HEIGHT = 180
 export const GROUP_FRAME_WIDTH = 320
 export const GROUP_FRAME_HEIGHT = 200
 /** Padding between a grouped selection's bounds and its new frame. */
-export const GROUP_PADDING_PX = 24
+const GROUP_PADDING_PX = 24
 
 interface Size {
   readonly width: number

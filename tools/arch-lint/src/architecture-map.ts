@@ -741,6 +741,10 @@ export const SUBPATH_POLICY: Readonly<Record<string, SubpathPolicy>> = {
     consumers: [],
     reason: TEST_ONLY_HELPER,
   },
+  '@kamiazya/whiteboard-server-core/test-utils/fake-version-history': {
+    consumers: [],
+    reason: TEST_ONLY_HELPER,
+  },
   '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract': {
     consumers: [],
     reason: TEST_ONLY_HELPER,

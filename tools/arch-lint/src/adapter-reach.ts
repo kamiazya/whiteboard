@@ -212,11 +212,6 @@ export const ADAPTER_HOST_REACH: Readonly<Record<string, HostReach>> = {
     reason:
       'serves an installed font’s bytes by reading the catalogue file from disk; the read belongs with `export/installed-fonts`',
   },
-  'routes/runtime-storage.ts': {
-    kinds: ['node:fs'],
-    reason:
-      'walks the data directory to report bytes per category, restating the layout `tenant/data-layout` declares; a mechanic filed under routes',
-  },
 }
 
 /**
@@ -224,4 +219,4 @@ export const ADAPTER_HOST_REACH: Readonly<Record<string, HostReach>> = {
  * equality: a new reach fails until it is listed, and paying one off fails until
  * this comes down.
  */
-export const ADAPTER_HOST_REACH_CEILING = 30
+export const ADAPTER_HOST_REACH_CEILING = 29

@@ -482,6 +482,8 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/canvas-render/src/quality/drawing-score.ts#FRAME_CLEARANCE_FLOOR_PX':
+    'part of the `scoring` subpath’s published surface, whose name list scoring-subpath.test.ts pins',
   'packages/mcp-server/src/server/security/macaroon.ts#mintMacaroon':
     'the tested core of the ADR-0043 act-plane token, kept until a surface mints one',
   'packages/mcp-server/src/server/security/macaroon.ts#attenuateMacaroon':
