@@ -62,6 +62,23 @@ describe('wbDocumentMove', () => {
     expect(await bodyOf(source.documentId)).toBe('see [[archive/login]]')
   })
 
+  it('moves the document it was given when that is not the first one the listing returns', async () => {
+    const deps = makeTestDeps()
+    const { create, pathOf } = await seed(deps)
+    const first = await create('a/first')
+    const second = await create('z/second')
+
+    const moved = await wbDocumentMove(deps, {
+      workspaceId: WS,
+      documentId: second.documentId,
+      path: 'moved/second',
+    })
+
+    expect(moved).toMatchObject({ documentId: second.documentId, from: 'z/second' })
+    expect(await pathOf(second.documentId)).toBe('moved/second')
+    expect(await pathOf(first.documentId)).toBe('a/first')
+  })
+
   it('refuses an id the workspace does not hold, before moving anything', async () => {
     const deps = makeTestDeps()
     await seed(deps)

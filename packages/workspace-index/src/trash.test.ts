@@ -9,7 +9,11 @@
  * migrate afterwards — the bytes are simply gone.
  */
 
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readSpatialCanvas,
+  recordTrashEntry,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { type BlobStore, blobRefKey } from '@kamiazya/whiteboard-ports'
@@ -157,5 +161,79 @@ describe('deleting a document', () => {
     await index.deleteDocument({ workspaceId: WS, path: 'design' })
 
     expect(await index.listTrash({ workspaceId: WS })).toHaveLength(1)
+  })
+})
+
+describe('restoring a document', () => {
+  let blobs: ReturnType<typeof inMemoryBlobStore>
+  let docs: ReturnType<typeof inMemoryWorkspaceDocs>
+  let index: LoroWorkspaceDocumentIndex
+
+  beforeEach(async () => {
+    blobs = inMemoryBlobStore()
+    docs = inMemoryWorkspaceDocs()
+    index = new LoroWorkspaceDocumentIndex(docs, blobs, {
+      listWorkspaces: async () => [],
+      renameWorkspace: notRenamed,
+    })
+    await index.createWorkspace({ workspaceId: WS })
+  })
+
+  async function createAndDelete(path: string): Promise<string> {
+    const { documentId } = await index.createDocument({
+      workspaceId: WS,
+      path,
+      kind: 'markdown',
+    })
+    await index.deleteDocument({ workspaceId: WS, path })
+    return documentId
+  }
+
+  it('puts a nested document back under the folder it came from', async () => {
+    const documentId = await createAndDelete('design/notes')
+
+    const restored = await index.restoreDocument({ workspaceId: WS, documentId })
+
+    expect(restored?.path).toBe('design/notes')
+    expect(
+      (await index.resolveDocument({ workspaceId: WS, path: 'design/notes' }))?.documentId,
+    ).toBe(documentId)
+  })
+
+  it('puts a top-level document back at the top level', async () => {
+    const documentId = await createAndDelete('notes')
+
+    const restored = await index.restoreDocument({ workspaceId: WS, documentId })
+
+    expect(restored?.path).toBe('notes')
+  })
+
+  it('answers null and keeps the trash row when the evacuated bytes are gone', async () => {
+    const documentId = await createAndDelete('design')
+    const [row] = await index.listTrash({ workspaceId: WS })
+    if (row === undefined) throw new Error('expected a trash row')
+    await blobs.delete({ ref: row.blob })
+
+    expect(await index.restoreDocument({ workspaceId: WS, documentId })).toBeNull()
+
+    // The row is the only record the document existed.
+    expect((await index.listTrash({ workspaceId: WS })).map((entry) => entry.documentId)).toEqual([
+      documentId,
+    ])
+  })
+
+  it('answers null and keeps the trash row when the bytes hold no document', async () => {
+    const documentId = await createAndDelete('design')
+    const { ref } = await blobs.put({
+      bytes: new Uint8Array(new LoroDoc().export({ mode: 'snapshot' })),
+      contentType: 'application/octet-stream',
+    })
+    recordTrashEntry(docs.peek(WS), { documentId, path: 'design', deletedAt: 1, blob: ref })
+
+    expect(await index.restoreDocument({ workspaceId: WS, documentId })).toBeNull()
+
+    expect((await index.listTrash({ workspaceId: WS })).map((entry) => entry.documentId)).toEqual([
+      documentId,
+    ])
   })
 })
