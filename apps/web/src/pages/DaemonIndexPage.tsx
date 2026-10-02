@@ -38,6 +38,18 @@ import { useDeleteDocuments } from './use-delete-documents.js'
 
 const WORKSPACE_GONE = 'This workspace is not on the daemon any more.'
 
+// The segment the daemon gives the first workspace a data directory bootstraps.
+const DAEMON_DEFAULT_SEGMENT = 'default'
+
+// With no address, the workspace the daemon calls `default` — the one an agent
+// reaches without being told an id — before first-listed, so the page and the
+// agent start in the same place.
+function workspaceOpenedByDefault<W extends { readonly segment?: string }>(
+  workspaces: readonly W[],
+): W | undefined {
+  return workspaces.find((w) => w.segment === DAEMON_DEFAULT_SEGMENT) ?? workspaces[0]
+}
+
 // daemon-api-client errors are already sanitized (Problem Details title or a
 // generic status message), so one is safe to show — except a 404, which on a
 // create is the WORKSPACE, and whose reason is written for an MCP caller: it
@@ -179,7 +191,7 @@ export function DaemonIndexPage({
       // survives a rename — and an id-form address matched against segments
       // alone would miss and silently open a different workspace.
       const wanted = targeted ? resolveWorkspaceHandle(res.workspaces, targeted) : null
-      const first = res.workspaces[0]
+      const first = workspaceOpenedByDefault(res.workspaces)
       setSelectedWorkspace(
         (current) =>
           current ??

@@ -1,10 +1,12 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWorkspaceIdCache, ensureWorkspaceId } from './current-workspace.js'
 import { getDb } from './store/db/index.js'
+import { prepareDataDir } from './store/db/prepare.js'
+import { upsertWorkspaceRow } from './store/db/upsert-workspace.js'
 
 describe('ensureWorkspaceId', () => {
   let dataDir: string
@@ -38,12 +40,9 @@ describe('ensureWorkspaceId', () => {
     // writing the old shape — a daemon created after 0019 shipped is never
     // re-keyed by anything.
     //
-    // Two consequences, both on every fresh install. The bootstrapped
-    // workspace has no segment, so its handle IS this id and the address reads
-    // `/w/<id>` — removing raw identifiers from that position is what ADR-0019
-    // is for. And segment-first resolution stays unambiguous only because a
-    // segment may not be ULID-shaped; a nanoid is not ULID-shaped either, so
-    // it lands in the same namespace segments occupy.
+    // Segment-first resolution stays unambiguous only because a segment may
+    // not be ULID-shaped; a nanoid is not ULID-shaped either, so it lands in
+    // the same namespace segments occupy.
     const id = await ensureWorkspaceId(dataDir)
     expect(workspaceCanonicalIdSchema.safeParse(id).success).toBe(true)
   })
@@ -105,5 +104,66 @@ describe('ensureWorkspaceId', () => {
     // format, which `mints a canonical ULID` above owns.
     const retried = await ensureWorkspaceId(blocked)
     expect(workspaceCanonicalIdSchema.safeParse(retried).success).toBe(true)
+  })
+
+  describe('the segment `default`', () => {
+    // The README tells an agent to address the daemon's first workspace as
+    // `default`, and the browser opens the first workspace the list names. Both
+    // only agree when the bootstrapped workspace is the one holding that
+    // segment — otherwise `createWorkspace: true` mints a second workspace
+    // beside an empty first one.
+    async function segments(): Promise<Record<string, string | null>> {
+      const db = await getDb(dataDir)
+      const rows = await db.selectFrom('workspaces').select(['id', 'segment']).execute()
+      return Object.fromEntries(rows.map((row) => [row.id, row.segment]))
+    }
+
+    async function seedCurrent(id: string): Promise<void> {
+      await prepareDataDir(dataDir)
+      const db = await getDb(dataDir)
+      await db
+        .insertInto('runtime')
+        .values({ key: 'currentWorkspaceId', value: id, updatedAt: Date.now() })
+        .execute()
+    }
+
+    it('is the segment of the workspace a fresh data dir bootstraps', async () => {
+      const id = await ensureWorkspaceId(dataDir)
+      expect(await segments()).toEqual({ [id]: 'default' })
+    })
+
+    it('is given to the current workspace of an install that bootstrapped it without one', async () => {
+      const legacy = generateDocumentId()
+      await seedCurrent(legacy)
+      await upsertWorkspaceRow(await getDb(dataDir), legacy)
+
+      await expect(ensureWorkspaceId(dataDir)).resolves.toBe(legacy)
+      expect(await segments()).toEqual({ [legacy]: 'default' })
+
+      clearWorkspaceIdCache()
+      await ensureWorkspaceId(dataDir)
+      expect(await segments()).toEqual({ [legacy]: 'default' })
+    })
+
+    it('is left with the workspace that already holds it', async () => {
+      const holder = generateDocumentId()
+      const current = generateDocumentId()
+      await seedCurrent(current)
+      const db = await getDb(dataDir)
+      await upsertWorkspaceRow(db, holder, { segment: 'default' })
+      await upsertWorkspaceRow(db, current)
+
+      await expect(ensureWorkspaceId(dataDir)).resolves.toBe(current)
+      expect(await segments()).toEqual({ [holder]: 'default', [current]: null })
+    })
+
+    it('does not replace a segment the current workspace already chose', async () => {
+      const current = generateDocumentId()
+      await seedCurrent(current)
+      await upsertWorkspaceRow(await getDb(dataDir), current, { segment: 'mine' })
+
+      await ensureWorkspaceId(dataDir)
+      expect(await segments()).toEqual({ [current]: 'mine' })
+    })
   })
 })

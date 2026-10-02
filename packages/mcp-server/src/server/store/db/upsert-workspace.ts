@@ -29,7 +29,7 @@ import type { TenantDatabase } from './tenant-database.js'
  * being dead code that reads as covered. It stays rather than being deleted
  * because this shape has moved once already, silently.
  */
-function isSegmentUniqueViolation(err: unknown): err is Error {
+export function isSegmentUniqueViolation(err: unknown): err is Error {
   if (!(err instanceof Error)) return false
   const { code, extendedCode } = err as { code?: unknown; extendedCode?: unknown }
   const unique = code === 'SQLITE_CONSTRAINT_UNIQUE' || extendedCode === 'SQLITE_CONSTRAINT_UNIQUE'
