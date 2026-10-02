@@ -160,10 +160,10 @@ function signatureOf(def: Def): string {
     .join('|')
 }
 
-const wsMessages = import.meta.glob<Record<string, unknown>>('../ws-messages.ts', { eager: true })
+const syncFrames = import.meta.glob<Record<string, unknown>>('../sync-frames.ts', { eager: true })
 const answerSchemas = [
   ...answers,
-  ...Object.values(wsMessages).flatMap((mod) =>
+  ...Object.values(syncFrames).flatMap((mod) =>
     Object.entries(mod).filter(([, value]) => isSchema(value)),
   ),
 ]

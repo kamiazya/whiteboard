@@ -6,9 +6,8 @@
  *
  * What it must say is read off the code rather than remembered: the three
  * endpoints the daemon mounts, the three SSE events `sync-sse-contract.ts`
- * declares, and every text frame type `ws-messages.ts` declares — which still
- * carries the frames a stream relays and keeps the module name of the
- * transport that predates it.
+ * declares, and every text frame type `sync-frames.ts` declares, which are
+ * the frames a stream relays.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -19,7 +18,7 @@ const PAGE = readFileSync(
   join(REPO_ROOT, 'docs/contributing/architecture/wire-protocol.md'),
   'utf-8',
 )
-const MESSAGES = readFileSync(join(REPO_ROOT, 'packages/daemon-client/src/ws-messages.ts'), 'utf-8')
+const MESSAGES = readFileSync(join(REPO_ROOT, 'packages/daemon-client/src/sync-frames.ts'), 'utf-8')
 const CONTRACT = readFileSync(
   join(REPO_ROOT, 'packages/daemon-client/src/sync-sse-contract.ts'),
   'utf-8',

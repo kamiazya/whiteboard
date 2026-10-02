@@ -8,7 +8,7 @@
  * declaration; the hub cannot import from `server/`.
  */
 import { z } from 'zod'
-import { clientTextMessageSchema } from './ws-messages.js'
+import { clientTextMessageSchema } from './sync-frames.js'
 
 /**
  * These are deliberately NOT `.strict()`, unlike the request DTOs elsewhere in

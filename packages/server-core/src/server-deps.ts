@@ -25,8 +25,8 @@ export interface SceneTextMeasurer {
  *
  * Deliberately carries no operator identity: server-core does not know who
  * the daemon is, and inventing an actor here would put a second source of
- * truth beside the one `ws-messages.ts` (the sync text-message vocabulary) already has. The implementation
- * fills it in.
+ * truth beside the one `sync-frames.ts` (the sync text-message vocabulary)
+ * already has. The implementation fills it in.
  */
 export interface AgentActivity {
   readonly workspaceId: string

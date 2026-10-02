@@ -11,7 +11,7 @@ import type {
   AgentActivityMessage,
   ServerTextMessage,
   ViewportRequestParams,
-} from '@kamiazya/whiteboard-daemon-client/ws-messages'
+} from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import {
   sseBroadcastText,
   sseBroadcastTextToReady,

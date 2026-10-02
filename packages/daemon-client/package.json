@@ -126,9 +126,9 @@
       "types": "./src/extension-names.ts",
       "import": "./src/extension-names.ts"
     },
-    "./ws-messages": {
-      "types": "./src/ws-messages.ts",
-      "import": "./src/ws-messages.ts"
+    "./sync-frames": {
+      "types": "./src/sync-frames.ts",
+      "import": "./src/sync-frames.ts"
     }
   },
   "scripts": {

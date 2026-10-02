@@ -11,18 +11,18 @@
  * seam (methods + on* callbacks), NOT a JSON shape that crosses a process
  * boundary. The zod-schema-discipline rule governs cross-boundary JSON
  * payloads; the payload field types used here flow from z.infer<> in
- * ws-messages.ts, so there is no parallel re-declaration of those shapes.
+ * sync-frames.ts, so there is no parallel re-declaration of those shapes.
  */
 
 // ── Payload types re-exported from the Zod SoT ───────────────────────────────
-// All payload types originate from z.infer<> in ws-messages.ts.
+// All payload types originate from z.infer<> in sync-frames.ts.
 export type {
   ClientTextMessage,
   RestoreStartedMessage,
   ServerTextMessage,
   VersionCreatedPayload,
   ViewportRequestMessage,
-} from './ws-messages.js'
+} from './sync-frames.js'
 
 export {
   clientReadyMessageSchema,
@@ -32,7 +32,7 @@ export {
   serverTextMessageSchema,
   versionCreatedMessageSchema,
   viewportRequestMessageSchema,
-} from './ws-messages.js'
+} from './sync-frames.js'
 
 // ── Inbound callback surface (hook receives from backend) ─────────────────────
 
@@ -41,7 +41,7 @@ import type {
   RestoreStartedMessage,
   VersionCreatedPayload,
   ViewportRequestMessage,
-} from './ws-messages.js'
+} from './sync-frames.js'
 
 export type RestoreStartedPayload = RestoreStartedMessage
 export type ViewportRequestPayload = ViewportRequestMessage

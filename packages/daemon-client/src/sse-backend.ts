@@ -18,7 +18,7 @@ import { apiFetch } from './api-client.js'
 import type { DocumentBackend, DocumentBackendHandlers } from './document-backend-contract.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
-import { parseServerTextMessage } from './ws-text-message.js'
+import { parseServerTextMessage } from './sync-frame-text.js'
 
 export interface SseTransport {
   fetch: typeof globalThis.fetch

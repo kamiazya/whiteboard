@@ -14,7 +14,7 @@ import {
   agentActivityMessageSchema,
   serverTextMessageSchema,
   viewportRequestParamsSchema,
-} from '@kamiazya/whiteboard-daemon-client/ws-messages'
+} from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'

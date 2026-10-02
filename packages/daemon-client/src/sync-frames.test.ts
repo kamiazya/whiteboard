@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { versionCreatedMessageSchema } from './ws-messages.js'
+import { versionCreatedMessageSchema } from './sync-frames.js'
 
 const VALID_VERSION_CREATED = {
   type: 'version_created' as const,

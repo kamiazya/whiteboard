@@ -10,9 +10,9 @@
  */
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect, vi } from 'vitest'
+import { parseServerTextMessage } from './sync-frame-text.js'
+import { serverTextMessageSchema, viewportRequestParamsSchema } from './sync-frames.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-import { serverTextMessageSchema, viewportRequestParamsSchema } from './ws-messages.js'
-import { parseServerTextMessage } from './ws-text-message.js'
 
 const ARMS = serverTextMessageSchema.options.map((arm) => arm.shape.type.value)
 const viaJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value))

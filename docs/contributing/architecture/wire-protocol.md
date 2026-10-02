@@ -44,9 +44,8 @@ names a stream the daemon does not hold answers `404 unknown_stream`.
 
 ### Text frames
 
-The frames are declared in `packages/daemon-client/src/ws-messages.ts`. The
-module keeps the name of the transport that predates the stream; it is the
-frames themselves that the stream carries inside `message` events.
+The frames are declared in `packages/daemon-client/src/sync-frames.ts`; the
+stream carries them inside `message` events.
 
 Server to client:
 
