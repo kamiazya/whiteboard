@@ -15,7 +15,7 @@ same files as its SQLite reads, its per-workspace lock and its websocket
 broadcast, so the browser keeper could not have checkpoints without writing a
 second copy. This package is the first copy, moved, so there is never a second.
 Both keepers import it today (`mcp-server`'s `version-store.ts` and
-`routes/document/auto-version.ts`; `apps/web`'s `browser-version-store.ts` and
+`store/auto-version.ts`; `apps/web`'s `browser-version-store.ts` and
 `use-auto-checkpoint.ts`), which is the claim being made and the reason it
 holds.
 

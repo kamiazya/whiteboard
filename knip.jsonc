@@ -72,15 +72,7 @@
         // exported anyway: migration 0011 is recorded history and must stay
         // byte-identical (see its own doc comment), so the `export` keyword
         // cannot be dropped even though this file is now its only caller.
-        "src/server/store/db/migrations/0011-import-fs-blobs.ts": ["exports"],
-        // ponytail: exports under routes/ and mcp/ that nothing imports,
-        // registered rather than un-exported because those directories are
-        // restructured as a unit; un-export (or delete) each and drop its
-        // entry together.
-        "src/server/routes/document.ts": ["exports"],
-        "src/server/routes/sync-sse.ts": ["exports"],
-        "src/server/mcp/tarball.distribution-impl.ts": ["exports"],
-        "src/server/mcp/daemon-process.smoke-impl.ts": ["types"]
+        "src/server/store/db/migrations/0011-import-fs-blobs.ts": ["exports"]
       }
     },
     "packages/model": {

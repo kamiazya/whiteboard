@@ -17,7 +17,6 @@ import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
 
 export type { AutoVersionTrigger }
-export { createAutoVersionTrigger }
 
 export interface DocumentRouterOptions {
   // Allow tests to replace the store. Production passes the root's own, built

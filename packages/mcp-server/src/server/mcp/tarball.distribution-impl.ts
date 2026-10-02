@@ -125,7 +125,7 @@ function listTarballEntries(tarballPath: string): string[] {
  *     defect this whole check exists for: it used to live only in scripts/,
  *     which is never published.
  */
-export function assertSemanticSearchOptIn(options: {
+function assertSemanticSearchOptIn(options: {
   installDir: string
   installedPackageRoot: string
   installedBin: string

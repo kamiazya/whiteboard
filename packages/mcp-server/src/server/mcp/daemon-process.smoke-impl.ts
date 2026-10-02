@@ -14,18 +14,18 @@ export interface DaemonProcess {
   stop(): void
 }
 
-export interface DaemonResponse {
+interface DaemonResponse {
   status: number
   bytes: Buffer
   json(): unknown
 }
 
-export interface SseFrame {
+interface SseFrame {
   event: string
   data: unknown
 }
 
-export interface SseStream {
+interface SseStream {
   streamId: string
   /** Every frame received so far, in order. */
   frames(): readonly SseFrame[]

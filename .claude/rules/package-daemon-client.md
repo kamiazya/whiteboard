@@ -93,7 +93,7 @@ what JSON carries — its generator is built from the parser's own schema,
 so narrowing the schema narrows the generator and a drift between the two
 ends passes (measured: dropping a union arm and turning `scrollX` into an
 integer both stayed green). The drift guard is mcp-server's
-`routes/sync-audience.test.ts`: it drives the daemon's hand-written
+`sync-audience.test.ts` (under `src/server/`): it drives the daemon's hand-written
 emitters (`sendVersionCreated`, `sendRestoreEvent`, `sendAgentActivity`,
 `sendViewportRequest`) with what their parameters
 admit, reads the frame each hands the SSE broadcaster, and requires it to

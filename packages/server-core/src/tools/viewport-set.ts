@@ -35,7 +35,7 @@ type ViewportSetOutput = z.infer<typeof viewportSetOutputSchema>
  *
  * The `viewport_request` text frame this rides has existed since the
  * daemon's HTTP viewport route was added; until now nothing exposed it to an
- * agent, while `routes/viewport-requests.ts`'s own no-client hint told callers to
+ * agent, while `server/viewport-requests.ts`'s own no-client hint told callers to
  * "run viewport_set" — a tool that did not exist.
  *
  * `wb_canvas_edit` already follows its own edits, so reach for this when an

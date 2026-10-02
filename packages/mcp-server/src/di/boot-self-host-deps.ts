@@ -20,7 +20,7 @@ import { resolveSelfHostServerDeps } from './self-host-server-deps.js'
  * `prepareDataDir` itself, which is how a root once got migrated by accident —
  * naming both here is what stops that being load-bearing.
  */
-export async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
+async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
   await prepareDataDir(dataDir)
   await ensureWorkspaceId(dataDir)
 }
