@@ -8,7 +8,7 @@
  * tool surface left on the raw store would read pre-fold copies and write
  * edits the web app never sees. These wrappers route both ports through the
  * tree while the `documents` table remains the placement/listing mirror
- * (versions, branches and the fold still key off it).
+ * (versions and the fold still key off it).
  */
 import {
   resolveWorkspaceDocumentById,
