@@ -34,14 +34,14 @@ vi.mock('../../config.js', () => ({
 }))
 
 const documentStore = await import('../../store/document-store.js')
-const { clearCache } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 
 // The deps a router is handed by its root; here, the test wiring over the
 // temp data dir (routers no longer compose their own).
 let serverDeps: ServerDeps
 beforeEach(async () => {
-  clearCache()
+  clearDocCacheForTests()
   serverDeps = await resolveTestServerDeps(tmp.dir)
 })
 const { getDoc } = documentStore

@@ -458,10 +458,10 @@ describe('auto-compact', () => {
     // this pins that a post-compact edit round-trips instead of resurrecting
     // pre-compact bytes or losing the edit.
     const { LoroMap } = await import('loro-crdt')
-    const { peekDoc, clearCache } = await import('./doc-cache.js')
+    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
 
-    clearCache()
+    clearDocCacheForTests()
 
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
@@ -501,7 +501,7 @@ describe('auto-compact', () => {
     live.commit()
     await saveDocument('session1', 'cached', live, { overwrite: true })
     const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
-    clearCache()
+    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     const reloaded = await loadDocument('session1', 'cached')
     expect(reloaded.getMovableList('elements').length).toBe(60)

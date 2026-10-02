@@ -45,17 +45,17 @@ const { exportCanvasHeadless, exportCanvasHeadlessSvg, _hasLegacyElementsForTest
   './headless-export.js'
 )
 const { saveDocument, documentExists } = await import('../store/document-store.js')
-const { clearCache } = await import('../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-headless-export-test-'))
-  clearCache()
+  clearDocCacheForTests()
   renderSpy.mockClear()
   renderSvgSpy.mockClear()
 })
 
 afterEach(async () => {
-  clearCache()
+  clearDocCacheForTests()
   await rm(tempDir, { recursive: true, force: true })
 })
 

@@ -9,7 +9,7 @@
 // and a file path for a picture of nothing.
 //
 // Deliberately not mocking the store. The existing `headless-export.test.ts`
-// calls `clearCache()` in beforeEach AND afterEach, which designs this defect
+// calls `clearDocCacheForTests()` in beforeEach AND afterEach, which designs this defect
 // out of every case in the file; this one exists to keep the cache in play.
 
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -34,7 +34,7 @@ vi.mock('../config.js', () => ({
 
 const { exportCanvasHeadlessSvg } = await import('./headless-export.js')
 const { saveDocument, getDoc } = await import('../store/document-store.js')
-const { clearCache } = await import('../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 const { getDb } = await import('../store/db/index.js')
 const { LibsqlDocumentStore } = await import('../store/libsql/libsql-document-store.js')
 const { resolveDocumentIdAtPath } = await import('../store/document-store.js')
@@ -44,11 +44,11 @@ const PATH = 'design'
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-cache-test-'))
-  clearCache()
+  clearDocCacheForTests()
 })
 
 afterEach(async () => {
-  clearCache()
+  clearDocCacheForTests()
   await rm(tempDir, { recursive: true, force: true })
 })
 

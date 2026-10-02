@@ -25,7 +25,7 @@ propagation.setGlobalPropagator(new W3CTraceContextPropagator())
 // Cross-process trace propagation uses the W3C `traceparent` header; the
 // MCP semantic-convention names from
 // https://opentelemetry.io/docs/specs/semconv/registry/attributes/mcp/
-// are exposed via MCP_ATTR_* below so call sites do not need to know the
+// are exposed via MCP_ATTR below so call sites do not need to know the
 // raw strings.
 
 export const SERVICE_NAME = 'whiteboard-mcp'
@@ -36,8 +36,6 @@ export const MCP_ATTR = {
   METHOD_NAME: 'mcp.method.name',
   TOOL_NAME: 'mcp.tool.name',
   REQUEST_ID: 'mcp.request.id',
-  SESSION_ID: 'mcp.session.id',
-  PROTOCOL_VERSION: 'mcp.protocol.version',
 } as const
 
 // Stderr-safe console exporter. Bound late to the SDK's tracing namespace
@@ -222,7 +220,7 @@ export async function shutdownTracing(): Promise<void> {
 
 // Reset hook for tests so a per-test initTracing() does not leak between
 // describe blocks.
-export function resetTracingForTesting(): void {
+export function resetTracingForTests(): void {
   activeHandle = null
 }
 

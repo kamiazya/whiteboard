@@ -100,6 +100,6 @@ export function ensureWorkspaceId(dataDir: string): Promise<string> {
   return pending
 }
 
-export function clearWorkspaceIdCache(): void {
+export function clearWorkspaceIdCacheForTests(): void {
   ensureCache.clear()
 }

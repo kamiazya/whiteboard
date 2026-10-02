@@ -21,7 +21,7 @@ vi.mock('./config.js', async () => {
 })
 
 const { startHttpServer } = await import('./http-server.js')
-const { clearWorkspaceIdCache } = await import('./current-workspace.js')
+const { clearWorkspaceIdCacheForTests } = await import('./current-workspace.js')
 const { closeDb } = await import('./store/db/index.js')
 
 function getOverSocket(
@@ -46,14 +46,14 @@ describe('startHttpServer on a local socket (ADR-0050)', () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-http-socket-'))
-    clearWorkspaceIdCache()
+    clearWorkspaceIdCacheForTests()
   })
 
   afterEach(async () => {
     await running?.close()
     running = undefined
     await closeDb(tempDir)
-    clearWorkspaceIdCache()
+    clearWorkspaceIdCacheForTests()
     await rm(tempDir, { recursive: true, force: true })
   })
 

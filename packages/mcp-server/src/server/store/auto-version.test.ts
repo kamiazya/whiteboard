@@ -24,24 +24,15 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { AUTO_VERSION_CEILING_MS, AUTO_VERSION_QUIET_MS, createAutoVersionTrigger } = await import(
-  './auto-version.js'
-)
+const { createAutoVersionTrigger } = await import('./auto-version.js')
 const { corruptStoredData } = await import('./corrupt-stored-data.js')
-const { clearCache } = await import('./doc-cache.js')
+const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { loadDocument } = await import('./document-store.js')
 const { createDocumentRouter } = await import('../routes/document.js')
 const wsModule = await import('../sync-audience.js')
 const { FileVersionStore } = await import('./version-store.js')
 
 describe('auto-version', () => {
-  it('exports a quiet period, and a ceiling longer than it', () => {
-    expect(AUTO_VERSION_QUIET_MS).toBeGreaterThan(0)
-    // The ceiling only means anything if editing can plausibly run past a
-    // pause without reaching it.
-    expect(AUTO_VERSION_CEILING_MS).toBeGreaterThan(AUTO_VERSION_QUIET_MS)
-  })
-
   it('createAutoVersionTrigger is a function', () => {
     expect(typeof createAutoVersionTrigger).toBe('function')
   })
@@ -117,10 +108,10 @@ describe('createAutoVersionTrigger', () => {
 describe('auto-version corruption handling', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
+    clearDocCacheForTests()
   })
   afterEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('returns 200 and skips version_created when auto-version save reports corruption', async () => {
@@ -161,7 +152,7 @@ describe('auto-version corruption handling', () => {
     expect(versionStore.save).toHaveBeenCalledTimes(1)
     expect(sendVersionCreated).not.toHaveBeenCalled()
 
-    clearCache()
+    clearDocCacheForTests()
     const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['e1'])
@@ -182,10 +173,10 @@ describe('auto-version corruption handling', () => {
 describe('an unchanged document', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    clearCache()
+    clearDocCacheForTests()
   })
   afterEach(() => {
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('takes no second checkpoint when the newest version already holds this state', async () => {

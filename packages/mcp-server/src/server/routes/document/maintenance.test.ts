@@ -26,17 +26,17 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearCache } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { getDb } = await import('../../store/db/index.js')
 const { saveDocument } = await import('../../store/document-store.js')
 const { createMaintenanceRouter } = await import('./maintenance.js')
 const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 afterEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 
 describe('maintenance router', () => {

@@ -17,7 +17,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getDb, getRawDb, closeDb, clearDbCache } = await import('./index.js')
+const { getDb, getRawDb, closeDb, clearDbCacheForTests } = await import('./index.js')
 const { runMigrations } = await import('./migrator.js')
 const { IncompatibleDatabaseError } = await import('./incompatible-database.js')
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
@@ -25,13 +25,13 @@ const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
 describe('runMigrations', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-migrator-test-'))
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
   })
 
   afterEach(async () => {
     await closeDb(tempDir).catch(() => {})
-    clearDbCache()
+    clearDbCacheForTests()
     clearPrepareCache()
     await rm(tempDir, { recursive: true, force: true })
   })

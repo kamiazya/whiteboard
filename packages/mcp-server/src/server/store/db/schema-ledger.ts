@@ -10,8 +10,6 @@
 import type { Selectable } from 'kysely'
 import type { DatabaseSchema } from './schema.js'
 
-export type SqlType = 'TEXT' | 'INTEGER' | 'BLOB'
-
 type SqlTypeOf<V> =
   NonNullable<V> extends number
     ? 'INTEGER'

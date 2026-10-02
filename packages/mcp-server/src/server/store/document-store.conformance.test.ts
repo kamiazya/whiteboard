@@ -31,7 +31,7 @@ const { CacheCoherentDocumentIndex, cacheBackedWorkspaceDocs, workspaceRegistry 
   './document-store.js'
 )
 const { FsBlobStore } = await import('./fs/fs-blob-store.js')
-const { clearCache } = await import('./doc-cache.js')
+const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
@@ -43,7 +43,7 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
     // previous case is exactly the class this wrapper exists to manage.
     tempDir = await mkdtemp(join(tmpdir(), 'prod-index-conformance-'))
     const handle = await createIsolatedDb({ dataDir: tempDir })
-    clearCache()
+    clearDocCacheForTests()
     const index = new CacheCoherentDocumentIndex(
       cacheBackedWorkspaceDocs(),
       new FsBlobStore(blobsRoot(tempDir, SELF_HOST_TENANT_ID), tempDir),

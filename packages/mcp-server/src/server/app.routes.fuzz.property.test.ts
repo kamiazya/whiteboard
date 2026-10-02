@@ -64,7 +64,7 @@ const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../di/store-local.module.js')
 const { getDb } = await import('./store/db/index.js')
-const { clearCache } = await import('./store/doc-cache.js')
+const { clearDocCacheForTests } = await import('./store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store.js')
 const { seedWorkspaceRow } = await import('./routes/_test-helpers.js')
 const { resetSyncStreamsForTests } = await import('./sync-streams.js')
@@ -117,7 +117,7 @@ const FILE_ID = 'img1'
 /** A fresh daemon over a fresh data dir: one workspace, two documents, one saved version. */
 async function seededApp(): Promise<Seeded> {
   dataDir = await mkdtemp(join(tempDir, 'data-'))
-  clearCache()
+  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   const workspace = `ws-${++seq}`
   await seedWorkspaceRow(dataDir, workspace)

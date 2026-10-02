@@ -25,8 +25,8 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
-const { clearCache } = await import('./store/doc-cache.js')
-const { clearWorkspaceIdCache } = await import('./current-workspace.js')
+const { clearDocCacheForTests } = await import('./store/doc-cache.js')
+const { clearWorkspaceIdCacheForTests } = await import('./current-workspace.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 function createRuntimeOptions(token?: string) {
@@ -62,8 +62,8 @@ describe('createApp daemon mutation auth', () => {
     await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
     await mkdir(join(tmp.dir, 'data'), { recursive: true })
     process.env.WHITEBOARD_DEBUG = '1'
-    clearCache()
-    clearWorkspaceIdCache()
+    clearDocCacheForTests()
+    clearWorkspaceIdCacheForTests()
     await writeFile(
       join(tmp.dir, 'web-app', 'index.html'),
       '<!DOCTYPE html><html><head><title>Whiteboard</title></head><body><div id="root"></div></body></html>',
@@ -82,8 +82,8 @@ describe('createApp daemon mutation auth', () => {
     } else {
       process.env.WHITEBOARD_DEBUG = originalWhiteboardDebug
     }
-    clearCache()
-    clearWorkspaceIdCache()
+    clearDocCacheForTests()
+    clearWorkspaceIdCacheForTests()
   })
 
   it('read routes require bearer auth just like mutation routes', async () => {

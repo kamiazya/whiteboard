@@ -28,7 +28,7 @@ export function installAutoCheckpoint(scheduler: CheckpointScheduler): void {
   installed = scheduler
 }
 
-export function uninstallAutoCheckpoint(): void {
+export function uninstallAutoCheckpointForTests(): void {
   installed = null
 }
 

@@ -19,7 +19,6 @@ import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import {
   evaluateSbomArtifactState,
-  SBOM_ARTIFACT_REL_PATH,
   SBOM_REGENERATE_COMMAND,
   SBOM_SIDECAR_REL_PATH,
 } from './sbom-artifact-state.js'
@@ -321,7 +320,7 @@ describe('ci.yml sbom-npm job wiring (drift guard for the absent-artifact skip)'
 // manifest (one explicit 'stale artifact' failure, never a false policy
 // violation — see the module doc comment on sbom-artifact-state.ts).
 
-const SBOM_PATH = join(ROOT, SBOM_ARTIFACT_REL_PATH)
+const SBOM_PATH = join(ROOT, 'packages/mcp-server/_artifacts/npm-sbom.cdx.json')
 const SIDECAR_PATH = join(ROOT, SBOM_SIDECAR_REL_PATH)
 const sbomExists = existsSync(SBOM_PATH)
 

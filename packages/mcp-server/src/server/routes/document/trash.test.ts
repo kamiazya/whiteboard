@@ -31,7 +31,7 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { saveDocument, resolveDocumentIdAtPath } = await import('../../store/document-store.js')
-const { clearCache } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
@@ -39,7 +39,7 @@ const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { getDb } = await import('../../store/db/index.js')
 
 beforeEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 
 function canvasDoc(text: string): LoroDoc {

@@ -25,7 +25,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests, peekDoc } = await import('../../store/doc-cache.js')
 
 const { getDoc, saveDocument, loadDocument } = await import('../../store/document-store.js')
 const { createLiveDocRouter } = await import('./live-doc.js')
@@ -33,10 +33,10 @@ const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
   await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-  clearCache()
+  clearDocCacheForTests()
 })
 afterEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 
 describe('live-doc router', () => {
@@ -124,7 +124,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     expect(updateDocumentResponseSchema.safeParse(body).success).toBe(true)
 
     // Clear the cache, reload, and confirm the change was persisted.
-    clearCache()
+    clearDocCacheForTests()
     const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as { id: string; type: string }[]
     expect(elements).toHaveLength(1)

@@ -46,7 +46,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { saveDocument, compactWorkspace } = await import('./document-store.js')
-const { clearCache } = await import('./doc-cache.js')
+const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { purgeDanglingFiles } = await import('./file-gc.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -59,7 +59,7 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'branch-pin-price-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearCache()
+  clearDocCacheForTests()
 })
 afterEach(async () => {
   await handle.dispose()

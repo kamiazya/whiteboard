@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { clearDbCache, closeDb } from './db/index.js'
+import { clearDbCacheForTests, closeDb } from './db/index.js'
 import { globalStoreScope, storeScope } from './store-scope.js'
 import { _clearWorkspaceDocCacheForTests, getWorkspaceDoc } from './workspace-doc-cache.js'
 
@@ -20,7 +20,7 @@ afterEach(async () => {
   _clearWorkspaceDocCacheForTests()
   await closeDb(dir)
   await closeDb(other)
-  clearDbCache()
+  clearDbCacheForTests()
   resetDataDirForTests()
   await rm(dir, { recursive: true, force: true })
   await rm(other, { recursive: true, force: true })

@@ -22,7 +22,7 @@ vi.mock('../config.js', () => ({
 }))
 const tmp = withTempDataDir('whiteboard-version-tools-')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
-const { clearCache } = await import('../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('../store/document-store.js')
 const { FileVersionStore } = await import('../store/version-store.js')
 
@@ -65,7 +65,7 @@ async function textOf(deps: ServerDeps, documentId: string): Promise<string | un
 // tools used to keep their own records inside the document, addressed by a
 // frontier of the per-document PROJECTION, whose lineage is reborn each time
 // the cache drops. Measured before the change: a restore in the same
-// process worked, and the same restore after `clearCache()` threw
+// process worked, and the same restore after `clearDocCacheForTests()` threw
 // `The given ID (1@…) is not contained by the doc` — so every agent
 // checkpoint died with the daemon's next idle shutdown, and the History
 // panel never showed it while it lived.
@@ -100,7 +100,7 @@ describe('wb_version_* tools over the daemon history', () => {
     expect(await textOf(deps, documentId)).toBe('modified')
 
     // Simulate the daemon restarting between the checkpoint and the rollback.
-    clearCache()
+    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     const reborn = await resolveTestServerDeps(tmp.dir)
     const restored = await createVersionRestoreTool(reborn).execute({

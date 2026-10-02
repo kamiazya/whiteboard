@@ -97,7 +97,7 @@ function abortPendingLoad(key: string): void {
 }
 
 // Test helper: clear the cache.
-export function clearCache(): void {
+export function clearDocCacheForTests(): void {
   cache.clear()
   for (const key of Array.from(pendingLoads.keys())) abortPendingLoad(key)
 }

@@ -8,18 +8,18 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearDbCache, closeDb, getDb } from './index.js'
+import { clearDbCacheForTests, closeDb, getDb } from './index.js'
 import { createIsolatedDb, tableExists } from './test-helpers.js'
 
 let scratch: string
 
 beforeEach(async () => {
   scratch = await mkdtemp(join(tmpdir(), 'createIsolatedDb-test-'))
-  clearDbCache()
+  clearDbCacheForTests()
 })
 
 afterEach(async () => {
-  clearDbCache()
+  clearDbCacheForTests()
   await rm(scratch, { recursive: true, force: true })
 })
 

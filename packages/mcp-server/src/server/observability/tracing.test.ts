@@ -4,7 +4,7 @@ import {
   getTracer,
   initTracing,
   MCP_ATTR,
-  resetTracingForTesting,
+  resetTracingForTests,
   SERVICE_NAME,
   StderrSpanExporter,
   shutdownTracing,
@@ -13,13 +13,13 @@ import {
 
 // Isolate module-level state (activeHandle) between tests.
 beforeEach(() => {
-  resetTracingForTesting()
+  resetTracingForTests()
 })
 
 afterEach(() => {
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
-  resetTracingForTesting()
+  resetTracingForTests()
 })
 
 // ---------------------------------------------------------------------------
@@ -37,8 +37,6 @@ describe('MCP_ATTR', () => {
     expect(MCP_ATTR.METHOD_NAME).toBe('mcp.method.name')
     expect(MCP_ATTR.TOOL_NAME).toBe('mcp.tool.name')
     expect(MCP_ATTR.REQUEST_ID).toBe('mcp.request.id')
-    expect(MCP_ATTR.SESSION_ID).toBe('mcp.session.id')
-    expect(MCP_ATTR.PROTOCOL_VERSION).toBe('mcp.protocol.version')
   })
 })
 
@@ -118,7 +116,7 @@ describe('initTracing() when tracing is disabled', () => {
 // These tests DO spin up a real NodeSDK with a stderr-only exporter because
 // OTEL_EXPORTER_OTLP_ENDPOINT is unset. The SDK itself is lightweight when
 // only SimpleSpanProcessor + stderr exporter are wired — no network I/O
-// occurs. We shut down cleanly after each test via resetTracingForTesting()
+// occurs. We shut down cleanly after each test via resetTracingForTests()
 // plus explicit shutdownTracing().
 // ---------------------------------------------------------------------------
 
@@ -131,7 +129,7 @@ describe('initTracing() when tracing is enabled', () => {
   })
 
   afterEach(async () => {
-    // Always shut down before resetTracingForTesting clears the handle so
+    // Always shut down before resetTracingForTests clears the handle so
     // the SDK's internal state is cleaned up too.
     await shutdownTracing()
   })
@@ -406,7 +404,7 @@ describe('flushOnExit — signal-handler body', () => {
     const shutdownSpy = vi.fn().mockResolvedValue(undefined)
     mockSdkAndEnableTracing(shutdownSpy)
 
-    const { initTracing: init, resetTracingForTesting: reset } = await import(
+    const { initTracing: init, resetTracingForTests: reset } = await import(
       // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
       './tracing.js?flush-body=' + Date.now()
     )
@@ -435,7 +433,7 @@ describe('flushOnExit — signal-handler body', () => {
     const capture = captureLogsForTests('warning')
 
     try {
-      const { initTracing: init, resetTracingForTesting: reset } = await import(
+      const { initTracing: init, resetTracingForTests: reset } = await import(
         // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
         './tracing.js?flush-catch=' + Date.now()
       )
@@ -478,7 +476,7 @@ describe('initTracing() catch path', () => {
       throw new Error('sdk-node unavailable')
     })
     // Re-import the module under test so it picks up the mock.
-    const { initTracing: initTracingFresh, resetTracingForTesting: reset } = await import(
+    const { initTracing: initTracingFresh, resetTracingForTests: reset } = await import(
       // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
       './tracing.js?bust=' + Date.now()
     )

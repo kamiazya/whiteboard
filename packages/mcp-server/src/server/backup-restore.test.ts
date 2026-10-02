@@ -23,7 +23,7 @@ const { backupDataDir, restoreDataDir, BackupError } = await import('./backup-re
 const { PENDING_WRITES_DIRNAME } = await import('./atomic-write.js')
 const { saveDocument, listDocuments, loadDocument } = await import('./store/document-store.js')
 const { FileVersionStore } = await import('./store/version-store.js')
-const { clearDbCache } = await import('./store/db/index.js')
+const { clearDbCacheForTests } = await import('./store/db/index.js')
 const { clearPrepareCache } = await import('./store/db/prepare.js')
 
 interface DrillRoots {
@@ -93,7 +93,7 @@ beforeEach(() => {
 afterEach(async () => {
   // Drop cached libsql connections / prepare results so the next test
   // can rebuild them against a fresh dataDir without leaking state.
-  clearDbCache()
+  clearDbCacheForTests()
   clearPrepareCache()
 })
 
@@ -106,7 +106,7 @@ describe('backup-restore drill', () => {
       await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
       // Make sure prior cached connections do not bleed into the
       // restored dir — restore is a fresh-process drill.
-      clearDbCache()
+      clearDbCacheForTests()
       clearPrepareCache()
       await restoreDataDir(roots.backup, roots.target, { allowedRoots: [roots.root] })
 

@@ -20,14 +20,14 @@ vi.mock('./config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearWorkspaceIdCache, ensureWorkspaceId } = await import('./current-workspace.js')
+const { clearWorkspaceIdCacheForTests, ensureWorkspaceId } = await import('./current-workspace.js')
 const { getDb } = await import('./store/db/index.js')
 const { prepareDataDir } = await import('./store/db/prepare.js')
 const { upsertWorkspaceRow } = await import('./store/db/upsert-workspace.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../di/store-local.module.js')
 
-afterEach(() => clearWorkspaceIdCache())
+afterEach(() => clearWorkspaceIdCacheForTests())
 
 async function documentIndex() {
   const db = await getDb(tmp.dir)

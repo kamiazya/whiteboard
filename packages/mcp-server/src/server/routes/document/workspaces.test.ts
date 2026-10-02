@@ -48,7 +48,7 @@ vi.mock('../../store/document-store.js', async () => {
   return { ...actual, getDoc: vi.fn(actual.getDoc) }
 })
 
-const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
+const { clearDocCacheForTests, peekDoc } = await import('../../store/doc-cache.js')
 
 const { getDoc } = await import('../../store/document-store.js')
 const documentStore = await import('../../store/document-store.js')
@@ -88,10 +88,10 @@ async function routerFailing(method: 'deleteDocument' | 'moveDocument', err: unk
 }
 
 beforeEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 afterEach(() => {
-  clearCache()
+  clearDocCacheForTests()
 })
 
 describe('workspaces router', () => {

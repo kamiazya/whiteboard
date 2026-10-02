@@ -24,7 +24,7 @@ const { createDocumentRouter } = await import('../document.js')
 const { createSharedWorkers, sharedBackgroundWork } = await import(
   '../../shared-background-work.js'
 )
-const { uninstallAutoCheckpoint } = await import('../../store/auto-checkpoint.js')
+const { uninstallAutoCheckpointForTests } = await import('../../store/auto-checkpoint.js')
 const { FileVersionStore } = await import('../../store/version-store.js')
 const { compactWorkspace } = await import('../../store/document-store.js')
 const { disposeAutoCompact } = await import('../../store/auto-compact.js')
@@ -99,7 +99,7 @@ describe('an agent-only workspace', () => {
       expect(compaction.reason).not.toBe('no-versions')
     } finally {
       trigger?.stop()
-      uninstallAutoCheckpoint()
+      uninstallAutoCheckpointForTests()
       await disposeAutoCompact()
     }
   })

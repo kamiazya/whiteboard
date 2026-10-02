@@ -1,9 +1,4 @@
-import {
-  CHECKPOINT_CEILING_MS,
-  CHECKPOINT_QUIET_MS,
-  type CheckpointScheduler,
-  createCheckpointScheduler,
-} from '@kamiazya/whiteboard-history'
+import { type CheckpointScheduler, createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { getLogger } from '../log.js'
 import type { OperatorInfo, VersionEntry, VersionStore } from './version-store.js'
 
@@ -17,11 +12,6 @@ import type { OperatorInfo, VersionEntry, VersionStore } from './version-store.j
  * `auto-version-timing.test.ts` holds the timing measurement against this
  * wiring.
  */
-
-/** The pause after which a document is considered settled. */
-export const AUTO_VERSION_QUIET_MS = CHECKPOINT_QUIET_MS
-/** How long editing may run with no pause before a checkpoint is taken regardless. */
-export const AUTO_VERSION_CEILING_MS = CHECKPOINT_CEILING_MS
 
 export interface AutoVersionOptions {
   readonly quietMs?: number

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { generateDocumentId, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearWorkspaceIdCache, ensureWorkspaceId } from './current-workspace.js'
+import { clearWorkspaceIdCacheForTests, ensureWorkspaceId } from './current-workspace.js'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
 import { upsertWorkspaceRow } from './store/db/upsert-workspace.js'
@@ -13,11 +13,11 @@ describe('ensureWorkspaceId', () => {
 
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'whiteboard-ensure-test-'))
-    clearWorkspaceIdCache()
+    clearWorkspaceIdCacheForTests()
   })
 
   afterEach(async () => {
-    clearWorkspaceIdCache()
+    clearWorkspaceIdCacheForTests()
     await rm(dataDir, { recursive: true, force: true })
   })
 
@@ -49,7 +49,7 @@ describe('ensureWorkspaceId', () => {
 
   it('returns the persisted id again after the in-memory cache is cleared', async () => {
     const first = await ensureWorkspaceId(dataDir)
-    clearWorkspaceIdCache()
+    clearWorkspaceIdCacheForTests()
     await expect(ensureWorkspaceId(dataDir)).resolves.toBe(first)
   })
 
@@ -140,7 +140,7 @@ describe('ensureWorkspaceId', () => {
       await expect(ensureWorkspaceId(dataDir)).resolves.toBe(legacy)
       expect(await segments()).toEqual({ [legacy]: 'default' })
 
-      clearWorkspaceIdCache()
+      clearWorkspaceIdCacheForTests()
       await ensureWorkspaceId(dataDir)
       expect(await segments()).toEqual({ [legacy]: 'default' })
     })

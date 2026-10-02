@@ -19,7 +19,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearCache } = await import('../store/doc-cache.js')
+const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 
 const { getDoc, saveDocument } = await import('../store/document-store.js')
 const { createDebugRouter } = await import('./debug.js')
@@ -47,7 +47,7 @@ describe('GET /api/debug', () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-debug-test-'))
-    clearCache()
+    clearDocCacheForTests()
     process.env.WHITEBOARD_DEBUG = '1'
   })
 
@@ -58,7 +58,7 @@ describe('GET /api/debug', () => {
       process.env.WHITEBOARD_DEBUG = originalDebugEnv
     }
     await rm(tempDir, { recursive: true, force: true })
-    clearCache()
+    clearDocCacheForTests()
   })
 
   it('returns session and canvas element counts for visible and tombstoned elements', async () => {
