@@ -361,9 +361,7 @@ export function createApp(options: AppOptions) {
       ...membershipRouterOptions(membership),
     }),
   )
-  // Shared versionStore so the files router can do version-aware purge
-  // and the branches router can resolve frontiers — they would each
-  // instantiate their own otherwise.
+  // Handed to the files router for its version-aware purge.
   const sharedVersionStore = new FileVersionStore()
   app.route(
     '/',

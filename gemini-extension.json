@@ -1,7 +1,7 @@
 {
   "name": "whiteboard",
   "version": "0.0.20",
-  "description": "Collaborative whiteboard for Gemini CLI. Runs a live whiteboard in your browser and exposes MCP tools so Gemini can draw, annotate, and refine diagrams alongside you.",
+  "description": "Collaborative whiteboard for Gemini CLI. Exposes MCP tools so Gemini can draw, annotate, and refine diagrams alongside you, and shows the same canvas live in the hosted web app once the whiteboard browser extension connects it to your local daemon.",
   "mcpServers": {
     "whiteboard": {
       "command": "npx",

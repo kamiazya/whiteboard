@@ -18,15 +18,6 @@ export function corruptStoredDataBody(
   return { error: 'corrupt_stored_data', message: error.message }
 }
 
-export function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as NodeJS.ErrnoException).code === 'ENOENT'
-  )
-}
-
 // `path` is a real FS path an operator can go inspect (thumbnails, uploaded
 // files, blob-store envelopes).
 export function corruptStoredData(path: string, detail: string): CorruptStoredDataError {

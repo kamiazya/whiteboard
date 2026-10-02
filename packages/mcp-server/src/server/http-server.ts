@@ -144,7 +144,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const serverDeps = attachLiveAudience(bootedDeps)
 
   // Filled synchronously by createApp below, and read only by the
-  // auto-checkpoint declaration's stop() — which runs long after.
+  // auto-checkpoint declaration's start() and stop() — which run after createApp returns.
   let autoVersionTrigger: AutoVersionTrigger | undefined
   const app = createApp({
     authMode: 'local-daemon',
@@ -168,9 +168,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // See background-work.ts for why that is a registry rather than four calls.
   const backgroundWork = startBackgroundWork([
     ...sharedBackgroundWork(shared, {
-      flushCheckpoints: async () => {
-        await autoVersionTrigger?.flush()
-      },
+      checkpointScheduler: () => autoVersionTrigger,
       fileGc: {
         start: () => shared.fileGcSweeper.start(),
         stop: () => shared.fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),

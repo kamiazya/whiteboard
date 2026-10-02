@@ -41,7 +41,7 @@ for the duplication to exist.
 - Forbidden: `node:*`, DOM globals, `inversify` — it runs in both roots.
 - Enforced by `tools/arch-lint`. **Registering a package in
   `architecture-map.ts` does NOT scan it**: it must also be listed in
-  `repo-coverage.test.ts`'s `SHARED_LAYER_PACKAGES`. Verified here the same
+  `scan-packages.ts`'s `SHARED_LAYER_PACKAGES`. Verified here the same
   way the comment there records for `plugin-visual` — a `node:fs` import
   passed a full arch-lint run until the package was added to that list.
 

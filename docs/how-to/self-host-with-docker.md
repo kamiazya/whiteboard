@@ -660,19 +660,20 @@ reach the shared database skips the pass rather than assuming it is alone.
 
   | excluded | what it holds | what a restore does instead |
   |---|---|---|
-  | `daemon.json` | the Bearer token the daemon authenticates HTTP and WS with | writes a fresh record on first start; nothing is lost |
+  | `daemon.json` | the Bearer token the daemon authenticates requests with | writes a fresh record on first start; nothing is lost |
   | `macaroon-root-key.json` | the secret a scoped token would chain from | generates a fresh key; nothing mints scoped tokens today ([ADR-0043](../contributing/adr/0043-authority-as-keys.md)), so nothing is lost |
   | `daemon-identity.json` | the daemon's Ed25519 private key and the source of its `did:key` | generates a fresh identity — see the warning below |
 
   **A restored deployment is a new identity.** Because the identity key is
   excluded, the restored daemon's `did:key` differs from the original's:
-  every paired browser must pair again, and version attestations signed by
-  the old identity no longer verify against the current one. Past versions
+  version attestations signed by the old identity no longer verify against
+  the current one. Past versions
   and their history are intact; what changes is the signature's
   *attribution*, and the timeline shows those entries as signed by a device
   it no longer knows.
 
-  This is deliberate. A broken pairing is recoverable — pair again. A signing
+  This is deliberate. A lost identity is recoverable: past versions keep their
+  content and only their attribution changes. A signing
   key that travels in a backup is a forgery capability that outlives the
   machine it came from, and that is not recoverable. If you need a restore
   that keeps the identity, copy `daemon-identity.json` across by hand, over a

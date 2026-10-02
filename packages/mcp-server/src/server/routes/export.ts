@@ -10,6 +10,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
 import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
+import { isErrnoCode } from '../../shared/errno.js'
 import { errorMessage } from '../../shared/error-message.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
@@ -226,7 +227,7 @@ async function writeDefaultOutput(
       await writeFile(filePath, pngBuffer, { flag: 'wx' })
       return filePath
     } catch (err) {
-      if (!isEexist(err)) throw err
+      if (!isErrnoCode(err, 'EEXIST')) throw err
     }
   }
   throw new Error(
@@ -241,8 +242,4 @@ async function writeExplicitOutput(outputPath: string, pngBuffer: Buffer): Promi
   await mkdir(dirname(outputPath), { recursive: true })
   await writeFile(outputPath, pngBuffer)
   return outputPath
-}
-
-function isEexist(err: unknown): boolean {
-  return err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'EEXIST'
 }

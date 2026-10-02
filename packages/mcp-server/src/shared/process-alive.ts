@@ -1,3 +1,5 @@
+import { isErrnoCode } from './errno.js'
+
 /**
  * Whether a process with this pid exists.
  *
@@ -15,6 +17,6 @@ export function isPidAlive(pid: number): boolean {
     process.kill(pid, 0)
     return true
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM'
+    return isErrnoCode(err, 'EPERM')
   }
 }

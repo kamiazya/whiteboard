@@ -25,8 +25,8 @@ Guides:
 - **[define-your-own-stencils](define-your-own-stencils.md)** — dress a box by what it IS, and
   grow the vocabulary with a stencil library the workspace owns.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas
-  view inline in an MCP Apps-compatible AI chat client (currently unavailable — see the page's
-  notice).
+  view inline in an MCP Apps-compatible AI chat client, with comments pinned back through
+  `wb_canvas_edit`.
 
 Planned guides:
 

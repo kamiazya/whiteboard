@@ -17,6 +17,13 @@
  * anything else in `api-contracts/` — an answer, a refusal, a part of one —
  * may not. A daemon that wants to refuse an undeclared field in what it
  * EMITS applies `.strict()` at the emit site, where the browser never sees it.
+ *
+ * What this reads is TEXT, so it sees only declarations written in these
+ * files. A schema the browser parses can also arrive by `export { x as y }`
+ * from another package, or be built from a strict piece declared there; the
+ * barrel therefore re-exports no foreign schema by name (below), and
+ * `packages/daemon-client/src/api-contracts/answers-tolerant.test.ts` walks
+ * the live schema graph of everything published, at any depth.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -25,6 +32,30 @@ import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
 const CONTRACTS_DIR = join(REPO_ROOT, 'packages', 'daemon-client', 'src', 'api-contracts')
+const BARREL = join(CONTRACTS_DIR, 'index.ts')
+
+/**
+ * A foreign re-export that is a schema by name but cannot be strict: a lone
+ * string pattern has no object to refuse a key. Guarded from both sides
+ * below, so an entry cannot outlive the line it excuses.
+ */
+const FOREIGN_SCHEMA_REEXPORTS: readonly string[] = ['apiErrorCodeSchema']
+
+/** Value exports the barrel takes from another package, by the name the browser sees. */
+function foreignSchemaReexports(source: string): string[] {
+  const blocks = source.matchAll(/export\s*\{([^}]*)\}\s*from\s*'([^']+)'/g)
+  return [...blocks]
+    .filter(([, , specifier]) => !specifier?.startsWith('.'))
+    .flatMap(([, names]) => (names ?? '').split(','))
+    .map(
+      (name) =>
+        name
+          .trim()
+          .split(/\s+as\s+/)
+          .pop() ?? '',
+    )
+    .filter((name) => name.endsWith('Schema'))
+}
 
 interface Declaration {
   readonly file: string
@@ -67,5 +98,25 @@ describe('api-contracts: strict requests, tolerant answers', () => {
       .filter((d) => d.code.includes('.strict()') && !d.name.endsWith('RequestSchema'))
       .map((d) => `${d.file}: ${d.name}`)
     expect(offenders).toEqual([])
+  })
+
+  it('re-exports no schema from another package, where a strict one would pass for an answer', () => {
+    // An alias of a server-core tool output is `.strict()` and reads as
+    // tolerant at the import site; the browser-facing answers are derived in
+    // `packages/daemon-client/src/api-contracts/v1-answers.ts` instead,
+    // where this scan and the live walk can see them.
+    const source = readFileSync(BARREL, 'utf-8')
+    expect(source).toContain('export')
+    expect(foreignSchemaReexports(source)).toEqual([...FOREIGN_SCHEMA_REEXPORTS])
+  })
+
+  it('reads the foreign re-exports it judges from the barrel, so an empty list is not a miss', () => {
+    // Proves the matcher on a known shape: the alias form this rule exists for.
+    expect(
+      foreignSchemaReexports(
+        "export { fooOutputSchema as fooResponseSchema, x } from '@kamiazya/whiteboard-server-core/contracts'",
+      ),
+    ).toEqual(['fooResponseSchema'])
+    expect(foreignSchemaReexports("export { aSchema } from './local.js'")).toEqual([])
   })
 })

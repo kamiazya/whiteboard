@@ -28,6 +28,7 @@ import {
   supportBundleDoctorSectionSchema,
   supportBundleManifestSchema,
 } from '../shared/diagnostics/support-bundle.js'
+import { isMissingFileError } from '../shared/errno.js'
 import {
   OPERATOR_JSON_SCHEMA_VERSION,
   operatorJsonLine,
@@ -249,7 +250,7 @@ export async function runServerSupportBundle(
       return fail('Could not write support bundle. The output directory must be empty.')
     }
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+    if (!isMissingFileError(err)) {
       return fail('support bundle failed')
     }
     // Missing output dir: create it.

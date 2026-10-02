@@ -1,8 +1,5 @@
-import {
-  type MeasureText,
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
-} from '@kamiazya/whiteboard-canvas-render'
+import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
@@ -13,11 +10,10 @@ import { CanvasViewer } from './CanvasViewer.js'
 // by the previous test (or the previous REPEAT of this one) answers too.
 afterEach(cleanup)
 
-const fakeMeasure: MeasureText = (text) => ({
-  advanceWidth: text.length * 8,
+const fakeMeasure = createFixedMeasure({
+  advance: (text) => text.length * 8,
   ascent: 12,
   descent: 4,
-  lineGap: 0,
 })
 
 const canvas: SpatialCanvas = {

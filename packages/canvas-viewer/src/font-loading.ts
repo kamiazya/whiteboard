@@ -158,11 +158,6 @@ export function registerFontBytes(family: string, bytes: ArrayBuffer): Promise<V
   return pending
 }
 
-/** Whether this realm can register the vendored face at all. */
-export function canLoadViewerFont(): boolean {
-  return typeof FontFace !== 'undefined' && resolveFontFaceSet() !== undefined
-}
-
 async function loadViewerFont(generation: number): Promise<ViewerFontStatus> {
   // Totality: an environment with no FontFace constructor and no face set (a
   // non-browser test runner, or a browser lacking the API) degrades instead

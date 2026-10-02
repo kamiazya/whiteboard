@@ -16,6 +16,7 @@
 import { readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { isMissingFileError } from '../../shared/errno.js'
 import { writeSecretFileAtomicSync } from './secret-file-mode.js'
 
 export const SERVER_MODE_RECORD_SCHEMA_VERSION = 1 as const
@@ -58,9 +59,7 @@ export function readServerModeRecord(dataDir: string): ServerModeRecordReadResul
   try {
     raw = readFileSync(path, 'utf8')
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'ENOENT'
-      ? { kind: 'missing' }
-      : { kind: 'unreadable' }
+    return isMissingFileError(err) ? { kind: 'missing' } : { kind: 'unreadable' }
   }
   let parsed: unknown
   try {

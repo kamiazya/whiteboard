@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, sep } from 'node:path'
 import { z } from 'zod'
+import { isMissingFileError } from '../../shared/errno.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
 import { blobsRoot, listTenants } from '../tenant/data-layout.js'
@@ -299,7 +300,7 @@ export async function readBackupBlobManifest(
   try {
     raw = await readFile(join(backupDir, BLOB_MANIFEST_FILENAME), 'utf8')
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    if (isMissingFileError(err)) return null
     throw new BackupManifestUnusableError(backupDir, 'cannot be read', err)
   }
   let json: unknown

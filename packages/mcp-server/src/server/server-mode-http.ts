@@ -116,7 +116,7 @@ export async function startServerModeHttp(
   const serverDeps = attachLiveAudience(bootedDeps)
 
   // Filled synchronously by createApp below, and read only by the
-  // auto-checkpoint declaration's stop() — which runs long after.
+  // auto-checkpoint declaration's start() and stop() — which run after createApp returns.
   let autoVersionTrigger: AutoVersionTrigger | undefined
   const app = createApp({
     authMode: 'server-mode',
@@ -163,9 +163,7 @@ export async function startServerModeHttp(
   const shared = createSharedWorkers(instanceId, options)
   const backgroundWork = startBackgroundWork(
     sharedBackgroundWork(shared, {
-      flushCheckpoints: async () => {
-        await autoVersionTrigger?.flush()
-      },
+      checkpointScheduler: () => autoVersionTrigger,
       fileGc: {
         start: () => shared.fileGcSweeper.start(),
         stop: () => shared.fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),

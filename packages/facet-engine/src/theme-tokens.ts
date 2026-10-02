@@ -15,6 +15,7 @@
  * medium-neutral contract is the one every medium here can read.
  */
 import { z } from 'zod'
+import { FACET_NAMESPACED_ID_PATTERN } from './facet-grammar.js'
 
 const hexColorSchema = z
   .string()
@@ -26,7 +27,7 @@ const fillSchema = z.union([hexColorSchema, z.literal('none')])
 /** A registered thing's id: `<plugin>.<name>`, both key segments. */
 export const namespacedIdSchema = z
   .string()
-  .regex(/^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$/, 'must be a namespaced id like "visual.diamond"')
+  .regex(FACET_NAMESPACED_ID_PATTERN, 'must be a namespaced id like "visual.diamond"')
 
 const nodeStyleTokensSchema = z.object({
   fill: fillSchema,

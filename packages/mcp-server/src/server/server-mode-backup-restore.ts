@@ -1,4 +1,5 @@
 import { unlink } from 'node:fs/promises'
+import { isMissingFileError } from '../shared/errno.js'
 import type { BackupRestoreOptions } from './backup-restore.js'
 import { BackupError, backupDataDir, restoreDataDir } from './backup-restore.js'
 import { getServerModeRecordPath } from './security/server-mode-record.js'
@@ -31,6 +32,6 @@ export async function restoreServerModeDataDir(
   await restoreDataDir(backupDir, targetDataDir, options)
   const recordPath = getServerModeRecordPath(targetDataDir)
   await unlink(recordPath).catch((err) => {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    if (!isMissingFileError(err)) throw err
   })
 }

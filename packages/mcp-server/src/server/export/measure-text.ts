@@ -3,10 +3,12 @@
 // imports a font itself — this module supplies the real opentype.js-backed
 // measurer. When the vendored asset is unavailable it degrades to
 // canvas-render's shared constant-ratio measurer rather than a local copy.
+
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type * as opentype from 'opentype.js'
+import { errnoCode } from '../../shared/errno.js'
 
 import { opentypeApi } from '../../shared/opentype.js'
 import { getLogger } from '../log.js'
@@ -163,7 +165,7 @@ let hasLoggedFallback = false
  */
 function describeLoadFailure(err: unknown): string {
   if (!(err instanceof Error)) return 'unknown'
-  const code = (err as NodeJS.ErrnoException).code
+  const code = errnoCode(err)
   return code ? `${err.name}(${code})` : err.name
 }
 
@@ -181,27 +183,6 @@ async function parseFace(path: string | null): Promise<opentype.Font | null> {
   if (path === null) return null
   const buffer = await readFile(path)
   return opentypeApi.parse(buffer)
-}
-
-/**
- * The parsed Regular face the export path draws with, or `null` when the
- * vendored asset is unreachable and the render has already degraded to system
- * fonts.
- *
- * Exposed for `undrawableCharacters`, which asks the same question the
- * measurer asks internally — does this face carry a glyph for this code point
- * — but reports the answer instead of silently estimating around it. Parsed
- * on demand and NOT cached here: the answer is needed once per export, while
- * the measurer's own cache exists because layout calls it per line.
- */
-export async function loadExportFont(
-  resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>> = resolveExportFontFaces,
-): Promise<opentype.Font | null> {
-  try {
-    return await parseFace((await resolveFontFiles()).regular)
-  } catch {
-    return null
-  }
 }
 
 /**

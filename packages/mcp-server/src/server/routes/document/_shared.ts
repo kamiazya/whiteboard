@@ -7,7 +7,10 @@ import {
   isWorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
-import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
+import {
+  type ApiErrorBody,
+  WorkspaceNotFoundForCallerError,
+} from '@kamiazya/whiteboard-server-core'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
 import { validationErrorBody } from '../../validators.js'
 
@@ -106,6 +109,14 @@ export const hasDescendants: ErrorAnswer = (err) =>
   err instanceof DocumentHasDescendantsError ? { status: 409, body: { title: err.message } } : null
 
 /**
+ * An absent workspace has two spellings that reach a route: the index's own
+ * error, and the tool layer's `WorkspaceNotFoundForCallerError` from a route
+ * that delegates to a tool. Both are the one condition to a caller.
+ */
+const isWorkspaceAbsent = (err: unknown): boolean =>
+  isWorkspaceNotFoundError(err) || err instanceof WorkspaceNotFoundForCallerError
+
+/**
  * Nothing at that address. The WORKSPACE being absent and the DOCUMENT being
  * absent are one answer to a caller who named a document — which is why the
  * title is the caller's to supply.
@@ -113,15 +124,13 @@ export const hasDescendants: ErrorAnswer = (err) =>
 export const notFoundAs =
   (title: string): ErrorAnswer =>
   (err) =>
-    isDocumentNotFoundError(err) || isWorkspaceNotFoundError(err)
-      ? { status: 404, body: { title } }
-      : null
+    isDocumentNotFoundError(err) || isWorkspaceAbsent(err) ? { status: 404, body: { title } } : null
 
 /** Only the WORKSPACE half of the above, for a route with no document in its address. */
 export const workspaceNotFoundAs =
   (title: string): ErrorAnswer =>
   (err) =>
-    isWorkspaceNotFoundError(err) ? { status: 404, body: { title } } : null
+    isWorkspaceAbsent(err) ? { status: 404, body: { title } } : null
 
 /** Stored data this server cannot read — a 500 that says which. */
 export const corruptStored: ErrorAnswer = (err) => handleCorruptStoredData(err)

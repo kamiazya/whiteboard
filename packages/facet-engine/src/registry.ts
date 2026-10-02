@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import { FACET_KEY_PATTERN, FACET_SEGMENT_PATTERN } from './facet-grammar.js'
 import { deriveFacetForm, type FacetEditorSpec, type FacetForm, resolveEditorSpec } from './form.js'
 import { type StencilAsset, type StencilAssetInput, stencilAssetSchema } from './stencil.js'
 import {
@@ -20,7 +21,6 @@ import {
  * payloads they govern stay schema-derived.
  */
 
-const SEGMENT_PATTERN = /^[a-z][a-z0-9-]*$/
 const VERSION_PATTERN = /^v[0-9]+$/
 
 export type FacetTarget = 'document' | 'canvas' | 'node' | 'edge'
@@ -100,8 +100,8 @@ export interface FacetPlugin {
 export function defineFacet<S extends z.ZodTypeAny>(
   definition: FacetDefinition<S>,
 ): FacetDefinition<S> {
-  if (!SEGMENT_PATTERN.test(definition.name)) {
-    throw new Error(`facet name "${definition.name}" must match ${SEGMENT_PATTERN}`)
+  if (!FACET_SEGMENT_PATTERN.test(definition.name)) {
+    throw new Error(`facet name "${definition.name}" must match ${FACET_SEGMENT_PATTERN}`)
   }
   if (!VERSION_PATTERN.test(definition.version)) {
     throw new Error(`facet version "${definition.version}" must match ${VERSION_PATTERN}`)
@@ -217,8 +217,8 @@ function assertAssetShapes(plugin: FacetPlugin): void {
 }
 
 function validatePlugin(plugin: FacetPlugin): FacetPlugin {
-  if (!SEGMENT_PATTERN.test(plugin.id)) {
-    throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
+  if (!FACET_SEGMENT_PATTERN.test(plugin.id)) {
+    throw new Error(`plugin id "${plugin.id}" must match ${FACET_SEGMENT_PATTERN}`)
   }
   if (plugin.displayName.trim() === '') {
     throw new Error(`plugin "${plugin.id}" needs a non-blank displayName`)
@@ -235,8 +235,8 @@ function validatePlugin(plugin: FacetPlugin): FacetPlugin {
 }
 
 function assertAssetName(pluginId: string, name: string): void {
-  if (!SEGMENT_PATTERN.test(name)) {
-    throw new Error(`plugin "${pluginId}" asset name "${name}" must match ${SEGMENT_PATTERN}`)
+  if (!FACET_SEGMENT_PATTERN.test(name)) {
+    throw new Error(`plugin "${pluginId}" asset name "${name}" must match ${FACET_SEGMENT_PATTERN}`)
   }
 }
 
@@ -372,11 +372,15 @@ function summarizeIssues(error: z.ZodError): string {
 const versionNumber = (tag: string): number => Number(tag.slice(1))
 
 function parseKey(key: string): { namespace: string; name: string; version: string } | null {
-  const match = /^([a-z][a-z0-9-]*)\.([a-z][a-z0-9-]*)\/(v[0-9]+)$/.exec(key)
-  if (match === null) return null
-  const [, namespace, name, version] = match
-  if (namespace === undefined || name === undefined || version === undefined) return null
-  return { namespace, name, version }
+  if (!FACET_KEY_PATTERN.test(key)) return null
+  // Neither half may contain `.` or `/`, so the first of each is the seam.
+  const dot = key.indexOf('.')
+  const slash = key.indexOf('/')
+  return {
+    namespace: key.slice(0, dot),
+    name: key.slice(dot + 1, slash),
+    version: key.slice(slash + 1),
+  }
 }
 
 const UNSUPPORTED_FORM: FacetForm = { kind: 'unsupported' }

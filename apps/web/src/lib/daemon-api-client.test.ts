@@ -214,13 +214,14 @@ describe('createDocument', () => {
     expect(result).toEqual(created)
   })
 
-  it('refuses a body WIDER than the contract, which is what .strict() is for', async () => {
+  it('reads a body WIDER than the contract as the fields it knows, since a newer daemon may add one', async () => {
+    // The document WAS created: refusing the answer would report a failure
+    // for a success. The unknown field is dropped, never handed on.
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ ...created, secretToken: 'leaked' }, 201))
-    await expect(
-      createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas', 'spatial'),
-    ).rejects.toThrow(/validation/i)
+      .mockResolvedValue(jsonResponse({ ...created, addedByANewerDaemon: 'x' }, 201))
+    const result = await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas', 'spatial')
+    expect(result).toEqual(created)
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {

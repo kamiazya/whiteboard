@@ -32,6 +32,7 @@ const COMPOSITION_ROOTS = [
   'http-server.ts',
   'server-mode-http.ts',
   'shared-background-work.ts',
+  'mcp/index.ts',
 ] as const
 
 /**

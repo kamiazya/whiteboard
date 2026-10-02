@@ -1,5 +1,6 @@
 import { lstat, mkdir, readdir, realpath, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve, sep } from 'node:path'
+import { isMissingFileError } from '../errno.js'
 import { type SupportBundle, SupportBundleError } from './support-bundle.js'
 
 // Filesystem writer for the v0 support bundle. Lives apart from
@@ -37,7 +38,7 @@ async function lstatOrNullSync(path: string) {
   try {
     return await lstat(path)
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    if (isMissingFileError(err)) return null
     throw err
   }
 }

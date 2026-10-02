@@ -291,7 +291,7 @@ describe('publish contract', () => {
     expect(securityModelDoc).toContain('loopback')
     expect(securityModelDoc).toContain('Bearer')
     expect(wireProtocolDoc).toContain('# Wire Protocol')
-    expect(wireProtocolDoc).toContain('doc_update')
+    expect(wireProtocolDoc).toContain('/api/sync/stream')
     expect(wireProtocolDoc).toContain('version_created')
   })
 

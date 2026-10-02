@@ -1,86 +1,27 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
 import {
+  ARCHITECTURE_MAP,
+  allowedDependencies,
   exemptedBoundaryViolationKinds,
   KNOWN_IMPORT_CYCLES,
   KNOWN_TYPE_CYCLES,
 } from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
-import { checkDependencyDirection } from './direction-check.js'
+import { checkDependencyDirection, type PackageManifest } from './direction-check.js'
+import { COMPOSITION_ROOTS, listTsFiles, SHARED_LAYER_PACKAGES } from './scan-packages.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
+import {
+  type BoundaryViolationKind,
+  collectModuleSpecifiers,
+  scanSourceForBoundaryViolations,
+} from './scanner.js'
 import { findTypeOnlyCycles } from './type-cycle-check.js'
 
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
-const SHARED_LAYER_PACKAGES = [
-  'packages/daemon-client',
-  'packages/model',
-  'packages/codec',
-  'packages/canvas-render',
-  'packages/ports',
-  'packages/facet-engine',
-  'packages/loro-adapter',
-  'packages/search',
-  'packages/server-core',
-  'packages/workspace-index',
-  'packages/history',
-  // Browser-runtime UI package, not a "shared" model/codec/... layer package
-  // in the architecture-map.md sense, but scanned the same way — see its
-  // `exemptBoundaryViolationKinds` entry in architecture-map.ts for why DOM
-  // globals and one build-time `Buffer` use don't trip the scan.
-  'packages/canvas-viewer',
-  // React packages, scanned for the same reason and with the same caveat as
-  // canvas-viewer. The scan's `.ts`-only default is load-bearing here rather
-  // than incidental: it covers `plugin-visual`'s react-free DATA half
-  // (`data.ts`, `icons/`), which `canvas-render` imports and which therefore
-  // must not reach for `node:*`, while leaving each package's `.tsx` alone.
-  // Registering a package in `architecture-map.ts` does NOT scan it —
-  // verified by a `node:fs` import in `plugin-visual` passing a full
-  // arch-lint run before both of these were listed here.
-  'packages/facet-ui',
-  'packages/plugin-visual',
-]
-
-/**
- * Composition roots. Their SOURCE is deliberately unscanned — they are the
- * packages allowed `node:*`, DOM globals and inversify — and their
- * third-party surface is open by design, so they cannot join the list above.
- * Their dependency DIRECTION is still a rule, and it was the one thing
- * nothing checked: `apps/web` was absent from the map entirely, so a shared
- * package taking a dependency on it would have passed.
- */
-const COMPOSITION_ROOTS = ['apps/extension', 'apps/web', 'packages/mcp-server']
-
-// `extensions` defaults to `.ts` only, so the existing boundary/direction/
-// allowed-deps scans below keep collecting exactly what they always did; the
-// cycle scan further down opts into `.tsx` explicitly instead of widening
-// this default for everyone.
-function listTsFiles(dir: string, extensions: readonly string[] = ['.ts']): string[] {
-  const files: string[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      // test-utils are dev surface, not shipping modules — the same line the
-      // manifests already draw (ports keeps fast-check, daemon-client keeps
-      // loro-crdt in devDependencies for exactly these helpers). A contract
-      // suite legitimately mints real Loro bytes; holding it to the runtime
-      // boundary would ban the test for being a good test. `.test.ts` files
-      // are excluded below for the same reason.
-      if (entry.name === 'test-utils') continue
-      files.push(...listTsFiles(full, extensions))
-      continue
-    }
-    const ext = extensions.find((candidate) => entry.name.endsWith(candidate))
-    if (ext === undefined || entry.name.endsWith(`.test${ext}`)) continue
-    files.push(full)
-  }
-  return files
-}
-
 /**
  * Scope of the circular-value-import check: every scanned package's `src`,
  * both composition roots included. `apps/web/src` was excluded while a
@@ -115,17 +56,67 @@ const CYCLE_SCAN_DIRS = CYCLE_SCAN_PACKAGES.map((packageDir) => join(REPO_ROOT, 
 const CYCLE_SCAN_ALIASES = {} as const
 
 describe('composition-root dependency direction', () => {
+  const readManifest = (packageDir: string): PackageManifest =>
+    JSON.parse(readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'))
+  const workspaceDeclarations = (manifest: PackageManifest): string[] =>
+    [
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.devDependencies ?? {}),
+    ].filter((name) => name in ARCHITECTURE_MAP)
+
   for (const packageDir of COMPOSITION_ROOTS) {
-    it(`${packageDir}/package.json dependency direction is clean`, () => {
-      const manifest = JSON.parse(
-        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
+    // devDependencies count: mcp-server bundles every workspace package it
+    // uses (tsdown `noExternal`) and declares them all there, so a check over
+    // `dependencies` alone never saw a single one of its edges.
+    it(`${packageDir}/package.json dependency direction is clean, devDependencies included`, () => {
+      expect(
+        checkDependencyDirection(readManifest(packageDir), { includeDevDependencies: true }),
+      ).toHaveLength(0)
+    })
+
+    // The other half of the ledger: an allowance no manifest declares is a
+    // door left open for the next dependency to walk through unannounced.
+    it(`${packageDir} allows exactly the workspace packages its manifest declares`, () => {
+      const manifest = readManifest(packageDir)
+      const allowed = [...allowedDependencies(manifest.name)].sort()
+      expect(allowed.length, 'a composition root must be in ARCHITECTURE_MAP').toBeGreaterThan(0)
+      expect(workspaceDeclarations(manifest).sort()).toEqual(allowed)
+    })
+
+    it(`${packageDir} depends on no other composition root`, () => {
+      const manifest = readManifest(packageDir)
+      const otherRoots = COMPOSITION_ROOTS.filter((other) => other !== packageDir).map(
+        (other) => readManifest(other).name,
       )
-      expect(checkDependencyDirection(manifest)).toHaveLength(0)
+      const declared = new Set([
+        ...Object.keys(manifest.dependencies ?? {}),
+        ...Object.keys(manifest.devDependencies ?? {}),
+      ])
+      expect(otherRoots.filter((name) => declared.has(name))).toEqual([])
+      expect(
+        otherRoots.filter((name) => allowedDependencies(manifest.name).includes(name)),
+      ).toEqual([])
     })
   }
 })
 
+/** `file`'s path under `srcDir`, `/`-separated — the key `exemptBoundaryFiles` uses. */
+const inSrc = (srcDir: string, file: string): string => relative(srcDir, file).split(sep).join('/')
+
+const TSX_BANNED_KINDS: ReadonlySet<BoundaryViolationKind> = new Set([
+  'node-builtin-import',
+  'inversify-import',
+])
+
 describe('shared-layer boundary lint (real source coverage)', () => {
+  // A walk that finds no `.tsx` reports every package clean over nothing.
+  it('finds the .tsx files the import scan is meant to read', () => {
+    const tsxFiles = SHARED_LAYER_PACKAGES.flatMap((packageDir) =>
+      listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.tsx']),
+    )
+    expect(tsxFiles.length, 'the .tsx walk found almost nothing').toBeGreaterThanOrEqual(6)
+  })
+
   for (const packageDir of SHARED_LAYER_PACKAGES) {
     it(`${packageDir}/src has zero boundary violations`, () => {
       const manifest = JSON.parse(
@@ -135,15 +126,32 @@ describe('shared-layer boundary lint (real source coverage)', () => {
       // architecture-map.ts explicitly lists it for — never an implicit "it's
       // used here, so allow it" heuristic, so an unmapped package still fails
       // loudly.
-      const exemptKinds = exemptedBoundaryViolationKinds(manifest.name)
-
       const srcDir = join(REPO_ROOT, packageDir, 'src')
       const files = listTsFiles(srcDir)
       expect(files.length).toBeGreaterThan(0)
 
       for (const file of files) {
+        // A kind exempt for ONE file (`exemptBoundaryFiles`) is looked up per file.
+        const exemptKinds = exemptedBoundaryViolationKinds(manifest.name, inSrc(srcDir, file))
         const allViolations = scanSourceForBoundaryViolations(file, readFileSync(file, 'utf-8'))
         const violations = allViolations.filter((v) => !exemptKinds.has(v.kind))
+        expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
+      }
+    })
+
+    // `.tsx` is scanned for the two import kinds only: a component legitimately
+    // reaches for `window`/`document`, but a `node:*` or `inversify` import in
+    // one breaks the browser and the Worker exactly as it does in a `.ts`.
+    it(`${packageDir}/src .tsx files import no node builtin and no inversify`, () => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
+      )
+      const exemptKinds = exemptedBoundaryViolationKinds(manifest.name)
+      for (const file of listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.tsx'])) {
+        const violations = scanSourceForBoundaryViolations(
+          file,
+          readFileSync(file, 'utf-8'),
+        ).filter((v) => TSX_BANNED_KINDS.has(v.kind) && !exemptKinds.has(v.kind))
         expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
       }
     })

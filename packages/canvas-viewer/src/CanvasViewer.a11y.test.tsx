@@ -6,18 +6,17 @@
 // its children reachable, which is the honest interim until canvas-render
 // grows the a11y projection its README defers.
 
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
 
-const fakeMeasure: MeasureText = (text) => ({
-  advanceWidth: text.length * 8,
+const fakeMeasure = createFixedMeasure({
+  advance: (text) => text.length * 8,
   ascent: 12,
   descent: 4,
-  lineGap: 0,
 })
 
 afterEach(cleanup)

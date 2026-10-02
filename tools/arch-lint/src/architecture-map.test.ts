@@ -8,12 +8,26 @@ describe('exemptedBoundaryViolationKinds', () => {
     expect(kinds.has('dom-global')).toBe(false)
   })
 
-  it('exempts canvas-viewer from dom-global and node-ambient-global but not node-builtin-import', () => {
+  it('exempts canvas-viewer from dom-global package-wide but not node-ambient-global', () => {
     const kinds = exemptedBoundaryViolationKinds('@kamiazya/whiteboard-canvas-viewer')
     expect(kinds.has('dom-global')).toBe(true)
-    expect(kinds.has('node-ambient-global')).toBe(true)
+    expect(kinds.has('node-ambient-global')).toBe(false)
     expect(kinds.has('node-builtin-import')).toBe(false)
     expect(kinds.has('inversify-import')).toBe(false)
+  })
+
+  it('exempts node-ambient-global for canvas-viewer in the one build-time file only', () => {
+    const name = '@kamiazya/whiteboard-canvas-viewer'
+    expect(
+      exemptedBoundaryViolationKinds(name, 'widget/build-fonts-module.ts').has(
+        'node-ambient-global',
+      ),
+    ).toBe(true)
+    for (const other of ['mount.ts', 'widget-entry.ts', 'widget/canvas-point.ts']) {
+      expect(exemptedBoundaryViolationKinds(name, other).has('node-ambient-global'), other).toBe(
+        false,
+      )
+    }
   })
 
   it('returns an empty set for a package with no exemptions', () => {

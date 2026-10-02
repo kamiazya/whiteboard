@@ -4,6 +4,7 @@ import {
   daemonStopResultSchema,
 } from '../shared/api-contracts/daemon-stop.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
+import { terminateAndWait } from '../shared/terminate-and-wait.js'
 
 export interface DaemonStopOptions {
   dataDir: string
@@ -11,8 +12,20 @@ export interface DaemonStopOptions {
   killFn?: (pid: number, signal: string) => void
   sleep?: (ms: number) => Promise<void>
   stopTimeoutMs?: number
+  killWaitMs?: number
   removeRecord?: (dataDir: string) => Promise<void>
 }
+
+// SIGTERM's window and the poll inside it. Unlike `server stop`'s 10s, this
+// 5s has no recorded reason, and both closes can wait on the file sweeper for
+// FILE_GC_STOP_TIMEOUT_MS (5s), so it leaves no margin over that wait alone.
+// Kept as it was: what an operator waits is its own decision, not a rider on
+// extracting the sequence.
+const DEFAULT_STOP_TIMEOUT_MS = 5000
+const POLL_INTERVAL_MS = 100
+// After SIGKILL the process only has to be reaped; polling ends the wait the
+// moment it is gone.
+const DEFAULT_KILL_WAIT_MS = 200
 
 function defaultKill(pid: number, signal: string): void {
   process.kill(pid, signal as NodeJS.Signals)
@@ -28,7 +41,8 @@ export async function runDaemonStop(
   const isAlive = options.isPidAlive ?? defaultIsPidAlive
   const killFn = options.killFn ?? defaultKill
   const sleep = options.sleep ?? defaultSleep
-  const stopTimeoutMs = options.stopTimeoutMs ?? 5000
+  const stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS
+  const killWaitMs = options.killWaitMs ?? DEFAULT_KILL_WAIT_MS
   const removeRecord = options.removeRecord ?? deleteDaemonRecord
 
   const record = await loadDaemonRecord(options.dataDir)
@@ -62,9 +76,16 @@ export async function runDaemonStop(
     }
   }
 
-  try {
-    killFn(pid, 'SIGTERM')
-  } catch {
+  const stopped = await terminateAndWait({
+    pid,
+    isAlive,
+    kill: killFn,
+    sleep,
+    timeoutMs: stopTimeoutMs,
+    pollMs: POLL_INTERVAL_MS,
+    killWaitMs,
+  })
+  if (stopped.kind === 'signal-failed') {
     return {
       result: daemonStopResultSchema.parse({
         schemaVersion: 1,
@@ -75,22 +96,6 @@ export async function runDaemonStop(
       }),
       exitCode: 1,
     }
-  }
-
-  const deadline = Date.now() + stopTimeoutMs
-  const pollInterval = 100
-  while (Date.now() < deadline) {
-    await sleep(pollInterval)
-    if (!isAlive(pid)) break
-  }
-
-  if (isAlive(pid)) {
-    try {
-      killFn(pid, 'SIGKILL')
-    } catch {
-      // Process may have died between the check and kill
-    }
-    await sleep(200)
   }
 
   await removeRecord(options.dataDir)

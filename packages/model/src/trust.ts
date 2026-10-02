@@ -113,6 +113,10 @@ export type TrustTier = 'unverified' | 'machine-confirmed' | 'human-reviewed'
  * stale, so it records the signals and leaves the judgement to the reader
  * (§5.1). A `trustTier` field in the frontmatter would be exactly the
  * stored verdict the spec declines to have.
+ *
+ * No surface reads it yet; it is the format's own tier rule, kept here so the
+ * first one that shows a tier does not re-derive it (ADR-0039 leaves it
+ * unchanged beside the row-level derivation).
  */
 export function trustTier(trust: TrustFacets | undefined): TrustTier {
   const verified = trust?.verified

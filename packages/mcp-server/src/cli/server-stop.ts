@@ -2,9 +2,10 @@
 //
 // Sends SIGTERM to the pid in the server-mode record only when the
 // liveness gate passes. SIGTERM → wait → SIGKILL on timeout.
-// Stale / missing records are returned as not-running (exit 0) rather
-// than errors, matching the "desired-state idempotent" contract of
-// whiteboard daemon stop.
+// A missing record, or one describing a process that is gone, is answered
+// as not-running with exit 0: stopping what is already stopped is not an
+// error here. `whiteboard daemon stop` is the opposite — it exits 1 for
+// both a missing record and a dead process.
 //
 // Non-leak contract: paths, tokens, JWKS URIs and stack frames never
 // appear in the result or stderr. The pid field IS included because
@@ -24,7 +25,9 @@ import {
   type ServerStopResult,
   serverStopResultSchema,
 } from '../shared/api-contracts/server-stop.js'
+import { isErrnoCode } from '../shared/errno.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
+import { type TerminateOutcome, terminateAndWait } from '../shared/terminate-and-wait.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STOP_SCHEMA_VERSION = 1 as const
@@ -100,23 +103,6 @@ const defaultSleep = (ms: number): Promise<void> =>
 
 const defaultRemoveRecord = async (dataDir: string): Promise<void> => {
   await rm(getServerModeRecordPath(dataDir), { force: true })
-}
-
-async function waitForExit(
-  pid: number,
-  isPidAlive: (pid: number) => boolean,
-  sleep: (ms: number) => Promise<void>,
-  timeoutMs: number,
-  pollIntervalMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (!isPidAlive(pid)) return true
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) break
-    await sleep(Math.min(pollIntervalMs, remaining))
-  }
-  return !isPidAlive(pid)
 }
 
 /** The answer for a record that no longer describes a process we manage. */
@@ -205,65 +191,58 @@ async function stopRefusal(
 }
 
 /**
- * SIGTERM, and the two ways it can fail. `ESRCH` is not a failure at all —
- * the process exited in the window between the liveness check and the kill,
- * which is the outcome this command wanted. `null` means the signal landed.
- */
-async function sendStopSignal(
-  record: ServerModeRecord,
-  killFn: NonNullable<RunServerStopOptions['killFn']>,
-  removeRecord: NonNullable<RunServerStopOptions['removeRecord']>,
-  dataDir: string,
-): Promise<RunServerStopOutcome | null> {
-  try {
-    killFn(record.pid, 'SIGTERM')
-    return null
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException | undefined)?.code !== 'ESRCH') {
-      return outcome(1, {
-        action: 'refused',
-        reason: 'server-stop-signal-failed',
-        recordFound: true,
-        recordFresh: true,
-        pid: record.pid,
-      })
-    }
-  }
-  await forgetRecord(removeRecord, dataDir)
-  return notRunning('server-process-not-running', record.pid)
-}
-
-/**
- * SIGTERM timed out. Re-check identity before escalating: if the managed
- * server has already exited and its PID was reused, the polling loop would
- * have seen the NEW process as still alive, and SIGKILL would land on
- * something unrelated.
+ * What each way the stop can end means for the record and the operator.
  *
- * Both paths answer the same outcome, deliberately: our server is gone
- * either way, and the result has no field that could say which.
+ * `ESRCH` on SIGTERM is not a failure at all — the process exited in the
+ * window between the liveness check and the kill, which is the outcome this
+ * command wanted. A SIGKILL withheld because the pid no longer identifies the
+ * managed server answers the same as one that was sent, deliberately: our
+ * server is gone either way, and the result has no field that could say
+ * which.
  */
-async function escalateAfterTimeout(
+function stopOutcome(
+  stopped: TerminateOutcome,
   record: ServerModeRecord,
-  verifyIdentity: NonNullable<RunServerStopOptions['verifyIdentity']>,
-  killFn: NonNullable<RunServerStopOptions['killFn']>,
-  removeRecord: NonNullable<RunServerStopOptions['removeRecord']>,
-  dataDir: string,
-): Promise<RunServerStopOutcome> {
-  if (await verifyIdentity(record)) {
-    try {
-      killFn(record.pid, 'SIGKILL')
-    } catch {
-      /* already gone */
-    }
+): { outcome: RunServerStopOutcome; forget: boolean } {
+  switch (stopped.kind) {
+    case 'signal-failed':
+      if (isErrnoCode(stopped.error, 'ESRCH')) {
+        return { outcome: notRunning('server-process-not-running', record.pid), forget: true }
+      }
+      return {
+        outcome: outcome(1, {
+          action: 'refused',
+          reason: 'server-stop-signal-failed',
+          recordFound: true,
+          recordFresh: true,
+          pid: record.pid,
+        }),
+        forget: false,
+      }
+    case 'exited':
+      return {
+        outcome: outcome(0, {
+          action: 'stopped',
+          reason: null,
+          recordFound: true,
+          recordFresh: true,
+          pid: record.pid,
+        }),
+        forget: true,
+      }
+    case 'killed':
+    case 'kill-withheld':
+      return {
+        outcome: outcome(0, {
+          action: 'stopped',
+          reason: 'server-stop-timeout',
+          recordFound: true,
+          recordFresh: true,
+          pid: record.pid,
+        }),
+        forget: true,
+      }
   }
-  await forgetRecord(removeRecord, dataDir)
-  return outcome(0, {
-    action: 'stopped',
-    reason: 'server-stop-timeout',
-    recordFound: true,
-    recordFresh: true,
-    pid: record.pid,
-  })
 }
 
 export async function runServerStop(options: RunServerStopOptions): Promise<RunServerStopOutcome> {
@@ -280,20 +259,20 @@ export async function runServerStop(options: RunServerStopOptions): Promise<RunS
   if ('outcome' in refusal) return refusal.outcome
   const { record } = refusal
 
-  const signalFailure = await sendStopSignal(record, killFn, removeRecord, dataDir)
-  if (signalFailure !== null) return signalFailure
-
-  const exited = await waitForExit(record.pid, isPidAlive, sleep, stopTimeoutMs, pollIntervalMs)
-  if (!exited) {
-    return await escalateAfterTimeout(record, verifyIdentity, killFn, removeRecord, dataDir)
-  }
-
-  await forgetRecord(removeRecord, dataDir)
-  return outcome(0, {
-    action: 'stopped',
-    reason: null,
-    recordFound: true,
-    recordFresh: true,
+  // Before SIGKILL, re-identify: if the managed server has already exited and
+  // its PID was reused, the polling loop saw the NEW process as still alive,
+  // and SIGKILL would land on something unrelated.
+  const stopped = await terminateAndWait({
     pid: record.pid,
+    isAlive: isPidAlive,
+    kill: killFn,
+    sleep,
+    timeoutMs: stopTimeoutMs,
+    pollMs: pollIntervalMs,
+    killWaitMs: 0,
+    confirmKill: () => verifyIdentity(record),
   })
+  const { outcome: answer, forget } = stopOutcome(stopped, record)
+  if (forget) await forgetRecord(removeRecord, dataDir)
+  return answer
 }

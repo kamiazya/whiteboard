@@ -240,10 +240,6 @@ export function getLogLevel(): LogLevel {
   return root.level as LogLevel
 }
 
-export function isLogLevelEnabled(level: LogLevel): boolean {
-  return LEVEL_VALUES[level] >= LEVEL_VALUES[root.level as LogLevel]
-}
-
 // ── Destination management ────────────────────────────────────────────
 
 export interface LogDestinationOptions {

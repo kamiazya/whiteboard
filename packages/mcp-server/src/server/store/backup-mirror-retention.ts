@@ -16,17 +16,10 @@ import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getLogger } from '../log.js'
 import { BackupManifestUnusableError, readBackupBlobManifest } from './backup-blob-mirror.js'
+import { isBackupDirName } from './backup-dir-name.js'
 import { collectableFromBackup } from './backup-retention.js'
 
 const log = getLogger('backup-mirror-retention')
-
-/**
- * A directory the scheduler wrote. Same shape the scheduler's own retention
- * counts, and for the same reason: an operator's notes directory sitting in
- * the backup root is not a backup, and reading it as one that references
- * nothing would make this pass delete everything it protects.
- */
-const BACKUP_DIR_NAME = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/
 
 type Manifest = Awaited<ReturnType<typeof readBackupBlobManifest>>
 
@@ -71,7 +64,7 @@ export async function collectMirroredBlobs(backupRoot: string): Promise<number> 
     return 0
   }
 
-  const retained = entries.filter((name) => BACKUP_DIR_NAME.test(name))
+  const retained = entries.filter((name) => isBackupDirName(name))
   const manifests = await Promise.all(
     retained.map((name) =>
       // A manifest that is there but unusable says nothing about what its

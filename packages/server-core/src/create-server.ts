@@ -1,7 +1,4 @@
-import {
-  DocumentPathTakenError,
-  WorkspaceNotFoundError as PortWorkspaceNotFoundError,
-} from '@kamiazya/whiteboard-ports'
+import { DocumentPathTakenError, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
@@ -18,7 +15,7 @@ import { createCanvasSnapshotTool } from './tools/canvas-snapshot.js'
 import { createCanvasViewTool } from './tools/canvas-view.js'
 import {
   WorkspaceDocumentNotFoundError,
-  WorkspaceNotFoundError,
+  WorkspaceNotFoundForCallerError,
   WorkspaceSegmentUnusableError,
 } from './tools/document-crud.errors.js'
 import {
@@ -309,13 +306,11 @@ function mapDocumentError(c: Context, err: unknown) {
   if (err instanceof WorkspaceDocumentNotFoundError) {
     return c.json(errorBody('document_not_found', err.message), 404)
   }
-  if (err instanceof WorkspaceNotFoundError) {
-    return c.json(errorBody('workspace_not_found', err.message), 404)
-  }
-  // The index's own spelling of the same condition: tools that call
-  // `documentIndex.listDocuments` directly (backlinks, document-tags) let it
-  // escape untranslated, and a typo'd workspaceId must read as 404, not 500.
-  if (err instanceof PortWorkspaceNotFoundError) {
+  // The tool layer's own error carries advice for an MCP caller; the index's
+  // spelling of the same condition escapes untranslated from tools that call
+  // `documentIndex.listDocuments` directly (backlinks, document-tags), and a
+  // typo'd workspaceId must read as 404, not 500.
+  if (err instanceof WorkspaceNotFoundForCallerError || isWorkspaceNotFoundError(err)) {
     return c.json(errorBody('workspace_not_found', err.message), 404)
   }
   if (err instanceof DocumentPathTakenError) {

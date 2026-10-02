@@ -33,7 +33,7 @@ type ViewportSetOutput = z.infer<typeof viewportSetOutputSchema>
 /**
  * Points a watching browser at part of a canvas.
  *
- * The `viewport_request` WebSocket message this rides has existed since the
+ * The `viewport_request` text frame this rides has existed since the
  * daemon's HTTP viewport route was added; until now nothing exposed it to an
  * agent, while `routes/viewport.ts`'s own no-client hint told callers to
  * "run viewport_set" — a tool that did not exist.

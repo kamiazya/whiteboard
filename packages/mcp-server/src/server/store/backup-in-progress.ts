@@ -1,6 +1,7 @@
 import { readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { isMissingFileError } from '../../shared/errno.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
 
 /** Exported so `backupDataDir` can keep this command's own bookkeeping out
@@ -79,7 +80,7 @@ export async function backupIsInProgress(
   try {
     raw = await readFile(markerPath(dataDir), 'utf8')
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false
+    if (isMissingFileError(err)) return false
     return writtenWithinTtl(dataDir, nowMs)
   }
   const marker = markerSchema.safeParse(parseJson(raw))
@@ -105,7 +106,7 @@ async function writtenWithinTtl(dataDir: string, nowMs: number): Promise<boolean
   try {
     return (await stat(markerPath(dataDir))).mtimeMs + DEFAULT_TTL_MS > nowMs
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code !== 'ENOENT'
+    return !isMissingFileError(err)
   }
 }
 

@@ -15,7 +15,11 @@ const { startHttpServerMock, saveDaemonRecordMock, deleteDaemonRecordMock } = vi
 }))
 
 vi.mock('./http-server.js', () => ({ startHttpServer: startHttpServerMock }))
-vi.mock('../daemon/daemon-registry.js', () => ({
+// Partial on purpose: `app.ts` reaches the backup pass through the McpServer
+// factory's module, and `backup-restore.ts` reads `DAEMON_RECORD_FILENAME` at
+// load — a mock that omits it fails the whole file before any test runs.
+vi.mock('../daemon/daemon-registry.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../daemon/daemon-registry.js')>()),
   saveDaemonRecord: saveDaemonRecordMock,
   deleteDaemonRecord: deleteDaemonRecordMock,
 }))

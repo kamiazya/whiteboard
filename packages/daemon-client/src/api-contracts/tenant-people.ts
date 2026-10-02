@@ -35,7 +35,12 @@ export const deletionResponseSchema = z.object({
   deleted: z.literal(true),
 })
 
-/** Why an administrator's change was refused. A narrowing of `apiErrorBodySchema`. */
+/**
+ * Why an administrator's change was refused. A narrowing of
+ * `apiErrorBodySchema`'s code arm: every body this admits parses there too,
+ * `workspaceIds` included, which is what lets the daemon's fuzz lane and
+ * `apiErrorReason` read a `sole_owner` refusal like any other.
+ */
 export const tenantPeopleRefusalSchema = z.object({
   error: z.enum([
     'not_an_administrator',

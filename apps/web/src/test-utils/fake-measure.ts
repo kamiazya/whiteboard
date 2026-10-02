@@ -3,8 +3,10 @@ import type { FontDescriptor, TextMetrics } from '@kamiazya/whiteboard-canvas-re
 /**
  * Deterministic, ratio-based `MeasureText` for tests where geometry is not
  * the concern (that belongs to a `.browser.test.tsx` using a real Canvas 2D
- * context). Mirrors the fallback in `packages/canvas-viewer/src/measure-text.ts`
- * so tests exercise the same shape of `TextMetrics` contract.
+ * context). A test that wants canvas-render's own measurers imports them from
+ * `@kamiazya/whiteboard-canvas-render/test-utils`; this one differs from
+ * `createFakeMeasure` in its line gap (none) and in measuring a blank string
+ * as zero-sized, so moving its callers over means re-deriving their numbers.
  */
 export function fakeMeasure(text: string, font: FontDescriptor): TextMetrics {
   if (text === '') return { advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 }

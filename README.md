@@ -38,7 +38,7 @@ identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub
 You and your agent both reach the same whiteboard — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser through the whiteboard extension.
 
 <p align="center">
-  <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP controls the Browser Canvas via HTTP/WS." width="780" />
+  <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP syncs the Browser Canvas through the whiteboard extension." width="780" />
   <br />
   <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.canvas">architecture.canvas</a> to open it as a JSON Canvas document and remix.</i></sub>
 </p>
@@ -224,6 +224,7 @@ The agent returns the `wb_scene_render` result so the next turn can reason about
 
 - No MCP tool currently returns a raster (PNG) image or `ImageContent` — `wb_scene_render` is the closest equivalent for handing a rendered canvas back to an LLM.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
+- The published `stdio` entry opens the store in its own process: it takes the same automatic History checkpoints and compaction as the daemon, but it has no live path — nobody is told of an edit until they open or refresh the document, and `wb_viewport_set` answers `delivered: false`.
 
 See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.
 

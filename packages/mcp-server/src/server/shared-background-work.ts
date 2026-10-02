@@ -1,7 +1,10 @@
+import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import type { BackgroundWork, BackgroundWorker } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
+import { createAutoVersionTrigger } from './routes/document/auto-version.js'
 import { subscribedWorkspaceIds } from './routes/sync-audience.js'
+import { installAutoCheckpoint } from './store/auto-checkpoint.js'
 import {
   disposeAutoCompact,
   installAutoCompact,
@@ -175,11 +178,11 @@ export function createSharedWorkers(
 
 export interface SharedWorkerArming {
   /**
-   * Takes the pending checkpoints. Read at STOP time rather than captured,
-   * because the trigger is handed back by `createApp` after the workers are
-   * built.
+   * The checkpoint scheduler `createApp` built, which the router's own update
+   * path signals directly. Read at START and STOP time rather than captured,
+   * because it is handed back by `createApp` after the workers are built.
    */
-  flushCheckpoints: () => Promise<void>
+  checkpointScheduler: () => CheckpointScheduler | undefined
   /**
    * The sweeper as the root arms it — wrapped there, inside the registry
    * call, because its own `stop` takes a cap on how long shutdown waits for
@@ -190,7 +193,7 @@ export interface SharedWorkerArming {
   fileGc: BackgroundWorker
 }
 
-function autoCheckpointWork(flushCheckpoints: () => Promise<void>): BackgroundWork {
+function autoCheckpointWork(scheduler: () => CheckpointScheduler | undefined): BackgroundWork {
   return {
     name: 'auto-checkpoint',
     trigger: 'a document update, taken once that document has been quiet for five minutes',
@@ -199,16 +202,29 @@ function autoCheckpointWork(flushCheckpoints: () => Promise<void>): BackgroundWo
       because:
         'the debounce is about documents THIS process is holding edits for — another ' +
         'instance has neither the pending timer nor the LoroDoc the checkpoint would be ' +
-        'taken from, so a leader could not take it',
+        'taken from, so a leader could not take it. A stdio process is one instance by ' +
+        'construction.',
     },
     loop: LOOP_COSTS['auto-checkpoint'],
-    // Nothing to arm: the trigger schedules itself from the update that
-    // signalled it, which is why it is declared here for its STOP rather
-    // than its start. A trailing debounce loses exactly the checkpoint it
-    // exists to take if the process goes away without flushing — the one
-    // at the pause where editing stopped — so shutting down TAKES the
-    // pending checkpoints instead of dropping them.
-    worker: { start: () => {}, stop: flushCheckpoints },
+    // `start` makes the scheduler the one the agent write path signals
+    // (`documentWritten`), which has no router in its call chain; the update
+    // routes signal the same scheduler directly. After that the trigger
+    // schedules itself from the write that signalled it.
+    //
+    // `stop` takes the pending checkpoints: a trailing debounce loses exactly
+    // the checkpoint it exists to take, the one at the pause where editing
+    // stopped, if the process goes away without flushing. It does NOT
+    // uninstall — a write finishing after this point still arms a debounce
+    // that a root's final flush then takes.
+    worker: {
+      start: () => {
+        const current = scheduler()
+        if (current !== undefined) installAutoCheckpoint(current)
+      },
+      stop: async () => {
+        await scheduler()?.flush()
+      },
+    },
   }
 }
 
@@ -244,7 +260,7 @@ export function sharedBackgroundWork(
   arming: SharedWorkerArming,
 ): BackgroundWork[] {
   return [
-    autoCheckpointWork(arming.flushCheckpoints),
+    autoCheckpointWork(arming.checkpointScheduler),
     autoCompactWork(),
     {
       name: 'file-gc-sweeper',
@@ -284,4 +300,22 @@ export function sharedBackgroundWork(
       worker: workers.backupScheduler,
     },
   ]
+}
+
+/**
+ * What the stdio root runs: the published entry (`npx @kamiazya/whiteboard-mcp`).
+ *
+ * It mounts no router, so nothing else arms the automatic checkpoint, and
+ * `compactWorkspace` declines `no-versions` until a history row exists — a
+ * workspace only an agent edits through this entry would show no History and
+ * grow its op-log without bound. The scheduler is the daemon's own, over the
+ * same store, with no `onSaved`: no sync stream can be in this process.
+ *
+ * The compaction declaration is here for its stop: `documentWritten` already
+ * schedules folds under stdio, and what that left unanswered was waiting out
+ * a fold in flight before the process closes the database under it.
+ */
+export function stdioBackgroundWork(): BackgroundWork[] {
+  const scheduler = createAutoVersionTrigger(new FileVersionStore())
+  return [autoCheckpointWork(() => scheduler), autoCompactWork()]
 }

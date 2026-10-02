@@ -3,10 +3,6 @@
 // with stable sentinel strings so callers never forward raw credentials or local
 // filesystem layout to external destinations.
 
-export interface RedactionOptions {
-  keepPaths?: boolean
-}
-
 // Bearer <token> → Bearer [REDACTED]
 // The marker word "Bearer" is intentionally preserved so that downstream callers
 // (see `scrubAuthMarkers` below) can apply a second pass if even the keyword
@@ -17,12 +13,10 @@ const BEARER_TOKEN_RE = /Bearer\s+\S+/g
 // Matches paths like /opt/wb/server.ts or /Users/me/project.
 const UNIX_PATH_RE = /\/[A-Za-z_][A-Za-z0-9_\-/.]+/g
 
-export function redactDiagnosticText(text: string, options?: RedactionOptions): string {
-  let result = text.replace(BEARER_TOKEN_RE, 'Bearer [REDACTED]')
-  if (!options?.keepPaths) {
-    result = result.replace(UNIX_PATH_RE, '[REDACTED_PATH]')
-  }
-  return result
+// No switch to keep paths: every caller forwards text off the machine, and an
+// option on a redactor is a way for one of them to turn it off.
+export function redactDiagnosticText(text: string): string {
+  return text.replace(BEARER_TOKEN_RE, 'Bearer [REDACTED]').replace(UNIX_PATH_RE, '[REDACTED_PATH]')
 }
 
 // Drop the `Authorization` / `Bearer` marker keywords from text AFTER
@@ -42,16 +36,16 @@ export function scrubAuthMarkers(text: string): string {
     .replace(BARE_AUTH_HEADER_MARKER_RE, '[REDACTED_AUTH]')
 }
 
-export function redactDiagnosticValue(value: unknown, options?: RedactionOptions): unknown {
-  if (typeof value === 'string') return redactDiagnosticText(value, options)
+export function redactDiagnosticValue(value: unknown): unknown {
+  if (typeof value === 'string') return redactDiagnosticText(value)
   if (typeof value === 'bigint' || typeof value === 'function' || typeof value === 'symbol') {
     return '[REDACTED_NON_SERIALIZABLE]'
   }
-  if (Array.isArray(value)) return value.map((v) => redactDiagnosticValue(v, options))
+  if (Array.isArray(value)) return value.map((v) => redactDiagnosticValue(v))
   if (value !== null && typeof value === 'object') {
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = redactDiagnosticValue(v, options)
+      out[k] = redactDiagnosticValue(v)
     }
     return out
   }

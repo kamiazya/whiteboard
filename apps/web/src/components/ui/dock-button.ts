@@ -76,6 +76,3 @@ export const TOGGLE_STATE_CLASS =
 
 /** A square dock control (icon only). */
 export const DOCK_BUTTON_CLASS = `${DOCK_BUTTON_BASE_CLASS} ${DOCK_BUTTON_HEIGHT_CLASS} ${DOCK_BUTTON_WIDTH_CLASS}`
-
-/** A dock control whose content sets its width (the zoom readout). */
-export const DOCK_WIDE_BUTTON_CLASS = `${DOCK_BUTTON_BASE_CLASS} ${DOCK_BUTTON_HEIGHT_CLASS} min-w-12 px-1.5`

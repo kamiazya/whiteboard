@@ -16,9 +16,12 @@ import { FileVersionStore } from './version-store.js'
  * It exists because that listener was the ONLY trigger. The agent write
  * path (`wb_canvas_edit` -> `saveDocumentBodySnapshot` ->
  * `saveDocumentSnapshot`) reached the store directly and fired nothing, so
- * a canvas only an agent ever touched grew its op-log without bound. Worse
- * in stdio MCP: the save subscription is armed by the HTTP roots' background
- * work, which stdio never runs, so there was no emitter AND no subscriber.
+ * a canvas only an agent ever touched grew its op-log without bound. The
+ * seam is called from the write itself, so it works in every root — stdio
+ * included, which mounts no router and runs no HTTP save subscription. What a
+ * root has to do is install the checkpoint scheduler this signals (the
+ * `auto-checkpoint` declaration); until it does, only the compaction half
+ * has an effect.
  *
  * Compaction needs only the workspace: it folds the WORKSPACE record, which
  * every document shares. The checkpoint is per document, so the path and doc

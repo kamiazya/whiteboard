@@ -267,7 +267,6 @@ describe('headless-renderer', () => {
       // `measure-text.ts` has now broken this file twice. The empty/`null`
       // answers are the documented "no parsed face" case, which keeps these
       // tests about the singleton rather than about fonts.
-      loadExportFont: vi.fn().mockResolvedValue(null),
       loadExportFonts: vi.fn().mockResolvedValue([]),
     }))
     try {
@@ -302,7 +301,6 @@ describe('headless-renderer', () => {
       // `measure-text.ts` has now broken this file twice. The empty/`null`
       // answers are the documented "no parsed face" case, which keeps these
       // tests about the singleton rather than about fonts.
-      loadExportFont: vi.fn().mockResolvedValue(null),
       loadExportFonts: vi.fn().mockResolvedValue([]),
     }))
     const { renderSpatialCanvasToSvg } = await importRenderer()
@@ -323,7 +321,6 @@ describe('headless-renderer', () => {
       // `measure-text.ts` has now broken this file twice. The empty/`null`
       // answers are the documented "no parsed face" case, which keeps these
       // tests about the singleton rather than about fonts.
-      loadExportFont: vi.fn().mockResolvedValue(null),
       loadExportFonts: vi.fn().mockResolvedValue([]),
     }))
     // `captureLogsForTests` must come from the SAME fresh module instance

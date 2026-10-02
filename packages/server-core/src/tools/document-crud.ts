@@ -1,16 +1,13 @@
 import { hasOkfFrontmatter, parseOkf } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
-import {
-  isWorkspaceSegmentTakenError,
-  WorkspaceNotFoundError as PortWorkspaceNotFoundError,
-} from '@kamiazya/whiteboard-ports'
+import { isWorkspaceSegmentTakenError, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import {
   WorkspaceDocumentNotFoundError,
-  WorkspaceNotFoundError,
+  WorkspaceNotFoundForCallerError,
   type WorkspaceNotFoundIntent,
   WorkspaceSegmentUnusableError,
 } from './document-crud.errors.js'
@@ -30,9 +27,9 @@ import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
  * The index refuses an unknown workspace in its own words; the tool surface
- * has said `WorkspaceNotFoundError` with its own advice since before the
- * index existed, and a caller reading the tool's error should not have to
- * learn a second name for the same condition.
+ * answers with `WorkspaceNotFoundForCallerError`, whose advice depends on the
+ * call the caller was making, so a caller reading the tool's error is not
+ * left with a bare id and no next step.
  */
 async function rethrowWorkspaceNotFound<T>(
   workspaceId: string,
@@ -42,8 +39,8 @@ async function rethrowWorkspaceNotFound<T>(
   try {
     return await body()
   } catch (err) {
-    if (err instanceof PortWorkspaceNotFoundError) {
-      throw new WorkspaceNotFoundError(workspaceId, intent)
+    if (err instanceof WorkspaceNotFoundError) {
+      throw new WorkspaceNotFoundForCallerError(workspaceId, intent)
     }
     throw err
   }

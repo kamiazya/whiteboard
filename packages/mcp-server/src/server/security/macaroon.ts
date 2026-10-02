@@ -182,6 +182,11 @@ export function parseMacaroon(token: string): Macaroon | null {
   }
 }
 
+/**
+ * Nothing in production issues a macaroon: the act plane stops at enforcement
+ * (ADR-0043), so this and `attenuateMacaroon` are the tested core that a real
+ * holder will reach for, exercised by every verification test.
+ */
 export async function mintMacaroon(options: {
   rootKey: Uint8Array
   tokenId: string

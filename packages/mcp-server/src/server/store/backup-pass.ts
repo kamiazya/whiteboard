@@ -1,6 +1,7 @@
 import { lstat, readdir, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
+import { errnoCode, isMissingFileError } from '../../shared/errno.js'
 import { hasAncestorSymlink } from '../backup-restore.js'
 import { getLogger } from '../log.js'
 import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
@@ -16,7 +17,7 @@ const log = getLogger('backup-pass')
 /**
  * What an unfinished backup is called.
  *
- * Deliberately not a name `BACKUP_DIR_NAME` matches, so retention and the
+ * Deliberately not a name `isBackupDirName` accepts, so retention and the
  * mirror's collector both pass over it — a fragment must not be counted as a
  * backup by anything.
  */
@@ -166,7 +167,7 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
       return { kind: 'invalid-output-path' }
     }
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+    if (!isMissingFileError(err)) {
       return { kind: 'error', message: 'backup failed' }
     }
     // Missing output dir: helper creates it via cp().
@@ -313,7 +314,7 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
       // packaged smoke asserts stderr carries none.
       (err) =>
         log.error(
-          { code: (err as NodeJS.ErrnoException).code ?? 'unknown' },
+          { code: errnoCode(err) ?? 'unknown' },
           'could not put the finished backup in place',
         ),
     )

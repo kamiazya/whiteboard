@@ -8,6 +8,7 @@ import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
 import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
 import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
+import { isMissingFileError } from '../shared/errno.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import type { serverRestoreOutputSchema } from './operator-json.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
@@ -57,7 +58,7 @@ export async function runServerRestore(
     }
     // Existing directory: let helper enforce the non-empty check.
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+    if (!isMissingFileError(err)) {
       return { kind: 'error', message: 'restore failed' }
     }
     // Missing target: helper creates it via cp().

@@ -3,7 +3,7 @@
 // or a real mount produces a non-empty rendered <svg>. This is the nearest
 // real-browser layer for both claims.
 
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { render } from '@testing-library/react'
@@ -32,11 +32,10 @@ const goldenCanvas: SpatialCanvas = {
 // so the two produce byte-identical SVG (canvas-render already guarantees
 // that for a fixed Scene — this pins the viewer's own scene-building stage
 // adds no additional platform dependence).
-const fakeMeasure: MeasureText = (text) => ({
-  advanceWidth: text.length * 8,
+const fakeMeasure = createFixedMeasure({
+  advance: (text) => text.length * 8,
   ascent: 12,
   descent: 4,
-  lineGap: 0,
 })
 
 describe('CanvasViewer (real browser)', () => {

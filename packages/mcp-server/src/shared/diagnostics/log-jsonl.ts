@@ -1,10 +1,6 @@
 import { z } from 'zod'
-import {
-  type RedactionOptions,
-  redactDiagnosticText,
-  redactDiagnosticValue,
-  scrubAuthMarkers,
-} from './redact.js'
+import { isIsoDatetime } from './iso-datetime.js'
+import { redactDiagnosticText, redactDiagnosticValue, scrubAuthMarkers } from './redact.js'
 
 // Stable JSONL surface for daemon / CLI / runtime logs. The shape is
 // the contract that future `whiteboard daemon logs --json` and any
@@ -121,18 +117,10 @@ export class InvalidLogTimestampError extends Error {
 }
 
 const EPOCH_ISO = new Date(0).toISOString()
-// Lightweight ISO 8601 check that matches the same shape Zod's
-// `.datetime({ offset: true })` accepts (millisecond precision is
-// optional; offset can be `Z` or `±HH:MM`). Keeping the regex local
-// avoids a round-trip through Zod for every emitted entry.
-const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
 
 function normalizeTimestamp(input: string | undefined): string {
   if (input === undefined) return EPOCH_ISO
-  if (!ISO_DATETIME_RE.test(input)) throw new InvalidLogTimestampError()
-  // Belt-and-suspenders: reject "2026-13-40T..." style values that
-  // pass the regex but produce NaN through Date.parse.
-  if (Number.isNaN(Date.parse(input))) throw new InvalidLogTimestampError()
+  if (!isIsoDatetime(input)) throw new InvalidLogTimestampError()
   return input
 }
 
@@ -149,58 +137,46 @@ function scrubValue(value: unknown): unknown {
   return value
 }
 
-function pickAllowedFields(
-  input: Record<string, unknown> | undefined,
-  options?: RedactionOptions,
-): Record<string, unknown> {
+function pickAllowedFields(input: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!input) return {}
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input)) {
     if (DOCUMENT_PLAINTEXT_DENYLIST.has(key)) continue
     if (!OPERATIONAL_FIELD_ALLOWLIST.has(key)) continue
-    out[key] = scrubValue(redactDiagnosticValue(value, options))
+    out[key] = scrubValue(redactDiagnosticValue(value))
   }
   return out
 }
 
 // Produce a redacted, schema-shaped entry. The output is safe to
 // JSON.stringify and matches `daemonLogEntrySchema`.
-export function redactDaemonLogEntry(
-  input: DaemonLogEntryInput,
-  options?: RedactionOptions,
-): DaemonLogEntry {
+export function redactDaemonLogEntry(input: DaemonLogEntryInput): DaemonLogEntry {
   return {
     schemaVersion: 1,
     timestamp: normalizeTimestamp(input.timestamp),
     level: input.level,
     source: input.source,
-    message: scrubAuthMarkers(redactDiagnosticText(input.message, options)),
-    fields: pickAllowedFields(input.fields, options),
+    message: scrubAuthMarkers(redactDiagnosticText(input.message)),
+    fields: pickAllowedFields(input.fields),
   }
 }
 
 // Format one redacted entry as a single newline-terminated JSON line.
 // `\n` belongs to the line itself so concatenating lines yields a
 // well-formed JSONL stream without extra glue.
-export function formatDaemonLogEntryAsJsonLine(
-  input: DaemonLogEntryInput,
-  options?: RedactionOptions,
-): string {
-  const redacted = redactDaemonLogEntry(input, options)
+export function formatDaemonLogEntryAsJsonLine(input: DaemonLogEntryInput): string {
+  const redacted = redactDaemonLogEntry(input)
   return `${JSON.stringify(redacted)}\n`
 }
 
 // Format N entries as a concatenated JSONL stream. Empty input
 // produces empty output (no spurious newline). Non-empty input
 // always ends with a trailing newline.
-export function formatDaemonLogEntriesAsJsonLines(
-  inputs: readonly DaemonLogEntryInput[],
-  options?: RedactionOptions,
-): string {
+export function formatDaemonLogEntriesAsJsonLines(inputs: readonly DaemonLogEntryInput[]): string {
   if (inputs.length === 0) return ''
   let out = ''
   for (const entry of inputs) {
-    out += formatDaemonLogEntryAsJsonLine(entry, options)
+    out += formatDaemonLogEntryAsJsonLine(entry)
   }
   return out
 }

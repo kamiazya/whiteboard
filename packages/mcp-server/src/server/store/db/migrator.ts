@@ -1,4 +1,5 @@
 import { type MigrationProvider, Migrator } from 'kysely/migration'
+import { isErrnoCode } from '../../../shared/errno.js'
 import { IncompatibleDatabaseError } from './incompatible-database.js'
 import { migrations } from './migrations/index.js'
 import type { Database } from './schema.js'
@@ -47,7 +48,7 @@ export async function runMigrations(db: Database): Promise<void> {
     // error unrelated to the database itself. Point at the fix instead of
     // surfacing the raw "EACCES ... scandir '<path>'" errno message, which
     // names an implementation detail no user can act on directly.
-    if ((error as NodeJS.ErrnoException | undefined)?.code === 'EACCES') {
+    if (isErrnoCode(error, 'EACCES')) {
       throw new Error(
         `Database migration failed${failed ? ` at ${failed}` : ''}: permission denied reading ` +
           'the data directory. Check filesystem permissions on the blob directories under ' +

@@ -37,6 +37,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { errnoCode } from '../../shared/errno.js'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, readFontFamilyName, resolveExportFontFaces } from './export-font.js'
@@ -382,7 +383,7 @@ export async function prewarmHeadlessExporter(): Promise<void> {
   try {
     await getHeadlessExporter()
   } catch (err) {
-    const code = err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined
+    const code = err instanceof Error ? errnoCode(err) : undefined
     const name = err instanceof Error ? err.name : 'unknown'
     log.warning({ reason: code ? `${name}(${code})` : name }, 'pre-warm failed')
   }

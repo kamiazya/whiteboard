@@ -35,9 +35,21 @@ static-analysis-only, which is why it cannot see a cross-package cycle at all.
 
 It runs over the `src` of every entry in `repo-coverage.test.ts`'s
 `CYCLE_SCAN_PACKAGES` — every package the `SHARED_LAYER_PACKAGES` list names,
-plus both composition roots — over `.ts` and `.tsx` alike, which the boundary
-scans beside it do not. Test files and `test-utils/` are out, the same line
-those scans draw.
+plus both composition roots — over `.ts` and `.tsx` alike. Test files and
+`test-utils/` are out, the same line the boundary scans draw.
+
+**Which packages those scans run on is `scan-packages.ts`'s
+`SHARED_LAYER_PACKAGES`, and nothing used to say it was complete**: `scene` and `reference-graph` were in
+`ARCHITECTURE_MAP` and rule 1 for months while no per-package scan ran on
+either (a `node:fs` import in `reference-graph` passed).
+`workspace-scan-coverage.test.ts` (`every workspace is in a per-package scan
+list`) now fails on any `packages/*` or `apps/*` manifest in
+neither that list nor `COMPOSITION_ROOTS`, unless `NOT_BOUNDARY_SCANNED` gives
+it a reason (empty today, guarded from both sides). The boundary scan also reads
+`.tsx`, for the `node-builtin-import` and `inversify-import` kinds only — a
+component may touch the DOM, but not `node:*`. Scanning `.tsx` for every kind
+would be clean today too (measured: only `dom-global` hits, all exempt), so
+`.ts`-only was never what protected `plugin-visual`'s react-free data half.
 
 **It follows path aliases, and had to before `apps/web` could join**: that
 package wrote 115 of its 554 intra-package value edges as `@/...`, a fifth of
@@ -93,13 +105,57 @@ needed a hand guard for a type-only import a manifest cannot see, and
 `plugin-visual/src/renderer-independence.test.ts` now pins that there is no
 import of the renderer of ANY kind.
 
+## An exemption is per FILE when only one file needs it
+
+`exemptBoundaryViolationKinds` exempts a kind for a whole package, which is
+right for `dom-global` in a UI package and wrong for a use that lives in one
+build-time module. `canvas-viewer` carried `node-ambient-global` package-wide
+for a single `Buffer` in `widget/build-fonts-module.ts`, while the rule said
+one file: `process.env.X` or `__dirname` in `mount.ts` or `widget-entry.ts` —
+which ship into the browser and the widget iframe — passed (measured, both).
+`exemptBoundaryFiles` keys the exemption by path under `src/`, and `per-file
+boundary exemptions` fails an entry whose file is gone or no longer contains
+that kind. It is file-granular, not line-granular: a second `process` use in
+the exempt file passes, which is the cost of not scanning for the line.
+
+## `port-conformance-ledger.test.ts`: every store implementer runs its suite
+
+The three `describe*Conformance` suites make the browser's and the daemon's
+stores readings of one contract, and nothing tied `implements DocumentStore |
+DocumentIndex | BlobStore` to a call of the matching one — two of the twelve
+production implementers were added after the suites, each by someone
+remembering. The population is derived from the AST (every `implements` under
+`packages/*/src` and `apps/*/src`, tests included) and each member is ledgered
+to the test file that calls its suite AND constructs it with `new`. Both sides
+fail; `FakeDocumentStore`, a test double, is exempted with its reason. Blind
+spot: only `implements` clauses are read, so an object literal typed as a port
+is not a member.
+
+## The always-on table is parsed, not trusted
+
+`architecture-map.md`'s table is a second hand-kept copy of `ARCHITECTURE_MAP`,
+and they had drifted in six rows: loro-adapter listed `ports` the map says it
+deliberately lacks, plugin-visual a `lucide-react` the map records as gone, and
+three rows spelled a package by a name nothing resolves (`render`, `crdt`).
+`architecture-map.md table agrees with ARCHITECTURE_MAP` reads the "Checked
+dependencies" column: one row per mapped package, the workspace names in each
+cell equal to `allowedInternalDeps` (both directions), and every other token a
+recorded `allowedThirdParty` entry (`remark` stands for the `remark-*` family).
+Third-party names are checked one way only, since a cell is a summary of that
+list; a token containing a space is prose and skipped.
+
 ## What the composition roots do and do not get
 
-`mcp-server` and `apps/web` are registered for the dependency-direction guard,
-and both have their `src` in the cycle scan. What stays unscanned for them is
-the BOUNDARY scan (banned imports/globals) — they are the packages allowed
+`mcp-server`, `apps/web` and `apps/extension` are registered for the
+dependency-direction guard — over `devDependencies` too, which a shared package's
+check ignores. `mcp-server` declares all twelve workspace packages it uses there
+(tsdown's `noExternal` inlines them), so a `dependencies`-only read passed
+`@kamiazya/whiteboard-web` added to it: measured. Each root's allowed set must
+equal what its manifest declares (an unused allowance fails) and no root may
+depend on another. `mcp-server` and `apps/web` also have their `src` in the
+cycle scan. What stays unscanned for any of them is the BOUNDARY scan (banned imports/globals) — they are the packages allowed
 `node:*`, DOM and inversify — and their third-party surface is open by design,
-so neither carries an allowed-third-party list.
+so none carries an allowed-third-party list.
 
 `apps/web`'s own source is policed by a separate enforcer BESIDE this tool's
 scans: `web-app-boundary.test.ts` fails the build when it imports a Node

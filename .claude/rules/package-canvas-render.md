@@ -1251,7 +1251,7 @@ editor half is the one that stands.)
   the golden only as a deliberate serializer-format change, reviewed as
   such.
 - `src/test-utils/fake-measure.ts` is the shared deterministic measurer for
-  layout tests — never a real font/platform text API.
+  layout tests (`./test-utils`) — never a real font/platform text API.
 - `layout/spatial-canvas.test.ts`: the union of both former per-consumer
   suites (chrome shape, content placement, degenerate inputs, degradation
   reporting via `onDegrade`, document-order emission, appearance-independent

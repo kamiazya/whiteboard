@@ -35,12 +35,30 @@ describe('checkDependencyDirection', () => {
     ])
   })
 
-  it('ignores devDependencies entirely (only "dependencies" is inspected)', () => {
+  it('ignores a reversing devDependency by default', () => {
     const violations = checkDependencyDirection({
       name: '@kamiazya/whiteboard-model',
       dependencies: {},
+      devDependencies: { '@kamiazya/whiteboard-codec': 'workspace:*' },
     })
     expect(violations).toHaveLength(0)
+  })
+
+  it('fails a reversing devDependency when includeDevDependencies is set', () => {
+    const violations = checkDependencyDirection(
+      {
+        name: '@kamiazya/whiteboard-mcp',
+        dependencies: {},
+        devDependencies: {
+          '@kamiazya/whiteboard-server-core': 'workspace:*',
+          '@kamiazya/whiteboard-web': 'workspace:*',
+        },
+      },
+      { includeDevDependencies: true },
+    )
+    expect(violations).toEqual([
+      { packageName: '@kamiazya/whiteboard-mcp', dependencyName: '@kamiazya/whiteboard-web' },
+    ])
   })
 
   it('fails a shared-layer package depending on the mcp-server composition root', () => {

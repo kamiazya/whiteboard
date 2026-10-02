@@ -5,22 +5,14 @@
 // this stays a fast unit test with no real opentype.js font load — the
 // mutation-check target for this slice.
 
-import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { Scene } from '@kamiazya/whiteboard-canvas-render'
 import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { buildSpatialScene } from './headless-renderer.js'
-
-function fakeMeasure(): MeasureText {
-  return (text, font) => ({
-    advanceWidth: text.length * 0.6 * font.sizePx,
-    ascent: font.sizePx * 0.8,
-    descent: font.sizePx * 0.2,
-    lineGap: font.sizePx * 0.1,
-  })
-}
 
 function fixture(): SpatialCanvas {
   return {
@@ -45,7 +37,7 @@ function geometryOf(scene: Scene): unknown {
 
 describe('mcp-server export geometry conformance', () => {
   it('produces the same geometry as layoutSpatialCanvas with no geometry override', () => {
-    const measure = fakeMeasure()
+    const measure = createFakeMeasure(0.6)
     const canvas = fixture()
 
     const exportScene = buildSpatialScene(canvas, measure)

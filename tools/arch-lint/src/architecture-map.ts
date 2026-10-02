@@ -6,22 +6,38 @@ import type { BoundaryViolationKind } from './scanner.js'
  * third-party (non-workspace) dependencies. `allowedInternalDeps` feeds
  * `direction-check.ts` (internal-package direction); `allowedThirdParty`
  * feeds `allowed-deps-check.ts` (everything else a `dependencies` entry
- * could name). `devDependencies` are exempt from both — tooling, not
- * runtime coupling — per the same doc.
+ * could name). `devDependencies` are exempt from both for a shared-layer
+ * package — tooling, not runtime coupling — but a composition root that
+ * bundles its workspace packages is direction-checked over them too.
  *
  * `exemptBoundaryViolationKinds` opts a package OUT of specific
  * `scanner.ts` violation kinds it legitimately needs — e.g. canvas-viewer
- * is a browser-runtime UI package (DOM globals are its whole job) with one
- * embedded Node-side build-time module (`widget/build-fonts-module.ts`
- * uses `Buffer` to base64-encode font bytes at build time), so it is
- * exempted from `dom-global`/`node-ambient-global` while still banned from
- * `node-builtin-import`/`inversify-import` like every other shared-layer
- * package.
+ * is a browser-runtime UI package (DOM globals are its whole job), so it is
+ * exempted from `dom-global` while still banned from `node-builtin-import`/
+ * `inversify-import` like every other shared-layer package.
+ * `exemptBoundaryFiles` does the same for one file: canvas-viewer's one
+ * embedded Node-side build-time module (`widget/build-fonts-module.ts` uses
+ * `Buffer` to base64-encode font bytes at build time) is the only place
+ * `node-ambient-global` is allowed, because the rest of the package ships
+ * into the browser and the widget iframe, where `process` does not exist.
  */
+export interface BoundaryFileExemption {
+  readonly kinds: readonly BoundaryViolationKind[]
+  readonly reason: string
+}
+
 export interface PackageArchEntry {
   readonly allowedInternalDeps: readonly string[]
   readonly allowedThirdParty: readonly string[]
   readonly exemptBoundaryViolationKinds?: readonly BoundaryViolationKind[]
+  /**
+   * Violation kinds exempt in ONE file, keyed by its path relative to the
+   * package's `src/`. For a use that is legitimate in a single build-time
+   * module and a defect anywhere else the package ships, where a package-wide
+   * kind would silently exempt every other file. `repo-coverage.test.ts` fails
+   * an entry whose file is gone or no longer contains that kind of use.
+   */
+  readonly exemptBoundaryFiles?: Readonly<Record<string, BoundaryFileExemption>>
 }
 
 export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
@@ -242,7 +258,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-render',
     ],
     allowedThirdParty: ['@modelcontextprotocol/ext-apps', 'react', 'react-dom', 'zod'],
-    exemptBoundaryViolationKinds: ['dom-global', 'node-ambient-global'],
+    exemptBoundaryViolationKinds: ['dom-global'],
+    exemptBoundaryFiles: {
+      'widget/build-fonts-module.ts': {
+        kinds: ['node-ambient-global'],
+        reason:
+          'runs at build time in Node to base64-encode font bytes (`Buffer`); the module it ' +
+          'generates is what ships, never this file',
+      },
+    },
   },
   // The daemon's browser-safe client half (extracted from mcp-server's
   // src/shared, where it was held browser-safe only by a convention scan):
@@ -270,17 +294,34 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     exemptBoundaryViolationKinds: ['dom-global'],
   },
   // Composition root (Node CLI/daemon), never a runtime dependency of any
-  // shared-layer package. Registered here with an empty allowedInternalDeps
-  // so direction-check.ts flags the reverse import if a shared package ever
-  // adds it as a dependency; its own source is NOT scanned by
-  // repo-coverage.test.ts (it is allowed node:*/inversify — see
-  // architecture-map.md rule 2).
+  // shared-layer package. Registered here so direction-check.ts flags the
+  // reverse import if a shared package ever adds it as a dependency; its own
+  // source is NOT scanned by repo-coverage.test.ts (it is allowed
+  // node:*/inversify — see architecture-map.md rule 2).
+  //
+  // The set is every workspace package its manifest declares, which is all
+  // under `devDependencies`: tsdown's `noExternal` inlines them into the
+  // published dist, so they are runtime couplings that merely are not
+  // installed by a consumer. `repo-coverage.test.ts` therefore direction-
+  // checks a composition root's devDependencies too, and holds this list equal
+  // to what the manifest declares. Composition roots under `apps/` are
+  // deliberately absent: a root depending on the other is what this entry
+  // exists to flag.
   '@kamiazya/whiteboard-mcp': {
-    // daemon-client: the browser-safe client half extracted from this
-    // package's own src/shared. The re-export shims and the published client
-    // subpaths are retired; the server imports the package directly and tsup
-    // noExternal inlines it into the published dist.
-    allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-canvas-render',
+      '@kamiazya/whiteboard-canvas-viewer',
+      '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-daemon-client',
+      '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-history',
+      '@kamiazya/whiteboard-loro-adapter',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-plugin-visual',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-server-core',
+      '@kamiazya/whiteboard-workspace-index',
+    ],
     allowedThirdParty: [],
   },
   // The browser extension (ADR-0050): a composition root for the extension
@@ -422,7 +463,6 @@ export const KNOWN_PACKAGE_CYCLES: readonly {
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
-  'routes/document.ts -> auto-checkpoint',
   'routes/document.ts -> version-store',
   'routes/document/auto-version.ts -> version-store',
   'routes/document/maintenance.ts -> document-store',
@@ -497,9 +537,12 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * when `routes/workspace-people.ts` stopped holding the workspace-level
  * decisions (`isUser` before an add, the role and removal refusals) and the
  * member store they act on: they are `security/people-administration`'s now,
- * and the operator's `grant-member` runs the same ones.
+ * and the operator's `grant-member` runs the same ones. And 20 -> 19, when
+ * `routes/document.ts -> auto-checkpoint` went: the root installs the
+ * checkpoint scheduler through its background-work declaration instead of
+ * the router doing it as a side effect of being built.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 20
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 19
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
@@ -556,17 +599,23 @@ export function packagesAllowedToImportLoroCrdt(): readonly string[] {
 /**
  * Every `BoundaryViolationKind` a package's own source is exempt from,
  * combining the automatic loro-crdt exemption above with each package's
- * explicit `exemptBoundaryViolationKinds`. `repo-coverage.test.ts` filters
+ * explicit `exemptBoundaryViolationKinds`, and — when `fileInSrc` (the path
+ * relative to the package's `src/`, `/`-separated) is given — that file's
+ * `exemptBoundaryFiles` entry. `repo-coverage.test.ts` filters
  * `scanSourceForBoundaryViolations` output through this before asserting
  * zero violations.
  */
 export function exemptedBoundaryViolationKinds(
   packageName: string,
+  fileInSrc?: string,
 ): ReadonlySet<BoundaryViolationKind> {
   const entry = ARCHITECTURE_MAP[packageName]
   const kinds = new Set<BoundaryViolationKind>(entry?.exemptBoundaryViolationKinds ?? [])
   if (entry?.allowedThirdParty.includes('loro-crdt')) {
     kinds.add('loro-crdt-import')
+  }
+  if (fileInSrc !== undefined) {
+    for (const kind of entry?.exemptBoundaryFiles?.[fileInSrc]?.kinds ?? []) kinds.add(kind)
   }
   return kinds
 }
