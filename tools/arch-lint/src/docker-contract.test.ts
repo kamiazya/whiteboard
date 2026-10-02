@@ -345,6 +345,10 @@ const DOCKERFILE_USES = {
     builds: false,
     reason: 'asserts the file is an allowed repo-root entry',
   },
+  'tools/arch-lint/src/repo-root-reads.test.ts': {
+    builds: false,
+    reason: 'a detector self-test names the file as an example of a repo-root read',
+  },
   'tests/e2e/distribution/release-gate-matrix.json': {
     builds: false,
     reason: 'a gate description quotes the filename',
