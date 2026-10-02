@@ -20,6 +20,12 @@ const SRC = join(import.meta.dirname, '../..')
 // is a different thing — a log field's name, a category in a response — and
 // `data-layout.ts`'s own constants are not literals at a join either.
 const NAMES_DIRECTORY = /join\([^)]*['"](?:blobs|files)['"]/
+// The other way to name one: taking a path apart and comparing a segment, which
+// is how a report that sorts bytes by store respelled the layout (`segments[1]
+// === 'files'`) without a single join. Indexed or `head` comparisons only —
+// `category === 'files'` is a response's own vocabulary, not a path.
+const COMPARES_A_SEGMENT =
+  /(?:\[\d+\]|\bhead)\s*[!=]==\s*['"](?:tenants|workspaces|blobs|files|exports)['"]/
 
 async function sourceFiles(dir: string): Promise<string[]> {
   const out: string[] = []
@@ -44,7 +50,8 @@ describe('who may name a store directory', () => {
     expect(files.length).toBeGreaterThan(150)
     const namers: string[] = []
     for (const file of files) {
-      if (NAMES_DIRECTORY.test(withoutComments(await readFile(file, 'utf8')))) {
+      const text = withoutComments(await readFile(file, 'utf8'))
+      if (NAMES_DIRECTORY.test(text) || COMPARES_A_SEGMENT.test(text)) {
         namers.push(relative(SRC, file))
       }
     }

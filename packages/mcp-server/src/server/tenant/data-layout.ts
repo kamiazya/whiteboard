@@ -1,5 +1,5 @@
 import { mkdir, readdir, rename, stat } from 'node:fs/promises'
-import { dirname, join, sep } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { getLogger } from '../log.js'
 import type { DataLayout } from './data-layout-seam.js'
@@ -154,6 +154,30 @@ export function isAnyTenantBlobsPath(dataDir: string, path: string): boolean {
   if (!path.startsWith(tenants + sep)) return false
   const rest = path.slice(tenants.length + 1).split(sep)
   return rest[1] === BLOBS_DIRNAME
+}
+
+/** What kind of store a path under the data directory belongs to. */
+export type StoreArea = 'blobs' | 'files' | 'exports'
+
+/**
+ * Which store a path under `dataDir` is in, or `null` when it is none of them
+ * (the database, the daemon record, fonts, models and anything unrecognised).
+ *
+ * The inverse of the joins above, so a report that sorts bytes by store reads
+ * the layout from here instead of respelling it. Blobs and workspace files sit
+ * under `tenants/<tenantId>/`, whichever tenant holds them; exports sit under
+ * the workspace id at the top, which is why a top-level directory only counts
+ * as a workspace once it is not `tenants`.
+ */
+export function storeAreaOf(dataDir: string, path: string): StoreArea | null {
+  const parts = relative(dataDir, path).split(sep)
+  if (parts[0] === TENANTS_DIRNAME) {
+    const inTenant = parts.slice(2)
+    if (inTenant[0] === BLOBS_DIRNAME) return 'blobs'
+    if (inTenant[0] === WORKSPACES_DIRNAME && inTenant[2] === FILES_DIRNAME) return 'files'
+    return null
+  }
+  return parts[1] === EXPORTS_DIRNAME ? 'exports' : null
 }
 
 const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, 'models'])

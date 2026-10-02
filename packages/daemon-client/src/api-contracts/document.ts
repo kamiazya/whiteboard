@@ -331,7 +331,7 @@ export const storageBucketSchema = z.object({
 })
 
 /**
- * The categories the walk in `routes/runtime-storage.ts` can put a file in.
+ * The categories the walk in `tenant/storage-report.ts` can put a file in.
  *
  * Enumerated rather than left as `z.record(z.string(), …)`, because a loose
  * record makes a category the server can never emit indistinguishable from one
@@ -340,25 +340,18 @@ export const storageBucketSchema = z.object({
  * permanent 0 B instead of failing, which is what a contract with no key
  * constraint buys.
  *
- * `runtime-storage.ts` derives its report type from this, and the client
+ * `storage-report.ts` derives its report type from this, and the client
  * derives its row list from it, so all three cannot disagree.
  *
  * Note this makes the payload exhaustive at RUNTIME too, not only in the
  * types: `z.record` over an enum requires every key, so a report missing a
  * category is rejected rather than parsed with that bucket absent. Measured
- * — a payload carrying only `blobs` fails with six `invalid_type` issues.
+ * — a payload carrying only `blobs` fails with four `invalid_type` issues.
  * That is the intent. The walk initialises every bucket on every run, so
  * a missing one means the producer changed, and failing loudly beats a client
  * rendering 0 B for a category that is no longer being counted.
  */
-export const storageCategorySchema = z.enum([
-  'blobs',
-  'versions',
-  'files',
-  'exports',
-  'db',
-  'other',
-])
+export const storageCategorySchema = z.enum(['blobs', 'files', 'exports', 'db', 'other'])
 
 export const storageReportPayloadSchema = z.object({
   totalBytes: z.number(),

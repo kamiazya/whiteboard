@@ -7,15 +7,14 @@ import { drainSchedulerMacrotasks } from '../test-utils/scheduler-drain.js'
 import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
 const PAYLOAD = {
-  totalBytes: 4096,
-  fileCount: 6,
+  totalBytes: 2048,
+  fileCount: 5,
   // Every category the contract declares. It used to omit `exports` and
   // carry a `libraries` the daemon cannot report — a fixture describing a
   // payload no server sends, which is how the component's rows were asserted
   // against a shape nothing produced.
   byCategory: {
     blobs: { bytes: 1024, files: 2 },
-    versions: { bytes: 2048, files: 1 },
     files: { bytes: 0, files: 0 },
     exports: { bytes: 0, files: 0 },
     db: { bytes: 1024, files: 1 },
@@ -92,12 +91,12 @@ describe('StorageReportCard', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500)
     })
-    const versionsRow = container.querySelector('[data-storage-row="versions"]')
-    expect(versionsRow).not.toBeNull()
-    expect(versionsRow!.textContent).toContain('Versions')
-    expect(versionsRow!.textContent).toMatch(/2\.0\s*KiB|2048/)
+    const dbRow = container.querySelector('[data-storage-row="db"]')
+    expect(dbRow).not.toBeNull()
+    expect(dbRow!.textContent).toContain('Metadata DB')
+    expect(dbRow!.textContent).toMatch(/1\.0\s*KiB|1024/)
     // Reserved per-row action slot is the OOUI hook for future Optimize.
-    expect(container.querySelector('[data-storage-actions="versions"]')).not.toBeNull()
+    expect(container.querySelector('[data-storage-actions="db"]')).not.toBeNull()
   })
 
   it('exposes Optimize all on the Canvas snapshots row and aggregates across workspaces', async () => {
@@ -384,7 +383,7 @@ describe('StorageReportCard', () => {
     clearTimeoutSpy.mockRestore()
   })
 
-  it('exposes Cleanup on the Versions row and aggregates sandwiched-auto-version prunes across workspaces', async () => {
+  it('exposes Cleanup on the Metadata DB row and aggregates sandwiched-auto-version prunes across workspaces', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url =
@@ -406,14 +405,14 @@ describe('StorageReportCard', () => {
     vi.useRealTimers()
     const { container } = render(<StorageReportCard />)
     await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="versions"]')).not.toBeNull()
+      expect(container.querySelector('[data-storage-row="db"]')).not.toBeNull()
     })
 
-    const versionsActions = container.querySelector('[data-storage-actions="versions"]')!
-    fireEvent.click(versionsActions.querySelector('button')!)
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector('button')!)
 
     await waitFor(() => {
-      expect(versionsActions.textContent ?? '').toMatch(/Removed\s+3\s+auto-version/i)
+      expect(dbActions.textContent ?? '').toMatch(/Removed\s+3\s+auto-version/i)
     })
   })
 

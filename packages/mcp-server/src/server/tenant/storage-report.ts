@@ -3,21 +3,24 @@
 // Goals (in order):
 //   1. Visibility — users / operators need to see what is growing before we
 //      can sensibly enforce caps.
-//   2. Cheapness — recursively walk getDataDir() with stat() but never read blob
-//      contents. The numbers refresh on demand from the filesystem; nothing
-//      is cached or background-scheduled.
+//   2. Cheapness — recursively walk the data directory with stat() but never
+//      read blob contents. The numbers refresh on demand from the filesystem;
+//      nothing is cached or background-scheduled.
 //
 // Returns totals plus per-category breakdowns so the consumer can spot the
 // fastest-growing slice without writing a separate tool.
 
 import type { Dirent } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import type {
   StorageBucket,
   StorageCategory,
   StorageReportPayload,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { DAEMON_RECORD_FILENAME } from '../../daemon/daemon-registry.js'
+import { DB_FILENAME } from '../store/db/location.js'
+import { storeAreaOf } from './data-layout.js'
 
 // Derived from the wire schema rather than written alongside it. A
 // hand-written interface beside a Zod schema is the shape that shipped the
@@ -35,40 +38,16 @@ function emptyBucket(): StorageBucket {
   return { bytes: 0, files: 0 }
 }
 
-// Categorise a path under getDataDir(). Mirrors the layout the daemon actually
-// writes today:
-//   tenants/<t>/blobs/<workspaceId>/document/<id>.loro   — canvas Loro snapshots
-//   tenants/<t>/blobs/<workspaceId>/versions/<id>.png    — version thumbnails
-//   tenants/<t>/workspaces/<workspaceId>/files/<id>.png  — user-uploaded files
-//   tenants/<t>/workspaces/<workspaceId>/exports/<f>.png — export artifacts
-//   whiteboard.db / .db-wal / .db-shm            — metadata SQLite
-//   daemon.json                                   — port + token registry
-function categorize(relPath: string): StorageCategory {
-  // A tenant's own bytes are under `tenants/<tenantId>/` (`data-layout.ts`),
-  // and what they are is the same question whichever tenant holds them, so
-  // the prefix is peeled and the rest classified as before. A workspace's
-  // files sit one level deeper than they used to, under `workspaces/`.
-  const all = relPath.split('/').filter(Boolean)
-  const segments =
-    all[0] === 'tenants'
-      ? all.slice(2).filter((part, index) => !(index === 0 && part === 'workspaces'))
-      : all
-  const head = segments[0] ?? ''
-  if (head === 'blobs') {
-    // Version thumbnails live at blobs/<ws>/versions/{id}.png; canvas
-    // snapshots at blobs/<ws>/document/{id}.loro. Anything else under blobs/
-    // is treated as canvas storage.
-    if (segments[2] === 'versions') return 'versions'
-    return 'blobs'
-  }
-  // Per-workspace subtrees: <ws>/files, <ws>/exports.
-  if (segments[1] === 'files') return 'files'
-  if (segments[1] === 'exports') return 'exports'
-  // Top-level db files: whiteboard.db, whiteboard.db-wal, whiteboard.db-shm.
-  if (segments.length === 1 && head.startsWith('whiteboard.db')) return 'db'
-  // daemon.json (port + token registry) lives at the data-dir root.
-  if (segments.length === 1 && head === 'daemon.json') return 'db'
-  return 'other'
+// The database and the daemon record are keeper-wide files at the top of the
+// data directory (`data-layout.ts`), so they are classified here by name; the
+// SQLite sidecars (`-wal`, `-shm`) share the database's prefix. Version rows
+// live in that database, which is why there is no category of their own.
+function categoryOf(dataDir: string, path: string): StorageCategory {
+  const area = storeAreaOf(dataDir, path)
+  if (area !== null) return area
+  if (dirname(path) !== dataDir) return 'other'
+  const name = basename(path)
+  return name.startsWith(DB_FILENAME) || name === DAEMON_RECORD_FILENAME ? 'db' : 'other'
 }
 
 async function walk(root: string, current: string, report: StorageReport): Promise<void> {
@@ -92,8 +71,7 @@ async function walk(root: string, current: string, report: StorageReport): Promi
     } catch {
       continue
     }
-    const rel = fullPath.slice(root.length + 1)
-    const category = categorize(rel)
+    const category = categoryOf(root, fullPath)
     report.byCategory[category].bytes += info.size
     report.byCategory[category].files += 1
     report.totalBytes += info.size
@@ -107,7 +85,6 @@ export async function computeStorageReport(dataDir: string): Promise<StorageRepo
     fileCount: 0,
     byCategory: {
       blobs: emptyBucket(),
-      versions: emptyBucket(),
       files: emptyBucket(),
       db: emptyBucket(),
       exports: emptyBucket(),

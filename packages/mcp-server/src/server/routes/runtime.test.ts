@@ -25,7 +25,6 @@ const mockComputeStorageReport = vi.fn(async (_dir: string) => ({
   fileCount: 0,
   byCategory: {
     blobs: { bytes: 0, files: 0 },
-    versions: { bytes: 0, files: 0 },
     files: { bytes: 0, files: 0 },
     db: { bytes: 0, files: 0 },
     exports: { bytes: 0, files: 0 },
@@ -40,7 +39,7 @@ vi.mock('../config.js', () => ({
   WHITEBOARD_ROOT: '/__test__',
   REPO_ROOT: '/__test__',
 }))
-vi.mock('./runtime-storage.js', () => ({
+vi.mock('../tenant/storage-report.js', () => ({
   computeStorageReport: (dir: string) => mockComputeStorageReport(dir),
 }))
 vi.mock('../store/document-store.js', () => ({
@@ -168,7 +167,6 @@ describe('runtime routes', () => {
       fileCount: 3,
       byCategory: {
         blobs: { bytes: 4096, files: 3 },
-        versions: { bytes: 0, files: 0 },
         files: { bytes: 0, files: 0 },
         db: { bytes: 0, files: 0 },
         exports: { bytes: 0, files: 0 },
