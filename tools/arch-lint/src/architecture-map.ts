@@ -564,6 +564,12 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/export-svg.ts -> server/output-path',
   'routes/export.ts -> server/output-path',
   'routes/files.ts -> server/atomic-write',
+  // `computeStorageReport` walks the data directory (`readdir`, `stat`) and
+  // reads the daemon record's filename, so the runtime route holding it has the
+  // report welded to the disk. It filed under `tenant/` is no entitlement: that
+  // is a mechanic by name. Handing the route the report as a dependency, the way
+  // `createApp` hands it everything else, retires the entry.
+  'routes/runtime.ts -> tenant/storage-report',
   // The one helper every address-parsing route shares. Its own reach is the
   // workspace registry the store holds at module level; handing it the registry
   // the way `createApp` hands routes everything else retires the entry.
@@ -632,8 +638,12 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * `mcp-server-layer-order.test.ts` also reads, so the top-level mechanisms
  * (`atomic-write`, `output-path`, `config`) count where only the directories
  * did. Five edges that already existed.
+ *
+ * Then 28 -> 29, the same again: entitlement is now a list of modules NAMED, not
+ * the directories `security/` and `tenant/`, so `tenant/storage-report` — a disk
+ * walk filed under an entitled directory — counts. One edge that already existed.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 28
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 29
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

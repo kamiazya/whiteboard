@@ -305,13 +305,38 @@ describe('the mechanics layer and the adapter-mechanic finder share one definiti
     expect(neither).toEqual([])
   })
 
-  it('keeps every entitlement matching a module that exists, with a reason of substance', () => {
+  it('names every entitlement as a module that exists in the mechanics layer, with a reason of substance', () => {
+    const modules = new Set(inLayer.map(({ path }) => modulePathOf(path)))
+    const idle = ADAPTER_ENTITLED_MECHANICS.flatMap(({ modules: named, reason }) => [
+      ...(reason.trim().length <= 20 ? [`reason: ${reason}`] : []),
+      ...named.filter((module) => !modules.has(module)),
+    ])
+    expect(idle, 'an entitlement naming no module is a permission nobody uses').toEqual([])
+  })
+
+  it('names no module twice', () => {
+    const named = ADAPTER_ENTITLED_MECHANICS.flatMap(({ modules }) => modules)
+    expect(named.filter((module, i) => named.indexOf(module) !== i)).toEqual([])
+  })
+
+  // Entitlement is by name, so a module sitting in an entitled directory is a
+  // mechanic until someone decides otherwise. These keep, rows or files and are
+  // in `security/` and `tenant/` without being called `*-store`.
+  it('still calls a mechanic every module that keeps rows or files, wherever it is filed', () => {
     const modules = inLayer.map(({ path }) => modulePathOf(path))
-    const idle = ADAPTER_ENTITLED_MECHANICS.filter(
-      ({ pattern, reason }) =>
-        reason.trim().length <= 20 || !modules.some((module) => pattern.test(module)),
-    ).map(({ pattern }) => String(pattern))
-    expect(idle, 'an entitlement that matches nothing is a permission nobody uses').toEqual([])
+    const keepers = [
+      'security/user-deletion',
+      'security/user-deactivation',
+      'security/secret-file-mode',
+      'security/server-mode-record',
+      'security/sign-in-config-file',
+      'security/member-profile-store',
+      'tenant/data-layout',
+      'tenant/storage-report',
+      'server/atomic-write',
+    ].map((module) => module.replace(/^server\//, ''))
+    expect(keepers.filter((module) => !modules.includes(module))).toEqual([])
+    expect(keepers.filter((module) => !isAdapterForbiddenMechanic(module))).toEqual([])
   })
 
   it('still calls every module the finder always matched a mechanic', () => {
