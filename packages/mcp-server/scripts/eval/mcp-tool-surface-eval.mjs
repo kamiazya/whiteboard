@@ -35,15 +35,11 @@ import { TASKS, tagLibrary } from './tasks.mjs'
 // one are source-only; `tsx` resolves them the way the server launcher
 // resolves the server.
 register()
-const {
-  constantRatioMeasureText,
-  createSpatialTheme,
-  layoutSpatialCanvas,
-  scoreComposition,
-  scoreDrawing,
-  scoreFacets,
-  withDeclaredColours,
-} = await import('@kamiazya/whiteboard-canvas-render')
+const { constantRatioMeasureText, createSpatialTheme, layoutSpatialCanvas, withDeclaredColours } =
+  await import('@kamiazya/whiteboard-canvas-render')
+const { scoreComposition, scoreDrawing, scoreFacets } = await import(
+  '@kamiazya/whiteboard-canvas-render/scoring'
+)
 const { parseSpatial } = await import('@kamiazya/whiteboard-codec')
 
 const arg = (name, fallback) => {

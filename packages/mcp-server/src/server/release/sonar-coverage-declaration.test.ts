@@ -16,12 +16,13 @@
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = resolve(__dirname, '../../../../..')
+const ROOT = repoRoot()
 const RUN_COVERAGE_MODULE_PATH = join(ROOT, 'tools/checks/src/run-coverage.mjs')
 const VITEST_PROJECTS_MODULE_PATH = join(ROOT, 'tools/checks/src/vitest-projects.mjs')
 

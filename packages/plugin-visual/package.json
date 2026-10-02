@@ -37,6 +37,10 @@
       "types": "./src/render.ts",
       "import": "./src/render.ts"
     },
+    "./tag-library": {
+      "types": "./src/tag-library.ts",
+      "import": "./src/tag-library.ts"
+    },
     "./ui": {
       "types": "./src/ui.tsx",
       "import": "./src/ui.tsx"

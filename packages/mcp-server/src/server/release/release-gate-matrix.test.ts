@@ -8,9 +8,10 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(__dirname, '../../../../..')
+const ROOT = repoRoot()
 
 function readJson(relPath: string): unknown {
   return JSON.parse(readFileSync(join(ROOT, relPath), 'utf-8'))
@@ -39,10 +40,7 @@ interface GateMatrix {
 // single validation authority shared with publish-gate.mjs and
 // gate-isomorphism.test.ts. Importing it here (rather than re-implementing it)
 // is what keeps this test and the runtime loader from drifting apart.
-const SCHEMA_MODULE_PATH = join(
-  __dirname,
-  '../../../../../tools/checks/src/release-gate-matrix-schema.mjs',
-)
+const SCHEMA_MODULE_PATH = join(ROOT, 'tools/checks/src/release-gate-matrix-schema.mjs')
 const {
   validateGate,
   KNOWN_CATEGORIES,

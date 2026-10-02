@@ -5,7 +5,7 @@
  * the tool's own graph coming with them. See that file for why the split
  * exists rather than being a matter of taste.
  */
-import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
+import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec/okf-schema'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 // Static release-gate contract. Failing here means a release-sensitive
 // surface (CODEOWNERS, package.json bin map, build chmod, prepublish
@@ -12,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname → packages/mcp-server/src/server/release
-const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..', '..')
+const REPO_ROOT = repoRoot()
 const PACKAGE_ROOT = resolve(__dirname, '..', '..', '..')
 const PACKAGE_JSON_PATH = resolve(PACKAGE_ROOT, 'package.json')
 const CODEOWNERS_PATH = resolve(REPO_ROOT, '.github', 'CODEOWNERS')

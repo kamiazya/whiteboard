@@ -15,6 +15,7 @@ import {
   sha512Hex,
 } from '../../../scripts/release/sbom-fingerprint.mjs'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { jobSection } from './job-section.js'
 import {
   evaluateSbomArtifactState,
@@ -24,7 +25,7 @@ import {
 } from './sbom-artifact-state.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(__dirname, '../../../../..')
+const ROOT = repoRoot()
 
 function readFile(relPath: string): string {
   return readFileSync(join(ROOT, relPath), 'utf-8')

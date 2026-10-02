@@ -31,8 +31,9 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
-const REPO_ROOT = join(__dirname, '../../../../..')
+const REPO_ROOT = repoRoot()
 
 /**
  * Every place a daemon HTTP refusal is written: this package's routers, and

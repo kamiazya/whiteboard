@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..')
+const REPO_ROOT = repoRoot()
 
 /**
  * A surface somebody OUTSIDE this repo reads or writes, carrying a whole
@@ -37,7 +37,7 @@ describe('a surface read from outside this repo names the wire schema, not the m
 
   for (const [path, why] of Object.entries(WIRE_SURFACES)) {
     it(`${path} names jsonCanvasDocumentSchema — ${why}`, () => {
-      const source = readFileSync(resolve(repoRoot, path), 'utf8')
+      const source = readFileSync(resolve(REPO_ROOT, path), 'utf8')
       expect(source).toContain('jsonCanvasDocumentSchema')
       expect(source).not.toContain('spatialCanvasSchema')
     })

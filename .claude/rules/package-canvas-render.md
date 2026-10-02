@@ -1531,7 +1531,7 @@ dissolution; until JSON Canvas gives one, containers-behind is the rule.
 
 ## The drawing score judges the board, not a mechanism
 
-`quality/drawing-score.ts` (`scoreDrawing(canvas, scene)`, exported) reads
+`quality/drawing-score.ts` (`scoreDrawing(canvas, scene)`, from `/scoring`) reads
 a laid-out board as a person would: boxes over boxes, a box across a
 frame's edge, an edge's ink through a box it does not connect, a label
 over a box or under a frame, content cut to fit, a member jammed against
@@ -1852,7 +1852,8 @@ justifies the change is how a fixture becomes the convention by accident.
 
 ## The composition score judges what the board hands its reader
 
-`quality/composition-score.ts` (`scoreComposition(canvas, scene)`) is
+`quality/composition-score.ts` (`scoreComposition(canvas, scene)`, from
+`/scoring`) is
 [ADR-0032](../../docs/contributing/adr/0032-composition-axis.md)'s second
 axis, scored BESIDE the drawing score and never mixed into it: the drawing
 score judges DEFECTS and their price, and the questions left once its debt
@@ -2025,7 +2026,7 @@ to 2).
 
 ## The facet score judges what the board SAYS, not where it puts things
 
-`quality/facet-score.ts` (`scoreFacets(canvas)`) is
+`quality/facet-score.ts` (`scoreFacets(canvas)`, from `/scoring`) is
 [ADR-0033](../../docs/contributing/adr/0033-facet-vocabulary-axis.md)'s third
 axis. The drawing score and the composition axis both read GEOMETRY; a
 drawing also distinguishes things by APPEARANCE, which says two things differ

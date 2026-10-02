@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 import { USAGE } from '../../cli/dispatcher.js'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname → packages/mcp-server/src/server/release
@@ -165,18 +166,18 @@ describe('documented CLI commands are commands the CLI routes', () => {
       .map((line) => line.trim())
       .filter((line) => line.startsWith('whiteboard '))
 
-    const repoRoot = resolve(PACKAGE_ROOT, '../..')
+    const root = repoRoot()
     const docs = [
-      ...globSync('docs/**/*.md', { cwd: repoRoot }),
+      ...globSync('docs/**/*.md', { cwd: root }),
       'README.md',
       'CONTRIBUTING.md',
-    ].filter((relPath) => existsSync(resolve(repoRoot, relPath)))
+    ].filter((relPath) => existsSync(resolve(root, relPath)))
 
     const undocumented: string[] = []
     let checked = 0
     for (const relPath of docs) {
       let inFence = false
-      for (const line of readFileSync(resolve(repoRoot, relPath), 'utf-8').split('\n')) {
+      for (const line of readFileSync(resolve(root, relPath), 'utf-8').split('\n')) {
         if (line.trim().startsWith('```')) {
           inFence = !inFence
           continue

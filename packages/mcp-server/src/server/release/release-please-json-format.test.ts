@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..')
+const REPO_ROOT = repoRoot()
 
 /**
  * release-please's `type: json` updater does not edit a line — it parses the

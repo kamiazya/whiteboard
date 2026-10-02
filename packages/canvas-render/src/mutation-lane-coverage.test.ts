@@ -268,9 +268,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // arithmetic `scene-digest.ts` (in the lane) shares with the quality
     // instruments, so it is in the lane too — taking it out would have shrunk
     // what the lane sees of the digest.
+    //
+    // 98 with `scoring.ts`, the `/scoring` subpath: re-exports of the three
+    // quality instruments, outside the lane for the reason they are.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 20,
-      production: 97,
+      production: 98,
     })
   })
 

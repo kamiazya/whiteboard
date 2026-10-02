@@ -108,20 +108,37 @@ async function openFirefox(extensionDir) {
     goto: (url) => webdriver('POST', at('/url'), { url }),
     run,
     until,
-    /** Clicks the first element matching `xpath`, once there is one. */
-    async click(xpath) {
-      const found = await until(
-        `return document.evaluate(${JSON.stringify(xpath)}, document, null, 9, null).singleNodeValue !== null`,
-      )
-      if (!found) {
-        const page = await run(
-          `return location.pathname + ' | buttons: ' + [...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.innerText.trim()).join(' / ')`,
-        )
-        throw new Error(`nothing matched ${xpath} at ${page}`)
+    /**
+     * Clicks the first element matching `xpath`, once there is one. The find
+     * and the click are one retried step: the connection popover re-renders
+     * while the extension answers, so a node a separate presence probe saw
+     * can be gone by the time the find runs — "no such element" for a button
+     * that was there a moment earlier. Playwright's locators retry the same
+     * way on the Chromium side.
+     */
+    async click(xpath, timeoutMs = 20_000) {
+      const deadline = Date.now() + timeoutMs
+      let lastError = 'no such element'
+      for (;;) {
+        const clicked = await webdriver('POST', at('/element'), { using: 'xpath', value: xpath })
+          .then(async (element) => {
+            const id = Object.values(element)[0]
+            await webdriver('POST', at(`/element/${id}/click`), {})
+            return id
+          })
+          .catch((error) => {
+            lastError = error instanceof Error ? error.message : String(error)
+            return null
+          })
+        if (clicked) return clicked
+        if (Date.now() > deadline) {
+          const page = await run(
+            `return location.pathname + ' | buttons: ' + [...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.innerText.trim()).join(' / ')`,
+          )
+          throw new Error(`nothing matched ${xpath} at ${page} (last: ${lastError})`)
+        }
+        await new Promise((later) => setTimeout(later, 250))
       }
-      const element = await webdriver('POST', at('/element'), { using: 'xpath', value: xpath })
-      await webdriver('POST', at(`/element/${Object.values(element)[0]}/click`), {})
-      return Object.values(element)[0]
     },
     type: (elementId, text) => webdriver('POST', at(`/element/${elementId}/value`), { text }),
     close: () => webdriver('DELETE', at('')),

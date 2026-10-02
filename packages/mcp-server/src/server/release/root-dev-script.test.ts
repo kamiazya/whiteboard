@@ -6,10 +6,11 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname -> packages/mcp-server/src/server/release
-const REPO_ROOT = resolve(__dirname, '../../../../..')
+const REPO_ROOT = repoRoot()
 const rootPackage = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf-8')) as {
   scripts?: Record<string, string>
 }

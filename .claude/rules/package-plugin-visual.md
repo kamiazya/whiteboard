@@ -51,8 +51,13 @@ content, and every caller has already parsed the frontmatter it holds.
 The default entry is react-free because it runs wherever a document is read —
 Node, a worker, the browser — and `canvas-render` imports it. Keep that true:
 a React import in `data.ts` or `icons/` is the one mistake this split exists to
-prevent, and nothing mechanical catches it (the package legitimately lists
-`react`, so the boundary scan cannot tell the halves apart).
+prevent. The package legitimately lists `react`, so the boundary scan cannot
+tell the halves apart; `tools/arch-lint`'s
+`plugin-visual-default-entry-react-free.test.ts` does, by walking the
+value-import closure of every manifest entry but `./ui`. `./tag-library` is a
+subpath of its own so a contract that only needs the tag library's schema
+(`server-core`'s `document-tags.schemas.ts`, published to a browser) does not
+inherit the default entry's emoji and icon catalogs.
 
 ## Dependency direction
 

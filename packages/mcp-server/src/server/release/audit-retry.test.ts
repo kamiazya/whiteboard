@@ -8,11 +8,12 @@
 // The classifier is pure and lives beside the runner in
 // tools/checks/src/audit-with-retry.mjs; these fixtures are the two real
 // outputs those jobs produced, abbreviated to their signatures.
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../../..')
+const ROOT = repoRoot()
 
 const { classifyAuditFailure } = (await import(
   pathToFileURL(join(ROOT, 'tools/checks/src/audit-with-retry.mjs')).href

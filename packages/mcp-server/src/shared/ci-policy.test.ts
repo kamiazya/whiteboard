@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
+import { repoRoot } from './test-utils/repo-root.js'
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../../')
+const REPO_ROOT = repoRoot()
 
 // A full 40-character hex commit SHA — the only form that is immutable.
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/

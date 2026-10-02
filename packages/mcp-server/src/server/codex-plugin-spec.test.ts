@@ -3,16 +3,17 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../../..')
+const REPO_ROOT = repoRoot()
 
 function readJson(path: string): any {
   return JSON.parse(readFileSync(path, 'utf-8'))
 }
 
 describe('Codex plugin spec contract', () => {
-  const pluginRoot = repoRoot
+  const pluginRoot = REPO_ROOT
   const codexPluginDir = resolve(pluginRoot, '.codex-plugin')
   const codexPluginPath = resolve(codexPluginDir, 'plugin.json')
   const codexPlugin = readJson(codexPluginPath)

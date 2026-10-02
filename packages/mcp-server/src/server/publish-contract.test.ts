@@ -3,54 +3,55 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../shared/test-utils/repo-root.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../../..')
+const REPO_ROOT = repoRoot()
 
 function readJson(path: string): any {
   return JSON.parse(readFileSync(path, 'utf-8'))
 }
 
 describe('publish contract', () => {
-  const rootPackage = readJson(resolve(repoRoot, 'package.json'))
-  const mcpPackagePath = resolve(repoRoot, 'packages/mcp-server/package.json')
+  const rootPackage = readJson(resolve(REPO_ROOT, 'package.json'))
+  const mcpPackagePath = resolve(REPO_ROOT, 'packages/mcp-server/package.json')
   const mcpPackage = readJson(mcpPackagePath)
-  const manifest = readJson(resolve(repoRoot, '.release-please-manifest.json'))
-  const releaseWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/release.yml'), 'utf-8')
-  const rootReadme = readFileSync(resolve(repoRoot, 'README.md'), 'utf-8')
-  const contributing = readFileSync(resolve(repoRoot, 'CONTRIBUTING.md'), 'utf-8')
-  const packageReadme = readFileSync(resolve(repoRoot, 'packages/mcp-server/README.md'), 'utf-8')
+  const manifest = readJson(resolve(REPO_ROOT, '.release-please-manifest.json'))
+  const releaseWorkflow = readFileSync(resolve(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')
+  const rootReadme = readFileSync(resolve(REPO_ROOT, 'README.md'), 'utf-8')
+  const contributing = readFileSync(resolve(REPO_ROOT, 'CONTRIBUTING.md'), 'utf-8')
+  const packageReadme = readFileSync(resolve(REPO_ROOT, 'packages/mcp-server/README.md'), 'utf-8')
   const mcpDebuggingDoc = readFileSync(
-    resolve(repoRoot, 'docs/contributing/mcp-debugging.md'),
+    resolve(REPO_ROOT, 'docs/contributing/mcp-debugging.md'),
     'utf-8',
   )
   const architectureDoc = readFileSync(
-    resolve(repoRoot, 'docs/explanation/architecture.md'),
+    resolve(REPO_ROOT, 'docs/explanation/architecture.md'),
     'utf-8',
   )
   const securityModelDoc = readFileSync(
-    resolve(repoRoot, 'docs/explanation/security-model.md'),
+    resolve(REPO_ROOT, 'docs/explanation/security-model.md'),
     'utf-8',
   )
   const wireProtocolDoc = readFileSync(
-    resolve(repoRoot, 'docs/contributing/architecture/wire-protocol.md'),
+    resolve(REPO_ROOT, 'docs/contributing/architecture/wire-protocol.md'),
     'utf-8',
   )
   const developmentDoc = readFileSync(
-    resolve(repoRoot, 'docs/contributing/development.md'),
+    resolve(REPO_ROOT, 'docs/contributing/development.md'),
     'utf-8',
   )
-  const claudeMarketplace = readJson(resolve(repoRoot, '.claude-plugin/marketplace.json'))
-  const tsconfigServer = readJson(resolve(repoRoot, 'packages/mcp-server/tsconfig.server.json'))
+  const claudeMarketplace = readJson(resolve(REPO_ROOT, '.claude-plugin/marketplace.json'))
+  const tsconfigServer = readJson(resolve(REPO_ROOT, 'packages/mcp-server/tsconfig.server.json'))
   const vitestShared = readFileSync(
-    resolve(repoRoot, 'packages/mcp-server/vitest.shared.ts'),
+    resolve(REPO_ROOT, 'packages/mcp-server/vitest.shared.ts'),
     'utf-8',
   )
-  const rootReleaseConfig = readJson(resolve(repoRoot, 'release-please-config.json'))
-  const publishedMcpConfig = readJson(resolve(repoRoot, '.mcp.json'))
-  const claudePlugin = readJson(resolve(repoRoot, '.claude-plugin/plugin.json'))
-  const codexPlugin = readJson(resolve(repoRoot, '.codex-plugin/plugin.json'))
-  const registryMetadata = readJson(resolve(repoRoot, 'server.json'))
+  const rootReleaseConfig = readJson(resolve(REPO_ROOT, 'release-please-config.json'))
+  const publishedMcpConfig = readJson(resolve(REPO_ROOT, '.mcp.json'))
+  const claudePlugin = readJson(resolve(REPO_ROOT, '.claude-plugin/plugin.json'))
+  const codexPlugin = readJson(resolve(REPO_ROOT, '.codex-plugin/plugin.json'))
+  const registryMetadata = readJson(resolve(REPO_ROOT, 'server.json'))
 
   it('keeps release-please manifest versions in sync with package.json files', () => {
     expect(rootPackage.version).toBe(manifest['.'])
@@ -58,8 +59,8 @@ describe('publish contract', () => {
   })
 
   it('ships npm-facing package docs and license files from the package directory', () => {
-    expect(existsSync(resolve(repoRoot, 'packages/mcp-server/README.md'))).toBe(true)
-    expect(existsSync(resolve(repoRoot, 'packages/mcp-server/LICENSE'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'packages/mcp-server/README.md'))).toBe(true)
+    expect(existsSync(resolve(REPO_ROOT, 'packages/mcp-server/LICENSE'))).toBe(true)
     expect(mcpPackage.files).toContain('README.md')
     expect(mcpPackage.files).toContain('LICENSE')
   })

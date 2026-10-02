@@ -1,14 +1,14 @@
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { corpusDigest, DOCS_JUDGED_QUERIES, loadDocsCorpus, queryDigest } from './docs-corpus.js'
 
 // `.pathname` keeps percent-encoding, so a checkout under a directory with
 // a space in its name would resolve to a path that does not exist.
-const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url))
+const REPO_ROOT = repoRoot()
 
 describe('loadDocsCorpus', () => {
   it('reads the real docs tree, sorted, with the h1 as the name', () => {
-    const docs = loadDocsCorpus(repoRoot)
+    const docs = loadDocsCorpus(REPO_ROOT)
     expect(docs.length).toBeGreaterThan(20)
     // By CODE POINT, matching the loader. `localeCompare` is what the loader
     // deliberately does not use — it reads the runtime's locale and ICU
@@ -20,7 +20,7 @@ describe('loadDocsCorpus', () => {
   })
 
   it('judges only paths that exist, so a renamed document fails loudly', () => {
-    const paths = new Set(loadDocsCorpus(repoRoot).map((d) => d.path))
+    const paths = new Set(loadDocsCorpus(REPO_ROOT).map((d) => d.path))
     for (const judged of DOCS_JUDGED_QUERIES) {
       for (const path of Object.keys(judged.relevant)) {
         expect(paths, `${judged.query} judges a missing document`).toContain(path)
@@ -31,18 +31,18 @@ describe('loadDocsCorpus', () => {
 
 describe('digests', () => {
   it('changes when any document body changes', () => {
-    const docs = loadDocsCorpus(repoRoot)
+    const docs = loadDocsCorpus(REPO_ROOT)
     const edited = docs.map((d, i) => (i === 0 ? { ...d, body: `${d.body} .` } : d))
     expect(corpusDigest(edited)).not.toBe(corpusDigest(docs))
   })
 
   it('changes when a document is added or removed', () => {
-    const docs = loadDocsCorpus(repoRoot)
+    const docs = loadDocsCorpus(REPO_ROOT)
     expect(corpusDigest(docs.slice(1))).not.toBe(corpusDigest(docs))
   })
 
   it('is stable across repeated reads of an unchanged tree', () => {
-    expect(corpusDigest(loadDocsCorpus(repoRoot))).toBe(corpusDigest(loadDocsCorpus(repoRoot)))
+    expect(corpusDigest(loadDocsCorpus(REPO_ROOT))).toBe(corpusDigest(loadDocsCorpus(REPO_ROOT)))
   })
 
   it('separates the query set from the corpus, so a report says which moved', () => {
