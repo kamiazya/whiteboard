@@ -54,8 +54,12 @@ const WEB_SRC = join(ROOT, 'apps/web/src')
  * not drop out of this guard's subject. (`daemon-client-urls.routes.test.ts`
  * also requests every builder against the app; this scan is the one that
  * sees a path spelled in either place.)
+ *
+ * The whole package is read, not just `api-contracts`: the sync hub posts to
+ * `/api/sync/*` from its own source, and a route literal there that no server
+ * mounts would otherwise be the one request nothing checks.
  */
-const DAEMON_CLIENT_CONTRACTS = join(ROOT, 'packages/daemon-client/src/api-contracts')
+const DAEMON_CLIENT_SRC = join(ROOT, 'packages/daemon-client/src')
 
 const tempDirs: string[] = []
 let dbHandle: IsolatedDbHandle | null = null
@@ -82,6 +86,9 @@ afterAll(async () => {
  */
 const NOT_A_REQUEST_TARGET = new Set([
   '/api/v1',
+  // `startsWith('/api/')` prefix tests in api-client and extension-bridge:
+  // a same-origin check, never a request.
+  '/api',
   // daemon-urls' v1 workspace stem, normalized: every builder over it appends a segment.
   '/api/v1/workspaces/:p',
   // The action segment is a closed union the builder's signature types, and
@@ -130,7 +137,7 @@ interface WebPath {
 
 function webApiPaths(): WebPath[] {
   const seen = new Map<string, WebPath>()
-  for (const file of [...sourceFiles(WEB_SRC), ...sourceFiles(DAEMON_CLIENT_CONTRACTS)]) {
+  for (const file of [...sourceFiles(WEB_SRC), ...sourceFiles(DAEMON_CLIENT_SRC)]) {
     const text = code(readFileSync(file, 'utf-8'))
     // All three quotings, matched with a backreference so the closing quote is
     // the opening one. Double quotes are not hypothetical here: biome.json sets
@@ -278,6 +285,16 @@ describe('apps/web only asks for /api and /auth routes the daemon mounts', () =>
 
   it('finds the paths apps/web asks for', () => {
     expect(paths.length).toBeGreaterThan(8)
+  })
+
+  // The hub's own literals are the subject the scan was extended to reach;
+  // a scan that stops at api-contracts reports them as fine by never seeing them.
+  it('reaches the sync hub in daemon-client', () => {
+    const hub = paths.filter((path) => path.file.endsWith('daemon-client/src/sse-stream-hub.ts'))
+    expect(hub.map((path) => path.normalized).sort()).toEqual([
+      '/api/sync/message',
+      '/api/sync/subscribe',
+    ])
   })
 
   // The matcher's own control. Everything above can be right while `isMounted`
