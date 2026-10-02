@@ -149,7 +149,7 @@ export function renderComment(report, marker, knownEquivalent = {}) {
       'It is a HYPOTHESIS, not a verdict — apply the edit and run the suite before acting on it.',
       'This tool reports false survivors AND false kills, and the score has a noise floor of a',
       'mutant or so between identical runs, so read a small change as nothing. Settled cases are',
-      'in `KNOWN_EQUIVALENT`; the reasoning is `package-canvas-render.md`.',
+      'in `KNOWN_EQUIVALENT`; the reasoning is `docs/contributing/architecture/canvas-render-decisions.md`.',
       '',
       '`judged by` is how many tests actually ran against that mutant. Stryker picks them by',
       'relatedness, so a module few test files import is judged by a handful and its survivors are',

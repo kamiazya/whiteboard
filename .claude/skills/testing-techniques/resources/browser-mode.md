@@ -150,7 +150,8 @@ and its arithmetic was re-measured against a real 5.0.0 attachment name (repo-ro
 ## Traces
 
 - Failure traces land under `<package>/tmp/vitest-traces`, kept for the MOST RECENT run only
-  (the shared config clears them as it loads — one session left 19GB behind before that).
+  (a per-project globalSetup clears them when a run that uses the project starts — not at config
+  load, and never a directory another live run holds; one session left 19GB behind before that).
 - **The default trace has no DOM view**: action log, stacks, screenshots. Recording the DOM
   through Playwright's `snapshots` means recording every resource vite served: 302MB against
   7.5MB on 16 page files, 22–23GB over a run, and the disk runs out MID-RUN with `774 passed`
