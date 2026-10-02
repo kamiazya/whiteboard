@@ -467,7 +467,7 @@ const ALWAYS_ON_TOTAL_BUDGET = 20
 //
 // 144 -> 108 when the measurements, the rejected alternatives and the incident
 // narratives moved to `docs/contributing/architecture/canvas-render-decisions.md`
-// (~37 KB). The rule keeps each decision's standing statement, the invariants
+// (~36 KB). The rule keeps each decision's standing statement, the invariants
 // and the names of the guards that hold them; a passage is in one file or the
 // other, never both. Pins only go down on a cut.
 const CANVAS_RENDER_BUDGET = 108
