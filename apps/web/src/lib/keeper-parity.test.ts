@@ -258,7 +258,7 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
  * `documentFileApiUrl`, `trashApiUrl`, … — any `*ApiUrl(` call), it holds one
  * of the two fetches that reach it, it writes an `/api/` path by hand, or it
  * calls the daemon client's request functions. A keeper's own `/auth/` routes
- * count too: sign-in is a thing only a server-mode keeper has, and a module
+ * count too, spelled by hand or built by an `auth*Url(` helper: sign-in is a thing only a server-mode keeper has, and a module
  * that reaches it is exactly one that has to say what a Browser keeper does.
  *
  * The `/api/` arm takes no quote in front of it, because a path built as a
@@ -273,7 +273,7 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
  * browser for.
  */
 const DAEMON_REACH_PATTERN =
-  /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|\/api\/|\/auth\/|\w+ApiUrl\(/
+  /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|\/api\/|\/auth\/|\w+ApiUrl\(|\bauth\w*Url\(/
 
 const CLIENT_MODULE = String.raw`['"][^'"]*\/daemon-api-client(?:\.js)?['"]`
 const CLIENT_DYNAMIC_IMPORT = new RegExp(String.raw`import\(\s*${CLIENT_MODULE}`)
@@ -334,6 +334,7 @@ describe('every module that reaches the daemon says what the browser keeper does
 
   it.each([
     ["fetch('/auth/session')", true],
+    ['fetchFn(authSessionUrl())', true],
     ['fetch(base + "/auth/sign-out")', true],
     ["fetch('/api/workspaces')", true],
     ["// fetch('/auth/session') in a comment", false],
