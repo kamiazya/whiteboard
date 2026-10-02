@@ -68,7 +68,6 @@ const NO_USE_BESIDE_TESTS: readonly string[] = [
   'packages/codec/src/spatial/projection.ts#jsonCanvasLoss',
   'packages/codec/src/spatial/projection.ts#valueLeafPaths',
   'packages/daemon-client/src/api-contracts/document.ts#CreateWorkspaceRequest',
-  'packages/daemon-client/src/api-contracts/document.ts#ExportDocumentJsonRequest',
   'packages/daemon-client/src/api-contracts/document.ts#PurgeResult',
   'packages/daemon-client/src/api-contracts/document.ts#RestoreVersionRequest',
   'packages/daemon-client/src/api-contracts/document.ts#SaveVersionRequest',
@@ -307,7 +306,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/daemon-client/src/api-contracts/document-url.ts#WORKSPACE_DOCUMENT_API_ACTIONS',
   'packages/daemon-client/src/api-contracts/document-url.ts#WorkspaceDocumentApiAction',
   'packages/daemon-client/src/api-contracts/document.ts#documentSummarySchema',
-  'packages/daemon-client/src/api-contracts/document.ts#exportDocumentJsonRequestSchema',
   'packages/daemon-client/src/api-contracts/document.ts#storageCategorySchema',
   'packages/daemon-client/src/api-contracts/files.ts#uploadableImageTypeSchema',
   'packages/daemon-client/src/api-contracts/runtime.ts#daemonIdentitySchema',
@@ -505,7 +503,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the two debt lists hold, pinned by equality. */
-const DEBT_CEILING = 442
+const DEBT_CEILING = 440
 
 const DIRS = [
   'apps',
