@@ -9,7 +9,7 @@ import { type ChildProcess, execFileSync, spawn, spawnSync } from 'node:child_pr
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const WRAPPER = resolve(import.meta.dirname, 'with-dev-data-dir.mjs')
 const STOP = resolve(import.meta.dirname, 'stop-http-dev-daemon.mjs')
@@ -41,11 +41,12 @@ setInterval(() => {}, 1000)
 }
 
 async function until(condition: () => boolean, what: string, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`)
-    await new Promise((r) => setTimeout(r, 25))
-  }
+  await vi.waitFor(
+    () => {
+      if (!condition()) throw new Error(`timed out waiting for ${what}`)
+    },
+    { timeout: timeoutMs, interval: 25 },
+  )
 }
 
 function alive(pid: number): boolean {

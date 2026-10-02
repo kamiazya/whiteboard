@@ -104,7 +104,7 @@ export function reraiseSignalOrExit(
  * signal sent to one process of the chain, so a wrapper that dies alone leaves
  * `tsx watch` and the daemon it spawned alive on the socket.
  */
-export const FORWARDED_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP']
+const FORWARDED_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP']
 
 /**
  * Where the wrapper records its own pid while it runs. `daemon.json` names the
@@ -127,7 +127,10 @@ export function devWrapperPidPath(dataDir) {
  *
  * @param {import('node:events').EventEmitter & { kill: (signal?: string) => unknown }} child
  * @param {{
- *   proc?: Pick<NodeJS.Process, 'on' | 'removeListener'>,
+ *   proc?: {
+ *     on: (signal: string, listener: () => void) => unknown,
+ *     removeListener: (signal: string, listener: () => void) => unknown,
+ *   },
  *   exit?: (code?: number) => unknown,
  *   reraise?: (signal: string) => unknown,
  *   write?: (text: string) => unknown,
