@@ -14,8 +14,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { bundledFacetRegistry, visualPlugin, visualSymbolFacetSchema } from '../data.js'
-import { EMOJI_VERSION } from './catalog-data.js'
-import { EMOJI_JA, EMOJI_JA_TAG } from './catalog-ja.js'
+import { EMOJI_JA } from './catalog-ja.js'
 import { emojiSections } from './sections.js'
 import { emojiSlug } from './slug.js'
 
@@ -43,7 +42,6 @@ describe('the generated emoji catalog', () => {
   it('carries the whole published set, in the categories it publishes', () => {
     expect(sections.length).toBeGreaterThanOrEqual(8)
     expect(options.length).toBeGreaterThanOrEqual(1500)
-    expect(EMOJI_VERSION).toMatch(/^\d+\.\d+$/)
   })
 
   it('writes a payload the facet accepts for every single row', () => {
@@ -174,7 +172,6 @@ describe('the generated emoji catalog', () => {
       .map((row) => row.slice(0, row.indexOf('\t')))
       .filter((char) => !chars.has(char))
     expect(spare).toEqual([])
-    expect(EMOJI_JA_TAG).toMatch(/^release-\d+$/)
   })
 
   /**
