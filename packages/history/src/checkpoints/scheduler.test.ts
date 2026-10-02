@@ -92,4 +92,74 @@ describe('createCheckpointScheduler', () => {
     await vi.advanceTimersByTimeAsync(150)
     expect(saves).toEqual(['a'])
   })
+
+  it('takes the checkpoint when the keeper cannot say whether one already exists', async () => {
+    const saves: string[] = []
+    const errors: unknown[] = []
+    const scheduler = createCheckpointScheduler<void>({
+      quietMs: 100,
+      alreadyCheckpointed: async () => {
+        throw new Error('keeper unreachable')
+      },
+      save: async (_ws, path) => {
+        saves.push(path)
+      },
+      onError: (err) => errors.push(err),
+    })
+    scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+    await vi.advanceTimersByTimeAsync(150)
+    expect(saves).toEqual(['a'])
+    expect(errors).toEqual([])
+  })
+
+  it('skips the save when the keeper already holds the document as it stands', async () => {
+    const saves: string[] = []
+    const scheduler = createCheckpointScheduler<void>({
+      quietMs: 100,
+      alreadyCheckpointed: async () => true,
+      save: async (_ws, path) => {
+        saves.push(path)
+      },
+      onError: () => {},
+    })
+    scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+    await vi.advanceTimersByTimeAsync(150)
+    expect(saves).toEqual([])
+  })
+
+  it('flush resolves only after the saves it started have finished', async () => {
+    let finishSave: () => void = () => {}
+    const saved: string[] = []
+    const scheduler = createCheckpointScheduler<void>({
+      quietMs: 60_000,
+      save: (_ws, path) =>
+        new Promise<void>((resolve) => {
+          finishSave = () => {
+            saved.push(path)
+            resolve()
+          }
+        }),
+      onError: () => {},
+    })
+    scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+
+    let flushed = false
+    const flushing = scheduler.flush().then(() => {
+      flushed = true
+    })
+    await vi.advanceTimersByTimeAsync(10)
+    expect(flushed).toBe(false)
+
+    finishSave()
+    await flushing
+    expect(saved).toEqual(['a'])
+  })
+
+  it('a flush after stop takes nothing for the documents stop dropped', async () => {
+    const { scheduler, saves } = harness({ quietMs: 60_000 })
+    scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+    scheduler.stop()
+    await scheduler.flush()
+    expect(saves).toEqual([])
+  })
 })

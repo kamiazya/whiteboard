@@ -11,6 +11,7 @@ import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LiveDocuments, RestoreProgressEvent, VersionHistory } from '../server-deps.js'
+import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { VersionEntry } from '../versions/version-entry.js'
 import { type RestoreVersionResult, restoreVersion } from './restore-version.js'
 
@@ -266,6 +267,28 @@ describe('restoreVersion result union', () => {
     expect(live.calls.map((c) => c.method)).not.toContain('save')
   })
 
+  it('refuses a version of another document even when this document has versions of its own', async () => {
+    // With an empty history any "take the first row" lookup also answers
+    // undefined, so the ownership test above cannot tell it from a lookup by
+    // id. Here the path's history is non-empty and its first row is not the
+    // one asked for.
+    const live = new FakeLive()
+    const liveDoc = spatialDoc(['mine'])
+    live.seed('canvas-a', liveDoc)
+    const before = liveDoc.oplogVersion()
+    const result = await run(
+      live,
+      versionsWith({
+        v0: { doc: spatialDoc(['mine-old']), path: 'canvas-a' },
+        v1: { doc: spatialDoc(['theirs']), path: 'canvas-b' },
+      }),
+      { versionId: 'v1' },
+    )
+    expect(result).toEqual({ kind: 'not-found' })
+    expect(liveDoc.oplogVersion().compare(before)).toBe(0)
+    expect(live.calls.map((c) => c.method)).not.toContain('save')
+  })
+
   it('answers output-exists for an existing target without overwrite, and writes nothing', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
@@ -469,6 +492,69 @@ describe('restoreVersion subtree mode', () => {
       { workspaceId: WS, path: 'canvas-a', phase: 'complete' },
     ])
     expectAllCallsLocked(live)
+  })
+
+  it('leaves a sibling whose name merely starts with the subtree path alone', async () => {
+    const live = new FakeLive()
+    const rootId = generateDocumentId()
+    live.seed('canvas-a', spatialDoc(['root']), 'spatial', rootId)
+    live.seed('canvas-ab', spatialDoc(['sibling']))
+    const pastWorkspace = workspaceDocWith([
+      { path: 'canvas-a', documentId: rootId, nodeIds: ['root'] },
+    ])
+    const result = await run(
+      live,
+      versionsWith({ v1: { doc: spatialDoc(['root']), workspace: pastWorkspace } }),
+      { subtree: true },
+    )
+    expect(result).toEqual({ kind: 'restored-subtree', restoredCount: 1 })
+    expect(live.paths()).toEqual(['canvas-a', 'canvas-ab'])
+  })
+
+  fcTest.prop(
+    [
+      fc.string({
+        minLength: 1,
+        maxLength: 6,
+        unit: fc.constantFrom(...'abcxyz-_.019'.split('')),
+      }),
+    ],
+    withDefaults(),
+  )(
+    'never deletes a live sibling whose path extends the subtree path without a separator',
+    async (suffix) => {
+      const live = new FakeLive()
+      const rootId = generateDocumentId()
+      live.seed('canvas-a', spatialDoc(['root']), 'spatial', rootId)
+      live.seed(`canvas-a${suffix}`, spatialDoc(['sibling']))
+      const pastWorkspace = workspaceDocWith([
+        { path: 'canvas-a', documentId: rootId, nodeIds: ['root'] },
+      ])
+      await run(
+        live,
+        versionsWith({ v1: { doc: spatialDoc(['root']), workspace: pastWorkspace } }),
+        { subtree: true },
+      )
+      expect(live.paths()).toEqual(['canvas-a', `canvas-a${suffix}`].sort())
+    },
+  )
+
+  it('records the merge point on every document a subtree rollback moved', async () => {
+    const live = new FakeLive()
+    const rootId = generateDocumentId()
+    const childId = generateDocumentId()
+    live.seed('canvas-a', spatialDoc(['root-new']), 'spatial', rootId)
+    live.seed('canvas-a/child', spatialDoc(['child-new']), 'spatial', childId)
+    const pastWorkspace = workspaceDocWith([
+      { path: 'canvas-a', documentId: rootId, nodeIds: ['root-old'] },
+      { path: 'canvas-a/child', documentId: childId, nodeIds: ['child-old'] },
+    ])
+    const versions = versionsWith({
+      v1: { doc: spatialDoc(['root-old']), workspace: pastWorkspace },
+    })
+    await run(live, versions, { subtree: true })
+    expect(versions.saved.map((s) => s.path).sort()).toEqual(['canvas-a', 'canvas-a/child'])
+    expect(versions.saved.every((s) => s.options.restoredFrom === 'v1')).toBe(true)
   })
 
   // Deletions run first, and the order is load-bearing: a document the
