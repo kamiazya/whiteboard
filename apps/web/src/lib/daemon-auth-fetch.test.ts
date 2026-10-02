@@ -5,12 +5,13 @@
  * process that may have claimed it.
  */
 import { describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 
 const DAEMON = 'http://127.0.0.1:3099'
 
 function setup(token: string | (() => string | undefined) | null = 'secret') {
-  const network = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'))
+  const network = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}))
   const daemonFetch = createDaemonFetch(DAEMON, token ?? undefined, network)
   const lastCall = () => {
     const [url, init] = network.mock.calls[0] ?? []
