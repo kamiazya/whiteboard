@@ -24,14 +24,11 @@
 // hand scanner is deleted rather than simplified.
 
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = repoRoot()
 const WORKFLOWS_DIR = resolve(REPO_ROOT, '.github', 'workflows')
 const RELEASE_WORKFLOW_PATH = resolve(WORKFLOWS_DIR, 'release.yml')
 

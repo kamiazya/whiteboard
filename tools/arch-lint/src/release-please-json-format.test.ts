@@ -1,9 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
-
-const REPO_ROOT = repoRoot()
+import { REPO_ROOT } from './scan-roots.js'
 
 /**
  * release-please's `type: json` updater does not edit a line — it parses the

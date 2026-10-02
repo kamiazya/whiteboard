@@ -5,13 +5,12 @@
 // project from ci.yml's verify path fails this test red.
 
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = repoRoot()
+const ROOT = REPO_ROOT
 
 interface VitestProject {
   configPath: string

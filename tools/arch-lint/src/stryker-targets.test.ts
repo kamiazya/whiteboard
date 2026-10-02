@@ -13,13 +13,11 @@
 // ported.
 
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-// __dirname -> packages/mcp-server/src/server/release
-const PACKAGE_ROOT = resolve(__dirname, '../../..')
+const PACKAGE_ROOT = resolve(REPO_ROOT, 'packages/mcp-server')
 const config = readFileSync(resolve(PACKAGE_ROOT, 'stryker.config.mjs'), 'utf-8')
 
 /** The `mutate` array's entries, in source order. */

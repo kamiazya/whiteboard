@@ -92,12 +92,10 @@ const DELIBERATE: Record<string, string> = {
     'the comment is about its ABSENCE — it stopped reaching the daemon and the ledger refuses an entry naming a module that no longer does',
   'apps/web/src/lib/provider.ts#provider.capability-reach.test.ts':
     'past tense about a deleted guard — "could never have refused" is the argument for deleting it, and a present-tense pointer would invert it',
-  'packages/mcp-server/src/server/release/stryker-targets.test.ts#api-contracts/libraries.ts':
+  'tools/arch-lint/src/stryker-targets.test.ts#api-contracts/libraries.ts':
     'the comment IS the record that these three names went stale while the score stayed plausible; correcting them destroys what it says',
-  'packages/mcp-server/src/server/release/stryker-targets.test.ts#routes/canvas-thumbnail.ts':
-    'same sentence',
-  'packages/mcp-server/src/server/release/stryker-targets.test.ts#routes/canvas-output-path-error.ts':
-    'same sentence',
+  'tools/arch-lint/src/stryker-targets.test.ts#routes/canvas-thumbnail.ts': 'same sentence',
+  'tools/arch-lint/src/stryker-targets.test.ts#routes/canvas-output-path-error.ts': 'same sentence',
   'tools/arch-lint/src/architecture-map.ts#routes/branches.ts':
     'ADR-0029 retired the branch and the comment says the route no longer exists — debt paid by deletion, recorded',
   'tools/arch-lint/src/architecture-map.ts#routes/document/thumbnails.ts':
