@@ -144,10 +144,6 @@ const DELIBERATE: Record<string, string> = {
     'stale; W7 lane C owns the package, repoint next wave',
   'packages/mcp-server/src/server/store/document-store.test.ts#ws.ts':
     'stale (the sync routes replaced it); W7 lane A owns the store, repoint next wave',
-  'tools/arch-lint/src/architecture-map.ts#ws.ts':
-    'stale; W7 lane F owns tools/arch-lint, repoint next wave',
-  'tools/arch-lint/src/workflow-hygiene.test.ts#spawn-args.ts':
-    'stale; W7 lane F owns tools/arch-lint, repoint next wave',
   // Stale directory-qualified pointers the suffix rule exposed in files other
   // lanes owned when it landed; each is repointed by the lane that owns the
   // file, and the entry goes with it (guarded from both sides below).

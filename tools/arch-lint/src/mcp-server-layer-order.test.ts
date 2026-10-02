@@ -131,7 +131,7 @@ interface SourceFile {
   readonly text: string
 }
 
-/** `server/store/x.ts -> server/routes/y.ts`, `(type)` when erased at emit. */
+/** One edge as the ledger spells it (a store file reaching a route), `(type)` when erased at emit. */
 function upwardEdges(files: readonly SourceFile[]): string[] {
   const known = new Set(files.map(({ path }) => path))
   const edges: string[] = []
