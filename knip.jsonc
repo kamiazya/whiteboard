@@ -19,8 +19,8 @@
       "entry": [
         // CI/test-invoked standalone scripts: run via `node tools/checks/...`
         // (release.yml) or loaded with a dynamically-built path
-        // (`join(ROOT, 'tools/checks/src/...')`) from mcp-server's release
-        // tests, not statically imported within this workspace.
+        // (`join(ROOT, 'tools/checks/src/...')`) from arch-lint's tests, not
+        // statically imported within this workspace.
         "src/verify-pack-contents.mjs",
         "src/release-gate-matrix-schema.mjs",
         // run-shared-layer-tests.mjs itself is NOT listed here: knip's
@@ -29,8 +29,8 @@
         // listing it again trips knip's "redundant entry pattern" hint.
         // vitest-projects.mjs, its dependency, still needs a listing of its
         // own: it is also reached by a dynamically-built path
-        // (`join(ROOT, 'tools/checks/src/...')`) from mcp-server's release
-        // tests, which the GitHub Actions plugin has no way to see.
+        // (`join(ROOT, 'tools/checks/src/...')`) from arch-lint's tests, which
+        // the GitHub Actions plugin has no way to see.
         "src/vitest-projects.mjs"
       ],
       "project": ["src/**/*.mjs"]
