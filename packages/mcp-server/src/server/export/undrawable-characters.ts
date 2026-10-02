@@ -13,7 +13,7 @@ import { loadExportFonts } from './measure-text.js'
  * given, so a code point NONE of those faces carries is painted as a tofu box.
  *
  * It is worth reporting because of HOW it fails. Measurement is correct
- * (`createOpentypeMeasureText` falls back to the estimator per code point), so
+ * (`createExportTextMeasurer` falls back to the estimator per code point), so
  * the box is the right size, the text wraps in the right places, and every
  * other signal — `truncated`, `overflows`, the digest — says the render is
  * fine. The only thing wrong is that the reader cannot read it, and nothing

@@ -42,7 +42,8 @@ async function importRenderer() {
 
 import { renderSceneToSvg, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { buildSpatialScene } from './headless-renderer.js'
-import { createOpentypeMeasureText, loadExportFonts } from './measure-text.js'
+import { loadExportFonts } from './measure-text.js'
+import { opentypeMeasureText } from './test-utils/opentype-measure.js'
 
 describe('emphasis survives the whole export pipeline', () => {
   it('a real PNG render selects the vendored bold/italic faces — styled pixels differ from plain', async () => {
@@ -61,7 +62,7 @@ describe('emphasis survives the whole export pipeline', () => {
   })
 
   it('markdown source with strong/emphasis reaches the SVG as weight/style attributes', async () => {
-    const measure = await createOpentypeMeasureText()
+    const measure = await opentypeMeasureText()
     const scene = buildSpatialScene(
       {
         nodes: [
@@ -259,7 +260,6 @@ describe('headless-renderer', () => {
     }))
     vi.doMock('./measure-text.js', () => ({
       createExportTextMeasurer: buildSpy,
-      createOpentypeMeasureText: async () => (await buildSpy()).measure,
       _resetExportMeasureTextCacheForTests: vi.fn(),
       // These mocks replace the module WHOLESALE, so every export
       // `headless-renderer` reaches for has to be answered here — an omission
