@@ -81,7 +81,7 @@ Use this loop:
 2. brainstorm: generate 2-3 candidate node / edge compositions
 3. curate: choose one and explicitly name what you are discarding
 4. gap check: find meaning that still exists only in your head
-5. draw/update: one `wb_canvas_edit` call carrying the whole composition as ops, with `mode: "apply"` — you are drawing WITH somebody, which is the case the proposal default (ADR-0029 decision 3) exempts. Through the stdio entry nobody is told live: edits show up when the user opens or refreshes the document. Automatic History rows are taken after five quiet minutes and when the session ends; use `wb_version_save` for a named restore point
+5. draw/update: one `wb_canvas_edit` call carrying the whole composition as ops, with `mode: "apply"` — you are drawing WITH somebody, which is the case the proposal default (ADR-0029 decision 3) exempts. Through the stdio entry nothing moves the user's view or highlights the change, but a document open in the browser through the daemon picks the edit up within about half a second (with no daemon running it is there when they next open it). Automatic History rows are taken after five quiet minutes and when the session ends; use `wb_version_save` for a named restore point
 6. refine: tighten labels, alignment, and reading direction
 
 Stage 2 rules:
