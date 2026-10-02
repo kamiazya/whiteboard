@@ -76,6 +76,23 @@ describe('classifyPagesOrigin', () => {
     expect(classifyPagesOrigin('https://custom.example.com')).toBe('custom-domain-deferred')
   })
 
+  it('classifies the IPv6 loopback as localhost', () => {
+    // URL keeps the brackets in `hostname`, so this is the spelling that reaches the check.
+    expect(classifyPagesOrigin('https://[::1]:5173')).toBe('localhost')
+  })
+
+  it('classifies the production host on a non-default port as custom-domain-deferred, not production', () => {
+    expect(classifyPagesOrigin('https://kamiazya-whiteboard.pages.dev:8443')).toBe(
+      'custom-domain-deferred',
+    )
+  })
+
+  it('classifies a host that merely ends in the pages domain as custom-domain-deferred, not preview', () => {
+    expect(classifyPagesOrigin('https://notkamiazya-whiteboard.pages.dev')).toBe(
+      'custom-domain-deferred',
+    )
+  })
+
   it('classifies a different pages.dev project as custom-domain-deferred', () => {
     expect(classifyPagesOrigin('https://other-project.pages.dev')).toBe('custom-domain-deferred')
   })

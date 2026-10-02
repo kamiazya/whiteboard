@@ -164,6 +164,14 @@ describe('resolveHostedProviderStateFromRaw', () => {
     expect(state.kind).toBe('browser')
   })
 
+  it('a browserOrigin that merely ends in the pages domain is not a preview, so a daemon config is kept', () => {
+    const state = resolveHostedProviderStateFromRaw(
+      { daemonBaseUrl: 'http://127.0.0.1:3099' },
+      'https://notkamiazya-whiteboard.pages.dev',
+    )
+    expect(state.kind).toBe('daemon')
+  })
+
   it('localhost browserOrigin with empty runtime config returns "browser" (local dev)', () => {
     const state = resolveHostedProviderStateFromRaw({}, 'https://localhost:5173')
     expect(state.kind).toBe('browser')
