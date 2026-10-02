@@ -55,7 +55,7 @@ function senderSnapshot(): Uint8Array {
 function keeperStub(
   target: LoroDoc,
   promotes: unknown[],
-  { signedIn = true }: { signedIn?: boolean } = {},
+  { signedIn = true, refusePromote }: { signedIn?: boolean; refusePromote?: Response } = {},
 ): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -69,6 +69,7 @@ function keeperStub(
     if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
       const body = JSON.parse(init.body as string) as { snapshot: string; attestation?: unknown }
       promotes.push(body)
+      if (refusePromote) return refusePromote
       target.import(base64UrlToBytes(body.snapshot) as Uint8Array)
       return Response.json({
         ok: true,
@@ -167,6 +168,40 @@ describe('ReceiveTransferPage', () => {
     // authority.
     expect(promotes).toHaveLength(1)
     expect(promotes[0]).not.toHaveProperty('attestation')
+  })
+
+  it('shows a refused merge and tells the opener why, merging nothing', async () => {
+    const target = new LoroDoc()
+    const promotes: unknown[] = []
+    const opener = { postMessage: vi.fn() }
+    const refusal = jsonResponse(
+      { error: 'forbidden', message: 'You may not merge into this workspace.' },
+      403,
+    )
+    render(
+      <ReceiveTransferPage
+        fetchFn={keeperStub(target, promotes, { refusePromote: refusal })}
+        opener={opener}
+      />,
+    )
+    arrive(SENDER, offer())
+    await screen.findByTestId('receive-transfer-offer')
+    await userEvent.click(screen.getByTestId('receive-transfer-accept'))
+
+    expect((await screen.findByTestId('receive-transfer-refused')).textContent).toBe(
+      'You may not merge into this workspace.',
+    )
+    expect(screen.queryByTestId('receive-transfer-done')).toBeNull()
+    expect(readWorkspaceDocuments(target)).toEqual([])
+    const reply = opener.postMessage.mock.calls.at(-1)
+    if (reply === undefined) throw new Error('expected a reply to the opener')
+    expect(reply[1]).toBe(SENDER)
+    expect(reply[0]).toEqual({
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: false,
+      reason: 'You may not merge into this workspace.',
+    })
   })
 
   it('shows nothing for an offer from another origin, however well-formed', async () => {
