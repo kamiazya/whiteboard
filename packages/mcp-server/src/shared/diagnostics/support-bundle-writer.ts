@@ -1,6 +1,7 @@
-import { lstat, mkdir, readdir, realpath, writeFile } from 'node:fs/promises'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { lstat, mkdir, readdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { isMissingFileError } from '../errno.js'
+import { canonicalizeWithMissingTail, isWithinAllowedRoots } from '../path-containment.js'
 import { type SupportBundle, SupportBundleError } from './support-bundle.js'
 
 // Filesystem writer for the v0 support bundle. Lives apart from
@@ -29,90 +30,13 @@ export interface WriteSupportBundleOptions {
   allowedRoots: string[]
 }
 
-function isInside(child: string, parent: string): boolean {
-  if (child === parent) return true
-  return child.startsWith(parent + sep)
-}
-
-async function lstatOrNullSync(path: string) {
+async function lstatOrNull(path: string) {
   try {
     return await lstat(path)
   } catch (err) {
     if (isMissingFileError(err)) return null
     throw err
   }
-}
-
-// Resolve `target` against the filesystem in a symlink-aware way:
-//   - walk every existing ancestor with `lstat` and reject any
-//     symlink encountered (parent-traversal guard);
-//   - take the realpath of the deepest existing ancestor and append
-//     the missing tail segments;
-//   - return the canonicalised absolute path.
-//
-// Rejects with `SupportBundleError` if any ancestor is a symlink.
-async function canonicaliseTarget(target: string): Promise<string> {
-  const absolute = resolve(target)
-  // Walk from the absolute root downward, lstat'ing each segment.
-  // The first existing ancestor is the deepest one we can `realpath`
-  // safely; missing leaf segments don't need realpath because they
-  // can't be a symlink yet.
-  const parts = absolute.split(sep).filter((p) => p.length > 0)
-  // POSIX absolute paths start at '/'. On Windows the first segment
-  // is the drive letter; preserve it as-is via dirname() walking.
-  let existing = absolute
-  const missingTail: string[] = []
-  while (existing !== dirname(existing)) {
-    const stat = await lstatOrNullSync(existing)
-    if (stat !== null) {
-      if (stat.isSymbolicLink()) {
-        throw new SupportBundleError('Target path traverses a symlink, which is not allowed.')
-      }
-      break
-    }
-    missingTail.unshift(parts[parts.length - 1 - missingTail.length] ?? '')
-    existing = dirname(existing)
-  }
-  // existing is now either the deepest existing ancestor or the
-  // filesystem root. realpath canonicalises any symlinks BELOW
-  // the lstat-checked chain (defence in depth — lstat already
-  // rejected each level, but realpath catches anything mounted /
-  // bound between lstat and the next syscall).
-  const realExisting = await realpath(existing)
-  return missingTail.length === 0 ? realExisting : join(realExisting, ...missingTail)
-}
-
-async function assertWithinAllowed(
-  canonicalTarget: string,
-  options: WriteSupportBundleOptions,
-): Promise<void> {
-  for (const root of options.allowedRoots) {
-    let canonicalRoot: string
-    try {
-      canonicalRoot = await realpath(resolve(root))
-    } catch {
-      // A nonexistent allowed-root entry can't contain anything;
-      // skip it rather than throwing — a follow-up entry may match.
-      continue
-    }
-    if (isInside(canonicalTarget, canonicalRoot)) return
-    // Belt-and-suspenders: also require the relative path to not
-    // start with `..` — the prefix check above already covers it,
-    // but `relative()` makes the intent explicit for the reader.
-    const rel = relative(canonicalRoot, canonicalTarget)
-    if (rel === '' || (!rel.startsWith('..') && !rel.includes(`..${sep}`))) {
-      // Already accepted by the prefix check; this branch is
-      // unreachable in practice but documents the invariant.
-      return
-    }
-  }
-  // Generic — never echo the resolved target. A future CLI surface
-  // could otherwise leak the user's local path back through stderr.
-  throw new SupportBundleError('Target directory is not inside an allowed root.')
-}
-
-async function lstatOrNull(path: string) {
-  return lstatOrNullSync(path)
 }
 
 // Stable order. The manifest must be written last so a reader that
@@ -130,18 +54,19 @@ export async function writeSupportBundle(
   targetDir: string,
   options: WriteSupportBundleOptions,
 ): Promise<{ outputDir: string; files: string[] }> {
-  // Canonicalise BEFORE the containment check so a symlinked
-  // ancestor (e.g. `<root>/link → /outside`) cannot pass a naive
-  // string-prefix guard. The walk also rejects ancestor symlinks
-  // outright, matching the parent-traversal contract documented
-  // above.
-  // Canonicalise BEFORE the containment check so a symlinked
-  // ancestor (e.g. `<root>/link → /outside`) cannot pass a naive
-  // string-prefix guard. The walk also rejects ancestor symlinks
-  // outright, matching the parent-traversal contract documented
-  // above.
-  const canonicalTarget = await canonicaliseTarget(targetDir)
-  await assertWithinAllowed(canonicalTarget, options)
+  // Canonicalise BEFORE the containment check so a symlinked ancestor
+  // (e.g. `<root>/link → /outside`) cannot pass a naive string-prefix guard.
+  // The entry the bundle is written through is refused outright when it is a
+  // symlink, matching the parent-traversal contract documented above.
+  const canonicalTarget = await canonicalizeWithMissingTail(targetDir, {
+    symlinkRefusal: () =>
+      new SupportBundleError('Target path traverses a symlink, which is not allowed.'),
+  })
+  if (!(await isWithinAllowedRoots(canonicalTarget, options.allowedRoots))) {
+    // Generic — never echo the resolved target. A future CLI surface
+    // could otherwise leak the user's local path back through stderr.
+    throw new SupportBundleError('Target directory is not inside an allowed root.')
+  }
 
   const stat = await lstatOrNull(targetDir)
   if (stat !== null) {

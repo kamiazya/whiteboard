@@ -2,6 +2,7 @@ import { cp, lstat, mkdir, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { isMissingFileError } from '../shared/errno.js'
+import { canonicalizeWithMissingTail, isWithinAllowedRoots } from '../shared/path-containment.js'
 import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
 import { DAEMON_IDENTITY_FILENAME } from './security/daemon-identity.js'
 import { MACAROON_ROOT_KEY_FILENAME } from './security/macaroon-root-key.js'
@@ -62,34 +63,6 @@ export interface BackupRestoreOptions {
   excludeBlobs?: boolean
 }
 
-// Canonicalize `p` by resolving symlinks on the deepest existing ancestor.
-// `resolve()` does NOT follow symlinks, so an ancestor symlink (e.g.
-// `<allowed>/link → /outside`) passes a plain resolve()-based prefix check
-// while actually pointing outside the allowed tree. `realpath` on the deepest
-// existing ancestor fixes that.
-//
-// Exported so CLI callers can canonicalize user-supplied paths before
-// passing them to helpers, ensuring the `allowedRoots` guard sees real paths.
-async function canonicalizePath(p: string): Promise<string> {
-  const abs = resolve(p)
-  const parts = abs.split(sep)
-  let existingLen = parts.length
-  while (existingLen > 1) {
-    const candidate = parts.slice(0, existingLen).join(sep) || sep
-    try {
-      await lstat(candidate)
-      break
-    } catch (err) {
-      if (!isMissingFileError(err)) throw err
-      existingLen--
-    }
-  }
-  const existingPart = parts.slice(0, existingLen).join(sep) || sep
-  const real = await realpath(existingPart)
-  const tail = parts.slice(existingLen)
-  return tail.length === 0 ? real : join(real, ...tail)
-}
-
 // Walk every existing path component of `p` from the deepest toward the root.
 // Returns true if any component is a symbolic link.
 // Used by CLI callers to fail-closed before passing paths to the helper, so
@@ -117,10 +90,8 @@ async function assertWithinAllowed(
   options: BackupRestoreOptions,
   label: string,
 ): Promise<void> {
-  const canonical = await canonicalizePath(target)
-  for (const root of options.allowedRoots) {
-    const canonicalRoot = await canonicalizePath(root)
-    if (canonical === canonicalRoot || canonical.startsWith(canonicalRoot + sep)) return
+  if (await isWithinAllowedRoots(await canonicalizeWithMissingTail(target), options.allowedRoots)) {
+    return
   }
   // The error MUST NOT echo the resolved target — that would leak the
   // full local path back to a user-facing surface in a future support
