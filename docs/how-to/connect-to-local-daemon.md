@@ -2,8 +2,8 @@
 
 The web app (`apps/web`) can run entirely in the browser with no daemon —
 documents are stored in IndexedDB and never leave the device. This guide
-covers connecting it to a local daemon (started with `whiteboard daemon run`,
-or by an MCP client), and moving a workspace kept in your browser onto it.
+covers connecting it to a local daemon (started with `whiteboard daemon run`),
+and moving a workspace kept in your browser onto it.
 
 The web app UI calls these "variations" and "combining changes," but the
 underlying MCP tools your AI agent calls keep their own names — the UI
@@ -125,7 +125,7 @@ any Flatpak apps), or reset every portal permission Firefox holds with
 
 ### 4. Connect
 
-Start the daemon (`whiteboard daemon run`, or let an MCP client start it),
+Start the daemon with `whiteboard daemon run`,
 then in the hosted app open the workspace popover and choose **Connect
 through the extension**. The app reloads onto the daemon's workspaces.
 
