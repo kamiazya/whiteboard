@@ -51,7 +51,7 @@ Three modules, and `src/index.ts` is the whole published surface:
 Branch (variation) operations and merge planning lived here — a branch
 schema, create/delete/setHead/rename over a mergeable plane of the workspace
 record, and a merge engine that computed a per-peer meet of two version
-vectors. [ADR-0029](../../docs/contributing/adr/0029-proposals.md) retired the
+vectors. [ADR-0029](../../docs/contributing/adr/0029-proposal-layer.md) retired the
 branch in favour of the proposal, and all of it was deleted. Nothing replaced
 it inside this package: a proposal follows the document rather than fixing a
 point in time, so it needs no frontier arithmetic of its own.

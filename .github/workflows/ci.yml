@@ -679,7 +679,7 @@ jobs:
       #
       # build:server, not build: the full `build` also copies canvas-viewer's
       # widget into dist, and that package is not built in this job, so it
-      # fails on a missing dist/widget/canvas-viewer.html. tsup produces the
+      # fails on a missing dist/widget/canvas-viewer.html. tsdown produces the
       # module the smoke needs on its own.
       - name: Build mcp-server dist for the backup/restore smoke
         if: steps.detect.outputs.docker == 'true'

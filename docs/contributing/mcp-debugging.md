@@ -83,7 +83,7 @@ pnpm mcp:inspect
 
 ## When To Use HTTP vs STDIO
 
-- Prefer HTTP (`/mcp`) for active development. The client keeps the same URL while the daemon restarts on code changes.
+- Prefer HTTP (`/mcp`) for active development. The stdio proxy the client launches retries across daemon restarts, so a code change restarts the daemon without reconnecting the client; the daemon listens on an owner-only socket, not a TCP port.
 - Use stdio Inspector only when validating the standalone packaged MCP entrypoint or debugging stdio-specific startup issues.
 
 ## Enable Request Logging

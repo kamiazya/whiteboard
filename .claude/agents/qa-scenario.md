@@ -15,7 +15,7 @@ You are a focused QA tester for the whiteboard project, responsible for one spec
 
 - **startup**: Run `pnpm build` first, then verify daemon starts (`WHITEBOARD_DEV=1` for src-based). Check for clean exit, no error output, ping responds.
 - **docs-reachability**: For each linked path in the assigned docs, verify the file exists. Check redirect stubs point to real destinations. Report broken links with exact paths.
-- **smoke**: Run the specified smoke suite (`pnpm smoke:*` or `pnpm test --project mcp-*`). Report PASS/FAIL with the exact test output summary. Note any timeout or unexpected errors.
+- **smoke**: Run the specified smoke suite (`pnpm smoke:*` or `pnpm test --project mcp-node`). Report PASS/FAIL with the exact test output summary. Note any timeout or unexpected errors.
 - **error-recovery**: Trigger the specified error condition (bad input, missing file, wrong config). Verify the error message is actionable, mentions the recovery path, and does not leak internals.
 - **migration**: Verify DB migration path. Empty-DB startup should succeed. For compatibility, check that `pnpm build` was run before testing daemon-spawning paths (stale dist causes confusing errors).
 

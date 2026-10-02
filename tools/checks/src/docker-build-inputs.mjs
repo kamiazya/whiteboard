@@ -185,7 +185,7 @@ export function couldBeInert(path) {
  * at 7 of the last 31 image builds. Neither can change whether
  * Dockerfile.server compiles: `pnpm-lock.yaml` records no workspace package's
  * OWN version, so a bump cannot fail `--frozen-lockfile`, and the build is
- * tsup plus the widget build, neither of which reads a changelog.
+ * tsdown plus the widget build, neither of which reads a changelog.
  *
  * PARSED JSON, never text: release-please rewrites these files with different
  * array formatting, so a version bump's textual diff also carries reflowed

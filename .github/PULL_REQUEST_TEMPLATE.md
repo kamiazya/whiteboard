@@ -8,8 +8,8 @@
 
 <!-- How was this tested? Check all that apply. -->
 
-- [ ] New or updated `mcp-node` / `mcp-jsdom` / `mcp-browser` / `web-browser` tests added
-- [ ] `pnpm test` passes locally
+- [ ] New or updated tests added at the nearest layer (`mcp-node`, `web-jsdom`, `web-browser`, `canvas-viewer-browser`, …)
+- [ ] The suites for the area I touched pass locally (`pnpm test --project <name>`, `pnpm test:browser` for browser changes); CI runs the full matrix
 - [ ] Manual verification completed (describe below)
 - [ ] E2E coverage added or extended where applicable
 

@@ -11,12 +11,17 @@ import { describe, expect, it } from 'vitest'
 // findings somewhere nobody looks. Nothing failed, because a retired path is
 // just a string.
 //
-// The scan covers the Markdown a reader or an agent is TOLD things by: the
-// user/contributor docs, `.claude/**` (skills, agents, rules) and AGENTS.md.
+// The scan covers what a reader or an agent is TOLD things by: the
+// user/contributor docs, `.claude/**` (skills, agents, rules), the workflow
+// descriptions under `.claude/workflows` (a workflow's `description` is the
+// text its caller reads) and AGENTS.md. The hyphenated and spaced spellings
+// ("Tasks/tmp-issues") are the same instruction reworded, and survived a
+// reword that only searched for the slash.
 // Worktrees under `.claude/worktrees` are other checkouts of this same tree,
 // so counting them would report one stale line once per worktree.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const RETIRED = 'tmp/issues'
+const RETIRED_SPELLING = /tmp[-/_ ]issues/i
 
 // Files that may spell the retired path, each for a reason, and each checked
 // from the other side below: an exemption that no longer needs to exist is a
@@ -28,35 +33,39 @@ const MAY_NAME_RETIRED_PATH: Record<string, string> = {
     'the Source Comment Discipline tells authors NOT to point a source comment at tmp/issues',
 }
 
-function markdownUnder(dir: string): string[] {
+function scannedUnder(dir: string): string[] {
   return readdirSync(join(REPO_ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) {
       if (path === '.claude/worktrees' || entry.name === 'node_modules') return []
-      return markdownUnder(path)
+      return scannedUnder(path)
     }
-    return entry.name.endsWith('.md') ? [path] : []
+    return entry.name.endsWith('.md') ||
+      (dir.startsWith('.claude/workflows') && entry.name.endsWith('.mjs'))
+      ? [path]
+      : []
   })
 }
 
-const scanned = [...markdownUnder('docs'), ...markdownUnder('.claude'), 'AGENTS.md']
+const scanned = [...scannedUnder('docs'), ...scannedUnder('.claude'), 'AGENTS.md']
 
 describe('the retired tmp/issues path is not an instruction', () => {
   // Reached, not assumed: a scan over an empty list passes every assertion
   // below. 252 files at the time of writing; the floor is far enough under
   // that a pruned tree is still fine and a broken walk is not.
-  it('scans the docs, the .claude Markdown and AGENTS.md', () => {
+  it('scans the docs, the .claude Markdown, the workflow scripts and AGENTS.md', () => {
     expect(scanned.length).toBeGreaterThan(150)
     expect(scanned).toContain('docs/contributing/testing.md')
     expect(scanned).toContain('.claude/skills/ci-triage/SKILL.md')
     expect(scanned).toContain('AGENTS.md')
+    expect(scanned).toContain('.claude/workflows/audit-triage.workflow.mjs')
     expect(scanned.some((path) => path.startsWith('.claude/worktrees'))).toBe(false)
   })
 
   it('appears in no scanned file outside the documented exemptions', () => {
     const offenders = scanned
       .filter((path) => !(path in MAY_NAME_RETIRED_PATH))
-      .filter((path) => readFileSync(join(REPO_ROOT, path), 'utf8').includes(RETIRED))
+      .filter((path) => RETIRED_SPELLING.test(readFileSync(join(REPO_ROOT, path), 'utf8')))
     expect(
       offenders,
       'file findings as a whiteboard `type: issue` document (see the ticketing skill), not under tmp/issues',

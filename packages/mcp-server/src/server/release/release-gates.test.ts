@@ -52,9 +52,7 @@ describe('release gate: CODEOWNERS', () => {
     '/packages/mcp-server/src/server/security/**',
     '/packages/mcp-server/src/server/routes/runtime.ts',
     '/packages/mcp-server/src/server/routes/auth.ts',
-    '/packages/mcp-server/src/server/routes/ws-auth.ts',
     '/packages/mcp-server/src/shared/diagnostics/**',
-    '/packages/mcp-server/src/shared/api-contracts/problem-details.ts',
     // Release / distribution
     '/packages/mcp-server/package.json',
     '/packages/mcp-server/scripts/**',

@@ -75,4 +75,19 @@ describe('root composite scripts', () => {
     expect(found.length).toBeGreaterThan(20)
     expect(found).toContain('typecheck')
   })
+
+  // Two names for one command is a decision somebody has to keep making twice:
+  // `test:all` was `test` under another name and `test:node` was
+  // `test:mcp-node` under a worse one (`node` reads as the runtime, not the
+  // project), and nothing referenced either. The second name only ever adds a
+  // question — "which one is the real one?".
+  it('give no two scripts the same body', () => {
+    const namesByBody = new Map<string, string[]>()
+    for (const [name, body] of Object.entries(rootScripts)) {
+      namesByBody.set(body, [...(namesByBody.get(body) ?? []), name])
+    }
+    const duplicated = [...namesByBody.values()].filter((names) => names.length > 1)
+    expect(Object.keys(rootScripts).length).toBeGreaterThan(40)
+    expect(duplicated).toEqual([])
+  })
 })

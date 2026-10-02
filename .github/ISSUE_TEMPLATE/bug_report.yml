@@ -23,7 +23,7 @@ body:
       description: Minimal steps that reliably reproduce the issue.
       placeholder: |
         1. Run `pnpm mcp:http:dev`
-        2. Open canvas at http://127.0.0.1:...
+        2. Open the web app, or call the MCP tool, that shows the problem
         3. ...
     validations:
       required: true

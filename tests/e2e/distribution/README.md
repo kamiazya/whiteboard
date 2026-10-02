@@ -122,10 +122,10 @@ three of the four image builds omitted the required `NODE_VERSION` build arg (th
 image could not build), the musl libsql prebuild could not load on Alpine (it
 could not start), scenario 8's leak check was scanning an empty string, scenario
 4 asserted a `pid` the ping contract had dropped, `dist/server/server-mode-backup-restore.js`
-was not a tsup entry so no build produced it, and the palette route above.
+was not a tsdown entry so no build produced it, and the palette route above.
 `docker-contract.test.ts` classifies every file reaching the image build and
 checks each passes the arg; `smoke-dist-entries.test.ts` checks every dist path a
-smoke imports is a tsup entry.
+smoke imports is a tsdown entry.
 
 Whether a gate is exercised on a pull request is the separate `prCoverage` axis,
 checked structurally against `ci.yml` by `gate-isomorphism.test.ts`. Its

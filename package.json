@@ -7,7 +7,7 @@
   "type": "module",
   "packageManager": "pnpm@11.12.0",
   "engines": {
-    "node": "^22 || ^24 || >=26"
+    "node": "^24"
   },
   "repository": {
     "type": "git",
@@ -16,10 +16,8 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",
-    "test:all": "vitest run",
     "test:coverage": "pnpm --filter @kamiazya/whiteboard-mcp test:coverage",
     "coverage": "node tools/checks/src/run-coverage.mjs",
-    "test:node": "vitest run --project mcp-node",
     "test:mcp-node": "vitest run --project mcp-node",
     "test:web-jsdom": "vitest run --project web-jsdom",
     "test:distribution": "pnpm --filter @kamiazya/whiteboard-mcp test:distribution",

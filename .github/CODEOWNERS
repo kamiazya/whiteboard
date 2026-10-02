@@ -19,9 +19,7 @@
 /packages/mcp-server/src/server/security/** @kamiazya
 /packages/mcp-server/src/server/routes/runtime.ts @kamiazya
 /packages/mcp-server/src/server/routes/auth.ts @kamiazya
-/packages/mcp-server/src/server/routes/ws-auth.ts @kamiazya
 /packages/mcp-server/src/shared/diagnostics/** @kamiazya
-/packages/mcp-server/src/shared/api-contracts/problem-details.ts @kamiazya
 
 # Release / distribution
 /packages/mcp-server/package.json @kamiazya

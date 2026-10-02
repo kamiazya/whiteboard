@@ -14,7 +14,7 @@ cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm 
                    # full prerequisites: docs/contributing/development.md
 pnpm install
 pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser / canvas-render-browser / web-browser-window-state)
-pnpm test         # all 28 vitest projects (listed under Workflow below)
+pnpm test         # optional: all 28 vitest projects, which CI runs anyway (listed under Workflow below)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```
@@ -87,13 +87,15 @@ Hooks are a local safety net, **not** a replacement for CI (the authoritative ga
 ## Pull request checklist
 
 - `pnpm check:local` is green — the local mirror of CI's `check` job (its compose-figure tests need ImageMagick; they skip without it locally and fail on CI)
-- `pnpm test` is green
+- The suites for the area you touched are green (`pnpm test --project <name>`; names under Workflow above)
 - `pnpm typecheck` is green
 - New behavior has at least one nearest-layer automated test
 - For UI / browser-mode changes: `pnpm test:browser` is green
 - For MCP tool / route changes: `pnpm smoke:e2e` is green
 - README / AGENTS.md updated if the public surface changed
 - No secrets, `.env`, or large binaries committed
+
+CI runs the full matrix on every push, so a local full run repeats its work; `pnpm test` stays available as the run-everything command when you want one.
 
 ## Release / Publish
 
@@ -102,20 +104,23 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 1. Push to `main` using Conventional Commits.
 2. The `release` GitHub Actions workflow opens or updates a `chore(main): release X.Y.Z` PR that bumps `package.json` and updates the changelog.
 3. A maintainer reviews and merges that PR.
-4. The workflow runs again from the merge with `release_created=true` and performs:
+4. The workflow runs again from the merge with `release_created=true`. `publish-mcp` performs:
    - `pnpm install --frozen-lockfile`
-   - `pnpm test` / `pnpm typecheck` / `pnpm smoke:e2e`
-   - `pnpm build` → `npm publish`
+   - `pnpm audit --prod`
+   - `pnpm publish-gate` — the publishability tier (typecheck, build, artifact checks, SBOM, tarball/packaged smokes). It deliberately does not re-run `pnpm test`: verify CI already ran the full matrix on this exact commit.
+   - `verify-pack-contents`, then `pnpm pack` → `npm publish`
    - GitHub Release + tag creation
+
+   The `docker-publish-sign` job runs the same gate, then the container smokes, before it pushes and signs the image. [docs/contributing/releasing.md](docs/contributing/releasing.md) has the step-by-step.
 
 ### Local checks before merging a release PR
 
 ```bash
-pnpm test
-pnpm typecheck
-pnpm smoke:e2e
-npm pack --dry-run   # verify the tarball includes dist/, skills/, package README, and LICENSE
+pnpm check:release-candidate   # typecheck, build, distribution + artifact checks, SBOM, tests, smokes
+npm pack --dry-run             # verify the tarball includes dist/, skills/, package README, and LICENSE
 ```
+
+`pnpm check:release-candidate:local` adds the mutation lane; `pnpm check:release-candidate:docker` adds the container smokes.
 
 ### Config files
 
