@@ -667,7 +667,17 @@ export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
  */
 export const ADAPTER_HELPER_FILES: readonly string[] = ['workspace-handle.ts']
 
-export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
+/**
+ * `store-scope` is a value an adapter is HANDED, not a mechanic it reaches for:
+ * the directory and tenant its routes serve, which `createApp` derives once
+ * from the layout its root booted the deps over. Holding the type is what lets
+ * a router pass the directory on to the store functions it calls, and counting
+ * it here would ledger nine routes for holding the contract. What an adapter
+ * must NOT do — fall back to the process's directory, or build a scope itself —
+ * is `adapter-process-global-check`'s scope scan, which bans `globalStoreScope`
+ * and `storeScope(` outside `createApp`.
+ */
+export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data', 'store-scope']
 
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []

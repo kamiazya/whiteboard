@@ -6,9 +6,9 @@ import { isMissingFileError } from '../../shared/errno.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
 import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
+import type { StoreScope } from '../store/store-scope.js'
 import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
-import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { validateFileId, validationErrorBody } from '../validators.js'
 import { parseWorkspaceHandle } from '../workspace-handle.js'
 import { limitBody } from './body-limit.js'
@@ -43,8 +43,12 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
 }
 
 export interface FilesRouterOptions {
-  /** Where a workspace's files are stored, and the data dir uploads are written atomically under. */
-  dataLayout: DataLayout
+  /**
+   * The directory and tenant these routes serve: where a workspace's files are
+   * stored, the data dir uploads are written atomically under, and what the
+   * purge reads its references from.
+   */
+  scope: StoreScope
   // Provide a versionStore for version-aware purge. Without one, the
   // purge endpoint walks only the live state of each canvas and leaves
   // files referenced exclusively by saved versions untouched.
@@ -79,6 +83,7 @@ async function storedFileFor(
 
 export function createFilesRouter(options: FilesRouterOptions) {
   const app = new Hono()
+  const { scope, versionStore } = options
 
   // PUT /api/w/:workspaceId/document/<path>/file/:fileId
   // Called by MCP load_image. fileId is already generated on the MCP side with nanoid().
@@ -104,7 +109,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
           415,
         )
       }
-      const dir = options.dataLayout.workspaceFilesDir(workspaceId)
+      const dir = scope.layout.workspaceFilesDir(workspaceId)
       const filePath = join(dir, `${fileId}${ext}`)
       const bytes = new Uint8Array(await c.req.arrayBuffer())
       if (bytes.length === 0) {
@@ -123,7 +128,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
         // overlapping an in-flight 8 MiB upload captured a torn file 2 times
         // out of 10, which is worse than always, because a backup then holds
         // a corrupt image only sometimes.
-        await writeFileAtomicStaged(options.dataLayout.dataDir, filePath, bytes)
+        await writeFileAtomicStaged(scope.dataDir, filePath, bytes)
       })
       return c.body(null, 204)
     },
@@ -141,7 +146,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
       throw err
     }
     try {
-      const found = await storedFileFor(options.dataLayout.workspaceFilesDir(workspaceId), fileId)
+      const found = await storedFileFor(scope.layout.workspaceFilesDir(workspaceId), fileId)
       // JSON like every other refusal here: `c.notFound()` is plain text,
       // which the browser client cannot read.
       if (found === null) {
@@ -167,9 +172,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
     try {
-      const result = await purgeDanglingFiles(workspaceId, {
-        versionStore: options.versionStore,
-      })
+      const result = await purgeDanglingFiles(workspaceId, { versionStore, scope })
       return c.json(result)
     } catch (err) {
       // 503: fail-closed refusal (some branch/version could not be scanned),

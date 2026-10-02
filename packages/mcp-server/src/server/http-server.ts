@@ -79,7 +79,11 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const startedAt = new Date(startedAtMs).toISOString()
   let socketListener: Awaited<ReturnType<typeof listenOnSocket>> | undefined
 
-  const shared = createSharedWorkers(instanceId, options)
+  // Booted before the workers so they serve the directory the deps were booted
+  // over (`scope`). Prepared and migrated before the ports get a handle — see
+  // `prepareSelfHostDataDir` for what each step's absence produced.
+  const { db, serverDeps: bootedDeps, dataLayout, scope } = await bootSelfHostDeps(getDataDir())
+  const shared = createSharedWorkers(instanceId, scope, options)
 
   // A page holding a sync stream makes no request while nobody types, and
   // must not have the daemon stop under it.
@@ -129,11 +133,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // /api/v1 document surface: same libSQL database as the MCP tools
   // (getDb memoizes per dataDir, so this container shares the connection
   // with the per-session MCP containers rather than opening a second one).
-  const dataDir = getDataDir()
-  // Prepared and migrated before the ports get a handle, and the daemon holds
-  // its current workspace before anything reads the list — see
-  // `prepareSelfHostDataDir` for what each one's absence produced.
-  const { db, serverDeps: bootedDeps, dataLayout } = await bootSelfHostDeps(dataDir)
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
   // from the same post-migration handle as the container above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {

@@ -9,6 +9,7 @@ import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
+import type { StoreScope } from '../store/store-scope.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { computeStorageReport } from './runtime-storage.js'
 
@@ -27,6 +28,8 @@ export interface RuntimeRouterOptions {
   credentialResolver: CredentialResolver
   /** The data directory the storage report walks. */
   dataLayout: DataLayout
+  /** Whose workspace records the compaction stamp is read from: the same directory as `dataLayout`. */
+  scope: StoreScope
 }
 
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
@@ -90,7 +93,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   app.get('/api/runtime/storage', async (c) => {
     options.touch()
     const report = await computeStorageReport(options.dataLayout.dataDir)
-    const lastAutoCompactedAt = await readLatestCompactedAt()
+    const lastAutoCompactedAt = await readLatestCompactedAt(options.scope)
     return c.json({ ...report, lastAutoCompactedAt })
   })
 

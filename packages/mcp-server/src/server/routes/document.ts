@@ -2,8 +2,8 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
+import type { StoreScope } from '../store/store-scope.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
@@ -20,7 +20,8 @@ export type { AutoVersionTrigger }
 export { createAutoVersionTrigger }
 
 export interface DocumentRouterOptions {
-  // Allow tests to replace the store. Production uses FileVersionStore.
+  // Allow tests to replace the store. Production passes the root's own, built
+  // over the same scope.
   versionStore?: VersionStore
   // Auto-version interval in milliseconds. Tests can reduce it.
   /**
@@ -35,8 +36,13 @@ export interface DocumentRouterOptions {
   // composition path, and the one it built carried none of what the root
   // attaches.
   serverDeps: ServerDeps
-  /** Where exports are written; threaded to the SVG export router. */
-  dataLayout: DataLayout
+  /**
+   * Which data directory and tenant the routes serve, threaded to every
+   * sub-router that reaches a store. Required: a router that defaulted to the
+   * process's directory would answer from a different one than the deps beside
+   * it whenever the keeper serves another.
+   */
+  scope: StoreScope
   /**
    * Hands the caller the checkpoint trigger this router created, so a
    * composition root can flush it when the process is going away.
@@ -97,12 +103,12 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
 // (`shared-background-work.ts`), not here.
 export function createDocumentRouter(options: DocumentRouterOptions) {
   const app = new Hono()
-  const versionStore = options.versionStore ?? new FileVersionStore()
+  const versionStore = options.versionStore ?? new FileVersionStore(options.scope)
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
 
   app.route('/', createWorkspacesRouter(workspacesRouterOptions(options)))
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
-  app.route('/', createDocumentMetadataRouter())
+  app.route('/', createDocumentMetadataRouter({ scope: options.scope }))
   app.route('/', createLiveDocRouter({ triggerAutoVersion, serverDeps: options.serverDeps }))
   app.route(
     '/',
@@ -116,15 +122,16 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     '/',
     createVersionsRouter({
       versionStore,
+      scope: options.scope,
       ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
     }),
   )
-  app.route('/', createMaintenanceRouter({ versionStore }))
+  app.route('/', createMaintenanceRouter({ versionStore, scope: options.scope }))
   app.route(
     '/',
     createDocumentSvgExportRouter({
       liveDocuments: options.serverDeps.liveDocuments,
-      dataLayout: options.dataLayout,
+      scope: options.scope,
     }),
   )
   const restoreProgress: RestoreProgress = async (event) => {

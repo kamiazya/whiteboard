@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { globalStoreScope } from './store/store-scope.js'
 
 let tempDir: string
 
@@ -34,7 +35,7 @@ describe('the shared set arms auto-compaction', () => {
   })
 
   function declared() {
-    const work = sharedBackgroundWork(createSharedWorkers('instance-a'), {
+    const work = sharedBackgroundWork(createSharedWorkers('instance-a', globalStoreScope), {
       checkpointScheduler: () => undefined,
       fileGc: { start: () => {}, stop: async () => {} },
     }).find((entry) => entry.name === 'auto-compact')

@@ -27,7 +27,7 @@ import {
   createTestDocument,
   resolveTestServerDeps,
   seedWorkspaceRow,
-  testDataLayout,
+  testStoreScope,
 } from '../_test-helpers.js'
 
 let tempDir: string
@@ -103,7 +103,7 @@ async function fetchWorkspaceSnapshot(
 
 it('GET workspace-document/snapshot answers a document a peer can resolve paths in', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -120,7 +120,7 @@ it('GET workspace-document/snapshot answers a document a peer can resolve paths 
 
 it('GET workspace-document/snapshot refuses an unregistered workspace', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -130,7 +130,7 @@ it('GET workspace-document/snapshot refuses an unregistered workspace', async ()
 
 it('POST workspace-document/update lands on the tree and refreshes per-document reads', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -171,7 +171,7 @@ it('POST workspace-document/update lands on the tree and refreshes per-document 
 
 it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -206,7 +206,7 @@ it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => 
 
 it('a malformed workspace-document update is a 400, not a daemon crash', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })

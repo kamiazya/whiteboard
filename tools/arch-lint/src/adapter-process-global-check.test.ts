@@ -113,8 +113,6 @@ describe('an adapter does not read the process data dir or the self-host tenant'
  * allowed to make that choice.
  */
 const STILL_READ_BY_COMPOSITION: Record<string, string> = {
-  'di/boot-self-host-deps.ts -> SELF_HOST_TENANT_ID':
-    "builds the data layout for the keeper's only tenant, the one a self-hosting root serves",
   'di/container.ts -> globalStoreScope':
     "a container with no store module of its own binding (the in-memory one a test builds) has no directory, so its seams take the process's",
   'di/store-local.module.ts -> SELF_HOST_TENANT_ID':
@@ -132,7 +130,7 @@ const STILL_READ_BY_COMPOSITION: Record<string, string> = {
   'store/store-scope.ts -> getDataDir':
     'the process scope: the one place the global is read for stores that have no composition above them',
 }
-const COMPOSITION_LEDGER_SIZE = 9
+const COMPOSITION_LEDGER_SIZE = 8
 
 const composed = findCompositionGlobalReads(SRC_DIR)
 

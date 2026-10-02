@@ -10,6 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
+import { testStoreScope } from '../routes/_test-helpers.js'
 
 let tempDir: string
 
@@ -67,6 +68,7 @@ describe('exportCanvasHeadless', () => {
     await saveDocument('ws_a', 'design', doc)
 
     await exportCanvasHeadless({
+      scope: testStoreScope(),
       workspaceId: 'ws_a',
       path: 'design',
       options: { padding: 20, scale: 2, theme: 'dark' },
@@ -93,7 +95,11 @@ describe('exportCanvasHeadless', () => {
 
     const capture = captureLogsForTests('debug')
     try {
-      const result = await exportCanvasHeadless({ workspaceId: 'ws_legacy', path: 'design' })
+      const result = await exportCanvasHeadless({
+        scope: testStoreScope(),
+        workspaceId: 'ws_legacy',
+        path: 'design',
+      })
       expect(result.png.length).toBeGreaterThan(0)
       expect(renderSpy).toHaveBeenCalledTimes(1)
       const [canvas] = renderSpy.mock.calls[0] as [{ nodes: unknown[] }]
@@ -179,15 +185,23 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
   it('hands the renderer the library the document at `tags` declares, for a tagged board', async () => {
     await saveDocument('ws_lib', 'tags', libraryDoc())
     await saveDocument('ws_lib', 'design', board(['health:ok']))
-    await exportCanvasHeadlessSvg({ workspaceId: 'ws_lib', path: 'design' })
+    await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: 'ws_lib',
+      path: 'design',
+    })
     expect(optionsOf(renderSvgSpy)?.tagLibrary).toEqual(library)
-    await exportCanvasHeadless({ workspaceId: 'ws_lib', path: 'design' })
+    await exportCanvasHeadless({ scope: testStoreScope(), workspaceId: 'ws_lib', path: 'design' })
     expect(optionsOf(renderSpy)?.tagLibrary).toEqual(library)
   })
 
   it('hands none when no document sits at `tags` — and creates none by asking', async () => {
     await saveDocument('ws_nolib', 'design', board(['health:ok']))
-    await exportCanvasHeadlessSvg({ workspaceId: 'ws_nolib', path: 'design' })
+    await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: 'ws_nolib',
+      path: 'design',
+    })
     expect(optionsOf(renderSvgSpy)?.tagLibrary).toBeUndefined()
     // The headless read path answers a missing document with an EMPTY one,
     // so the library lookup must probe existence first or every export
@@ -198,7 +212,11 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
   it('does not read the library for a board that carries no tag', async () => {
     await saveDocument('ws_untagged', 'tags', libraryDoc())
     await saveDocument('ws_untagged', 'design', board())
-    await exportCanvasHeadlessSvg({ workspaceId: 'ws_untagged', path: 'design' })
+    await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: 'ws_untagged',
+      path: 'design',
+    })
     expect(optionsOf(renderSvgSpy)?.tagLibrary).toBeUndefined()
   })
 })
@@ -208,7 +226,11 @@ describe('exportCanvasHeadlessSvg', () => {
     const doc = spatialTextDoc('n1', 'hello')
     await saveDocument('ws_svg', 'design', doc)
 
-    const result = await exportCanvasHeadlessSvg({ workspaceId: 'ws_svg', path: 'design' })
+    const result = await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: 'ws_svg',
+      path: 'design',
+    })
 
     expect(renderSvgSpy).toHaveBeenCalledTimes(1)
     expect(result.svg).toBe('<svg><rect/></svg>')

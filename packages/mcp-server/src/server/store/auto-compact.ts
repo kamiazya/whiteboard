@@ -54,13 +54,17 @@ function clearAllAutoCompactTimers(): void {
  * indirection was the original reason for a registered trigger, and it
  * survives the split intact.
  *
- * Compacts in the process's own `StoreScope`: the saved-listener carries no
- * scope, and the version store is the root's. A keeper serving another
- * directory schedules through `createDocumentWritten(scope)` instead.
+ * The saved-listener carries no scope of its own, so the one it compacts in is
+ * given here: the root passes the scope its stores serve, and a keeper whose
+ * directory is not the process's would otherwise fold a different record from
+ * the one that was written. Omitted, it is the process's.
  */
-export function installAutoCompact(versionStore: VersionStore): void {
+export function installAutoCompact(
+  versionStore: VersionStore,
+  scope: StoreScope = globalStoreScope,
+): void {
   setDocumentSavedListener((workspaceId) => {
-    scheduleAutoCompact(workspaceId, versionStore)
+    scheduleAutoCompact(workspaceId, versionStore, { scope })
   })
 }
 

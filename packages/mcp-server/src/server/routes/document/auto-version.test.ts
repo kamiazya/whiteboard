@@ -4,7 +4,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { versionStoreMock } from '../../store/test-utils/version-store-mock.js'
-import { resolveTestServerDeps, testDataLayout, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-test-')
 
@@ -145,7 +145,7 @@ describe('auto-version corruption handling', () => {
     // Quiet immediately: the checkpoint fires on the next tick rather than
     // five minutes out, so the route's own behaviour is what this observes.
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 0,
       versionStore,
@@ -217,7 +217,7 @@ describe('an unchanged document', () => {
       })
 
     const first = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 0,
       versionStore: store,
@@ -232,7 +232,7 @@ describe('an unchanged document', () => {
     // reconnecting client replaying ops the record already carries.
     const askedBefore = asked
     const second = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 0,
       versionStore: store,

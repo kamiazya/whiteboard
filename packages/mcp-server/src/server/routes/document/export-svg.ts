@@ -16,7 +16,7 @@ import {
 } from '../../../shared/api-contracts/export-svg.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
-import type { DataLayout } from '../../tenant/data-layout-seam.js'
+import type { StoreScope } from '../../store/store-scope.js'
 import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
@@ -86,7 +86,7 @@ async function resolveSvgOutputPath(
  */
 export interface DocumentSvgExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
-  dataLayout: DataLayout
+  scope: StoreScope
 }
 
 export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions) {
@@ -115,7 +115,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       if ('error' in parsedBody) return c.json(parsedBody.error, 400)
       const body = parsedBody.body
 
-      const exportsDir = options.dataLayout.exportsDir(workspaceId)
+      const exportsDir = options.scope.layout.exportsDir(workspaceId)
       const resolved = await resolveSvgOutputPath(body, workspaceId, exportsDir)
       if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
@@ -127,11 +127,8 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
           path,
-          options: {
-            padding: body.padding,
-            theme: body.theme,
-            style: body.style,
-          },
+          scope: options.scope,
+          options: { padding: body.padding, theme: body.theme, style: body.style },
         })
         svg = result.svg
         undrawable = result.undrawable

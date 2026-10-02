@@ -89,7 +89,9 @@ export async function startServerModeHttp(
   const startedAt = new Date(startedAtMs).toISOString()
   const instanceId = randomUUID()
   const baseUrl = `https://${options.host}:${options.port}`
-  const shared = createSharedWorkers(instanceId, options)
+  const dataDir = getDataDir()
+  const { serverDeps: bootedDeps, dataLayout, scope } = await bootSelfHostDeps(dataDir)
+  const shared = createSharedWorkers(instanceId, scope, options)
   const close = createRootShutdown({
     stopBackgroundWork: () => backgroundWork.stopAll(),
     closeListener: () => closeListener(server),
@@ -110,8 +112,6 @@ export async function startServerModeHttp(
   // Anything not on that list that the daemon does, this root should do too:
   // the migration, the current workspace and the live audience are not
   // optional here.
-  const dataDir = getDataDir()
-  const { serverDeps: bootedDeps, dataLayout } = await bootSelfHostDeps(dataDir)
   const serverDeps = attachLiveAudience(bootedDeps)
 
   const app = createApp({

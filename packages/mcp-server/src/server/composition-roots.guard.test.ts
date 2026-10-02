@@ -30,6 +30,11 @@ import { describe, expect, it } from 'vitest'
  *   scheduler `createApp` builds were hand-copied into both roots; a third
  *   root that wrote either itself could take no checkpoints, or wait out a
  *   file-GC pass without a bound, and nothing would fail.
+ * - **One directory.** An HTTP root builds the shared workers over the
+ *   `scope` `bootSelfHostDeps` returned, never over one it assembles itself:
+ *   the workers back up, sweep and compact a directory, and a root that gave
+ *   them the process's while serving another's deps backed up the wrong tree
+ *   and reported success.
  * - **Tracing.** Every root initialises OpenTelemetry itself — an HTTP root
  *   through `startHttpRootTracing` (the one helper that names its role), the
  *   stdio root through `initTracing`. The process entries differ (`daemon
@@ -61,6 +66,18 @@ function usesShared(code: string, pattern: RegExp): boolean {
   const bound = SHARED_BINDING.exec(code)?.[1]
   const used = pattern.exec(code)?.[1]
   return bound !== undefined && bound === used
+}
+
+/**
+ * Whether the scope `createSharedWorkers` is handed is the one the root
+ * destructured from `bootSelfHostDeps`. Matching the NAME is what tells it from
+ * a scope built beside the boot (`storeScope(getDataDir())`), which agrees with
+ * the deps only while the process directory happens to be the served one.
+ */
+function sharesBootScope(code: string): boolean {
+  const booted = /\{[^{}]*\bscope\b[^{}]*\}\s*=\s*await\s+bootSelfHostDeps\(/.test(code)
+  const given = /\bcreateSharedWorkers\(\s*[\w.]+\s*,\s*(\w+)\s*[,)]/.exec(code)?.[1]
+  return booted && given === 'scope'
 }
 
 interface RootRule {
@@ -117,6 +134,11 @@ const ROOT_RULES: readonly RootRule[] = [
     satisfied: (code) => usesShared(code, /\bsharedBackgroundWork\(\s*(\w+)\s*\)/),
   },
   {
+    missing: 'createSharedWorkers over the scope bootSelfHostDeps returned',
+    kinds: ['http'],
+    satisfied: sharesBootScope,
+  },
+  {
     missing: "createApp's onAutoVersionTrigger from the shared checkpoint holder",
     kinds: ['http'],
     satisfied: (code) =>
@@ -159,6 +181,7 @@ async function productionSources(): Promise<Array<{ file: string; source: string
   )
 }
 
+const BOOT_SCOPE = 'createSharedWorkers over the scope bootSelfHostDeps returned'
 const SHARED_ARMING =
   'sharedBackgroundWork over what createSharedWorkers returned, with no hand-built arming'
 const SHARED_CAPTURE = "createApp's onAutoVersionTrigger from the shared checkpoint holder"
@@ -166,9 +189,9 @@ const SHARED_FLUSH = "the shutdown's flushCheckpoints from the shared checkpoint
 
 const COMPLIANT_HTTP_ROOT = [
   'await startHttpRootTracing("daemon")',
-  'const shared = createSharedWorkers(id, options)',
+  'const { serverDeps, scope } = await bootSelfHostDeps(dir)',
+  'const shared = createSharedWorkers(id, scope, options)',
   'const close = createRootShutdown({ flushCheckpoints: shared.checkpoints.flush })',
-  'const { serverDeps } = await bootSelfHostDeps(dir)',
   'const deps = attachLiveAudience(serverDeps)',
   'const app = createApp({ onAutoVersionTrigger: shared.checkpoints.capture })',
   'const work = startBackgroundWork(sharedBackgroundWork(shared))',
@@ -187,7 +210,7 @@ describe('composition roots share one boot sequence and one live audience', () =
       ].join('\n'),
     )
     expect(findings.kind).toBe('http')
-    expect(findings.missing).toHaveLength(10)
+    expect(findings.missing).toHaveLength(11)
   })
 
   it('does not read a comment as a call', () => {
@@ -202,6 +225,7 @@ describe('composition roots share one boot sequence and one live audience', () =
       'the background work that carries the auto-checkpoint',
       'stopAll (flush the pending checkpoints)',
       SHARED_ARMING,
+      BOOT_SCOPE,
       SHARED_CAPTURE,
       SHARED_FLUSH,
     ])
@@ -217,6 +241,19 @@ describe('composition roots share one boot sequence and one live audience', () =
       'sharedBackgroundWork(shared, { fileGc: { start: () => {}, stop: async () => {} } })',
     )
     expect(inspectRoot(handBuilt).missing).toEqual([SHARED_ARMING])
+  })
+
+  it('flags a root that gives the shared workers a scope other than the booted one', () => {
+    const own = COMPLIANT_HTTP_ROOT.replace(
+      'createSharedWorkers(id, scope, options)',
+      'createSharedWorkers(id, storeScope(getDataDir()), options)',
+    )
+    expect(inspectRoot(own).missing).toEqual([BOOT_SCOPE])
+    const unbooted = COMPLIANT_HTTP_ROOT.replace(
+      'const { serverDeps, scope } = await',
+      'const { serverDeps } = await',
+    )
+    expect(inspectRoot(unbooted).missing).toEqual([BOOT_SCOPE])
   })
 
   it('flags a root that keeps its own trigger instead of the holder', () => {

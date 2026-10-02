@@ -9,6 +9,7 @@ import {
   setDocumentPinned,
   setWorkspaceName,
 } from '../../store/names-store.js'
+import type { StoreScope } from '../../store/store-scope.js'
 import { parseWorkspaceHandle } from '../../workspace-handle.js'
 import { handleCorruptStoredData, handleDocumentNotFound } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -20,7 +21,12 @@ import { onDocumentsRoute } from './path-route.js'
 // PUT /api/workspaces/:workspaceId/name  body: { name: string } (empty string deletes)
 // PUT /api/workspaces/:workspaceId/documents/:path/name  body: { name: string } (empty string deletes)
 // PUT /api/workspaces/:workspaceId/documents/:path/pin  body: { pinned: boolean }
-export function createDocumentMetadataRouter() {
+export interface DocumentMetadataRouterOptions {
+  /** The directory and tenant whose names these routes read and write. */
+  scope: StoreScope
+}
+
+export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOptions) {
   const app = new Hono()
 
   app.get('/api/workspaces/:workspaceId/names', async (c) => {
@@ -28,7 +34,7 @@ export function createDocumentMetadataRouter() {
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
     try {
-      const names = await loadWorkspaceNames(workspaceId)
+      const names = await loadWorkspaceNames(workspaceId, scope)
       return c.json(names)
     } catch (err) {
       const missing = handleDocumentNotFound(err)
@@ -48,7 +54,7 @@ export function createDocumentMetadataRouter() {
       return c.json({ error: 'invalid_body' }, 400)
     }
     try {
-      const updated = await setWorkspaceName(workspaceId, parsed.data.name)
+      const updated = await setWorkspaceName(workspaceId, parsed.data.name, scope)
       return c.json(updated)
     } catch (err) {
       const missing = handleDocumentNotFound(err)
@@ -65,7 +71,7 @@ export function createDocumentMetadataRouter() {
       return c.json({ error: 'invalid_body' }, 400)
     }
     try {
-      const updated = await setDocumentDisplayName(workspaceId, path, parsed.data.name)
+      const updated = await setDocumentDisplayName(workspaceId, path, parsed.data.name, scope)
       return c.json(updated)
     } catch (err) {
       const missing = handleDocumentNotFound(err)
@@ -83,7 +89,7 @@ export function createDocumentMetadataRouter() {
       return c.json({ error: 'invalid_body', message: 'pinned must be boolean' }, 400)
     }
     try {
-      const updated = await setDocumentPinned(workspaceId, path, parsed.data.pinned)
+      const updated = await setDocumentPinned(workspaceId, path, parsed.data.pinned, scope)
       return c.json(updated)
     } catch (err) {
       const missing = handleDocumentNotFound(err)

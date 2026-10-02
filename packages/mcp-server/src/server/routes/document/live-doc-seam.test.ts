@@ -13,7 +13,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { testDataLayout, withTempDataDir } from '../_test-helpers.js'
+import { testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-live-doc-seam-')
 
@@ -60,7 +60,7 @@ describe('live-doc routes and the deps they were handed', () => {
     }
 
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps: deps,
       autoVersionQuietMs: 60_000,
     })

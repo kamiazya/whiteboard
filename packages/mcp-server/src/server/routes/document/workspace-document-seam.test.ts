@@ -9,7 +9,7 @@ import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { testDataLayout, withTempDataDir } from '../_test-helpers.js'
+import { testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspace-doc-seam-')
 
@@ -58,7 +58,7 @@ describe('workspace-document routes and the deps they were handed', () => {
     }
 
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps: deps,
       autoVersionQuietMs: 60_000,
     })

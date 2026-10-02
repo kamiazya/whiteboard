@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
+import { testStoreScope } from '../_test-helpers.js'
 
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {
@@ -14,7 +15,7 @@ const { createDocumentMetadataRouter } = await import('./metadata.js')
 
 describe('metadata router', () => {
   it('returns a Hono instance', () => {
-    const app = createDocumentMetadataRouter()
+    const app = createDocumentMetadataRouter({ scope: testStoreScope() })
     expect(app).toBeInstanceOf(Hono)
   })
 })

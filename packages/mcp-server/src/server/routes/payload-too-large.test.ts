@@ -10,7 +10,7 @@
  */
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testDataLayout, withTempDataDir } from './_test-helpers.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-payload-too-large-')
 
@@ -48,7 +48,7 @@ const CASES: readonly {
     route: 'file upload',
     method: 'PUT',
     path: '/api/w/s1/document/canvas-a/file/img1',
-    build: () => createFilesRouter({ dataLayout: testDataLayout(tmp.dir) }),
+    build: () => createFilesRouter({ scope: testStoreScope(tmp.dir) }),
     limit: 16 * MIB,
     noun: 'Upload',
   },
@@ -59,7 +59,7 @@ const CASES: readonly {
     build: () =>
       createExportRouter({
         liveDocuments: { exists: async () => true },
-        dataLayout: testDataLayout(tmp.dir),
+        scope: testStoreScope(tmp.dir),
       }),
     limit: MIB,
     noun: 'Request body',
@@ -68,7 +68,7 @@ const CASES: readonly {
     route: 'SVG export',
     method: 'POST',
     path: '/api/w/s1/document/canvas-a/export-svg',
-    build: () => createDocumentRouter({ dataLayout: testDataLayout(), serverDeps }),
+    build: () => createDocumentRouter({ scope: testStoreScope(), serverDeps }),
     limit: MIB,
     noun: 'Request body',
   },
@@ -76,7 +76,7 @@ const CASES: readonly {
     route: 'live document update',
     method: 'POST',
     path: '/api/w/s1/document/canvas-a/update',
-    build: () => createDocumentRouter({ dataLayout: testDataLayout(), serverDeps }),
+    build: () => createDocumentRouter({ scope: testStoreScope(), serverDeps }),
     limit: 16 * MIB,
     noun: 'Update',
   },
@@ -84,7 +84,7 @@ const CASES: readonly {
     route: 'workspace document update',
     method: 'POST',
     path: '/api/w/s1/workspace-document/update',
-    build: () => createDocumentRouter({ dataLayout: testDataLayout(), serverDeps }),
+    build: () => createDocumentRouter({ scope: testStoreScope(), serverDeps }),
     limit: 16 * MIB,
     noun: 'Update',
   },
@@ -92,7 +92,7 @@ const CASES: readonly {
     route: 'workspace promotion',
     method: 'POST',
     path: '/api/w/s1/workspace-document/promote',
-    build: () => createDocumentRouter({ dataLayout: testDataLayout(), serverDeps }),
+    build: () => createDocumentRouter({ scope: testStoreScope(), serverDeps }),
     limit: 24 * MIB,
     noun: 'Promotion',
   },

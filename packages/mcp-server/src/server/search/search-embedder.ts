@@ -1,5 +1,4 @@
 import type { Embedder } from '@kamiazya/whiteboard-server-core'
-import { getDataDir } from '../config.js'
 import { searchModelCacheDir } from './model-cache-dir.js'
 import { createTransformersEmbedder } from './transformers-embedder.js'
 
@@ -27,30 +26,34 @@ import { createTransformersEmbedder } from './transformers-embedder.js'
 const FLAG = 'WHITEBOARD_SEMANTIC_SEARCH'
 const PRECISION = { '1': 'q8', full: 'fp32' } as const
 
-let held: Embedder | undefined
+// Per data directory, since the weights are read from the one the keeper serves.
+const held = new Map<string, Embedder>()
 
 /**
- * Memoized for the life of the process, and that is load-bearing rather
- * than a micro-optimisation: a `ServerDeps` is composed per root, and the
- * stdio root composes one per connection, so an embedder held by the deps
- * would re-load the whole model each time one is composed.
+ * Memoized per data directory for the life of the process, and that is
+ * load-bearing rather than a micro-optimisation: a `ServerDeps` is composed
+ * per root, and the stdio root composes one per connection, so an embedder
+ * held by the deps would re-load the whole model each time one is composed.
  *
- * Weights are read from the daemon's own data directory and never fetched
- * here. A download does not belong on a request path at any size, let alone
+ * Weights are read from the data directory the keeper serves (the caller's
+ * `StoreScope`, never the process's) and never fetched here. A download does not belong on a request path at any size, let alone
  * this one; `whiteboard search fetch-model` populates the cache as a
  * deliberate step, and until it has, search simply stays lexical.
  */
-export function resolveSearchEmbedder(): Embedder | undefined {
+export function resolveSearchEmbedder(dataDir: string): Embedder | undefined {
   const dtype = PRECISION[process.env[FLAG] as keyof typeof PRECISION]
   if (dtype === undefined) return undefined
-  held ??= createTransformersEmbedder({
-    cacheDir: searchModelCacheDir(getDataDir()),
+  const existing = held.get(dataDir)
+  if (existing !== undefined) return existing
+  const created = createTransformersEmbedder({
+    cacheDir: searchModelCacheDir(dataDir),
     offline: true,
     dtype,
   })
-  return held
+  held.set(dataDir, created)
+  return created
 }
 
 export function resetSearchEmbedderForTests(): void {
-  held = undefined
+  held.clear()
 }

@@ -7,7 +7,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testDataLayout, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-versions-test-')
 
@@ -46,7 +46,10 @@ const SOMEONE_ELSES_ACTOR = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGt
 describe('versions router', () => {
   it('returns a Hono instance', () => {
     const versionStore = { listVersions: vi.fn(), saveVersion: vi.fn() }
-    const app = createVersionsRouter({ versionStore: versionStore as never })
+    const app = createVersionsRouter({
+      scope: testStoreScope(),
+      versionStore: versionStore as never,
+    })
     expect(app).toBeInstanceOf(Hono)
   })
 })
@@ -76,7 +79,7 @@ describe('versions API', () => {
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
 
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 0,
     })
@@ -102,7 +105,7 @@ describe('versions API', () => {
 
   it('saves a manual version with a label through POST /versions', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
     })
@@ -119,7 +122,7 @@ describe('versions API', () => {
 
   it('POST /versions persists an explicit operator', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
@@ -158,7 +161,7 @@ describe('versions API', () => {
 
   it('POST /versions defaults operator to human when omitted', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
     })
@@ -189,7 +192,7 @@ describe('versions API', () => {
   // asserting only that the field was non-blank passed over it.
   it('POST /versions stamps the daemon actor, unchanged across a document reload', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
@@ -222,7 +225,7 @@ describe('versions API', () => {
   // be this daemon, or any other device.
   it('refuses an operator that names a device, rather than believing the caller', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
@@ -246,7 +249,7 @@ describe('versions API', () => {
   // they always were.
   it('keeps the caller\u2019s kind and display name, and stamps its own device', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
       daemonActor: TEST_DAEMON_ACTOR,
@@ -278,7 +281,7 @@ describe('versions API', () => {
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
 
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 0,
     })
@@ -304,7 +307,7 @@ describe('versions API', () => {
 
   it('filters GET /versions by path and returns newest first', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
     })
@@ -346,7 +349,7 @@ describe('GET /versions/:id/document', () => {
 
   it('answers the canvas as it stood, not as it stands', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
     })
@@ -391,7 +394,7 @@ describe('GET /versions/:id/document', () => {
 
   it('refuses a version id that belongs to another document, as restore does', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
     })

@@ -22,7 +22,7 @@ import {
   createTestDocument,
   resolveTestServerDeps,
   seedWorkspaceRow,
-  testDataLayout,
+  testStoreScope,
 } from '../_test-helpers.js'
 
 let tempDir: string
@@ -93,7 +93,7 @@ async function saveVersion(app: ReturnType<typeof createDocumentRouter>): Promis
 
 it('in-place restore makes the document equal the past state — a later-added node goes away', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -114,7 +114,7 @@ it('in-place restore makes the document equal the past state — a later-added n
 
 it('a version of a tree-served document restores correctly after a simulated restart', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -144,7 +144,7 @@ async function createDoc(path: string) {
 
 it('subtree rollback reverts the document AND its descendants, and evacuates documents created after the version', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })

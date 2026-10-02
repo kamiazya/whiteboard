@@ -53,6 +53,7 @@ import {
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
 import { mountServerModeWebApp } from './server-mode-web-app.js'
+import { storeScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
 
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
@@ -343,6 +344,16 @@ export function createApp(options: AppOptions) {
 
   const admit = membership.admit
 
+  // The directory and tenant every router below serves, derived from the layout
+  // the root booted `serverDeps` over. A router that reached a store by its
+  // default would follow the process's directory instead, and disagree with
+  // the deps whenever the keeper serves another. One scope, built here, is
+  // what `split-dir` holds: `app.split-dir.test.ts`.
+  const scope = storeScope(options.dataLayout.dataDir, options.dataLayout.tenantId)
+  // The document router's checkpoints and the files router's version-aware
+  // purge read the same rows, so they share one store.
+  const versionStore = new FileVersionStore(scope)
+
   app.route(
     '/',
     createDocumentRouter({
@@ -351,7 +362,8 @@ export function createApp(options: AppOptions) {
       // place that answer is known without threading it through the DI graph.
       daemonActor: identity.did,
       serverDeps: options.serverDeps,
-      dataLayout: options.dataLayout,
+      scope,
+      versionStore,
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
@@ -361,22 +373,11 @@ export function createApp(options: AppOptions) {
       ...membershipRouterOptions(membership),
     }),
   )
-  // Handed to the files router for its version-aware purge.
-  const sharedVersionStore = new FileVersionStore()
-  app.route(
-    '/',
-    createFilesRouter({ versionStore: sharedVersionStore, dataLayout: options.dataLayout }),
-  )
-  app.route(
-    '/',
-    createExportRouter({
-      liveDocuments: options.serverDeps.liveDocuments,
-      dataLayout: options.dataLayout,
-    }),
-  )
+  app.route('/', createFilesRouter({ versionStore, scope }))
+  app.route('/', createExportRouter({ liveDocuments: options.serverDeps.liveDocuments, scope }))
   app.route('/', createFontsRouter())
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
-  app.route('/', createDebugRouter({ credentialResolver }))
+  app.route('/', createDebugRouter({ credentialResolver, scope }))
   app.route('/', createStatusRouter())
   app.route(
     '/',
@@ -387,6 +388,7 @@ export function createApp(options: AppOptions) {
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       credentialResolver,
       dataLayout: options.dataLayout,
+      scope,
     }),
   )
   if (options.authMode === 'server-mode') {

@@ -14,6 +14,7 @@ import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { z } from 'zod'
 import { getDoc } from '../../store/document-store.js'
+import type { StoreScope } from '../../store/store-scope.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import {
   defaultHumanDisplayName,
@@ -26,6 +27,8 @@ import { onDocumentsRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
   versionStore: VersionStore
+  /** The directory the document a manual save checkpoints is read from. */
+  scope: StoreScope
   /**
    * This daemon as an OKF actor — its `did:key` (ADR-0035 decision 2).
    * Optional so a composition without an identity records no actor rather
@@ -83,7 +86,7 @@ function saveVersionIssueMessage(error: z.ZodError): string {
 // POST /api/workspaces/:workspaceId/documents/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
   const app = new Hono()
-  const { versionStore, daemonActor } = options
+  const { versionStore, daemonActor, scope } = options
 
   // List versions for one canvas in reverse chronological order.
   onDocumentsRoute(app, 'get', ['versions'], async (c, workspaceId, path) => {
@@ -157,7 +160,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
     const { label, operator } = parsed
 
     try {
-      const doc = await getDoc(workspaceId, path)
+      const doc = await getDoc(workspaceId, path, scope)
       // The SCHEMA is what stops a caller naming the device; this spread
       // order is arrangement, not a second guard — measured, reversing it
       // fails no test, because nothing can get an `actor` past the schema to

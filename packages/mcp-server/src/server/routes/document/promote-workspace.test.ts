@@ -32,7 +32,7 @@ import {
   createTestDocument,
   resolveTestServerDeps,
   seedWorkspaceRow,
-  testDataLayout,
+  testStoreScope,
 } from '../_test-helpers.js'
 
 let tempDir: string
@@ -119,7 +119,7 @@ async function listDocuments(app: ReturnType<typeof createDocumentRouter>) {
 
 it('a browser record promotes through workspace-document/update: ids, kinds, names and bodies survive; collisions shadow', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -166,7 +166,7 @@ it('workspace-document/update answers 404 for a workspace the daemon never regis
   // Promotion cannot mint a workspace as a side effect — the browser's fixed
   // 'local' id must never leak through as a new daemon workspace.
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -180,7 +180,7 @@ it('workspace-document/update answers 404 for a workspace the daemon never regis
 
 it('an edit made after the promotion export still lands as an incremental delta — the replica plane', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -233,7 +233,7 @@ async function daemonSnapshot(app: ReturnType<typeof createDocumentRouter>): Pro
 
 it('promotion lands as ONE fan-out frame under a live subscriber, whose pending edit then merges instead of being overwritten', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -295,7 +295,7 @@ it('promotion lands as ONE fan-out frame under a live subscriber, whose pending 
 
 it('promoting the same snapshot twice is idempotent — no duplicate documents, no error', async () => {
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })
@@ -325,7 +325,7 @@ it("the literal workspace id 'local' cannot be minted by a promotion", async () 
   // browser-local sense as a daemon workspace. The route already refuses
   // every unregistered id; this pins that 'local' gets no special pass.
   const app = createDocumentRouter({
-    dataLayout: testDataLayout(),
+    scope: testStoreScope(),
     serverDeps,
     autoVersionQuietMs: 60_000,
   })

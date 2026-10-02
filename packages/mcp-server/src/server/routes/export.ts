@@ -14,6 +14,7 @@ import { type ExportResponse, exportRequestSchema } from '../../shared/api-contr
 import { isErrnoCode } from '../../shared/errno.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
+import type { StoreScope } from '../store/store-scope.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 import { onDocumentAction } from './document/path-route.js'
@@ -83,11 +84,12 @@ async function renderedExport(
   workspaceId: string,
   path: string,
   body: z.infer<typeof exportRequestSchema>,
+  scope: StoreScope,
 ): Promise<
   Awaited<ReturnType<typeof renderHeadless>> | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
   try {
-    return await renderHeadless(workspaceId, path, body)
+    return await renderHeadless(workspaceId, path, body, scope)
   } catch (err) {
     const message = messageOf(err)
     if (/target size is zero/i.test(message)) {
@@ -106,12 +108,13 @@ async function renderedExport(
  * daemon passes its own; a router built without one — a route test, an
  * ad-hoc caller — falls back to the same production wiring.
  *
- * Default exports are written under the layout's exports directory, which
- * the composition root hands down with the deps it booted.
+ * Default exports are written under the scope's exports directory, which
+ * the composition root hands down with the deps it booted — and the document
+ * rendered is read from that same directory.
  */
 export interface ExportRouterOptions {
   liveDocuments: Pick<LiveDocuments, 'exists'>
-  dataLayout: DataLayout
+  scope: StoreScope
 }
 
 export function createExportRouter(options: ExportRouterOptions) {
@@ -131,7 +134,7 @@ export function createExportRouter(options: ExportRouterOptions) {
 
       // Validated up front, before rendering, so the caller does not waste a
       // render on a write that will fail.
-      const resolved = await resolveExportOutputPath(body, workspaceId, options.dataLayout)
+      const resolved = await resolveExportOutputPath(body, workspaceId, options.scope.layout)
       if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
 
@@ -148,14 +151,14 @@ export function createExportRouter(options: ExportRouterOptions) {
         return c.json(errBody, 404)
       }
 
-      const rendered = await renderedExport(workspaceId, path, body)
+      const rendered = await renderedExport(workspaceId, path, body, options.scope)
       if ('error' in rendered) return c.json(rendered.error, rendered.status)
       const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
 
       const filePath =
         outputPath !== undefined
           ? await writeExplicitOutput(outputPath, pngBuffer)
-          : await writeDefaultOutput(options.dataLayout, workspaceId, path, pngBuffer)
+          : await writeDefaultOutput(options.scope.layout, workspaceId, path, pngBuffer)
       const response: ExportResponse = {
         filePath,
         undrawable: [...undrawable],
@@ -173,6 +176,7 @@ async function renderHeadless(
   workspaceId: string,
   path: string,
   body: z.infer<typeof exportRequestSchema>,
+  scope: StoreScope,
 ): Promise<{
   png: Buffer
   undrawable: readonly string[]
@@ -181,6 +185,7 @@ async function renderHeadless(
   const result = await exportCanvasHeadless({
     workspaceId,
     path,
+    scope,
     options: {
       padding: body.padding,
       scale: body.scale,

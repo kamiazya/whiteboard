@@ -5,7 +5,8 @@ import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportResponseSchema } from '../../shared/api-contracts/export.js'
-import { testDataLayout } from './_test-helpers.js'
+import type { StoreScope } from '../store/store-scope.js'
+import { testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -31,6 +32,7 @@ vi.mock('./sync-audience.js', () => ({
 type MockHeadlessArgs = {
   workspaceId: string
   path: string
+  scope: StoreScope
   options?: {
     padding?: number
     scale?: number
@@ -82,7 +84,7 @@ function makeApp() {
     '/',
     createExportRouter({
       liveDocuments: { exists: mockDocumentExists },
-      dataLayout: testDataLayout(tempDir),
+      scope: testStoreScope(tempDir),
     }),
   )
   return app
@@ -145,7 +147,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
         '/',
         createExportRouter({
           liveDocuments: { exists: mockDocumentExists },
-          dataLayout: testDataLayout(elsewhere),
+          scope: testStoreScope(elsewhere),
         }),
       )
 
@@ -189,7 +191,12 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     const argsWithClients = mockExportCanvasHeadless.mock.calls[0][0]
 
     expect(resWithClients.status).toBe(resNoClient.status)
-    expect(argsWithClients).toEqual(argsNoClient)
+    // Each app builds its own scope, whose `db` is a fresh function; what it
+    // names is the directory, and that is what must not vary.
+    expect({ ...argsWithClients, scope: argsWithClients.scope.dataDir }).toEqual({
+      ...argsNoClient,
+      scope: argsNoClient.scope.dataDir,
+    })
   })
 
   it('generates distinct default filePaths for two headless exports in the same millisecond', async () => {

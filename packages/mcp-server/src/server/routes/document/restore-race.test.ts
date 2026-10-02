@@ -1,7 +1,7 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testDataLayout, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-restore-race-')
 
@@ -56,7 +56,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
 
   it('does not resurrect deleted content when a DELETE of the overwrite target races the restore reading it', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
     })
@@ -155,7 +155,7 @@ describe('restore in-place vs delete race', () => {
 
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       autoVersionQuietMs: 60_000,
     })

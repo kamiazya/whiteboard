@@ -6,7 +6,7 @@ import { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { versionStoreMock } from '../../store/test-utils/version-store-mock.js'
-import { resolveTestServerDeps, testDataLayout, withTempDataDir } from '../_test-helpers.js'
+import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-maintenance-test-')
 
@@ -42,7 +42,10 @@ afterEach(() => {
 describe('maintenance router', () => {
   it('returns a Hono instance', () => {
     const versionStore = { listVersions: vi.fn(), saveVersion: vi.fn() }
-    const app = createMaintenanceRouter({ versionStore: versionStore as never })
+    const app = createMaintenanceRouter({
+      scope: testStoreScope(),
+      versionStore: versionStore as never,
+    })
     expect(app).toBeInstanceOf(Hono)
   })
 })
@@ -76,7 +79,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt reco
     _clearWorkspaceDocCacheForTests()
 
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       versionStore: createVersionStoreMock(),
     })
@@ -106,7 +109,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
     await saveDocument('session1', 'canvas-b', new LoroDoc())
 
     const versionStore = createVersionStoreMock()
-    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps, versionStore })
+    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps, versionStore })
     const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
       method: 'POST',
     })
@@ -123,7 +126,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
 
   it('answers no-file for a workspace with nothing stored', async () => {
     const app = createDocumentRouter({
-      dataLayout: testDataLayout(),
+      scope: testStoreScope(),
       serverDeps,
       versionStore: createVersionStoreMock(),
     })
@@ -151,7 +154,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
         deletedIds: path === 'canvas-a' ? ['x', 'y'] : ['z'],
       }))
 
-    const app = createDocumentRouter({ dataLayout: testDataLayout(), serverDeps, versionStore })
+    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps, versionStore })
     const res = await app.request('/api/workspaces/session1/versions/prune-sandwiched', {
       method: 'POST',
     })
