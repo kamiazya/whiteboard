@@ -170,6 +170,21 @@ same face, or do not make the figure.
 **Read the PNG before uploading.** Half the failures above are invisible in
 the SVG text and obvious in the image.
 
+**Prerequisite (one-time per machine).** `gh image` is not part of `gh`; it is an
+extension, and `unknown command "image" for "gh"` means it is missing:
+
+```bash
+gh extension install drogers0/gh-image   # if that repository has moved: gh extension search image
+```
+
+It uploads through your logged-in github.com browser session, not a token, so
+the machine needs a browser profile signed in to GitHub; `gh image check-token`
+says whether that session is valid. A headless or web session has neither. There
+the upload cannot run, so do not leave a local path in the body (nothing uploads
+it): say `Visual evidence: none — <why it could not be uploaded here, and where
+the before/after is>` and let the integrator attach the figure. The PR hook
+names this escape first when the extension is absent.
+
 Upload it with `gh image`, which prints the markdown to paste:
 
 ```bash

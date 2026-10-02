@@ -50,11 +50,12 @@ function makeRepoPair(changed) {
 }
 
 /** Runs the hook against a `gh pr create` command; returns {status, stderr}. */
-function runHook(cwd, command) {
+function runHook(cwd, command, env = process.env) {
   const stdin = JSON.stringify({ tool_input: { command } })
   try {
     execFileSync('node', [scriptPath], {
       cwd,
+      env,
       input: stdin,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -185,4 +186,37 @@ test('fails open on a command it cannot read a body out of', () => {
 test('ignores every command that is not gh pr create', () => {
   const work = makeRepoPair('apps/web/src/components/Thing.tsx')
   assert.equal(runHook(work, 'git push').status, 0)
+})
+
+/** A PATH holding a `gh` that has (or lacks) the `image` extension, the way `gh image --help` answers. */
+function envWithGh({ hasImageExtension }) {
+  const dir = mkdtempSync(join(tmpdir(), 'pre-pr-visual-evidence-gh-'))
+  scratchDirs.push(dir)
+  writeFileSync(
+    join(dir, 'gh'),
+    hasImageExtension
+      ? '#!/bin/sh\nexit 0\n'
+      : '#!/bin/sh\necho \'unknown command "image" for "gh"\' >&2\nexit 1\n',
+    { mode: 0o755 },
+  )
+  return { ...process.env, PATH: `${dir}:${process.env.PATH}` }
+}
+
+test('with no gh image extension, the remedy leads with the stated-reason escape and names the install', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  const { status, stderr } = runHook(work, bodyArg('## What\n\nprose'), envWithGh({ hasImageExtension: false }))
+  assert.equal(status, 2)
+  assert.match(stderr, /gh image.*not installed/)
+  assert.match(stderr, /gh extension install drogers0\/gh-image/)
+  const escape = stderr.indexOf('Visual evidence: none')
+  const upload = stderr.indexOf('upload it with')
+  assert.ok(escape !== -1, 'the escape is named')
+  assert.ok(upload === -1 || escape < upload, 'the escape comes before the upload instruction')
+})
+
+test('with the extension present, the remedy is the upload instruction as before', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  const { stderr } = runHook(work, bodyArg('## What\n\nprose'), envWithGh({ hasImageExtension: true }))
+  assert.match(stderr, /upload it with `gh image tmp\/screenshots\/figure\.png`/)
+  assert.doesNotMatch(stderr, /not installed/)
 })

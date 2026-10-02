@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { codeText } from './markdown-code.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { trackedFiles } from './tracked-files.js'
 
@@ -68,5 +69,87 @@ describe('docs never tell a reader to stop a daemon by process name', () => {
 
   it('names the per-checkout stop command where the daemon is documented', () => {
     expect(read('docs/contributing/development.md')).toContain('pnpm mcp:http:stop')
+  })
+})
+
+// `gh <name>` where <name> is not one of gh's own commands is an EXTENSION, and
+// an extension is absent on a fresh machine: the reader gets
+// `unknown command "image" for "gh"`. A skill that tells its reader to run one
+// carries the install line itself, since nothing else in the repo does.
+const GH_CORE_COMMANDS = new Set([
+  'agent-task',
+  'alias',
+  'api',
+  'attestation',
+  'auth',
+  'browse',
+  'cache',
+  'codespace',
+  'completion',
+  'config',
+  'copilot',
+  'extension',
+  'gist',
+  'gpg-key',
+  'help',
+  'issue',
+  'label',
+  'licenses',
+  'org',
+  'pr',
+  'preview',
+  'project',
+  'release',
+  'repo',
+  'ruleset',
+  'run',
+  'search',
+  'secret',
+  'ssh-key',
+  'status',
+  'variable',
+  'version',
+  'workflow',
+])
+
+describe('a gh extension a skill tells its reader to run is installed by the same skill', () => {
+  const skills = trackedFiles(REPO_ROOT, '.claude/skills/**/*.md')
+
+  /** A skill is its directory: the install line may sit in SKILL.md while a sibling file runs the command. */
+  const skillText = (file: string): string => {
+    const dir = file.split('/').slice(0, 3).join('/')
+    return skills
+      .filter((other) => other.startsWith(`${dir}/`))
+      .map(read)
+      .join('\n')
+  }
+
+  const extensionsNamed = (file: string): string[] => [
+    ...new Set(
+      [...codeText(read(file)).matchAll(/(?:^|[\s`$(])gh ([a-z][a-z-]*)\b/gm)]
+        .map((m) => m[1] as string)
+        .filter((name) => !GH_CORE_COMMANDS.has(name)),
+    ),
+  ]
+
+  it('reads the skills, and finds the two extensions this repo uses', () => {
+    expect(skills.length).toBeGreaterThan(20)
+    const found = new Set(skills.flatMap(extensionsNamed))
+    expect(found.has('stack')).toBe(true)
+    expect(found.has('image')).toBe(true)
+  })
+
+  it('has an install line beside every extension command', () => {
+    const missing = skills.flatMap((file) =>
+      extensionsNamed(file)
+        .filter(
+          (name) => !new RegExp(`gh extension install \\S*gh-${name}\\b`).test(skillText(file)),
+        )
+        .map(
+          (name) =>
+            `${file}: \`gh ${name}\` has no \`gh extension install <owner>/gh-${name}\` line`,
+        ),
+    )
+    expect(missing).toEqual([])
   })
 })

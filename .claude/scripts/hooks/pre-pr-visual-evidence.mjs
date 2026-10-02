@@ -97,6 +97,16 @@ const command = input?.tool_input?.command ?? ''
 // `printf 'gh pr create …'`, which creates no PR.
 if (!runsGh(command, 'pr create')) process.exit(0)
 
+/** Whether `gh image` (a third-party extension, not part of gh) is installed. */
+function hasGhImage(cwd) {
+  try {
+    execFileSync('gh', ['image', '--help'], { cwd, stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Reads --body '<text>' / --body="<text>" / --body-file <path>. */
 function readBody(cmd, cwd) {
   const file = cmd.match(/--body-file[= ]("([^"]*)"|'([^']*)'|[^\s'"]+)/)
@@ -131,18 +141,30 @@ try {
     .filter((file) => VISUAL_PATHS.some((re) => re.test(file)))
   if (changed.length === 0) process.exit(0)
 
+  const NO_FIGURE =
+    `  • If a picture is genuinely the wrong evidence — or cannot be uploaded from here — say so in one line:\n` +
+    `    "Visual evidence: none — <reason>".`
+  const HOW_TO_MAKE_ONE =
+    `  • For a FIX, show the defect and the fix: render the same case both ways and compose with\n` +
+    `      node .claude/scripts/compose-figure.mjs --before <a.png> --after <b.png> --out tmp/screenshots/figure.png\n` +
+    `    (it refuses two identical panels, which is the trap that has produced a misleading figure before),\n` +
+    `    then upload it with \`gh image tmp/screenshots/figure.png\` and paste the markdown it prints\n` +
+    `    under a "## Visual repro" section (a local path is not uploaded by anything).\n` +
+    `    See the visual-evidence skill.\n` +
+    `  • For a new affordance, one capture of it is enough.`
+  const uploaderInstalled = hasGhImage(where)
+  // The upload step needs an extension a fresh machine lacks, so the escape that
+  // always works comes first when it is missing rather than last.
+  const remedy = uploaderInstalled
+    ? `${HOW_TO_MAKE_ONE}\n${NO_FIGURE}`
+    : `${NO_FIGURE}\n` +
+      `  • \`gh image\` is not installed here, and it is what uploads a figure: \`gh extension install drogers0/gh-image\`,\n` +
+      `    then \`gh image check-token\` (it uses a logged-in browser session; see the visual-evidence skill).\n` +
+      HOW_TO_MAKE_ONE
   console.error(
     `[pre-pr-visual-evidence] this diff changes ${changed.length} file(s) a human looks at ` +
       `(${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ', …' : ''}), and the PR body ` +
-      `carries no figure.\n` +
-      `  • For a FIX, show the defect and the fix: render the same case both ways and compose with\n` +
-      `      node .claude/scripts/compose-figure.mjs --before <a.png> --after <b.png> --out tmp/screenshots/figure.png\n` +
-      `    (it refuses two identical panels, which is the trap that has produced a misleading figure before),\n` +
-      `    then upload it with \`gh image tmp/screenshots/figure.png\` and paste the markdown it prints\n` +
-      `    under a "## Visual repro" section (a local path is not uploaded by anything).\n` +
-      `    See the visual-evidence skill.\n` +
-      `  • For a new affordance, one capture of it is enough.\n` +
-      `  • If a picture is genuinely the wrong evidence, say so in one line: "Visual evidence: none — <reason>".`,
+      `carries no figure.\n${remedy}`,
   )
   process.exit(2)
 } catch {
