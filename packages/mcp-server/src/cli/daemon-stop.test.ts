@@ -43,6 +43,7 @@ function baseOpts(
     killFn: () => undefined,
     sleep: async () => undefined,
     stopTimeoutMs: 0,
+    killWaitMs: 0,
     removeRecord: async () => undefined,
     ...overrides,
   }
