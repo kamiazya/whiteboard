@@ -6,7 +6,7 @@ const THEME_COLOR = '#ffffff'
 const BACKGROUND_COLOR = '#ffffff'
 const ONE_MIB = 1024 * 1024
 
-// vite-plugin-pwa options for the browser-local app shell.
+// vite-plugin-pwa options for the browser-kept app shell.
 //
 // registerType 'prompt' (not 'autoUpdate'): silently swapping the
 // service-worker-controlled bundle under a user mid-draw on the canvas risks
@@ -46,7 +46,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
       },
     ],
     // Long-press / right-click the installed icon. `?new=canvas` is handled
-    // by the browser-local page (BrowserLocalDocumentPage); in daemon mode it
+    // by the browser document page (BrowserDocumentPage); in daemon mode it
     // degrades to the gallery, one click from the same action.
     shortcuts: [
       {
@@ -73,7 +73,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     ],
   },
   workbox: {
-    // wasm: the browser-local editor loads loro-crdt's WASM module; without
+    // wasm: the browser editor loads loro-crdt's WASM module; without
     // it in the precache manifest an installed/offline PWA loads the JS
     // shell but fails the moment it needs Loro. ttf: the app's only font
     // (the vendored Roboto face canvas-viewer's measurer and mcp-server's

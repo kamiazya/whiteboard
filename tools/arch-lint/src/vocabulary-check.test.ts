@@ -79,6 +79,17 @@ const BROWSER_LOCAL_IN_PACKAGES: Readonly<Record<string, string>> = {
     'sample document text the search tests index; the word is its content',
 }
 
+/**
+ * `apps/web`'s root `.ts` files — the vite config and its plugin options — are
+ * neither under `src` nor in `scripts`, and their comments are read like any
+ * other: one named `BrowserLocalDocumentPage` and `browser-local-backend`
+ * after both were renamed. Found rather than listed so a new root file is
+ * scanned the day it exists.
+ */
+const WEB_ROOT_TS_FILES: readonly string[] = readdirSync(join(REPO_ROOT, 'apps/web'))
+  .filter((name) => name.endsWith('.ts'))
+  .map((name) => `apps/web/${name}`)
+
 /** Test and test-support source: a test may spell what it asserts about. */
 function isTestSource(path: string): boolean {
   return /\.test\.[a-z]+$|(^|\/)test-utils\/|(^|\/)_test-|__screenshots__/.test(path)
@@ -140,6 +151,7 @@ const BANNED = [
     dirs: [
       'apps/web/src',
       'apps/web/scripts',
+      ...WEB_ROOT_TS_FILES,
       'docs',
       '.github',
       '.claude',
@@ -185,6 +197,7 @@ const BANNED = [
     dirs: [
       'apps/web/src',
       'apps/web/scripts',
+      ...WEB_ROOT_TS_FILES,
       'docs',
       '.github',
       '.claude',

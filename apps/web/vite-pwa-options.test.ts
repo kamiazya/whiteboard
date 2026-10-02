@@ -67,7 +67,7 @@ describe('pwaOptions', () => {
     expect(patterns.some((p) => p.includes('png'))).toBe(true)
   })
 
-  it('precaches the Loro WASM module so the browser-local editor works offline', () => {
+  it('precaches the Loro WASM module so the browser editor works offline', () => {
     const patterns = pwaOptions.workbox?.globPatterns ?? []
     expect(patterns.some((p) => p.includes('wasm'))).toBe(true)
   })
