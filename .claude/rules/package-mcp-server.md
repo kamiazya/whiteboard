@@ -169,7 +169,8 @@ arms itself at module load or from somewhere else; that is what this paragraph
 is for, and prose is the weaker rung on purpose. The registry earned its keep
 on the first read: `server-mode-http.ts` — the MULTI-INSTANCE root, the one the
 backup lease was built for — was starting no background work at all, so
-scheduled backups reached only the local daemon.
+scheduled backups reached only the local daemon. `createSharedWorkers` takes
+the keeper's scope, so a worker serves the directory the routes serve.
 
 ## How the HTTP roots arm their work, trace, and document their env
 
@@ -191,6 +192,11 @@ one-shot (~40-60ms stall, 150-220ms wall) and is not registry work.
 `env.WHITEBOARD_*` and `env.MCP_*`, so a new variable of any of those shapes
 needs its documentation in the same increment.
 
+A root arms server-core's log sink explicitly: `createApp` for both HTTP
+roots, `startStdioServer` for stdio, both through `routeServerCoreLogs()`.
+Loading the tool registry arms nothing; `composition-roots.guard.test.ts`
+reads `createApp`'s source and requires the stdio root to call it.
+
 ## A store follows the directory it is handed
 
 **Through a `StoreScope`.** `bootSelfHostDeps(dataDir)` builds the document
@@ -198,12 +204,24 @@ store, blob store and index over `dataDir`; the seams beside them (live
 documents, workspace documents, versions, teardown, the write signal) and the
 doc and workspace-doc caches under them follow the same `StoreScope`
 (`server/store/store-scope.ts`), which the store module binds under
-`STORE_SCOPE`. Functions in `store/` take a trailing `scope` defaulting to
-`globalStoreScope` (the process's data dir, read lazily), so routers and
-workers with no composition are unchanged. `boot-self-host-deps.test.ts` is
-the executable half: it boots over one dir while `getDataDir()` names another
-and asserts the other stays empty. What still follows the process dir is
-listed in `bootSelfHostDeps`'s doc comment.
+`STORE_SCOPE`. `createApp` derives ONE `StoreScope` from the `dataLayout` it
+is handed (the roots pass the layout `bootSelfHostDeps` returned, so
+`createApp`'s public shape did not change) and hands it to every router that
+reaches a store; a router's option is `scope`, whose `.layout` is the layout,
+so the pair cannot disagree. `createSharedWorkers(instanceId, scope, factories)`
+takes the `scope` `bootSelfHostDeps` returns — the backup's directory and the
+lease's database, the sweeper, the workspace tail and auto-compaction — and
+both HTTP roots boot before they build workers; `composition-roots.guard.test.ts`
+names a root that gives them any other scope. `store/` functions still default
+`scope = globalStoreScope`, for tests and the stdio root, and `tools/arch-lint`'s
+`scope-default-calls.ts` derives that list from the store's own signatures and
+fails an adapter, `app.ts`, `shared-background-work.ts` or a root that calls
+one without a scope. `boot-self-host-deps.test.ts`, `app.split-dir.test.ts`
+and `shared-background-work.split-dir.test.ts` boot over one dir with
+`getDataDir()` naming another and assert nothing lands outside the served
+dir. Still on the process global, each ledgered: the installed-font dir the
+export singletons read, handle resolution in `workspace-handle.ts`, and
+`stdioBackgroundWork`'s default.
 
 **`createContainer(storeModule)` takes its module; the in-memory one is a
 test double at `shared/test-utils/store-memory.module.ts`.** There is no
@@ -217,6 +235,30 @@ importing a `test-utils` module.
 re-spelling either — digest slicing, the shard and digest regexes, and inline
 sha-256-to-hex outside `shared/sha256.ts` — in non-test mcp-server source;
 tests that hand-spell a path are the independent oracle and are exempt.
+
+## A cached record follows the stored one
+
+**Because the published install is two processes.** `npx
+@kamiazya/whiteboard-mcp` (stdio, the agent) and `whiteboard daemon run` (the
+browser's keeper) share one data dir and each keeps a private in-memory
+workspace record. `workspace-doc-cache.ts` therefore asks the store, on every
+access, whether the record's persisted frontier holds ops the cached document
+lacks (`recordIsAhead`: one `readFrontier` plus a version-vector compare,
+0.074ms against 1.04ms for `readCursor`). If it does, the document catches up
+from `followedTo`, every projection of that workspace in `doc-cache.ts` is
+evicted, and the gain is announced through `emitWorkspaceDocUpdated`.
+Anything that imports into the cached document announces it or returns the
+updates for its caller to (`catchUpWorkspaceDoc` announces); a silent import
+is a subscriber that never hears. The daemon's tail is only the push for pages
+that make no request: the daemon's own entry points set `WHITEBOARD_WORKSPACE_TAIL_MS`
+to 500 for `whiteboard daemon run` and the dev daemon (server mode stays off
+unless set), by measurement in
+`packages/mcp-server/scripts/measure/workspace-follow-cost.mjs`.
+Stdio runs no timer; read-through on access is the only catch-up it needs, so
+`stdioBackgroundWork` declares none. `workspace-coherence.smoke.test.ts`
+drives both real processes and waits for the SSE frame with NO request to the
+daemon, since any read would catch the cache up and hide a tail that never
+ran.
 
 ## Log redaction
 

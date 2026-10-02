@@ -463,8 +463,10 @@ up as an unlisted portable route.
 
 ## `adapter-process-global-check.ts`: an adapter is handed its data layout
 
-A sibling of the mechanic check over the same adapter trees (`server/routes/**`,
-`server/mcp/**`, tests and `_test-*` scaffolding skipped): it bans `getDataDir(`
+A sibling of the mechanic check over the adapter trees and the wiring beside
+them (`server/routes/**`, `mcp/**`, `export/**`, `search/**`, plus `app.ts`,
+`shared-background-work.ts` and `workspace-handle.ts`; tests and `_test-*`
+scaffolding skipped): it bans `getDataDir(`
 and `SELF_HOST_TENANT_ID`. The first is a process global and the second the one
 tenant a self-hosted keeper has, so a route reading either decides inside
 itself which directory and which tenant it serves. `createApp` takes a
@@ -479,13 +481,30 @@ joins directory names — which the mechanic scan would count.
 Comments and string bodies are stripped before matching (`source-scan.ts`'s
 `stripCommentsAndStrings`), so prose naming `getDataDir()` is not a read. The
 ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
-from both sides, size pinned, every entry carrying its reason. It holds one
-entry, `mcp/index.ts`, the stdio composition root that resolves the data dir
-once before booting. `findCompositionGlobalReads` covers the layers that BUILD
+from both sides, size pinned, every entry carrying its reason. It holds two
+entries: `mcp/index.ts`, the stdio composition root that resolves the data dir
+once before booting, and `export/installed-fonts.ts` until the export
+singletons are keyed by directory. `findCompositionGlobalReads` covers the layers that BUILD
 stores: `di/**` (also banning `globalStoreScope`, the stores' default) and
 `server/store/**`. Its both-sided, size-pinned ledger holds the reads that are
 each the one place allowed to choose the data dir or tenant; a new
 `getDataDir()` in either tree fails until it takes the `StoreScope` instead.
+
+A second scan, `scope-default-calls.ts`, closes what name-matching cannot
+see: the process directory also enters through a default parameter (`new
+FileVersionStore()`, `getDoc(id, path)`). It derives, from the AST of
+`store/`, every export with a trailing `scope = globalStoreScope` parameter
+(constructors too) or an `options.scope ?? globalStoreScope` read, then
+reports a call in that population or in the two HTTP roots that omits the
+scope, an `undefined` passed for it, a bare reference to such a function, and
+any naming of `globalStoreScope` or `storeScope(`. It matches by imported
+NAME, so a local function of the same name is not read as one, and it does
+not follow a function handed on by reference to code elsewhere. Its ledger is
+both-sided with a pinned size: `app.ts -> storeScope` (the one derivation),
+`shared-background-work.ts -> globalStoreScope` (the stdio default) and
+`workspace-handle.ts -> workspaceRegistry`. `store-scope` is in
+`MECHANICS_NOT_SCANNED`: a router holding the `StoreScope` it is HANDED is
+not reaching for a mechanic.
 
 ## `no-test-utils-in-production.test.ts` and `blob-identity-one-place.test.ts`
 

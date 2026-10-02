@@ -200,10 +200,12 @@ function createBackup(
 
 /**
  * Several instances share one record (ADR-0020 decision 5), and the tail is
- * how a browser on THIS one learns what another wrote. Off unless the operator
- * sets the interval: one instance hears all its own writes through
- * `onWorkspaceDocUpdated` already, and polling for a second instance that does
- * not exist is pure cost.
+ * how a browser on THIS instance learns what another PROCESS wrote: a second
+ * server-mode instance, or the stdio entry beside the local daemon. One
+ * instance hears all its own writes through `onWorkspaceDocUpdated` already,
+ * so the local daemon arms it by default (`armLocalDaemonTail`) and server
+ * mode follows only when the operator sets the interval, since polling for a
+ * second instance that does not exist is pure cost.
  */
 function createTail(
   intervalMs: number | null,
