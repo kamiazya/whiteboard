@@ -15,10 +15,11 @@ import type { PastDocument, VersionsBackend } from './versions-backend.js'
  *
  * What a contract CANNOT catch, and why this is only half the answer: a
  * feature implemented in one keeper and never written in the other is an
- * absent test, not a failing one. `list` and `save` are here because both
- * keepers answer them; automatic checkpoints and thumbnails are not, because
- * only one keeper has them, and no assertion in this file would fire if the
- * other never got them. That gap is what a keeper-capability ledger is for.
+ * absent test, not a failing one. The four seam calls are here because both
+ * keepers answer them; automatic checkpoints are not, because they are
+ * scheduled beside the seam rather than called through it, and no assertion in
+ * this file would fire if a keeper never scheduled them. That gap is what a
+ * keeper-capability ledger is for.
  *
  * Cases are deliberately keeper-independent — no assertion about which
  * endpoint is called, which object store is written, or what the stored bytes
