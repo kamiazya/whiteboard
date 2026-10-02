@@ -182,7 +182,10 @@ function undeclaredSkills(ids, { skillDirs, enabledPlugins }) {
   return ids.filter((id) => {
     const [plugin, skill] = id.includes(':') ? id.split(':') : [undefined, id]
     if (plugin === undefined) return !skillDirs.includes(skill)
-    return !Object.keys(enabledPlugins).some((key) => key.split('@')[0] === plugin)
+    // A plugin entry set to `false` is a disabled plugin, not a declared one.
+    return !Object.entries(enabledPlugins).some(
+      ([key, enabled]) => key.split('@')[0] === plugin && enabled === true,
+    )
   })
 }
 
@@ -205,6 +208,12 @@ test('every skill an agent preloads is shipped here or declared as an enabled pl
 })
 
 test('a namespaced skill needs its plugin declared in settings.json', () => {
-  const world = { skillDirs: ['local'], enabledPlugins: { 'declared@market': true } }
-  assert.deepEqual(undeclaredSkills(['local', 'declared:any', 'ghost:any', 'absent'], world), ['ghost:any', 'absent'])
+  const world = {
+    skillDirs: ['local'],
+    enabledPlugins: { 'declared@market': true, 'disabled@market': false },
+  }
+  assert.deepEqual(
+    undeclaredSkills(['local', 'declared:any', 'ghost:any', 'absent', 'disabled:any'], world),
+    ['ghost:any', 'absent', 'disabled:any'],
+  )
 })

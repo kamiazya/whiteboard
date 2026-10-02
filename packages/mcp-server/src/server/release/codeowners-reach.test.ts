@@ -18,7 +18,11 @@ function patternToRegExp(pattern: string): RegExp {
     .replace(/^\//, '')
     .replace(/\/$/, '')
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    // `/**/` is zero or more directories (gitignore syntax), so `/a/**/b.ts`
+    // owns `a/b.ts` too; it is held apart from the bare `**` and `*` below.
+    .replace(/\/\*\*\//g, '/\u0000')
     .replace(/\*\*|\*/g, (glob) => (glob === '**' ? '.*' : '[^/]*'))
+    .replace(/\u0000/g, '(?:.*/)?')
   // A bare name matches at any depth, and a path with no glob also owns what is under it.
   return new RegExp(`^${anchored ? '' : '(?:.*/)?'}${body}(?:/.*)?$`)
 }
@@ -48,6 +52,9 @@ describe('every CODEOWNERS pattern still names something', () => {
     expect(match('/a/b/**', 'a/b/c/d.ts')).toBe(true)
     expect(match('/a/*.ts', 'a/c/d.ts')).toBe(false)
     expect(match('/a/b/**', 'a/other/x.ts')).toBe(false)
+    expect(match('/a/**/b.ts', 'a/b.ts')).toBe(true)
+    expect(match('/a/**/b.ts', 'a/x/y/b.ts')).toBe(true)
+    expect(match('/a/**/b.ts', 'a/x/c.ts')).toBe(false)
   })
 
   it('no pattern matches zero tracked files', () => {

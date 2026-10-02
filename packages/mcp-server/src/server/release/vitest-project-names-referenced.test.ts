@@ -30,17 +30,26 @@ const names = new Set(
 // Only a token shaped like a project name is judged: a package prefix some
 // real project uses, then the environment. `in-browser` is not one.
 const prefixes = [...names].map((name) => name.replace(/-(node|jsdom|browser)\b.*$/, ''))
-const PROJECT_SHAPED = new RegExp(
-  `\\b(?:${[...new Set(prefixes)].join('|')})-(?:node|jsdom|browser)\\b`,
-  'g',
-)
+// The WHOLE hyphenated token, so `web-browser-window-state` is judged as
+// itself rather than passing on its `web-browser` prefix.
+function projectShaped(prefixes: Iterable<string>): RegExp {
+  return new RegExp(
+    `\\b(?:${[...new Set(prefixes)].join('|')})-(?:node|jsdom|browser)(?:-[a-z]+)*\\b`,
+    'g',
+  )
+}
+const PROJECT_SHAPED = projectShaped(prefixes)
 // wrangler has a `--project-name`, and prose says "--project pins" — only a
 // vitest invocation's flag is judged.
 const PROJECT_FLAG = /--project[ =]([a-z][\w-]*\*?)/g
 const VITEST_INVOCATION = /vitest|pnpm test/
 
-// Prose that must keep the retired spelling to say it is retired.
-const MAY_NAME_RETIRED: ReadonlySet<string> = new Set([])
+// A file whose project-shaped tokens are not project names, with the reason;
+// each entry is checked from the other side below, so it cannot outlive it.
+const NOT_PROJECT_NAMES: Readonly<Record<string, string>> = {
+  '.claude/scripts/stale-issues-lib.test.mjs':
+    'fixture issue slugs such as mcp-node-tests-use-real-data-dir name a project only by accident',
+}
 
 const scanned = [...trackedFiles(ROOT, '.claude', '.github'), ...trackedFiles(ROOT, '*.md')]
   .filter((path) => /\.(md|mjs|ya?ml)$/.test(path))
@@ -55,10 +64,16 @@ describe('vitest project names written outside vitest.config.ts exist', () => {
     expect(scanned.length).toBeGreaterThan(250)
   })
 
+  it('judges a suffixed token as itself, not by the project it starts with', () => {
+    const tokens = 'runs under web-browser-window-state alone'.match(projectShaped(['web'])) ?? []
+    expect(tokens).toEqual(['web-browser-window-state'])
+    expect(new Set(['web-browser']).has(tokens[0] ?? '')).toBe(false)
+  })
+
   it('every project-shaped token and every --project value is a real project', () => {
     const unknown: string[] = []
     for (const path of scanned) {
-      if (MAY_NAME_RETIRED.has(path)) continue
+      if (path in NOT_PROJECT_NAMES) continue
       const text = readFileSync(join(ROOT, path), 'utf-8')
       const tokens = [
         ...(text.match(PROJECT_SHAPED) ?? []),
@@ -75,5 +90,13 @@ describe('vitest project names written outside vitest.config.ts exist', () => {
       unknown,
       'name a project from vitest.config.ts, or point at test-layer-selection',
     ).toEqual([])
+  })
+
+  it('every exempted file still holds a token the scan would otherwise refuse', () => {
+    for (const path of Object.keys(NOT_PROJECT_NAMES)) {
+      const text = readFileSync(join(ROOT, path), 'utf-8')
+      const unknown = (text.match(PROJECT_SHAPED) ?? []).filter((token) => !names.has(token))
+      expect(unknown, `${path} no longer needs its exemption`).not.toEqual([])
+    }
   })
 })

@@ -9,10 +9,14 @@ function partition(markdown: string): { prose: string[]; fenced: string[] } {
   let fence: string | null = null
   for (const line of markdown.split('\n')) {
     const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1]
+    // An opener may carry an info string; a closer carries nothing but
+    // whitespace after its marker (CommonMark 4.5), so `~~~example` inside a
+    // tilde fence is content, not the end of the block.
+    const closes = /^\s*(`{3,}|~{3,})\s*$/.test(line)
     if (fence === null) {
       if (marker === undefined) prose.push(line)
       else fence = marker
-    } else if (marker?.[0] === fence[0] && marker.length >= fence.length) {
+    } else if (closes && marker?.[0] === fence[0] && marker.length >= fence.length) {
       fence = null
     } else {
       fenced.push(line)
