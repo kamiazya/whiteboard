@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { type RedactionOptions, redactDiagnosticText, redactDiagnosticValue } from './redact.js'
+import {
+  type RedactionOptions,
+  redactDiagnosticText,
+  redactDiagnosticValue,
+  scrubAuthMarkers,
+} from './redact.js'
 
 // Stable JSONL surface for daemon / CLI / runtime logs. The shape is
 // the contract that future `whiteboard daemon logs --json` and any
@@ -129,23 +134,6 @@ function normalizeTimestamp(input: string | undefined): string {
   // pass the regex but produce NaN through Date.parse.
   if (Number.isNaN(Date.parse(input))) throw new InvalidLogTimestampError()
   return input
-}
-
-// Drop the `Authorization` / `Bearer` marker keywords from a string
-// AFTER the shared redactor has already scrubbed the token value.
-// The shared redactor preserves the marker on purpose (e.g. for the
-// doctor diagnostic surface where "Authorization: Bearer [REDACTED]"
-// is informative). The JSONL surface is consumed by support bundles
-// and live log streams where even the marker word is unwelcome — a
-// reader scanning for "Bearer" / "Authorization" should never have to
-// distinguish "actual leak" from "redacted marker".
-const AUTH_MARKER_RE = /(?:Authorization\s*:\s*)?\bBearer\s*\[REDACTED\]/gi
-const BARE_AUTH_HEADER_MARKER_RE = /Authorization\s*:\s*\[REDACTED\]/gi
-
-function scrubAuthMarkers(text: string): string {
-  return text
-    .replace(AUTH_MARKER_RE, '[REDACTED_AUTH]')
-    .replace(BARE_AUTH_HEADER_MARKER_RE, '[REDACTED_AUTH]')
 }
 
 function scrubValue(value: unknown): unknown {

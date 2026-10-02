@@ -9,7 +9,7 @@ export interface RedactionOptions {
 
 // Bearer <token> → Bearer [REDACTED]
 // The marker word "Bearer" is intentionally preserved so that downstream callers
-// (e.g. log-jsonl scrubAuthMarkers) can apply a second pass if even the keyword
+// (see `scrubAuthMarkers` below) can apply a second pass if even the keyword
 // is unwanted on that surface.
 const BEARER_TOKEN_RE = /Bearer\s+\S+/g
 
@@ -23,6 +23,23 @@ export function redactDiagnosticText(text: string, options?: RedactionOptions): 
     result = result.replace(UNIX_PATH_RE, '[REDACTED_PATH]')
   }
   return result
+}
+
+// Drop the `Authorization` / `Bearer` marker keywords from text AFTER
+// `redactDiagnosticText` has already scrubbed the token value. The shared
+// redactor keeps the marker on purpose (the doctor diagnostic surface finds
+// "Authorization: Bearer [REDACTED]" informative), but the JSONL log stream
+// and the support bundle are read by maintainers grepping for "Bearer" /
+// "Authorization" across files, and a reader should never have to tell an
+// actual leak from a redacted marker. One definition, so the two surfaces
+// cannot disagree about what counts as one.
+const AUTH_MARKER_RE = /(?:Authorization\s*:\s*)?\bBearer\s*\[REDACTED\]/gi
+const BARE_AUTH_HEADER_MARKER_RE = /Authorization\s*:\s*\[REDACTED\]/gi
+
+export function scrubAuthMarkers(text: string): string {
+  return text
+    .replace(AUTH_MARKER_RE, '[REDACTED_AUTH]')
+    .replace(BARE_AUTH_HEADER_MARKER_RE, '[REDACTED_AUTH]')
 }
 
 export function redactDiagnosticValue(value: unknown, options?: RedactionOptions): unknown {
