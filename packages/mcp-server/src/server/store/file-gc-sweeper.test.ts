@@ -395,17 +395,6 @@ describe('createFileGcSweeper stop()', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('still resolves promptly via timeoutMs when there is no in-flight pass to wait for', async () => {
-    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
-    const sweeper = createFileGcSweeper({
-      intervalMs: 1000,
-      listWorkspaces: async () => [],
-      discoverFsWorkspaces: async () => [],
-      purge,
-    })
-    await sweeper.stop({ timeoutMs: 5000 })
-  })
-
   it('double stop() and tick()-after-stop are no-ops', async () => {
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({

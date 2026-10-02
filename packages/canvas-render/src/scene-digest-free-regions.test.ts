@@ -115,18 +115,19 @@ describe('free regions, against a cell-by-cell oracle', () => {
     })
   })
 
-  it('never reports a region any node overlaps', () => {
-    // The debt the whole derivation owes, stated directly rather than via the
-    // oracle: an agent placing a new node into a reported gap must not land it
-    // on top of something.
-    const boards = fc.sample(boardArb, { numRuns: 200, seed: 31337 })
-    // A box with no extent covers no area and so collides with nothing —
-    // stated because the first version of this test omitted it and reported 58
-    // "collisions", every one of them a `w: 0` or `h: 0` node. That read as a
-    // defect in the derivation and was a defect in the question.
-    const covers = (b: BoundingBox) => b.w > 0 && b.h > 0
-    const collisions = boards.flatMap((boxes) =>
-      sceneDigest(scene(boxes)).freeRegions.flatMap((region) =>
+  fcTest.prop([boardArb], withDefaults({ numRuns: 200 }))(
+    'never reports a region any node overlaps',
+    (boxes) => {
+      // The debt the whole derivation owes, stated directly rather than via the
+      // oracle: an agent placing a new node into a reported gap must not land it
+      // on top of something.
+      //
+      // A box with no extent covers no area and so collides with nothing —
+      // stated because the first version of this test omitted it and reported 58
+      // "collisions", every one of them a `w: 0` or `h: 0` node. That read as a
+      // defect in the derivation and was a defect in the question.
+      const covers = (b: BoundingBox) => b.w > 0 && b.h > 0
+      const collisions = sceneDigest(scene(boxes)).freeRegions.flatMap((region) =>
         boxes.filter(
           (b) =>
             covers(b) &&
@@ -135,9 +136,9 @@ describe('free regions, against a cell-by-cell oracle', () => {
             b.y < region.y + region.h &&
             b.y + b.h > region.y,
         ),
-      ),
-    )
+      )
 
-    expect(collisions).toEqual([])
-  })
+      expect(collisions).toEqual([])
+    },
+  )
 })

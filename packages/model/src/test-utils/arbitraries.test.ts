@@ -14,7 +14,11 @@ import { fc } from './fast-check.js'
  * drift apart without something going red.
  */
 describe('what spatialCanvasArbitrary draws', () => {
-  const sample = fc.sample(spatialCanvasArbitrary, { numRuns: 2000, seed: 20260911 })
+  // Unseeded on purpose: a pinned seed would make the tally read the same on
+  // every run whatever the generator does with a different draw. At ~4000 line
+  // ends the free share sits near 0.20 with a sampling spread of ~0.006, so
+  // each band below is many standard deviations wide.
+  const sample = fc.sample(spatialCanvasArbitrary, { numRuns: 2000 })
 
   // A LINE's ends, since ADR-0038 decision 2 moved the free arm there: an
   // edge is a relation and both of its ends name a node, which the type now
