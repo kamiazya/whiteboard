@@ -74,7 +74,7 @@ const FREE_REGION_GRID_PX = 20
  * an arbitrarily large `rows x cols` boolean matrix; past this bound free
  * regions are dropped rather than risking unbounded allocation.
  */
-export const FREE_REGION_MAX_CELLS = 250_000
+const FREE_REGION_MAX_CELLS = 250_000
 /**
  * Upper bound on the entry count fed into the pairwise O(n^2)
  * overlap/containment/cluster derivation below. Scene node counts are
@@ -82,7 +82,7 @@ export const FREE_REGION_MAX_CELLS = 250_000
  * fields degrades to empty rather than risking a runaway pairwise scan —
  * mirroring FREE_REGION_MAX_CELLS's guard for the grid allocation above.
  */
-export const PAIRWISE_MAX_ENTRIES = 2_000
+const PAIRWISE_MAX_ENTRIES = 2_000
 
 interface DigestEntry {
   readonly id: string

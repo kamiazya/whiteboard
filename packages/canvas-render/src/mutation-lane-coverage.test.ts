@@ -271,9 +271,12 @@ describe('the mutation lane covers what it says it covers', () => {
     //
     // 98 with `scoring.ts`, the `/scoring` subpath: re-exports of the three
     // quality instruments, outside the lane for the reason they are.
+    //
+    // 97 since the highlight folder's one-line barrel was deleted: a
+    // re-export nothing imported, outside the lane for the reason a barrel is.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 20,
-      production: 98,
+      production: 97,
     })
   })
 

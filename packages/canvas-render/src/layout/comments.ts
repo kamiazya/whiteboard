@@ -47,7 +47,7 @@ export const COMMENT_PIN_SIZE_PX = 20
  * and still read — the same relation the source pane's 12px gutter dot has
  * to its 9px count.
  */
-export const COMMENT_PIN_COUNT_FONT_PX = 10
+const COMMENT_PIN_COUNT_FONT_PX = 10
 
 // Exported with the offset so the editor's compose bubble can wear the same
 // box the renderer draws (padding, corner) — the draft and the settled

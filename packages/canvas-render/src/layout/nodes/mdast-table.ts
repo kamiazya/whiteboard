@@ -63,7 +63,7 @@ export function tableColumnWidths(
 }
 
 /** A cell's text with no styling, for width measurement only. */
-export function cellPlainText(children: readonly MdastCellPhrasingContent[]): string {
+function cellPlainText(children: readonly MdastCellPhrasingContent[]): string {
   let text = ''
   for (const child of children) {
     if ('value' in child && typeof child.value === 'string') text += child.value

@@ -1139,7 +1139,7 @@ export function layoutMdastBlocks(root: MdastRoot, options: MdastLayoutOptions):
  * the entry rather than defaulted at each of forty reference sites — the same
  * shape `layoutSpatialCanvas` uses for `parseBody`.
  */
-export function resolveTheme(options: MdastLayoutOptions): ResolvedMdastOptions {
+function resolveTheme(options: MdastLayoutOptions): ResolvedMdastOptions {
   return { ...withReferenceSeams(options), theme: options.theme ?? MARKDOWN_THEME_NODE }
 }
 

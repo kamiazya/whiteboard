@@ -84,7 +84,7 @@ export const TIDY_MARGIN_PX = 32
  * the tidy still applies). Same class of bound as the edge optimizer's
  * CROSSING_OPT_MAX_EDGES — this runs on a phone.
  */
-export const TIDY_MAX_UNITS = 300
+const TIDY_MAX_UNITS = 300
 
 export interface Rect {
   x: number

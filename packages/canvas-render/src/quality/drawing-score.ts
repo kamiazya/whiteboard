@@ -140,7 +140,7 @@ export interface DrawingScore {
   readonly density: number
 }
 
-export type Flow = 'down' | 'right' | 'up' | 'left' | 'none'
+type Flow = 'down' | 'right' | 'up' | 'left' | 'none'
 
 /**
  * The band tidy snaps within: two edges closer than this were meant to
@@ -162,7 +162,7 @@ export const GROUP_PADDING_PX = 16
  * passed, and neither fits a label. Tidy's margin is held at this value
  * so what tidy lays out is never charged.
  */
-export const READABLE_GAP_PX = 32
+const READABLE_GAP_PX = 32
 /** One grid step; two gaps within it read as equal. */
 export const EVEN_GAP_TOLERANCE_PX = 8
 

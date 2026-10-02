@@ -702,7 +702,6 @@ function resolveNodeOutlines(
 export {
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
-  COMMENT_PIN_COUNT_FONT_PX,
   COMMENT_PIN_SIZE_PX,
   commentAnchor,
   type EdgePathLookup,

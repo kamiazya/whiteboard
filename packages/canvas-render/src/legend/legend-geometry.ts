@@ -17,7 +17,7 @@ export const LEGEND_SWATCH_W = 16
 export const LEGEND_SWATCH_H = 11
 export const LEGEND_GAP_PX = 6
 
-export const UNTAGGED_LABEL = 'untagged'
+const UNTAGGED_LABEL = 'untagged'
 export const legendValueLabel = (value: string): string => (value === '' ? UNTAGGED_LABEL : value)
 
 export interface LegendRow {

@@ -22,7 +22,7 @@ import { el, type SvgChild, type SvgDef, withDefs } from './vnode.js'
  * serves every referencing node. Only the stroke COLOR is left to inherit
  * from each `<use>`.
  */
-export type IconPaint = Readonly<Record<string, string | number>>
+type IconPaint = Readonly<Record<string, string | number>>
 
 /**
  * One icon: its geometry plus the two things geometry is meaningless without.
@@ -32,7 +32,7 @@ export type IconPaint = Readonly<Record<string, string | number>>
  * before this, so a contributed icon in any other space came out the wrong
  * size and clipped, and one wanting a fill came out invisible.
  */
-export interface IconContribution {
+interface IconContribution {
   readonly geometry: ReadonlyArray<LucideIconElement>
   readonly viewBox?: string
   readonly paint?: IconPaint
@@ -57,10 +57,7 @@ const FALLBACK_ICON_PAINT: IconPaint = {
  * objects, so a prototype-inherited name (`toString`) answers a function,
  * which must degrade like any unknown name rather than throw downstream.
  */
-export function lookupIcon(
-  name: string,
-  icons: IconTable | undefined,
-): IconContribution | undefined {
+function lookupIcon(name: string, icons: IconTable | undefined): IconContribution | undefined {
   const fromCaller = icons === undefined ? undefined : icons[name]
   const found = fromCaller ?? VISUAL_ICONS[name]
   return Array.isArray(found?.geometry) ? found : undefined
