@@ -24,6 +24,10 @@
       "types": "./src/scene.ts",
       "import": "./src/scene.ts"
     },
+    "./widget-canvas-view-result": {
+      "types": "./src/widget/canvas-view-result.ts",
+      "import": "./src/widget/canvas-view-result.ts"
+    },
     "./widget-tool-calls": {
       "types": "./src/widget/widget-tool-calls.ts",
       "import": "./src/widget/widget-tool-calls.ts"

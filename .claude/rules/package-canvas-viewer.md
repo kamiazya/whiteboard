@@ -43,7 +43,10 @@ paths:
   mapping (`canvas-point.ts`), `widget-tool-calls.ts` (the builders of the
   widget's `canvas_view` / `wb_canvas_edit` requests — import-free so
   mcp-server's contract test and e2e smoke parse the very bytes the widget
-  sends), and `theme-font.ts`: the widget's ONE
+  sends), `canvas-view-result.ts` (the reader of `canvas_view`'s result,
+  the other half of that contract — mcp-server's
+  `canvas-view-widget.contract.test.ts` runs the real tool's output
+  through it), and `theme-font.ts`: the widget's ONE
   outbound request (ADR-0011's 2026-09-10 note), gated on a pinned
   catalogue origin the widget holds itself.
 
