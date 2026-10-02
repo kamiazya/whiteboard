@@ -3,7 +3,7 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { listenOnSocket } from '../daemon/daemon-socket.js'
 import { IdleTimer } from '../daemon/idle-timer.js'
-import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
+import { bootLocalDeps } from '../di/boot-local-deps.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
@@ -80,14 +80,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // Booted before the workers so they serve the directory the deps were booted
   // over (`scope`). Prepared and migrated before the ports get a handle — see
   // `prepareSelfHostDataDir` for what each step's absence produced.
-  const {
-    db,
-    serverDeps: bootedDeps,
-    dataLayout,
-    scope,
-  } = await bootSelfHostDeps(getDataDir(), {
-    nameKnownWorkspaces: true,
-  })
+  const { db, serverDeps: bootedDeps, dataLayout, scope } = await bootLocalDeps(getDataDir())
   const shared = createSharedWorkers(instanceId, scope, options)
 
   // A page holding a sync stream makes no request while nobody types, and

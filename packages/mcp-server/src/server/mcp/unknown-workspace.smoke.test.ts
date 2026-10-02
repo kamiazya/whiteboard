@@ -1,12 +1,14 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { type DaemonProcess, startDaemon } from './daemon-process.smoke-impl.js'
 import { openStdioSession, type StdioSession } from './stdio-session.smoke-impl.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const stdioEntry = resolve(root, 'src/server/mcp/stdio.ts')
+const cliEntry = resolve(root, 'src/cli/index.ts')
 
 /**
  * An agent installed without the skills has no tool that lists workspaces, so
@@ -16,10 +18,12 @@ const stdioEntry = resolve(root, 'src/server/mcp/stdio.ts')
  */
 const dirs: string[] = []
 let agent: StdioSession | undefined
+let daemon: DaemonProcess | undefined
 
 afterEach(() => {
   agent?.kill()
-  agent = undefined
+  daemon?.stop()
+  agent = daemon = undefined
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 3 })
 })
 
@@ -44,4 +48,19 @@ describe('an unknown workspaceId over stdio on an empty data directory', () => {
       }),
     ).rejects.toThrow(/Workspaces here: "default"/)
   }, 60_000)
+
+  // The daemon is the other root that composes the tools' deps, and the one a
+  // browser and its `/mcp` clients reach: wired separately, so checked apart.
+  it('is refused by the local daemon with the same names', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-unknown-ws-daemon-'))
+    const runtimeDir = mkdtempSync(join(tmpdir(), 'whiteboard-unknown-ws-run-'))
+    dirs.push(dataDir, runtimeDir)
+    mkdirSync(runtimeDir, { recursive: true })
+    daemon = await startDaemon({ root, cliEntry, dataDir, runtimeDir, token: 'unknown-ws-smoke' })
+
+    const refused = await daemon.fetch('/api/v1/workspaces/main/documents')
+
+    expect(refused.status).toBe(404)
+    expect(refused.bytes.toString()).toContain('Workspaces here: \\"default\\"')
+  }, 90_000)
 })

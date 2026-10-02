@@ -14,6 +14,7 @@ import { clearDbCacheForTests, closeDb } from '../server/store/db/index.js'
 import { clearDocCacheForTests } from '../server/store/doc-cache.js'
 import { _clearWorkspaceDocCacheForTests } from '../server/store/workspace-doc-cache.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
+import { bootLocalDeps } from './boot-local-deps.js'
 import { bootSelfHostDeps } from './boot-self-host-deps.js'
 
 let dataDir: string
@@ -51,5 +52,10 @@ describe('bootSelfHostDeps and the workspaces a refusal may name', () => {
     await expect(wbDocumentList(serverDeps, { workspaceId: 'main' })).rejects.toThrow(
       /Workspaces here: "default"/,
     )
+  })
+
+  it('names them for the local roots, which boot through bootLocalDeps', async () => {
+    const { serverDeps } = await bootLocalDeps(dataDir)
+    expect(await serverDeps.knownWorkspaceHandles?.()).toEqual(['default'])
   })
 })
