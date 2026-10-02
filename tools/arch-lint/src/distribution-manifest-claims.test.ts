@@ -33,6 +33,8 @@ const RETIRED_CLAIMS: readonly { readonly pattern: RegExp; readonly why: string 
   { pattern: /127\.0\.0\.1/, why: 'the daemon listens on an owner-only socket, not a port' },
   { pattern: /served by a local daemon/i, why: 'the daemon serves no page of its own' },
   { pattern: /in your browser/i, why: 'the hosted app reaches the daemon through the extension' },
+  { pattern: /patch nodes/i, why: 'no patch tool exists; edits are one wb_canvas_edit batch' },
+  { pattern: /create canvases/i, why: 'a workspace holds documents; a canvas is the surface' },
 ]
 
 /** Every string a JSON document holds, with where it sits. */
@@ -78,6 +80,39 @@ describe('distribution manifests advertise only what the product does', () => {
       .filter(({ path }) => path.startsWith('/interface/defaultPrompt'))
     expect(prompts.length).toBeGreaterThan(1)
     expect(prompts.flatMap(({ text }) => unregisteredToolsIn(text, registered))).toEqual([])
+  })
+
+  // The registry listing is read by people choosing whether to install, and
+  // it is the one place a stale tool list is read as a promise.
+  it('names, in every manifest, only tools the server registers', () => {
+    const registered = registeredTools()
+    const named = manifests.flatMap(({ file, strings }) =>
+      strings.flatMap(({ text }) =>
+        unregisteredToolsIn(text, registered).map((name) => `${file}: ${name}`),
+      ),
+    )
+    expect(named).toEqual([])
+  })
+
+  it('lets the registry listing say what the tools are for, by name', () => {
+    const description = manifests
+      .find(({ file }) => file === 'server.json')
+      ?.strings.find(({ path }) => path === '/description')?.text
+    const registered = registeredTools()
+    const named = registered.filter((tool) => description?.includes(tool))
+    expect(named.length).toBeGreaterThanOrEqual(3)
+  })
+
+  // The registry refuses a package whose manifest does not name the listing
+  // that claims it, so the two names are one fact written twice.
+  it('claims the registry name server.json lists under, as the package says it', () => {
+    const listing = JSON.parse(readFileSync(join(REPO_ROOT, 'server.json'), 'utf-8')) as {
+      name: string
+    }
+    const published = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'packages/mcp-server/package.json'), 'utf-8'),
+    ) as { mcpName?: string }
+    expect(published.mcpName).toBe(listing.name)
   })
 
   it('recognises a tool name that is not registered, so a clean answer is not a blind one', () => {

@@ -46,6 +46,7 @@
   "sideEffects": [
     "./dist/server/mcp/stdio.js"
   ],
+  "mcpName": "io.github.kamiazya/whiteboard",
   "engines": {
     "node": "^22 || ^24 || >=26"
   },

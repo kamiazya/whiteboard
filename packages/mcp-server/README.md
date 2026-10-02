@@ -11,7 +11,7 @@ stored as OKF Markdown or [JSON Canvas 1.0](https://jsoncanvas.org/spec/1.0/).
 
 ## Requirements
 
-- Node `>=22`
+- Node `^22`, `^24` or `>=26`
 
 ## Quick start
 
