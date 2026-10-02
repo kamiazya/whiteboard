@@ -294,6 +294,27 @@ exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
 
+## `route-portability.test.ts`: which routes could leave Node
+
+Classifies every non-test file under `mcp-server/src/server/routes/**` as
+`node-bound` (a Node builtin, a Node-only package, inversify, a `store/`,
+`daemon/`, `di/` or `export/` module, a `security/*-store`, the data layout,
+the stdio root, or anything `scanSourceForBoundaryViolations` flags except
+loro-crdt) or `portable`. The portable files that sit in `mcp-server` are a
+ledger held from both sides with a length pinned by equality, so it can only
+fall: a new portable route fails as unlisted, a listed route that gained Node
+(or was lifted into `server-core`) fails as stale. It exists because ADR-0052
+assumed `createServer(deps)` held the keeper protocol and it holds `/api/v1`
+only; whether to lift the portable routes is that ADR's open decision, and the
+scan states the count without deciding anything.
+
+**Direct imports only**: a portable route still reaches `../log.js`,
+the security gates and `workspace-handle.ts` (its registry read is a ledgered
+`adapter-mechanic-check` edge), so the number is the lower bound on the work. It
+owns its own matcher on purpose and shares nothing with the mechanic check, so
+each can fail alone. `NODE_ONLY_PACKAGES` is a short list; a Node-only package
+missing from it shows up as an unlisted portable route.
+
 ## `adapter-process-global-check.ts`: an adapter is handed its data layout
 
 A sibling of the mechanic check over the same adapter trees (`server/routes/**`,
