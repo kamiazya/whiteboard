@@ -79,6 +79,12 @@ know, because the reader who trips them is elsewhere:
   mechanics is its job. The existing edges are allowlisted AND their count is
   pinned by equality, so adding one fails until someone raises the ceiling
   deliberately. ADR-0018 is Accepted and carries the burn-down order.
+- **`createServer(deps)` mounts `/api/v1` and the MCP tools only.** The keeper
+  protocol the web app syncs through (`/api/sync/*`, workspace-document,
+  workspaces, trash, names, files) lives in `mcp-server/src/server/routes/`;
+  an arch-lint portability scan counts which of those files could run off Node
+  (shrink-only), and ADR-0052's correction note records that lifting them is
+  an open decision.
 
 `apps/web`'s own source is policed by a separate enforcer beside this tool's
 scans (`tools/arch-lint/src/web-app-boundary.test.ts`), so "is this checked?"

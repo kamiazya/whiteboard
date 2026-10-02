@@ -249,10 +249,10 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * 25 with no recorded reason, and the corpus stood at 103818 characters when
  * it was next measured.
  *
- * 20 when the movable bulk left the always-on set (82076 characters): the
+ * 20 when the movable bulk left the always-on set (82512 characters): the
  * flake taxonomy, the gates narrative, the daemon's background-work account
  * and the cycle history are all path-scoped or on-demand now. The corpus sat
- * 182 characters under the 25 -> 26 boundary beforehand; it now sits 1924
+ * 182 characters under the 25 -> 26 boundary beforehand; it now sits 1488
  * under the 20 -> 21 boundary, which is the point — real room for the next
  * rule, rather than a bucket bought one sentence at a time.
  *

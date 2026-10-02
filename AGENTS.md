@@ -191,7 +191,7 @@ against them rather than spying on `console`; `restore()` in `afterEach`.
 
 ### Redaction
 
-The root pino instance in `log.ts` redacts a fixed list of secret-bearing field names before a record reaches stderr, an MCP subscriber, or a test sink — never log a secret-bearing object wholesale, and never interpolate a secret into a message string. The list, how to extend it, and its depth limit are `.claude/rules/package-mcp-server.md`.
+The root pino instance in `log.ts` redacts a fixed list of secret-bearing field names. Never log a secret-bearing object wholesale or interpolate a secret into a message string; the list and how to extend it are in `.claude/rules/package-mcp-server.md`.
 
 ## Doc Screenshots
 
