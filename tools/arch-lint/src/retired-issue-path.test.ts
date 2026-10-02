@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
+import { trackedFiles } from './tracked-files.js'
 
 // Findings used to be filed as markdown files under `tmp/issues/`. That path
 // is gitignored and retired: issues are whiteboard documents of `type: issue`
@@ -79,5 +80,38 @@ describe('the retired tmp/issues path is not an instruction', () => {
         `${path} no longer names ${RETIRED}; drop its exemption`,
       ).toContain(RETIRED)
     }
+  })
+})
+
+// `.claude/` is TRACKED (ADR-0003): the workflows, agents, skills and scripts
+// are shared with every clone, and only `worktrees/` and `settings.local.json`
+// stay per-machine. A header comment in `new-worktree.mjs` said the directory
+// was "gitignored", which is the claim ADR-0003 reversed — and a script header
+// is what a session reads before editing the script, so it is believed. The
+// scan reads `.claude/` scripts and workflows, comment lines only; a line that
+// calls `dist` or `.claude/worktrees` gitignored is true and is not the claim.
+describe('`.claude/` is not described as gitignored', () => {
+  const CLAIM = /\.claude\/?(?!worktrees|settings\.local)[^\n]{0,40}\bgitignored\b/i
+
+  const headers = (): { file: string; line: string }[] =>
+    trackedFiles(REPO_ROOT)
+      .filter((path) => /^\.claude\/(scripts|workflows)\/.*\.mjs$/.test(path))
+      .flatMap((file) =>
+        readFileSync(join(REPO_ROOT, file), 'utf8')
+          .split('\n')
+          .filter((line) => /^\s*(\/\/|\*|\/\*)/.test(line))
+          .map((line) => ({ file, line })),
+      )
+
+  it('reaches the script and workflow comments at all', () => {
+    expect(new Set(headers().map(({ file }) => file)).size).toBeGreaterThan(30)
+    expect(headers().some(({ line }) => /gitignored/.test(line))).toBe(true)
+  })
+
+  it('says no script or workflow comment calls .claude/ gitignored', () => {
+    const wrong = headers()
+      .filter(({ line }) => CLAIM.test(line))
+      .map(({ file, line }) => `${file}: ${line.trim()}`)
+    expect(wrong, '.claude/ is tracked in git — see ADR-0003').toEqual([])
   })
 })

@@ -31,6 +31,8 @@ pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chrom
 
 This installs Playwright's own Chromium, which is what a local browser-mode run uses. **CI does not**: every browser job in `.github/workflows/ci.yml` sets `WHITEBOARD_CHROME_PATH=/usr/bin/google-chrome-stable`, so CI drives the runner's system Chrome. Local and CI therefore execute browser tests in *different* browser builds — worth remembering when a browser test disagrees between them, since the browser itself is one of the variables. Set `WHITEBOARD_CHROME_PATH` locally to match CI when you are chasing exactly that kind of divergence.
 
+A first `pnpm install` in a fresh checkout prints two `ENOENT` warnings for `dist/cli/index.js`: the `whiteboard` bin of `@kamiazya/whiteboard-mcp` points at a build output that does not exist yet. They are harmless and go away after `pnpm build`; `node .claude/scripts/new-worktree.mjs` seeds `dist` from the main checkout first, so a worktree does not print them.
+
 ## Recommended: develop against the dev daemon's `/mcp`
 
 For active MCP development, connect Claude Code or Codex to the dev daemon's `/mcp` endpoint through the development stdio proxy rather than wiring the client to the packaged `stdio` entry directly. A `tsx watch` daemon restart does not force the MCP client to reconnect: the proxy retries each request across it.
