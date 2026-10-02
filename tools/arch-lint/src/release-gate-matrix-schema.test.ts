@@ -3,13 +3,12 @@
 // validation authority: release-gate-matrix.test.ts imports the same module
 // instead of re-implementing validateGate, so the two can never drift apart.
 
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = repoRoot()
+const ROOT = REPO_ROOT
 const SCHEMA_MODULE = join(ROOT, 'tools/checks/src/release-gate-matrix-schema.mjs')
 
 async function importSchema() {

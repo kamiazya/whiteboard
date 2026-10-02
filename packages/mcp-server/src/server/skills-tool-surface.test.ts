@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
@@ -8,10 +7,6 @@ import { z } from 'zod'
 import { repoRoot } from '../shared/test-utils/repo-root.js'
 import { ALL_REGISTERED_TOOLS } from './mcp/mcp-smoke-coverage.js'
 
-// Same repo-root resolution as the sibling plugin-support.test.ts
-// (packages/mcp-server/src/server/plugin-support.test.ts): both files sit at
-// the same depth under the repo root.
-const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = repoRoot()
 const SKILLS_ROOT = resolve(REPO_ROOT, 'skills')
 

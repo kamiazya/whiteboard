@@ -14,13 +14,9 @@
 // `mcpServers.whiteboard.command` and `.args` match exactly.
 
 import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../shared/test-utils/repo-root.js'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = repoRoot()
+import { REPO_ROOT } from './scan-roots.js'
 
 function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(resolve(REPO_ROOT, path), 'utf-8')) as T

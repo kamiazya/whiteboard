@@ -3,13 +3,12 @@
 // contents" step. Cross-package import of the .mjs matches the established
 // pattern in release-gate-matrix-schema.test.ts.
 
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = repoRoot()
+const ROOT = REPO_ROOT
 const MODULE_PATH = join(ROOT, 'tools/checks/src/verify-pack-contents.mjs')
 
 type VerifyResult =

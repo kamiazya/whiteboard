@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
 // Static release-gate contract. Failing here means a release-sensitive
 // surface (CODEOWNERS, package.json bin map, build chmod, prepublish
@@ -11,10 +10,7 @@ import { repoRoot } from '../../shared/test-utils/repo-root.js'
 // scripts/release/check-release-artifacts.mjs and is invoked by `pnpm
 // check:release-artifacts` + `prepublishOnly`.
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-// __dirname → packages/mcp-server/src/server/release
-const REPO_ROOT = repoRoot()
-const PACKAGE_ROOT = resolve(__dirname, '..', '..', '..')
+const PACKAGE_ROOT = resolve(REPO_ROOT, 'packages', 'mcp-server')
 const PACKAGE_JSON_PATH = resolve(PACKAGE_ROOT, 'package.json')
 const CODEOWNERS_PATH = resolve(REPO_ROOT, '.github', 'CODEOWNERS')
 

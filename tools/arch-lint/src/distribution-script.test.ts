@@ -17,13 +17,12 @@
 // silence, and a string is the only rung available short of running a
 // multi-minute build here.
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
 const scripts = (
-  JSON.parse(readFileSync(join(__dirname, '../../../package.json'), 'utf-8')) as {
+  JSON.parse(readFileSync(join(REPO_ROOT, 'packages/mcp-server/package.json'), 'utf-8')) as {
     scripts: Record<string, string>
   }
 ).scripts

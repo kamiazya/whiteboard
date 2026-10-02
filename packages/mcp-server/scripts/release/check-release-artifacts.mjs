@@ -39,7 +39,7 @@ const SHEBANG = '#!/usr/bin/env node'
 // Required bin entries, pinned here so a regression that drops one
 // from package.json fails the publish gate even before any on-disk
 // artifact check runs. Keep this in sync with the static release
-// gate at packages/mcp-server/src/server/release/release-gates.test.ts.
+// gate at tools/arch-lint/src/release-gates.test.ts.
 const REQUIRED_BIN_MAP = {
   whiteboard: 'dist/cli/index.js',
 }

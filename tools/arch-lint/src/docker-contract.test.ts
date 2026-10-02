@@ -30,13 +30,9 @@
 //     prefix" fails, while the cp-target equality test above stays green.
 
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../shared/test-utils/repo-root.js'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = repoRoot()
+import { REPO_ROOT } from './scan-roots.js'
 
 function readText(relPath: string): string {
   return readFileSync(resolve(REPO_ROOT, relPath), 'utf-8')
@@ -357,19 +353,19 @@ const DOCKERFILE_USES = {
     builds: false,
     reason: 'an artifact description quotes the filename',
   },
-  'packages/mcp-server/src/server/docker-contract.test.ts': {
+  'tools/arch-lint/src/docker-contract.test.ts': {
     builds: false,
     reason: 'this file — it reads the Dockerfile to assert its contracts',
   },
-  'packages/mcp-server/src/server/release/docker-build-inputs.test.ts': {
+  'tools/arch-lint/src/docker-build-inputs.test.ts': {
     builds: false,
     reason: 'covers the diff-affects-build derivation',
   },
-  'packages/mcp-server/src/server/release/dockerfile-cache-mounts.test.ts': {
+  'tools/arch-lint/src/dockerfile-cache-mounts.test.ts': {
     builds: false,
     reason: 'asserts the file declares no cache mount a cached layer would empty',
   },
-  'packages/mcp-server/src/server/release/smoke-image-reuse.test.ts': {
+  'tools/arch-lint/src/smoke-image-reuse.test.ts': {
     builds: false,
     reason: 'covers the reuse contract with an injected docker, never a real build',
   },

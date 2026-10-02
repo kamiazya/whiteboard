@@ -20,13 +20,11 @@
 // it starts empty on every run. It could only ever cost.
 
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = repoRoot()
+const ROOT = REPO_ROOT
 const DOCKERFILE = readFileSync(join(ROOT, 'Dockerfile.server'), 'utf-8')
 
 describe('Dockerfile.server and the layer cache', () => {

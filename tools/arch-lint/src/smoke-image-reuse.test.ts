@@ -8,13 +8,12 @@
 // log still read as success — the same shape as the missing build arg this
 // work uncovered, where the pipeline was green about a path it never ran.
 
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { REPO_ROOT } from './scan-roots.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = repoRoot()
+const ROOT = REPO_ROOT
 
 const { resolveServerImage } = (await import(
   pathToFileURL(join(ROOT, 'tests/e2e/distribution/smoke-helpers.mjs')).href
