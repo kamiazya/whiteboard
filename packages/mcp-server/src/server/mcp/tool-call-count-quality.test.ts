@@ -21,11 +21,11 @@ import { bundledFacetRegistry, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { STENCIL_LIBRARY_PATH } from '@kamiazya/whiteboard-server-core'
+import { FakeVersionHistory } from '@kamiazya/whiteboard-server-core/test-utils/fake-version-history'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import { type Errand, MCP_ERRAND_CORPUS } from '../../shared/test-utils/mcp-errand-corpus.js'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 
@@ -112,7 +112,7 @@ async function harness(
     documentStore,
     blobStore: {} as never,
     documentIndex,
-    versions: new InMemoryVersionHistory(),
+    versions: new FakeVersionHistory(),
     // The daemon's own seam: every mutating tool takes its write lock.
     liveDocuments: liveDocuments(),
     facetRegistry: bundledFacetRegistry,
