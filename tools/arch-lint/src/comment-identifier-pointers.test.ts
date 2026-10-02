@@ -106,11 +106,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
   'tools/arch-lint/src/vocabulary-check.test.ts#BROWSER_LOCAL':
     'a retired word, spelled in every casing in order to ban it',
 
-  // Present-tense pointers at symbols that no longer exist, in files this
-  // guard's owner does not edit. Each leaves when its owner fixes the sentence.
-  'apps/web/src/pages/DaemonIndexPage.test.tsx#handleConfirmDelete':
-    'stale, in a file the wiring lane holds — the integrator rewords it at fold',
-
   // Dev-workflow prose (.claude/rules, .claude/skills). History and worked
   // examples first: each names a thing that is gone, in a sentence that says so.
   '.claude/rules/app-web.md#drawAs': 'names the deleted state to describe the chain it fed',
