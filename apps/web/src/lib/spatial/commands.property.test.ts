@@ -74,6 +74,40 @@ describe('buildFragmentInsertCommand properties', () => {
 })
 
 /**
+ * A pointer-derived anchor is fractional, and the pasted boxes must still sit
+ * on whole coordinates (JSON Canvas positions are integers). The property above
+ * draws integer anchors, where the rounding is a no-op and the unrounded and
+ * the rounded result are indistinguishable.
+ */
+const fractionalAnchorArb = fc.record({
+  x: fc.double({ min: -500, max: 500, noNaN: true, noDefaultInfinity: true }),
+  y: fc.double({ min: -500, max: 500, noNaN: true, noDefaultInfinity: true }),
+})
+
+describe('buildFragmentInsertCommand at a fractional anchor', () => {
+  fcTest.prop([fragmentArb, fractionalAnchorArb], withDefaults({ numRuns: 100 }))(
+    'lands every pasted box on integer coordinates',
+    (fragment, anchor) => {
+      const canvas: SpatialCanvas = { nodes: [], edges: [] }
+      let counter = 0
+      const command = buildFragmentInsertCommand(
+        canvas,
+        fragment,
+        () => `remint-${counter++}`,
+        anchor,
+      )
+      if (command === undefined) throw new Error('a non-empty fragment always yields a command')
+      const inserted = applyCommand(canvas, command).nodes
+      expect(inserted).toHaveLength(fragment.nodes.length)
+      for (const node of inserted) {
+        expect(Number.isInteger(node.x)).toBe(true)
+        expect(Number.isInteger(node.y)).toBe(true)
+      }
+    },
+  )
+})
+
+/**
  * Moving a stroke is a TRANSLATION, and the two things that makes true are
  * exactly what an example cannot pin over the shapes a line comes in: an end
  * on a node, an end on a point, with bends and without.

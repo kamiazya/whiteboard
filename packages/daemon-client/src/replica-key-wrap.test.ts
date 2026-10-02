@@ -39,6 +39,40 @@ describe('deriveWrappingKey', () => {
   })
 })
 
+/**
+ * A blob already stored in someone's browser must keep opening after any
+ * change to this module. A wrap/unwrap round trip cannot say so: both halves
+ * share the derivation, so a changed HKDF `info`, salt or binding layout moves
+ * them together and the round trip stays green while every stored blob stops
+ * opening.
+ *
+ * The blob below was sealed independently with node:crypto's `hkdfSync` and
+ * `aes-256-gcm` (HKDF-SHA-256, empty salt, info `wb-replica-wrap-v1`, the
+ * additional data as the JSON array ['wb-replica-wrap-v1', daemonBaseUrl,
+ * workspaceId]) rather than by the code under test.
+ */
+describe('unwrapWorkspaceKey: known answer', () => {
+  const KNOWN_PRF = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
+  const KNOWN_BLOB = {
+    v: 1 as const,
+    iv: 'sLGys7S1tre4ubq7',
+    ct: 'khJFN6YL3jBNTmyo7Ez0sqr4pJddw9mMHO1jgHEuCnvTP1_o7Ao0_TtTiIRkG_VMfPYpCwTyNGLFk0-2YTTpTOuTyt51zB7KZcnrFwbs4n_ksKS-VPd7XolBeFT2l7_TPBnvidwlF0946YVHWu0PJQJfCTwxqosrqkssfEkPwXIXJ5er8RXSiK6Z7g',
+  }
+
+  it('opens a blob sealed outside this module to the response it carried', async () => {
+    const key = await deriveWrappingKey(KNOWN_PRF)
+    expect(await unwrapWorkspaceKey(key, KNOWN_BLOB, BINDING)).toEqual(RESPONSE)
+  })
+
+  it('does not open it under a different authenticator output or binding', async () => {
+    const key = await deriveWrappingKey(KNOWN_PRF)
+    expect(await unwrapWorkspaceKey(await deriveWrappingKey(PRF), KNOWN_BLOB, BINDING)).toBeNull()
+    expect(
+      await unwrapWorkspaceKey(key, KNOWN_BLOB, { ...BINDING, workspaceId: 'ws-2' }),
+    ).toBeNull()
+  })
+})
+
 describe('wrapWorkspaceKey', () => {
   it('writes no part of the workspace key into the blob it produces', async () => {
     const blob = await wrapWorkspaceKey(await deriveWrappingKey(PRF), RESPONSE, BINDING)

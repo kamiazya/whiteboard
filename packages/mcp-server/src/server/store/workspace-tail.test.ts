@@ -175,6 +175,55 @@ describe('createWorkspaceTail', () => {
     expect(peer.getMap('meta').get('before-audience')).toBe('1')
   })
 
+  /**
+   * What a pass emits is consumed: the next pass starts from where this one
+   * ended. A cursor that is not carried forward re-reads the same updates on
+   * every poll, which an open page would receive twice a second for as long as
+   * it stayed subscribed.
+   */
+  it('emits an update once, however many passes follow it', async () => {
+    const h = harness()
+    await writeFrom(h.docs, WS, 'existing', '1')
+    h.subscribe(WS)
+    await h.tail.pollOnce()
+
+    await writeFrom(h.docs, WS, 'remote', '1')
+    await h.tail.pollOnce()
+    const afterCatchUp = h.emitted.length
+    expect(afterCatchUp).toBeGreaterThan(0)
+
+    await h.tail.pollOnce()
+    await h.tail.pollOnce()
+    expect(h.emitted).toHaveLength(afterCatchUp)
+  })
+
+  it('hands each pass the cursor the previous one returned, from the first pass on', async () => {
+    const h = harness()
+    await writeFrom(h.docs, WS, 'existing', '1')
+    h.subscribe(WS)
+    const seen: { from: unknown; to: unknown }[] = []
+    const catchUp = h.docs.catchUp.bind(h.docs)
+    vi.spyOn(h.docs, 'catchUp').mockImplementation(async (workspaceId, doc, cursor) => {
+      const result = await catchUp(workspaceId, doc, cursor)
+      seen.push({ from: cursor, to: result.cursor })
+      return result
+    })
+
+    await h.tail.pollOnce()
+    await writeFrom(h.docs, WS, 'remote', '1')
+    await h.tail.pollOnce()
+    await writeFrom(h.docs, WS, 'remote-again', '1')
+    await h.tail.pollOnce()
+
+    expect(seen).toHaveLength(3)
+    // The baseline pass starts cold; the passes after it never do.
+    const cold = { generation: null, afterSeq: null }
+    expect(seen[0]?.from).toEqual(cold)
+    expect(seen[1]?.from).not.toEqual(cold)
+    expect(seen[1]?.from).toEqual(seen[0]?.to)
+    expect(seen[2]?.from).toEqual(seen[1]?.to)
+  })
+
   it('keeps polling the other workspaces when one of them throws', async () => {
     const h = harness()
     await writeFrom(h.docs, WS, 'existing', '1')
@@ -243,6 +292,15 @@ describe('armLocalDaemonTail', () => {
     const env: NodeJS.ProcessEnv = {}
     armLocalDaemonTail(env)
     expect(resolveWorkspaceTailIntervalMs(env)).toBe(LOCAL_DAEMON_TAIL_INTERVAL_MS)
+  })
+
+  // Pinned as a number as well: the case above compares the default with
+  // itself, so a changed constant would agree with it. Half a second is the
+  // latency an agent's write is visible within in an open page.
+  it('follows twice a second by default', () => {
+    const env: NodeJS.ProcessEnv = {}
+    armLocalDaemonTail(env)
+    expect(resolveWorkspaceTailIntervalMs(env)).toBe(500)
   })
 
   it("leaves an operator's interval alone, and their zero, which is off", () => {
