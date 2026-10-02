@@ -16,6 +16,7 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadDocument, saveDocumentSnapshot } from './document-io.js'
+import { withWorkspaceWrite } from './write-lock.js'
 
 /**
  * "Nothing was written" is literal here, not a formula copied from
@@ -211,11 +212,7 @@ export function createThreadEditTool(deps: ServerDeps) {
     inputSchema: threadEditInputSchema,
     outputSchema: threadEditOutputSchema,
     execute(input: ThreadEditInput): Promise<ThreadEditOutput> {
-      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
-      // mutating tool is a load-modify-save against a store whose save writes
-      // unconditionally, and the one place that holds the bracket is the one
-      // every surface — MCP, HTTP, the next one — goes through.
-      return deps.liveDocuments.withWriteLock(input.workspaceId, () => editThreads(deps, input))
+      return withWorkspaceWrite(deps, input.workspaceId, () => editThreads(deps, input))
     },
   }
 }

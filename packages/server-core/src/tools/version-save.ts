@@ -4,6 +4,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { versionEntryForAgent, versionEntryForAgentSchema } from '../versions/version-entry.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadOrCreateDocument } from './document-io.js'
+import { withWorkspaceWrite } from './write-lock.js'
 
 /**
  * A ceiling on one request. Unlike `wb_document_get`'s, this one is not
@@ -75,13 +76,9 @@ export function createVersionSaveTool(deps: ServerDeps) {
       // Parsed again here: the MCP boundary may rebuild validation without
       // `.strict()`, so the schema is the only guard on what reaches the seam.
       const parsed = versionSaveInputSchema.parse(input)
-      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
-      // mutating tool is a load-modify-save against a store whose save writes
-      // unconditionally, and the one place that holds the bracket is the one
-      // every surface — MCP, HTTP, the next one — goes through.
       // One hold for the whole batch: a checkpoint of several documents is one
       // point in time, which an interleaved write would make two.
-      return deps.liveDocuments.withWriteLock(parsed.workspaceId, () => saveVersions(deps, parsed))
+      return withWorkspaceWrite(deps, parsed.workspaceId, () => saveVersions(deps, parsed))
     },
   }
 }

@@ -13,6 +13,8 @@ export {
   linkifyMentionsOutputSchema,
 } from './linkify-mentions.schemas.js'
 
+import { withWorkspaceWrite } from './write-lock.js'
+
 /** The target carries no display name, so there is no prose to find. */
 export class NamelessLinkifyTargetError extends Error {
   constructor(readonly targetDocumentId: string) {
@@ -53,10 +55,8 @@ export async function linkifyMentions(
   if (target.name === undefined) throw new NamelessLinkifyTargetError(input.targetDocumentId)
   const targetName = target.name
 
-  // The lock is the operation's (ADR-0018 §4). This one is reached over
-  // HTTP alone, and ran with no lock while the MCP adapter held one around
-  // its tools — a Link action racing an agent edit could drop either.
-  return deps.liveDocuments.withWriteLock(input.workspaceId, async () => {
+  // Reached over HTTP alone, so no MCP adapter holds the lock around it.
+  return withWorkspaceWrite(deps, input.workspaceId, async () => {
     const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
     const linked = linkifyMentionsIn(doc, source.kind ?? readDocumentKind(doc) ?? 'spatial', {
       documentId: input.targetDocumentId,

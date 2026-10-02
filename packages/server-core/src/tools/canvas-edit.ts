@@ -24,6 +24,7 @@ import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
+import { withWorkspaceWrite } from './write-lock.js'
 
 export { canvasEditInputSchema } from './canvas-edit-ops.js'
 export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.js'
@@ -335,11 +336,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
-      // The lock is the operation's, not an adapter's (ADR-0018 §4): every
-      // mutating tool is a load-modify-save against a store whose save writes
-      // unconditionally, and the one place that holds the bracket is the one
-      // every surface — MCP, HTTP, the next one — goes through.
-      return deps.liveDocuments.withWriteLock(input.workspaceId, () => editCanvas(deps, input))
+      return withWorkspaceWrite(deps, input.workspaceId, () => editCanvas(deps, input))
     },
   }
 }
