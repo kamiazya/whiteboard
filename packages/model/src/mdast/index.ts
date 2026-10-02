@@ -56,7 +56,7 @@ import { documentIdSchema } from '../ids.js'
  * drift a compile error, not a silent widening to `any`.
  */
 
-export type MdastAlign = 'left' | 'right' | 'center' | null
+type MdastAlign = 'left' | 'right' | 'center' | null
 
 type MdastReferenceType = 'shortcut' | 'collapsed' | 'full'
 type MdastHeadingDepth = 1 | 2 | 3 | 4 | 5 | 6
@@ -253,7 +253,7 @@ export const mdastPhrasingContentSchema: z.ZodType<MdastPhrasingContent> = z.laz
   ]),
 )
 
-export const mdastCellPhrasingContentSchema: z.ZodType<MdastCellPhrasingContent> = z.lazy(() =>
+const mdastCellPhrasingContentSchema: z.ZodType<MdastCellPhrasingContent> = z.lazy(() =>
   z.discriminatedUnion('type', [
     textNodeSchema,
     cellEmphasisNodeSchema,
@@ -286,9 +286,9 @@ export const mdastFlowContentSchema: z.ZodType<MdastFlowContent> = z.lazy(() =>
   ]),
 )
 
-export const mdastListItemSchema: z.ZodType<MdastListItem> = z.lazy(() => listItemNodeSchema)
+const mdastListItemSchema: z.ZodType<MdastListItem> = z.lazy(() => listItemNodeSchema)
 
-export const mdastTableCellSchema: z.ZodType<MdastTableCell> = z.lazy(() => tableCellNodeSchema)
+const mdastTableCellSchema: z.ZodType<MdastTableCell> = z.lazy(() => tableCellNodeSchema)
 
 export const mdastTableRowSchema: z.ZodType<MdastTableRow> = z.lazy(() => tableRowNodeSchema)
 

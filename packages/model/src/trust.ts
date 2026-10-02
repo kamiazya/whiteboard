@@ -67,7 +67,6 @@ export const okfTimestampSchema = z
  * something extra.
  */
 export const okfTrustEventSchema = z.object({ by: okfActorSchema, at: okfTimestampSchema }).loose()
-export type OkfTrustEvent = z.infer<typeof okfTrustEventSchema>
 
 /**
  * `verified` is a LIST of independent checks — a human sign-off plus a

@@ -196,7 +196,7 @@ export const canvasLineArbitrary = arbitraryForSchema(canvasLineSchema)
  * generators draw any string; this is for the sites composed by hand, and
  * for a property that wants a scoped tag to land rather than to be possible.
  */
-export const tagsArbitrary: fc.Arbitrary<string[]> = fc.uniqueArray(
+const tagsArbitrary: fc.Arbitrary<string[]> = fc.uniqueArray(
   fc.oneof(
     fc
       .tuple(fc.stringMatching(/^[a-z][a-z0-9-]{0,5}$/), fc.stringMatching(/^[a-z][a-z0-9-]{0,5}$/))

@@ -602,8 +602,6 @@ export const canvasCommentDraftSchema = canvasCommentFieldsSchema
   .partial({ id: true, x: true, y: true })
   .refine(namesOneTarget, ONE_TARGET)
 
-export type CanvasCommentDraft = z.infer<typeof canvasCommentDraftSchema>
-
 export const spatialCanvasSchema = z
   .object({
     // JSON Canvas 1.0 declares both top-level arrays optional; a bare `{}`
