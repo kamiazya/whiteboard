@@ -35,7 +35,7 @@ This project is split into three main runtime layers:
     runs in an idle stdio process. A client that wants the live path itself
     connects to the daemon's `/mcp` on its socket instead
 - **daemon**
-  - Entry point: `dist/server/index.js`
+  - Entry point: `whiteboard daemon run` (`cli/daemon-run.ts`)
   - Serves `/api/*` (including the live-sync SSE stream) and `/mcp` on its
     owner-only socket, token-gated, and owns the runtime lifecycle
   - Serves no page; the browser reaches it through the whiteboard extension
@@ -51,8 +51,10 @@ This project is split into three main runtime layers:
     over the daemon's SSE stream
   - Applies remote updates and emits local edits
 - **storage**
-  - Lives under `~/.whiteboard/{workspaceId}/`
-  - Stores canvas state, versions, exports, and library metadata
+  - Lives under `~/.whiteboard/`: one SQLite database (`whiteboard.db`)
+    holding every workspace's documents and versions, with images and
+    stored files beside it under `tenants/`
+    ([Configuration](../reference/configuration.md#storage-layout))
 
 ## Data flow
 
@@ -68,7 +70,7 @@ This project is split into three main runtime layers:
 
 ### Browser collaboration path
 
-1. A browser opens `/w/{workspaceId}/document/{path}`.
+1. A browser opens `/w/<workspace>/d/<path>`.
 2. The app loads the current canvas snapshot from the daemon.
 3. Local edits update the in-memory document and are persisted through daemon routes.
 4. SSE events broadcast document changes and version events.

@@ -23,8 +23,7 @@ no need to switch to a browser tab to see what the agent drew.
   same workspace shows that document's prose, and every reference is labelled with
   its readable name rather than its raw id. The widget has no store of its own, so
   the server resolves these and sends them in the tool result alongside the scene.
-- The same self-contained viewer bundle used for
-  [self-contained HTML export](../explanation/) — no daemon credentials, tokens, or
+- One self-contained viewer bundle — no daemon credentials, tokens, or
   base URLs are ever passed into the widget. The widget only ever receives the scene
   snapshot plus the resolved references above — nothing else.
 - No external network access, with **one exception**: the bundle is fully self-contained

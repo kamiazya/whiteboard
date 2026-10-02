@@ -43,16 +43,30 @@ at full precision — see below). Neither arrives unless you ask for it. Three
 deliberate steps turn it on:
 
 ```bash
-# once — install the embedding runtime beside the server
-npm install @huggingface/transformers
+# once — install the CLI and the embedding runtime side by side
+npm install -g @kamiazya/whiteboard-mcp @huggingface/transformers
 
 # once — download the model into your data directory (add --full for the
 # higher-precision weights)
 whiteboard search fetch-model --json
-
-# then start the daemon with
-WHITEBOARD_SEMANTIC_SEARCH=1
 ```
+
+Then set `WHITEBOARD_SEMANTIC_SEARCH=1` in **every process that answers a
+search**, because each one decides for itself whether to use the model:
+
+- the daemon: `WHITEBOARD_SEMANTIC_SEARCH=1 whiteboard daemon run`;
+- the MCP server your agent starts, which is what answers
+  `wb_document_search` in a chat. Put the variable in that server's `env`
+  block in your MCP client's configuration, and start it from the global
+  install (`"command": "whiteboard", "args": ["mcp"]`) rather than through
+  `npx`, which would not see the runtime.
+
+**Install the runtime where `whiteboard` can find it.** The server loads
+`@huggingface/transformers` by resolving it from its own package's directory,
+so the runtime has to sit in the same `node_modules` tree as
+`@kamiazya/whiteboard-mcp` — as the global install above puts them. A copy in
+your project's directory, or `npx` unpacking the package somewhere else, is
+invisible to it and `search fetch-model` answers `runtime-missing`.
 
 **You choose how good a job it does.** The same model ships in two
 precisions, and the download and the quality are the same dial:

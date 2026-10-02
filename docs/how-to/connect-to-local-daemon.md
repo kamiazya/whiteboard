@@ -36,8 +36,10 @@ own.
 **Without the extension**, the hosted app keeps its data in the browser, and
 says that the extension is what connects it to a local daemon.
 
-Running `whiteboard daemon run` interactively opens the hosted app in your
-default browser once the daemon is listening. Pass `--no-open` (or set
+Running `whiteboard daemon run` interactively prints one line saying the
+daemon is up (its pid and socket) and opens the hosted app in your
+default browser once the daemon is listening. A script that needs to read
+that line passes `--json`, which prints it as one JSON object instead. Pass `--no-open` (or set
 `openBrowser: false` in a
 [config file](../reference/configuration.md#config-file-local-daemon)) to
 disable this. See
@@ -50,6 +52,31 @@ page is still connected to it: an open tab keeps it running however long
 nobody types. `whiteboard daemon run` then prints `whiteboard daemon stopped:
 no request within its idle timeout.` to stderr and exits `0`; run it again to
 continue.
+
+After you upgrade `whiteboard`, a daemon that was already running keeps the old
+build. `whiteboard daemon doctor --json` reports a `daemon.version` check as a
+warning (the overall status is `warning` and the exit code stays `0`) when the
+version in the daemon's record differs from the build you are running, and
+points at `whiteboard daemon stop --json`. Stop it and start it again to pick
+up the new one.
+
+## Get the `whiteboard` command
+
+Every `whiteboard ...` command on this page is the CLI that
+`@kamiazya/whiteboard-mcp` ships; the package's one executable is
+`whiteboard`. Install it once so the command is on your `PATH`:
+
+```bash
+npm install -g @kamiazya/whiteboard-mcp
+```
+
+Without installing, `npx -y @kamiazya/whiteboard-mcp daemon run` runs any of
+them (the arguments after the package name are the command's own). That is
+fine for starting the daemon, but not for step 3 below: `native-host install`
+records the path of the `whiteboard` it ran from, and the copy `npx` unpacks
+is in a cache directory it replaces on the next release. Run that step from
+the global install; the command warns on stderr when it finds itself in
+`npx`'s cache.
 
 ## Set it up
 
@@ -93,7 +120,8 @@ level, naming only the whiteboard extension as allowed to start it, plus a
 small launcher that records which Node, which `whiteboard` install and which
 data directory the host relays to. Pass `--data-dir=<path>` if your daemon
 uses a data directory other than the default. Run it again after moving or
-reinstalling `whiteboard`.
+reinstalling `whiteboard`, including when a new release replaces the copy it
+ran from.
 
 Where the manifest goes depends on the platform:
 
