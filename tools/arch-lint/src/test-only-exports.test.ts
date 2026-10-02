@@ -390,6 +390,10 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_TTL_MS':
+    'half of the refresh-to-TTL ratio that keeps a stalled loop from lapsing a live backup’s marker, held by backup-in-progress.defaults.test.ts',
+  'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_REFRESH_MS':
+    'the other half of that ratio, asserted at three refreshes per lifetime by the same test',
   'apps/web/src/components/spatial-editor/gesture-trace.ts#replayNavigation':
     'the replay fold that is the reason the flight recorder stores whole events, proven by gesture-trace.test.ts reproducing a recorded run',
   'apps/web/src/components/spatial-editor/navigation.ts#NAVIGATION_MEMORY_KEYS':

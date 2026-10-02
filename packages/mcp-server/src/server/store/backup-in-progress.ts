@@ -29,8 +29,8 @@ const markerSchema = z.object({
  * long after a backup dies. The refresh is well inside it so a stalled event
  * loop has room to miss a beat without expiring a live backup's own marker.
  */
-const DEFAULT_TTL_MS = 60_000
-const DEFAULT_REFRESH_MS = 15_000
+export const DEFAULT_TTL_MS = 60_000
+export const DEFAULT_REFRESH_MS = 15_000
 
 function markerPath(dataDir: string): string {
   return join(dataDir, BACKUP_MARKER_FILENAME)

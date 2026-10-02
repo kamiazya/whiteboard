@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BACKUP_MARKER_FILENAME,
   backupIsInProgress,
+  DEFAULT_REFRESH_MS,
+  DEFAULT_TTL_MS,
   withBackupMarker,
 } from './backup-in-progress.js'
 
@@ -25,6 +27,12 @@ afterEach(async () => {
  * marker lapse mid-copy and GC unlinks blobs the snapshot still references.
  */
 describe('the backup-in-progress marker with its default timings', () => {
+  it('refreshes at least three times inside one lifetime', () => {
+    // A stalled event loop may miss a beat or two; a refresh that needs
+    // every beat to land would let a live backup's marker lapse under GC.
+    expect(DEFAULT_REFRESH_MS * 3).toBeLessThanOrEqual(DEFAULT_TTL_MS)
+  })
+
   it('stays in force across a body running several lifetimes', async () => {
     // Only the interval and the clock are faked: the marker is written to a
     // real directory, and the reader takes its "now" as an argument.
