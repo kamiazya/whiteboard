@@ -24,6 +24,9 @@ type DocumentFileHandler = (
   fileId: string,
 ) => Promise<Response> | Response
 
+// Not `parseWorkspaceHandle`: the handle and the document path are validated in
+// one try, with the 400 shape chosen per route, and the handle is resolved
+// only after both pass.
 function validated(
   c: Context,
   workspaceId: string,

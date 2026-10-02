@@ -16,8 +16,7 @@ import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../../log.js'
-import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
-import { workspaceIdFromHandle } from '../../workspace-handle.js'
+import { parseWorkspaceHandle } from '../../workspace-handle.js'
 
 export interface TrashRouterOptions {
   serverDeps: ServerDeps
@@ -29,17 +28,11 @@ export function createTrashRouter(options: TrashRouterOptions): Hono {
   const deps = options.serverDeps
 
   app.get('/api/workspaces/:workspaceId/trash', async (c) => {
-    const handle = c.req.param('workspaceId')
     // A malformed address is the caller's error, not this server's — kept
     // outside the try below so it cannot fall through to the 500 arm.
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    const workspaceId = await workspaceIdFromHandle(c, handle)
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
     try {
       if (deps.trash === undefined) {
         return c.json({ title: 'This composition has no trash.' } satisfies ApiErrorBody, 501)
@@ -66,16 +59,10 @@ export function createTrashRouter(options: TrashRouterOptions): Hono {
   })
 
   app.post('/api/workspaces/:workspaceId/trash/:documentId/restore', async (c) => {
-    const handle = c.req.param('workspaceId')
     const documentId = c.req.param('documentId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    const workspaceId = await workspaceIdFromHandle(c, handle)
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
     try {
       if (deps.trash === undefined) {
         return c.json({ title: 'This composition has no trash.' } satisfies ApiErrorBody, 501)

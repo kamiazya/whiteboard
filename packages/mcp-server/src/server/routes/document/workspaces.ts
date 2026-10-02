@@ -27,8 +27,12 @@ import { type Context, Hono } from 'hono'
 import { getLogger } from '../../log.js'
 import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate.js'
 import { membershipRefusal } from '../../security/workspace-access.js'
-import { validateDocumentPath, validateWorkspaceId } from '../../validators.js'
-import { workspaceIdFromHandle } from '../../workspace-handle.js'
+import { validateDocumentPath } from '../../validators.js'
+import {
+  parseWorkspaceHandle,
+  refuseMalformedHandle,
+  workspaceIdFromHandle,
+} from '../../workspace-handle.js'
 import {
   corruptStored,
   firstOwned,
@@ -277,8 +281,8 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // carrying only a name would be asking to drop the address.
   app.patch('/api/workspaces/:workspaceId', async (c) => {
     const handle = c.req.param('workspaceId')
-    const invalidWorkspaceId = refusedBy(() => validateWorkspaceId(handle))
-    if (invalidWorkspaceId) return c.json(invalidWorkspaceId, 400)
+    const malformed = refuseMalformedHandle(c, handle)
+    if (malformed !== null) return malformed
     const parsed = renameWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ title: 'segment or displayName must be valid' } satisfies ApiErrorBody, 400)
@@ -308,10 +312,9 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   })
 
   app.get('/api/workspaces/:workspaceId/documents', async (c) => {
-    const handle = c.req.param('workspaceId')
-    const invalidWorkspaceId = refusedBy(() => validateWorkspaceId(handle))
-    if (invalidWorkspaceId) return c.json(invalidWorkspaceId, 400)
-    const workspaceId = await workspaceIdFromHandle(c, handle)
+    const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
+    if ('refusal' in address) return address.refusal
+    const { workspaceId } = address
     try {
       const deps = options.serverDeps
       const { documents } = await wbDocumentList(deps, { workspaceId })

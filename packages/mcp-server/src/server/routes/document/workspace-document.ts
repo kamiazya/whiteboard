@@ -64,6 +64,9 @@ async function admittedWorkspace(
   // and an empty handle refuses through the same validator as any other
   // unusable one rather than through a second path.
   const handle = c.req.param('workspaceId') ?? ''
+  // Validated here, not through `parseWorkspaceHandle`: this surface is read
+  // by the page, which speaks Problem Details (`{ title }`), where the helper
+  // answers the `{ error, message }` family.
   try {
     validateWorkspaceId(handle)
   } catch (err) {

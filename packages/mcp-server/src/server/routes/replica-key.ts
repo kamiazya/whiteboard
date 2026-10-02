@@ -53,7 +53,10 @@ import { validateWorkspaceId, validationErrorBody } from '../validators.js'
 const log = getLogger('replica-key')
 
 /** A malformed workspaceId (path-traversal-shaped, non-ASCII, etc.) is a 400,
- *  not the uncaught ValidationError `workspaceExists` throws underneath. */
+ *  not the uncaught ValidationError `workspaceExists` throws underneath.
+ *  Kept apart from `refuseMalformedHandle`: the body is the typed
+ *  `MembershipRefusal` the client parses, which `satisfies` holds, and this
+ *  route addresses a canonical id rather than a handle. */
 function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
   try {
     validateWorkspaceId(workspaceId)
