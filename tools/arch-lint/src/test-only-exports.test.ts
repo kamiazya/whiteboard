@@ -492,8 +492,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the other half of the membership-gate partition, asserted by route-scope-registry.test.ts against the origin-trusted list',
   'packages/mcp-server/src/server/store/backup-retention.ts#sealableSnapshots':
     'no production caller on purpose: it presumes a mirror running behind the snapshot (see ADR-0021 status note), kept correct by its property test',
-  'packages/mcp-server/src/server/store/db/published-migration-names.ts#PUBLISHED_MIGRATION_NAMES':
-    'the compatibility contract of migration names that shipped, asserted equal to the runtime provider by its own test',
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#LEDGER':
     'the schema the migrations are held to, read by the schema-ledger test',
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#NULLABLE_IN_DATABASE':

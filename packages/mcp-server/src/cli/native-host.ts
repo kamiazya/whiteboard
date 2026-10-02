@@ -82,7 +82,7 @@ function portableExecArgv(execArgv: readonly string[]): string[] {
  * stderr, beside the JSON answer, rather than refused: the install is correct
  * until that day.
  */
-export function transientInstallWarning(entry: string): string | undefined {
+function transientInstallWarning(entry: string): string | undefined {
   if (!/[\\/]_npx[\\/]/.test(entry)) return undefined
   return `whiteboard native-host install: this launcher points into npx's cache (${entry}), which npx replaces on a new release. Install the package globally (npm install -g @kamiazya/whiteboard-mcp) and run \`whiteboard native-host install --json\` from that install.\n`
 }
