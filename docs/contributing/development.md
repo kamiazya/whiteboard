@@ -204,7 +204,7 @@ Two layers close that gap:
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket)
 pnpm mcp             # MCP server only (tsx)
 pnpm build           # dist/server (apps/web build copies dist/web-app in via its postbuild step)
-pnpm test            # Vitest (all projects)
+pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke
 pnpm smoke:e2e       # version / route / no_client wiring smoke
@@ -219,12 +219,15 @@ pnpm eval:tool-surface # LLM-driven tool-surface eval on a seeded fixture (uses 
 pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 ```
 
-Default regression triple after a change:
+Default local pass after a change. CI runs the full matrix on every push, so a local full run is the same work twice; run the area you touched, then the gates:
 
 ```bash
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower)
-pnpm typecheck   # tsc --noEmit in every workspace package that defines a typecheck script
-pnpm smoke:e2e   # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
+pnpm test --project <area>   # the nearest project(s) for what you touched; CONTRIBUTING.md's table names them
+pnpm typecheck               # tsc --noEmit in every workspace package that defines a typecheck script
+pnpm smoke:e2e               # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
+pnpm check:local             # every gate CI's check job runs
+pnpm test:browser            # when the change touches real-browser behavior
+pnpm test                    # optional: every project at once, not required; full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower)
 ```
 
 For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-eight configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, extension node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all four browser projects (canvas-render-browser, canvas-viewer-browser, web-browser, web-browser-window-state)):

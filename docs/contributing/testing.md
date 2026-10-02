@@ -29,7 +29,8 @@ pnpm test --project mcp-node
 pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change touches UI
 
 # 2. After targeted test passes, run the broader gate for the touched area
-pnpm test
+#    (not the whole repo: CI runs the full matrix on every push)
+pnpm check:local         # every gate CI's check job runs
 pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
@@ -386,7 +387,7 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#p
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state
+pnpm test           # optional: every project at once, CI runs the matrix; full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state
 pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 pnpm coverage       # every non-browser project with v8 coverage -> tmp/coverage/lcov.info

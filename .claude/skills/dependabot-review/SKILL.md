@@ -119,7 +119,7 @@ After draining the merge loop, on the integration branch:
 ```bash
 pnpm install
 pnpm -r typecheck
-pnpm test
+pnpm test   # optional: every project at once; CI runs the matrix
 pnpm smoke:e2e
 pnpm audit --prod --audit-level=high   # mirrors the CI gate — must be clean to merge
 ```

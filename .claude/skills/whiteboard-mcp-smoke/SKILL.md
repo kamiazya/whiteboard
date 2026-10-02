@@ -44,10 +44,10 @@ Meaning:
 
 ### 2. Unit Tests
 
-Start with focused tests for the touched area. If broader coverage is not needed yet, leave full `pnpm test` for later.
+Start with focused tests for the touched area; full suites are CI's job.
 
 ```bash
-pnpm test
+pnpm test --project mcp-node
 ```
 
 Stop there if it fails.

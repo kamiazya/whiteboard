@@ -17,7 +17,7 @@
 // `check:local`; this closes it for the two lists a new contributor reads
 // first.
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -25,6 +25,7 @@ import { jobSection } from './job-section.js'
 import { codeText } from './markdown-code.js'
 import { bareScriptNames, declaresScript, scriptsOf } from './pnpm-scripts.js'
 import { REPO_ROOT } from './scan-roots.js'
+import { trackedFiles } from './tracked-files.js'
 
 const ROOT = REPO_ROOT
 
@@ -211,5 +212,63 @@ describe('no contributor-facing checklist requires a local full-suite run', () =
     const template = readFileSync(join(ROOT, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf-8')
     expect(template).toContain('- [ ]')
     expect(template).not.toMatch(CHECKBOX_NAMING_FULL_SUITE)
+  })
+})
+
+// The same premise, one door over: the two checklists above are the ones a
+// contributor MEETS, but the commands a session actually runs are copied from
+// the how-to docs and the skills. A fenced bare `pnpm test` line there is the
+// instruction "run every project", and it kept reaching sessions after the
+// checklists were corrected — development.md's "default regression triple" and
+// testing.md's "after targeted test passes" step both said it. A bare line is
+// allowed only where it labels itself optional on the same line.
+describe('no how-to doc or skill instructs a bare local full-suite run', () => {
+  // `pnpm test` and nothing else but a trailing comment: no `--project`, no
+  // path, no `:variant` script (`pnpm test:browser` is a different command).
+  const BARE_FULL_SUITE = /^\s*pnpm test\s*(?:#.*)?$/
+
+  function scannedDocs(): string[] {
+    const how = readdirSync(join(ROOT, 'docs/contributing'))
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => `docs/contributing/${name}`)
+    const skills = trackedFiles(ROOT).filter(
+      (path) => path.startsWith('.claude/skills/') && path.endsWith('.md'),
+    )
+    return [...how, ...skills]
+  }
+
+  function fencedLines(file: string): string[] {
+    const lines: string[] = []
+    let fenced = false
+    for (const line of readFileSync(join(ROOT, file), 'utf-8').split('\n')) {
+      if (/^\s*```/.test(line)) {
+        fenced = !fenced
+      } else if (fenced) {
+        lines.push(line)
+      }
+    }
+    return lines
+  }
+
+  const bare = scannedDocs().flatMap((file) =>
+    fencedLines(file)
+      .filter((line) => BARE_FULL_SUITE.test(line))
+      .map((line) => ({ file, line })),
+  )
+
+  it('reads the docs and skills at all, and reaches a bare line to judge', () => {
+    // A scan over nothing passes. The labelled-optional lines are the
+    // subject's own proof of presence: they exist precisely so the bare
+    // command stays documented, and a regex that matched none of them would
+    // be judging nothing.
+    expect(scannedDocs().length).toBeGreaterThan(40)
+    expect(bare.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('labels every bare `pnpm test` line optional', () => {
+    const unlabelled = bare
+      .filter(({ line }) => !/optional/i.test(line))
+      .map(({ file, line }) => `${file}: ${line.trim()}`)
+    expect(unlabelled).toEqual([])
   })
 })
