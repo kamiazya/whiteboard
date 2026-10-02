@@ -27,8 +27,8 @@ export const nodeIdSchema = z.string().min(1, 'node id must not be empty')
  * Legacy workspace identifier shape, retained for the live data both
  * keepers already hold on disk today (the daemon's `workspaces.id` column,
  * the browser's hard-coded `'local'`). This codifies the contract already
- * enforced at runtime by mcp-server's `SAFE_WORKSPACE_ID`
- * (`/^[a-zA-Z0-9_-]+$/`, non-empty): workspace ids are used directly as
+ * enforced at runtime by mcp-server's `validateWorkspaceId`, which imports
+ * `WORKSPACE_ID_PATTERN` from here (`/^[a-zA-Z0-9_-]+$/`, non-empty): workspace ids are used directly as
  * path segments and cache/index keys, so `.`/`/`/whitespace/non-ASCII must
  * stay rejected to prevent path traversal and key collisions.
  *
@@ -39,7 +39,7 @@ export const nodeIdSchema = z.string().min(1, 'node id must not be empty')
  * re-keying live data onto the new canonical-id shape is a later, migration-
  * driven slice, not this one.
  */
-const WORKSPACE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
+export const WORKSPACE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
 
 export const workspaceIdSchema = z
   .string()
@@ -47,11 +47,12 @@ export const workspaceIdSchema = z
   .regex(WORKSPACE_ID_PATTERN, 'workspace id must be a path-safe path ([a-zA-Z0-9_-]+)')
 
 /**
- * One segment of a document path. Codifies the rule mcp-server enforces at
- * runtime as `DOCUMENT_PATH_SEGMENT_PATTERN`: ASCII letters and digits, hyphens only in
- * the interior. `.` is absent from the character class rather than merely
- * unmatched, which is what forecloses `..` traversal once segments are
- * joined into a filesystem-shaped path.
+ * One segment of a document path: ASCII letters and digits, hyphens only in
+ * the interior. mcp-server's `validateDocumentPath` imports this pattern, so
+ * the schema and the validator that explains a rejection cannot drift apart.
+ * `.` is absent from the character class rather than merely unmatched, which
+ * is what forecloses `..` traversal once segments are joined into a
+ * filesystem-shaped path.
  */
 export const DOCUMENT_PATH_SEGMENT_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
 

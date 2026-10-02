@@ -1,4 +1,4 @@
-import { documentPathSchema } from '@kamiazya/whiteboard-model'
+import { documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
 import {
@@ -21,6 +21,54 @@ describe('shared validators', () => {
     expect(() => validateDocumentPath('../escape')).toThrow(/Invalid path/)
     expect(() => validateVersionId('bad.id')).toThrow(/Invalid version id/)
     expect(() => validateFileId('bad/id')).toThrow(/Invalid file id/)
+  })
+})
+
+describe('validateWorkspaceId / workspaceIdSchema conformance', () => {
+  // The schema is what the shared layer parses with, validateWorkspaceId is
+  // what explains a rejection. They share WORKSPACE_ID_PATTERN, and this keeps
+  // the empty-string case and any future extra rule from drifting apart.
+  const accepts = (id: string): boolean => {
+    try {
+      validateWorkspaceId(id)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // A safe id with one hostile character spliced in is the arrangement a
+  // generic string arbitrary would almost never produce.
+  const hostile = fc.constantFrom(
+    '.',
+    '/',
+    '\\',
+    ' ',
+    '\n',
+    '\0',
+    '\u00e9',
+    '\u3042',
+    '%',
+    '\u200b',
+  )
+  const spliced = fc
+    .tuple(
+      fc.stringMatching(/^[a-zA-Z0-9_-]{0,6}$/),
+      hostile,
+      fc.stringMatching(/^[a-zA-Z0-9_-]{0,6}$/),
+    )
+    .map(([head, bad, tail]) => `${head}${bad}${tail}`)
+
+  fcTest.prop([fc.oneof(fc.string(), fc.stringMatching(/^[a-zA-Z0-9_-]{0,12}$/), spliced)])(
+    'accept exactly the same strings',
+    (id) => {
+      expect(workspaceIdSchema.safeParse(id).success).toBe(accepts(id))
+    },
+  )
+
+  it('both refuse the empty string', () => {
+    expect(accepts('')).toBe(false)
+    expect(workspaceIdSchema.safeParse('').success).toBe(false)
   })
 })
 
