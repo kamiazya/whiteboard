@@ -6,38 +6,14 @@
 // did not touch (the canvas-level extension, every stored comment) must
 // survive the save.
 
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { okfTimestampSchema, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import type { ServerDeps } from '../server-deps.js'
-import {
-  FakeDocumentStore,
-  registerDocumentInWorkspace,
-  seedDoc,
-} from '../test-utils/fake-document-store.js'
-import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { createCanvasSnapshotTool } from './canvas-snapshot.js'
 import { loadDocument } from './document-io.js'
-
-const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
-const WORKSPACE_ID = 'ws-1'
-
-function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
-  return makeTestDeps({
-    documentStore: documentStore,
-    documentIndex: documentStore.documentIndex,
-  })
-}
-
-async function seedCanvas(store: FakeDocumentStore, canvas: SpatialCanvas): Promise<void> {
-  await seedDoc(store, DOCUMENT_ID, (doc) => {
-    writeDocumentKind(doc, 'spatial')
-    writeSpatialCanvas(doc, canvas)
-  })
-  await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-}
 
 const NODE: SpatialCanvas['nodes'][number] = textNode({
   id: 'n1',

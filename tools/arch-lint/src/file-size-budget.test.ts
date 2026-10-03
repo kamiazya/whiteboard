@@ -426,9 +426,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3143 -> 3176: the agent-activity summary's only assertion was
   // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
   // pinning its wording and order.
-  // 3176 -> 3177: `ViewportRequest` moved to its own module, so the import
-  // it shared with ServerDeps became two.
-  'packages/server-core/src/tools/canvas-edit.test.ts': 3177,
+  // The describes that stand alone (`region.set`, `node.add within a group`,
+  // line ops) live in `canvas-edit.<topic>.test.ts` siblings over
+  // `_test-canvas-edit.ts`; what remains is the tool's core and sizing cases.
+  'packages/server-core/src/tools/canvas-edit.test.ts': 1948,
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 
