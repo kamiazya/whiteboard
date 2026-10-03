@@ -4,7 +4,6 @@ import {
   canvasToScreen,
   clampZoom,
   contentBounds,
-  fitViewportToBoxes,
   frameViewport,
   IDENTITY_VIEWPORT,
   MAX_ZOOM,
@@ -13,6 +12,7 @@ import {
   panBy,
   panToShowTarget,
   screenToCanvas,
+  viewportRevealingProposal,
   viewportTransformCss,
   zoomAt,
 } from './viewport.js'
@@ -76,33 +76,27 @@ describe('viewportTransformCss', () => {
   })
 })
 
-describe('fitViewportToBoxes', () => {
-  it('fits the top-left of the union of the given boxes at identity zoom', () => {
-    const boxes = [
-      { x: 30, y: 40, width: 10, height: 10 },
-      { x: 10, y: 60, width: 5, height: 5 },
-    ]
-    expect(fitViewportToBoxes(boxes)).toEqual({ x: 10, y: 40, zoom: 1 })
+describe('viewportRevealingProposal', () => {
+  const chrome = (x: number, y: number) => ({
+    proposalId: 'p1',
+    bbox: { x, y, w: 10, h: 10 },
+    extent: { x, y, w: 40, h: 30 },
   })
 
-  it('degrades to IDENTITY_VIEWPORT for an empty list', () => {
-    expect(fitViewportToBoxes([])).toEqual(IDENTITY_VIEWPORT)
+  it('stands the chrome inset from the viewport corner at identity zoom', () => {
+    expect(viewportRevealingProposal([chrome(300, 200)], 'p1')).toEqual({
+      x: 220,
+      y: 120,
+      zoom: 1,
+    })
   })
 
-  it('degrades to IDENTITY_VIEWPORT when every box is non-finite', () => {
-    const boxes = [
-      { x: Number.NaN, y: Number.POSITIVE_INFINITY, width: 10, height: 10 },
-      { x: Number.NEGATIVE_INFINITY, y: Number.NaN, width: 5, height: 5 },
-    ]
-    expect(fitViewportToBoxes(boxes)).toEqual(IDENTITY_VIEWPORT)
+  it('answers null for a proposal the canvas draws no chrome for', () => {
+    expect(viewportRevealingProposal([chrome(300, 200)], 'other')).toBeNull()
   })
 
-  it('ignores non-finite boxes while fitting the remaining finite ones', () => {
-    const boxes = [
-      { x: Number.NaN, y: Number.NaN, width: 10, height: 10 },
-      { x: 15, y: 25, width: 5, height: 5 },
-    ]
-    expect(fitViewportToBoxes(boxes)).toEqual({ x: 15, y: 25, zoom: 1 })
+  it('degrades to IDENTITY_VIEWPORT when the chrome has a non-finite origin', () => {
+    expect(viewportRevealingProposal([chrome(Number.NaN, 200)], 'p1')).toEqual(IDENTITY_VIEWPORT)
   })
 })
 
