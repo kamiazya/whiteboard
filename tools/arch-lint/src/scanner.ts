@@ -62,8 +62,8 @@ function isInversifySpecifier(specifier: string): boolean {
 }
 
 /**
- * A test framework in a file that ships. Vitest and fast-check are
- * devDependencies, so a production import of either resolves in the workspace
+ * A test framework in a file that ships. Vitest, fast-check and Testing
+ * Library are devDependencies, so a production import of any resolves in the workspace
  * and fails only in a consumer's install — or drags the framework into a
  * bundle. Benches and a `testing/` entry import them on purpose; those are
  * ledgered per file in `architecture-map.ts`.
@@ -74,7 +74,8 @@ function isTestFrameworkSpecifier(specifier: string): boolean {
     specifier.startsWith('vitest/') ||
     specifier.startsWith('@vitest/') ||
     specifier === 'fast-check' ||
-    specifier.startsWith('@fast-check/')
+    specifier.startsWith('@fast-check/') ||
+    specifier.startsWith('@testing-library/')
   )
 }
 

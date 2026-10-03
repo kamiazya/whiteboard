@@ -13,6 +13,9 @@
  * a package keeps for tests only, under a name that says neither, is listed
  * below with why, and the entry is checked from both sides.
  *
+ * A helper named `<thing>-test-utils` counts as a test-utils module for the
+ * importee side, and Testing Library counts as a test framework.
+ *
  * Two more ways a double ships. A production file importing a `_test-*` helper
  * pulls that helper (and the `vitest` it imports) into the build, since the
  * name exempts the helper as an importer and nothing checked it as the
@@ -28,9 +31,12 @@ import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-ro
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
-/** An import or re-export specifier whose path has a `test-utils` segment. */
+/**
+ * An import or re-export specifier whose path has a `test-utils` segment, or
+ * whose basename ends in `-test-utils` (`node-editor-test-utils.js`).
+ */
 const TEST_UTILS_SPECIFIER =
-  /(?:from|import\s*\(?)\s*['"]([^'"]*(?:^|[/@-])test-utils(?:\/[^'"]*)?)['"]/g
+  /(?:from|import\s*\(?)\s*['"]([^'"]*(?:^|[/@-])test-utils(?:\/[^'"]*|\.[cm]?[jt]sx?)?)['"]/g
 
 const ALLOWLIST: Readonly<Record<string, string>> = {
   'apps/web/src/docs-snapshots/_helpers.ts':
@@ -46,7 +52,9 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
  */
 const TEST_FRAMEWORK_ALLOWLIST: Readonly<Record<string, string>> = {
   'apps/web/src/docs-snapshots/_helpers.ts':
-    'shared support of the doc-screenshot vitest browser tests (`vitest/browser` locators): the directory holds only those tests and what they share, and nothing outside it imports it',
+    'shared support of the doc-screenshot vitest browser tests (`vitest/browser` locators and `@testing-library/react` `waitFor`): the directory holds only those tests and what they share, and nothing outside it imports it',
+  'apps/web/src/components/spatial-editor/node-editor-test-utils.ts':
+    'the CodeMirror node editor helpers (`@testing-library/react` `fireEvent`) that browser tests share: its name ends in test-utils but sits in a shipped directory, and only test files import it',
   'apps/web/src/docs-snapshots/_setup.ts':
     'the vitest setup file of the doc-screenshot browser tests: only that project loads it, and nothing outside docs-snapshots imports it',
 }
@@ -104,7 +112,15 @@ describe('production source does not import test-utils', () => {
     const dynamic = ['const m = await ', "import('@x/test-utils')"].join('')
     expect(testUtilsImports(dynamic)).toEqual(['@x/test-utils'])
     expect(testUtilsImports("// import { x } from '@x/test-utils'")).toEqual([])
+    // A helper whose BASENAME only ends in `-test-utils` is a test-utils module too.
+    expect(testUtilsImports("import { x } from './node-editor-test-utils.js'")).toEqual([
+      './node-editor-test-utils.js',
+    ])
+    expect(testUtilsImports("export * from '../a/node-editor-test-utils'")).toEqual([
+      '../a/node-editor-test-utils',
+    ])
     expect(testUtilsImports("import { x } from './not-test-utilsy.js'")).toEqual([])
+    expect(testUtilsImports("import { x } from './test-utils-not.js'")).toEqual([])
   })
 
   it('recognises a `_test-*` helper by the specifier basename, and not a type-only edge or a look-alike', () => {
