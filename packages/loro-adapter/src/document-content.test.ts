@@ -2,7 +2,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { readDocumentContent } from './document-content.js'
-import { writeDocumentKind } from './document-envelope.js'
+import { writeCoreFacets, writeDocumentKind } from './document-envelope.js'
 import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
 import { writeMarkdownBody } from './markdown-body.js'
 
@@ -38,6 +38,22 @@ describe('readDocumentContent', () => {
     expect(md).toEqual({ kind: 'markdown', body: '# body' })
     const sp = readDocumentContent(docWith('spatial'))
     expect(Object.keys(sp).sort()).toEqual(['canvas', 'kind'])
+  })
+
+  test('markdown content carries the description its core facets record, so search can see it', () => {
+    const doc = docWith('markdown')
+    writeCoreFacets(doc, { type: 'note', description: 'Quarterly summary' })
+    expect(readDocumentContent(doc)).toEqual({
+      kind: 'markdown',
+      body: '# body',
+      description: 'Quarterly summary',
+    })
+  })
+
+  test('a spatial document has no description to carry, whatever its core map holds', () => {
+    const doc = docWith('spatial')
+    writeCoreFacets(doc, { type: 'note', description: 'Quarterly summary' })
+    expect(Object.keys(readDocumentContent(doc)).sort()).toEqual(['canvas', 'kind'])
   })
 
   test('an unrecognised stored kind falls through to the index row, then to spatial', () => {

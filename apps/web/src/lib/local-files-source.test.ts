@@ -313,6 +313,26 @@ describe('createLocalFilesSource search', () => {
     const byJapanese = await source.searchDocuments('ロケット')
     expect(byJapanese.map((hit) => hit.document.path)).toEqual(['notes/untitled-1'])
   })
+
+  // The daemon's spelling is `extract.test.ts`: both keepers read content
+  // through `readDocumentContent`, and this holds the browser's half.
+  it('finds a document by a word only its description holds', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'notes/quarterly',
+      kind: 'markdown',
+    })
+    const doc = new Loro()
+    writeMarkdownBody(doc, 'Nothing relevant here.')
+    writeCoreFacets(doc, { type: 'note', description: 'Quarterly zebracrossing summary' })
+    await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
+    const source = createLocalFilesSource({ index })
+
+    const hits = await source.searchDocuments('zebracrossing')
+    expect(hits.map((hit) => hit.document.path)).toEqual(['notes/quarterly'])
+  })
 })
 
 // ADR-0040: a board's own tags are the document's, listed like a note's, and

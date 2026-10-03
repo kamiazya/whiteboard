@@ -42,6 +42,17 @@ describe('extractContentFacts chooses the half a document is read as', () => {
   })
 })
 
+describe('extractContentFacts texts', () => {
+  it('lead with the description a markdown document records, so the daemon indexes it', () => {
+    const doc = docWith('markdown')
+    writeCoreFacets(doc, { type: 'note', description: 'Quarterly zebracrossing summary' })
+    expect(extractContentFacts({ kind: 'markdown' }, doc).texts).toEqual([
+      'Quarterly zebracrossing summary',
+      'see [[from-the-body]]',
+    ])
+  })
+})
+
 describe('what a document bears', () => {
   const board = (): LoroDoc => {
     const doc = new LoroDoc()
