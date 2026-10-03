@@ -43,13 +43,9 @@ export function runWireStep({ scriptPath, wtPath, spawn = spawnSync, log = (msg)
 }
 
 /**
- * Copy the main checkout's built `packages/mcp-server/dist` into a fresh worktree BEFORE its first
- * `pnpm install`.
- *
- * That install links every workspace dep's declared `bin`, and @kamiazya/whiteboard-mcp declares
- * `whiteboard -> dist/cli/index.js`. `dist` is gitignored, so a new worktree has none and pnpm
- * prints two ENOENT warnings it can do nothing about. Seeding the directory first removes them,
- * and leaves the worktree able to run the server without a build.
+ * Copy the main checkout's built `packages/mcp-server/dist` into a fresh worktree, so it can run
+ * the built server (`dist/cli/index.js`) before anything has been built there. `dist` is
+ * gitignored, so a new worktree has none.
  *
  * Never load-bearing: an absent build or a failed copy is logged and skipped, because a worktree
  * that exists without this is still a working worktree. The copy is a starting point, not a
@@ -132,8 +128,6 @@ function main() {
   const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
   if (!baseArg) run('git', ['-C', repoRoot, 'fetch', 'origin'])
   run('git', ['-C', repoRoot, 'worktree', 'add', wtPath, '-b', name, base])
-  // Before the first install: see seedBuiltDist for why pnpm cannot link the `whiteboard` bin
-  // otherwise.
   seedBuiltDist({ mainRoot: repoRoot, worktreeRoot: wtPath })
   run('pnpm', ['--dir', wtPath, 'install', '--prefer-offline'])
 

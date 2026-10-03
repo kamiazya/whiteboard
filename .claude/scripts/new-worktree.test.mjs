@@ -54,12 +54,9 @@ test('runWireStep: reports success when the wire script exits zero', () => {
 // --- pre-seeding the built dist ---
 import { seedBuiltDist, seedsThisPath } from './new-worktree.mjs'
 
-// `pnpm install` links every workspace dep's declared `bin`. @kamiazya/whiteboard-mcp declares
-// `whiteboard -> dist/cli/index.js`, and `dist` is gitignored, so a fresh worktree's FIRST install
-// cannot create the symlink and pnpm prints two ENOENT warnings. Verified: seeding dist before
-// that first install removes them. Moving the bin path was rejected — `dist/cli/index.js` is
-// pinned by prepend-cli-shebang, check-release-artifacts and three distribution smokes, and none
-// of that release surface should move for an install-time warning.
+// `dist` is gitignored, so a fresh worktree has no built server; the copy lets it run one before
+// its first build. The path stays `dist/cli/index.js`: prepend-cli-shebang, check-release-artifacts
+// and three distribution smokes pin it.
 test('seeds the built dist when the main checkout has one', () => {
   const copies = []
   const ok = seedBuiltDist({

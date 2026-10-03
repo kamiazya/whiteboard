@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Auto-wires a git worktree's Claude Code session to its own dev daemon,
-// through the worktree's own stdio proxy (mcp-http-stdio-proxy.mjs, which
-// reaches the daemon over the socket in the worktree's own data dir), so
-// opening a worktree in Claude Code never has to fall back to the tracked
-// .mcp.json's `npx @kamiazya/whiteboard-mcp@latest` stdio entry or the main
-// checkout's daemon.
+// Wires a git worktree's Claude Code session to the dev daemon's stdio proxy
+// (mcp-http-stdio-proxy.mjs, which reaches the daemon over the socket in its own data dir), so
+// opening a worktree in Claude Code does not have to fall back to the tracked .mcp.json's
+// `npx @kamiazya/whiteboard-mcp@latest` stdio entry.
 //
-// Mechanism: `claude mcp add --scope local` under the SAME name as the
-// tracked entry ("whiteboard") writes to ~/.claude.json, keyed by this
-// worktree's absolute path — that local-scope entry cleanly shadows the
-// repo-tracked .mcp.json project-scope entry of the same name for every
-// purpose that matters, with no name collision or guesswork for an agent
-// (verified against the real CLI).
+// Mechanism: `claude mcp add --scope local` under the SAME name as the tracked entry
+// ("whiteboard") writes to ~/.claude.json, and the CLI keys that write by the MAIN checkout —
+// there is one slot per repository, shared by every worktree session. The entry cleanly shadows
+// the repo-tracked .mcp.json project-scope entry of the same name for every purpose that
+// matters, with no name collision or guesswork for an agent (verified against the real CLI).
+// Because the slot is the repository's, an empty one is filled with the MAIN checkout's proxy
+// (ticket documents are written through it, and a worktree's data dir does not outlive the
+// worktree), and a filled one is left alone.
 //
 //   node .claude/scripts/wire-worktree-mcp.mjs [worktreePath]   (default: cwd)
 //   node .claude/scripts/wire-worktree-mcp.mjs --sweep          (remove entries for deleted worktrees)
