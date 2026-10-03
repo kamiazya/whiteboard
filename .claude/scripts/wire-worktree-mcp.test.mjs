@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { main } from './wire-worktree-mcp.mjs'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -427,4 +430,23 @@ test('main --sweep: a worktree-keyed removal leaves the main slot alone, so it p
 
   assert.ok(logs.some((line) => /removed stale/.test(line)), JSON.stringify(logs))
   assert.ok(!logs.some((line) => /claude mcp add/.test(line)), JSON.stringify(logs))
+})
+
+// Both exit before any config or git access, but HOME is scratch anyway: this suite must never be
+// able to reach the developer's real ~/.claude.json.
+test('the CLI answers --help, and refuses a mistyped option or a surplus argument, before wiring or sweeping anything', () => {
+  const home = mkdtempSync(join(tmpdir(), 'wire-worktree-flags-'))
+  try {
+    for (const args of [['--help'], ['--sweeep'], ['--bogus'], ['a', 'b']]) {
+      const result = spawnSync('node', [join(__dirname, 'wire-worktree-mcp.mjs'), ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, HOME: home, USERPROFILE: home },
+      })
+      assert.equal(result.status, args[0] === '--help' ? 0 : 2, JSON.stringify(args))
+      assert.match(`${result.stdout}${result.stderr}`, /usage: wire-worktree-mcp/, JSON.stringify(args))
+      assert.doesNotMatch(result.stdout, /wired|sweep:/, JSON.stringify(args))
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
 })

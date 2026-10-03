@@ -11,8 +11,15 @@
 // Exit 0 when every checkpoint is met, 1 with one line per unmet checkpoint.
 import { readFileSync } from 'node:fs'
 import { explainDesignShape } from '../workflows/lib/explain-design.mjs'
+import { parseScriptArgs } from './script-flags.mjs'
 
-const file = process.argv[2]
+const {
+  positionals: [file],
+} = parseScriptArgs({
+  argv: process.argv.slice(2),
+  maxPositionals: 1,
+  usage: 'usage: check-design.mjs [design.json | -]   (reads stdin when omitted)',
+})
 let raw
 try {
   raw = file && file !== '-' ? readFileSync(file, 'utf8') : readFileSync(0, 'utf8')

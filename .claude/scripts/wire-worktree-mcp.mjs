@@ -29,6 +29,7 @@ import { chmodSync, existsSync, lstatSync, readFileSync, realpathSync, renameSyn
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseScriptArgs } from './script-flags.mjs'
 import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/checkout-kind-lib.mjs'
 import {
   assertNotTrackedSettingsPath,
@@ -333,12 +334,14 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
   }
 }
 
+const USAGE = 'usage: wire-worktree-mcp.mjs [worktreePath]   |   wire-worktree-mcp.mjs --sweep'
+
 /**
  * @param {{
  *   argv?: string[],
  *   spawn?: typeof defaultSpawn, readConfig?: typeof defaultReadConfig, writeConfig?: typeof defaultWriteConfig,
  *   log?: (msg: string) => void, isMainCheckoutOverride?: boolean, claudeCliAvailableOverride?: boolean,
- *   mainCheckoutRootOverride?: string, liveWorktreePathsOverride?: string[],
+ *   mainCheckoutRootOverride?: string, liveWorktreePathsOverride?: string[], exit?: (code: number) => never,
  * }} [deps]
  */
 export async function main({
@@ -351,8 +354,16 @@ export async function main({
   claudeCliAvailableOverride,
   mainCheckoutRootOverride,
   liveWorktreePathsOverride,
+  exit = (code) => process.exit(code),
 } = {}) {
-  if (argv.includes('--sweep')) {
+  const { flags, positionals } = parseScriptArgs({
+    argv,
+    flags: ['--sweep'],
+    maxPositionals: 1,
+    usage: USAGE,
+    io: { exit },
+  })
+  if (flags.has('--sweep')) {
     const cwd = process.cwd()
     const mainCheckoutRoot = mainCheckoutRootOverride ?? defaultMainCheckoutRoot(cwd)
     const liveWorktreePaths = liveWorktreePathsOverride ?? defaultLiveWorktreePaths(mainCheckoutRoot)
@@ -360,7 +371,7 @@ export async function main({
     return
   }
 
-  const target = argv.find((a) => !a.startsWith('--')) ?? process.cwd()
+  const target = positionals[0] ?? process.cwd()
   wireWorktree({
     worktreeRoot: target,
     spawn,

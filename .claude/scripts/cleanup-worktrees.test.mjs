@@ -5,7 +5,7 @@
 // Builds a throwaway "origin" + working repo pair per test (not the real
 // repo) and points the script at it via CLEANUP_WORKTREES_REPO_ROOT.
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -168,6 +168,7 @@ test('finds the main checkout when invoked through a linked worktree copy', () =
   mkdirSync(hostScripts, { recursive: true })
   const hostScript = join(hostScripts, 'cleanup-worktrees.mjs')
   copyFileSync(scriptPath, hostScript)
+  copyFileSync(resolve(__dirname, 'script-flags.mjs'), join(hostScripts, 'script-flags.mjs'))
 
   // No CLEANUP_WORKTREES_REPO_ROOT: the script has to find the main checkout
   // itself, which is the whole point.
@@ -307,4 +308,20 @@ test('a real run launched from a subdirectory of a merged lane leaves that lane 
   mkdirSync(sub)
   runReal(repoDir, [], sub)
   assert.equal(existsSync(sub), true)
+})
+
+// An unrecognised option must never read as consent to the destructive default: `--dryrun` is a
+// typo for a dry run, and `--help` is a question.
+test('--help and an unrecognised option print usage and touch nothing: no fetch, no removal', () => {
+  for (const flag of ['--help', '--bogus', '--dryrun', '-n']) {
+    const { repoDir, laneDir } = squashMergedLane(`lane-flag${flag.replace(/\W/g, '')}`)
+    const mainBefore = git(repoDir, ['rev-parse', 'origin/main'])
+    const result = spawnSync('node', [scriptPath, flag], { cwd: repoDir, encoding: 'utf-8', env: realEnv(repoDir) })
+
+    assert.equal(result.status, flag === '--help' ? 0 : 2, `${flag}: ${result.stdout}${result.stderr}`)
+    assert.match(`${result.stdout}${result.stderr}`, /usage: cleanup-worktrees/, flag)
+    assert.doesNotMatch(result.stdout, /removed lane|done:/, flag)
+    assert.equal(existsSync(laneDir), true, `${flag} removed a worktree`)
+    assert.equal(git(repoDir, ['rev-parse', 'origin/main']), mainBefore, `${flag} fetched`)
+  }
 })
