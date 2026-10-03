@@ -23,21 +23,19 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { credentialGateCalls } from './auth-surface-scan.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const SCAN_DIR = 'packages/mcp-server/src'
-
-/** A surface asks the resolver what a credential carries… */
-const RESOLVES = /(?:credentialResolver|resolver)\s*\??\.\s*resolve\s*\(/
-/** …or, in server-mode, asks its own external-IdP strategy. */
-const OWN_STRATEGY = /authStrategy\.authorize\s*\(/
 
 type SurfacePolicy =
   /** Resolves through `credential-resolver.ts`; the text is what it then DECIDES. */
   | `resolver: ${string}`
   /** Server-mode's own strategy; the text says why it is not the resolver's. */
   | `own-strategy: ${string}`
+  /** Hands the decision to a classified surface and adds none of its own. */
+  | `delegate: ${string}`
 
 const AUTH_SURFACES = {
   'packages/mcp-server/src/server/routes/auth.ts':
@@ -54,7 +52,15 @@ const AUTH_SURFACES = {
 
   'packages/mcp-server/src/server/security/server-mode-middleware.ts':
     'own-strategy: server-mode validates a JWT against an external IdP, so there is no credential this daemon issued to resolve. Folding it into the resolver is a separate increment with its own review; what it shares today is the scope vocabulary and the route-scope registry.',
+
+  'packages/mcp-server/src/server/security/mcp-http.ts':
+    'delegate: /mcp in local-daemon mode. The Hono middleware over the `McpHttpAuthStrategy` it is handed: it forwards the method and Authorization header and answers the status and challenge the decision carries. Every policy decision is `mcp-auth.ts`, classified above.',
 } satisfies Record<string, SurfacePolicy>
+
+/** Whether a source text gates on a credential, and the ledger has no answer for it. */
+function unclassifiedSurface(rel: string, source: string): boolean {
+  return credentialGateCalls(rel, source).length > 0 && !(rel in AUTH_SURFACES)
+}
 
 function scan(): { readonly surfaces: string[]; readonly fileCount: number } {
   const files: string[] = []
@@ -65,8 +71,7 @@ function scan(): { readonly surfaces: string[]; readonly fileCount: number } {
     const rel = relative(REPO_ROOT, file).split(sep).join('/')
     if (isTestPath(rel)) continue
     fileCount += 1
-    const source = readFileSync(file, 'utf8')
-    if (RESOLVES.test(source) || OWN_STRATEGY.test(source)) surfaces.push(rel)
+    if (credentialGateCalls(rel, readFileSync(file, 'utf8')).length > 0) surfaces.push(rel)
   }
   return { surfaces: surfaces.sort(), fileCount }
 }
@@ -101,8 +106,62 @@ describe('every auth surface answers for itself', () => {
   // refactored all of them, so it is worth a reader having to change a number
   // deliberately rather than watching one drift. Five, since ADR-0050 took
   // the local daemon off loopback TCP and its browser-facing surfaces (the
-  // websocket, its ticket, and the replica-key route's passkey binding) went.
-  it('holds the surface count at five', () => {
-    expect(scan().surfaces).toHaveLength(5)
+  // websocket, its ticket, and the replica-key route's passkey binding) went;
+  // six once the scan stopped keying on a receiver's name and saw
+  // `security/mcp-http.ts`, the middleware that forwards to `mcp-auth.ts`.
+  it('holds the surface count at six', () => {
+    expect(scan().surfaces).toHaveLength(6)
+  })
+})
+
+describe('the scan keys on what a file is handed, not on what it calls it', () => {
+  const HEAD = "import type { CredentialResolver } from '../security/credential-resolver.js'\n"
+  const STRATEGY_HEAD = "import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'\n"
+
+  it.each([
+    [
+      'a resolver-typed parameter under another name',
+      `${HEAD}export async function gate(credentials: CredentialResolver, h: string) {\n  return credentials.resolve({ authorizationHeader: h })\n}`,
+    ],
+    [
+      'a destructured resolve',
+      `${HEAD}export async function gate(r: CredentialResolver, h: string) {\n  const { resolve } = r\n  return resolve({ authorizationHeader: h })\n}`,
+    ],
+    [
+      'a strategy under another name',
+      `${STRATEGY_HEAD}export async function gate(strategy: McpHttpAuthStrategy, h: string) {\n  return strategy.authorize({ method: 'POST', authorizationHeader: h })\n}`,
+    ],
+    [
+      'a string-key call',
+      `${HEAD}export async function gate(r: CredentialResolver, h: string) {\n  return r['resolve']({ authorizationHeader: h })\n}`,
+    ],
+  ])('flags %s as unclassified', (_label, source) => {
+    expect(unclassifiedSurface('packages/mcp-server/src/server/routes/zz-surface.ts', source)).toBe(
+      true,
+    )
+  })
+
+  it.each([
+    [
+      'a path resolve in a file handed no gate type',
+      "import { resolve } from 'node:path'\nexport const f = (p: string) => resolve(p)",
+    ],
+    [
+      'a promise executor beside a gate type',
+      `${HEAD}export const wait = (r: CredentialResolver) => new Promise<void>((resolve) => { void r; resolve() })`,
+    ],
+    [
+      'Promise.resolve beside a gate type',
+      `${HEAD}export const done = (r: CredentialResolver) => { void r; return Promise.resolve() }`,
+    ],
+  ])('does not flag %s', (_label, source) => {
+    expect(unclassifiedSurface('packages/mcp-server/src/server/routes/zz-surface.ts', source)).toBe(
+      false,
+    )
+  })
+
+  it('accepts a surface the ledger answers for', () => {
+    const source = `${HEAD}export const gate = (c: CredentialResolver) => c.resolve({})`
+    expect(unclassifiedSurface('packages/mcp-server/src/server/routes/auth.ts', source)).toBe(false)
   })
 })
