@@ -82,14 +82,8 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       await expect(store.loadWorkspaceAt('ws-a', id)).resolves.toBeNull()
     })
 
-    it('has no frontiers under this workspace', async () => {
-      const id = await foreignVersionId()
-      await expect(store.getFrontiersBase64('ws-a', id)).resolves.toBeNull()
-    })
-
     it('is still served to its own workspace', async () => {
       const id = await foreignVersionId()
-      await expect(store.getFrontiersBase64('ws-b', id)).resolves.not.toBeNull()
       await expect(store.loadWorkspaceAt('ws-b', id)).resolves.not.toBeNull()
       await expect(store.load('ws-b', id)).resolves.not.toBeNull()
     })
@@ -136,6 +130,17 @@ describe('FileVersionStore workspace scoping and ordering', () => {
   })
 
   describe('earliestWorkspaceFrontiers', () => {
+    // The stored column, read straight off the row: it is the encoding the
+    // store's answer has to agree with.
+    async function frontiersOf(id: string): Promise<string | undefined> {
+      const row = await handle.db
+        .selectFrom('versions')
+        .select('frontiers')
+        .where('id', '=', id)
+        .executeTakeFirst()
+      return row?.frontiers
+    }
+
     it('is the OLDEST version in the workspace: the point compaction may cut to', async () => {
       await edit('ws-a', 'one')
       const first = await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: false }))
@@ -145,7 +150,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       const earliest = await store.earliestWorkspaceFrontiers('ws-a')
       expect(earliest).not.toBeNull()
       if (earliest === null) return
-      expect(frontiersToBase64(earliest)).toBe(await store.getFrontiersBase64('ws-a', first.id))
+      expect(frontiersToBase64(earliest)).toBe(await frontiersOf(first.id))
     })
 
     it("reads only this workspace, however old another workspace's versions are", async () => {
@@ -157,7 +162,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       const earliest = await store.earliestWorkspaceFrontiers('ws-a')
       expect(earliest).not.toBeNull()
       if (earliest === null) return
-      expect(frontiersToBase64(earliest)).toBe(await store.getFrontiersBase64('ws-a', own.id))
+      expect(frontiersToBase64(earliest)).toBe(await frontiersOf(own.id))
     })
 
     it('is null for a workspace with no versions', async () => {

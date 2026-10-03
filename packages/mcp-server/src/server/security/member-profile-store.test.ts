@@ -72,8 +72,8 @@ describe('ensureProfile', () => {
   })
 })
 
-describe('addMember / listMembers', () => {
-  it('is idempotent and listMembers returns the profile with its credentials', async () => {
+describe('addMember', () => {
+  it('is idempotent: a second call leaves one membership', async () => {
     const profile = await store.ensureProfile({
       binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
@@ -81,39 +81,7 @@ describe('addMember / listMembers', () => {
     await store.addMember('ws-1', profile.id)
     await store.addMember('ws-1', profile.id)
 
-    const members = await store.listMembers('ws-1')
-    expect(members).toEqual([profile])
-  })
-
-  it('orders multiple members by (createdAt, id) regardless of addMember call order', async () => {
-    // Pin distinct createdAt values: ensureProfile's `now` comes from
-    // Date.now(), and two calls in the same millisecond would tie on
-    // createdAt and fall through to an id order this test cannot predict.
-    vi.useFakeTimers()
-    try {
-      vi.setSystemTime(1_000)
-      const ada = await store.ensureProfile({
-        binding: passkeyBinding('https://a.example', 'cred-1'),
-        displayName: 'Ada',
-      })
-      vi.setSystemTime(2_000)
-      const bea = await store.ensureProfile({
-        binding: passkeyBinding('https://b.example', 'cred-2'),
-        displayName: 'Bea',
-      })
-
-      // Insert in the OPPOSITE order from profile creation: with no ORDER BY,
-      // sqlite would answer in this (reversed) insertion order, so this
-      // catches a dropped/reversed `orderBy` where the tie-insensitive
-      // Set-based property test cannot.
-      await store.addMember('ws-1', bea.id)
-      await store.addMember('ws-1', ada.id)
-
-      const members = await store.listMembers('ws-1')
-      expect(members.map((m) => m.id)).toEqual([ada.id, bea.id])
-    } finally {
-      vi.useRealTimers()
-    }
+    expect((await roles.list('ws-1')).map((m) => m.profile.id)).toEqual([profile.id])
   })
 })
 
@@ -127,7 +95,7 @@ describe('removing a member', () => {
     expect(await roles.remove('ws-1', profile.id)).toBe('ok')
     await store.addMember('ws-1', profile.id)
 
-    expect(await store.listMembers('ws-1')).toEqual([profile])
+    expect((await roles.list('ws-1')).map((m) => m.profile.id)).toEqual([profile.id])
   })
 
   it('leaves the profile itself and its credentials in place', async () => {

@@ -85,9 +85,6 @@ export interface VersionStore {
   // Null when the workspace has no scoped versions (compacting would then
   // risk history nothing has measured the need for).
   earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null>
-  // A saved version's frontiers as base64, taken in the workspace record's
-  // history. Returns null only when the version is missing.
-  getFrontiersBase64(workspaceId: string, id: string): Promise<string | null>
   // Does the newest checkpoint of this document already hold the state the
   // record is in? The scheduler asks the keeper rather than comparing
   // frontiers itself, because a version's frontier is taken in THIS store's
@@ -471,19 +468,6 @@ export class FileVersionStore implements VersionStore {
       .where('id', 'in', toDelete)
       .execute()
     return { deletedCount: toDelete.length, deletedIds: toDelete }
-  }
-
-  async getFrontiersBase64(workspaceId: string, id: string): Promise<string | null> {
-    validateWorkspaceId(workspaceId)
-    validateVersionId(id)
-    const db = await this.scope.db()
-    const row = await db
-      .selectFrom('versions')
-      .select(['frontiers'])
-      .where('workspaceId', '=', workspaceId)
-      .where('id', '=', id)
-      .executeTakeFirst()
-    return row?.frontiers ?? null
   }
 
   /**

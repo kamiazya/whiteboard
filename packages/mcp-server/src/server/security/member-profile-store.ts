@@ -106,7 +106,6 @@ export interface MemberProfileStore {
    *  sign-in asks so it can say so instead of treating them as a newcomer. */
   isDeactivated(binding: AuthenticatorBinding): Promise<boolean>
   ensureProfile(input: EnsureProfileInput): Promise<MemberProfile>
-  listMembers(workspaceId: string): Promise<MemberProfile[]>
   /** Every user this tenant has, oldest first — what an operator or an
    *  administrator picks from. */
   listUsers(): Promise<{ id: string; displayName: string; deactivated: boolean }[]>
@@ -291,23 +290,6 @@ async function roleIn(db: TenantScoped, workspaceId: string, profileId: string) 
 export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     ...bindingLookups(db),
-
-    async listMembers(workspaceId) {
-      const rows = await db
-        .selectFrom('workspaceMemberships')
-        .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
-        .select('memberProfiles.id')
-        .where('workspaceMemberships.workspaceId', '=', workspaceId)
-        .orderBy('memberProfiles.createdAt', 'asc')
-        .orderBy('memberProfiles.id', 'asc')
-        .execute()
-      const profiles: MemberProfile[] = []
-      for (const row of rows) {
-        const profile = await loadProfileWhere(db, 'id', row.id)
-        if (profile !== null) profiles.push(profile)
-      }
-      return profiles
-    },
 
     listUsers: () => usersOf(db),
 
