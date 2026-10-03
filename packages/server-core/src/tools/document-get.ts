@@ -11,6 +11,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
+import { DocumentSerializeError } from './errors.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
 
@@ -137,9 +138,14 @@ export function createDocumentGetTool(deps: ServerDeps) {
         try {
           documents.push(await readOne(deps, input, documentId, entry.kind))
         } catch (error) {
-          // Only the one failure that is genuinely ABOUT this document.
-          // Everything else propagates.
-          if (!(error instanceof DocumentKindUnknownError)) throw error
+          // Only the failures that are genuinely ABOUT this document: it has
+          // no kind to read it by, or its content has no representation in
+          // that format. Everything else propagates.
+          if (
+            !(error instanceof DocumentKindUnknownError || error instanceof DocumentSerializeError)
+          ) {
+            throw error
+          }
           failed.push({ documentId, reason: error.message })
         }
       }

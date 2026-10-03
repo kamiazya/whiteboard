@@ -9,6 +9,7 @@ import {
 import type { ServerDeps } from '../server-deps.js'
 import { BARE_BODY_TYPE } from './document-crud.js'
 import { loadDocument } from './document-io.js'
+import { DocumentSerializeError } from './errors.js'
 
 /**
  * OKF-Markdown is a single-document format (frontmatter + body); a spatial
@@ -63,6 +64,13 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
     ...(trust ?? {}),
     facets,
   }
-  const markdown = serializeOkf({ frontmatter, body })
+  // Pure, so a throw here is about THIS document's content and nothing else —
+  // the caller can report it per document instead of failing the batch.
+  let markdown: string
+  try {
+    markdown = serializeOkf({ frontmatter, body })
+  } catch (error) {
+    throw new DocumentSerializeError(input.documentId, 'OKF Markdown', error)
+  }
   return { markdown, body, frontmatter }
 }

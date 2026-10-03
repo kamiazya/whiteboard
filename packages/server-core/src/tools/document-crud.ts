@@ -1,4 +1,4 @@
-import { hasOkfFrontmatter, parseOkf } from '@kamiazya/whiteboard-codec'
+import { hasOkfFrontmatter } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import { isWorkspaceSegmentTakenError, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
@@ -22,7 +22,7 @@ import type {
 } from './document-crud.schemas.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { saveDocumentSnapshot } from './document-io.js'
-import { createDocumentSetTool, OkfParseError } from './document-set.js'
+import { createDocumentSetTool, parseWritableOkf } from './document-set.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
@@ -162,14 +162,7 @@ export async function wbDocumentCreate(
   const markdown = sent !== undefined && !hasOkfFrontmatter(sent) ? asOkfBody(sent) : sent
 
   if (markdown !== undefined) {
-    const preflight = parseOkf(markdown)
-    if (!preflight.ok) {
-      throw new OkfParseError(
-        preflight.error.stage,
-        preflight.error.message,
-        preflight.error.issues,
-      )
-    }
+    const preflight = parseWritableOkf(markdown)
     // A tag the workspace's library forbids is refused here for exactly the
     // reason the parse above is: the delegated write below would otherwise
     // refuse it AFTER the mint, leaving an empty document squatting the path
@@ -181,7 +174,7 @@ export async function wbDocumentCreate(
     // `createWorkspace: true` reaches this before the mint, against a
     // workspace that does not exist yet; the read degrades to "nothing
     // declared", which is the truth about a workspace being born.
-    await refuseFrontmatterTags(deps, input.workspaceId, preflight.value.frontmatter.tags)
+    await refuseFrontmatterTags(deps, input.workspaceId, preflight.frontmatter.tags)
   }
 
   // Workspaces never materialize implicitly: a typo'd or hallucinated

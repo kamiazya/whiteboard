@@ -37,6 +37,26 @@ export class DocumentContentLossError extends Error {
   }
 }
 
+/**
+ * Thrown when a stored document cannot be written out in its format — a value
+ * in it has no representation there. About the one document, not the store, so
+ * a batch read reports it beside the documents that did read.
+ */
+export class DocumentSerializeError extends Error {
+  constructor(
+    public readonly documentId: string,
+    format: string,
+    cause: unknown,
+  ) {
+    super(
+      `Document ${documentId} cannot be read as ${format}: ${cause instanceof Error ? cause.message : String(cause)}. ` +
+        "Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it.",
+      { cause },
+    )
+    this.name = 'DocumentSerializeError'
+  }
+}
+
 /** Thrown when a patch tool targets a nodeId absent from the canvas. */
 export class NodeNotFoundError extends Error {
   constructor(
