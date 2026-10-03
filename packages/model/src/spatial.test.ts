@@ -30,6 +30,15 @@ describe('canvasColorSchema', () => {
     expect(canvasColorSchema.safeParse('#abc').success).toBe(false)
     expect(canvasColorSchema.safeParse('red').success).toBe(false)
   })
+
+  // A string that is no preset is judged by the hex branch alone, so its
+  // message is the only thing a caller reads of the six presets.
+  it('names the presets as well as the hex form when it refuses a string', () => {
+    const refused = canvasColorSchema.safeParse('red')
+    expect(
+      refused.success ? '' : refused.error.issues.map((issue) => issue.message).join(),
+    ).toMatch(/"1".*"6".*6-digit hex/)
+  })
 })
 
 /**

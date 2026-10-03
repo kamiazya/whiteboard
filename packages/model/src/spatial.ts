@@ -10,7 +10,12 @@ import { okfActorSchema, okfTimestampSchema } from './trust.js'
 // six numbered presets or a 6-digit hex string.
 export const canvasColorSchema = z.union([
   z.enum(['1', '2', '3', '4', '5', '6']),
-  z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a 6-digit hex color'),
+  z
+    .string()
+    .regex(
+      /^#[0-9a-fA-F]{6}$/,
+      'must be a preset "1"–"6" or a 6-digit hex color such as "#1a2b3c"',
+    ),
 ])
 
 // Registered because it is the most-repeated subschema the canvas tools
