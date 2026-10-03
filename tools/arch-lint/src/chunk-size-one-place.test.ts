@@ -204,7 +204,7 @@ describe('the snapshot chunk size is written in one place', () => {
       const rel = relative(REPO_ROOT, path).split(sep).join('/')
       if (rel === DECLARATION_SITE) continue
       const allowed = ALLOWLIST[rel]
-      const whole = stripCommentsAndStrings(readFileSync(path, 'utf8'))
+      const whole = stripCommentsAndStrings(readFileSync(path, 'utf8'), path)
       // An exemption covers ONE declaration, so the rest of an allowlisted
       // file is scanned like anyone else's.
       const source = allowed === undefined ? whole : beyondTheExemption(whole, allowed)
@@ -212,7 +212,8 @@ describe('the snapshot chunk size is written in one place', () => {
       if (match !== null) hits.push(`${rel}: ${match[0].trim()}`)
     }
     expect(hits).toEqual([])
-  })
+    // Parses every production file, which a loaded machine stretches past the default.
+  }, 180_000)
 
   it('every allowlisted file spells each exempt declaration exactly as many times as claimed', () => {
     // Guarded from both sides. An entry that has stopped being true is an
@@ -221,7 +222,10 @@ describe('the snapshot chunk size is written in one place', () => {
     // classified, which is how the second `maxChunkBytes: -1` and the two
     // conformance literals were found.
     for (const [rel, allowed] of Object.entries(ALLOWLIST)) {
-      const source = stripCommentsAndStrings(readFileSync(join(REPO_ROOT, rel), 'utf8'))
+      const source = stripCommentsAndStrings(
+        readFileSync(join(REPO_ROOT, rel), 'utf8'),
+        join(REPO_ROOT, rel),
+      )
       for (const { text, times } of allowed.declarations) {
         expect(
           occurrences(source, text),

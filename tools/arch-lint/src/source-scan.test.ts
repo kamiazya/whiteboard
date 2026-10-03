@@ -12,10 +12,12 @@
  * is in the dangerous direction, because a scan that cannot see a file
  * reports it clean.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
+import ts from '@typescript/typescript6'
 import { afterEach, describe, expect, it } from 'vitest'
+import { isExcludedPath, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
 import {
   classifyPath,
   isShippedPath,
@@ -104,6 +106,120 @@ describe('stripCommentsAndStrings — what it still removes', () => {
   it('keeps a string body that is a single identifier', () => {
     expect(stripCommentsAndStrings("const k = { 'resolveAlias': 1 }")).toContain('resolveAlias')
   })
+})
+
+// Code inside a template's `${…}` is code. The stripper used to read a
+// substitution as part of the string, so a call there was invisible to every
+// guard built on it, and a template nested in a substitution flipped every
+// later backtick.
+describe('stripCommentsAndStrings — what the parser knows and a char scan does not', () => {
+  it('keeps a call inside a template substitution', () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the probe is source text
+    const stripped = stripCommentsAndStrings('const a = `x ${isAuthorized(h, t)} y`')
+
+    expect(stripped).toContain('isAuthorized(h, t)')
+    expect(stripped).not.toContain('x ')
+  })
+
+  it('stays in sync across a template nested in a substitution', () => {
+    const source = [
+      // The shape `daemon/native-host/install.ts` quotes a shell argument with.
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the probe is source text
+      "const q = `'${value.replaceAll(\"'\", `'\\\\''`)}'`",
+      'const after = isAuthorized(h, t)',
+    ].join('\n')
+
+    const stripped = stripCommentsAndStrings(source)
+
+    expect(stripped).toContain('replaceAll(')
+    expect(stripped.split('\n')[1]).toBe('const after = isAuthorized(h, t)')
+  })
+
+  it('keeps code after a JSX closing tag on the same line', () => {
+    const source = 'const a = <A>{x}</A>; const b = <B>{readSpatialCanvas(doc)}</B>'
+
+    expect(stripCommentsAndStrings(source)).toContain('readSpatialCanvas(doc)')
+  })
+
+  it('reads a slash after a closing parenthesis as a regex when the grammar says so', () => {
+    const source = ['if (x) /re"/.test(y)', 'isAuthorized(h)'].join('\n')
+
+    const stripped = stripCommentsAndStrings(source)
+
+    expect(stripped).toContain('.test(y)')
+    expect(stripped).toContain('isAuthorized(h)')
+  })
+
+  // `<Foo>bar` is a type assertion to a .ts grammar and an unclosed element
+  // to a .tsx one, which then reads on to the next `</`.
+  it('reads a type assertion as one when the file is .ts, named or not', () => {
+    const source = 'const a = <Foo>bar\nconst b = isAuthorized(h)'
+
+    expect(stripCommentsAndStrings(source, 'a.ts')).toContain('isAuthorized(h)')
+    expect(stripCommentsAndStrings(source)).toContain('isAuthorized(h)')
+  })
+
+  it('reads JSX as JSX when the file is .tsx, named or not', () => {
+    const source = 'const a = <A>{x}</A>\nconst b = isAuthorized(h)'
+
+    expect(stripCommentsAndStrings(source, 'a.tsx')).toContain('isAuthorized(h)')
+    expect(stripCommentsAndStrings(source)).toContain('isAuthorized(h)')
+  })
+})
+
+/**
+ * Every call name a file's syntax tree holds must still be a call in what the
+ * stripper leaves, as many times. The tree is the reference: the stripper may
+ * drop prose, never code, and the failure is invisible from the inside because
+ * a guard that cannot see a call reports clean. Read back through the parser
+ * rather than a `name(` pattern, which loses `useRef<() => void>(…)`.
+ */
+function callNames(path: string, source: string): Map<string, number> {
+  const kind = path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, kind)
+  const calls = new Map<string, number>()
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression
+      const name = ts.isIdentifier(callee)
+        ? callee.text
+        : ts.isPropertyAccessExpression(callee)
+          ? callee.name.text
+          : undefined
+      if (name !== undefined) {
+        const bare = name.replace(/^#/, '')
+        calls.set(bare, (calls.get(bare) ?? 0) + 1)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return calls
+}
+
+describe('stripCommentsAndStrings — keeps every call the syntax tree holds', () => {
+  const files = SCAN_ROOTS.flatMap((root) =>
+    walk(join(import.meta.dirname, '..', '..', '..', root), {
+      include: (path) => /\.tsx?$/.test(path) && !isExcludedPath(path),
+      skip: (_path, name) => name === 'node_modules' || name === 'dist' || name === 'tmp',
+    }),
+  )
+
+  it('is looking at the tree', () => {
+    expect(files.length).toBeGreaterThan(1500)
+  })
+
+  it('loses no call in any source file', () => {
+    const lost: string[] = []
+    for (const path of files) {
+      const source = readFileSync(path, 'utf8')
+      const shown = callNames(path, stripCommentsAndStrings(source, path))
+      for (const [name, count] of callNames(path, source)) {
+        if ((shown.get(name) ?? 0) < count) lost.push(`${relativeToRepo(path)}: ${name}`)
+      }
+    }
+    expect(lost).toEqual([])
+  }, 300_000)
 })
 
 // A package's `tmp/` is where a crashed or interrupted Stryker run leaves a

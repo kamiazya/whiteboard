@@ -17,6 +17,7 @@
  */
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import ts from '@typescript/typescript6'
 
 /**
  * Every `.ts`/`.tsx` under `dir`, skipping `node_modules`, `dist` and `tmp`.
@@ -91,142 +92,137 @@ export function isTestPath(path: string): boolean {
   return category === 'test' || category === 'test-support'
 }
 
+function parse(source: string, fileName: string, kind: ts.ScriptKind): ts.SourceFile {
+  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false, kind)
+}
+
+/** The parser's own syntax-error count; `parseDiagnostics` is not in the public typings. */
+function syntaxErrors(file: ts.SourceFile): number {
+  return (
+    (file as unknown as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics?.length ?? 0
+  )
+}
+
+function parseSource(source: string, fileName: string | undefined): ts.SourceFile {
+  if (fileName !== undefined) {
+    return parse(source, fileName, fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
+  }
+  const plain = parse(source, 'source.ts', ts.ScriptKind.TS)
+  if (syntaxErrors(plain) === 0) return plain
+  const jsx = parse(source, 'source.tsx', ts.ScriptKind.TSX)
+  return syntaxErrors(jsx) < syntaxErrors(plain) ? jsx : plain
+}
+
+/** One source range replaced by `text`. */
+type Edit = { start: number; end: number; text: string }
+
+const IDENTIFIER_BODY = /^[A-Za-z_$][\w$]*$/
+
+function quoted(file: ts.SourceFile, node: ts.StringLiteralLike, quote: string): string {
+  const raw = file.text.slice(node.getStart(file) + 1, node.end - 1)
+  return quote + (IDENTIFIER_BODY.test(raw) ? raw : '') + quote
+}
+
+function literalEdit(file: ts.SourceFile, node: ts.Node): Edit | undefined {
+  const start = node.getStart(file)
+  const edit = (text: string): Edit => ({ start, end: node.end, text })
+  switch (node.kind) {
+    case ts.SyntaxKind.StringLiteral:
+      return edit(quoted(file, node as ts.StringLiteral, file.text[start] as string))
+    case ts.SyntaxKind.NoSubstitutionTemplateLiteral:
+      return edit(quoted(file, node as ts.NoSubstitutionTemplateLiteral, '`'))
+    case ts.SyntaxKind.TemplateHead:
+      return edit('`${')
+    case ts.SyntaxKind.TemplateMiddle:
+      return edit('}${')
+    case ts.SyntaxKind.TemplateTail:
+      return edit('}`')
+    case ts.SyntaxKind.RegularExpressionLiteral:
+      return edit('')
+    default:
+      return undefined
+  }
+}
+
 /**
- * Comments removed and string bodies blanked, so prose naming a thing is not
- * read as doing it — and a `//` inside a string does not swallow the code
- * after it.
+ * Comments removed, string bodies blanked, and regex literals dropped, so
+ * prose naming a thing is not read as doing it — and a `//` inside a string
+ * does not swallow the code after it.
  *
- * One pass with a state machine rather than regexes, because a regex cannot
- * tell `"//"` from a comment or `// don't` from a string, and both mistakes
- * were measured.
+ * Read off the TypeScript parser, never a character scan: a text scanner
+ * cannot know that the code inside a template's `${…}` is code (a call there
+ * was invisible to every guard), that a template nested in a substitution
+ * closes its own backtick, that `</A>` ends a JSX element rather than
+ * starting a regex, or that a `/` after `)` can open one. Each of those was
+ * measured against the real tree; `source-scan.test.ts` pins them.
  *
  * A string whose body is a single identifier is KEPT, because it may be a
  * quoted object key (`'resolveAlias': …`) and a scan looking for keys has to
- * still see it. Anything longer is prose.
+ * still see it. Anything longer is prose. A template's literal text is
+ * dropped but its `${` and `}` stay, so the substitutions read as the code
+ * they are.
  *
- * Telling a regex literal from division needs the previous token; the
- * standard heuristic is enough here — a `/` opens a regex when the last
- * meaningful character was an operator, an opening bracket, or nothing.
+ * `fileName` picks the grammar: `.tsx` reads `<T>x` as JSX, `.ts` reads it as
+ * a type assertion, and a wrong choice garbles the tokens. Without one, the
+ * text is read as whichever grammar reports fewer syntax errors, `.ts` on a
+ * tie.
  */
-const REGEX_MAY_FOLLOW: ReadonlySet<string> = new Set([
-  '',
-  '(',
-  ',',
-  '=',
-  ':',
-  '[',
-  '!',
-  '&',
-  '|',
-  '?',
-  '{',
-  '}',
-  ';',
-  '+',
-  '-',
-  '*',
-  '%',
-  '<',
-  '>',
-  '~',
-  '^',
-])
-
-/** Past the end of a `//` comment — its own newline is left for the caller. */
-function skipLineComment(source: string, from: number): number {
-  let i = from
-  while (i < source.length && source[i] !== '\n') i += 1
-  return i
-}
-
-/** Past a block comment's terminator, or to the end when it is unterminated. */
-function skipBlockComment(source: string, from: number): number {
-  const end = source.indexOf('*/', from + 2)
-  return end === -1 ? source.length : end + 2
-}
-
 /**
- * Past a regex literal's closing delimiter.
+ * The comments in the stretches of code BETWEEN the carved-out ranges.
  *
- * A closing bracket only closes a character class that an opening one began,
- * so a slash INSIDE a class does not end the literal. A newline ends the
- * scan because a regex cannot span lines, and treating an unterminated one
- * as running to EOF would swallow the rest of the file.
+ * A bare scanner is trustworthy there and only there: what it cannot know is
+ * whether a quote opens a string, a backtick a template or a slash a regex,
+ * and every token that could be read either way is already a carved range. So
+ * the parser decides what is a literal and the scanner reads the rest, which
+ * costs a lex of the gaps instead of a node for every token.
  */
-function skipRegexLiteral(source: string, from: number): number {
-  let i = from + 1
-  let inClass = false
-  while (i < source.length) {
-    const r = source[i] as string
-    if (r === '\\') {
-      i += 2
-      continue
+function commentsBetween(text: string, carved: readonly Edit[]): Edit[] {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false)
+  const found: Edit[] = []
+  const scanGap = (from: number, to: number): void => {
+    scanner.setText(text, from, to - from)
+    for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+      if (
+        kind === ts.SyntaxKind.SingleLineCommentTrivia ||
+        kind === ts.SyntaxKind.MultiLineCommentTrivia
+      ) {
+        found.push({ start: scanner.getTokenStart(), end: scanner.getTokenEnd(), text: '' })
+      }
     }
-    if (r === '[') inClass = true
-    else if (r === ']') inClass = false
-    else if (r === '/' && !inClass) break
-    else if (r === '\n') break
-    i += 1
   }
-  return i + 1
+  let cursor = 0
+  for (const range of [...carved].sort((a, b) => a.start - b.start)) {
+    scanGap(cursor, range.start)
+    cursor = range.end
+  }
+  scanGap(cursor, text.length)
+  return found
 }
 
-/**
- * A string or template literal, replaced by its own quotes plus its body
- * ONLY when the body is a bare identifier.
- *
- * Keeping identifier-shaped bodies is what lets a scan see `import x from
- * 'node:fs'`-style specifiers and property keys while still erasing prose,
- * which is where a word this tool searches for would otherwise hide.
- */
-function readStringLiteral(
-  source: string,
-  from: number,
-  quote: string,
-): { next: number; text: string } {
-  const start = from + 1
-  let i = start
-  while (i < source.length && source[i] !== quote) {
-    if (source[i] === '\\') i += 1
-    i += 1
+export function stripCommentsAndStrings(source: string, fileName?: string): string {
+  const file = parseSource(source, fileName)
+  const edits: Edit[] = []
+  // Text a scanner cannot be trusted with, and which is not rewritten: JSX
+  // children are prose that may hold an apostrophe or a `//`.
+  const carved: Edit[] = []
+  const visit = (node: ts.Node): void => {
+    const edit = literalEdit(file, node)
+    if (edit !== undefined) {
+      edits.push(edit)
+      carved.push(edit)
+    } else if (node.kind === ts.SyntaxKind.JsxText) {
+      carved.push({ start: node.pos, end: node.end, text: '' })
+    }
+    ts.forEachChild(node, visit)
   }
-  const body = source.slice(start, i)
-  return {
-    next: i + 1,
-    text: quote + (/^[A-Za-z_$][\w$]*$/.test(body) ? body : '') + quote,
-  }
-}
+  visit(file)
+  edits.push(...commentsBetween(source, carved))
 
-export function stripCommentsAndStrings(source: string): string {
   let out = ''
-  let i = 0
-  let lastMeaningful = ''
-  while (i < source.length) {
-    const ch = source[i] as string
-    const next = source[i + 1]
-    if (ch === '/' && next === '/') {
-      i = skipLineComment(source, i)
-      continue
-    }
-    if (ch === '/' && next === '*') {
-      i = skipBlockComment(source, i)
-      continue
-    }
-    if (ch === '/' && REGEX_MAY_FOLLOW.has(lastMeaningful)) {
-      i = skipRegexLiteral(source, i)
-      lastMeaningful = ')'
-      continue
-    }
-    if (ch === "'" || ch === '"' || ch === '`') {
-      const literal = readStringLiteral(source, i, ch)
-      out += literal.text
-      i = literal.next
-      lastMeaningful = ch
-      continue
-    }
-    out += ch
-    if (!/\s/.test(ch)) lastMeaningful = ch
-    i += 1
+  let cursor = 0
+  for (const edit of edits.sort((a, b) => a.start - b.start)) {
+    out += source.slice(cursor, edit.start) + edit.text
+    cursor = edit.end
   }
-  return out
+  return out + source.slice(cursor)
 }

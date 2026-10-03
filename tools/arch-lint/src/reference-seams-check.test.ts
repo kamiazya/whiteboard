@@ -124,7 +124,7 @@ describe('references resolve in one place', () => {
     for (const path of production) {
       const rel = relative(REPO_ROOT, path).split(sep).join('/')
       if (ALLOWLIST[rel] !== undefined) continue
-      const source = stripCommentsAndStrings(readFileSync(path, 'utf8'))
+      const source = stripCommentsAndStrings(readFileSync(path, 'utf8'), path)
       for (const { pattern, shape } of DEFINITION_PATTERNS) {
         const match = pattern.exec(source)
         if (match !== null) hits.push(`${rel}: ${shape} — \`${match[0].trim().slice(0, 80)}\``)
@@ -141,7 +141,7 @@ describe('references resolve in one place', () => {
       const path = join(REPO_ROOT, rel)
       let source: string
       try {
-        source = stripCommentsAndStrings(readFileSync(path, 'utf8'))
+        source = stripCommentsAndStrings(readFileSync(path, 'utf8'), path)
       } catch {
         return true
       }

@@ -48,7 +48,11 @@ const callers = walkSourceFiles(join(REPO_ROOT, SCANNED))
   .filter((path) => !isTestPath(path))
   .map(relOf)
   .filter((rel) => rel !== RESOLVER)
-  .filter((rel) => CALL.test(stripCommentsAndStrings(readFileSync(join(REPO_ROOT, rel), 'utf8'))))
+  .filter((rel) =>
+    CALL.test(
+      stripCommentsAndStrings(readFileSync(join(REPO_ROOT, rel), 'utf8'), join(REPO_ROOT, rel)),
+    ),
+  )
 
 describe('every data-directory resolver in the CLI is classified against the config file', () => {
   it('finds the resolvers it classifies', () => {
