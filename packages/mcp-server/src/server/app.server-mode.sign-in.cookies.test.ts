@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
-import { IDP, PUBLIC_URL, serverModeSignIn } from './_test-server-mode-harness.js'
+import { IDP, PUBLIC_URL, serverModePeople, serverModeSignIn } from './_test-server-mode-harness.js'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
 import { DENY_ALL_STRATEGY, oidcProviders, resolvedForTest } from './security/_test-helpers.js'
@@ -76,6 +76,7 @@ beforeEach(async () => {
     serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     authStrategy: DENY_ALL_STRATEGY,
+    people: serverModePeople(handle.db, tempDir).people,
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')

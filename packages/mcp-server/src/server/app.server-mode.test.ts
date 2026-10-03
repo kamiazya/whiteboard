@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
+import { isolatedServerModePeople } from './_test-server-mode-harness.js'
 import type { AppOptions, ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
 import type { AuthScope } from './security/auth-strategy.js'
@@ -27,11 +28,16 @@ const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
 const { planServerModeAuth } = await import('./security/server-mode-auth-plan.js')
 
+let people: ServerModeAppOptions['people']
+let disposePeople: () => Promise<void>
+
 beforeAll(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-server-mode-app-test-'))
+  ;({ people, dispose: disposePeople } = await isolatedServerModePeople(tempDir))
 })
 
 afterAll(async () => {
+  await disposePeople()
   await rm(tempDir, { recursive: true, force: true })
 })
 
@@ -55,6 +61,14 @@ function makeScopeStrategy(grantedScopes: readonly AuthScope[]): AsyncAuthStrate
       }
     },
   }
+}
+
+// The scope gate and the workspace gate both answer 403. A bearer that names no
+// person is no member of the workspace it addresses, so past the scope gate the
+// answer is the membership refusal — what matters here is that it is not the
+// scope refusal.
+async function expectScopeGatePassed(res: Response): Promise<void> {
+  expect(await res.json()).not.toMatchObject({ error: 'auth.forbidden' })
 }
 
 const BEARER = 'Bearer any-valid-server-mode-token'
@@ -92,6 +106,7 @@ function makeServerModeOptions(
     serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     authStrategy: makeScopeStrategy(grantedScopes),
+    people,
     touch: () => {},
     getStatus: makeInternalStatus,
     ...overrides,
@@ -209,6 +224,7 @@ describe('app — server-mode composition', () => {
           publicBaseUrl: 'http://example.com',
           allowedOrigins: ['https://example.com'],
           authStrategy: makeScopeStrategy(['canvas:read']),
+          people,
           touch: () => {},
           getStatus: () => makeInternalStatus(),
         }),
@@ -224,6 +240,7 @@ describe('app — server-mode composition', () => {
           publicBaseUrl: 'https://example.com',
           allowedOrigins: ['*'],
           authStrategy: makeScopeStrategy(['canvas:read']),
+          people,
           touch: () => {},
           getStatus: () => makeInternalStatus(),
         }),
@@ -554,7 +571,7 @@ describe('app — server-mode composition', () => {
         body: JSON.stringify({}),
       })
       expect(res.status).not.toBe(401)
-      expect(res.status).not.toBe(403)
+      await expectScopeGatePassed(res)
     })
 
     it('GET /api/w/:wid/document/:path/client-count → 401 without auth', async () => {
@@ -609,7 +626,7 @@ describe('app — server-mode composition', () => {
         headers: { authorization: BEARER },
       })
       expect(res.status).not.toBe(401)
-      expect(res.status).not.toBe(403)
+      await expectScopeGatePassed(res)
     })
 
     it('POST /api/workspaces/:wid/documents/:path/versions/:id/restore → 403 with versions:read only (requires versions:write)', async () => {
@@ -693,6 +710,7 @@ describe('app — server-mode composition', () => {
       publicBaseUrl: 'https://example.com',
       allowedOrigins: ['https://example.com'],
       authStrategy: alwaysDeny,
+      people,
       touch: () => {},
       getStatus: () => makeInternalStatus(),
     })

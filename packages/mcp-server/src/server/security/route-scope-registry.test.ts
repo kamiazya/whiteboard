@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
+import { isolatedServerModePeople } from '../_test-server-mode-harness.js'
 // Imported STATICALLY, though nothing here mocks it. As `await import()`
 // inside the test body, the cost of transforming and loading app.ts's whole
 // module graph was charged to the 10s per-test budget — fine on an idle
@@ -19,7 +20,7 @@ import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.j
 // every project in parallel (aggregate import time there is measured in
 // minutes). The test's own work is milliseconds; only the load was slow, so
 // it belongs in the collection phase, which no per-test timeout bounds.
-import { createApp } from '../app.js'
+import { createApp, type ServerModeAppOptions } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import {
@@ -31,12 +32,16 @@ import {
 } from './route-scope-registry.js'
 
 let tempDir: string
+let people: ServerModeAppOptions['people']
+let disposePeople: () => Promise<void>
 
 beforeAll(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-route-scope-registry-test-'))
+  ;({ people, dispose: disposePeople } = await isolatedServerModePeople(tempDir))
 })
 
 afterAll(async () => {
+  await disposePeople()
   await rm(tempDir, { recursive: true, force: true })
 })
 
@@ -53,6 +58,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       publicBaseUrl: 'https://example.com',
       allowedOrigins: ['https://example.com'],
       authStrategy: alwaysDeny,
+      people,
       touch: () => {},
       getStatus: () => ({
         ok: true,
@@ -95,6 +101,8 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     // decision. Assert the surface is present, not merely that what is
     // present is declared.
     expect(apiRoutes.some((route) => route.path.startsWith('/api/v1/'))).toBe(true)
+    // Likewise the people routes, which only a composition with `people` mounts.
+    expect(apiRoutes.some((route) => route.path.startsWith('/api/people'))).toBe(true)
 
     const undeclared = apiRoutes
       .map((route) => ({ ...route, decision: resolveApiRouteScope(route.method, route.path) }))

@@ -13,18 +13,34 @@
 // test below reads the ROOT'S OWN SOURCE for the option.
 
 import { readFileSync } from 'node:fs'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
-import { createApp } from '../app.js'
+import { isolatedServerModePeople } from '../_test-server-mode-harness.js'
+import { createApp, type ServerModeAppOptions } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
 import { DENY_ALL_STRATEGY } from '../security/_test-helpers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 describe('server mode mounts the same /api surface as the local daemon', () => {
+  let tempDir: string
+  let people: ServerModeAppOptions['people']
+  let disposePeople: () => Promise<void>
+
+  beforeAll(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-server-mode-route-parity-'))
+    ;({ people, dispose: disposePeople } = await isolatedServerModePeople(tempDir))
+  })
+  afterAll(async () => {
+    await disposePeople()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
   it("server-mode-http.ts passes serverDeps to createApp — the root's own wiring, not a test's", () => {
     // Source-level on purpose: the functional check below configures both
     // apps itself, so it can only prove the SHAPE works — a composition
@@ -43,6 +59,7 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
       publicBaseUrl: 'https://example.com',
       allowedOrigins: ['https://example.com'],
       authStrategy: DENY_ALL_STRATEGY,
+      people,
       touch: () => {},
       getStatus: () => ({}) as never,
       serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
@@ -69,12 +86,19 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
     const local = apiRoutes(localDaemon)
 
     const missingFromServerMode = [...local].filter((route) => !server.has(route))
-    const extraInServerMode = [...server].filter((route) => !local.has(route))
+    // ADR-0049: only server mode has people to manage, so only it mounts their routes.
+    const peopleRoutes =
+      /^[A-Z]+ \/api\/(people|invitations|workspaces\/:workspace\/(people|invitations))(\/|$)/
+    const extraInServerMode = [...server].filter(
+      (route) => !local.has(route) && !peopleRoutes.test(route),
+    )
 
     // Not vacuous: both sets must actually carry the surfaces this test is
     // about, or a broken option shape would compare two empty sets.
     expect([...server].some((route) => route.includes('/api/v1/'))).toBe(true)
     expect([...local].some((route) => route.includes('/api/workspaces'))).toBe(true)
+
+    expect([...server].some((route) => peopleRoutes.test(route))).toBe(true)
 
     expect(missingFromServerMode).toEqual([])
     expect(extraInServerMode).toEqual([])

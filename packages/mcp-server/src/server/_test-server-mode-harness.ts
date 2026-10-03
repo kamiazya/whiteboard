@@ -26,7 +26,7 @@ import { createUserDeactivation } from './security/user-deactivation.js'
 import { createUserDeletion } from './security/user-deletion.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { accountRetirementFor } from './store/db/account-retirement.js'
-import type { createIsolatedDb } from './store/db/test-helpers.js'
+import { createIsolatedDb } from './store/db/test-helpers.js'
 
 /** The OIDC provider server-mode tests sign in through. */
 export const IDP = 'https://idp.test'
@@ -73,6 +73,17 @@ export function serverModePeople(db: TenantDb, dataDir: string) {
     origin: PUBLIC_URL,
   }
   return { members, sessions, people }
+}
+
+/**
+ * The `people` option over a throwaway database, for a composition that only
+ * needs server mode to be wired the way the root wires it — `people` is
+ * required of `ServerModeAppOptions`, so none can leave it out. Dispose when
+ * the suite ends.
+ */
+export async function isolatedServerModePeople(dataDir: string) {
+  const handle = await createIsolatedDb({ dataDir })
+  return { people: serverModePeople(handle.db, dataDir).people, dispose: () => handle.dispose() }
 }
 
 /**
