@@ -60,8 +60,8 @@ const DIGEST = blobRefSchema.shape.digestHex
 // A manifest is an artifact a restore reads from somewhere it does not
 // control, and these two strings are joined under the target data directory
 // there. Refused at the schema so no reader of the manifest has to remember to
-// check; `materialiseMirroredBlobs` checks the destination again, because the
-// schema guards what is read and not what is later built from it.
+// check, and so the writer, which holds itself to the same two schemas, cannot
+// record what its own reader would refuse.
 const TENANT_ID = z.string().refine(isSafePathSegment, 'a tenant id is one path segment')
 const FILE_PATH = z
   .string()
@@ -369,26 +369,49 @@ export class BackupManifestUnusableError extends Error {
   }
 }
 
+/**
+ * The manifest a restore will accept, from what a pass found.
+ *
+ * The reader refuses a tenant id or a file path it could not join safely, and
+ * refuses the WHOLE manifest for one such entry. The writer holds itself to the
+ * same key schemas (`TENANT_ID`, `FILE_PATH`), because a pass that records an entry its own restore refuses
+ * succeeds into a backup that cannot be restored, and retention then reads the
+ * manifest as unusable and collects nothing. Such an entry is left out and
+ * named instead: it could not have been written back anyway.
+ */
+function recordableManifest(references: BackupBlobReferences) {
+  const tenants: Record<string, { blobs: string[]; files: Record<string, string> }> = {}
+  // Sorted, so two backups of the same store produce the same bytes and a diff
+  // between manifests reads as what changed rather than as reordering.
+  for (const [tenantId, refs] of Object.entries(references.tenants).sort(byKey)) {
+    if (!TENANT_ID.safeParse(tenantId).success) {
+      log.warning({ tenantId }, 'left a tenant out of the backup manifest; its id is not a name')
+      continue
+    }
+    const files: Record<string, string> = {}
+    for (const [path, digest] of Object.entries(refs.files).sort(byKey)) {
+      if (!FILE_PATH.safeParse(path).success) {
+        log.warning(
+          { tenantId, path },
+          'left a file out of the backup manifest; a restore would refuse its path',
+        )
+        continue
+      }
+      files[path] = digest
+    }
+    tenants[tenantId] = { blobs: [...refs.blobs].sort(), files }
+  }
+  return { schemaVersion: 3, tenants, mirror: references.mirror } satisfies z.infer<
+    typeof manifestSchema
+  >
+}
+
+function byKey([a]: [string, unknown], [b]: [string, unknown]): number {
+  return a < b ? -1 : 1
+}
+
 async function writeManifest(backupDir: string, references: BackupBlobReferences): Promise<void> {
-  const manifest = {
-    schemaVersion: 3,
-    // Sorted, so two backups of the same store produce the same bytes and a
-    // diff between manifests reads as what changed rather than as reordering.
-    tenants: Object.fromEntries(
-      Object.entries(references.tenants)
-        .sort(([a], [b]) => (a < b ? -1 : 1))
-        .map(([tenantId, refs]) => [
-          tenantId,
-          {
-            blobs: [...refs.blobs].sort(),
-            files: Object.fromEntries(
-              Object.entries(refs.files).sort(([a], [b]) => (a < b ? -1 : 1)),
-            ),
-          },
-        ]),
-    ),
-    mirror: references.mirror,
-  } satisfies z.infer<typeof manifestSchema>
+  const manifest = recordableManifest(references)
   await mkdir(backupDir, { recursive: true })
   await writeFile(join(backupDir, BLOB_MANIFEST_FILENAME), `${JSON.stringify(manifest, null, 2)}\n`)
 }

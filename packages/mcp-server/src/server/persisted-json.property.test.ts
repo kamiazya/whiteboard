@@ -14,7 +14,7 @@
  * compared modulo JSON's own identities (`-0` is `0` once written).
  */
 import { EventEmitter } from 'node:events'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -24,6 +24,7 @@ import { parseDaemonRecord } from '../daemon/daemon-record.js'
 import { daemonRecordSchema } from '../daemon/daemon-record-schema.js'
 import { loadDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
+import { captureLogsForTests } from './log.js'
 import {
   readServerModeRecord,
   serverModeRecordSchema,
@@ -203,6 +204,57 @@ describe('the blob manifest', () => {
     expect(references).toEqual({ tenants: expected, mirror })
     expect(await readBackupBlobManifest(backupDir)).toEqual(references)
   })
+})
+
+describe('the blob manifest over named files', () => {
+  // Named files are whatever sits under a tenant's `blobs/` that is not a
+  // shard, so their names are the operator's, not ours. The ones that
+  // matter to a restore are those holding a backslash, which the reader's
+  // POSIX path rule refuses; the second arm makes them common enough to draw.
+  const fileName = fc
+    .oneof(
+      fc.string({ minLength: 1, maxLength: 12 }),
+      fc
+        .array(fc.constantFrom('a', 'b', '\\', '.', ' ', 'é', '日'), { minLength: 1, maxLength: 6 })
+        .map((parts) => parts.join('')),
+    )
+    .filter((name) => !name.includes('/') && !name.includes('\0') && name !== '.' && name !== '..')
+
+  let capture: ReturnType<typeof captureLogsForTests>
+  // The writer names each file it leaves out; that is the behaviour under test
+  // and not output for the run's log.
+  beforeAll(() => {
+    capture = captureLogsForTests('error')
+  })
+  afterAll(() => capture.restore())
+
+  fcTest.prop(
+    [fc.uniqueArray(fileName, { maxLength: 5 }), fc.constantFrom('self', 'parent')],
+    withDefaults({ numRuns: 40 }),
+  )(
+    'writes a manifest its reader accepts, recording every file whose name has no backslash',
+    async (names, mirror) => {
+      const dataDir = await freshDir('named-src')
+      const workspaceDir = join(
+        blobsRoot(dataDir, SELF_HOST_TENANT_ID),
+        '01JWORKSPACE00000000000000',
+      )
+      await mkdir(workspaceDir, { recursive: true })
+      for (const name of names) await writeFile(join(workspaceDir, name), name)
+
+      const backupDir = join(await freshDir('named-dst'), 'backup')
+      const backupRoot = mirror === 'self' ? backupDir : dirname(backupDir)
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: backupDir, mirror })
+
+      const manifest = await readBackupBlobManifest(backupDir)
+      const recorded = Object.keys(manifest?.tenants[SELF_HOST_TENANT_ID]?.files ?? {}).sort()
+      const expected = names
+        .filter((name) => !name.includes('\\'))
+        .map((name) => `01JWORKSPACE00000000000000/${name}`)
+        .sort()
+      expect(recorded).toEqual(expected)
+    },
+  )
 })
 
 describe('the backup result', () => {
