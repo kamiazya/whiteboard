@@ -23,20 +23,28 @@ export interface RestoreLockProps {
 export function RestoreLock({ restoring, label, children }: RestoreLockProps) {
   return (
     <div className="relative h-full min-h-0 min-w-0">
-      {restoring && (
-        <div
-          data-testid="restore-status"
-          data-editor-overlay
-          // Polite: a restore is announced once and nothing about it needs
-          // to interrupt what is being read.
-          role="status"
-          aria-live="polite"
-          className="absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-lg"
-        >
-          <History aria-hidden="true" className="size-3.5 text-muted-foreground" />
-          <span>Restoring {label ?? 'a saved version'}…</span>
-        </div>
-      )}
+      <div
+        data-testid="restore-status"
+        data-editor-overlay
+        // Polite: a restore is announced once and nothing about it needs
+        // to interrupt what is being read. The region is mounted before it
+        // speaks (`sr-only` while idle) because one that arrives WITH its
+        // message is announced inconsistently.
+        role="status"
+        aria-live="polite"
+        className={
+          restoring
+            ? 'absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-lg'
+            : 'sr-only'
+        }
+      >
+        {restoring && (
+          <>
+            <History aria-hidden="true" className="size-3.5 text-muted-foreground" />
+            <span>Restoring {label ?? 'a saved version'}…</span>
+          </>
+        )}
+      </div>
       <div className="h-full min-h-0 min-w-0" inert={restoring}>
         {children}
       </div>

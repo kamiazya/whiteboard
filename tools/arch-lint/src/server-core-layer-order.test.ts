@@ -135,9 +135,12 @@ function directoryCycles(files: readonly SourceFile[]): string[][] {
     if (a !== b) graph.get(a)?.add(b)
   }
   const reaches = (start: string, goal: string, seen = new Set<string>()): boolean =>
-    [...(graph.get(start) ?? [])].some(
-      (next) => next === goal || (!seen.has(next) && (seen.add(next), reaches(next, goal, seen))),
-    )
+    [...(graph.get(start) ?? [])].some((next) => {
+      if (next === goal) return true
+      if (seen.has(next)) return false
+      seen.add(next)
+      return reaches(next, goal, seen)
+    })
   const looping = [...graph.keys()].filter((unit) => reaches(unit, unit))
   const components = new Map<string, string[]>()
   for (const unit of looping) {

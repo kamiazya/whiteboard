@@ -63,10 +63,12 @@ describe('DaemonDocumentPage restore wiring', () => {
   const editorIsLocked = () =>
     screen.getByTestId('spatial-editor-container').closest('[inert]') !== null
 
-  it('shows nothing and leaves the editor live until a restore starts', async () => {
+  it('says nothing and leaves the editor live until a restore starts', async () => {
     await mountPage()
 
-    expect(restoreStatus()).toBeNull()
+    // Mounted before it speaks: a live region that arrives with its message
+    // is announced inconsistently, so the region is there, empty.
+    expect(restoreStatus()?.textContent).toBe('')
     expect(editorIsLocked()).toBe(false)
   })
 
@@ -90,7 +92,7 @@ describe('DaemonDocumentPage restore wiring', () => {
       backend?.handlers?.onRestoreComplete?.()
     })
 
-    expect(restoreStatus()).toBeNull()
+    expect(restoreStatus()?.textContent).toBe('')
     expect(editorIsLocked()).toBe(false)
   })
 
