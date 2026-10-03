@@ -562,7 +562,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // `ensureProfile`) live in `bindingLookups`, the user listing in `usersOf` and
   // the role lookup in `roleIn`, in the same file, so the membership insert and
   // its clear still sit together here.
-  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 57,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   // The setter's write-side validation and the boolean answer to the lazy-row
   // hazard (ADR-0042 decision 1 addendum) both belong beside tierFor/effectiveTier
