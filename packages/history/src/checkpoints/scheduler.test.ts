@@ -162,4 +162,77 @@ describe('createCheckpointScheduler', () => {
     await scheduler.flush()
     expect(saves).toEqual([])
   })
+  describe('a document whose path changes inside the quiet window', () => {
+    it('takes the checkpoint under the new path after a move', async () => {
+      const { scheduler, saves, errors } = harness({ quietMs: 60_000 })
+      scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+      scheduler.moved('w', 'a', 'b')
+      await scheduler.flush()
+      expect(saves).toEqual([{ path: 'b' }])
+      expect(errors).toEqual([])
+    })
+
+    it('re-arms the timer under the new path so the quiet window still fires there', async () => {
+      const { scheduler, saves } = harness({ quietMs: 1000 })
+      scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+      scheduler.moved('w', 'a', 'b')
+      await vi.advanceTimersByTimeAsync(1100)
+      expect(saves).toEqual([{ path: 'b' }])
+    })
+
+    it('carries every pending document below a moved path with it, and no sibling that shares the prefix', async () => {
+      const { scheduler, saves } = harness({ quietMs: 60_000 })
+      scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+      scheduler('w', 'a/child', edited(new LoroDoc(), 'y'))
+      scheduler('w', 'ab', edited(new LoroDoc(), 'z'))
+      scheduler('other', 'a', edited(new LoroDoc(), 'q'))
+      scheduler.moved('w', 'a', 'b')
+      await scheduler.flush()
+      expect(saves.map((s) => s.path).sort()).toEqual(['a', 'ab', 'b', 'b/child'])
+    })
+
+    it('carries the ceiling start across a move, so a run of edits does not get a fresh allowance', async () => {
+      const { scheduler, saves } = harness({ quietMs: 1000, ceilingMs: 2500 })
+      const doc = new LoroDoc()
+      for (let i = 0; i < 3; i++) {
+        scheduler('w', 'a', edited(doc, `k${i}`))
+        await vi.advanceTimersByTimeAsync(700)
+      }
+      scheduler.moved('w', 'a', 'b')
+      await vi.advanceTimersByTimeAsync(500)
+      expect(saves).toEqual([{ path: 'b' }])
+    })
+
+    it('drops the pending checkpoint quietly when the document is removed', async () => {
+      const { scheduler, saves, errors } = harness({ quietMs: 60_000 })
+      scheduler('w', 'a', edited(new LoroDoc(), 'x'))
+      scheduler('w', 'keep', edited(new LoroDoc(), 'y'))
+      scheduler.removed('w', 'a')
+      await scheduler.flush()
+      expect(saves).toEqual([{ path: 'keep' }])
+      expect(errors).toEqual([])
+    })
+
+    it('forgets what a removed path was last checkpointed at, so a document created there is judged afresh', async () => {
+      const { scheduler, saves } = harness({ quietMs: 100 })
+      const doc = edited(new LoroDoc(), 'x')
+      scheduler('w', 'a', doc)
+      await vi.advanceTimersByTimeAsync(150)
+      scheduler.removed('w', 'a')
+      scheduler('w', 'a', doc)
+      await vi.advanceTimersByTimeAsync(150)
+      expect(saves).toHaveLength(2)
+    })
+
+    it('does not re-save a moved document that was already checkpointed at its old path', async () => {
+      const { scheduler, saves } = harness({ quietMs: 100 })
+      const doc = edited(new LoroDoc(), 'x')
+      scheduler('w', 'a', doc)
+      await vi.advanceTimersByTimeAsync(150)
+      scheduler.moved('w', 'a', 'b')
+      scheduler('w', 'b', doc)
+      await vi.advanceTimersByTimeAsync(150)
+      expect(saves).toEqual([{ path: 'a' }])
+    })
+  })
 })

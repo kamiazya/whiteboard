@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { MUTATED } from './stryker-targets.mjs'
+import { MUTATED, shardOf } from './stryker-targets.mjs'
 
 const require = createRequire(import.meta.url)
 
@@ -41,7 +41,10 @@ export default {
   vitest: {
     configFile: 'vitest.stryker.config.ts',
   },
-  mutate: MUTATED,
+  // `MUTATION_SHARD=k/n` narrows a run to one leg's share of the list, which
+  // is how the weekly job fits inside a runner's time limit; a `--mutate` flag
+  // still overrides it, as the per-PR job relies on.
+  mutate: shardOf(MUTATED, process.env.MUTATION_SHARD),
   reporters: ['progress', 'clear-text', 'html', 'json'],
   htmlReporter: {
     fileName: 'tmp/stryker-reports/mutation.html',
@@ -52,7 +55,14 @@ export default {
   jsonReporter: {
     fileName: 'tmp/stryker-reports/mutation.json',
   },
-  coverageAnalysis: 'off',
+  // `perTest` skips a mutant no test reaches and gives every other mutant only
+  // the tests that cover its line. Measured against `off` on two files (108
+  // mutants): the same suite and a 25% smaller CPU bill (21 CPU-minutes against
+  // 28), 1300 tests run against 1438, and no mutant that `off` killed
+  // survived. It depends on the patched vitest runner's per-test ids (see
+  // `patches/@stryker-mutator__vitest-runner@9.6.1.patch`), which join suite
+  // and test names the way vitest 5 matches them.
+  coverageAnalysis: 'perTest',
   // A property runs 200 cases, so the default 5s budget times out on slow but
   // perfectly healthy mutants — and a timeout counts as KILLED, which flatters
   // the score instead of reporting a gap. Raised so a timeout means what it

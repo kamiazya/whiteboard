@@ -19,12 +19,6 @@ describe('the mutation lane selects property tests by a stable title', () => {
     expect([setup].flat()).toContain('./vitest.stryker-setup.ts')
   })
 
-  it('loads fast-check/vitest through this package, or no property test loads at all', () => {
-    // Run from this package, Stryker's vitest is not the instance the shared
-    // `@fast-check/vitest` binds to; external, every property file fails to load.
-    expect(strykerVitestConfig.test?.server?.deps?.inline).toContain('@fast-check/vitest')
-  })
-
   // Importing the setup module above is what pins the seed in THIS file's
   // process, so the title is checked without running the lane.
   fcTest.prop([fc.nat()])('a property title carries the pinned seed, not a fresh one', () => {

@@ -7,7 +7,12 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import {
+  resolveTestServerDeps,
+  testDocumentRouterOptions,
+  testStoreScope,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-versions-test-')
 
@@ -78,11 +83,12 @@ describe('versions API', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
 
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 0,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 0,
+      }),
+    )
     const resUpdate = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -104,11 +110,12 @@ describe('versions API', () => {
   })
 
   it('saves a manual version with a label through POST /versions', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -121,12 +128,13 @@ describe('versions API', () => {
   })
 
   it('POST /versions persists an explicit operator', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-      daemonActor: TEST_DAEMON_ACTOR,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+        daemonActor: TEST_DAEMON_ACTOR,
+      }),
+    )
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -160,11 +168,12 @@ describe('versions API', () => {
   })
 
   it('POST /versions defaults operator to human when omitted', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -191,12 +200,13 @@ describe('versions API', () => {
   // numbers), so stamping one here recorded noise as identity, and a test
   // asserting only that the field was non-blank passed over it.
   it('POST /versions stamps the daemon actor, unchanged across a document reload', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-      daemonActor: TEST_DAEMON_ACTOR,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+        daemonActor: TEST_DAEMON_ACTOR,
+      }),
+    )
     const save = async () => {
       const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
         method: 'POST',
@@ -224,12 +234,13 @@ describe('versions API', () => {
   // shape: anything holding `workspace:write` could write a row claiming to
   // be this daemon, or any other device.
   it('refuses an operator that names a device, rather than believing the caller', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-      daemonActor: TEST_DAEMON_ACTOR,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+        daemonActor: TEST_DAEMON_ACTOR,
+      }),
+    )
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -248,12 +259,13 @@ describe('versions API', () => {
   // of party asked, and what to show a reader. Those stay a self-report, as
   // they always were.
   it('keeps the caller\u2019s kind and display name, and stamps its own device', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-      daemonActor: TEST_DAEMON_ACTOR,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+        daemonActor: TEST_DAEMON_ACTOR,
+      }),
+    )
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -280,11 +292,12 @@ describe('versions API', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
 
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 0,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 0,
+      }),
+    )
     const resUpdate = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -306,11 +319,12 @@ describe('versions API', () => {
   })
 
   it('filters GET /versions by path and returns newest first', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
     await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       body: JSON.stringify({ label: 'a1' }),
@@ -348,11 +362,12 @@ describe('GET /versions/:id/document', () => {
   })
 
   it('answers the canvas as it stood, not as it stands', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
 
     const first = new LoroDoc()
     writeSpatialCanvas(first, {
@@ -393,11 +408,12 @@ describe('GET /versions/:id/document', () => {
   })
 
   it('refuses a version id that belongs to another document, as restore does', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
     const saved = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

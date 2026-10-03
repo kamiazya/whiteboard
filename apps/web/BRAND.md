@@ -85,7 +85,7 @@ Brand surfaces are mid-gray on any ground, plus exactly one accent:
   metaphor: the frame is the connection, and offline breaks it. Legible
   even at 16px.
 - **The app-header mark carries state too**, and takes its tones from the
-  app's `StateDot` set rather than from the favicon's — the header sits
+  app chrome's amber rather than from the favicon's — the header sits
   inside the themed page, where `emerald-500` / `amber-500` already mean
   "safe" / "attention" on three other carriers, while the favicon renders
   outside the theme and needs its own fixed hues. Same idea, two palettes,
@@ -105,7 +105,7 @@ Brand surfaces are mid-gray on any ground, plus exactly one accent:
 In-app chrome state colors are DESIGN.md's domain and use a different
 palette (emerald/amber on the connection chip — picked against chrome
 surfaces, not a 16px tab strip). What the favicon mirrors is the header's
-*signals* (`useDirtyState`, sync status), never its exact colors, so tab
+*signals* (`useStorageHealth`, sync status), never its exact colors, so tab
 and header always agree on state even where their palettes differ.
 
 ## Motion grammar

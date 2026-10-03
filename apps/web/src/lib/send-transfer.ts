@@ -28,6 +28,7 @@ import {
   transferResponseSchema,
   transferWindowUrl,
 } from './cross-origin-transfer-protocol.js'
+import { isLoopbackHostname } from './loopback-host.js'
 
 /** The part of a `Window` this needs — what `window.open` returns, minus the rest. */
 export interface PopupHandle {
@@ -252,7 +253,7 @@ export function parseDestination(
   } catch {
     return { ok: false, reason: 'Enter the keeper’s full address, starting with https://.' }
   }
-  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+  const local = isLoopbackHostname(url.hostname)
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
     return {
       ok: false,

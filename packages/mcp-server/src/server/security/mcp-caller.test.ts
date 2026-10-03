@@ -37,6 +37,7 @@ function tools() {
   return gatedByMembership(
     {
       edit: {
+        name: 'wb_edit',
         async execute(input: { workspaceId?: string; createWorkspace?: boolean; fail?: boolean }) {
           executed.push(input)
           if (input.createWorkspace && input.workspaceId && !workspaces.has(input.workspaceId)) {
@@ -144,8 +145,40 @@ describe('gatedByMembership', () => {
     expect(await members.isWorkspaceMember('ws-fresh', profile.id)).toBe('member')
   })
 
-  it('passes a call that names no workspace through', async () => {
-    await asAda(() => tools().execute({}))
-    expect(executed).toHaveLength(1)
+  // The gate selects on the workspace field, so a call without it must not be
+  // a way to skip the gate: it fails closed unless the tool is allowlisted.
+  it('refuses a call that names no workspace, and runs nothing', async () => {
+    await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await expect(asAda(() => tools().execute({}))).rejects.toThrow(/workspace_required/)
+    await expect(asAda(() => tools().execute({ workspaceId: 42 } as never))).rejects.toThrow(
+      /workspace_required/,
+    )
+    expect(executed).toEqual([])
+  })
+
+  it('passes an allowlisted tool through when it names no workspace', async () => {
+    const optional = {
+      async execute(input: unknown) {
+        executed.push(input)
+        return { ok: true }
+      },
+    }
+    const gated = gatedByMembership(
+      { facetList: { ...optional, name: 'wb_facet_list' } },
+      { resolveWorkspace: async () => null },
+    )
+    await asAda(() => gated.facetList.execute({}))
+    expect(executed).toEqual([{}])
+  })
+
+  it('still gates an allowlisted tool that does name a workspace', async () => {
+    await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    const gated = gatedByMembership(
+      { facetList: { name: 'wb_facet_list', execute: async (input: unknown) => input } },
+      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
+    )
+    await expect(asAda(() => gated.facetList.execute({ workspaceId: 'plans' }))).rejects.toThrow(
+      /not_a_member/,
+    )
   })
 })

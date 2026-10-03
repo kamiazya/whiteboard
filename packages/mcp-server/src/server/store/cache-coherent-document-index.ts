@@ -12,6 +12,7 @@ import {
   type WorkspaceDocs,
   type WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
+import { checkpointAfterMove, checkpointAfterRemoval } from './auto-checkpoint.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc } from './doc-cache.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -28,6 +29,9 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  * phantom cached there, and the next write through it would persist the
  * phantom over the moved document's real content. The shared index cannot
  * know this cache exists, so the composition root wraps it.
+ *
+ * The automatic-checkpoint scheduler's pending work is path-keyed state of the
+ * same kind, so the same wrapper tells it.
  */
 export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
   /**
@@ -130,6 +134,10 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
           this.scope,
         )
       }
+      // A pending automatic checkpoint is keyed by path too, and the keeper
+      // resolves that path when it saves: left under the old name it would
+      // fail against a document that is no longer there.
+      checkpointAfterMove(input.workspaceId, input.from, input.to)
     })
   }
 
@@ -137,6 +145,7 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     return withWorkspaceWriteLock(input.workspaceId, async () => {
       await super.deleteDocument(input)
       evictDoc(input.workspaceId, input.path, this.scope)
+      checkpointAfterRemoval(input.workspaceId, input.path)
     })
   }
 }

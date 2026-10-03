@@ -5,6 +5,7 @@
 // asked of every registered format instead of written once per format, because
 // a second projection is exactly where a per-format guard starts being copied
 // rather than generalised.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fromJsonCanvas, toJsonCanvas } from './projection.js'
 
@@ -19,6 +20,23 @@ describe('the wire trip canonicalises exactly one thing', () => {
       nodes: [],
       edges: [],
     })
+  })
+})
+
+describe("an embed node's tags", () => {
+  // The embed arm of a node's extension is built apart from the plain arm, and
+  // the shared fixture's tagged node is not an embed, so the ledger position
+  // is occupied without this arm ever being asked for it.
+  it('ride the embed arm of x-whiteboard and come back on the node', () => {
+    const node = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'a' }),
+      embed: { documentId: '01M231FG6BGKKWW4BAA6Z1C945' },
+      tags: ['phase:design'],
+    }
+    const wire = toJsonCanvas({ nodes: [node], edges: [] })
+
+    expect(wire.nodes[0]?.['x-whiteboard']).toMatchObject({ kind: 'embed', tags: ['phase:design'] })
+    expect(fromJsonCanvas(wire).nodes[0]?.tags).toEqual(['phase:design'])
   })
 })
 

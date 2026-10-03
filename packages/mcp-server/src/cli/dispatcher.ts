@@ -141,6 +141,13 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0
   }
 
+  // Only as the whole command line: `-h` after a subcommand is that
+  // subcommand's own to interpret, and `mcp`'s stdout is a protocol channel.
+  if (argv.length === 1 && (argv[0] === '--help' || argv[0] === '-h')) {
+    process.stdout.write(USAGE)
+    return 0
+  }
+
   // Loaded once, here, for every command that locates the daemon by its data
   // directory: a file `dataDir` honoured by `daemon run` alone put the daemon
   // where no other command looked for it. Layered under process.env, so

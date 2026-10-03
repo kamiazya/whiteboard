@@ -22,7 +22,7 @@ import {
   createTestDocument,
   resolveTestServerDeps,
   seedWorkspaceRow,
-  testStoreScope,
+  testDocumentRouterOptions,
 } from '../_test-helpers.js'
 
 let tempDir: string
@@ -92,11 +92,12 @@ async function saveVersion(app: ReturnType<typeof createDocumentRouter>): Promis
 }
 
 it('in-place restore makes the document equal the past state — a later-added node goes away', async () => {
-  const app = createDocumentRouter({
-    scope: testStoreScope(),
-    serverDeps,
-    autoVersionQuietMs: 60_000,
-  })
+  const app = createDocumentRouter(
+    testDocumentRouterOptions({
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+    }),
+  )
   const client = new LoroDoc()
   await push(app, client, ['n-a'])
   const versionId = await saveVersion(app)
@@ -113,11 +114,12 @@ it('in-place restore makes the document equal the past state — a later-added n
 })
 
 it('a version of a tree-served document restores correctly after a simulated restart', async () => {
-  const app = createDocumentRouter({
-    scope: testStoreScope(),
-    serverDeps,
-    autoVersionQuietMs: 60_000,
-  })
+  const app = createDocumentRouter(
+    testDocumentRouterOptions({
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+    }),
+  )
   const client = new LoroDoc()
   await push(app, client, ['n-a'])
   const versionId = await saveVersion(app)
@@ -143,11 +145,12 @@ async function createDoc(path: string) {
 }
 
 it('subtree rollback reverts the document AND its descendants, and evacuates documents created after the version', async () => {
-  const app = createDocumentRouter({
-    scope: testStoreScope(),
-    serverDeps,
-    autoVersionQuietMs: 60_000,
-  })
+  const app = createDocumentRouter(
+    testDocumentRouterOptions({
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+    }),
+  )
   const parent = new LoroDoc()
   const child = new LoroDoc()
   // Created through the create route, so the rows carry a kind and the

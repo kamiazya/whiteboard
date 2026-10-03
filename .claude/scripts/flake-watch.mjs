@@ -13,21 +13,34 @@
 // (2026-08-28..09-04, sixteen failures) is pinned as the lib's fixture.
 //
 // Annotations of a completed run never change, so they are cached per run
-// id under tmp/flake-watch/ — a session start re-fetches only runs it has
-// not seen.
+// id under the git common dir's flake-watch/ (shared by every worktree of the
+// clone) — a session start re-fetches only runs no checkout has seen.
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { clusterFailures, failedLegFrom, formatReport } from './flake-watch-lib.mjs'
+import { clusterFailures, commitsLandedAfter, failedLegFrom, flakeCacheDir, formatReport, runPassedAfter } from './flake-watch-lib.mjs'
 
 const QUIET = process.argv.includes('--quiet')
 const daysArg = process.argv.indexOf('--days')
 const WINDOW_DAYS = daysArg === -1 ? 14 : Number(process.argv[daysArg + 1] ?? 14)
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
-const CACHE_DIR = join(ROOT, 'tmp', 'flake-watch')
+
+function gitCommonDir() {
+  try {
+    return execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      timeout: 10_000,
+    }).trim()
+  } catch {
+    return undefined
+  }
+}
+
+const CACHE_DIR = flakeCacheDir({ gitCommonDir: gitCommonDir(), root: ROOT })
 
 function gh(args) {
   return JSON.parse(execFileSync('gh', args, { encoding: 'utf-8', timeout: 30_000 }))
@@ -35,8 +48,8 @@ function gh(args) {
 
 // Bumped when the cached SHAPE changes, so an entry written by an older
 // version is refetched rather than read as the new one. A run's annotations
-// never change, so the old files simply go unread; `tmp/` is per-machine and
-// disposable, which is why this is a suffix rather than a migration.
+// never change, so the old files simply go unread; the cache is per-machine
+// and disposable, which is why this is a suffix rather than a migration.
 const CACHE_SHAPE = 'v3-annotations'
 
 function cached(runId, fetch) {
@@ -46,7 +59,11 @@ function cached(runId, fetch) {
   } catch {
     const value = fetch()
     mkdirSync(CACHE_DIR, { recursive: true })
-    writeFileSync(file, JSON.stringify(value))
+    // Sessions in different worktrees now share the directory, so a reader
+    // must never see a half-written file: write beside it and rename.
+    const staging = `${file}.${process.pid}.tmp`
+    writeFileSync(staging, JSON.stringify(value))
+    renameSync(staging, file)
     return value
   }
 }
@@ -77,19 +94,14 @@ function gitInspector() {
   return (path, sinceIso) => {
     const files = git(['ls-files', `*${path}`]).split('\n').filter(Boolean)
     if (files.length === 0) return { state: 'missing' }
-    const landedSince = (lines) =>
-      lines
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => line.split('\t'))
-        .filter(([committedAt]) => committedAt > sinceIso)
-    const commits = landedSince(git(['log', base, '--format=%cI\t%s', '--', ...files]))
+    const commits = commitsLandedAfter(git(['log', base, '--format=%cI\t%s', '--', ...files]), sinceIso)
     // A later commit whose SUBJECT names the file, touching it or not: the
     // shape a root-cause fix has, and "fixed in <sha>" is what the report
     // otherwise has no way to record.
     const name = path.split('/').pop()
-    const naming = landedSince(
+    const naming = commitsLandedAfter(
       git(['log', base, '--format=%cI\t%s', '--fixed-strings', `--grep=${name}`]),
+      sinceIso,
     )
     const namedBy = naming[0]?.[1]
     if (commits.length === 0) return namedBy === undefined ? { state: 'unchanged' } : { state: 'unchanged', namedBy }
@@ -114,7 +126,7 @@ function mainPassedAfter() {
       'run', 'list', '--branch', 'main', '--workflow', 'ci', '--status', 'success',
       '--limit', '50', '--json', 'createdAt',
     ])
-    return (iso) => passed.some((run) => run.createdAt > iso)
+    return (iso) => runPassedAfter(passed, iso)
   } catch {
     return undefined
   }

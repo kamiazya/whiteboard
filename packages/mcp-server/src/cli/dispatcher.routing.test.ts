@@ -701,6 +701,18 @@ describe('dispatcher routing: unknown server subcommand', () => {
 })
 
 // ---------------------------------------------------------------------------
+// --help / -h → print usage on stdout and exit 0
+// ---------------------------------------------------------------------------
+describe('dispatcher routing: --help flag', () => {
+  it.each([['--help'], ['-h']])('prints usage and exits 0 for %s', async (flag) => {
+    const { result: exitCode, stdout, stderr } = await captureStdio(() => main([flag]))
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe(USAGE)
+    expect(stderr).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // --version / -v → print version and exit 0
 // ---------------------------------------------------------------------------
 describe('dispatcher routing: --version flag', () => {

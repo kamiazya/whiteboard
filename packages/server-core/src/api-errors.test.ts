@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { apiErrorBodySchema, apiErrorReason } from './api-errors.js'
+import { z } from 'zod'
+import { apiErrorBodySchema, apiErrorReason, issueText } from './api-errors.js'
 
 describe('apiErrorBodySchema', () => {
   it.each([
@@ -58,5 +59,16 @@ describe('apiErrorReason', () => {
     expect(apiErrorReason({ error: 'branch_conflict' })).toBeUndefined()
     expect(apiErrorReason({ oops: 1 })).toBeUndefined()
     expect(apiErrorReason(undefined)).toBeUndefined()
+  })
+})
+
+describe('issueText', () => {
+  it('prefixes the path of a nested issue and leaves a top-level one bare', () => {
+    const schema = z.object({ operator: z.object({ kind: z.string() }).strict() }).strict()
+    const nested = schema.safeParse({ operator: { kind: 'human', zzz: 1 } })
+    const top = schema.safeParse({ operator: { kind: 'human' }, zzz: 1 })
+    if (nested.success || top.success) throw new Error('expected refusals')
+    expect(issueText(nested.error.issues[0])).toBe('operator: Unrecognized key: "zzz"')
+    expect(issueText(top.error.issues[0])).toBe('Unrecognized key: "zzz"')
   })
 })

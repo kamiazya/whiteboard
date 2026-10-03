@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
+import { captureLogsForTests } from '../log.js'
 import { blobsRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import {
@@ -248,6 +249,25 @@ describe('the backup blob mirror', () => {
    * hashed to answer the same question, and hashing thumbnails is cheap
    * against copying them all every night, which is what happens today.
    */
+  it('leaves out a tenant whose id is not a name, rather than writing a manifest nothing can read', async () => {
+    const kept = await putBlob('ordinary tenant')
+    await putBlob('odd tenant', 'a\\b')
+    const backupDir = join(backupRoot, '2026-03-04T05-06-07.000Z')
+
+    const capture = captureLogsForTests('warning')
+    try {
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: backupDir })
+      expect(capture.records.some((record) => record.data?.tenantId === 'a\\b')).toBe(true)
+    } finally {
+      capture.restore()
+    }
+
+    expect(Object.keys((await readBackupBlobManifest(backupDir))?.tenants ?? {})).toEqual([
+      SELF_HOST_TENANT_ID,
+    ])
+    expect([...selfBlobs(await readBackupBlobManifest(backupDir))]).toEqual([kept])
+  })
+
   describe('files addressed by name', () => {
     async function putThumbnail(workspaceId: string, version: string, contents: string) {
       const dir = join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), workspaceId, 'versions')
@@ -299,6 +319,30 @@ describe('the backup blob mirror', () => {
           await readFile(join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2)), 'utf8'),
         ).toBeTruthy()
       }
+    })
+
+    it('leaves out a file whose path a restore would refuse, and says which', async () => {
+      // A backslash is not a path separator in the manifest's POSIX paths, so a
+      // file named with one cannot be written back; recording it would make the
+      // whole manifest unreadable and the pass a success over an unrestorable backup.
+      const dir = join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), '01JWORKSPACE00000000000000')
+      await mkdir(join(dir, 'versions'), { recursive: true })
+      await writeFile(join(dir, 'versions', 'a\\b.png'), 'odd name')
+      const kept = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'ordinary')
+      const backupDir = join(backupRoot, '2026-03-04T05-06-07.000Z')
+
+      const capture = captureLogsForTests('warning')
+      try {
+        await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: backupDir })
+        const refused = capture.records.find((record) => record.level === 'warning')
+        expect(refused?.data?.path).toBe('01JWORKSPACE00000000000000/versions/a\\b.png')
+      } finally {
+        capture.restore()
+      }
+
+      expect(selfFiles(await readBackupBlobManifest(backupDir))).toEqual({
+        '01JWORKSPACE00000000000000/versions/v1.png': kept,
+      })
     })
 
     it('does not re-copy a named file whose content has not changed', async () => {

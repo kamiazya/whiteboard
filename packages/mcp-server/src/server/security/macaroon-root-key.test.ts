@@ -154,8 +154,8 @@ describe('createMacaroonRootKey — the key does not reach the log', () => {
 
 // The reachability half of `secret-file-mode.test.ts`: that module's own
 // tests pass whether or not either key store ever calls it, which is the
-// exact shape that let this PR ship a verification path with no production
-// caller. These two assert the CALL.
+// exact shape that lets a verification path ship with no production caller.
+// These two assert the CALL.
 describe('createMacaroonRootKey refuses a leaked key file', () => {
   it.skipIf(!CHMOD_IS_OBSERVABLE)(
     'throws on a group-readable root key instead of rotating past it',

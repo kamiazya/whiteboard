@@ -107,7 +107,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/files.ts -> file-gc',
   'routes/files.ts -> version-store',
   'routes/files.ts -> workspace-lock',
-  'routes/runtime.ts -> document-store',
   // Mechanics kept outside `store/`, counted since the scan learned to look
   // for them. Each is a row-keeping store or a disk layout a route holds by
   // type or by value; none is an operation a second surface would re-write
@@ -223,8 +222,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Then 29 -> 28, when `createApp` began handing the runtime route its storage
  * report as a dependency instead of the route importing the disk walk.
+ *
+ * Then 28 -> 27, when it handed the route the compaction stamp the same way
+ * (`readLatestCompactedAt`), so the route opens no workspace record itself.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 28
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 27
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

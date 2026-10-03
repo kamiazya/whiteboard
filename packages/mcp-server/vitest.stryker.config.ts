@@ -26,13 +26,6 @@ export default mergeConfig(
         '**/cli/dispatcher-server-run.test.ts',
       ],
       environment: 'node',
-      // Stryker runs this package's own `vitest`, whose peer set differs from
-      // the one `@fast-check/vitest` binds to through `model`'s test-utils. Left
-      // external, the two are different instances and every property test
-      // fails to load ("failed to find the current suite") — measured as 31 of
-      // 33 fast-check files. Inlining it resolves `vitest` through this
-      // project, so there is one.
-      server: { deps: { inline: ['@fast-check/vitest'] } },
       // Pins the property seed: Stryker re-selects tests by title, and the
       // seed is in it. See `vitest.stryker-setup.ts`.
       setupFiles: ['./vitest.stryker-setup.ts'],

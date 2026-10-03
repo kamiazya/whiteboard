@@ -103,13 +103,11 @@ it('Escape and empty-space clicks clear the edge selection without deleting', as
 })
 
 it('Shift-clicking a node ADDS it to a held edge selection, and Delete takes both', async () => {
-  // This test pinned the OPPOSITE contract until 2026-09-19, when the user
-  // decided to open shift for edges. The exclusivity it guarded was never
-  // about the gesture: Delete processed a selected edge first, and later the
-  // lock dispatched to a single one, so a surviving edge meant the wrong
-  // thing got the verb. Both take the whole selection now, so the reason is
-  // gone. Rewritten rather than deleted, because a reader finding the old
-  // title in `git log` should land on what replaced it.
+  // Shift opens a held edge selection to nodes rather than excluding them.
+  // An exclusive selection was never about the gesture: Delete processed a
+  // selected edge first, and later the lock dispatched to a single one, so a
+  // surviving edge meant the wrong thing got the verb. Both take the whole
+  // selection, so nothing is left to protect by excluding.
   const { Host, latest } = makeEditorHost({ initial: makeStart() })
   const { container } = render(<Host />)
 

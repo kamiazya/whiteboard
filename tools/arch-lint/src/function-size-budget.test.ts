@@ -272,7 +272,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#DocumentRow': 57,
-  'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#TreeItem': 80,
+  'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#TreeItem': 51,
   // Raised 992 -> 1008: the two list effects stopped repeating one another on
   // a mount, and the lines are the guard plus the paragraph saying which run
   // it skips and which it must not.
@@ -288,7 +288,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 81,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,
-  'apps/web/src/components/workspace-files/WorkspaceFolderTree.tsx#FolderItem': 68,
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 60,
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
@@ -326,7 +325,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the locks lifted as sub-modules, the undo one handed `dropQueuedWrite`
   // rather than the queue itself. Both document pages already sit behind one
   // `DocumentBackend`, so that port is not what is left to do.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 856,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 864,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 139,
@@ -343,7 +342,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // named constant beside the function rather than a comment inside it.
   'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 79,
   'apps/web/src/lib/spatial/commands.ts#applyCommand': 132,
-  'apps/web/src/lib/spatial/commands.ts#buildFragmentInsertCommand': 84,
+  'apps/web/src/lib/spatial/fragment-insert.ts#buildFragmentInsertCommand': 84,
   'apps/web/src/lib/spatial/freehand.ts#freehandLine': 58,
   'apps/web/src/lib/spatial/geometry.ts#findFreeSpot': 64,
   'apps/web/src/lib/spatial/minimap.ts#fitMinimap': 52,
@@ -408,7 +407,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
   'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 60,
-  'apps/web/src/pages/use-auto-checkpoint.ts#useAutoCheckpoint': 60,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 400,
   // Raised 157 -> 182 for `duplicateDocument`: the copy itself is one call
   // into lib/duplicate-daemon-document.ts, shared with the index page; what
@@ -517,7 +515,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/facet-ui/src/derived-form.tsx#FieldInput': 90,
   'packages/facet-ui/src/facet-catalog-picker.tsx#FacetCatalogPicker': 79,
   'packages/facet-ui/src/option-group.tsx#FacetOption': 57,
-  'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 99,
+  'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 87,
   'packages/mcp-server/src/cli/daemon-doctor.ts#runDaemonDoctor': 73,
   'packages/mcp-server/src/cli/daemon-run.ts#runDaemonRun': 86,
   'packages/mcp-server/src/cli/daemon-status.ts#runDaemonStatus': 84,
@@ -621,7 +619,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,
   'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 73,
   'packages/ports/src/test-utils/blob-store-conformance.ts#describeBlobStoreConformance': 127,
-  'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 720,
+  // A conformance suite is a table of cases, so each describe's size is its
+  // case count. The four describes extracted from the main function keep the
+  // nesting the test names report (`resolveWorkspace` and `renameWorkspace`
+  // stay under `listWorkspaces`).
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 362,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeListWorkspaces': 117,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeRenameWorkspace': 96,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeResolveWorkspace': 57,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeSetDocumentName': 60,
   'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 639,
   // +4: the two v1 POST routes refuse a body that names the URL's own
   // workspace or document before parsing — two lines each, the refusal

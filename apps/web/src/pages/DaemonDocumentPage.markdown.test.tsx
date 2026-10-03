@@ -1,7 +1,7 @@
 /**
  * A markdown-kind document opened in daemon mode must get the MARKDOWN
  * editor. Before this branch existed the page always mounted SpatialEditor,
- * so a note created by an agent (wb_document_create + wb_body_patch) opened
+ * so a note created by an agent (`wb_workspace_edit` + `wb_body_edit`) opened
  * as an empty spatial canvas — and drawing on it corrupted the document.
  */
 
@@ -35,8 +35,8 @@ const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 
 /**
- * A daemon-held markdown document in the shape `wb_document_set` actually
- * writes: the body in the `body` text container, and NOT as a text node of
+ * A daemon-held markdown document in the shape `wb_workspace_edit`'s
+ * `document.set` actually writes: the body in the `body` text container, and NOT as a text node of
  * the spatial canvas. The distinction is the whole point of this fixture —
  * an agent-authored document that opened empty here is exactly the interop
  * defect the one-writer rule exists to prevent.

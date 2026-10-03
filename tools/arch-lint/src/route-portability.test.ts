@@ -155,6 +155,7 @@ const PORTABLE_ROUTES_IN_MCP_SERVER: Readonly<Record<string, PortableRoute>> = {
   'document/trash.ts': { role: 'router', blockedBy: [HANDLE, LOG] },
   'document/workspaces.ts': { role: 'router', blockedBy: [HANDLE, LOG, OS_IN_SHARED] },
   'mcp.ts': { role: 'router', blockedBy: [LOG, MCP_SERVER, PROCESS_IN_HELPERS] },
+  'runtime.ts': { role: 'router', blockedBy: [BUFFER_IN_TIMING, CRYPTO_IN_TIMING] },
   'sync-sse.ts': { role: 'router', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
   'status.ts': { role: 'router', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
   'workspace-people.ts': { role: 'router', blockedBy: [BUFFER_IN_SSE, HANDLE, LOG] },
@@ -183,7 +184,7 @@ const CUT_SEAMS: Readonly<Record<string, string>> = {
  * it is lowered, so the number keeps saying where the lift stands. The same
  * shape as `ADAPTERS_REACHING_MECHANICS_CEILING`.
  */
-const PORTABLE_ROUTES_CEILING = 12
+const PORTABLE_ROUTES_CEILING = 13
 
 /**
  * What the closure says, pinned by equality for the same reason: a file

@@ -143,9 +143,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `element-verb-parity.test.ts` holds every verb to every collection, and a
   // stroke stores as much as a relation does. What has already left: which
   // collection a selected ink id came from (`ink-commands.ts`) and the tag
-  // list rules (`lib/spatial/tags.ts`). The next shrink is the line arms
-  // leaving as a sibling the way the ink-id family did.
-  'apps/web/src/lib/spatial/commands.ts': 1504,
+  // list rules (`lib/spatial/tags.ts`), the z-order block (`z-order.ts`) and
+  // the paste/duplicate builder (`fragment-insert.ts`). The next shrink is the
+  // line arms leaving as a sibling the way the ink-id family did.
+  'apps/web/src/lib/spatial/commands.ts': 1314,
   // The markdown host: CodeMirror's extensions, the preview column and the
   // conversation and proposal markers drawn beside it. What has a seam has
   // already left — the pane scroll sync and the preview geometry it shares
@@ -188,7 +189,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `dropQueuedWrite`, because the debounce timer and the queue stay closed
   // over by the factory (`function-size-budget.test.ts` carries the same path
   // for `createDocumentSyncSession`).
-  'apps/web/src/lib/document-sync-session.ts': 1159,
+  'apps/web/src/lib/document-sync-session.ts': 1167,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
@@ -346,12 +347,12 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2768 -> 2855 for the three cases pinning that undo: the document
   // agreeing with the screen after an undo and after a redo, and a taken-back
   // write settling as saved rather than reading as pending forever.
-  'apps/web/src/lib/document-sync-session.test.ts': 2850,
+  'apps/web/src/lib/document-sync-session.test.ts': 2662,
   // One example per rule of every command arm, ink included: a table of ink
   // verbs where every row is one example is what stops the next one being
   // added without one. It grows one row per verb the parity matrix reports,
   // which is the growth it is for.
-  'apps/web/src/lib/spatial/commands.test.ts': 2072,
+  'apps/web/src/lib/spatial/commands.test.ts': 1681,
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.
@@ -403,7 +404,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and why its follow report costs wire bytes and no visible ones — the
   // prose a pinned scoreboard carries instead of a changelog.
   // 963 -> 966: `wb_canvas_edit`'s row and the two totals say why they moved +58.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 966,
+  // 966 -> 994: the rows for the readable annotation layer, the snapshot's
+  // dressing and the in-place rename, each with why it moved.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 994,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
@@ -424,9 +427,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3143 -> 3176: the agent-activity summary's only assertion was
   // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
   // pinning its wording and order.
-  // 3176 -> 3177: `ViewportRequest` moved to its own module, so the import
-  // it shared with ServerDeps became two.
-  'packages/server-core/src/tools/canvas-edit.test.ts': 3177,
+  // The describes that stand alone (`region.set`, `node.add within a group`,
+  // line ops) live in `canvas-edit.<topic>.test.ts` siblings over
+  // `_test-canvas-edit.ts`; what remains is the tool's core and sizing cases.
+  'packages/server-core/src/tools/canvas-edit.test.ts': 1948,
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 
@@ -489,7 +493,11 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the
   // distribution smokes' helpers did.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2678,
+  // 2678 -> 2735: the steps that read a markdown thread back through
+  // `wb_document_get`, rename a spatial board in place, read an edge facet
+  // through the snapshot, and the session-end checkpoint phase (whose body
+  // lives in `smoke/lib`).
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2735,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

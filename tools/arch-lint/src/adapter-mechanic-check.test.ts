@@ -1,8 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, posix, relative } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
+import { adapterFiles } from './adapter-files.js'
 import { findAdapterMechanicEdges } from './adapter-mechanic-check.js'
+import { ADAPTER_ENTITLED_MECHANICS } from './adapter-reach.js'
 import {
   ADAPTER_HELPER_FILES,
   ADAPTER_SCAN_EXEMPT_FILES,
@@ -140,8 +142,8 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
         // adapter reading a bearer header or a credential type is translating.
         "import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'",
         "import type { DaemonIdentity } from '../security/daemon-identity.js'",
-        // A tenant id is a value, not the layout that places files by it.
-        "import { SELF_HOST_TENANT_ID } from '../tenant/id.js'",
+        // A layout seam is a value, not the layout that places files by it.
+        "import type { DataLayout } from '../tenant/data-layout-seam.js'",
         'export const x = [resolveDefaultDataDir, workspaceFilesDir]',
       ].join('\n'),
     )
@@ -188,8 +190,8 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
         "import { computeStorageReport } from '../tenant/storage-report.js'",
         "import { workspaceRoles } from '../security/workspace-roles.js'",
         "import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'",
-        "import { SELF_HOST_TENANT_ID } from '../tenant/id.js'",
-        'export const x = [deleteUser, writeSecretFileAtomicSync, computeStorageReport, workspaceRoles, parseBearerAuthorizationHeader, SELF_HOST_TENANT_ID]',
+        "import type { DataLayout } from '../tenant/data-layout-seam.js'",
+        'export const x = [deleteUser, writeSecretFileAtomicSync, computeStorageReport, workspaceRoles, parseBearerAuthorizationHeader]',
       ].join('\n'),
     )
 
@@ -325,6 +327,33 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
       'an entry in ADAPTER_HELPER_FILES is imported by no adapter, or the file is gone — ' +
         'it is not an adapter helper. Delete it.',
     ).toEqual([...ADAPTER_HELPER_FILES])
+  })
+
+  // The entitlement list is a set of permissions, and the layer-order test only
+  // checks that each names a module that exists. One no adapter imports is a
+  // permission nobody uses, so it stays until it is needed and then lets a
+  // mechanic in unreviewed.
+  it('every entitled module is imported by at least one adapter', () => {
+    const imported = new Set<string>()
+    for (const file of [
+      ...adapterFiles(SERVER_DIR),
+      ...ADAPTER_HELPER_FILES.map((helper) => join(SERVER_DIR, helper)),
+    ]) {
+      const from = relative(SERVER_DIR, file).split('\\').join('/')
+      for (const { specifier } of collectRelativeImportEdges(file, readFileSync(file, 'utf8'))) {
+        imported.add(posix.normalize(posix.join(dirname(from), specifier)).replace(/\.js$/, ''))
+      }
+    }
+    expect(imported.size).toBeGreaterThan(50)
+
+    const unused = ADAPTER_ENTITLED_MECHANICS.flatMap(({ modules }) => modules).filter(
+      (module) => !imported.has(module),
+    )
+    expect(
+      unused,
+      'an entitlement in ADAPTER_ENTITLED_MECHANICS is imported by no adapter — delete it, ' +
+        'and name it again in the change that first needs it.',
+    ).toEqual([])
   })
 
   // Guarded from both sides too. An exemption is a CLASSIFICATION — "this

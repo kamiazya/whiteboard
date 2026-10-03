@@ -4,8 +4,11 @@ import {
   type CanvasEdge,
   canvasColorSchema,
   canvasCommentSchema,
+  canvasEdgeSchema,
   documentIdSchema,
+  type ExtensionFacets,
   edgeEndSchema,
+  extensionFacetsSchema,
   frameLabel,
   lineEndSchema,
   type NodeKind,
@@ -39,6 +42,16 @@ export const SNAPSHOT_MAX_NODES = 300
 export const SNAPSHOT_MAX_EDGES = 600
 
 /**
+ * What dresses an element rather than places it: its facet buckets (a shape,
+ * a stencil, a stroke) and its tags. Optional and omitted when empty, for the
+ * reason `locked` is — a board of plain boxes pays nothing for them.
+ */
+const dressingFields = {
+  facets: extensionFacetsSchema.optional(),
+  tags: z.array(z.string()).optional(),
+}
+
+/**
  * `locked` and `textTruncated` are `z.literal(true).optional()` rather than
  * plain booleans: this payload is sized for an agent's context window, and
  * emitting `false` on every node of a 300-node board costs more than the
@@ -63,6 +76,7 @@ const canvasSnapshotNodeSchema = z
     url: z.string().optional(),
     color: canvasColorSchema.optional(),
     locked: z.literal(true).optional(),
+    ...dressingFields,
     /**
      * The node's content does not fit the box it is drawn in, so the editor
      * paints its last surviving line under a fade and the rest is invisible.
@@ -111,6 +125,9 @@ const canvasSnapshotEdgeSchema = z
     label: z.string().optional(),
     color: canvasColorSchema.optional(),
     locked: z.literal(true).optional(),
+    /** Hand-placed waypoints; absent when the route is computed. */
+    bends: canvasEdgeSchema.shape.bends,
+    ...dressingFields,
   })
   .strict()
 
@@ -179,6 +196,21 @@ type SnapshotNodeBase = {
   readonly height: number
   readonly color?: string
   readonly locked?: true
+  readonly facets?: ExtensionFacets
+  readonly tags?: string[]
+}
+
+/** Only what is there: an empty bucket or an empty tag list says nothing. */
+function dressing(element: {
+  readonly facets?: ExtensionFacets
+  readonly tags?: readonly string[]
+}) {
+  const hasFacets = element.facets !== undefined && Object.keys(element.facets).length > 0
+  const hasTags = element.tags !== undefined && element.tags.length > 0
+  return {
+    ...(hasFacets ? { facets: element.facets } : {}),
+    ...(hasTags ? { tags: [...(element.tags ?? [])] } : {}),
+  }
 }
 
 function projectNode(
@@ -195,6 +227,7 @@ function projectNode(
     height: node.height,
     ...(node.color === undefined ? {} : { color: node.color }),
     ...(locked ? { locked: true as const } : {}),
+    ...dressing(node),
   }
 
   // An unreadable resource has no row of its own; it projects as the frame
@@ -255,6 +288,8 @@ function projectEdge(edge: CanvasEdge, locked: boolean): z.infer<typeof canvasSn
     ...(edge.label === undefined ? {} : { label: edge.label }),
     ...(edge.color === undefined ? {} : { color: edge.color }),
     ...(locked ? { locked: true as const } : {}),
+    ...(edge.bends === undefined ? {} : { bends: edge.bends }),
+    ...dressing(edge),
   }
 }
 
@@ -321,7 +356,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_snapshot' as const,
     description:
-      'Read a spatial canvas as a compact snapshot: every node with its type, text, geometry and lock state, plus every edge. Long text and large boards are cut, and the true totals are reported alongside so nothing is hidden silently. Prefer this over wb_document_get when reading a canvas to decide what to change.',
+      'Read a spatial canvas as a compact snapshot: every node with its type, text, geometry, lock state, facets and tags, plus every edge with its bends. Long text and large boards are cut, and the true totals are reported alongside so nothing is hidden silently. Comments hold only the opening message of a thread; wb_document_get has them whole. Prefer this over wb_document_get when reading a canvas to decide what to change.',
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {

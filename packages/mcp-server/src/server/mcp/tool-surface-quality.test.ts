@@ -419,7 +419,9 @@ describe('what the tool table costs to read', () => {
         // -4857 on the merge, the input convergence and the resource fold
         // together — the same two causes as `canvas_view`'s row, arriving
         // here through the echo this tool's output carries.
-        wireBytes: 33842,
+        // +221 wire: its answer is the board it produced, and the snapshot now
+        // carries facets, tags and bends (see wb_canvas_snapshot). Output only.
+        wireBytes: 34063,
         descriptionWords: 169,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
@@ -434,28 +436,40 @@ describe('what the tool table costs to read', () => {
       // carries edges, so the endpoint union costs the client on connect and
       // the model nothing on every turn. Same for `canvas_view` above.
       wb_canvas_snapshot: {
-        visibleBytes: 705,
+        // +113 visible: the description names what a snapshot node now carries
+        // (facets, tags; bends on an edge) and where the full conversations are.
+        // What it buys is the read a blind agent was told to make and could
+        // not: a node dressed as a diamond, a stencilled box, a tag, a bend
+        // all left no trace in the snapshot, so "read the board instead" of
+        // looking at the render was a promise the payload did not keep.
+        // +521 wire from the same output fields.
+        visibleBytes: 818,
         // +1,303 wire: the snapshot answers with `lines` now. It did not,
         // which meant a model could write ink through `wb_canvas_edit` and
         // had no way to read it back — a write with no read is half a
         // capability, and the wire is where that costs.
-        wireBytes: 5532,
-        descriptionWords: 53,
+        wireBytes: 6053,
+        descriptionWords: 71,
         parameters: 3,
         undescribed: 3,
         strays: 'refused',
         names: ['wb_document_get'],
       },
       wb_document_get: {
-        visibleBytes: 979,
+        // +137 visible, +2,537 wire: each result carries the document's comment
+        // `threads` whole. This is the read an agent had no tool for on a
+        // markdown note (C5: an errand step with no tool behind it), and the
+        // one widening that costs no input byte, where a `thread.list` op on
+        // `wb_thread_edit` would have put a read arm inside a write tool.
+        visibleBytes: 1116,
         // +63: the `ExtensionFacets` registration is a NET COST here, and
         // saying so is the point of an exact pin. A `$defs` entry plus a
         // `$ref` is dearer than one inlined copy, so a tool holding the
         // record once pays for the dedup the repeat-heavy tools collect. The
         // table-wide figure is what the registration is judged on (-1,408
         // wire, -16 visible); this row is where it is paid.
-        wireBytes: 2820,
-        descriptionWords: 63,
+        wireBytes: 5357,
+        descriptionWords: 86,
         parameters: 4,
         undescribed: 3,
         strays: 'refused',
@@ -648,15 +662,19 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_thread_edit: {
-        visibleBytes: 3375,
+        // +114 visible, +2,202 wire: the output is the threads whole (anchor,
+        // status, every message with author and time) where it was a count,
+        // so "Returns every thread the document holds" is true. The
+        // description now names the read that writes nothing.
+        visibleBytes: 3489,
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 3966,
-        descriptionWords: 122,
+        wireBytes: 6168,
+        descriptionWords: 138,
         parameters: 32,
         undescribed: 25,
         strays: 'refused',
-        names: [],
+        names: ['wb_document_get'],
       },
       // The version tools and wb_facet_set are the ones whose every
       // parameter is described. They are the shape to copy.
@@ -716,10 +734,14 @@ describe('what the tool table costs to read', () => {
         // follow report (what was rewritten, what could not be, or the error
         // that stopped the pass) — output only, so the model reads nothing
         // more and the client receives what the op's description promised.
-        visibleBytes: 2759,
-        wireBytes: 4303,
-        descriptionWords: 45,
-        parameters: 21,
+        // +187 on both, +1 parameter (described): `name` on the `document.move`
+        // arm, and `path` optional. A spatial document has no frontmatter
+        // `title`, so a rename of one had no tool at any price (C5); the web
+        // app renames both kinds.
+        visibleBytes: 2946,
+        wireBytes: 4490,
+        descriptionWords: 47,
+        parameters: 22,
         undescribed: 16,
         strays: 'refused',
         names: [],
@@ -909,7 +931,11 @@ describe('what the tool table costs to read', () => {
       // Then +412 for `wb_workspace_edit`'s `document.move` arm, priced at
       // its own row.
       // Then +58 for `wb_canvas_edit`'s two nested objects refusing a stray key.
-      visibleBytes: 38996,
+      // +551 for the annotation layer becoming readable (`threads` on
+      // wb_document_get and wb_thread_edit), the snapshot saying what it
+      // carries, and a rename for a spatial document (see those rows): three
+      // errands that had no tool behind a step, none of them costing a call.
+      visibleBytes: 39547,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -929,8 +955,10 @@ describe('what the tool table costs to read', () => {
       // to the default (five `false` at +24, wb_version_restore `true` at +23):
       // the annotation is client-side, so visibleBytes does not move.
       // Then +58 wire, the same bytes as visible.
-      wireBytes: 109677,
-      parameters: 343,
+      // +5,668: the thread shape twice (output only) and the snapshot's
+      // facets, tags and bends wherever a board is answered.
+      wireBytes: 115345,
+      parameters: 344,
       undescribed: 219,
     })
   })

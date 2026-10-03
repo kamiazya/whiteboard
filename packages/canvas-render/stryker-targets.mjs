@@ -106,6 +106,35 @@ export const MUTATED = [
 ]
 
 /**
+ * The share of `files` one leg of the weekly run mutates, from a `k/n`
+ * spec (1-based): `shardOf(MUTATED, '2/4')`. No spec means everything, which
+ * is what a local `pnpm mutation:render` wants.
+ *
+ * Dealt in a snake (0..n-1, then n-1..0) rather than round-robin or in
+ * contiguous slices: the list is grouped by subject and the heavy files sit
+ * at its ends (the edge router first, the sketch ink last), so slices put the
+ * whole router on one runner and a plain round-robin pairs the two heaviest.
+ * Every leg of a spec reads the same list, so the legs partition it exactly.
+ *
+ * @param {readonly string[]} files
+ * @param {string | undefined} spec
+ */
+export function shardOf(files, spec) {
+  if (spec === undefined || spec === '') return [...files]
+  const match = /^(\d+)\/(\d+)$/.exec(spec)
+  const shard = Number(match?.[1])
+  const total = Number(match?.[2])
+  if (match === null || shard < 1 || shard > total) {
+    throw new Error(`shard spec must be "k/n" with 1 <= k <= n, got "${spec}"`)
+  }
+  return files.filter((_, index) => {
+    const row = Math.floor(index / total)
+    const column = index % total
+    return (row % 2 === 0 ? column : total - 1 - column) === shard - 1
+  })
+}
+
+/**
  * Survivors that NO test can kill, because the mutation does not change what
  * the code does. They are a real triage answer rather than debt, and without
  * somewhere to record them the same set is re-investigated every time the

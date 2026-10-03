@@ -1,6 +1,11 @@
 import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
-import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import { documentIdSchema, documentKindSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { readAnnotations, readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  commentThreadSchema,
+  documentIdSchema,
+  documentKindSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
@@ -44,6 +49,11 @@ const readDocumentSchema = z
     // Canvas document has none (ADR-0009 decision 3) — an always-present
     // field would have to invent one.
     frontmatter: okfMarkdownFrontmatterSchema.optional(),
+    // The annotation layer, whole, on either kind: neither format's `content`
+    // carries it, so this is the one read an agent has of what people said
+    // about a document. Absent when there is none, so an uncommented
+    // document costs no bytes.
+    threads: z.array(commentThreadSchema).optional(),
   })
   .strict()
 
@@ -93,7 +103,7 @@ export function createDocumentGetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_get' as const,
     description:
-      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. A document that cannot be read is reported in `failed` rather than failing the whole call.',
+      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), when it has any. A document that cannot be read is reported in `failed` rather than failing the whole call.',
     inputSchema: documentGetInputSchema,
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
@@ -134,17 +144,25 @@ async function readOne(
   if (kind === undefined) {
     throw new DocumentKindUnknownError(documentId)
   }
+  const threads = readAnnotations(doc)
+  const annotated = threads.length === 0 ? {} : { threads }
   if (kind === 'markdown') {
     const { markdown, frontmatter } = await exportOkf(deps, {
       workspaceId: input.workspaceId,
       documentId,
     })
-    return { documentId, kind, content: markdown, ...(frontmatter ? { frontmatter } : {}) }
+    return {
+      documentId,
+      kind,
+      content: markdown,
+      ...(frontmatter ? { frontmatter } : {}),
+      ...annotated,
+    }
   }
   const { json } = await exportJsonCanvas(deps, {
     workspaceId: input.workspaceId,
     documentId,
     ...(input.options ? { options: input.options } : {}),
   })
-  return { documentId, kind, content: json }
+  return { documentId, kind, content: json, ...annotated }
 }

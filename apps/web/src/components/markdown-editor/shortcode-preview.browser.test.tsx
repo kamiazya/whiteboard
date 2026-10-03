@@ -7,11 +7,10 @@
  * projects have already pinned the projection itself. What only this layer
  * can say is that the pane a person looks at is wired to it.
  *
- * Verified by hand at the same time (`tmp/screenshots` at the time of
- * writing): 🚀 🔥 🤔 😀 all came out in COLOUR here, unlike the facet
- * picker's chips, which inherited a stack resolving to DejaVu Sans. Nothing
- * here can assert that — no API reports which face won — so it is recorded
- * rather than pinned.
+ * Whether the emoji come out in COLOUR is not asserted here: no API reports
+ * which face won, and a facet picker chip whose font stack resolves to
+ * DejaVu Sans draws the same glyph monochrome. That is checked by eye, not
+ * pinned.
  */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'

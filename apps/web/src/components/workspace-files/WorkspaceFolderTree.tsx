@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, Folder } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Folder } from 'lucide-react'
+import { useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
+import { TreeItemShell } from './TreeItemShell.js'
 
 export interface WorkspaceFolderTreeProps {
   documents: readonly WorkspaceDocumentEntry[]
@@ -74,38 +75,13 @@ function FolderItem({
   onSelectFolder: (path: string) => void
   selectedFolder?: string
 }) {
-  const [expanded, setExpanded] = useState(true)
-  const hasChildren = node.children.length > 0
-
   return (
-    // Generic containers carry the ARIA tree roles (APG tree pattern):
-    // biome's a11y rules reject interactive roles on semantic ul/li.
-    // tabIndex satisfies useFocusableInteractive; actual keyboard operation
-    // happens through the nested native buttons, which are tabbable.
-    <div
-      role="treeitem"
-      tabIndex={-1}
-      aria-expanded={hasChildren ? expanded : undefined}
-      aria-label={node.name}
-    >
-      <div className="flex items-center gap-1">
-        {hasChildren ? (
-          <button
-            type="button"
-            data-testid={`tree-toggle-${node.path.replaceAll('/', '-')}`}
-            aria-label={expanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
-            onClick={() => setExpanded((prev) => !prev)}
-            className="text-muted-foreground hover:text-foreground rounded p-0.5"
-          >
-            {expanded ? (
-              <ChevronDown className="size-3.5" />
-            ) : (
-              <ChevronRight className="size-3.5" />
-            )}
-          </button>
-        ) : (
-          <span className="w-[1.125rem]" aria-hidden="true" />
-        )}
+    <TreeItemShell
+      path={node.path}
+      name={node.name}
+      label={node.name}
+      hasChildren={node.children.length > 0}
+      row={
         <button
           type="button"
           aria-label={`Open folder ${node.name}`}
@@ -116,21 +92,17 @@ function FolderItem({
           <Folder className="text-muted-foreground size-3.5 shrink-0" />
           <span className="truncate">{node.name}</span>
         </button>
-      </div>
-      {hasChildren && expanded && (
-        // biome-ignore lint/a11y/useSemanticElements: role="group" inside a role="tree" is the APG tree pattern; the suggested semantic elements (fieldset/optgroup) are invalid tree children
-        <div role="group" className="border-border/60 ml-3 border-l pl-2">
-          {node.children.map((child) => (
-            <FolderItem
-              key={child.path}
-              node={child}
-              onSelectFolder={onSelectFolder}
-              selectedFolder={selectedFolder}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      }
+    >
+      {node.children.map((child) => (
+        <FolderItem
+          key={child.path}
+          node={child}
+          onSelectFolder={onSelectFolder}
+          selectedFolder={selectedFolder}
+        />
+      ))}
+    </TreeItemShell>
   )
 }
 

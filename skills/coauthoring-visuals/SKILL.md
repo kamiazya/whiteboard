@@ -69,10 +69,12 @@ If the content really wants to become a structured table, such as a comparison m
 ## Stage 2: Refinement & Structure
 
 The working unit is a **section** — one coherent question and its answer — not necessarily a whole
-document. The whiteboard MCP surface has no frame feature, so a section is either its own document
-(a `wb_workspace_edit` `document.create` op), or a region within one document marked with a `group`
-node (label + background; what it holds is whatever lies inside its bounds). `wb_scene_render` with
-`fragment` set to the group's label draws that one section on its own.
+document. A section is either its own document (a `wb_workspace_edit` `document.create` op), or a
+region within one document marked with a `group` node (label + background; what it holds is
+whatever lies fully inside its bounds, and `node.add` with `within` or `region.set` puts things
+there). `wb_scene_render` with `fragment` set to the group's label draws that one section on its
+own. A document's name is `wb_workspace_edit`'s `document.move` with `name` and no `path`
+(`path` as well moves it too), the only way to rename a spatial document.
 
 Default rule: 1 section = 1 question.
 Use this loop:
@@ -163,7 +165,10 @@ Stage 2 rules:
 Once a draft exists, break it as if you know nothing about the prior chat.
 Review either the whole document or one section at a time, but do it **while looking at the SVG
 `wb_scene_render` returns** (or, when you cannot view an image, what
-`wb_canvas_snapshot({ workspaceId, documentId, layout: true })` returns).
+`wb_canvas_snapshot({ workspaceId, documentId, layout: true })` returns, which also carries each
+node's facets and tags and each edge's bends, so how the board is dressed is readable too). When
+the person is in the chat and not in a browser, `canvas_view({ workspaceId, documentId })` shows
+the stored board inline where their client renders MCP Apps.
 
 Check:
 
@@ -206,6 +211,22 @@ Do not over-explain by dumping more text.
 Prefer **local whiteboard surgery** — `node.patch` / `edge.patch` / `node.remove` ops in one `wb_canvas_edit` call (`mode: "apply"`) — over redrawing everything.
 At this stage, prioritize the **second polish pass** over adding more nodes:
 composition, whitespace, alignment, and label density should get tighter before the board gets bigger.
+
+## Reading And Replying To Comments
+
+Someone reviewing the board in the document's annotation layer leaves comments, and a reply there
+is part of the loop: read them before you redraw, and answer in the thread rather than in chat.
+
+- **Read.** `wb_document_get({ workspaceId, documentIds: [documentId] })` returns, on each document of either
+  kind, a `threads` list: every thread whole, with its anchor (a node, an edge, a point, a quoted
+  passage, or the document as a whole), its `open` or `resolved` status, and every message with
+  author and time. A document nobody commented on has no `threads`. `wb_canvas_snapshot`'s
+  `comments` carry only each thread's opening message, so it is not the read for the conversation.
+- **Reply.** `wb_thread_edit({ workspaceId, documentId, ops: [{ op: "message.add", threadId, body }] })`.
+  Its answer is the document's threads, so you see the conversation you joined.
+- **Open or close.** `thread.add` opens a thread on an anchor, `thread.resolve` closes one
+  (`resolved: false` reopens it). Threads are never deleted, so resolve a thread once the change it
+  asked for has landed and say so in a final message.
 
 ## Quality Gate
 

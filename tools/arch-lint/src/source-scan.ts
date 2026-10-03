@@ -18,21 +18,33 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
-/** Every `.ts`/`.tsx` under `dir`, skipping `node_modules` and `dist`. */
+/**
+ * Every `.ts`/`.tsx` under `dir`, skipping `node_modules`, `dist` and `tmp`.
+ * `tmp` holds git-ignored scratch (a Stryker sandbox is a full copy of a
+ * package's source), and no tracked source lives in a directory of that name.
+ */
 export function walkSourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules' || entry === 'dist') continue
+      if (entry === 'node_modules' || entry === 'dist' || entry === 'tmp') continue
       walkSourceFiles(full, out)
     } else if (/\.(ts|tsx)$/.test(entry)) out.push(full)
   }
   return out
 }
 
-/** A test file, or a helper only tests import. */
+/**
+ * A test file, or a helper only tests import: a `test-utils` directory, or a
+ * `_test-*` basename beside the code it seeds (the shape
+ * `no-test-utils-in-production` admits as a test-only importer).
+ */
 export function isTestPath(path: string): boolean {
-  return /\.(test|spec)\.tsx?$/.test(path) || path.split(sep).includes('test-utils')
+  return (
+    /\.(test|spec)\.tsx?$/.test(path) ||
+    path.split(sep).includes('test-utils') ||
+    /^_test-.*\.tsx?$/.test(path.split(sep).at(-1) ?? '')
+  )
 }
 
 /**

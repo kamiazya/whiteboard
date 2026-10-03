@@ -148,15 +148,30 @@ export class SseBackend implements DocumentBackend {
   }
 
   private dispatchText(raw: string, handlers: DocumentBackendHandlers): void {
-    // The payload reuses the WebSocket parser so both transports agree on the
-    // shape and on what an unknown message does.
+    // The parser is the one definition of a text frame, so a frame whose type
+    // it does not know is dropped there; this switch is exhaustive so a type
+    // it does know cannot arrive here without a handler.
     const message = parseServerTextMessage(raw)
     if (message === null) return
-    if (message.type === 'version_created') handlers.onVersionCreated(message.version)
-    else if (message.type === 'restore_started') handlers.onRestoreStarted(message)
-    else if (message.type === 'restore_complete') handlers.onRestoreComplete()
-    else if (message.type === 'viewport_request') handlers.onViewportRequest(message)
-    else if (message.type === 'agent_activity') handlers.onAgentActivity?.(message)
+    switch (message.type) {
+      case 'version_created':
+        handlers.onVersionCreated(message.version)
+        return
+      case 'restore_started':
+        handlers.onRestoreStarted(message)
+        return
+      case 'restore_complete':
+        handlers.onRestoreComplete()
+        return
+      case 'viewport_request':
+        handlers.onViewportRequest(message)
+        return
+      case 'agent_activity':
+        handlers.onAgentActivity?.(message)
+        return
+      default:
+        message satisfies never
+    }
   }
 
   disconnect(): void {

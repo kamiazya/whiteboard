@@ -352,6 +352,10 @@ describe('checking the destination a person typed', () => {
   it('accepts plain http only for a keeper on this machine', () => {
     expect(parseDestination('http://localhost:3099', SELF_ORIGIN).ok).toBe(true)
     expect(parseDestination('http://127.0.0.1:3099', SELF_ORIGIN).ok).toBe(true)
+    expect(parseDestination('http://[::1]:7777', SELF_ORIGIN)).toEqual({
+      ok: true,
+      keeperBaseUrl: 'http://[::1]:7777',
+    })
     expect(parseDestination('http://keeper.example', SELF_ORIGIN).ok).toBe(false)
   })
   it('does not take a host that merely begins with a loopback name for this machine', () => {

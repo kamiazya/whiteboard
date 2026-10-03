@@ -3,10 +3,10 @@
  * ANOTHER KEEPER's workspace, identity and history intact.
  *
  * The destination is `keeperBaseUrl` and has always been a plain parameter.
- * It was called `daemonBaseUrl` until 2026-09-22 because the local daemon
- * was the only thing that could receive one — a name that made the transfer
- * read as daemon-shaped when nothing about it is. ADR-0023 makes the
- * destination the workspace's new KEEPER, so that is the word. A browser
+ * It is not called `daemonBaseUrl`: a daemon is only one kind of keeper, and
+ * a name saying so would make the transfer read as daemon-shaped when nothing
+ * about it is. ADR-0023 makes the destination the workspace's new KEEPER, so
+ * that is the word. A browser
  * transfers directly to a SaaS or a self-hosted server with no daemon hop
  * (user decision, 2026-09-22); the receiving route is not gated on
  * `authMode`, so server mode already answers it.
@@ -51,6 +51,7 @@ import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
+import { daemonContractError, logDaemonContractError } from './daemon-contract-error.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
 
@@ -216,7 +217,8 @@ async function promoteWorkspaceUnsafe(
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
   // plus the explicit checkpoints a person's move leaves behind.
-  const res = await fetch(`${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`, {
+  const promoteUrl = `${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`
+  const res = await fetch(promoteUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),
@@ -226,6 +228,7 @@ async function promoteWorkspaceUnsafe(
   }
   const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
   if (!promoted.success) {
+    logDaemonContractError(daemonContractError(promoteUrl, promoted.error))
     return { kind: 'failed', reason: 'The daemon answered the move with an unexpected response.' }
   }
 

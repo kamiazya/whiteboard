@@ -8,7 +8,8 @@ import type { CanvasLine, ClipboardFragment, SpatialCanvas } from '@kamiazya/whi
 import { canvasLineArbitrary, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
-import { applyCommand, buildFragmentInsertCommand } from './commands.js'
+import { applyCommand } from './commands.js'
+import { buildFragmentInsertCommand } from './fragment-insert.js'
 
 const rawNodeArb = fc.record({
   x: fc.integer({ min: -500, max: 500 }),

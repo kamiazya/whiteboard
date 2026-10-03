@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isLoopbackHost } from '../../../shared/loopback-host.js'
 
 export const DB_FILENAME = 'whiteboard.db'
 export const DB_URL_ENV = 'WHITEBOARD_DATABASE_URL'
@@ -14,8 +15,6 @@ export interface DatabaseLocation {
    *  reads as a server problem rather than a missing setting. */
   authToken?: string
 }
-
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
 
 /**
  * The database this instance opens.
@@ -55,7 +54,7 @@ export function resolveDatabaseLocation(
     throw new Error(`${DB_URL_ENV} is not a URL`)
   }
 
-  if (parsed.protocol === 'http:' && !LOOPBACK_HOSTS.has(parsed.hostname)) {
+  if (parsed.protocol === 'http:' && !isLoopbackHost(parsed.hostname)) {
     throw new Error(
       `${DB_URL_ENV} may only use http: for a loopback host; use libsql: or https: for a remote database`,
     )

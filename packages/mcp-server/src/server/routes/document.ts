@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto-version.js'
 import type { StoreScope } from '../store/store-scope.js'
-import { FileVersionStore, type VersionStore } from '../store/version-store.js'
+import type { VersionStore } from '../store/version-store.js'
 import { sendRestoreEvent, sendVersionCreated } from '../sync-audience.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
@@ -19,9 +19,9 @@ import { createWorkspacesRouter } from './document/workspaces.js'
 export type { AutoVersionTrigger }
 
 export interface DocumentRouterOptions {
-  // Allow tests to replace the store. Production passes the root's own, built
-  // over the same scope.
-  versionStore?: VersionStore
+  // Required: the root's own, built over `scope`. A router that built its own
+  // would be a second composition path only tests take.
+  versionStore: VersionStore
   // Auto-version interval in milliseconds. Tests can reduce it.
   /**
    * The pause after which a document's automatic checkpoint is taken. Tests
@@ -102,7 +102,7 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
 // (`shared-background-work.ts`), not here.
 export function createDocumentRouter(options: DocumentRouterOptions) {
   const app = new Hono()
-  const versionStore = options.versionStore ?? new FileVersionStore(options.scope)
+  const { versionStore } = options
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
 
   app.route('/', createWorkspacesRouter(workspacesRouterOptions(options)))

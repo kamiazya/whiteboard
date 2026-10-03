@@ -12,8 +12,11 @@
  * is in the dangerous direction, because a scan that cannot see a file
  * reports it clean.
  */
-import { describe, expect, it } from 'vitest'
-import { stripCommentsAndStrings } from './source-scan.js'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, relative } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
 describe('stripCommentsAndStrings — a regex literal is not a string', () => {
   // The exact shape that regressed, for both scan families: a seam
@@ -93,5 +96,47 @@ describe('stripCommentsAndStrings — what it still removes', () => {
   // scan looking for keys has to still see it.
   it('keeps a string body that is a single identifier', () => {
     expect(stripCommentsAndStrings("const k = { 'resolveAlias': 1 }")).toContain('resolveAlias')
+  })
+})
+
+// A package's `tmp/` is where a crashed or interrupted Stryker run leaves a
+// whole copy of the package's `src`, git-ignored and still on disk. A walk
+// that descends into it reads every file twice, and a rule that wants exactly
+// one definition of something fails on the copy.
+describe('walkSourceFiles', () => {
+  const roots: string[] = []
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+  })
+
+  function tree(files: readonly string[]): string {
+    const root = mkdtempSync(join(tmpdir(), 'source-scan-'))
+    roots.push(root)
+    for (const file of files) {
+      mkdirSync(join(root, file, '..'), { recursive: true })
+      writeFileSync(join(root, file), 'export const x = 1\n')
+    }
+    return root
+  }
+
+  const walked = (root: string): string[] =>
+    walkSourceFiles(root)
+      .map((path) => relative(root, path).split('\\').join('/'))
+      .sort()
+
+  it('reads .ts and .tsx source and nothing else', () => {
+    const root = tree(['src/a.ts', 'src/b.tsx', 'src/c.md', 'src/d.js'])
+    expect(walked(root)).toEqual(['src/a.ts', 'src/b.tsx'])
+  })
+
+  it('skips node_modules, dist and tmp at any depth', () => {
+    const root = tree([
+      'src/a.ts',
+      'node_modules/dep/index.ts',
+      'dist/index.ts',
+      'tmp/stryker-sandbox/sandbox-1/src/a.ts',
+      'pkg/tmp/probe/src/shared/redact.ts',
+    ])
+    expect(walked(root)).toEqual(['src/a.ts'])
   })
 })

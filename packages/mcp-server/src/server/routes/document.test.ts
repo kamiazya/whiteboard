@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
   resolveTestServerDeps,
+  testDocumentRouterOptions,
   testStoreScope,
   withTempDataDir,
 } from './_test-helpers.js'
@@ -45,11 +46,23 @@ describe('createDocumentRouter composition', () => {
     clearDocCacheForTests()
   })
 
+  // The router composes nothing of its own: the version store is the root's,
+  // so leaving it out is a compile error rather than a second composition path
+  // that only tests take. `typecheck:tests` is what holds this.
+  it('requires the version store the root builds', () => {
+    // @ts-expect-error versionStore is required
+    const options: Parameters<typeof createDocumentRouter>[0] = {
+      scope: testStoreScope(),
+      serverDeps,
+    }
+    expect(options).not.toHaveProperty('versionStore')
+  })
+
   it('serves a nested document path at /api/w/:workspaceId/document/*', async () => {
     // The path-addressed shape: the document path is the URL tail, one
     // segment per path segment, with the action suffix anchoring the parse.
     // A nested path is exactly what the old :path param could never match.
-    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps })
+    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     await createTestDocument(serverDeps, {
       workspaceId: 'ws1',
       path: 'notes/2026/plan',
@@ -76,7 +89,7 @@ describe('createDocumentRouter composition', () => {
     // match a nested path): versions, restore, compact, name, pin, rename,
     // delete. One scenario, so a regression in ANY of them on a nested path
     // is loud.
-    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps })
+    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     await createTestDocument(serverDeps, {
       workspaceId: 'ws1',
       path: 'notes/2026/plan',

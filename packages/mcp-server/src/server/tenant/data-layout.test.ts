@@ -10,7 +10,6 @@ import {
   blobsRoot,
   isAnyTenantBlobsPath,
   isBlobShardName,
-  isTenantBlobsRootUnderTenants,
   listTenants,
   moveLegacyDataDirUnderTenant,
   parseBlobShard,
@@ -44,24 +43,6 @@ describe('where a tenant keeps its files', () => {
   it('keeps one tenant out of another tenant root', () => {
     expect(tenantRoot(dataDir, SELF)).not.toBe(tenantRoot(dataDir, OTHER))
     expect(blobsRoot(dataDir, OTHER).startsWith(tenantRoot(dataDir, OTHER))).toBe(true)
-  })
-})
-
-describe('whether a tenant id builds a blob root directly under tenants/', () => {
-  it('accepts an ordinary tenant id, one that has no directory yet included', async () => {
-    expect(await isTenantBlobsRootUnderTenants(dataDir, SELF)).toBe(true)
-    expect(await isTenantBlobsRootUnderTenants(dataDir, '01JTENANT0000000000000000A')).toBe(true)
-  })
-
-  it.each([
-    ['climbs out of the data directory', '../../../outside'],
-    ['is the parent directory', '..'],
-    ['is the current directory', '.'],
-    ['is empty', ''],
-    ['holds a separator', 'a/b'],
-    ['climbs and comes back', 'a/../../b'],
-  ])('refuses a tenant id that %s', async (_why, tenantId) => {
-    expect(await isTenantBlobsRootUnderTenants(dataDir, tenantId)).toBe(false)
   })
 })
 

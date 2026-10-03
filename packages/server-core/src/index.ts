@@ -4,6 +4,7 @@ export {
   apiErrorReason,
   errorBody,
   invalidRequestBody,
+  issueText,
 } from './api-errors.js'
 export { createServer } from './create-server.js'
 export { countAliveNodes, countLegacyTombstones } from './document-counts.js'

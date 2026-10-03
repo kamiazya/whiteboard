@@ -4,6 +4,7 @@
  * https://developer.chrome.com/docs/extensions/reference/manifest
  */
 import { WHITEBOARD_GECKO_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
+import { version } from '../package.json'
 
 /**
  * The public half of the key the extension id is derived from, so a build
@@ -28,7 +29,7 @@ export function manifestFor(mode: BuildMode) {
     manifest_version: 3,
     name: 'Whiteboard',
     description: 'Connects the whiteboard app to the whiteboard daemon on this computer.',
-    version: '0.0.1',
+    version,
     key: EXTENSION_KEY,
     permissions: ['nativeMessaging'],
     background: { service_worker: 'background.js', type: 'module' },
@@ -47,7 +48,7 @@ export function firefoxManifestFor(mode: BuildMode) {
     manifest_version: 3,
     name: 'Whiteboard',
     description: 'Connects the whiteboard app to the whiteboard daemon on this computer.',
-    version: '0.0.1',
+    version,
     permissions: ['nativeMessaging'],
     background: { scripts: ['background.js'], type: 'module' },
     content_scripts: [

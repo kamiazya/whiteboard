@@ -70,6 +70,58 @@ export function failedLegFrom(annotation) {
   return match === null ? null : match[1]
 }
 
+/**
+ * Whether instant `a` is later than instant `b`.
+ *
+ * The Actions API stamps a run in UTC (`...Z`) while `git log --format=%cI`
+ * keeps the committer's own offset, and two ISO strings in different offsets
+ * do not order as text: `17:06Z` is eleven thousand seconds after
+ * `22:57+09:00` and sorts before it. Anything unparseable is "not later", so
+ * a malformed date never retires or counts a flake on a guess.
+ */
+export function instantIsAfter(a, b) {
+  const left = Date.parse(a)
+  const right = Date.parse(b)
+  return Number.isFinite(left) && Number.isFinite(right) && left > right
+}
+
+/** Whether any of the listed successful runs was created after `iso`. */
+export function runPassedAfter(passedRuns, iso) {
+  return passedRuns.some((run) => instantIsAfter(run.createdAt, iso))
+}
+
+/**
+ * The `%cI<TAB>subject` lines of a `git log` whose commit landed after
+ * `sinceIso`, as `[committedAt, subject]` pairs in log order.
+ */
+export function commitsLandedAfter(logOutput, sinceIso) {
+  return logOutput
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf('\t')
+      return tab === -1 ? [line, ''] : [line.slice(0, tab), line.slice(tab + 1)]
+    })
+    .filter(([committedAt]) => instantIsAfter(committedAt, sinceIso))
+}
+
+/**
+ * Where a run's cached annotations live.
+ *
+ * A completed run's annotations never change, so what one checkout fetched is
+ * every checkout's. The git common dir is the one directory all of a clone's
+ * worktrees share and none of them tracks, so a worktree created today reads
+ * what the main checkout fetched last week instead of paying the whole
+ * window's API round trips in a SessionStart hook. Without a git common dir
+ * (not a repository, git absent) the cache falls back to the checkout's own
+ * git-ignored `tmp/`.
+ */
+export function flakeCacheDir({ gitCommonDir, root }) {
+  return typeof gitCommonDir === 'string' && gitCommonDir !== ''
+    ? `${gitCommonDir.replace(/[\\/]+$/, '')}/flake-watch`
+    : `${root}/tmp/flake-watch`
+}
+
 /** A window entry's annotations, however the caller supplied them. */
 function annotationsOf(run) {
   if (Array.isArray(run.annotations)) return run.annotations
@@ -112,7 +164,7 @@ export function clusterFailures(window) {
     for (const [id, path] of keyed) {
       const entry = byId.get(id) ?? { id, path, runIds: [], latest: '' }
       entry.runIds.push(run.runId)
-      if (run.createdAt > entry.latest) entry.latest = run.createdAt
+      if (entry.latest === '' || instantIsAfter(run.createdAt, entry.latest)) entry.latest = run.createdAt
       byId.set(id, entry)
     }
   }

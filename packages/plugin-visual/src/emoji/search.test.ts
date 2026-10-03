@@ -17,6 +17,30 @@ describe('typing a name after a colon finds the emoji it names', () => {
     expect(codes('fire')[0]).toBe('fire')
   })
 
+  /**
+   * `:ro` scores `rocket` and `rolling_on_the_floor_laughing` alike; CLDR order
+   * alone would put the laughing face first, so the shorter name has to win.
+   */
+  it('puts the shorter shortcode first among equally good prefix matches', () => {
+    const prefixed = searchEmojiShortcodes('ro', 200)
+      .map((match) => match.shortcode)
+      .filter((shortcode) => shortcode.startsWith('ro'))
+    expect(prefixed.length).toBeGreaterThan(3)
+    expect(prefixed.indexOf('rocket')).toBeLessThan(
+      prefixed.indexOf('rolling_on_the_floor_laughing'),
+    )
+    const lengths = prefixed.map((shortcode) => shortcode.length)
+    expect(lengths).toEqual([...lengths].sort((a, b) => a - b))
+  })
+
+  it('keeps every prefix match ahead of a shorter name that only contains the query', () => {
+    const found = codes('ar')
+    const firstLoose = found.findIndex((shortcode) => !shortcode.startsWith('ar'))
+    expect(firstLoose).toBeGreaterThan(0)
+    expect(found.slice(firstLoose).some((shortcode) => shortcode.startsWith('ar'))).toBe(false)
+    expect(found[firstLoose]?.length).toBeLessThan(found[firstLoose - 1]?.length ?? 0)
+  })
+
   it('completes a prefix', () => {
     expect(codes('roc')).toContain('rocket')
     expect(codes('grinning')).toContain('grinning_face')

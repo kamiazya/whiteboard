@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
-import { type ReactNode, useMemo, useState } from 'react'
+import { FileText, Folder, LayoutGrid } from 'lucide-react'
+import { type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
+import { TreeItemShell } from './TreeItemShell.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 export interface WorkspaceFileTreeProps {
@@ -175,39 +176,14 @@ function TreeItem({
   renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
   selectedPath?: string
 }) {
-  const [expanded, setExpanded] = useState(true)
-  const hasChildren = node.children.length > 0
-
   return (
-    // Generic containers carry the ARIA tree roles (APG tree pattern):
-    // biome's a11y rules reject interactive roles on semantic ul/li.
-    // tabIndex satisfies useFocusableInteractive; actual keyboard operation
-    // happens through the nested native buttons, which are tabbable.
-    <div
-      role="treeitem"
-      tabIndex={-1}
-      aria-expanded={hasChildren ? expanded : undefined}
-      aria-label={node.canvas?.name ?? node.name}
-    >
-      <div className="flex items-center gap-1">
-        {hasChildren ? (
-          <button
-            type="button"
-            data-testid={`tree-toggle-${node.path.replaceAll('/', '-')}`}
-            aria-label={expanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
-            onClick={() => setExpanded((prev) => !prev)}
-            className="text-muted-foreground hover:text-foreground rounded p-0.5"
-          >
-            {expanded ? (
-              <ChevronDown className="size-3.5" />
-            ) : (
-              <ChevronRight className="size-3.5" />
-            )}
-          </button>
-        ) : (
-          <span className="w-[1.125rem]" aria-hidden="true" />
-        )}
-        {node.canvas === null ? (
+    <TreeItemShell
+      path={node.path}
+      name={node.name}
+      label={node.canvas?.name ?? node.name}
+      hasChildren={node.children.length > 0}
+      row={
+        node.canvas === null ? (
           <FolderRow name={node.name} />
         ) : (
           <DocumentRow
@@ -219,25 +195,21 @@ function TreeItem({
             renderIcon={renderIcon}
             selectedPath={selectedPath}
           />
-        )}
-      </div>
-      {hasChildren && expanded && (
-        // biome-ignore lint/a11y/useSemanticElements: role="group" inside a role="tree" is the APG tree pattern; the suggested semantic elements (fieldset/optgroup) are invalid tree children
-        <div role="group" className="border-border/60 ml-3 border-l pl-2">
-          {node.children.map((child) => (
-            <TreeItem
-              key={child.path}
-              node={child}
-              onOpen={onOpen}
-              onActivate={onActivate}
-              onDocumentContextMenu={onDocumentContextMenu}
-              renderIcon={renderIcon}
-              selectedPath={selectedPath}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+        )
+      }
+    >
+      {node.children.map((child) => (
+        <TreeItem
+          key={child.path}
+          node={child}
+          onOpen={onOpen}
+          onActivate={onActivate}
+          onDocumentContextMenu={onDocumentContextMenu}
+          renderIcon={renderIcon}
+          selectedPath={selectedPath}
+        />
+      ))}
+    </TreeItemShell>
   )
 }
 

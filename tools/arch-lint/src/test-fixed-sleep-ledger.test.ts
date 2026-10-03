@@ -25,6 +25,12 @@
  * is how a later +1 walks through. Guarded from both sides: an entry for a
  * file that no longer holds any sleep, or no longer exists, fails as well.
  *
+ * The population is every `*.test.ts(x)` AND the helpers that run inside tests
+ * (`test-utils/**`, `*-contract.ts`): a sleep in a shared contract suite is paid
+ * by every project that calls it, and a scan that only read test files never
+ * saw it. A helper entry counts its own sleeps, not its callers' — a `settle()`
+ * called eight times is one line here.
+ *
  * Lower an entry whenever you touch a file here; never raise one without
  * saying in the diff why the condition cannot be waited on.
  */
@@ -33,7 +39,7 @@ import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { countFixedSleeps } from './fixed-sleep-count.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
+import { listTestFiles, listTestHelperFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
 
 /** Repo-relative file -> fixed sleeps it held when last pinned. */
 const LEDGER: Record<string, number> = {
@@ -74,6 +80,18 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/pages/BrowserIndexPage.defaults.browser.test.tsx': 1,
   'apps/web/src/pages/DaemonDocumentPage.surface-outlives-document.test.tsx': 1,
   'apps/web/src/pages/ReplicaReadPage.browser.test.tsx': 1,
+  // The poll interval of a deadline loop that watches for a deleted database to come back: a poll
+  // between reads, not a wait for something to finish.
+  'apps/web/src/test-utils/browser-document.ts': 1,
+  // The settle window of `waitForMarkdownSaved` when the caller has nothing to anchor on: it lets
+  // the debounce window pass so a write scheduled behind the one just seen would show itself.
+  'apps/web/src/test-utils/wait-for-saved.ts': 1,
+  // `settle()`, called per case: the contract asserts that nothing further happens after a
+  // connect or disconnect, and waiting for nothing to happen is the assertion.
+  'packages/daemon-client/src/test-utils/document-backend-contract.ts': 1,
+  // `settle()`, called per case: a real window in which a wrong delivery could arrive, so
+  // asserting none did is the assertion.
+  'packages/daemon-client/src/test-utils/sse-stream-source-contract.ts': 1,
   'packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.script.test.ts': 1,
   // One is the poll interval of a hand-rolled deadline loop (a vi.waitFor in all but name); two
   // are settle windows, since "nothing was opened" can only be shown by letting time pass.
@@ -100,7 +118,7 @@ const LEDGER: Record<string, number> = {
   'packages/mcp-server/src/shared/test-utils/loop-availability.test.ts': 4,
 }
 
-describe('fixed-duration sleeps in test files', () => {
+describe('fixed-duration sleeps in test files and the helpers they call', () => {
   it('counts the shape and leaves zero-ms yields alone (self-test)', () => {
     expect(countFixedSleeps('await new Promise((resolve) => setTimeout(resolve, 50))')).toBe(1)
     expect(countFixedSleeps('await new Promise((r) => setTimeout(r, 1200))')).toBe(1)
@@ -171,7 +189,8 @@ describe('fixed-duration sleeps in test files', () => {
   it('matches the ledger exactly: no file gained a sleep, and every entry is still earned', () => {
     const actual: Record<string, number> = {}
     for (const dir of TEST_SCAN_DIRS) {
-      for (const file of listTestFiles(join(REPO_ROOT, dir))) {
+      const root = join(REPO_ROOT, dir)
+      for (const file of [...listTestFiles(root), ...listTestHelperFiles(root)]) {
         // This guard names the pattern it hunts, in its self-test.
         if (file.endsWith('test-fixed-sleep-ledger.test.ts')) continue
         const count = countFixedSleeps(readFileSync(file, 'utf-8'))
@@ -206,5 +225,14 @@ describe('fixed-duration sleeps in test files', () => {
     const all = TEST_SCAN_DIRS.flatMap((dir) => listTestFiles(join(REPO_ROOT, dir)))
     expect(all.length).toBeGreaterThan(1500)
     expect(Object.keys(LEDGER).length).toBeGreaterThan(0)
+    // The helper walk matches nothing silently if its predicate drifts, so both shapes it reads
+    // are asserted present, and no test file is counted twice.
+    const helpers = TEST_SCAN_DIRS.flatMap((dir) => listTestHelperFiles(join(REPO_ROOT, dir))).map(
+      (file) => relative(REPO_ROOT, file).split(sep).join('/'),
+    )
+    expect(helpers.length).toBeGreaterThan(80)
+    expect(helpers).toContain('packages/daemon-client/src/test-utils/document-backend-contract.ts')
+    expect(helpers).toContain('packages/daemon-client/src/document-backend-contract.ts')
+    expect(helpers.filter((file) => /\.test\.tsx?$/.test(file))).toEqual([])
   })
 })

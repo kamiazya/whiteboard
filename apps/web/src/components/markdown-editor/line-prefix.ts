@@ -273,7 +273,7 @@ function outdentToParent(
 
 /**
  * The indent / outdent button (Tab / Shift-Tab). A list line moves in the
- * tree (see `nestingIndent`); any other line moves by the indent unit, as
+ * tree (see `indentUnderSibling` and `outdentToParent`); any other line moves by the indent unit, as
  * Tab does in every editor — CommonMark reads four of those as a code
  * block, and that is the author's to spend. A selection moves every
  * covered line by the FIRST line's delta, so nested structure under it

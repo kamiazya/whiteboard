@@ -20,14 +20,19 @@ If you skip this step, the same kind of thing will keep changing appearance thro
 
 ## Default Mapping
 
-- gateway: entry / adaptation point. It can share the base box family with services, but it needs an accent that marks it as entry-role
-- service: the main processing role; use the base rectangle family
-- queue / bus: give it a standalone box; do not bury it in arrow labels
-- database / store: make storage legible through silhouette or label
-- external: use neutral treatment, outside-boundary placement, or a lighter color
+How a role is drawn is a stencil or a shape facet (`wb_facet_list` lists them; the mechanics are
+in [`../../drawing-visuals/SKILL.md`](../../drawing-visuals/SKILL.md) "Shapes, Stencils And
+Tags"). Set it on the node in the `node.add` that draws it, so the role is the same on every box.
+
+- gateway: entry / adaptation point (`stencil: "visual.gateway"`, a hexagon). It can share the base box family with services, but it needs an accent that marks it as entry-role
+- service: the main processing role (`visual.service`, an octagon), or the plain rectangle family
+- queue / bus: give it a standalone box (`visual.queue`, a parallelogram); do not bury it in arrow labels
+- database / store: make storage legible through silhouette or label (`visual.datastore`, a cylinder)
+- external: use neutral treatment, outside-boundary placement, or a lighter color (`visual.external` draws a diamond, so keep decisions worded as questions on a board that has both)
+- actor: a person or client that starts the flow (`visual.actor`, an ellipse)
 - security / auth: draw it as a control tied to a crossing or protected asset; avoid a generic `security` box
 - error / failure sink: move it to a side path away from the mainline
-- decision: use a diamond or an equivalent conditional node
+- decision: a node whose `facets` carry `"visual.shape/v0": { "kind": "diamond" }`, with the question as its text
 - container / boundary: use it for the outer shell such as frame, lane, zone, or subgroup
 
 ## Rules
@@ -65,7 +70,7 @@ If you skip this step, the same kind of thing will keep changing appearance thro
 
 - lane title: actor / role / system
 - rectangle step: action
-- diamond: decision
+- diamond: decision (`visual.shape/v0`)
 - async / message path: its own edge color, labeled
 - side sink: exception / failure handling
 

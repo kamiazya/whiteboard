@@ -1,7 +1,11 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import {
+  resolveTestServerDeps,
+  testDocumentRouterOptions,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-restore-race-')
 
@@ -55,11 +59,12 @@ describe('restore targetPath-overwrite vs delete race', () => {
   })
 
   it('does not resurrect deleted content when a DELETE of the overwrite target races the restore reading it', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
 
     // Source canvas-a with a saved version to restore from.
     const sourceDoc = new LoroDoc()
@@ -154,11 +159,12 @@ describe('restore in-place vs delete race', () => {
   })
 
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
 
     // Single canvas with a saved version to restore onto itself (no targetPath).
     const sourceDoc = new LoroDoc()

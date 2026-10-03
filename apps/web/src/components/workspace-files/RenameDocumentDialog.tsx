@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { DocumentNameField } from './DocumentNameField.js'
 import { DocumentPathField } from './DocumentPathField.js'
 
 /**
@@ -76,20 +77,7 @@ export function RenameDocumentDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-4">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium">Name</span>
-              <input
-                type="text"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder={path.split('/').at(-1) ?? ''}
-                className="rounded-md border bg-background px-2 py-1.5 text-sm"
-              />
-              <span className="text-muted-foreground text-xs">
-                What it is called, everywhere it appears. Leave empty to show the last part of the
-                path instead.
-              </span>
-            </label>
+            <DocumentNameField value={name} path={path} onChange={setName} />
             <DocumentPathField
               workspace={workspace}
               value={path}

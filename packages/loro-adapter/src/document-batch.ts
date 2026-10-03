@@ -1,6 +1,6 @@
 import type { ProposedChangeStatus, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { DocumentContainers } from './containers.js'
-import { writeSpatialCanvasInto } from './loro-bridge.js'
+import { reconcileSpatialCanvasInto } from './loro-bridge.js'
 import { writeMarkdownBodyInto } from './markdown-body.js'
 import { setProposedChangeStatusInto } from './proposals.js'
 
@@ -10,7 +10,11 @@ import { setProposedChangeStatusInto } from './proposals.js'
  */
 export interface DocumentBatchWriter {
   setProposedChangeStatus(proposalId: string, changeId: string, status: ProposedChangeStatus): void
-  writeSpatialCanvas(canvas: SpatialCanvas): void
+  /**
+   * Applies `next` as a visible-diff against `prev`, so a record this build's
+   * schema cannot read survives it — see `reconcileSpatialCanvas`.
+   */
+  reconcileSpatialCanvas(prev: SpatialCanvas, next: SpatialCanvas): void
   writeMarkdownBody(body: string): void
 }
 
@@ -20,7 +24,7 @@ export interface DocumentBatchWriter {
  * one undo step.
  *
  * Deciding a proposal is why it exists. That act stamps a status per change,
- * resyncs the canvas, and rewrites the body; each committing helper on its
+ * reconciles the canvas, and rewrites the body; each committing helper on its
  * own made that four independent deltas (measured: three synchronous commits
  * produce three separate `subscribeLocalUpdates` payloads, one produces one).
  * A transport that died between them left the change marked adopted with the
@@ -29,8 +33,8 @@ export interface DocumentBatchWriter {
  *
  * Error contract, matching `withSpatialBatch`: if `fn` throws, NOTHING is
  * committed and the partial ops stay pending on the doc, for the caller's
- * converging write (document-sync-session's `writeSpatialCanvas(doc, next)`
- * fallback) to absorb into one commit.
+ * converging write (command-writes' whole-canvas reconcile fallback) to
+ * absorb into one commit.
  */
 export function withDocumentBatch(
   doc: DocumentContainers,
@@ -42,9 +46,8 @@ export function withDocumentBatch(
       setProposedChangeStatusInto(doc, proposalId, changeId, status)
       wrote = true
     },
-    writeSpatialCanvas(canvas) {
-      writeSpatialCanvasInto(doc, canvas)
-      wrote = true
+    reconcileSpatialCanvas(prev, next) {
+      if (reconcileSpatialCanvasInto(doc, prev, next)) wrote = true
     },
     writeMarkdownBody(body) {
       writeMarkdownBodyInto(doc, body)

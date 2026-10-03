@@ -25,7 +25,6 @@ import {
   type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
-  type ClipboardFragment,
   type CommentMessage,
   type CommentThread,
   type CommentThreadStatus,
@@ -57,9 +56,9 @@ import {
   VISUAL_EDGES_KEY,
   VISUAL_INK_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
-import { remintClipboardFragment } from '../clipboard-fragment.js'
 import { withTagList } from './tags.js'
 import type { Point } from './viewport.js'
+import { reorderNodes } from './z-order.js'
 
 /**
  * Where a dragged end lands: a box, or a bare point on the canvas.
@@ -679,7 +678,7 @@ export function ownedLinePoints(line: CanvasLine): readonly Point[] {
  * An end ON a node stays where it is: the attachment is the whole point of
  * that end, and the node is what carries it.
  */
-function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
+export function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
   const shift = (end: LineEnd): LineEnd =>
     end.kind === 'point' ? { ...end, point: { x: end.point.x + dx, y: end.point.y + dy } } : end
   return {
@@ -1312,193 +1311,4 @@ function createEdge(canvas: SpatialCanvas, edge: CanvasEdge): SpatialCanvas {
   const nodeIds = new Set(canvas.nodes.map((node) => node.id))
   if (!endIn(edge.from, nodeIds) || !endIn(edge.to, nodeIds)) return canvas
   return { ...canvas, edges: [...canvas.edges, edge] }
-}
-
-/** Strict bbox intersection — flush-touching edges are NOT overlap. */
-function overlapsAny(
-  candidate: SpatialCanvas['nodes'][number],
-  block: readonly SpatialCanvas['nodes'][number][],
-): boolean {
-  return block.some(
-    (member) =>
-      candidate.x < member.x + member.width &&
-      member.x < candidate.x + candidate.width &&
-      candidate.y < member.y + member.height &&
-      member.y < candidate.y + candidate.height,
-  )
-}
-
-/**
- * Step the block over the nearest OVERLAPPING non-member above its topmost
- * member (tldraw semantics, user feedback 2026-08-09): hopping over a node the
- * selection does not visually overlap changes nothing on screen and reads as
- * the shortcut "not working". No overlapping node above → the block is already
- * visually on top of its pile → no-op. (Index loops, not findLast — the
- * tsconfig lib target predates es2023.)
- */
-function forwardInsertIndex(
-  canvas: SpatialCanvas,
-  members: ReadonlySet<string>,
-  block: SpatialCanvas['nodes'],
-  rest: SpatialCanvas['nodes'],
-): number | undefined {
-  let top = -1
-  for (let i = canvas.nodes.length - 1; i >= 0; i--) {
-    if (members.has(canvas.nodes[i].id)) {
-      top = i
-      break
-    }
-  }
-  const over = canvas.nodes
-    .slice(top + 1)
-    .find((node) => !members.has(node.id) && overlapsAny(node, block))
-  return over === undefined ? undefined : rest.indexOf(over) + 1
-}
-
-/** Mirror: step under the nearest overlapping non-member below the bottom member. */
-function backwardInsertIndex(
-  canvas: SpatialCanvas,
-  members: ReadonlySet<string>,
-  block: SpatialCanvas['nodes'],
-  rest: SpatialCanvas['nodes'],
-): number | undefined {
-  const bottom = canvas.nodes.findIndex((node) => members.has(node.id))
-  for (let i = bottom - 1; i >= 0; i--) {
-    const node = canvas.nodes[i]
-    if (!members.has(node.id) && overlapsAny(node, block)) return rest.indexOf(node)
-  }
-  return undefined
-}
-
-/** Where the block lands, or `undefined` when the placement moves nothing. */
-function reorderInsertIndex(
-  placement: 'forward' | 'backward' | 'front' | 'back',
-  canvas: SpatialCanvas,
-  members: ReadonlySet<string>,
-  block: SpatialCanvas['nodes'],
-  rest: SpatialCanvas['nodes'],
-): number | undefined {
-  if (placement === 'front') return rest.length
-  if (placement === 'back') return 0
-  return placement === 'forward'
-    ? forwardInsertIndex(canvas, members, block, rest)
-    : backwardInsertIndex(canvas, members, block, rest)
-}
-
-function reorderNodes(
-  canvas: SpatialCanvas,
-  ids: readonly string[],
-  placement: 'forward' | 'backward' | 'front' | 'back',
-): SpatialCanvas {
-  const members = new Set(ids)
-  const block = canvas.nodes.filter((node) => members.has(node.id))
-  if (block.length === 0) return canvas
-  const rest = canvas.nodes.filter((node) => !members.has(node.id))
-
-  const insertAt = reorderInsertIndex(placement, canvas, members, block, rest)
-  if (insertAt === undefined) return canvas
-
-  const next = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
-  // No-op permutations return the input so callers can cheaply detect "did
-  // anything move" (and undo history stays free of empty steps).
-  if (next.every((node, index) => node === canvas.nodes[index])) return canvas
-  return { ...canvas, nodes: next }
-}
-
-/** Standard duplicate-again cascade offset — also `pasteFragment`'s
- * fallback when it is given no anchor point. */
-export const DUPLICATE_OFFSET_PX = 16
-
-/**
- * The shared core of `pasteFragment` and `duplicateSelection`: remint a
- * fragment's ids against `canvas`'s existing ones, then batch it in as
- * `create-node`/`create-edge`, offset either by the standard +16/+16
- * duplicate cascade (no anchor) or so its bounding-box center lands on
- * `anchor` (rounded) — the "Paste here" placement. Undefined for an
- * empty-node fragment, matching every other command builder's totality
- * contract: nothing to insert is nothing to command.
- */
-export function buildFragmentInsertCommand(
-  canvas: SpatialCanvas,
-  fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines' | 'cut'>,
-  createId: () => string,
-  anchor?: Point,
-): EditorCommand | undefined {
-  // Ink alone is a fragment: a copied stroke used to answer here exactly as
-  // an empty clipboard does.
-  if (fragment.nodes.length === 0 && (fragment.lines ?? []).length === 0) return undefined
-  const existingIds = new Set([
-    ...canvas.nodes.map((node) => node.id),
-    ...canvas.edges.map((edge) => edge.id),
-    ...(canvas.lines ?? []).map((line) => line.id),
-  ])
-  const reminted = remintClipboardFragment(fragment, createId, existingIds)
-  let dx = DUPLICATE_OFFSET_PX
-  let dy = DUPLICATE_OFFSET_PX
-  if (anchor !== undefined) {
-    // Read from the boxes AND the strokes, because either may be the whole
-    // fragment: over nodes alone an ink-only paste computed `Infinity` and
-    // landed nowhere a person could find it.
-    const xs = [
-      ...reminted.nodes.flatMap((node) => [node.x, node.x + node.width]),
-      ...reminted.lines.flatMap((line) => ownedLinePoints(line).map((point) => point.x)),
-    ]
-    const ys = [
-      ...reminted.nodes.flatMap((node) => [node.y, node.y + node.height]),
-      ...reminted.lines.flatMap((line) => ownedLinePoints(line).map((point) => point.y)),
-    ]
-    // A fragment of strokes hung entirely on boxes owns no point of its own,
-    // and there is nothing to centre; the cascade offset is the honest
-    // answer rather than a NaN.
-    if (xs.length > 0 && ys.length > 0) {
-      dx = Math.round(anchor.x - (Math.min(...xs) + Math.max(...xs)) / 2)
-      dy = Math.round(anchor.y - (Math.min(...ys) + Math.max(...ys)) / 2)
-    }
-  }
-  // A cut fragment reconnects its severed boundary edges to peers that
-  // still exist on THIS canvas (same-canvas paste is a move); a missing
-  // peer means a cross-canvas paste or a deleted neighbour, and the edge
-  // drops silently — exactly what a plain copy would have done.
-  const canvasNodeIds = new Set(canvas.nodes.map((node) => node.id))
-  const canvasEdgeIds = new Set(canvas.edges.map((edge) => edge.id))
-  const boundaryEdges = (fragment.cut?.boundaryEdges ?? []).flatMap((edge) => {
-    // The original edge still exists → it was never actually severed (the
-    // cut was lifted, or resolved as a move): nothing to reconnect, and a
-    // second wire onto the peer would be the new defect.
-    if (canvasEdgeIds.has(edge.id)) return []
-    // A boundary edge crosses the cut, so exactly one end is being re-minted
-    // and the other must already be on the canvas. A FREE end is neither, so
-    // an edge carrying one is never a boundary edge.
-    const fromId = endNode(edge.from)
-    const toId = endNode(edge.to)
-    if (fromId === undefined || toId === undefined) return []
-    const from = reminted.idMap.get(fromId)
-    const to = reminted.idMap.get(toId)
-    if ((from === undefined) === (to === undefined)) return []
-    const peer = from === undefined ? fromId : toId
-    if (!canvasNodeIds.has(peer)) return []
-    return [
-      {
-        ...edge,
-        id: reminted.mintId(),
-        from: { ...edge.from, kind: 'node' as const, node: from ?? fromId },
-        to: { ...edge.to, kind: 'node' as const, node: to ?? toId },
-      },
-    ]
-  })
-  return {
-    kind: 'batch',
-    commands: [
-      ...reminted.nodes.map(
-        (node) =>
-          ({ kind: 'create-node', node: { ...node, x: node.x + dx, y: node.y + dy } }) as const,
-      ),
-      ...[...reminted.edges, ...boundaryEdges].map(
-        (edge) => ({ kind: 'create-edge', edge }) as const,
-      ),
-      ...reminted.lines.map(
-        (line) => ({ kind: 'create-line', line: shiftLine(line, dx, dy) }) as const,
-      ),
-    ],
-  }
 }

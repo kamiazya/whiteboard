@@ -26,7 +26,13 @@ import {
   wrappedWorkspaceKeySchema,
 } from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
 import { safeGetItem, safeSetItem } from './safe-local-storage.js'
-import { readStoredRecord } from './stored-record.js'
+import {
+  readStoredRecord,
+  type StoredRecord,
+  serializeStoredRecord,
+  withoutStoredEntry,
+  withStoredEntry,
+} from './stored-record.js'
 
 const STORE_KEY = 'whiteboard:replica-sealed-keys'
 
@@ -43,23 +49,23 @@ const daemonKey = (daemonBaseUrl: string): string => daemonBaseUrl.replace(/\/+$
 const entryKey = (daemonBaseUrl: string, workspaceId: string): string =>
   `${daemonKey(daemonBaseUrl)}${SEPARATOR}${workspaceId}`
 
-function load(): Record<string, WrappedWorkspaceKey> {
+function load(): StoredRecord<WrappedWorkspaceKey> {
   // A browser refusing storage reads as nothing cached, the same as a cold start.
   return readStoredRecord(safeGetItem(STORE_KEY), wrappedWorkspaceKeySchema)
 }
 
-function save(records: Record<string, WrappedWorkspaceKey>): void {
+function save(record: StoredRecord<WrappedWorkspaceKey>): void {
   // A browser refusing storage (private mode, a full quota) costs the cold
   // start and nothing else: the session already holds its key in memory, so
   // the tab carries on and only the NEXT one has to ask.
-  safeSetItem(STORE_KEY, JSON.stringify(records))
+  safeSetItem(STORE_KEY, serializeStoredRecord(record))
 }
 
 export function loadWrappedKey(
   daemonBaseUrl: string,
   workspaceId: string,
 ): WrappedWorkspaceKey | null {
-  return load()[entryKey(daemonBaseUrl, workspaceId)] ?? null
+  return load().entries[entryKey(daemonBaseUrl, workspaceId)] ?? null
 }
 
 export function saveWrappedKey(
@@ -67,10 +73,9 @@ export function saveWrappedKey(
   workspaceId: string,
   blob: WrappedWorkspaceKey,
 ): void {
-  save({ ...load(), [entryKey(daemonBaseUrl, workspaceId)]: blob })
+  save(withStoredEntry(load(), entryKey(daemonBaseUrl, workspaceId), blob))
 }
 
 export function dropWrappedKey(daemonBaseUrl: string, workspaceId: string): void {
-  const { [entryKey(daemonBaseUrl, workspaceId)]: _dropped, ...rest } = load()
-  save(rest)
+  save(withoutStoredEntry(load(), entryKey(daemonBaseUrl, workspaceId)))
 }

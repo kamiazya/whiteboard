@@ -14,7 +14,7 @@ function setup(token: string | (() => string | undefined) | null = 'secret') {
   const network = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}))
   const daemonFetch = createDaemonFetch(DAEMON, token ?? undefined, network)
   const lastCall = () => {
-    const [url, init] = network.mock.calls[0] ?? []
+    const [url, init] = network.mock.lastCall ?? []
     return { url: String(url), init, auth: new Headers(init?.headers).get('Authorization') }
   }
   return { daemonFetch, lastCall }
@@ -36,6 +36,8 @@ describe('the daemon bearer destination', () => {
   it('reads a rotated token on each call when the credential is a function', async () => {
     let current: string | undefined = 'first'
     const { daemonFetch, lastCall } = setup(() => current)
+    await daemonFetch('/api/x')
+    expect(lastCall().auth).toBe('Bearer first')
     current = 'second'
     await daemonFetch('/api/x')
     expect(lastCall().auth).toBe('Bearer second')

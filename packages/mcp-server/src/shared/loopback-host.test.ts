@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isLoopbackHost } from './daemon-auth-binding.js'
+import { isLoopbackHost } from './loopback-host.js'
 
 describe('isLoopbackHost', () => {
   it.each([

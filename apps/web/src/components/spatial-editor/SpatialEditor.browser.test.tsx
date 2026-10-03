@@ -1827,13 +1827,6 @@ describe('SpatialEditor (browser) — spatial text layout defects', () => {
       expect(container.querySelectorAll('svg text').length).toBeGreaterThan(0)
     })
 
-    await page.screenshot({
-      // Resolved relative to this test file's own directory by vitest's
-      // browser screenshot API — walk up to the repo-root tmp/ bucket
-      // rather than nesting a tmp/ under this source directory.
-      path: '../../../../../tmp/screenshots/spatial-editor-four-defects-after.png',
-    })
-
     const svg = container.querySelector('svg')
     expect(svg).not.toBeNull()
 

@@ -11,8 +11,7 @@ import type { DocRef } from './doc-ref.js'
  * matching IndexedDB stores. Changing it means migrating those rows — see
  * mcp-server's `0013-document-dockey-prefix` — and moving every frozen
  * literal that a boot-time routine still writes, which is why `importFsBlobs`
- * and `sweepImportedFsBlobs` take their prefix from here rather than spelling
- * it themselves.
+ * takes its prefix from here rather than spelling it itself.
  *
  * It lives in `ports` rather than beside one implementation for the reason
  * above: two stores that disagree about this string are two stores that

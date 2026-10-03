@@ -88,8 +88,7 @@ export function searchEmojiShortcodes(query: string, limit = 20): readonly Emoji
   // Length is not a tie-break detail, it is what makes a prefix usable:
   // `:ro` scores `rocket` and `rolling_on_the_floor_laughing` alike, and on
   // CLDR order alone the laughing face wins because Smileys is the first
-  // group. Measured against the first version of this file, which is what
-  // the test asserting `:rocke` -> `rocket` is really pinning.
+  // group. `search.test.ts` pins this with the `:ro` ordering.
   scored.sort((a, b) => b.score - a.score || a.row.shortcode.length - b.row.shortcode.length)
   return scored.slice(0, limit).map(({ row }) => ({
     shortcode: row.shortcode,

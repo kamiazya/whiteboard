@@ -70,14 +70,36 @@ import { resolveWorkspaceId, withResolvedWorkspaceHandles } from './workspace-ha
  */
 const URL_IDENTITY_KEYS = ['workspaceId', 'documentId'] as const
 
-function identityNamedBy(body: unknown): ApiErrorBody | undefined {
-  if (body === null || typeof body !== 'object' || Array.isArray(body)) return undefined
+function identityNamedBy(body: object): ApiErrorBody | undefined {
   const named = URL_IDENTITY_KEYS.filter((key) => key in body)
   if (named.length === 0) return undefined
   return errorBody(
     'invalid_request',
     `${named.join(' and ')} ${named.length === 1 ? 'is' : 'are'} named by the URL, not the body`,
   )
+}
+
+/**
+ * The fields a write's JSON body carries, or the refusal to answer with.
+ *
+ * A body that is not JSON is refused as that: reading it as `{}` made a
+ * truncated body which DID carry `kind` come back as "Invalid discriminator
+ * value", naming a field the caller had sent. JSON that is not an object (a
+ * string, an array, `null`) has no fields to spread, so the schema is left to
+ * name what is missing.
+ */
+async function readWriteBody(
+  c: Context,
+): Promise<{ body: Record<string, unknown> } | { refusal: ApiErrorBody }> {
+  let json: unknown
+  try {
+    json = await c.req.json()
+  } catch {
+    return { refusal: errorBody('invalid_body', 'the request body is not valid JSON') }
+  }
+  const body = json !== null && typeof json === 'object' && !Array.isArray(json) ? json : {}
+  const smuggled = identityNamedBy(body)
+  return smuggled ? { refusal: smuggled } : { body: { ...body } }
 }
 
 export function createServer(deps: ServerDeps) {
@@ -103,11 +125,10 @@ export function createServer(deps: ServerDeps) {
   })
 
   app.post('/api/v1/workspaces/:workspaceId/documents', async (c) => {
-    const body = await c.req.json().catch(() => ({}))
-    const smuggled = identityNamedBy(body)
-    if (smuggled) return c.json(smuggled, 400)
+    const read = await readWriteBody(c)
+    if ('refusal' in read) return c.json(read.refusal, 400)
     const parsed = wbDocumentCreateInputSchema.safeParse({
-      ...body,
+      ...read.body,
       workspaceId: c.get('workspaceId'),
     })
     if (!parsed.success) {
@@ -201,11 +222,10 @@ export function createServer(deps: ServerDeps) {
   })
 
   app.post('/api/v1/workspaces/:workspaceId/documents/:documentId/linkify-mentions', async (c) => {
-    const body = await c.req.json().catch(() => ({}))
-    const smuggled = identityNamedBy(body)
-    if (smuggled) return c.json(smuggled, 400)
+    const read = await readWriteBody(c)
+    if ('refusal' in read) return c.json(read.refusal, 400)
     const parsed = linkifyMentionsInputSchema.safeParse({
-      ...body,
+      ...read.body,
       workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
     })

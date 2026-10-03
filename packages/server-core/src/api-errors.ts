@@ -125,9 +125,15 @@ export function errorBody(code: string, message?: string): ApiErrorBody {
  * generic banner. The issues say the same thing in the slot a reader reads.
  */
 export function invalidRequestBody(error: z.ZodError): ApiErrorBody {
-  const said = error.issues.map((issue) => {
-    const at = issue.path.join('.')
-    return at === '' ? issue.message : `${at}: ${issue.message}`
-  })
-  return errorBody('invalid_request', said.join('; '))
+  return errorBody('invalid_request', error.issues.map(issueText).join('; '))
+}
+
+/**
+ * One issue as a sentence that names the object it concerns. A nested key
+ * the schema does not know says `Unrecognized key: "zzz"` with nothing to say
+ * which object it sits in, so the path leads when there is one.
+ */
+export function issueText(issue: z.ZodError['issues'][number]): string {
+  const at = issue.path.join('.')
+  return at === '' ? issue.message : `${at}: ${issue.message}`
 }

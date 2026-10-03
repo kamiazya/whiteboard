@@ -40,6 +40,7 @@ jobs:
   pr:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # measured: 2026-10-02 40 min
     timeout-minutes: 60
     permissions:
       contents: read
@@ -140,10 +141,34 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # One leg per share of the curated list (`MUTATION_SHARD`, dealt by
+  # `shardOf` in stryker-targets.mjs): the whole list no longer fits one
+  # runner's limit, and a cancelled run uploads nothing, because the reports
+  # are written at the end. A report-only lane going quiet looks the same as a
+  # lane with nothing to say, so each leg must finish well inside its limit.
+  #
+  # Sizing. The last whole-lane run to finish took 95 minutes (2026-09-07); the
+  # next three were cancelled at 180, so 180 is a lower bound on the whole
+  # lane. The heaviest of six legs holds 836 of the 3451 mutants (24%), which
+  # makes 44 minutes its share of that bound, and the limit is 2x it for
+  # install time and for the lane's growth. `perTest` coverage (see
+  # stryker.config.mjs) takes about a quarter off that on top. Replace the
+  # `measured:` figure with the longest leg of the next scheduled run, and
+  # re-count the heaviest leg's share when MUTATED changes. The guard in
+  # tools/arch-lint/src/mutation-lane.test.ts holds the figure to 1.5x
+  # headroom.
   weekly:
     if: github.event_name != 'pull_request'
+    name: weekly (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # measured: 2026-09-28 44 min
+    timeout-minutes: 90
+    strategy:
+      # A leg that times out must not cancel the others: the reports of the
+      # legs that finished are the point.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -157,12 +182,57 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Mutation test canvas-render
+        env:
+          MUTATION_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: pnpm mutation:render
 
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mutation-canvas-render
+          name: mutation-canvas-render-shard-${{ matrix.shard }}
           path: packages/canvas-render/tmp/stryker-reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # One report out of the legs', under the name the single-job lane used, so
+  # anything that looked for `mutation-canvas-render` still finds it. Runs
+  # after a failed or cancelled leg too, and merges what finished: the files a
+  # leg did not reach are absent from the report rather than the whole week.
+  weekly-report:
+    if: github.event_name != 'pull_request' && !cancelled()
+    needs: weekly
+    runs-on: ubuntu-latest
+    # measured: 2026-10-03 1 min
+    # Two jq calls over the downloaded reports (0.04 s locally over two real
+    # ones); the download and upload are the rest, and are not yet observed.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: mutation-canvas-render-shard-*
+          path: shards
+
+      - name: Merge the legs' reports
+        run: |
+          set -euo pipefail
+          if ! compgen -G 'shards/*/mutation.json' > /dev/null; then
+            echo '::error::no leg produced a mutation report'
+            exit 1
+          fi
+          mkdir -p report
+          # Each leg mutates a disjoint set of files, so concatenating the
+          # `files` maps is the whole merge; the other top-level keys are the
+          # same in every leg.
+          jq -s '.[0] + {
+            files: (map(.files) | add),
+            testFiles: (map(.testFiles // {}) | add)
+          }' shards/*/mutation.json > report/mutation.json
+          echo "merged $(jq '.files | length' report/mutation.json) files from $(ls -d shards/*/ | wc -l) legs"
+
+      - name: Upload merged mutation report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-canvas-render
+          path: report/
           retention-days: 30

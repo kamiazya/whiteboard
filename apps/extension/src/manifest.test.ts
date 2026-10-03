@@ -4,6 +4,7 @@
  * sides of that are written in the manifest.
  */
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import {
   WHITEBOARD_EXTENSION_ID,
   WHITEBOARD_GECKO_ID,
@@ -16,6 +17,26 @@ function extensionIdOf(key: string): string {
   const hex = createHash('sha256').update(Buffer.from(key, 'base64')).digest('hex').slice(0, 32)
   return [...hex].map((digit) => String.fromCharCode(97 + Number.parseInt(digit, 16))).join('')
 }
+
+// The page quotes this version when it reports a bridge skew, so it must be
+// the one the extension's package declares, not a copy that stops moving.
+describe('the version both builds stamp', () => {
+  const declared = (
+    JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      version: string
+    }
+  ).version
+
+  it('is the extension package version', () => {
+    expect(manifestFor('production').version).toBe(declared)
+    expect(firefoxManifestFor('production').version).toBe(declared)
+  })
+
+  // Both browsers accept one to four dot-separated integers and no more.
+  it('is a version a browser accepts', () => {
+    expect(declared).toMatch(/^\d+(\.\d+){0,3}$/)
+  })
+})
 
 describe('manifestFor', () => {
   // The native host's manifest allows exactly this id, so a key that drifted

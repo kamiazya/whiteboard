@@ -17,13 +17,15 @@
 // is read by the caller:
 //   ... -- pnpm vitest run --project mcp-node my-guard   # expect non-zero
 //
-// The file is restored from memory in a `finally`, so a crash mid-command
-// does not leave the tree mutated — the trap that makes `git checkout --`
-// the wrong restore for an UNTRACKED file, and a whole-file overwrite the
-// wrong one when the tree already had other edits.
-import { spawnSync } from 'node:child_process'
+// The file is restored from memory — on the command's exit and on SIGINT,
+// SIGTERM or SIGHUP (exit 128+signo) — so neither a crash nor a Ctrl-C leaves
+// the tree mutated. That is the trap that makes `git checkout --` the wrong
+// restore for an UNTRACKED file, and a whole-file overwrite the wrong one
+// when the tree already had other edits. SIGKILL cannot be caught: the backup
+// path is printed before the command runs for that case.
+import { spawn } from 'node:child_process'
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { constants as osConstants, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
 const argv = process.argv.slice(2)
@@ -63,7 +65,7 @@ if (occurrences === 0) {
 console.error(`mutate: ${file} — ${occurrences} occurrence(s) replaced`)
 
 // A backup ON DISK, not only the string in memory: if the restore throws —
-// the command chmod'd the file, the disk filled — a `finally` that only held
+// the command chmod'd the file, the disk filled — a restore that only held
 // `before` would leave the tree mutated with no copy anywhere, and its
 // exception would replace the command's exit code with its own. The shell
 // recipe in the `diagnosis-evidence` skill uses `mktemp` + `trap` for the
@@ -72,12 +74,13 @@ const backupDir = mkdtempSync(join(tmpdir(), 'mutate-'))
 const backup = join(backupDir, basename(file))
 copyFileSync(file, backup)
 
-let status = 1
-try {
-  writeFileSync(file, before.split(oldText).join(newText))
-  const run = spawnSync(command[0], command.slice(1), { stdio: 'inherit' })
-  status = run.status ?? 1
-} finally {
+// Restore is synchronous and idempotent so the signal path and the normal
+// path can share it: a `finally` does not run when the process is signalled,
+// and an async restore would not finish before `process.exit`.
+let restored = false
+function restore(status) {
+  if (restored) return
+  restored = true
   try {
     writeFileSync(file, before)
     rmSync(backupDir, { recursive: true, force: true })
@@ -96,3 +99,33 @@ try {
     process.exitCode = 4
   }
 }
+
+// Handlers go in BEFORE the file is mutated and the command forked: a starved
+// process can be descheduled between the fork and a later registration while
+// the command is already running, and a signal landing in that gap kills it
+// with the tree still mutated.
+let child
+for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(name, () => {
+    // Shell convention: 128 + signal number.
+    const status = 128 + osConstants.signals[name]
+    // Forwarded so a wrapper (pnpm, a shell) tears its own children down; the
+    // command must not outlive this process against a tree it no longer owns.
+    child?.kill(name)
+    restore(status)
+    process.exit(process.exitCode)
+  })
+}
+
+// Printed BEFORE the command runs so an unrecoverable kill (SIGKILL cannot be
+// caught) still leaves a path to restore from in the terminal scrollback.
+console.error(`mutate: backup at ${backup}`)
+writeFileSync(file, before.split(oldText).join(newText))
+
+// Async spawn, not spawnSync: a blocked event loop never runs a signal handler.
+child = spawn(command[0], command.slice(1), { stdio: 'inherit' })
+child.on('error', (err) => {
+  console.error(`mutate: could not run ${command[0]}: ${err.message}`)
+  restore(1)
+})
+child.on('close', (code) => restore(code ?? 1))

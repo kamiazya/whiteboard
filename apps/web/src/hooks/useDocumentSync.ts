@@ -82,7 +82,7 @@ export interface UseDocumentSyncResult {
   setNodeLock: (nodeId: string, locked: boolean) => void
   /**
    * The doc's `body` text container — a markdown document's whole body, and
-   * the ONE place it is stored (`wb_document_set` writes here too). Empty
+   * the ONE place it is stored (`wb_workspace_edit`'s `document.set` writes here too). Empty
    * string before the first snapshot; a caller that also needs to know
    * whether the document has hydrated reads `loaded`.
    */

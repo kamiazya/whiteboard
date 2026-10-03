@@ -7,6 +7,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
 import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetTool } from './document-set.js'
@@ -22,6 +23,9 @@ import { createDocumentSetTool } from './document-set.js'
  * roll them back. Claiming otherwise would be a lie a caller acts on: they
  * would retry the whole batch and create the first documents twice.
  *
+ * A `detail` that already ends in a full stop (an index's refusal reads as a
+ * sentence) is joined without doubling it.
+ *
  * `opIndex` and the applied count are in the MESSAGE as well as on the
  * class, because only `.message` survives the MCP error path and a caller
  * repairing a rejected batch needs to know where to resume.
@@ -34,7 +38,7 @@ class WorkspaceEditError extends Error {
     detail: string,
   ) {
     super(
-      `ops[${opIndex}] (${op}) could not be applied: ${detail}. ` +
+      `ops[${opIndex}] (${op}) could not be applied: ${detail.replace(/\.$/, '')}. ` +
         `${applied} op(s) before it were applied and stand; ops after it were not run. ` +
         'Resume from this index rather than resending the batch.',
     )
@@ -98,9 +102,17 @@ const workspaceOpSchema = z.discriminatedUnion('op', [
     .object({
       op: z.literal('document.move'),
       documentId: documentIdSchema,
-      path: documentPathSchema.describe(
-        'The new path. Documents below the old path move with it, and `[[old/path]]` references in other documents are rewritten to follow.',
-      ),
+      path: documentPathSchema
+        .optional()
+        .describe(
+          'The new path. Documents below the old path move with it, and `[[old/path]]` references in other documents are rewritten to follow. Omit it to rename in place.',
+        ),
+      name: z
+        .string()
+        .optional()
+        .describe(
+          'The new display name, which is how a spatial document is renamed. Blank clears it. Give `path`, `name`, or both.',
+        ),
     })
     .strict(),
   z.object({ op: z.literal('document.delete'), documentId: documentIdSchema }).strict(),
@@ -284,13 +296,40 @@ const WORKSPACE_EDIT_HANDLERS: {
   },
 
   'document.move': async (ctx, op) => {
-    const moved = await wbDocumentMove(ctx.deps, {
-      workspaceId: ctx.workspaceId,
-      documentId: op.documentId,
-      path: op.path,
-    })
+    if (op.path === undefined && op.name === undefined) {
+      throw new Error('a move needs a `path` to move it, a `name` to rename it, or both')
+    }
+    const { workspaceId } = ctx
+    const moved =
+      op.path === undefined
+        ? undefined
+        : await wbDocumentMove(ctx.deps, { workspaceId, documentId: op.documentId, path: op.path })
+    // An in-place rename has no move to have found the document, so it is
+    // looked up before anything is written to a name that may belong to nobody.
+    const path =
+      moved?.path ??
+      (await ctx.deps.documentIndex.resolveDocumentById({ workspaceId, documentId: op.documentId }))
+        ?.path
+    if (path === undefined) throw new WorkspaceDocumentNotFoundError(workspaceId, op.documentId)
+    // A name is the workspace's to keep, not the document's (vocabulary.md),
+    // so renaming is an index write whatever the kind — a spatial document
+    // has no frontmatter `title` to carry it. Blank means no name, the same
+    // normalisation `document.create` and `document.set` apply.
+    if (op.name !== undefined) {
+      const name = op.name.trim()
+      await ctx.deps.documentIndex.setDocumentName({
+        workspaceId,
+        documentId: op.documentId,
+        ...(name === '' ? {} : { name }),
+      })
+    }
     return {
-      result: { op: op.op, documentId: op.documentId, path: moved.path, ...followOf(moved) },
+      result: {
+        op: op.op,
+        documentId: op.documentId,
+        path,
+        ...(moved === undefined ? {} : followOf(moved)),
+      },
     }
   },
 
@@ -331,7 +370,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
   return {
     name: 'wb_workspace_edit' as const,
     description:
-      'Create, replace, move and delete several documents in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
+      'Create, replace, move (or rename) and delete several documents in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.',
     inputSchema: workspaceEditInputSchema,
     outputSchema: workspaceEditOutputSchema,
     execute: async (rawInput: WorkspaceEditInput): Promise<WorkspaceEditOutput> => {

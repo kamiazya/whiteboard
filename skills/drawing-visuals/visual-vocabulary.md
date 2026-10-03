@@ -50,16 +50,17 @@ Examples: `systems`, `review`, `proposal`, `executive`.
 
 ## Split Across Documents Or Group Nodes?
 
-There is no frame or membership feature on this tool surface — a document is one flat canvas of
-nodes and edges, and `wb_scene_render` always renders all of it. A `group` node (label + optional
-background) can loosely mark a region, but nothing tracks which other nodes are "inside" it, and
-there is no way to render or export just that region.
+A document is one flat canvas of nodes and edges. A `group` node (label + optional background)
+marks a region, and what it holds is whatever lies fully inside its bounds:
+`within` on `node.add`, `region.set` and `tidy` act on that containment, and `wb_scene_render` with
+`fragment` set to the group's label draws just that region. A reader who opens the document still
+meets all of it.
 
 That leaves two real choices when a discussion has multiple related questions:
 
 - **One document, multiple visually-separated regions**: use a `group` node per region and keep
-  each region's nodes physically clustered together on the grid. Cheap, but the whole SVG renders
-  every time — there is no way to inspect one region in isolation.
+  each region's nodes physically clustered together on the grid. Cheap, and `fragment` renders one
+  region on its own, but a reader opening the document still meets every region.
 - **Separate documents** (one `document.create` op per question): each renders independently, can be
   shared or exported on its own, and keeps unrelated revision history apart.
 

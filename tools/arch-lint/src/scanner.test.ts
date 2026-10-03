@@ -140,12 +140,16 @@ describe('scanSourceForBoundaryViolations', () => {
     '@vitest/browser',
     'fast-check',
     '@fast-check/vitest',
+    '@testing-library/react',
+    '@testing-library/dom',
+    '@testing-library/user-event',
   ])('flags a test framework import of %s', (specifier) => {
     expect(violationKinds(`import { x } from '${specifier}'`)).toContain('test-framework-import')
   })
 
   it('does not take a package that merely starts with vitest for the framework', () => {
     expect(violationKinds("import x from 'vitest-like'")).toHaveLength(0)
+    expect(violationKinds("import x from '@testing-library-like/react'")).toHaveLength(0)
   })
 
   it('passes clean on compliant source with no banned constructs', () => {

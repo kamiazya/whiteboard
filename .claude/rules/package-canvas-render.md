@@ -1123,7 +1123,9 @@ plugin adding a silhouette adds it to its own rather than widening
   patch` joins with ` > ` in both places the id is built; the same 15 then
   die in 73 seconds at 1.2 tests a mutant, and the whole file reads 100%
   (136 killed, 5 timed out, 8 minutes) where it read 89.4% with 15
-  survivors.
+  survivors. The config says `'perTest'` now: with the patched runner it
+  yields the same `min-heap.ts` survivors as `'off'` under core 9.6.1, and
+  fewer test runs a mutant; the weekly lane runs it as six sharded legs.
   `mutation-comment.mjs` lists a
   zero-test survivor apart from real ones now, under "the lane ran NO test
   against", so the next runner-vs-vitest disagreement reads as the lane's

@@ -21,7 +21,13 @@ import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { prfOutputOf } from './passkey-prf.js'
 import { safeGetItem, safeSetItem } from './safe-local-storage.js'
-import { readStoredRecord } from './stored-record.js'
+import {
+  readStoredRecord,
+  type StoredRecord,
+  serializeStoredRecord,
+  withoutStoredEntry,
+  withStoredEntry,
+} from './stored-record.js'
 
 const STORE_KEY = 'whiteboard:replica-offline-passkeys'
 const SALT_BYTES = 32
@@ -42,21 +48,21 @@ export type OfflinePasskeyCredentials = Pick<CredentialsContainer, 'create' | 'g
 const entryKey = (daemonBaseUrl: string, workspaceId: string): string =>
   `${daemonBaseUrl.replace(/\/+$/, '')}\u0000${workspaceId}`
 
-function load(): Record<string, OfflinePasskey> {
+function load(): StoredRecord<OfflinePasskey> {
   return readStoredRecord(safeGetItem(STORE_KEY), offlinePasskeySchema)
 }
 
-function save(records: Record<string, OfflinePasskey>): void {
+function save(record: StoredRecord<OfflinePasskey>): void {
   // A browser refusing storage keeps nothing, which the caller reads back as
   // "not readable offline" — the truth.
-  safeSetItem(STORE_KEY, JSON.stringify(records))
+  safeSetItem(STORE_KEY, serializeStoredRecord(record))
 }
 
 export function loadOfflinePasskey(
   daemonBaseUrl: string,
   workspaceId: string,
 ): OfflinePasskey | null {
-  return load()[entryKey(daemonBaseUrl, workspaceId)] ?? null
+  return load().entries[entryKey(daemonBaseUrl, workspaceId)] ?? null
 }
 
 export function saveOfflinePasskey(
@@ -64,12 +70,11 @@ export function saveOfflinePasskey(
   workspaceId: string,
   record: OfflinePasskey,
 ): void {
-  save({ ...load(), [entryKey(daemonBaseUrl, workspaceId)]: record })
+  save(withStoredEntry(load(), entryKey(daemonBaseUrl, workspaceId), record))
 }
 
 export function dropOfflinePasskey(daemonBaseUrl: string, workspaceId: string): void {
-  const { [entryKey(daemonBaseUrl, workspaceId)]: _dropped, ...rest } = load()
-  save(rest)
+  save(withoutStoredEntry(load(), entryKey(daemonBaseUrl, workspaceId)))
 }
 
 /** The WebAuthn API as this page sees it, or undefined where there is none. */

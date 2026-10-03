@@ -1,6 +1,6 @@
 ---
 name: drawing-visuals
-description: Draw diagrams with your AI agent on a shared JSON Canvas whiteboard. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone. Covers node/edge editing and SVG rendering only — no icon libraries, no other export formats.
+description: Draw diagrams with your AI agent on a shared JSON Canvas whiteboard. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone. Covers node/edge editing, shapes and stencils, tags, and SVG rendering — SVG is the only export format.
 ---
 
 # drawing-visuals
@@ -10,8 +10,9 @@ Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the document and can be revisited and refined later.
 
 **Coverage note.** The whiteboard MCP surface is deliberately small: edit nodes and edges,
-tidy the layout, render SVG, save/restore versions. There is no icon or template library and no
-align/distribute. `wb_viewport_set` exists, but through this stdio entry it answers
+dress them (a silhouette, a stencil, a tag), tidy the layout, render SVG, save/restore versions.
+There is no align/distribute and no artwork to insert; what draws a box differently is a facet
+(see "Shapes, Stencils And Tags" below). `wb_viewport_set` exists, but through this stdio entry it answers
 `delivered: false`, because no browser is in the same process: do not promise the user that the
 view moved, tell them to look at the document (an open tab picks your edit up within about half a
 second, but it stays where it is). Plan the diagram with that ceiling in mind
@@ -22,8 +23,12 @@ Use these tools:
 - `wb_workspace_edit` — create, replace, move and delete documents in one call (`document.create` / `document.set` / `document.move` / `document.delete` ops)
 - `wb_document_list` — find documents (each row carries the id and the path, so an id needs no second call to place)
 - `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction. **Pass `mode: "apply"`**: the default proposes content changes for a person to adopt, because nobody watches an agent type — but somebody just asked you to draw this, and they are looking at it
-- `wb_canvas_snapshot` — read a canvas: node types, text, geometry and lock state, plus every edge. Pass `layout: true` to also get the laid-out analysis (overlaps, clusters, free regions) for judging whether the board is tidy
+- `wb_canvas_snapshot` — read a canvas: node types, text, geometry, lock state, facets and tags, plus every edge with its bends, facets and tags. Pass `layout: true` to also get the laid-out analysis (overlaps, clusters, free regions) for judging whether the board is tidy
 - `wb_scene_render` — render the laid-out scene as SVG (the only export format)
+- `canvas_view` — show a canvas inline in the chat, read-only, in a client that renders MCP Apps
+- `wb_facet_list` — list what a write may name: the facets, the stencil / icon / theme ids, and with `workspaceId` the workspace's own stencils, the tags it uses and its tag library
+- `wb_facet_set` — tag a document, board, node or edge, or set a facet on one
+- `wb_document_search` — find documents by what they say or by a tag
 - `wb_version_save` / `wb_version_list` / `wb_version_restore` — checkpoint and roll back
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
@@ -102,6 +107,9 @@ Once the intent is fixed, choose the node shape that fits:
 | a reference to another document, image, or file | `file` |
 | a link out to a URL | `link` |
 | a lightweight visual boundary (label + background) | `group` |
+
+A node's kind of content is not its silhouette: a decision, a datastore or a queue is still a
+`text` node, drawn differently by a facet or a stencil — see "Shapes, Stencils And Tags" below.
 
 ### Step 2: Create The Document
 
@@ -219,8 +227,10 @@ If you cannot see the rendered image, read the board instead. The two reads answ
 questions and neither replaces the other:
 
 `wb_canvas_snapshot({ workspaceId, documentId })` answers **what is on the board**: each node's
-type, text, geometry and lock state, plus every edge. Long text and very large boards are cut, and
-the real totals come back alongside so a capped read never looks complete.
+type, text, geometry, lock state, `facets` (its shape, its stencil) and `tags`, plus every edge with
+its `bends`, `facets` and `tags`. So read the snapshot to learn how a board is dressed, not only
+what it says. Long text and very large boards are cut, and the real totals come back alongside so
+a capped read never looks complete.
 
 Add `layout: true` to also get **whether the board is tidy** — overlaps, containment, clusters and
 free regions, from the laid-out scene. It costs a layout pass, so ask for it when you are judging
@@ -228,6 +238,12 @@ composition rather than reading content.
 
 You rarely need either right after an edit: `wb_canvas_edit` already returns the resulting board
 under `snapshot`.
+
+**To let the person see the board without leaving the chat**, call
+`canvas_view({ workspaceId, documentId })`. In a client that renders MCP Apps it shows the stored
+board inline, read-only and pannable, with a markdown document a node references drawn inside that
+node. It draws what is stored, so call it after the edit lands; a client without MCP Apps support
+only receives the scene as data, in which case give the person the document's path.
 
 ### Step 5: Fine-Tune Or Redraw
 
@@ -244,6 +260,11 @@ Every one of these is an op inside a `wb_canvas_edit` call, and several can trav
 | make a group's contents match a list exactly | `{ op: "region.set", within: groupId, nodes, edges }` |
 | put boxes that already exist in a NEW group | `{ op: "node.add", node: { type: "group", label } }` with no position, then `region.set` naming them — the group is placed around them where they sit, gutter included. The same holds for members added with `within` after it: a group added with no position is placed around what goes in it, wherever you put them. `within` on a node.add places that node inside a group that already exists (or was added earlier in the batch); `within: null` means no group |
 | structure or intent is wrong | create a fresh document with a `document.create` op and redraw |
+
+**A group has no member list.** What it holds is whatever lies fully inside its bounds, so a
+`node.patch` of the group alone leaves its contents where they were (patch the members in the same
+call, with `within: "<group id>"` in place of `id`). `node.add` with `within`, `region.set` and
+`tidy` with `within` all read that same containment.
 
 **`region.set` is the one op that deletes what you did NOT mention.** It
 reconciles a group's contents to the list you give it, so anything strictly
@@ -282,6 +303,39 @@ fresh document when the STRUCTURE is wrong, not just a few elements.
 
 After each fix, go back to Step 4 and render again.
 Redrawing on a fresh document is normal whiteboard behavior when the structure is wrong, not failure.
+
+---
+
+## Shapes, Stencils And Tags
+
+A box is a rectangle until a facet says otherwise. Ask `wb_facet_list({ workspaceId })` before
+naming one: it answers the exact facet keys and payload schemas, the stencil / icon / theme ids a
+write may name, and for that workspace its own stencils (`workspace.<name>`), the tags already in
+use and its tag library.
+
+- **A silhouette**: `facets: { "visual.shape/v0": { kind } }` on the node, `kind` one of `ellipse`,
+  `diamond`, `hexagon`, `parallelogram`, `cylinder`, `octagon`. A decision is a `diamond`.
+- **A stencil**: what the box IS, named once. `stencil` is a key of the op, beside `node`, not
+  inside it: `{ op: "node.add", node: { id: "users", type: "text", text: "Users" }, stencil: "visual.datastore" }`.
+  `node.patch` takes it too. The six bundled are `visual.datastore` (cylinder), `visual.service`
+  (octagon), `visual.gateway` (hexagon), `visual.queue` (parallelogram), `visual.actor` (ellipse)
+  and `visual.external` (diamond, the same silhouette as a decision, so a board with both should
+  word its decisions as questions). An explicit `color` wins over the stencil's, and an id nobody
+  registered is refused with the registered ones listed. A workspace can define more in its own
+  library, which `wb_facet_list` shows.
+- **An icon is not for the board.** `visual.symbol/v0` stands for an object on small surfaces (the
+  minimap, the document browser, a tab) and is not drawn on a canvas. To mark kind or state on a
+  board, use a tag.
+- **A tag** records state or kind: `wb_facet_set({ workspaceId, documentIds: [documentId], nodeId, tags: { add: ["health:failing"] } })`
+  (`edgeId` for an edge; neither tags the board itself). A key the workspace's tag library declares
+  gives each value a colour, so the boxes wearing it are drawn in it and the board's legend names
+  it; a value the library does not admit is refused, and a tag nobody declared is recorded and
+  drawn in nothing. `wb_document_search({ workspaceId, tags: ["health:failing"] })` then finds the
+  documents that carry it.
+
+Pick the stencil or silhouette per ROLE once for the document and reuse it, which is how
+[`../coauthoring-visuals/references/technical-role-profiles.md`](../coauthoring-visuals/references/technical-role-profiles.md)
+keeps a role recognisable.
 
 ---
 

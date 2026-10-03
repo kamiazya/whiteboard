@@ -7,6 +7,7 @@ import {
 import {
   annotationAnchorSchema,
   annotationIdSchema,
+  commentThreadSchema,
   documentIdSchema,
   okfActorSchema,
   workspaceIdSchema,
@@ -87,19 +88,12 @@ type ThreadEditInput = z.infer<typeof threadEditInputSchema>
 const threadEditOutputSchema = z
   .object({
     /**
-     * Every thread the document now holds, so a caller that opened one has
-     * its minted id without a second read, and a caller that replied can see
-     * the conversation it joined.
+     * Every thread the document now holds, whole — anchor, status, and each
+     * message with its author and time — so a caller that opened one has its
+     * minted id without a second read, and a caller that replied can read the
+     * conversation it joined rather than a count of it.
      */
-    threads: z.array(
-      z
-        .object({
-          id: annotationIdSchema,
-          status: z.enum(['open', 'resolved']),
-          messageCount: z.number().int().positive(),
-        })
-        .strict(),
-    ),
+    threads: z.array(commentThreadSchema),
   })
   .strict()
 type ThreadEditOutput = z.infer<typeof threadEditOutputSchema>
@@ -208,7 +202,7 @@ export function createThreadEditTool(deps: ServerDeps) {
   return {
     name: 'wb_thread_edit' as const,
     description:
-      "Comment on any document — a spatial canvas or a markdown note — through its annotation layer: open a thread anchored to a node, an edge, a point, a set of nodes (a spatial anchor with nodeIds and the rect they occupy), a region (a spatial anchor with width and height), a quoted passage of a note's body, a quoted passage of a text node's text (a text anchor naming the node), or the document as a whole (kind: document); reply to one; resolve or reopen one. Threads are never deleted, by an agent or by a person: resolving is the only way to close one. Returns every thread the document holds, so a newly opened thread's id needs no second read.",
+      "Comment on any document — a spatial canvas or a markdown note — through its annotation layer: open a thread anchored to a node, an edge, a point, a set of nodes (a spatial anchor with nodeIds and the rect they occupy), a region (a spatial anchor with width and height), a quoted passage of a note's body, a quoted passage of a text node's text (a text anchor naming the node), or the document as a whole (kind: document); reply to one; resolve or reopen one. Threads are never deleted, by an agent or by a person: resolving is the only way to close one. Returns every thread the document holds, whole (anchor, status, every message with author and time), so a newly opened thread's id needs no second read. To read threads without writing, use wb_document_get.",
     inputSchema: threadEditInputSchema,
     outputSchema: threadEditOutputSchema,
     execute(input: ThreadEditInput): Promise<ThreadEditOutput> {
@@ -233,11 +227,5 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
 
   await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
 
-  return {
-    threads: readAnnotations(doc).map((thread) => ({
-      id: thread.id,
-      status: thread.status,
-      messageCount: thread.messages.length,
-    })),
-  }
+  return { threads: readAnnotations(doc) }
 }

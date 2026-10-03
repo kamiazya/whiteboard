@@ -11,6 +11,7 @@ import {
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
+import { daemonContractError } from './daemon-contract-error.js'
 
 /**
  * A document's version history as the UI reads and writes it — the seam
@@ -76,29 +77,32 @@ export class VersionsRequestError extends Error {
 export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): VersionsBackend {
   return {
     async list(workspaceId, path) {
-      const res = await fetchFn(documentVersionsApiUrl(workspaceId, path))
+      const url = documentVersionsApiUrl(workspaceId, path)
+      const res = await fetchFn(url)
       if (!res.ok) throw new VersionsRequestError(res.status, 'versions request')
       const parsed = listVersionsResponseSchema.safeParse(await res.json())
-      if (!parsed.success) throw new Error('versions response failed schema validation')
+      if (!parsed.success) throw daemonContractError(url, parsed.error)
       return parsed.data.versions
     },
     async loadPast(workspaceId, path, versionId) {
-      const res = await fetchFn(versionDocumentApiUrl(workspaceId, path, versionId))
+      const url = versionDocumentApiUrl(workspaceId, path, versionId)
+      const res = await fetchFn(url)
       if (res.status === 404) return null
       if (!res.ok) throw new VersionsRequestError(res.status, 'version document request')
       const parsed = versionDocumentResponseSchema.safeParse(await res.json())
-      if (!parsed.success) throw new Error('version document response failed schema validation')
+      if (!parsed.success) throw daemonContractError(url, parsed.error)
       return parsed.data
     },
     async save(workspaceId, path, { label }) {
-      const res = await fetchFn(documentVersionsApiUrl(workspaceId, path), {
+      const url = documentVersionsApiUrl(workspaceId, path)
+      const res = await fetchFn(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label } satisfies z.infer<typeof saveVersionRequestSchema>),
       })
       if (!res.ok) throw new VersionsRequestError(res.status, 'save version')
       const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-      if (!parsed.success) throw new Error('POST /versions response did not match schema')
+      if (!parsed.success) throw daemonContractError(url, parsed.error)
       return parsed.data.version
     },
     async restore(workspaceId, path, versionId) {

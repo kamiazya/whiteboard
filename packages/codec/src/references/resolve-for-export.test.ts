@@ -126,4 +126,28 @@ describe('resolveReferencesForExport', () => {
     const cell = table.children[0].children[0]
     expect(cell.children).toEqual([{ type: 'text', value: '[My Note](../notes/my-note.md)' }])
   })
+
+  it('rewrites a wikiLink nested inside emphasis', () => {
+    const root = {
+      type: 'root' as const,
+      children: [
+        {
+          type: 'paragraph' as const,
+          children: [
+            {
+              type: 'emphasis' as const,
+              children: [{ type: 'wikiLink' as const, documentId: ULID, alias: 'My Note' }],
+            },
+          ],
+        },
+      ],
+    }
+    const exported = resolveReferencesForExport(root, () => '../notes/my-note.md')
+
+    const paragraphNode = exported.children[0]
+    if (paragraphNode.type !== 'paragraph') throw new Error('expected paragraph')
+    const emphasis = paragraphNode.children[0]
+    if (emphasis.type !== 'emphasis') throw new Error('expected emphasis')
+    expect(emphasis.children).toEqual([{ type: 'text', value: '[My Note](../notes/my-note.md)' }])
+  })
 })

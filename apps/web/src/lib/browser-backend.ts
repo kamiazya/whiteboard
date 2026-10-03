@@ -369,6 +369,8 @@ export class BrowserBackend implements DocumentBackend {
       if (message.documentId === this.target.documentId) handlers.onVersionCreated(message.version)
       return
     }
+    // Path changes are for whoever holds work keyed by path, not for the record.
+    if (message.type !== 'update') return
     this._writeQueue = this._writeQueue.then(() => {
       if (this.isStale(handlers)) return
       if (importFromAnotherTab(workspaceDoc, message.bytes)) handlers.onRemoteUpdate(message.bytes)

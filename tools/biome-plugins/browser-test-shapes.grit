@@ -30,5 +30,17 @@ any {
       message = "Non-ASCII in a type() string: a character with no keycode is synthesized apart from the keystrokes around it and is the one that goes missing under load. Use an ASCII stand-in, or userEvent.fill(element, text) — one atomic value set — when the exact text matters (paste() for a contenteditable).",
       severity = "error"
     )
+  },
+  // A screenshot written from a regression test is read by nobody: it passes
+  // whether or not the picture is right, and every run rewrites a file under
+  // an untracked directory. Pictures that ARE a product (the docs images)
+  // live in *.docs-snapshot.test.tsx, which this plugin's `includes` does not
+  // reach, so the rule needs no path exception of its own.
+  `$r.screenshot($args)` where {
+    register_diagnostic(
+      span = $r,
+      message = "A screenshot written from a browser test asserts nothing and nobody reads it. Assert on the DOM instead; images that are a deliverable belong in a *.docs-snapshot.test.tsx.",
+      severity = "error"
+    )
   }
 }

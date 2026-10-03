@@ -806,7 +806,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   describe('a body written the pre-unification way', () => {
-    // `wb_document_set` used to store a body as an `okf-body` TEXT NODE
+    // The MCP document write used to store a body as an `okf-body` TEXT NODE
     // rather than the `body` text container CodeMirror binds to. Both sides
     // now write the container, but documents in the old shape are already in
     // stores — and only a real browser can show what CodeMirror actually

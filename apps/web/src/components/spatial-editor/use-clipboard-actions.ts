@@ -14,12 +14,11 @@ import {
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { applyCommand, ownedLinePoints } from '../../lib/spatial/commands.js'
 import {
-  applyCommand,
   buildFragmentInsertCommand,
   DUPLICATE_OFFSET_PX,
-  ownedLinePoints,
-} from '../../lib/spatial/commands.js'
+} from '../../lib/spatial/fragment-insert.js'
 import type { Point, Viewport } from '../../lib/spatial/viewport.js'
 import { screenToCanvas } from '../../lib/spatial/viewport.js'
 import { textNodeDefaults } from './node-factories.js'

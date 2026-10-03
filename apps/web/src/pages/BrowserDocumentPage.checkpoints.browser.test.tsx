@@ -14,6 +14,7 @@ import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { listenToWorkspace, type WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
@@ -231,5 +232,94 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // What a person does with the files panel, or another tab does, while a
+  // checkpoint is pending: the pending row is keyed by path, and the store
+  // resolves that path when it saves. The index doing the move here is not the
+  // page's own instance, which is what makes the announcement over the
+  // workspace channel the only way the page can hear of it.
+  describe('a path change in the quiet window', () => {
+    /** Resolves once the channel has carried a message of `type` to this end. */
+    function nextBroadcast(type: WorkspaceBroadcast['type']): Promise<void> {
+      return new Promise((resolve) => {
+        const end = listenToWorkspace(getBrowserWorkspaceId(), (message) => {
+          if (message.type !== type) return
+          end.close()
+          resolve()
+        })
+      })
+    }
+
+    async function mountAndEdit(): Promise<void> {
+      renderPage(<BrowserDocumentPage initialPath="canvas-a" />)
+      await waitFor(
+        () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+        { timeout: 5000 },
+      )
+      await userEvent.click(await screen.findByTestId('select-tool-button'))
+      await userEvent.dblClick(screen.getByTestId('spatial-editor-container'))
+      // Saved means the edit has committed, which is what arms the checkpoint:
+      // a move or delete before that finds nothing pending to follow.
+      await waitFor(
+        () =>
+          expect(
+            document
+              .querySelector('[data-testid="persistence-state"]')
+              ?.getAttribute('data-save-state'),
+          ).toBe('saved'),
+        { timeout: 10_000 },
+      )
+    }
+
+    it('checkpoints at the moved-to path', async () => {
+      const { index } = await seedDocument()
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        await mountAndEdit()
+        const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+        const workspaceId = getBrowserWorkspaceId()
+
+        // Listening opens AFTER the page's own end, so the page has heard it
+        // by the time this one does.
+        const heard = nextBroadcast('document-moved')
+        await index.moveDocument({ workspaceId, from: 'canvas-a', to: 'canvas-b' })
+        await heard
+        await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+
+        await waitFor(
+          async () => {
+            const rows = await store.list(workspaceId, 'canvas-b')
+            expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+          },
+          { timeout: 5000 },
+        )
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // Asked of the keeper first thing when a checkpoint fires, synchronously
+    // inside the timer, so "never asked" is decidable the moment the timers
+    // have run — a failure the save logs lands after the test has gone.
+    it('attempts none for a deleted document', async () => {
+      const { index } = await seedDocument()
+      const asked = vi.spyOn(BrowserVersionStore.prototype, 'isUnchangedSinceLastVersion')
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        await mountAndEdit()
+        const workspaceId = getBrowserWorkspaceId()
+
+        const heard = nextBroadcast('document-removed')
+        await index.deleteDocument({ workspaceId, path: 'canvas-a' })
+        await heard
+        await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+
+        expect(asked).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+        asked.mockRestore()
+      }
+    })
   })
 })

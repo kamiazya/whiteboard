@@ -1,7 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
+import { DaemonContractError } from '../lib/daemon-contract-error.js'
+import type { VersionsBackend } from '../lib/versions-backend.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import VersionTimeline, { type VersionPreviewSession } from './VersionTimeline.js'
 
@@ -882,6 +885,47 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
       )
     })
     expect(screen.getByText(/No versions yet/)).toBeTruthy()
+  })
+
+  it('drops the rows it holds when a refresh fails its contract, rather than marking them current', async () => {
+    const preview = capturePreview()
+    const rows = (await mkVersionsResponse().json()) as { versions: never[] }
+    const list = vi
+      .fn<VersionsBackend['list']>()
+      .mockResolvedValueOnce(rows.versions)
+      .mockRejectedValueOnce(
+        new DaemonContractError('/api/v1/versions', [
+          { code: 'custom', path: ['versions', 0, 'id'], message: 'Invalid input' },
+        ]),
+      )
+    const backend = {
+      list,
+      loadPast: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+    } satisfies VersionsBackend
+    const tree = (refreshSignal: number) => (
+      <VersionsBackendContext.Provider value={backend}>
+        <VersionTimeline
+          workspaceId="sess_1"
+          path="canvas-a"
+          refreshSignal={refreshSignal}
+          onPreview={preview.onPreview}
+        />
+      </VersionsBackendContext.Provider>
+    )
+    const { rerender } = render(tree(0))
+    await screen.findByText(/Assistant/)
+
+    rerender(tree(1))
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Assistant/)).toBeNull()
+    })
+    expect(mockLog.error).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/versions failed its contract at versions.0.id'),
+      expect.anything(),
+    )
   })
 
   it('clears the previous canvas versions immediately when workspaceId/path changes', async () => {

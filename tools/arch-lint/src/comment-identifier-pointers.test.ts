@@ -25,13 +25,21 @@ import { trackedFiles } from './tracked-files.js'
 // exports, and the few that are deliberately gone are named below.
 //
 // Three kinds of text are read. Source comments (product code AND tests — a
-// test's comment names the helper its case was written for just as often), and
-// the dev-workflow prose agents read at the moment they act: `.claude/rules/*.md`
-// and `.claude/skills/**/*.md`. The prose has no comment marker, so every
+// test's comment names the helper its case was written for just as often), the
+// dev-workflow prose agents read at the moment they act: `.claude/rules/*.md`
+// and `.claude/skills/**/*.md`, and the documents that sit beside a package's
+// code: its README, and `apps/web`'s DESIGN.md and BRAND.md. The prose has no comment marker, so every
 // backticked name in it counts, under a wider shape (any camelCase, PascalCase
 // or CONSTANT_CASE name of six characters or more) because a rule names classes
 // and constants as often as functions. That is also where foreign names live,
 // so they are ledgered by NAME in groups below rather than one sentence each.
+//
+// The SOURCE-comment shape is not widened to every long camelCase name, and
+// the package docs are read instead: measured, that widening left 83 unresolved
+// names of which about 70 were vendor APIs or deliberate history, so it would
+// start from a ledger longer than the defects it finds. The docs read under the
+// prose shape need no such ledger, because a README or design document names
+// the repo's own symbols far more often than a vendor's.
 //
 // "Exists" means the name occurs on a NON-comment line of some tracked source,
 // test or config file: a name only ever mentioned in other comments is the
@@ -62,6 +70,15 @@ const isCommentSource = (path: string): boolean =>
 /** Prose the dev workflow reads: the always-on and path-scoped rules, and every skill. */
 const isWorkflowProse = (path: string): boolean =>
   /^\.claude\/rules\/[^/]+\.md$/.test(path) || /^\.claude\/skills\/.+\.md$/.test(path)
+
+/**
+ * The documents a package ships beside its source. The same rot, and a reader
+ * who trusts them more because they are the front door: `packages/model`'s README
+ * named a hand-written type that was never there and a subpath the manifest
+ * does not export. A CHANGELOG is history by design and is not read.
+ */
+const isPackageDoc = (path: string): boolean =>
+  /^(?:packages|apps)\/[^/]+\/(?:README|DESIGN|BRAND)\.md$/.test(path)
 
 const PROSE_SHAPE =
   /^(?:[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)+|(?:[A-Z][a-z0-9]+){2,}|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)$/
@@ -278,7 +295,7 @@ function mentions(): Mention[] {
 
 function proseMentions(): Mention[] {
   const found: Mention[] = []
-  for (const file of tracked.filter(isWorkflowProse)) {
+  for (const file of tracked.filter((path) => isWorkflowProse(path) || isPackageDoc(path))) {
     for (const match of readFileSync(join(REPO_ROOT, file), 'utf8').matchAll(
       /`([A-Za-z_$][\w$]*)`/g,
     )) {
@@ -322,7 +339,7 @@ describe('an identifier a source comment points at is one the code still has', (
   })
 })
 
-describe('an identifier the rules and skills point at is one the code still has', () => {
+describe('an identifier the rules, skills and package docs point at is one the code still has', () => {
   it('reads the prose it is about, and most of what it names resolves', () => {
     // Measured at ~2,000 mentions across ~100 files, ~120 of them unresolved
     // (a third are vitest/React/harness names, ledgered by name).
@@ -330,6 +347,7 @@ describe('an identifier the rules and skills point at is one the code still has'
     expect(new Set(PROSE.map(({ file }) => file)).size).toBeGreaterThan(40)
     expect(PROSE.some(({ file }) => file.startsWith('.claude/rules/'))).toBe(true)
     expect(PROSE.some(({ file }) => file.startsWith('.claude/skills/'))).toBe(true)
+    expect(PROSE.some(({ file }) => isPackageDoc(file))).toBe(true)
     expect(UNRESOLVED_PROSE.length).toBeLessThan(PROSE.length / 10)
   })
 

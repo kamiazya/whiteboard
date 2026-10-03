@@ -16,6 +16,21 @@ import {
 import { jsonResponse } from '../test-utils/json-response.js'
 import { SettingsPage } from './SettingsPage.js'
 
+// Every bucket the contract requires: a partial `byCategory` fails the report's
+// schema, which the storage card now reports rather than shows as raw issues.
+const EMPTY_BUCKET = { bytes: 0, files: 0 }
+const EMPTY_STORAGE_REPORT = {
+  totalBytes: 0,
+  fileCount: 0,
+  byCategory: {
+    blobs: EMPTY_BUCKET,
+    files: EMPTY_BUCKET,
+    exports: EMPTY_BUCKET,
+    db: EMPTY_BUCKET,
+    other: EMPTY_BUCKET,
+  },
+}
+
 vi.mock('../lib/celebrate.js', () => ({ celebrate: vi.fn().mockResolvedValue(undefined) }))
 
 beforeEach(() => {
@@ -398,7 +413,7 @@ describe('SettingsPage — Connections', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/api/runtime/storage')) {
-          return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
+          return jsonResponse(EMPTY_STORAGE_REPORT)
         }
         return jsonResponse({}, 404)
       }),
@@ -415,7 +430,7 @@ describe('SettingsPage — Connections', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/api/runtime/storage')) {
-          return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
+          return jsonResponse(EMPTY_STORAGE_REPORT)
         }
         return jsonResponse({}, 404)
       }),
@@ -624,7 +639,7 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
       }
       if (url.includes('/api/runtime/storage')) {
         counts.storage += 1
-        return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
+        return jsonResponse(EMPTY_STORAGE_REPORT)
       }
       return jsonResponse({}, 404)
     })

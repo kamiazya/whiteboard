@@ -128,6 +128,24 @@ const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string; allow?: 
       'no tool has a dash or stroke-style field: edge.add takes color, label, bends and facets, so a convention taught in skills must be one a model can express — color and label',
     allow: /no dash\/line-style field/,
   },
+  // Denials of surface a tool now has. Every one of these read as true once
+  // and was left standing when the capability landed, so a model followed the
+  // skill over the tool's own description.
+  {
+    pattern: /no (icon|template)( or (icon|template))? (library|catalog)/i,
+    reason:
+      'wb_facet_list reports the bundled stencils and icons, and node.add takes a `stencil`; teach them rather than deny them',
+  },
+  {
+    pattern: /no auto-sizing/i,
+    reason:
+      'a text node with no height is made tall enough for its text, and a height too short for it is refused with the height it needs',
+  },
+  {
+    pattern: /no (frame|membership)( feature| tracking)?/i,
+    reason:
+      'node.add takes `within`, region.set reconciles a group, tidy takes `within`, and a group added with no position is placed around its members',
+  },
 ]
 
 describe('skills tool-surface guard', () => {
@@ -196,16 +214,59 @@ describe('skills tool-surface guard', () => {
   it('contains none of the banned dead-surface patterns', () => {
     const hits: string[] = []
     for (const path of SKILL_FILES) {
-      const lines = readSkill(path).split('\n')
-      lines.forEach((line, index) => {
-        for (const { pattern, reason, allow } of BANNED_PATTERNS) {
-          if (pattern.test(line) && !allow?.test(line)) {
-            hits.push(`${displayPath(path)}:${index + 1} matches ${pattern} (${reason})`)
-          }
+      const content = readSkill(path)
+      // A sentence wraps where the author's line ends, so "has no\nmembership
+      // tracking" is one claim over two lines: match over the text with line
+      // breaks folded to spaces (same offsets), and report the line a match
+      // starts on.
+      const folded = content.replace(/\n/g, ' ')
+      const lineStarts = [0, ...[...content.matchAll(/\n/g)].map((m) => m.index + 1)]
+      for (const { pattern, reason, allow } of BANNED_PATTERNS) {
+        const global = new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`)
+        for (const match of folded.matchAll(global)) {
+          const lineIndex = lineStarts.filter((start) => start <= match.index).length - 1
+          const line = content.split('\n')[lineIndex] ?? ''
+          if (allow?.test(line)) continue
+          hits.push(`${displayPath(path)}:${lineIndex + 1} matches ${pattern} (${reason})`)
         }
-      })
+      }
     }
     expect(hits).toEqual([])
+  })
+
+  // The converse of the registered-tool check above: that one proves every
+  // name a skill uses exists, this one proves every tool that exists is
+  // taught. Five tools were registered and named by no skill, so a model
+  // reading only the skills was told the capability did not exist.
+  //
+  // A tool belongs here only with the reason a skill should not teach it.
+  // Checked from both sides: an entry that is not a registered tool, or that
+  // a skill now names, fails, so the list cannot outlive its reason.
+  const NOT_TAUGHT: Readonly<Record<string, string>> = {}
+
+  function skillsNaming(tool: string): string[] {
+    const named = new RegExp(`\\b${tool}\\b`)
+    return SKILL_FILES.filter((path) => named.test(readSkill(path))).map(displayPath)
+  }
+
+  it('every registered tool is named by a skill or is on the not-taught list with a reason', () => {
+    expect(ALL_REGISTERED_TOOLS.length).toBeGreaterThan(10)
+    const untaught = ALL_REGISTERED_TOOLS.filter(
+      (tool) => !(tool in NOT_TAUGHT) && skillsNaming(tool).length === 0,
+    )
+    expect(untaught).toEqual([])
+  })
+
+  it('every not-taught entry is a registered tool, carries a reason, and is still named by no skill', () => {
+    const stale = Object.entries(NOT_TAUGHT).flatMap(([tool, reason]) => {
+      if (!(ALL_REGISTERED_TOOLS as readonly string[]).includes(tool)) {
+        return [`${tool}: not a registered tool`]
+      }
+      if (reason.trim() === '') return [`${tool}: no reason`]
+      const files = skillsNaming(tool)
+      return files.length > 0 ? [`${tool}: now named by ${files.join(', ')}`] : []
+    })
+    expect(stale).toEqual([])
   })
 
   it('resolves every relative markdown link inside skills/ to an existing file', () => {

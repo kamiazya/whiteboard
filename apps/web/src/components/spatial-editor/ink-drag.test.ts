@@ -82,6 +82,15 @@ describe('releasing one', () => {
     expect(release(['l1'], { x: 50, y: 50 }).commands).toEqual([])
   })
 
+  it('moves the stroke along a single axis, since only a press that travelled NOWHERE is a no-op', () => {
+    expect(release(['l1'], { x: 70, y: 50 }).commands).toEqual([
+      { kind: 'batch', commands: [{ kind: 'move-line', id: 'l1', dx: 20, dy: 0 }] },
+    ])
+    expect(release(['l1'], { x: 50, y: 30 }).commands).toEqual([
+      { kind: 'batch', commands: [{ kind: 'move-line', id: 'l1', dx: 0, dy: -20 }] },
+    ])
+  })
+
   it('writes nothing when every stroke went while the pointer was down', () => {
     expect(release(['gone'], { x: 70, y: 40 }).commands).toEqual([])
   })

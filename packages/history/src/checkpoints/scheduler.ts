@@ -78,6 +78,20 @@ export interface CheckpointSchedulerOptions<Entry> {
 export interface CheckpointScheduler {
   /** "This document just changed." Cheap, synchronous, and safe to call per update. */
   (workspaceId: string, path: string, doc: LoroDoc): void
+  /**
+   * "This document, and everything below it, now lives at `to`." Pending work
+   * follows the move: the checkpoint is keyed by path and the keeper resolves
+   * that path when it saves, so one left under the old name would fail
+   * against a path that no longer exists and the document would go
+   * unrecorded at the very pause the debounce was waiting for.
+   */
+  moved(workspaceId: string, from: string, to: string): void
+  /**
+   * "This document no longer exists." Drops its pending checkpoint without
+   * taking it: there is nothing left to record, and a save attempted anyway
+   * would only report a failure for an operation that succeeded.
+   */
+  removed(workspaceId: string, path: string): void
   /** Take every pending checkpoint now, and wait for them. For a session ending. */
   flush(): Promise<void>
   /** Drop every pending checkpoint without taking it. */
@@ -91,6 +105,81 @@ interface Pending {
   since: number
 }
 
+/** The keys at or below a path: the path itself, or `path/` and anything after. */
+function isAtOrBelow(key: string, workspaceId: string, path: string): boolean {
+  const at = `${workspaceId}/${path}`
+  return key === at || key.startsWith(`${at}/`)
+}
+
+/** The path a key at or below `from` has once `from` has become `to`. */
+function pathAfterMove(key: string, workspaceId: string, from: string, to: string): string {
+  return `${to}${key.slice(workspaceId.length + 1 + from.length)}`
+}
+
+/**
+ * A keeper that cannot answer must not silence the checkpoint: a thrown
+ * read answers "no" and the save goes ahead, because a duplicate row is a
+ * smaller harm than the pause a person stopped at going unrecorded.
+ */
+async function keeperHolds(
+  options: Pick<CheckpointSchedulerOptions<unknown>, 'alreadyCheckpointed'>,
+  workspaceId: string,
+  path: string,
+): Promise<boolean> {
+  if (options.alreadyCheckpointed === undefined) return false
+  try {
+    return await options.alreadyCheckpointed(workspaceId, path)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * What the scheduler remembers about each document it has taken a checkpoint
+ * for, and the taking itself — the part that needs the keeper's `save`,
+ * kept apart from the timers that decide WHEN.
+ */
+function createCheckpointTaker<Entry>(options: CheckpointSchedulerOptions<Entry>) {
+  /** The frontier each key was last checkpointed at — the diff check. */
+  const savedAt = new Map<string, string>()
+
+  return {
+    async take(workspaceId: string, path: string, doc: LoroDoc): Promise<void> {
+      const key = `${workspaceId}/${path}`
+      // Encoding a frontier is free (measured at 0ms), so the "has anything
+      // changed" question costs nothing and a quiet document writes no row.
+      const now = frontiersToBase64(doc.oplogFrontiers())
+      if (savedAt.get(key) === now) return
+
+      // Memory said nothing, so ask the rows. A read per checkpoint is
+      // nothing beside the save it guards — checkpoints land at a pause, not
+      // per edit — and it is the only answer that survives a restart or a
+      // save some other path made.
+      if (await keeperHolds(options, workspaceId, path)) {
+        savedAt.set(key, now)
+        return
+      }
+
+      const entry = await options.save(workspaceId, path, doc)
+      // Recorded only after the save succeeded: a failed checkpoint must leave
+      // the next edit free to try again rather than looking already covered.
+      savedAt.set(key, now)
+      options.onSaved?.(workspaceId, path, entry)
+    },
+    forget(workspaceId: string, path: string): void {
+      savedAt.delete(`${workspaceId}/${path}`)
+    },
+    /** A moved document is the same state under a new name, so what it was saved at moves too. */
+    relocate(workspaceId: string, from: string, to: string): void {
+      const stamps = [...savedAt].filter(([key]) => isAtOrBelow(key, workspaceId, from))
+      for (const [key] of stamps) savedAt.delete(key)
+      for (const [key, frontier] of stamps) {
+        savedAt.set(`${workspaceId}/${pathAfterMove(key, workspaceId, from, to)}`, frontier)
+      }
+    },
+  }
+}
+
 export function createCheckpointScheduler<Entry>(
   options: CheckpointSchedulerOptions<Entry>,
 ): CheckpointScheduler {
@@ -100,53 +189,16 @@ export function createCheckpointScheduler<Entry>(
   // scheduler state, never shared or observed, so the immutability rule
   // (which guards shared/observable data) does not apply.
   const pending = new Map<string, Pending>()
-  /** The frontier each key was last checkpointed at — the diff check. */
-  const savedAt = new Map<string, string>()
   const inFlight = new Set<Promise<unknown>>()
-
-  /**
-   * A keeper that cannot answer must not silence the checkpoint: a thrown
-   * read answers "no" and the save goes ahead, because a duplicate row is a
-   * smaller harm than the pause a person stopped at going unrecorded.
-   */
-  async function alreadyCheckpointed(workspaceId: string, path: string): Promise<boolean> {
-    if (options.alreadyCheckpointed === undefined) return false
-    try {
-      return await options.alreadyCheckpointed(workspaceId, path)
-    } catch {
-      return false
-    }
-  }
-
-  async function take(workspaceId: string, path: string, doc: LoroDoc): Promise<void> {
-    const key = `${workspaceId}/${path}`
-    // Encoding a frontier is free (measured at 0ms), so the "has anything
-    // changed" question costs nothing and a quiet document writes no row.
-    const now = frontiersToBase64(doc.oplogFrontiers())
-    if (savedAt.get(key) === now) return
-
-    // Memory said nothing, so ask the rows. A read per checkpoint is
-    // nothing beside the save it guards — checkpoints land at a pause, not
-    // per edit — and it is the only answer that survives a restart or a
-    // save some other path made.
-    if (await alreadyCheckpointed(workspaceId, path)) {
-      savedAt.set(key, now)
-      return
-    }
-
-    const entry = await options.save(workspaceId, path, doc)
-    // Recorded only after the save succeeded: a failed checkpoint must leave
-    // the next edit free to try again rather than looking already covered.
-    savedAt.set(key, now)
-    options.onSaved?.(workspaceId, path, entry)
-  }
+  const taker = createCheckpointTaker(options)
 
   function fire(key: string, workspaceId: string, path: string): void {
     const entry = pending.get(key)
     if (entry === undefined) return
     pending.delete(key)
     clearTimeout(entry.timer)
-    const run = take(workspaceId, path, entry.doc)
+    const run = taker
+      .take(workspaceId, path, entry.doc)
       .catch((err: unknown) => options.onError(err, { workspaceId, path }))
       .finally(() => {
         inFlight.delete(run)
@@ -154,12 +206,8 @@ export function createCheckpointScheduler<Entry>(
     inFlight.add(run)
   }
 
-  const trigger = ((workspaceId: string, path: string, doc: LoroDoc): void => {
+  function arm(workspaceId: string, path: string, doc: LoroDoc, since: number): void {
     const key = `${workspaceId}/${path}`
-    const existing = pending.get(key)
-    const since = existing?.since ?? Date.now()
-    if (existing) clearTimeout(existing.timer)
-
     // The ceiling is measured from the START of this run of edits, so a
     // session that never pauses still gets checkpoints at that cadence
     // rather than one at the very end.
@@ -172,7 +220,36 @@ export function createCheckpointScheduler<Entry>(
       timer.unref()
     }
     pending.set(key, { timer, doc, since })
+  }
+
+  const trigger = ((workspaceId: string, path: string, doc: LoroDoc): void => {
+    const existing = pending.get(`${workspaceId}/${path}`)
+    if (existing) clearTimeout(existing.timer)
+    arm(workspaceId, path, doc, existing?.since ?? Date.now())
   }) as CheckpointScheduler
+
+  trigger.moved = (workspaceId: string, from: string, to: string): void => {
+    if (from === to) return
+    // Collected before anything is re-armed: a destination inside the source
+    // subtree would otherwise be visited again as a source.
+    const movers = [...pending].filter(([key]) => isAtOrBelow(key, workspaceId, from))
+    for (const [key, entry] of movers) {
+      clearTimeout(entry.timer)
+      pending.delete(key)
+    }
+    taker.relocate(workspaceId, from, to)
+    for (const [key, entry] of movers) {
+      arm(workspaceId, pathAfterMove(key, workspaceId, from, to), entry.doc, entry.since)
+    }
+  }
+
+  trigger.removed = (workspaceId: string, path: string): void => {
+    const key = `${workspaceId}/${path}`
+    const entry = pending.get(key)
+    if (entry) clearTimeout(entry.timer)
+    pending.delete(key)
+    taker.forget(workspaceId, path)
+  }
 
   trigger.flush = async (): Promise<void> => {
     for (const [key, entry] of [...pending]) {

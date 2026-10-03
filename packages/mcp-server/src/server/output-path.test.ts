@@ -87,6 +87,51 @@ describe('validateOutputPath', () => {
       }
     })
 
+    it('rejects an existing leaf symlink that points outside allowedDir, with overwrite either way', async () => {
+      // The write goes THROUGH the leaf, so a symlink at the output path itself lands the
+      // bytes wherever it points even though its parent is inside the sandbox.
+      const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-output-path-outside-'))
+      try {
+        const victim = join(outsideDir, 'victim.txt')
+        await writeFile(victim, 'keep')
+        await symlink(victim, join(tempDir, 'leaf.svg'))
+        for (const overwrite of [true, false]) {
+          await expect(
+            validateOutputPath(join(tempDir, 'leaf.svg'), overwrite, tempDir),
+          ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+        }
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true })
+      }
+    })
+
+    it('rejects a dangling leaf symlink, which stat() reports as missing and a write would create outside', async () => {
+      const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-output-path-outside-'))
+      try {
+        await symlink(join(outsideDir, 'created-by-write.txt'), join(tempDir, 'dangling.svg'))
+        await expect(
+          validateOutputPath(join(tempDir, 'dangling.svg'), false, tempDir),
+        ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true })
+      }
+    })
+
+    it('rejects a leaf symlink even when it points at another in-sandbox file', async () => {
+      await writeFile(join(tempDir, 'real.svg'), 'x')
+      await symlink(join(tempDir, 'real.svg'), join(tempDir, 'leaf.svg'))
+      await expect(
+        validateOutputPath(join(tempDir, 'leaf.svg'), true, tempDir),
+      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+    })
+
+    it('rejects a path below a dangling directory symlink instead of surfacing a raw ENOENT', async () => {
+      await symlink(join(tempDir, 'nowhere'), join(tempDir, 'dangling-dir'))
+      await expect(
+        validateOutputPath(join(tempDir, 'dangling-dir', 'out.png'), false, tempDir),
+      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+    })
+
     it('accepts a path inside allowedDir that resolves to another in-sandbox location via a symlink', async () => {
       // allowedDir/link -> allowedDir/real, both inside the sandbox. realpath resolves the
       // parent to a path still under allowedDir, so a legitimate in-sandbox symlink must be

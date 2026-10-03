@@ -122,6 +122,29 @@ describe('the stored record', () => {
     expect(loadOfflinePasskey(DAEMON, 'bad')).toBeNull()
     expect(loadOfflinePasskey(DAEMON, 'good')).toEqual(RECORD)
   })
+
+  describe('an entry this build cannot read', () => {
+    const NEWER = { ...RECORD, transports: ['usb'] }
+    const stored = () =>
+      JSON.parse(localStorage.getItem(STORE_KEY) ?? '{}') as Record<string, unknown>
+    const plantNewer = () => {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ 'from-a-newer-build': NEWER }))
+    }
+
+    it('survives a save of another pin, in storage', () => {
+      plantNewer()
+      saveOfflinePasskey(DAEMON, 'ws-2', RECORD)
+      expect(stored()['from-a-newer-build']).toEqual(NEWER)
+      expect(loadOfflinePasskey(DAEMON, 'ws-2')).toEqual(RECORD)
+    })
+
+    it('survives a drop of another pin, in storage', () => {
+      plantNewer()
+      saveOfflinePasskey(DAEMON, 'ws-2', RECORD)
+      dropOfflinePasskey(DAEMON, 'ws-2')
+      expect(stored()).toEqual({ 'from-a-newer-build': NEWER })
+    })
+  })
 })
 
 describe('browserCredentials', () => {

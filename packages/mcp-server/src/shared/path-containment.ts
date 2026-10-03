@@ -61,20 +61,6 @@ export async function isWithinAllowedRoots(
 }
 
 /**
- * Whether `path` is below `root` and not `root` itself, both canonicalised, so
- * a `..` that climbs out and one that lands back on the root are both refused.
- * For a destination the caller is about to write a file at: a path equal to
- * the root names the directory, not something in it.
- */
-export async function isStrictlyInside(root: string, path: string): Promise<boolean> {
-  const canonical = await canonicalizeWithMissingTail(path)
-  return (
-    canonical !== (await canonicalizeWithMissingTail(root)) &&
-    (await isWithinAllowedRoots(canonical, [root]))
-  )
-}
-
-/**
  * Whether a string is ONE path segment that names a child: not empty, not `.`
  * or `..`, and holding no separator of either platform or NUL.
  *

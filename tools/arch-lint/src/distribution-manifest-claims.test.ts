@@ -18,7 +18,8 @@
  *
  * `codex-plugin-spec.test.ts` holds the SHAPE of the Codex manifest and
  * deliberately asserts `expect.any(String)` for the text, so this holds the
- * words.
+ * words. `server.json`'s shape is held here too, against the registry's own
+ * schema.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -44,9 +45,137 @@ function stringsOf(value: unknown, path = ''): { path: string; text: string }[] 
   return Object.entries(value).flatMap(([key, held]) => stringsOf(held, `${path}/${key}`))
 }
 
+const REGISTRY_DESCRIPTION_MAX = 100
+
+type Schema = { readonly [keyword: string]: unknown }
+
+/**
+ * The MCP registry's `server.json` schema (JSON Schema draft-07), vendored
+ * verbatim from https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json
+ * (retrieved 2026-10-03). The registry publishes one URL per dated version,
+ * so a newer version is a new fixture and a new `$schema` pin together.
+ */
+const REGISTRY_SCHEMA = JSON.parse(
+  readFileSync(join(import.meta.dirname, '__fixtures__/mcp-registry-server.schema.json'), 'utf-8'),
+) as Schema
+
+/**
+ * A draft-07 validator for exactly the keywords the registry schema uses,
+ * because the repo declares no JSON Schema library and a dependency for one
+ * file is more than the check is worth. A keyword it does not implement
+ * throws, so a newer schema cannot be validated by silently skipping part of
+ * it. NOT checked: `format` (the uri and email formats are annotations here),
+ * and the registry's server-side rules that live outside this file, such as
+ * proving the `name` namespace is owned by the publisher.
+ */
+type Check = (arg: unknown, value: unknown, path: string, schema: Schema, root: Schema) => string[]
+
+const ANNOTATIONS = new Set([
+  '$comment',
+  '$id',
+  '$schema',
+  'title',
+  'description',
+  'example',
+  'examples',
+  'default',
+  'format',
+  'definitions',
+])
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+function jsonTypeOf(value: unknown): string {
+  if (value === null) return 'null'
+  return Array.isArray(value) ? 'array' : typeof value
+}
+
+function resolveRef(ref: string, root: Schema): Schema {
+  const target = ref
+    .replace(/^#\//, '')
+    .split('/')
+    .reduce<unknown>((held, key) => (isObject(held) ? held[key] : undefined), root)
+  if (!isObject(target)) throw new Error(`unresolvable $ref ${ref}`)
+  return target
+}
+
+const KEYWORD_CHECKS: Record<string, Check> = {
+  type: (arg, value, path) =>
+    jsonTypeOf(value) === arg ? [] : [`${path}: expected ${String(arg)}, got ${jsonTypeOf(value)}`],
+  enum: (arg, value, path) =>
+    (arg as unknown[]).includes(value) ? [] : [`${path}: not one of ${JSON.stringify(arg)}`],
+  const: (arg, value, path) => (value === arg ? [] : [`${path}: must be ${JSON.stringify(arg)}`]),
+  pattern: (arg, value, path) =>
+    typeof value !== 'string' || new RegExp(String(arg)).test(value)
+      ? []
+      : [`${path}: does not match ${String(arg)}`],
+  minLength: (arg, value, path) =>
+    typeof value !== 'string' || value.length >= Number(arg)
+      ? []
+      : [`${path}: shorter than ${String(arg)}`],
+  maxLength: (arg, value, path) =>
+    typeof value !== 'string' || value.length <= Number(arg)
+      ? []
+      : [`${path}: ${value.length} characters, longer than ${String(arg)}`],
+  required: (arg, value, path) =>
+    isObject(value)
+      ? (arg as string[]).filter((key) => !(key in value)).map((key) => `${path}: missing ${key}`)
+      : [],
+  properties: (arg, value, path, _schema, root) =>
+    isObject(value)
+      ? Object.entries(arg as Record<string, Schema>).flatMap(([key, sub]) =>
+          key in value ? validateAt(sub, value[key], `${path}/${key}`, root) : [],
+        )
+      : [],
+  additionalProperties: (arg, value, path, schema, root) => {
+    if (!isObject(value) || arg === true) return []
+    const declared = Object.keys((schema.properties as Record<string, unknown> | undefined) ?? {})
+    return Object.keys(value)
+      .filter((key) => !declared.includes(key))
+      .flatMap((key) =>
+        arg === false
+          ? [`${path}/${key}: not allowed`]
+          : validateAt(arg as Schema, value[key], `${path}/${key}`, root),
+      )
+  },
+  items: (arg, value, path, _schema, root) =>
+    Array.isArray(value)
+      ? value.flatMap((item, index) => validateAt(arg as Schema, item, `${path}/${index}`, root))
+      : [],
+  allOf: (arg, value, path, _schema, root) =>
+    (arg as Schema[]).flatMap((sub) => validateAt(sub, value, path, root)),
+  anyOf: (arg, value, path, _schema, root) =>
+    (arg as Schema[]).some((sub) => validateAt(sub, value, path, root).length === 0)
+      ? []
+      : [`${path}: matches none of the anyOf branches`],
+  not: (arg, value, path, _schema, root) =>
+    validateAt(arg as Schema, value, path, root).length === 0
+      ? [`${path}: matches a schema it must not`]
+      : [],
+}
+
+function validateAt(schema: Schema, value: unknown, path: string, root: Schema): string[] {
+  // draft-07: a `$ref` replaces its siblings.
+  if (typeof schema.$ref === 'string')
+    return validateAt(resolveRef(schema.$ref, root), value, path, root)
+  return Object.entries(schema).flatMap(([keyword, arg]) => {
+    if (ANNOTATIONS.has(keyword)) return []
+    const check = KEYWORD_CHECKS[keyword]
+    if (!check) throw new Error(`unsupported keyword ${keyword} at ${path || '/'}`)
+    return check(arg, value, path, schema, root)
+  })
+}
+
+const validateAgainst = (schema: Schema, value: unknown): string[] =>
+  validateAt(schema, value, '', schema)
+
+const readManifest = (file: (typeof MANIFESTS)[number]): unknown =>
+  JSON.parse(readFileSync(join(REPO_ROOT, file), 'utf-8'))
+
 const manifests = MANIFESTS.map((file) => ({
   file,
-  strings: stringsOf(JSON.parse(readFileSync(join(REPO_ROOT, file), 'utf-8'))),
+  strings: stringsOf(readManifest(file)),
 }))
 
 /** Tool-shaped names a prompt mentions that no server registers. */
@@ -94,13 +223,39 @@ describe('distribution manifests advertise only what the product does', () => {
     expect(named).toEqual([])
   })
 
-  it('lets the registry listing say what the tools are for, by name', () => {
-    const description = manifests
-      .find(({ file }) => file === 'server.json')
-      ?.strings.find(({ path }) => path === '/description')?.text
-    const registered = registeredTools()
-    const named = registered.filter((tool) => description?.includes(tool))
-    expect(named.length).toBeGreaterThanOrEqual(3)
+  // The registry caps `description` at 100 characters, so the listing cannot
+  // carry a tool list; the tool names belong in the README and the package
+  // description, which have no such cap. The schema is what the registry
+  // enforces at publish time, so it is the contract, not a length picked here.
+  it('lists a server.json the registry schema accepts', () => {
+    expect(validateAgainst(REGISTRY_SCHEMA, readManifest('server.json'))).toEqual([])
+  })
+
+  it('pins $schema to the registry schema version this repo validates against', () => {
+    expect(readManifest('server.json')).toMatchObject({ $schema: REGISTRY_SCHEMA.$id })
+  })
+
+  it('keeps the registry description within the registry cap and not empty', () => {
+    const { description } = readManifest('server.json') as { description: string }
+    expect(description.length).toBeLessThanOrEqual(REGISTRY_DESCRIPTION_MAX)
+    expect(description.length).toBeGreaterThan(0)
+  })
+
+  it('rejects what the schema rejects, so a clean answer is not a blind one', () => {
+    const listing = {
+      name: 'io.github.example/server',
+      description: 'An example server.',
+      version: '1.0.0',
+      packages: [{ registryType: 'npm', identifier: 'example', transport: { type: 'stdio' } }],
+    }
+    expect(validateAgainst(REGISTRY_SCHEMA, listing)).toEqual([])
+    const refused = (change: Record<string, unknown>) =>
+      validateAgainst(REGISTRY_SCHEMA, { ...listing, ...change }).length
+    expect(refused({ description: 'x'.repeat(REGISTRY_DESCRIPTION_MAX + 1) })).toBeGreaterThan(0)
+    expect(refused({ description: 'x'.repeat(REGISTRY_DESCRIPTION_MAX) })).toBe(0)
+    expect(refused({ name: 'no-slash' })).toBeGreaterThan(0)
+    expect(refused({ version: undefined, packages: [{ registryType: 'npm' }] })).toBeGreaterThan(0)
+    expect(() => validateAgainst({ oneOf: [] }, {})).toThrow(/unsupported keyword/)
   })
 
   // The registry refuses a package whose manifest does not name the listing

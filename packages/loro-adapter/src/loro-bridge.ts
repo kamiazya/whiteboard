@@ -508,27 +508,37 @@ export function reconcileSpatialCanvas(
   prev: SpatialCanvas,
   next: SpatialCanvas,
 ): void {
+  if (reconcileSpatialCanvasInto(doc, prev, next)) doc.commit()
+}
+
+/**
+ * The reconcile itself, without the commit — see `withDocumentBatch`. Answers
+ * whether it wrote anything, so a caller that owns the commit boundary can
+ * leave an unchanged canvas out of it.
+ */
+export function reconcileSpatialCanvasInto(
+  doc: DocumentContainers,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+): boolean {
+  let wrote = false
+  const writer = spatialBatchWriter(doc, () => {
+    wrote = true
+  })
   // Order is load-bearing: a node's delete cascades to its edges, so the
   // node pass runs before the edge pass exactly as it always has.
-  withSpatialBatch(doc, (writer) => {
-    reconcileById(prev.nodes, next.nodes, writer.writeNode, writer.deleteNode)
-    reconcileById(prev.edges, next.edges, writer.writeEdge, writer.deleteEdge)
-    reconcileById(prev.lines ?? [], next.lines ?? [], writer.writeLine, writer.deleteLine)
-    reconcileById(
-      prev.comments ?? [],
-      next.comments ?? [],
-      writer.writeComment,
-      writer.deleteComment,
-    )
-  })
+  reconcileById(prev.nodes, next.nodes, writer.writeNode, writer.deleteNode)
+  reconcileById(prev.edges, next.edges, writer.writeEdge, writer.deleteEdge)
+  reconcileById(prev.lines ?? [], next.lines ?? [], writer.writeLine, writer.deleteLine)
+  reconcileById(prev.comments ?? [], next.comments ?? [], writer.writeComment, writer.deleteComment)
 
   const facetsMoved = !sameValue(prev.facets, next.facets)
   const tagsMoved = !sameValue(prev.tags, next.tags)
-  if (!facetsMoved && !tagsMoved) return
+  if (!facetsMoved && !tagsMoved) return wrote
   const canvasMap = doc.getMap(CANVAS_KEY)
   if (facetsMoved) setOrDelete(canvasMap, FACETS_FIELD, next.facets)
   if (tagsMoved) setOrDelete(canvasMap, TAGS_FIELD, next.tags)
-  doc.commit()
+  return true
 }
 
 /** Uncommitted spatial writes scoped to one `withSpatialBatch` call. */
@@ -545,6 +555,40 @@ export interface SpatialBatchWriter {
    * id-keyed rewrite), matching `writeCanvasComment`. */
   writeComment(comment: CanvasComment): void
   deleteComment(commentId: string): void
+}
+
+/** The writes `withSpatialBatch` and the reconcile share; `markWrote` fires on each that changed the doc. */
+function spatialBatchWriter(doc: DocumentContainers, markWrote: () => void): SpatialBatchWriter {
+  return {
+    writeNode(node) {
+      writeNodeInto(doc, node)
+      markWrote()
+    },
+    writeEdge(edge) {
+      writeEdgeInto(doc, edge)
+      markWrote()
+    },
+    deleteNode(nodeId) {
+      if (deleteNodeCascadeInto(doc, nodeId)) markWrote()
+    },
+    deleteEdge(edgeId) {
+      if (deleteEdgeInto(doc, edgeId)) markWrote()
+    },
+    writeLine(line) {
+      writeLineInto(doc, line)
+      markWrote()
+    },
+    deleteLine(lineId) {
+      if (deleteLineInto(doc, lineId)) markWrote()
+    },
+    writeComment(comment) {
+      writeCommentInto(doc, comment)
+      markWrote()
+    },
+    deleteComment(commentId) {
+      if (deleteCommentInto(doc, commentId)) markWrote()
+    },
+  }
 }
 
 /**
@@ -571,36 +615,9 @@ export function withSpatialBatch(
   fn: (writer: SpatialBatchWriter) => void,
 ): void {
   let wrote = false
-  const writer: SpatialBatchWriter = {
-    writeNode(node) {
-      writeNodeInto(doc, node)
-      wrote = true
-    },
-    writeEdge(edge) {
-      writeEdgeInto(doc, edge)
-      wrote = true
-    },
-    deleteNode(nodeId) {
-      if (deleteNodeCascadeInto(doc, nodeId)) wrote = true
-    },
-    deleteEdge(edgeId) {
-      if (deleteEdgeInto(doc, edgeId)) wrote = true
-    },
-    writeLine(line) {
-      writeLineInto(doc, line)
-      wrote = true
-    },
-    deleteLine(lineId) {
-      if (deleteLineInto(doc, lineId)) wrote = true
-    },
-    writeComment(comment) {
-      writeCommentInto(doc, comment)
-      wrote = true
-    },
-    deleteComment(commentId) {
-      if (deleteCommentInto(doc, commentId)) wrote = true
-    },
-  }
+  const writer = spatialBatchWriter(doc, () => {
+    wrote = true
+  })
   fn(writer)
   // Success path only — a finally-commit would break the error contract
   // above (the session fallback's own commit must stay the only one).

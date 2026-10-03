@@ -7,16 +7,19 @@ import {
 import { z } from 'zod'
 
 /**
- * Persisted JSON 'documents' row: metadata only. Elements are canonical in the
- * Loro doc ('loroDocuments' store); this schema must never grow a scene/elements
- * field again or the two stores drift out of sync. `.strict()` is what enforces
- * that rather than a comment asking nicely.
+ * The browser keeper's listing row for one document: metadata only. Elements
+ * are canonical in the Loro doc; this schema must never grow a scene/elements
+ * field or the row and the content drift out of sync. `.strict()` is what
+ * enforces that rather than a comment asking nicely.
+ *
+ * Nothing parses a stored row with it any more — the row is assembled from the
+ * workspace's document index (`local-document-summary.ts`) — so it is the
+ * single definition `DocumentSnapshot` is derived from, and its test pins the
+ * shape.
  *
  * A local document is addressed exactly as the daemon addresses one — a ULID
  * document id, a workspace, and a path — so one set of port contracts can
- * describe both stores. The previous shape (a `crypto.randomUUID()` in an
- * `id` field, no workspace, no path) could not satisfy `DocRef` at all, which
- * is what kept the two halves of this product apart.
+ * describe both stores.
  */
 export const documentSnapshotSchema = z
   .object({

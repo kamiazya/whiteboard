@@ -47,7 +47,7 @@ const optionsLabelled = (label: string): HTMLElement[] =>
  * The reference and the rect are both taken here rather than held from the
  * `waitFor` that established the option exists: the popup re-renders its
  * whole `<li>` list whenever the completion state updates, and
- * `wikiLinkTouchAccept` refuses a node the view no longer contains — so a
+ * `completionTouchAccept` refuses a node the view no longer contains — so a
  * held reference makes the tap a no-op and the failure reads as "the option
  * did not commit", naming the feature rather than the stale node.
  */
@@ -133,8 +133,8 @@ describe('wiki link completion (real browser)', () => {
   })
 
   it('the preview catches up with an accepted completion once the debounce settles', async () => {
-    // The dogfood report: on a phone, accepting a completion left the
-    // preview disagreeing with the source. The controlled round-trip is
+    // On a phone, accepting a completion left the preview disagreeing with
+    // the source. The controlled round-trip is
     // value -> onChange -> value -> debounced preview; this pins that an
     // accept (a programmatic dispatch, not typing) travels the whole way.
     function Harness() {
@@ -212,7 +212,7 @@ describe('wiki link completion (real browser)', () => {
 
   it('a tap while a sibling source refreshes the list is committed once the list is back', async () => {
     // The disabled window is the `:` sibling source re-activating on every
-    // keystroke — see `deferred` in `wikiLinkTouchAccept`. A tap landing in
+    // keystroke — see `deferred` in `completionTouchAccept`. A tap landing in
     // it used to be silently dropped: `acceptCompletion` refuses while
     // disabled, same as it refuses while genuinely closed.
     let value = ''

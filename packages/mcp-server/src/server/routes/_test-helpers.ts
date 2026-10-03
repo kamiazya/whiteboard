@@ -5,9 +5,11 @@ import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-c
 import { afterEach, beforeEach } from 'vitest'
 import { getDataDir } from '../config.js'
 import { type StoreScope, storeScope } from '../store/store-scope.js'
+import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import { createDataLayout } from '../tenant/data-layout.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
+import type { DocumentRouterOptions } from './document.js'
 
 /**
  * Registers per-test temp-dir lifecycle (beforeEach create, afterEach rm).
@@ -113,4 +115,20 @@ export function testDataLayout(dataDir: string = getDataDir()): DataLayout {
 /** The scope a router test hands a router: the data dir the test mocked, as production's root would. */
 export function testStoreScope(dataDir: string = getDataDir()): StoreScope {
   return storeScope(dataDir, SELF_HOST_TENANT_ID)
+}
+
+/**
+ * The options `createDocumentRouter` takes, over the mocked data dir's scope
+ * and the version store the root would build over it, unless a test supplies
+ * its own. The router requires both, so a test cannot get a second
+ * composition path by omitting one.
+ */
+export function testDocumentRouterOptions(
+  options: Omit<DocumentRouterOptions, 'scope' | 'versionStore'> & {
+    scope?: StoreScope
+    versionStore?: VersionStore
+  },
+): DocumentRouterOptions {
+  const scope = options.scope ?? testStoreScope()
+  return { ...options, scope, versionStore: options.versionStore ?? new FileVersionStore(scope) }
 }

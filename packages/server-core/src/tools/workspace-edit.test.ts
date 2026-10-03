@@ -96,6 +96,27 @@ describe('wb_workspace_edit', () => {
     ).rejects.toThrow(/1 op\(s\) before it were applied and stand/)
   })
 
+  it('ends a refusal that already carries a full stop without doubling it', async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    const made = await tool.execute({
+      workspaceId: WS,
+      ops: [
+        { op: 'document.create', path: 'a', kind: 'markdown' },
+        { op: 'document.create', path: 'a/b', kind: 'markdown' },
+      ],
+    })
+    const parent = made.results[0]?.documentId ?? ''
+    const refusal = await tool
+      .execute({ workspaceId: WS, ops: [{ op: 'document.delete', documentId: parent }] })
+      .then(
+        () => '',
+        (err: Error) => err.message,
+      )
+    expect(refusal).toContain('below it first')
+    expect(refusal).not.toContain('..')
+  })
+
   it('deletes and sets alongside creates', async () => {
     const deps = await makeDeps()
     const tool = createWorkspaceEditTool(deps)
@@ -421,5 +442,77 @@ describe('wb_workspace_edit', () => {
       documentId: out.results[0]?.documentId ?? '',
     })
     expect(exported.frontmatter.generated).toMatchObject({ by: 'process:whiteboard-server' })
+  })
+
+  describe('document.move with a name', () => {
+    async function seedSpatial() {
+      const deps = await makeDeps()
+      const tool = createWorkspaceEditTool(deps)
+      const seeded = await tool.execute({
+        workspaceId: WS,
+        ops: [{ op: 'document.create', path: 'boards/old', kind: 'spatial', name: 'Old name' }],
+      })
+      const documentId = seeded.results[0]?.documentId ?? ''
+      const entryOf = async () =>
+        (await deps.documentIndex.listDocuments({ workspaceId: WS })).find(
+          (candidate) => candidate.documentId === documentId,
+        )
+      return { deps, tool, documentId, entryOf }
+    }
+
+    it('renames a spatial document in place when only a name is given', async () => {
+      const { tool, documentId, entryOf } = await seedSpatial()
+
+      const out = await tool.execute({
+        workspaceId: WS,
+        ops: [{ op: 'document.move', documentId, name: 'New name' }],
+      })
+
+      expect(out.results).toEqual([{ op: 'document.move', documentId, path: 'boards/old' }])
+      expect(await entryOf()).toMatchObject({ path: 'boards/old', name: 'New name' })
+    })
+
+    it('moves and renames in one op', async () => {
+      const { tool, documentId, entryOf } = await seedSpatial()
+
+      const out = await tool.execute({
+        workspaceId: WS,
+        ops: [{ op: 'document.move', documentId, path: 'archive/old', name: 'Archived' }],
+      })
+
+      expect(out.results[0]).toMatchObject({ path: 'archive/old' })
+      expect(await entryOf()).toMatchObject({ path: 'archive/old', name: 'Archived' })
+    })
+
+    it('a blank name clears the name, as it does on document.set', async () => {
+      const { tool, documentId, entryOf } = await seedSpatial()
+
+      await tool.execute({
+        workspaceId: WS,
+        ops: [{ op: 'document.move', documentId, name: '   ' }],
+      })
+
+      expect((await entryOf())?.name).toBeUndefined()
+    })
+
+    it('refuses to rename a document the workspace does not hold, and writes no name', async () => {
+      const { tool, entryOf } = await seedSpatial()
+
+      await expect(
+        tool.execute({
+          workspaceId: WS,
+          ops: [{ op: 'document.move', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7', name: 'Ghost' }],
+        }),
+      ).rejects.toThrow(/01H8XJZ9K5N4M3P2Q1R0S9T8V7/)
+      expect((await entryOf())?.name).toBe('Old name')
+    })
+
+    it('refuses a move that names neither a path nor a name, saying what to give', async () => {
+      const { tool, documentId } = await seedSpatial()
+
+      await expect(
+        tool.execute({ workspaceId: WS, ops: [{ op: 'document.move', documentId }] }),
+      ).rejects.toThrow(/`path`.*`name`/)
+    })
   })
 })

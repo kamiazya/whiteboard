@@ -12,7 +12,11 @@ import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, seedWorkspaceRow, testStoreScope } from '../_test-helpers.js'
+import {
+  resolveTestServerDeps,
+  seedWorkspaceRow,
+  testDocumentRouterOptions,
+} from '../_test-helpers.js'
 
 let tempDir: string
 // The deps a router is handed by its root; here, the test wiring over the
@@ -66,11 +70,12 @@ function browserSnapshot(): Uint8Array {
 }
 
 function harness() {
-  const app = createDocumentRouter({
-    scope: testStoreScope(),
-    serverDeps,
-    autoVersionQuietMs: 60_000,
-  })
+  const app = createDocumentRouter(
+    testDocumentRouterOptions({
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+    }),
+  )
   const promote = (body: unknown) =>
     app.request('/api/w/session1/workspace-document/promote', {
       method: 'POST',

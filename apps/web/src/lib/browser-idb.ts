@@ -71,7 +71,7 @@ export function whiteboardDbName(): string {
  * v2 -> v3: elements are canonical in the Loro doc; the JSON metadata row is
  * demoted to metadata only (id/name/updatedAt). Any legacy 'scene' field left
  * over from a pre-v3 row is stripped during upgrade so no old-schema shape
- * survives to fail documentSnapshotSchema.parse.
+ * survives it.
  *
  * v3 -> v4: additive — adds the uploaded-image Blob store (see
  * document-file-store.ts). Existing data is untouched.

@@ -4,11 +4,12 @@
 // it is the one this file pins — the same argument `biome-plugin.test.mjs`
 // makes about config regressing without a sound.
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 const SCRIPT = join(import.meta.dirname, 'mutate.mjs')
 const ORIGINAL = 'keep me\nthe exact line\nkeep me too\n'
@@ -102,4 +103,77 @@ test('replaces every occurrence and says how many', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+// `finally` does not run when the process is signalled, so a Ctrl-C or a
+// harness timeout mid-command used to leave the tree mutated with the backup
+// abandoned and nothing printed. Each case signals the helper while its
+// command is running and asserts the observable end state.
+const signalCases = [
+  ['SIGTERM', 143],
+  ['SIGINT', 130],
+  ['SIGHUP', 129],
+]
+
+for (const [signal, exitCode] of signalCases) {
+  test(`restores the file and exits ${exitCode} when ${signal} arrives mid-command`, async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mutate-guard-'))
+    const file = join(dir, 'subject.txt')
+    const beatFile = join(dir, 'child.beat')
+    writeFileSync(file, ORIGINAL)
+    try {
+      // The command beats a heartbeat file until killed, which outlives the
+      // test's patience. A heartbeat rather than a pid probe: an orphan killed
+      // under a pid 1 that never reaps stays a zombie, and `kill(pid, 0)`
+      // still succeeds on one.
+      const hang = `const fs=require('node:fs');const beat=()=>fs.writeFileSync(${JSON.stringify(beatFile)},String(Date.now()));beat();setInterval(beat,25);setTimeout(()=>process.exit(0),20000)`
+      const helper = spawn(
+        process.execPath,
+        [SCRIPT, file, 'the exact line', 'the mutation', '--', process.execPath, '-e', hang],
+        { stdio: ['ignore', 'ignore', 'pipe'] },
+      )
+      let stderr = ''
+      helper.stderr.on('data', (chunk) => {
+        stderr += chunk
+      })
+      const closed = new Promise((resolve) => helper.on('close', (code, sig) => resolve({ code, sig })))
+
+      // Signalling before the mutation lands would test nothing, so wait for
+      // the mutated file AND the command to be running.
+      const deadline = Date.now() + 10_000
+      while (!(existsSync(beatFile) && readFileSync(file, 'utf8').includes('the mutation'))) {
+        assert.ok(Date.now() < deadline, `command never started\n${stderr}`)
+        await sleep(20)
+      }
+      helper.kill(signal)
+      // Bounded: a helper that died to the signal leaves its command holding
+      // the stderr pipe, and `close` would otherwise wait on it.
+      const result = await Promise.race([closed, sleep(10_000).then(() => null)])
+      assert.ok(result, `helper did not exit after ${signal}\n${stderr}`)
+      const { code, sig } = result
+
+      assert.equal(readFileSync(file, 'utf8'), ORIGINAL, stderr)
+      assert.equal(sig, null, `helper died to ${sig} instead of exiting`)
+      assert.equal(code, exitCode, stderr)
+      assert.match(stderr, /restored/)
+      // A signalled helper must not orphan the command it was running: the
+      // heartbeat has to stop.
+      const last = readFileSync(beatFile, 'utf8')
+      await sleep(300)
+      assert.equal(readFileSync(beatFile, 'utf8'), last, 'the command is still running after the helper exited')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+}
+
+test('prints where the backup is before the command runs', () => {
+  withFixture((file) => {
+    const run = mutate([file, 'the exact line', 'the mutation', '--', process.execPath, '-e', ''])
+    const backup = /backup at (\S+)/.exec(run.stderr)?.[1]
+    assert.ok(backup, run.stderr)
+    // Removed again on a clean restore, so the printed path is only a trail
+    // while the run is in flight.
+    assert.equal(existsSync(backup), false)
+  })
 })

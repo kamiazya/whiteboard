@@ -19,8 +19,13 @@ catalog:
   # a divergence nothing would report.
   "highlight.js": "^11.12.0"
   lowlight: "^3.3.0"
-  # cross-process contract cores — one version everywhere
-  zod: "^4.4.2"
+  # cross-process contract cores — one version everywhere. zod is EXACT, not a
+  # caret: its JSON Schema emitter's bytes are an ADR-0031 scoreboard and the
+  # model's `arbitraryForSchema` reads its internals, so a zod bump is a
+  # deliberate change (Dependabot proposes it, the scoreboard and the generator
+  # move with it) rather than something `pnpm dedupe` does in passing — which is
+  # how 4.4.3 became 4.6.5 once, failing both.
+  zod: "4.4.3"
   loro-crdt: "1.13.6"
   # shared build/test tooling
   # TypeScript 7 is the Go compiler: same type checking, ~4x faster. It ships
@@ -51,6 +56,11 @@ catalog:
   # One version everywhere, because a break-opportunity difference between the
   # browser and Node would desync the byte-identical-SVG guarantee.
   css-line-break: "^2.1.0"
+  # Node's type declarations. An optional peer of vitest and vite, so two
+  # versions in the lockfile split each of them into two store entries, and a
+  # run from inside a package then loads a different vitest than the one
+  # `@fast-check/vitest` bound to. One range here keeps it one entry.
+  "@types/node": "^24"
   "@vitest/coverage-v8": "^5.0.0"
   # the html reporter and `vitest --ui`; the only surfaces that persist a
   # browser traceView replay (measured: the flag alone writes nothing).

@@ -2,7 +2,7 @@
 /**
  * Indent and outdent are inverses ON THE MOVE THEY MAKE.
  *
- * `nestingIndent` is the one verb here whose meaning comes from the lines
+ * `indentUnderSibling` is the one verb here whose meaning comes from the lines
  * ABOVE — a child starts at its parent's CONTENT column, so the width is
  * the sibling's marker (`1. ` is three wide, `- ` two) rather than a fixed
  * unit. Thirty example tests cover the cases somebody thought of; what no
@@ -117,7 +117,7 @@ describe('a prefix rewrite canonicalises the marker', () => {
 })
 
 /**
- * The claim `nestingIndent`'s doc comment makes, asserted directly: a child
+ * The claim `indentUnderSibling`'s doc comment makes, asserted directly: a child
  * starts at its parent's CONTENT column, so the width is the sibling's
  * marker — `1. ` is three wide where `- ` is two — and not a fixed unit.
  *
