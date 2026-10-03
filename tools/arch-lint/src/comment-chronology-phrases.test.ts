@@ -157,11 +157,15 @@ describe('a source comment names the rule, not the working session that produced
 // A size ledger's ceiling is the reading; the comment above an entry says why
 // the file or function is that size. A `968 -> 1053` raise history beside it
 // disagreed with the number beneath in 26 places, because each raise appended
-// a line and the ceiling was edited without it.
+// a line and the ceiling was edited without it. A budget constant in a web
+// script is the same reading with the same history, so its comments are held
+// to the same rule.
 const SIZE_LEDGERS: readonly string[] = [
   'tools/arch-lint/src/file-size-budget.test.ts',
   'tools/arch-lint/src/function-size-budget.test.ts',
 ]
+
+const BUDGET_SCRIPT_ROOTS: readonly string[] = ['apps/web/scripts/']
 
 const LEDGER_ARROW = /\d[\d,]* (?:->|→) \d/
 
@@ -173,11 +177,16 @@ describe('a size ledger comment says why a file is its size, not how it got ther
     expect(LEDGER_ARROW.test('  // ADR-0040 decisions 3-6')).toBe(false)
   })
 
-  it('finds no arrow in either ledger', () => {
-    const hits = SIZE_LEDGERS.flatMap((file) => {
+  it('finds no arrow in either ledger or in a web script', () => {
+    const scripts = trackedFiles(REPO_ROOT).filter(
+      (file) => BUDGET_SCRIPT_ROOTS.some((root) => file.startsWith(root)) && isCommentSource(file),
+    )
+    // A guard that reads nothing reports clean.
+    expect(scripts).toContain('apps/web/scripts/smoke-bundle-size.mjs')
+    expect(scripts.length).toBeGreaterThan(5)
+    const hits = [...SIZE_LEDGERS, ...scripts].flatMap((file) => {
       const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
-      // A guard that reads nothing reports clean.
-      expect(lines.length).toBeGreaterThan(300)
+      expect(lines.length).toBeGreaterThan(SIZE_LEDGERS.includes(file) ? 300 : 0)
       return lines.flatMap((line, index) =>
         isComment(line) && LEDGER_ARROW.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [],
       )

@@ -4,9 +4,9 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 //
 // `smoke-bundle-size.mjs` counts gzipped bytes on the critical path. That is
 // cheap and perfectly repeatable, and it is not what anyone cares about: it is
-// a stand-in for how long a fresh visitor waits. The stand-in has drifted —
-// 108 -> 114 -> 126 -> 138 KB in four raises, each individually justified,
-// which is how a budget stops meaning anything — and the file says so itself.
+// a stand-in for how long a fresh visitor waits. A stand-in can drift from
+// what it stands for with every individually justified raise, which is how a
+// budget stops meaning anything.
 //
 // Before replacing that budget with a gate on measured metrics, the thing to
 // establish is whether such a gate can be TRUSTED, which is a question about
@@ -39,11 +39,10 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 // Two facts decide what a gate on these can be, and neither is guessable:
 //
 // **The instrument responds.** Appending 17.9 KB gzipped to the entry chunk
-// moved LCP 512 -> 600 ms (+88 ms) with the spread unchanged at 2% — signal
+// moved LCP from 512 to 600 ms (+88 ms) with the spread unchanged at 2% — signal
 // about nine times the noise band. At 4.9 ms per gzipped KB, an LCP gate that
 // respects that band detects a regression of roughly **2.5 KB gzipped**. It
-// would NOT have caught the +335 bytes that occasioned the last budget raise;
-// that is 1.6 ms, inside the noise.
+// would NOT have caught a +335 byte change; that is 1.6 ms, inside the noise.
 //
 // **LCP is the steady one and long tasks is not.** The CPU-bound metric —
 // the one that would catch a parse/execute regression the transfer number
