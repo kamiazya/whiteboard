@@ -2,8 +2,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { trySetPointerCapture } from './pointer-capture.js'
 
-const rootWith = (setPointerCapture: (id: number) => void): HTMLElement =>
-  ({ setPointerCapture }) as unknown as HTMLElement
+type Root = Parameters<typeof trySetPointerCapture>[0]
+
+const rootWith = (setPointerCapture: (id: number) => void): Root =>
+  ({ setPointerCapture }) as unknown as Root
 
 describe('trySetPointerCapture', () => {
   it('captures the pointer on the root', () => {
