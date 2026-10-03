@@ -471,15 +471,15 @@ export function moveWorkspaceDocument(
   doc.commit()
 }
 
-/** Sets — or, with no `name`, clears — a document's display name. */
+/** Sets a document's display name; no `name`, or a blank one, clears it. */
 export function setWorkspaceDocumentName(
   doc: LoroDoc,
   input: { documentId: string; name?: string },
 ): void {
   const node = nodeById(doc, input.documentId)
   if (node === null) throw new Error(`No document "${input.documentId}" to rename`)
-  if (input.name === undefined) node.data.delete('name')
-  else node.data.set('name', input.name)
+  if (!input.name?.trim()) node.data.delete('name')
+  else node.data.set('name', workspaceNodeMetaSchema.shape.name.parse(input.name))
   doc.commit()
 }
 
