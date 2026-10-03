@@ -530,8 +530,9 @@ export const canvasEditInputSchema = z
      * document, and adopted or dismissed by a person.
      *
      * **The default is decided by what the batch CARRIES, not by who is
-     * calling.** Content — node and edge adds, patches and removes — is
-     * proposed, because nobody watches an agent type and there is no moment
+     * calling.** Content — node, edge and line adds, patches and removes, and
+     * `node.splice` — is proposed, because nobody watches an agent type and
+     * there is no moment
      * at which a person could object (decision 3). A batch carrying anything
      * else applies: `comment.*` is the annotation layer, a lock is a claim on
      * a document rather than a change to it, and `tidy`/`region.set` have no
