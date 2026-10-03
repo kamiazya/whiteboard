@@ -364,7 +364,11 @@ describe('wb_thread_edit refuses an anchor that names nothing on the document', 
   })
 
   test.each<[string, Anchor, RegExp]>([
-    ['a spatial anchor, since a note has no canvas', { kind: 'spatial', x: 1, y: 2 }, /canvas/],
+    [
+      'a spatial anchor, since a note has no canvas',
+      { kind: 'spatial', x: 1, y: 2 },
+      /a markdown document has no canvas to anchor to; anchor to a quoted passage/,
+    ],
     [
       'a passage absent from the body',
       { kind: 'text', quote: { exact: 'zzz' }, start: 0, end: 3 },
@@ -373,7 +377,7 @@ describe('wb_thread_edit refuses an anchor that names nothing on the document', 
     [
       'a passage naming a node, since a note has none',
       { kind: 'text', nodeId: 'a', quote: { exact: 'why' }, start: 0, end: 3 },
-      /node/,
+      /a markdown document has no node "a"; omit nodeId to quote its body/,
     ],
   ])('on a note, %s', async (_name, anchor, detail) => {
     const store = new FakeDocumentStore()
@@ -404,5 +408,51 @@ describe('wb_thread_edit refuses an anchor that names nothing on the document', 
     })
 
     expect(result.threads).toHaveLength(anchors.length)
+  })
+})
+
+describe('wb_thread_edit edge anchors on a canvas with several edges', () => {
+  const TWO_EDGES: SpatialCanvas = {
+    nodes: BOARD.nodes,
+    edges: [
+      { id: 'e1', from: { node: 'a' }, to: { node: 'b' } },
+      { id: 'e2', from: { node: 'b' }, to: { node: 'a' } },
+    ],
+  }
+
+  async function seedTwoEdges(store: FakeDocumentStore): Promise<void> {
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, TWO_EDGES)
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+  }
+
+  test.each(['e1', 'e2'])('accepts an anchor on edge %s, whichever edge it is', async (edgeId) => {
+    const store = new FakeDocumentStore()
+    await seedTwoEdges(store)
+
+    const result = await createThreadEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'thread.add', anchor: { kind: 'spatial', edgeId, x: 0, y: 0 }, body: edgeId }],
+    })
+
+    expect(result.threads).toHaveLength(1)
+  })
+
+  test('refuses an anchor on an edge the canvas does not hold, naming it', async () => {
+    const store = new FakeDocumentStore()
+    await seedTwoEdges(store)
+
+    await expect(
+      createThreadEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          { op: 'thread.add', anchor: { kind: 'spatial', edgeId: 'e3', x: 0, y: 0 }, body: 'x' },
+        ],
+      }),
+    ).rejects.toThrow(/edge "e3" is not on the canvas/)
   })
 })

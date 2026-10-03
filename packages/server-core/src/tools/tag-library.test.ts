@@ -2,6 +2,8 @@
 // at the well-known path `tags`, read off the document's facet, and the
 // rules it declares applied to a tag set about to be written.
 import { writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import {
@@ -11,6 +13,7 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import {
+  carriesATag,
   refuseAgainstLibrary,
   TAG_LIBRARY_PATH,
   TagLibraryError,
@@ -101,5 +104,43 @@ describe('refuseAgainstLibrary', () => {
 
   test('with no library, everything passes', () => {
     expect(() => refuseAgainstLibrary({}, ['health:whatever', 'x:y'], 'the board')).not.toThrow()
+  })
+})
+
+const tagGeo = { x: 0, y: 0, width: 10, height: 10 }
+const plain = (id: string) => textNode({ id, ...tagGeo, text: id })
+const tagged = (id: string) => textNode({ id, ...tagGeo, text: id, tags: ['k:v'] })
+const edge = (id: string, tags?: string[]) => ({
+  id,
+  from: { node: 'a' },
+  to: { node: 'b' },
+  ...(tags === undefined ? {} : { tags }),
+})
+
+describe('carriesATag decides whether a render loads the tag library at all', () => {
+  test('is false for an untagged board, including empty tag lists', () => {
+    const board: SpatialCanvas = {
+      tags: [],
+      nodes: [plain('a'), { ...plain('b'), tags: [] }],
+      edges: [edge('e', [])],
+    }
+    expect(carriesATag(board)).toBe(false)
+    expect(carriesATag({ nodes: [], edges: [] })).toBe(false)
+  })
+
+  test.each<[string, SpatialCanvas]>([
+    ['the board', { tags: ['k:v'], nodes: [plain('a')], edges: [] }],
+    ['the last node', { nodes: [plain('a'), plain('c'), tagged('b')], edges: [] }],
+    ['the first node', { nodes: [tagged('a'), plain('b'), plain('c')], edges: [] }],
+    [
+      'the last edge',
+      { nodes: [plain('a'), plain('b')], edges: [edge('e1'), edge('e2'), edge('e3', ['k:v'])] },
+    ],
+    [
+      'the first edge',
+      { nodes: [plain('a'), plain('b')], edges: [edge('e1', ['k:v']), edge('e2'), edge('e3')] },
+    ],
+  ])('is true when only %s carries a tag', (_name, board) => {
+    expect(carriesATag(board)).toBe(true)
   })
 })
