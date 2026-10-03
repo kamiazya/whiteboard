@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       force_publish_tag:
-        description: 'Tag to (re-)publish to npm, e.g. mcp-server-v0.0.2. Leave blank to skip publish-mcp.'
+        description: 'Tag to re-run publishing for, e.g. mcp-server-v0.0.2. Runs publish-mcp (npm publish, which fails on a version npm already has) AND docker-publish-sign (pushes the image and re-tags latest). Leave blank to run neither.'
         required: false
         default: ''
 

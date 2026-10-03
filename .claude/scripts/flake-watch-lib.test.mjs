@@ -540,3 +540,93 @@ test('flakeCacheDir falls back to the checkout tmp when git cannot say where the
   assert.equal(flakeCacheDir({ gitCommonDir: undefined, root: '/repo' }), '/repo/tmp/flake-watch')
   assert.equal(flakeCacheDir({ gitCommonDir: '', root: '/repo' }), '/repo/tmp/flake-watch')
 })
+
+import {
+  formatUnhealedReport,
+  inspectPublishJobs,
+  unhealedPublishJobs,
+  unhealedWorkflowRuns,
+} from './flake-watch-lib.mjs'
+
+// The release that stranded the 0.0.20 image: publish-mcp went out, docker-publish-sign failed on
+// every attempt, and the next push to main ran the workflow again with both jobs skipped and the
+// RUN concluding success. A run-level "last success" reads that as healed.
+const RELEASE_RUNS = [
+  { runId: '2', createdAt: '2026-09-27T13:24:23Z', conclusion: 'success', event: 'push', title: 'chore: unpin release-as now that 0.0.20 is out (#1954)' },
+  { runId: '1', createdAt: '2026-09-27T12:58:29Z', conclusion: 'failure', event: 'push', title: 'chore: release main (#258)' },
+  { runId: '0', createdAt: '2026-09-27T11:57:04Z', conclusion: 'success', event: 'push', title: 'chore: release the next version as 0.0.20 (#1948)' },
+]
+
+test('inspectPublishJobs selects the runs that could have published or failed, and skips an ordinary push', () => {
+  assert.deepEqual(
+    RELEASE_RUNS.filter(inspectPublishJobs).map((run) => run.runId),
+    ['1', '0'],
+  )
+  assert.equal(inspectPublishJobs({ conclusion: 'success', event: 'workflow_dispatch', title: 'release' }), true)
+  assert.equal(inspectPublishJobs({ conclusion: 'success', event: 'push', title: 'fix: a thing' }), false)
+  assert.equal(inspectPublishJobs({ conclusion: 'failure', event: 'push', title: 'fix: a thing' }), true)
+})
+
+test('unhealedPublishJobs reports a publish job whose newest real run failed, even after later runs skipped it', () => {
+  const withJobs = [
+    { ...RELEASE_RUNS[1], jobs: [{ name: 'docker-publish-sign', conclusion: 'failure' }, { name: 'publish-mcp', conclusion: 'success' }] },
+    { ...RELEASE_RUNS[0], jobs: [{ name: 'docker-publish-sign', conclusion: 'skipped' }, { name: 'publish-mcp', conclusion: 'skipped' }] },
+  ]
+  assert.deepEqual(unhealedPublishJobs(withJobs), [
+    { job: 'docker-publish-sign', runId: '1', createdAt: '2026-09-27T12:58:29Z', conclusion: 'failure' },
+  ])
+})
+
+test('unhealedPublishJobs is empty once a later run of that job succeeded', () => {
+  const withJobs = [
+    { runId: '9', createdAt: '2026-09-28T00:00:00Z', jobs: [{ name: 'docker-publish-sign', conclusion: 'success' }] },
+    { runId: '1', createdAt: '2026-09-27T12:58:29Z', jobs: [{ name: 'docker-publish-sign', conclusion: 'failure' }] },
+  ]
+  assert.deepEqual(unhealedPublishJobs(withJobs), [])
+})
+
+test('unhealedPublishJobs orders by instant, not by the order the runs arrive in', () => {
+  const withJobs = [
+    { runId: '1', createdAt: '2026-09-27T12:58:29Z', jobs: [{ name: 'publish-mcp', conclusion: 'failure' }] },
+    { runId: '9', createdAt: '2026-09-28T00:00:00Z', jobs: [{ name: 'publish-mcp', conclusion: 'success' }] },
+  ]
+  assert.deepEqual(unhealedPublishJobs(withJobs), [])
+})
+
+// The scheduled Mutation lane: cancelled on three Mondays running, last green before them.
+const MUTATION_RUNS = [
+  { runId: 'm3', createdAt: '2026-09-28T11:00:04Z', conclusion: 'cancelled' },
+  { runId: 'm2', createdAt: '2026-09-21T10:00:46Z', conclusion: 'cancelled' },
+  { runId: 'm1', createdAt: '2026-09-14T09:56:44Z', conclusion: 'cancelled' },
+  { runId: 'm0', createdAt: '2026-09-07T04:30:00Z', conclusion: 'success' },
+]
+
+test('unhealedWorkflowRuns reports a scheduled workflow with no success newer than its last failure', () => {
+  assert.deepEqual(unhealedWorkflowRuns(MUTATION_RUNS), {
+    count: 3,
+    newest: { runId: 'm3', createdAt: '2026-09-28T11:00:04Z', conclusion: 'cancelled' },
+    lastSuccessAt: '2026-09-07T04:30:00Z',
+  })
+})
+
+test('unhealedWorkflowRuns reports nothing once a success follows the failure, and ignores a run still in progress', () => {
+  const healed = [{ runId: 'a2', createdAt: '2026-10-02T02:23:00Z', conclusion: 'success' }, { runId: 'a1', createdAt: '2026-10-01T09:07:15Z', conclusion: 'failure' }]
+  assert.equal(unhealedWorkflowRuns(healed), null)
+  assert.equal(unhealedWorkflowRuns([{ runId: 'p', createdAt: '2026-10-03T00:00:00Z', conclusion: '' }, ...healed]), null)
+})
+
+test('unhealedWorkflowRuns reports a failure with no success on record at all', () => {
+  const result = unhealedWorkflowRuns([{ runId: 'f', createdAt: '2026-10-01T09:07:15Z', conclusion: 'failure' }])
+  assert.equal(result.count, 1)
+  assert.equal(result.lastSuccessAt, null)
+})
+
+test('formatUnhealedReport is silent when nothing is unhealed and names each finding otherwise', () => {
+  assert.equal(formatUnhealedReport({ publishJobs: [], workflows: [] }), '')
+  const report = formatUnhealedReport({
+    publishJobs: [{ job: 'docker-publish-sign', runId: '1', createdAt: '2026-09-27T12:58:29Z', conclusion: 'failure' }],
+    workflows: [{ workflow: 'Mutation', ...unhealedWorkflowRuns(MUTATION_RUNS) }],
+  })
+  assert.match(report, /docker-publish-sign.*failure.*2026-09-27.*run 1/s)
+  assert.match(report, /Mutation.*3 run\(s\).*cancelled.*last success 2026-09-07/s)
+})
