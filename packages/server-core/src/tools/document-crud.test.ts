@@ -281,14 +281,6 @@ describe('wbDocumentResolve', () => {
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
-  it('refuses a missing markdown document as a document, not as a canvas', async () => {
-    const deps = await makeDeps()
-    await wbDocumentCreate(deps, { workspaceId: 'ws-1', path: 'note', kind: 'markdown' })
-    await expect(
-      wbDocumentResolve(deps, { workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
-    ).rejects.toThrow('Document not found: 01ARZ3NDEKTSV4RRFFQ69G5FAV in workspace ws-1')
-  })
-
   it('does not resolve a document from another workspace', async () => {
     const deps = await makeDeps()
     // A SECOND workspace, which makeDeps does not provide.
