@@ -383,12 +383,15 @@ async function materialiseMirroredBlobs(
   references: BackupBlobReferences,
 ): Promise<void> {
   const mirrorRoot = mirrorRootFor(backupDir, references)
-  const wanted: Array<{ from: string; to: string }> = []
   // The mirror is flat and the manifest says whose each blob is, so every
   // tenant's bytes go back under that tenant rather than into one of them.
-  for (const [tenantId, refs] of Object.entries(references.tenants)) {
-    wanted.push(...(await plannedRestores(mirrorRoot, targetDataDir, tenantId, refs)))
-  }
+  const wanted = (
+    await Promise.all(
+      Object.entries(references.tenants).map(([tenantId, refs]) =>
+        plannedRestores(mirrorRoot, targetDataDir, tenantId, refs),
+      ),
+    )
+  ).flat()
 
   const missing = (
     await Promise.all(
@@ -430,14 +433,16 @@ async function plannedRestores(
     from: blobShardPath(join(mirrorRoot, BLOBS_DIRNAME), digest),
     to: blobShardPath(into, digest),
   }))
-  for (const [relativePath, digest] of Object.entries(refs.files)) {
-    const to = join(into, ...relativePath.split('/'))
-    if (!(await isStrictlyInside(into, to))) {
-      throw new BackupError('Backup names a file outside the blob directory it belongs to.')
-    }
-    planned.push({ from: blobShardPath(join(mirrorRoot, FILES_DIRNAME), digest), to })
-  }
-  return planned
+  const named = await Promise.all(
+    Object.entries(refs.files).map(async ([relativePath, digest]) => {
+      const to = join(into, ...relativePath.split('/'))
+      if (!(await isStrictlyInside(into, to))) {
+        throw new BackupError('Backup names a file outside the blob directory it belongs to.')
+      }
+      return { from: blobShardPath(join(mirrorRoot, FILES_DIRNAME), digest), to }
+    }),
+  )
+  return [...planned, ...named]
 }
 
 async function pathExists(path: string): Promise<boolean> {
