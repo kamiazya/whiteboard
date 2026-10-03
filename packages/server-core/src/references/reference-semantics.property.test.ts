@@ -374,7 +374,7 @@ describe('reference semantics under command sequences', () => {
       // spatial document in a slot before it can fire, and the prelude seeds
       // only markdown — so whether any run exercises a canvas reference at
       // all is left to the generator. Measured against a real regression
-      // (#1454 flipping canvas-edit's default from apply to propose): 4 of 8
+      // (flipping canvas-edit's default from apply to propose): 4 of 8
       // unseeded runs caught it, and the change's own CI was one of the four
       // that did not, landing 26/26 green.
       //

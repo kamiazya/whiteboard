@@ -76,7 +76,7 @@ describe('names-store', () => {
     await expect(setDocumentPinned('sess-1', 'never-created', true)).rejects.toThrow(/no document/i)
   })
 
-  // Pin state is shared CRDT state (dual-plane collapse S4b): the row write
+  // Pin state is shared CRDT state (dual-plane collapse): the row write
   // keeps serving today's reads, and the workspace record's pinned list is
   // what every replica converges on.
   it('mirrors pin and unpin into the workspace record pinned list', async () => {

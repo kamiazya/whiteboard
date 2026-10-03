@@ -1,5 +1,5 @@
 /**
- * S8 (ADR-0041 L1, ADR-0042 d3-d4, user decision 2026-09-21): membership
+ * Membership (ADR-0041 L1, ADR-0042 d3-d4, user decision 2026-09-21)
  * gates ONLINE access. `workspaceAccess` is the ONE decision — every
  * membership-gated surface (the registry-driven routes and SSE) is meant to call this rather than keep its
  * own copy, which is exactly the shape that let an L1 revoke bite only the

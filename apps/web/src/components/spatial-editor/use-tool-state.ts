@@ -14,7 +14,7 @@ export interface ToolStateInputs {
 }
 
 export function useToolState({ defaultTool, initialTool }: ToolStateInputs) {
-  // OOUI interaction mode (S6/S7): Hand (navigation) is the default —
+  // OOUI interaction mode: Hand (navigation) is the default —
   // Select restores the pre-tool editing behavior byte-for-byte; Connect
   // arms object-first click-A, click-B edge creation. Creation is
   // deliberately NOT a mode — the palette's Note entry works in every mode.

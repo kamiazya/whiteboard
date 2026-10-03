@@ -324,8 +324,7 @@ describe('a themed picker draws one specimen per registered theme', () => {
   })
 })
 
-// What the specimen path was skipping that the DECLARED path has (CodeRabbit,
-// PR #1568). One root: `normalizePicker` guards a written-out list, and a
+// What the specimen path was skipping that the DECLARED path has. One root: `normalizePicker` guards a written-out list, and a
 // specimen picker returns before reaching most of it.
 describe('a specimen picker is held to what a declared one is held to', () => {
   const iconPlugin = (facets: Parameters<typeof definePlugin>[0]['facets']) =>

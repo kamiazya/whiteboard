@@ -79,7 +79,7 @@ export interface WorkspacesRouterOptions {
    *  this from `options.replicaKeys?.effectiveTier` only when a replica-key
    *  store was supplied. */
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
-  /** S8 slice 2: the membership gate GET /api/workspaces filters the listing
+  /** The membership gate GET /api/workspaces filters the listing
    *  through, rather than refusing the whole request — a name is a leak to a
    *  non-member the way its content is. Absent means no filtering (server-
    *  mode, and any composition that has not wired members). */

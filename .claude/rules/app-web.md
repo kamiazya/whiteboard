@@ -7,7 +7,7 @@ paths:
 
 ## Layers, bottom to top
 
-`src/layer-order.test.ts` is the executable half of this section; the order
+`tools/arch-lint/src/web-layer-order.test.ts` is the executable half of this section; the order
 it declares is:
 
 | layer | holds | may import |

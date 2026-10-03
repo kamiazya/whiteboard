@@ -1,6 +1,6 @@
 /**
  * What the daemon's membership gate looks like from this browser
- * (ADR-0041/0042 S8): a keeper that knows who is asking and says this person
+ * (ADR-0041/0042): a keeper that knows who is asking and says this person
  * is not a member of the workspace. Only server mode has more than one
  * person, so only there can this arrive.
  *

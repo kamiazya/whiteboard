@@ -59,7 +59,7 @@ interface StubOptions {
 
 /**
  * The daemon routes the flow touches, answering from `target` — and, as a
- * side effect of building it, connects the S4b replica-key holder to THIS
+ * side effect of building it, connects the replica-key holder to THIS
  * double. The demote pull inside `promoteWorkspace` (via `cacheDaemonWorkspace`)
  * now seals its write, which needs a connected keeper and a `/replica-key`
  * answer to do at all; every caller here already builds a fresh double

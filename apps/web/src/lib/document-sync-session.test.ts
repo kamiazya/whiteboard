@@ -700,12 +700,11 @@ describe('createDocumentSyncSession', () => {
   it('republishes annotations after a LOCAL comment commit, which is how a person creates one', async () => {
     // The path a person actually takes, and the one the remote-peer case
     // above does not cover: the editor commits a comment through
-    // `commitToDoc`, which writes it into the doc and — before this — never
-    // told the annotation channel. Found by dogfooding: the bubble appeared
-    // on the canvas (the optimistic canvas value is published undebounced)
-    // while the panel went on saying "No comments yet" for the rest of the
-    // session, because annotations were only recomputed when a REMOTE update
-    // happened to arrive.
+    // `commitToDoc`, which writes it into the doc. Without the republish the
+    // bubble appears on the canvas (the optimistic canvas value is published
+    // undebounced) while the panel keeps saying "No comments yet" for the
+    // rest of the session, because annotations would only be recomputed when
+    // a REMOTE update happened to arrive.
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()

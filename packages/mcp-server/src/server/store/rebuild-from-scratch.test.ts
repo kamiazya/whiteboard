@@ -1,5 +1,5 @@
 /**
- * The dual-plane collapse's permanent acceptance test (S8): the workspace
+ * The dual-plane collapse's permanent acceptance test: the workspace
  * tree is the address book, so the ENTIRE document surface — listing,
  * content, names, pins, versions, rename, delete — must work
  * across a restart with no `documents` table at all.

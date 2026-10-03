@@ -1,6 +1,6 @@
 /**
  * The replica read page's five degradation states (ADR-0042 decisions 3-6),
- * as a pure function of what the S4a holder knows about this workspace's key
+ * as a pure function of what the session-key holder knows about this workspace's key
  * and whether this device remembered a wrapped one — never of the tier or of
  * whether a registry entry exists, both of which the caller has already
  * resolved before this function is asked (see `replica-page-state.ts`'s own

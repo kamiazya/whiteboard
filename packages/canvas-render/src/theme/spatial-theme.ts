@@ -19,7 +19,7 @@
 // changes the document background, so a dark export pairs a dark
 // background with light node chrome — changing that is a behavior decision
 // (export gaining a dark chrome variant), not a convergence one, and is
-// out of this slice's scope.
+// outside what this resolver converges.
 import type { CanvasColor, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind } from '@kamiazya/whiteboard-model'
 import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'

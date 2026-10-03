@@ -1,7 +1,7 @@
 // The one invariant every reported routing defect violated: a line drawn
-// through the inside of a box. Four of them (#705, #706, #711, #713) reached
-// a human before they reached the suite, because each was pinned by the
-// single canvas that exposed it and nothing asked the question generally.
+// through the inside of a box. Pinning each such defect to the single canvas
+// that exposed it left the next one to reach a human first, because nothing
+// asked the question generally.
 //
 // The exemption is the one `routeEdge` already applies when it picks
 // obstacles: a rect that STRICTLY contains an anchor can never be routed

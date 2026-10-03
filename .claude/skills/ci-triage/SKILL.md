@@ -5,7 +5,7 @@ description: Monitor and triage the POST-PUSH automated-review surface for the w
 
 # CI & automated-review triage (whiteboard)
 
-`lefthook` (pre-push) catches local build/test/typecheck breakage before push. This skill covers the layer ONLY the cloud sees after push: CI workflows + the GitHub-App review bots on the PR. The integrator monitors them, separates signal from noise, and files actionable items into the Task list / whiteboard `type: issue` documents (or fixes quick ones on the spot).
+`lefthook` (pre-push) catches local typecheck, lint and architecture-guard breakage before push; it runs no test suite and no build. This skill covers the layer ONLY the cloud sees after push: CI workflows + the GitHub-App review bots on the PR. The integrator monitors them, separates signal from noise, and files actionable items into the Task list / whiteboard `type: issue` documents (or fixes quick ones on the spot).
 
 ## What runs on this repo (verified surface)
 

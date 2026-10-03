@@ -95,7 +95,7 @@ async function canonicalKeys(keys: readonly string[]): Promise<Array<{ key: stri
 export interface SyncSseRouterOptions {
   /** The workspace-record seam whose updates this stream carries. */
   workspaceDocuments: Pick<ServerDeps['workspaceDocuments'], 'onUpdated'>
-  /** S8 slice 2: the membership gate. Absent means no gate at all
+  /** The membership gate. Absent means no gate at all
    *  (server-mode, and any composition that has not wired members). */
   admit?: WorkspaceAdmit
   /** Whose stream this is, so losing access can end it. Absent: nobody's. */
@@ -103,7 +103,7 @@ export interface SyncSseRouterOptions {
 }
 
 /**
- * The membership gate for the SSE transport (S8 slice 2): decides ONCE per
+ * The membership gate for the SSE transport: decides ONCE per
  * distinct workspace among `keys`, refusing the whole request on the FIRST
  * non-admitted one — before any stream lookup, so a refused caller learns
  * nothing about stream ids. A malformed key is left to the route's own

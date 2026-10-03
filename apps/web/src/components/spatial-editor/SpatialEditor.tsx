@@ -1765,8 +1765,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // A canvas editor's interaction surface has no static-content semantics
           // HTML/ARIA can describe more precisely than "application" — this is
           // the same documented tradeoff drawing/whiteboard editors commonly
-          // make. A dedicated a11y parallel-DOM projection is future work, not
-          // this slice's scope.
+          // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
           aria-label="Spatial canvas editor"
           // Click-focusable (not tab-reachable): edge selection focuses this

@@ -3,7 +3,7 @@
  * (UNIQUE constraint) and a converged tree can: two replicas each created
  * a document at the same path and both survived the merge.
  *
- * The decided behavior (dual-plane collapse S5b): the LISTING shows both,
+ * The decided behavior (dual-plane collapse): the LISTING shows both,
  * with the later sibling marked `shadowed` — hiding converged data reads
  * as loss — while resolution BY PATH refuses: an agent naming a contested
  * path gets an error to act on (resolve by id, or rename one), never a

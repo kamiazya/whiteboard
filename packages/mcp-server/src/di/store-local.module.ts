@@ -47,7 +47,7 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
     // Content reads/writes land on the document's workspace-tree node (see
     // workspace-plane.ts), and the index IS the tree — the dual-plane
     // wrapper and its rows mirror retired with the documents table's
-    // address-book role (dual-plane collapse S7). Cache-backed, so the
+    // address-book role. Cache-backed, so the
     // index operates on the same live workspace doc every other path
     // writes through.
     bind(TOKENS.DocumentStore)

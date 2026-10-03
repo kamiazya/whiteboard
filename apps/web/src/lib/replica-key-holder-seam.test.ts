@@ -1,8 +1,8 @@
 // @vitest-environment node
 /**
- * Two structural invariants of the ONE-factory design (ADR-0042/0043 S4b):
+ * Two structural invariants of the ONE-factory design (ADR-0042/0043):
  *
- * - `replica-store.ts` is the only module that imports the S4a session-key
+ * - `replica-store.ts` is the only module that imports the session-key
  *   holder (`sessionKey`/`replicaKeyProviderFor`). A second importer would
  *   be a second place deciding whether a document is sealed or plaintext,
  *   which is exactly the split the ONE factory exists to rule out.

@@ -128,6 +128,23 @@ const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string; allow?: 
       'no tool has a dash or stroke-style field: edge.add takes color, label, bends and facets, so a convention taught in skills must be one a model can express — color and label',
     allow: /no dash\/line-style field/,
   },
+  // Fields and values no input schema has. A nonexistent tool name fails the
+  // checks below; a nonexistent FIELD or VALUE is made of real words, so only
+  // a pattern can see it.
+  {
+    pattern: /\bsubText\b/,
+    reason:
+      'no node has a subText field: a node carries `text` only, so a second line of explanation goes in that text or in a note node beside the box',
+  },
+  {
+    pattern: /\bbox `title`/,
+    reason: 'a box carries `text`, not a `title`',
+  },
+  {
+    pattern: /`(?:primary|success|info|neutral)`/,
+    reason:
+      'color is a hex string or a JSON Canvas preset "1"-"6" (CanvasColor); there is no semantic color name',
+  },
   // Denials of surface a tool now has. Every one of these read as true once
   // and was left standing when the capability landed, so a model followed the
   // skill over the tool's own description.

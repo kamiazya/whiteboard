@@ -2840,7 +2840,7 @@ describe('pinned counterexamples', () => {
   // different-node case above, in the one arm that was carved out of it.
   // Reachable the same way: right-click the node you are editing and pick
   // Edit text, which the right-click leaves open because it returns early
-  // from `handlePointerDown`. Found by CodeRabbit on #1119.
+  // from `handlePointerDown`.
   it('re-opening the edit on the SAME node keeps what was typed', () => {
     const canvas = initialCanvas()
     const opened = reduceGesture(createIdleState(), canvas, {

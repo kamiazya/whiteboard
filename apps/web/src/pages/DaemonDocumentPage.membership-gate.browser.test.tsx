@@ -1,5 +1,5 @@
-// The web app's answer to a keeper's membership gate (ADR-0041/0042 S8): a
-// not_a_member refusal lands on S5's removed page, and a
+// The web app's answer to a keeper's membership gate (ADR-0041/0042): a
+// not_a_member refusal lands on the removed page, and a
 // requires_person_session refusal is an ordinary load error — no passkey in
 // this browser can bind a session (ADR-0050 decision 3). Over a REAL fetch
 // double (never a daemon-api-client mock), so the real DaemonApiError seam

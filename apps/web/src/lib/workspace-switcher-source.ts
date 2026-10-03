@@ -7,7 +7,7 @@
  * per keeper — the browser's over its IndexedDB registry, the daemon's over
  * HTTP — and the shell only asks. A contract filed under its first renderer
  * is a contract the thing that PRODUCES it cannot reach: `hooks/` may not
- * import `components/` (see `layer-order.test.ts`), so the two keepers'
+ * import `components/` (see `tools/arch-lint/src/web-layer-order.test.ts`), so the two keepers'
  * answers had to be built inline in `App.tsx` to name the type at all.
  */
 

@@ -10,7 +10,7 @@
   // exports analysis skipped. This repo's source-scan guards glob a whole
   // source tree with `{ query: '?raw' }` to READ the text, never to import it
   // (canvas-render's import-guard.test.ts globs `./**/*.ts`; apps/web has
-  // twenty such scans), so with the plugin on, every file under those trees
+  // dozens of such scans), so with the plugin on, every file under those trees
   // became an entry and none of their exports were ever judged. The plugin's
   // only other jobs here are vite.config.ts and index.html entries, which the
   // workspaces below declare themselves.
@@ -76,9 +76,6 @@
       "project": ["src/**/*.ts"]
     },
     "tools/arch-lint": {
-      // Standalone lint tool invoked via its vitest project
-      // (`arch-lint-node`), not imported by any other workspace.
-      "entry": ["src/scanner.ts", "src/direction-check.ts", "src/architecture-map.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/ports": {
@@ -125,9 +122,6 @@
       "project": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.mjs"]
     },
     "packages/canvas-viewer": {
-      "entry": [
-        "scripts/*.mjs"
-      ],
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]
     },
     "apps/extension": {
@@ -143,9 +137,6 @@
         // Compile-time-only regression guard (tsc --noEmit fails/passes
         // around it); intentionally never imported at runtime.
         "src/_type-probe.ts",
-        // Regenerated on demand via `pnpm --filter @kamiazya/whiteboard-web docs:snapshots`, not imported from
-        // the app entry point.
-        "src/docs-snapshots/*.docs-snapshot.test.tsx",
         "scripts/*.mjs"
       ],
       "ignoreIssues": {

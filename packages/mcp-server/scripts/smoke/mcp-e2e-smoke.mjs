@@ -1284,7 +1284,7 @@ async function storedBendsDrawAndProposeModeStores(ctx) {
 
   // The bend is deliberately NOT cleared: `edge.patch` merges, so it has no
   // way to REMOVE an optional field (the same is true of `label` and
-  // `color`, and it predates this slice). Nothing after this point reads the
+  // `color`). Nothing after this point reads the
   // edge's route, so leaving it bent costs the smoke nothing — and writing a
   // clear that does not clear would cost it more than the missing step.
 

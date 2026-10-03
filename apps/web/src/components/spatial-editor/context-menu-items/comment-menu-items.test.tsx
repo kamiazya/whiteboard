@@ -9,7 +9,7 @@ describe('commentMenuItems', () => {
   it("offers only the conversation's own lifecycle, none of the canvas verbs", () => {
     const comment: CanvasComment = { id: 'c1', x: 10, y: 20, text: 'note' }
     const items = commentMenuItems({ comment, applyResult: vi.fn() })
-    // No Edit row since 2026-09-08: it opened a pre-filled bubble that
+    // No Edit row: it would open a pre-filled bubble that
     // could only rewrite the opening message, because what it wrote was the
     // flat comment's `text`. Editing moved onto the message, in the card,
     // where it can name WHICH message.

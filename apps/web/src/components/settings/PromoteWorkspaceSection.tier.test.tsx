@@ -1,5 +1,5 @@
 /**
- * The "This workspace" section's read-plane tier line (ADR-0042 S6):
+ * The "This workspace" section's read-plane tier line (ADR-0042):
  * read-only, sourced from GET /api/workspaces matched by workspaceId (never
  * the first row), and rendered only when that row carries a tier. Kept out
  * of PromoteWorkspaceSection.browser.test.tsx / .fold-failure.browser.test.tsx

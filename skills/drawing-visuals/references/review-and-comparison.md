@@ -19,7 +19,7 @@ Examples:
 ## Labels
 
 - Use roughly 1-2 arrow labels per frame
-- Push causes and evaluative wording into the box `title` / `subText`
+- Push causes and evaluative wording into a note beside the box
 - Do not mix the problem and the proposal in one annotation
 
 ## Visual Direction

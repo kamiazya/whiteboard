@@ -371,7 +371,7 @@ describe('every element kind, through every surface that has to know about it', 
           // either held already or is the mark just pressed. This is the
           // statement the two shipped defects would have failed — one
           // replaced the held ink, the other dropped it entirely. An EDGE
-          // takes this same arm since 2026-09-19, which is the whole of
+          // takes this same arm too, which is the whole of
           // what opening shift for edges cost here.
           for (const id of shift.ids) expect([...held, placed.id]).toContain(id)
           break

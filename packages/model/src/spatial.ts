@@ -448,13 +448,13 @@ export const canvasEdgeSchema = z
      * ledger declares them `extension` — JSON Canvas 1.0 has no waypoint, so
      * a strict reader gets the computed route instead.
      *
-     * They lived in `visual.path/v0` until this slice, and that was the
+     * They lived in `visual.path/v0` once, and that was the
      * ADR's own worked example of the cost the old binding imposed: adding a
      * field to an edge cost a facet definition, an `EdgeRouter` contract and
      * the extraction of `packages/scene`. The seam stays — it was worth
      * building — and the concept comes home.
      *
-     * Sub-pixel, like every other coordinate since this slice: the drag no
+     * Sub-pixel, like every other coordinate: the drag no
      * longer has to round before it writes.
      */
     bends: bendsFieldSchema,

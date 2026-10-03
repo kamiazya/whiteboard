@@ -1,5 +1,5 @@
 /**
- * The ONE `DocumentStore` factory (ADR-0042/0043 S4b). Every production
+ * The ONE `DocumentStore` factory (ADR-0042/0043). Every production
  * construction of `IdbDocumentStore` goes through `openDocumentStore` —
  * enforced by `replica-key-holder-seam.test.ts`'s source scan — so a
  * daemon-kept workspace's replica is sealed under the session key and a
@@ -74,7 +74,7 @@ const routingProvider: ReplicaKeyProvider = {
 }
 
 /**
- * The S4a holder's cached answer for one workspace's replica key — no
+ * The session-key holder's cached answer for one workspace's replica key — no
  * request, no key bytes — for a reader that only needs to know whether a
  * daemon-kept replica is readable right now and why not (ADR-0042 decision
  * 4/5's degraded read-plane states). `undefined` both before any ask and

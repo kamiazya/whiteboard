@@ -722,7 +722,7 @@ describe('what the tool table costs to read', () => {
       },
       wb_workspace_edit: {
         // +60 on both: `markdown` now says a string with no `---` block is
-        // the BODY, typed `note` (#112). The bytes buy knowing WHICH type.
+        // the BODY, typed `note`. The bytes buy knowing WHICH type.
         // +412 on both, +3 parameters (2 undescribed: the arm's `op` and
         // `documentId`, which every arm carries) and one description word:
         // the `document.move` arm. What it buys is an errand the table
@@ -919,8 +919,8 @@ describe('what the tool table costs to read', () => {
       // repeats. The visible column moves by 63 LESS than the input change
       // alone, because the same merge brought ADR-0040's tag clauses with
       // it; the wire column is where the fold shows.
-      // Then +128 visible / 0 parameters for `stencil: null` (#93) and +60
-      // for `document.create`'s bare body (#112), each priced at its own row.
+      // Then +128 visible / 0 parameters for `stencil: null` and +60
+      // for `document.create`'s bare body, each priced at its own row.
       //
       // The merge carried BOTH, so this total is re-measured rather than
       // added up: 39,460 was this branch alone and 39,536 was main alone.

@@ -321,7 +321,7 @@ export class FileVersionStore implements VersionStore {
       // reborn per process — frontiers recorded against it would break on
       // the first daemon restart. The stored record (not a cache) is read,
       // because a checkpoint must point at persisted ops — and it is also
-      // the address book now (S7): the path resolves in the tree, with no
+      // the address book now: the path resolves in the tree, with no
       // documents-row lookup left.
       const storedWorkspace = await new DocumentStoreWorkspaceDocs(
         new LibsqlDocumentStore(db),
@@ -554,7 +554,7 @@ export class FileVersionStore implements VersionStore {
     }
   }
 
-  // The stored record is the address book (S7). ponytail: opens the whole
+  // The stored record is the address book. ponytail: opens the whole
   // record per call; route frequency is low, cache when a measured
   // workspace makes it slow.
   private async resolveDocumentId(

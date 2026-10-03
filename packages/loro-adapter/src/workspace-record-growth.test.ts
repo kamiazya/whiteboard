@@ -154,7 +154,7 @@ describe('workspace-record growth scoreboard', () => {
     // place it ran out. CI's stress lane runs every test file a PR touched in
     // ONE process (290 of them on a repo-wide fixture migration) and timed
     // this out at 5000ms. A saturated runner costs far more than 8.5x: the
-    // same session measured a free event loop's worst stall rising ~20x under
+    // a free event loop's worst stall was measured rising ~20x under
     // only 16 competing processes, which puts this body near 12s there.
     //
     // Safe to widen because every assertion above is an EXACT byte pin on a

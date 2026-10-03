@@ -423,7 +423,7 @@ also retires a name that said `session` about a workspace.
 
 ## `mcp-server-layer-order.test.ts`: the layers inside the Node root
 
-`apps/web/src/layer-order.test.ts` pins that root's layers and has an emptied
+`web-layer-order.test.ts` pins that root's layers and has an emptied
 ledger. `packages/mcp-server/src` had only ADR-0018's one-way scan, so a store
 importing a route and `shared/` importing the server logger were both planted
 (`store/names-store.ts`, `shared/sha256.ts`) and passed the whole project. The

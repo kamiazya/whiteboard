@@ -1,8 +1,8 @@
 /**
  * Concurrent-replica convergence of the workspace record's LISTING
- * (dual-plane collapse S5a).
+ * (dual-plane collapse).
  *
- * The read flip (S5b) makes `readWorkspaceDocuments` the source every
+ * Reading the listing from the workspace record makes `readWorkspaceDocuments` the source every
  * surface lists from, so what it must guarantee is not "a tree looks like
  * the rows" but the CRDT claim underneath: two replicas that each applied
  * their own placement writes and then exchanged updates answer ONE

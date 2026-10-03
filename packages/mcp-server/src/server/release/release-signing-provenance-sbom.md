@@ -178,7 +178,7 @@ before running any content-policy assertion:
 
 Hashing (`scripts/release/sbom-fingerprint.mjs`) is subprocess-free and reads
 only the two declared input files, so the staleness check adds negligible
-cost to the pre-push gate.
+cost to the test run that evaluates it.
 
 ## What remains before publish gates become runnable matrix entries
 

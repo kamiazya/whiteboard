@@ -1,7 +1,7 @@
-// OOUI Connect tool (S7/S9): with the Connect tool armed, connecting two
+// OOUI Connect tool: with the Connect tool armed, connecting two
 // nodes is click A, then click B — no drag, no keyboard, no handle hunting.
 // The tool is additive: Select stays the default and double-click creation
-// survives in every mode (S6 decisions, 2026-08-08).
+// survives in every mode.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'

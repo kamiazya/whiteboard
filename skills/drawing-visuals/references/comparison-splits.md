@@ -27,7 +27,7 @@ In comparison splits, **keep the comparison axis aligned and emphasize only the 
 ## Labels
 
 - State the comparison axis explicitly
-- Prioritize `name + role` in each box and push evaluative language into `subText`
+- Prioritize `name + role` in each box and push evaluative language into a note beside it
 - Add callouts only where there is an actual difference
 - Keep arrow labels to a small number
 

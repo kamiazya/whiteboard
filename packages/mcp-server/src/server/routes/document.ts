@@ -60,7 +60,7 @@ export interface DocumentRouterOptions {
    *  echo per row (ADR-0042 decisions 1/3/5). Absent means the listing omits
    *  `tier` entirely — see `WorkspacesRouterOptions`. */
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
-  /** S8 slice 2: threaded to `createWorkspacesRouter` — see its own doc. */
+  /** Threaded to `createWorkspacesRouter` — see its own doc. */
   admit?: WorkspaceAdmit
   /** Threaded to `createWorkspacesRouter` — see its own doc. */
   firstMember?: FirstMember

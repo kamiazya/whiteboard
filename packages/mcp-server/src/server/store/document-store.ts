@@ -261,7 +261,7 @@ export async function saveDocument(
     const db = await scope.db()
     // The workspace REGISTRY row is still real (workspaceExists answers from
     // it); the documents rows are not written here anymore — the tree is the
-    // whole record of what exists (S7).
+    // whole record of what exists.
     await upsertWorkspaceRow(db, workspaceId)
     const workspaceDoc = await getWorkspaceDoc(workspaceId, scope)
     const existingEntry = resolveWorkspaceDocument(workspaceDoc, path)
@@ -305,7 +305,7 @@ export async function loadDocument(
 ): Promise<LoroDoc> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  // The workspace tree answers first, and resolves the PATH itself (S6):
+  // The workspace tree answers first, and resolves the PATH itself:
   // the tree is the address book now, so a document lists and serves even
   // if its mirror row is skewed or gone. The projection is a VALUE copy
   // with its own oplog.
@@ -718,8 +718,8 @@ export async function listDocuments(
     // Absent rather than null when unset: a document nobody renamed has no
     // name of its own to report.
     ...(entry.name === undefined ? {} : { displayName: entry.name }),
-    // Every tree write stamps updatedAt (S4b) and the fold carries the row
-    // value; a record written between the cutover and S4b simply has none,
+    // Every tree write stamps updatedAt and the fold carries the row
+    // value; a record written before that stamp existed simply has none,
     // and the epoch is the honest "unknown" for our own pre-release data.
     updatedAt: new Date(entry.updatedAt ?? entry.createdAt ?? 0).toISOString(),
     kind: entry.kind,

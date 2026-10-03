@@ -370,7 +370,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     )
   })
 
-  // Versions are keyed on workspaceId directly (dual-plane collapse S3):
+  // Versions are keyed on workspaceId directly (dual-plane collapse):
   // every workspace-scoped query used to reach the workspaceId through the
   // documents table, which was the version table's last read dependency on
   // the row plane.

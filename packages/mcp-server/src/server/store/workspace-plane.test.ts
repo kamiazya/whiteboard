@@ -82,7 +82,7 @@ async function stores() {
     db,
     inner,
     routed: new WorkspaceRoutedDocumentStore(inner),
-    // The production wiring: the tree IS the index (S7), cache-backed so it
+    // The production wiring: the tree IS the index, cache-backed so it
     // operates on the same live workspace doc every other path writes.
     index: new CacheCoherentDocumentIndex(
       cacheBackedWorkspaceDocs(),

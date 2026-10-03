@@ -98,7 +98,7 @@ describe('the daemon /api guard — a macaroon is checked against the route scop
 
   // Nothing mints a workspace-caveated macaroon yet and the middleware does
   // not thread the path's workspace through, so such a token fails closed.
-  // Pinned so the next slice has to notice it rather than discover it.
+  // Pinned so whoever starts minting one has to notice it rather than discover it.
   it('fails closed on a workspace caveat, which is not threaded through yet', async () => {
     const scoped = await mintMacaroon({
       rootKey: ROOT_KEY,

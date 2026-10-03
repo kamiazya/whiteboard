@@ -12,8 +12,8 @@
 // widens the gap even when both rows drift together with machine noise — and
 // machine noise is the reason a single row proves nothing here.
 //
-// Numbers are machine-specific and this session measured drift of 2-3x
-// between runs when other work was in flight. Compare a before/after on the
+// Numbers are machine-specific and drift of 2-3x between runs is
+// normal when other work is in flight. Compare a before/after on the
 // SAME machine, in INTERLEAVED runs, in one sitting — never a committed
 // figure against a fresh one.
 //

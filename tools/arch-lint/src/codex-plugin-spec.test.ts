@@ -35,7 +35,7 @@ describe('Codex plugin spec contract', () => {
     // Shape only — WHICH license this repo ships is publish-contract.test.ts's
     // 'declares the repo license consistently across every distribution manifest',
     // which derives it from the root package. A literal here pinned 'MIT' in place
-    // for the whole life of the Apache-2.0 relicense (#304): the guard meant to
+    // for the whole life of the Apache-2.0 relicense: the guard meant to
     // check spec compatibility was holding the stale value instead.
     expect(codexPlugin.license).toMatch(/^[\w.+-]+$/)
     expect(codexPlugin.interface).toMatchObject({

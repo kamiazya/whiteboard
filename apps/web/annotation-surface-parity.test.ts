@@ -225,8 +225,8 @@ const PARITY = {
         'packages/server-core/src/tools/thread-edit.test.ts#resolves and reopens, and offers no way to remove — the ADR-0025 symmetry',
     },
   },
-  // Named for the message rather than for the FIRST one since 2026-09-08:
-  // both writing surfaces edit any message of a conversation now. The
+  // Named for the message rather than for the FIRST one:
+  // both writing surfaces edit any message of a conversation. The
   // opening message was special because the flat comment's `text` carries
   // it and nothing else — a fact about the canvas projection, never about
   // which messages a reader may correct.

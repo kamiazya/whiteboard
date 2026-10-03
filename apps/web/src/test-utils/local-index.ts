@@ -83,7 +83,7 @@ export class LocalStoreDouble {
     )
 
   constructor() {
-    // See `seedLocal` above: an unseeded double must still LIST, not throw.
+    // An unseeded double must still LIST, not throw.
     // The in-memory index registers the workspace synchronously, so the
     // promise is complete before any caller can observe it.
     void this.index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })

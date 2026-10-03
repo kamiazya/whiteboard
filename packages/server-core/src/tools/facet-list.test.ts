@@ -479,9 +479,9 @@ describe('wb_facet_list: a WORKSPACE’s own vocabulary', () => {
  * `visual.shape/v0` with `{kind: 'diamond'}`. That is a registered facet and
  * the write succeeded; it records a SILHOUETTE and not a kind, so the board
  * scored `constructs 0, undeclared 3`: a distinction a reader sees and the
- * document does not state. (That reading said `excess 3` until 2026-09-19,
- * when the column was split — with nothing declared there is no construct to
- * cut, so every spent treatment fell there by construction.) The published schema for `visual.shape/v0`
+ * document does not state. (That reading once said `excess 3`, before the
+ * column was split — with nothing declared there is no construct to cut, so
+ * every spent treatment fell there by construction.) The published schema for `visual.shape/v0`
  * enumerates `diamond` outright while `visual.stencil/v0` publishes a
  * pattern-checked string, so the model picked the field it could act on.
  *

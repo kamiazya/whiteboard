@@ -9,8 +9,8 @@ language js
 // refusal under `/api/` in this daemon is a JSON object with an `error` code,
 // so a caller parsing the body gets a SyntaxError instead of the reason —
 // which is how a missing file came to answer plain text while every other
-// refusal on the same router answered JSON (fixed in #1521, found by the
-// fuzz lane rather than by a reader).
+// refusal on the same router answered JSON (found by the fuzz lane rather
+// than by a reader).
 //
 // SCOPED in biome.json to packages/mcp-server/src/server/routes/**, and it
 // has to be: `c.notFound()` is CORRECT twice outside that directory,

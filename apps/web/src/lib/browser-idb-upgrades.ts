@@ -501,7 +501,7 @@ const SEALED_REPLICA_DB_VERSION = 20
  * next daemon resolve re-pulls it through `openDocumentStore`, sealed.
  *
  * A `document:*` row is untouched: that ref is always plaintext, replica or
- * not (S4b's routing), so nothing about it changes at this version.
+ * not (`openDocumentStore`'s routing), so nothing about it changes at this version.
  *
  * The REGISTRY (`storage.replicas`, in localStorage) cannot be consulted
  * from inside a `versionchange` transaction — IndexedDB and localStorage are

@@ -116,10 +116,9 @@ describe('browser workspace id accessor', () => {
   })
 
   it('a second workspace does not break the resolve', async () => {
-    // The blocker this slice exists to remove: the resolver asserted the
-    // registry held EXACTLY one row and rejected otherwise, so creating a
-    // second browser workspace did not degrade anything — it stopped the app
-    // from booting at all. Not resolving to a PARTICULAR one here: which one
+    // A resolver that asserts the registry holds EXACTLY one row and rejects
+    // otherwise turns a second browser workspace from a degradation into an
+    // app that cannot boot. Not resolving to a PARTICULAR one here: which one
     // an address-less resolve picks is the next case's subject, and asserting
     // it from a minted id would be asserting a ULID-ordering coincidence.
     const first = await resolveBrowserWorkspaceId(DB_NAME)
