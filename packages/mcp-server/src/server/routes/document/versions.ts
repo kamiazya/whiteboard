@@ -15,11 +15,9 @@ import type { StoreScope } from '../../store/store-scope.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import {
   defaultHumanDisplayName,
-  type ErrorAnswer,
   firstOwned,
-  handleCorruptStoredData,
-  handleDocumentNotFound,
   refusalReason,
+  STORED_DOCUMENT_ANSWERS,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -34,17 +32,6 @@ export interface VersionsRouterOptions {
    */
   daemonActor?: string
 }
-
-/**
- * What a version save can be refused for, in the order this route answers
- * them. The SET is named here rather than inline because it is the same
- * three times in this file, and which errors a route owns is part of what
- * the route means.
- */
-const STORED_DOCUMENT_ANSWERS: readonly ErrorAnswer[] = [
-  handleDocumentNotFound,
-  handleCorruptStoredData,
-]
 
 /**
  * An empty body is valid — a version needs neither a label nor an operator.

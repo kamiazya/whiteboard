@@ -35,7 +35,7 @@ export function handleCorruptStoredData(
 }
 
 /**
- * Metadata writers (names, pins, branches, version save) refuse a path with
+ * Metadata writers (names, pins, version save) refuse a path with
  * no document instead of minting a phantom row; routes answer that refusal
  * as 404 — the caller named a document that does not exist.
  */
@@ -79,6 +79,16 @@ export function firstOwned(
   }
   return null
 }
+
+/**
+ * What reading or writing a stored document can be refused for: the path names
+ * no document, or the stored record is unreadable. Routes over a document's
+ * stored state share this set; the SET a route owns is still its own choice.
+ */
+export const STORED_DOCUMENT_ANSWERS: readonly ErrorAnswer[] = [
+  handleDocumentNotFound,
+  handleCorruptStoredData,
+]
 
 /** A conflicting workspace segment: another workspace already holds it. */
 export const segmentTaken: ErrorAnswer = (err) =>
