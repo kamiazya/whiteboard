@@ -30,9 +30,10 @@ export default defineProject({
     // tests under it): every guard here reads files, and none mutates what a
     // later file imports. Checked rather than assumed. No helper module holds
     // mutable module-scope state (the only `let` and `Map` caches are inside
-    // one test file or one function), no test uses `vi.mock`, fake timers or
-    // `chdir`, and the one that stubs the environment unstubs it in an
-    // `afterEach`. Then run: 5 of 5 plain runs and one `--sequence.shuffle` run
+    // one test file or one function), no test uses fake timers or `chdir`,
+    // the one that stubs the environment unstubs it in an `afterEach`, and
+    // the one that `vi.doMock`s `vitest` itself unmocks it and resets the
+    // module registry in `afterAll`. Then run: 5 of 5 plain runs and one `--sequence.shuffle` run
     // passed 1224 of 1224. Both the audit and the runs can only vouch for what
     // exists today, so the instrument was checked too: two tiny files sharing a
     // counter pass isolated and fail under `--no-isolate`, so a leak is visible
