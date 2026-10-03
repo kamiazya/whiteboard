@@ -4,9 +4,9 @@ import { apiErrorBodySchema, apiErrorReason, issueText } from './api-errors.js'
 
 describe('apiErrorBodySchema', () => {
   it.each([
-    [{ title: 'Canvas not found' }],
-    [{ error: 'branch_conflict' }],
-    [{ error: 'branch_conflict', message: 'A variation named "x" already exists' }],
+    [{ title: 'Document not found' }],
+    [{ error: 'not_found' }],
+    [{ error: 'not_found', message: 'Document "x" does not exist' }],
     // A refusal that names what it concerns (ADR-0051: a sole owner's deletion).
     [{ error: 'sole_owner', message: 'm', workspaceIds: ['w'] }],
   ])('accepts %j', (body) => {
@@ -23,7 +23,7 @@ describe('apiErrorBodySchema', () => {
     [{ message: 'reason without a code' }],
     // The EMISSION contract stays closed: an undeclared field a route wrote is
     // a reason put where no reader looks. Reading is the tolerant half.
-    [{ error: 'branch_conflict', issues: [] }],
+    [{ error: 'not_found', issues: [] }],
     [null],
     ['plain string'],
   ])('rejects %j', (body) => {
@@ -33,12 +33,14 @@ describe('apiErrorBodySchema', () => {
 
 describe('apiErrorReason', () => {
   it('returns the title for the Problem Details arm', () => {
-    expect(apiErrorReason({ title: 'Canvas "x" already exists' })).toBe('Canvas "x" already exists')
+    expect(apiErrorReason({ title: 'Document "x" already exists' })).toBe(
+      'Document "x" already exists',
+    )
   })
 
   it('returns the message for the code+reason arm', () => {
-    expect(apiErrorReason({ error: 'branch_conflict', message: 'already exists' })).toBe(
-      'already exists',
+    expect(apiErrorReason({ error: 'not_found', message: 'no such document' })).toBe(
+      'no such document',
     )
   })
 
@@ -56,7 +58,7 @@ describe('apiErrorReason', () => {
   })
 
   it('returns undefined for a bare code and for out-of-contract bodies', () => {
-    expect(apiErrorReason({ error: 'branch_conflict' })).toBeUndefined()
+    expect(apiErrorReason({ error: 'not_found' })).toBeUndefined()
     expect(apiErrorReason({ oops: 1 })).toBeUndefined()
     expect(apiErrorReason(undefined)).toBeUndefined()
   })

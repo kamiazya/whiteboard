@@ -15,7 +15,7 @@ export class WorkspaceDocumentNotFoundError extends Error {
     readonly workspaceId: string,
     readonly documentId: string,
   ) {
-    super(`Canvas not found: ${documentId} in workspace ${workspaceId}`)
+    super(`Document not found: ${documentId} in workspace ${workspaceId}`)
     this.name = 'WorkspaceDocumentNotFoundError'
   }
 }
