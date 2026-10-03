@@ -32,11 +32,7 @@ const PHRASES: ReadonlyArray<{ readonly pattern: RegExp; readonly name: string }
  * The ledger only shrinks: an entry whose comment is gone fails below, so it
  * cannot outlive the fix, and a new hit is never an entry.
  */
-const PENDING_REWRITE: ReadonlySet<string> = new Set([
-  'packages/mcp-server/src/server/security/macaroon-root-key.test.ts#this PR',
-  'packages/mcp-server/src/server/store/db/index.test.ts#this PR',
-  'packages/mcp-server/src/server/store/db/location.test.ts#this PR',
-])
+const PENDING_REWRITE: ReadonlySet<string> = new Set([])
 
 const SELF = 'tools/arch-lint/src/comment-chronology-phrases.test.ts'
 

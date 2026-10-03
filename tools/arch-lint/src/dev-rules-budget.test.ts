@@ -480,7 +480,7 @@ const CANVAS_RENDER_BUDGET = 108
 // neighbour above, so an addition says in its diff that it is one. A cut
 // lowers the pin; moving measurement history to `docs/contributing/architecture/`
 // is the cut `package-canvas-render.md` took.
-const TOOL_ARCH_LINT_BUDGET = 42
+const TOOL_ARCH_LINT_BUDGET = 44
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

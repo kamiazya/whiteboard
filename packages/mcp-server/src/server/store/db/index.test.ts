@@ -5,10 +5,9 @@ import { createClient } from '@libsql/client'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Bench tests for the connection-cache + per-connection FK pragma. These were
-// added after the initial cut of this PR shipped a stale-connection-cache /
-// non-enforced-FK pair of bugs that the existing migration / store unit tests
-// happily passed. Treat this as the canary suite for db/index.ts contracts.
+// Bench tests for the connection-cache + per-connection FK pragma: a stale
+// connection cache and a non-enforced FK pragma each passed every migration
+// and store unit test, so this is the canary suite for db/index.ts contracts.
 
 let tempDir: string
 

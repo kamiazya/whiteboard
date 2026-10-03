@@ -165,8 +165,9 @@ They are named so a clean result is not read as covering them.
   `globalThis.document`.
 - **Type-only is syntactic.** An un-annotated named import of an interface reads
   as a value edge, so the value cycle scan can over-report, never under-report.
-- **The test-framework kind names two frameworks.** `@testing-library/*`,
-  `msw` and `playwright` from shipped source are not a kind.
+- **The test-framework kind names three families** (`vitest`, `fast-check`,
+  `@testing-library/*`). `msw` and `playwright` from shipped source are not a
+  kind.
 - **The cycle resolver is intra-package.** It follows relative specifiers and
   declared aliases and drops anything else, so a cross-package cycle through a
   subpath is `package-cycle-check.ts`'s job and only at manifest level.
@@ -506,6 +507,10 @@ The seam is its OWN module, apart from `tenant/data-layout.ts` that implements
 it, so an adapter can hold the contract without importing the mechanic that
 joins directory names — which the mechanic scan would count.
 
+`source-scan.ts`'s walk skips `node_modules`, `dist` and `tmp` (a Stryker run
+that crashes leaves a sandbox copy of the source under `packages/*/tmp`, which
+failed two one-place guards until the walk stopped reading it; the size
+ledgers' `EXCLUDED_DIR_SEGMENTS` is a different list, over `src` only).
 Comments and string bodies are stripped before matching (`source-scan.ts`'s
 `stripCommentsAndStrings`), so prose naming `getDataDir()` is not a read. The
 ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
@@ -538,7 +543,9 @@ not reaching for a mechanic.
 
 No non-test, non-bench, non-`_test-*`, non-`test-utils/` file under
 `packages/*/src`, `apps/*/src` or `tools/*/src` imports a specifier with a
-`test-utils` segment: those barrels re-export vitest-importing suites, and the
+`test-utils` segment or a basename ending `-test-utils` (a helper named that
+way shipped under `spatial-editor/` and imported Testing Library while nothing
+read it as test code): those barrels re-export vitest-importing suites, and the
 built daemon bundle once carried `class InMemoryDocumentStore` because the
 production container defaulted to the in-memory module. Two allowlist entries,
 each with a reason, guarded from both sides.
@@ -667,6 +674,20 @@ was 328 production sites when measured, most of them right (platform probes,
 user input), and a scan that cries wolf gets deleted. Mutation-checked four
 ways, the fourth being the one that matters: reverting
 `readSecretFileIfPresentSync` to answer `null` for any error fails it.
+
+## The pointer guards read prose, and a comment names no occasion
+
+`comment-identifier-pointers.test.ts` and `comment-file-pointers.test.ts` read
+source comments, `.claude/rules`, `.claude/skills` AND each package's README
+with `apps/web`'s DESIGN.md and BRAND.md — the first sweep over those docs
+found six identifiers and two file names that nothing resolves. Widening the
+source-comment shape instead (any long camelCase name) would have needed a
+ledger of about 70 foreign and historical names, a licence rather than a
+decision per entry. `comment-chronology-phrases.test.ts` bans the phrases
+that date a comment to the work that produced it (`audit-triage`, `dogfood
+report`, `this PR`, "decision, this session", "this session's bug report");
+bare `this session` is NOT banned because the app's own noun hits about 50
+legitimate comments. Its ledger is empty and shrink-only.
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 

@@ -47,8 +47,8 @@ describe('resolveDatabaseLocation', () => {
   /**
    * The failure mode a fallback would create is the worst one available: two
    * instances each quietly opening their OWN local file, diverging with no
-   * error anywhere, and every guarantee this PR built silently not applying
-   * because they were never looking at the same record.
+   * error anywhere, and every guarantee the location record carries silently
+   * not applying because they were never looking at the same record.
    */
   it('throws on an unusable value rather than falling back to the local file', () => {
     for (const raw of ['postgres://db', 'not a url', 'db.example.com', '://x']) {
