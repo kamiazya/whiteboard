@@ -98,48 +98,53 @@ export function commandTargetKey(command: EditorCommand): string {
 /**
  * Writes exactly the node/edge the command targets into its own LoroMap
  * entry (via crdt's `writeSpatialNode`/`writeSpatialEdge`, the
- * same field projection the whole-canvas write uses), and returns whether it
- * could — false when the command's target id is missing from `next` (see
- * commitToDoc's fallback rule). This is what preserves the node-level CRDT
+ * same field projection the whole-canvas write uses), and says whether it
+ * could: `target-missing` when the command's target id is missing from
+ * `next`, `unmapped` when the kind has no fine-grained write at all (see
+ * commitToDoc's fallback rule). The two are told apart because only the
+ * first is worth a warning — an unmapped kind takes the whole-canvas path by
+ * design, on every edit. This is what preserves the node-level CRDT
  * merge granularity a whole-document rewrite would discard: a concurrent
  * peer edit to a different node survives a merge against this write.
  */
+type WriteOutcome = 'written' | 'target-missing' | 'unmapped'
+
 function writeCommandTarget(
   host: LoroDoc,
   doc: DocumentContainers,
   prev: SpatialCanvas,
   next: SpatialCanvas,
   command: EditorCommand,
-): boolean {
+): WriteOutcome {
   switch (command.kind) {
     case 'move-node':
     case 'resize-node':
     case 'set-text': {
       const node = next.nodes.find((n) => n.id === command.id)
-      if (!node) return false
+      if (!node) return 'target-missing'
       writeSpatialNode(doc, node)
-      return true
+      return 'written'
     }
     case 'connect-nodes': {
       const edge = next.edges.find((e) => e.id === command.edgeId)
-      if (!edge) return false
+      if (!edge) return 'target-missing'
       writeSpatialEdge(doc, edge)
-      return true
+      return 'written'
     }
     case 'create-node': {
       const node = next.nodes.find((n) => n.id === command.node.id)
-      if (!node) return false
+      if (!node) return 'target-missing'
       writeSpatialNode(doc, node)
-      return true
+      return 'written'
     }
     case 'create-comment':
     case 'set-comment-resolved':
     case 'move-comment': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
       const comment = next.comments?.find((c) => c.id === id)
-      if (!comment) return false
+      if (!comment) return 'target-missing'
       writeCanvasComment(doc, comment)
-      return true
+      return 'written'
     }
     case 'reply-to-thread':
       // Always "handled", like set-body below and for the same reason: the
@@ -150,17 +155,17 @@ function writeCommandTarget(
       // thread this replica does not hold, which is deliberate (replying must
       // never be the write that opens a container).
       writeThreadMessage(doc, command.threadId, command.message)
-      return true
+      return 'written'
     case 'set-thread-status':
       // Same plane, same reason: a status lives on the thread, and the
       // fallback's whole-canvas write would never reach a note's thread.
       setCommentThreadStatus(doc, command.threadId, command.status)
-      return true
+      return 'written'
     case 'edit-thread-message':
       // `writeThreadMessage` upserts by message id, so an edit is the same
       // write a reply is, aimed at a message the thread already holds.
       writeThreadMessage(doc, command.threadId, command.message)
-      return true
+      return 'written'
     case 'decide-proposal': {
       // Every plane in ONE commit, because a decision is one act: the
       // changes are stamped where the proposal lives, and an ADOPTED one
@@ -183,7 +188,7 @@ function writeCommandTarget(
         // words still on the page.
         applyAdoptedPassages(doc, command.changes, (body) => writer.writeMarkdownBody(body))
       })
-      return true
+      return 'written'
     }
     case 'create-thread':
       // Always "handled", for `reply-to-thread`'s reason: the fallback writes
@@ -209,38 +214,39 @@ function writeCommandTarget(
           ]),
         )
       }
-      return true
+      return 'written'
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the
       // whole SpatialCanvas, which would leave the body container untouched
       // and silently drop the edit.
       writeMarkdownBody(doc, command.text)
-      return true
+      return 'written'
     case 'set-facets':
       // Same must-handle reasoning as set-body (`core` is outside the canvas
       // the fallback rewrites); a core field this build cannot read survives.
       reconcileCoreFacets(doc, readCoreFacets(doc), command.facets)
-      return true
+      return 'written'
     case 'delete-node':
       // Always "handled": deleteSpatialNode is a documented no-op for an
       // already-absent id, so there is no missing-target case to fall back
       // from here (unlike the other kinds, which need the target to still
       // exist in `next` to know what to write).
       deleteSpatialNode(doc, command.id)
-      return true
+      return 'written'
     case 'batch': {
       // Pre-validate BEFORE any write: a batch is all-or-nothing at this
       // layer. One unsupported member (or a missing target) sends the WHOLE
       // batch down the whole-canvas fallback — still exactly one commit and
       // one undo step, just with whole-canvas granularity.
-      if (!command.commands.every((sub) => isBatchWritable(sub, next))) return false
+      const outcome = batchOutcome(command.commands, next)
+      if (outcome !== 'written') return outcome
       withSpatialBatch(doc, (writer) => {
         for (const sub of command.commands) writeSubCommand(writer, next, sub)
       })
-      return true
+      return 'written'
     }
     default:
-      return false
+      return 'unmapped'
   }
 }
 
@@ -250,29 +256,33 @@ function writeCommandTarget(
  * even though the non-batch path has no case for it (multi-delete needs
  * it); the other kinds fall back to the whole-canvas reconcile as a whole batch.
  */
-function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boolean {
+function batchOutcome(commands: readonly EditorLeafCommand[], next: SpatialCanvas): WriteOutcome {
+  return commands.map((sub) => isBatchWritable(sub, next)).find((o) => o !== 'written') ?? 'written'
+}
+
+function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): WriteOutcome {
   switch (command.kind) {
     case 'move-node':
     case 'resize-node':
     case 'set-text':
-      return next.nodes.some((n) => n.id === command.id)
+      return next.nodes.some((n) => n.id === command.id) ? 'written' : 'target-missing'
     case 'create-node':
-      return next.nodes.some((n) => n.id === command.node.id)
+      return next.nodes.some((n) => n.id === command.node.id) ? 'written' : 'target-missing'
     case 'connect-nodes':
-      return next.edges.some((e) => e.id === command.edgeId)
+      return next.edges.some((e) => e.id === command.edgeId) ? 'written' : 'target-missing'
     case 'create-edge':
-      return next.edges.some((e) => e.id === command.edge.id)
+      return next.edges.some((e) => e.id === command.edge.id) ? 'written' : 'target-missing'
     case 'create-comment':
-      return next.comments?.some((c) => c.id === command.comment.id) ?? false
+      return next.comments?.some((c) => c.id === command.comment.id) ? 'written' : 'target-missing'
     case 'set-comment-resolved':
     case 'move-comment':
-      return next.comments?.some((c) => c.id === command.id) ?? false
+      return next.comments?.some((c) => c.id === command.id) ? 'written' : 'target-missing'
     case 'delete-node':
     case 'delete-edge':
       // Deletes are no-ops for absent ids — always writable.
-      return true
+      return 'written'
     default:
-      return false
+      return 'unmapped'
   }
 }
 
@@ -348,10 +358,13 @@ export function commitToDoc(
   command: EditorCommand,
 ): void {
   try {
-    if (writeCommandTarget(host, doc, prev, next, command)) return
-    log.warn('editor command target missing from next canvas; reconciling the whole canvas', {
-      command,
-    })
+    const outcome = writeCommandTarget(host, doc, prev, next, command)
+    if (outcome === 'written') return
+    if (outcome === 'target-missing') {
+      log.warn('editor command target missing from next canvas; reconciling the whole canvas', {
+        command,
+      })
+    }
   } catch (err) {
     log.warn('fine-grained Loro write failed; reconciling the whole canvas', err)
   }

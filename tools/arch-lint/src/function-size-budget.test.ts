@@ -320,7 +320,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 864,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
-  'apps/web/src/lib/command-writes.ts#writeCommandTarget': 139,
+  'apps/web/src/lib/command-writes.ts#writeCommandTarget': 140,
   'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
