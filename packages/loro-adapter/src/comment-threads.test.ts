@@ -91,6 +91,35 @@ describe('comment threads storage', () => {
     doc.commit()
     expect(readCommentThreads(doc).map((t) => t.id)).toEqual(['t1'])
   })
+
+  describe('a spatial anchor that is not finite', () => {
+    const anchored = (anchor: Record<string, unknown>): CommentThread =>
+      ({
+        id: 't1',
+        anchor: { kind: 'spatial', x: 1, y: 2, ...anchor },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'hello' }],
+      }) as CommentThread
+
+    for (const [field, anchor] of [
+      ['x', { x: Number.NaN }],
+      ['y', { y: Number.POSITIVE_INFINITY }],
+      ['width', { width: Number.NaN, height: 5 }],
+      ['height', { width: 5, height: Number.POSITIVE_INFINITY }],
+    ] as const) {
+      it(`is refused loudly on ${field} instead of storing a thread every reader drops`, () => {
+        const doc = new LoroDoc()
+        expect(() => writeCommentThread(doc, anchored(anchor))).toThrow(/finite/)
+        expect(readCommentThreads(doc)).toEqual([])
+      })
+    }
+
+    it('is not confused with a finite region, which is stored', () => {
+      const doc = new LoroDoc()
+      writeCommentThread(doc, anchored({ width: 3, height: 4 }))
+      expect(readCommentThreads(doc)).toHaveLength(1)
+    })
+  })
 })
 
 describe('migrateCanvasCommentsToThreads', () => {

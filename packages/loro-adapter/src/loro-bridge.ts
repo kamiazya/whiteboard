@@ -139,7 +139,7 @@ function lineToFields(line: CanvasLine): Fields {
   return fields
 }
 
-function commentToFields(comment: CanvasComment): Fields {
+function assertWritableComment(comment: CanvasComment): void {
   // Same loud refusal as nodeToFields: readSpatialCanvas round-trips every
   // comment through the Zod schema and silently drops failures, so a NaN
   // anchor written here would delete the comment for every reader.
@@ -161,12 +161,6 @@ function commentToFields(comment: CanvasComment): Fields {
       `canvas comment "${comment.id}" names both a node and an edge; a comment is about one of them`,
     )
   }
-  const fields: Fields = { id: comment.id, x: comment.x, y: comment.y, text: comment.text }
-  if (comment.author !== undefined) fields.author = comment.author
-  if (comment.createdAt !== undefined) fields.createdAt = comment.createdAt
-  if (comment.targetNodeId !== undefined) fields.targetNodeId = comment.targetNodeId
-  if (comment.resolved !== undefined) fields.resolved = comment.resolved
-  return fields
 }
 
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
@@ -338,7 +332,7 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
 }
 
 // Shared with writeCanvasComment/deleteCanvasComment below, so field
-// projection (including commentToFields' loud non-finite-anchor refusal)
+// projection (including assertWritableComment's loud non-finite-anchor refusal)
 // cannot drift between the single-commit and withSpatialBatch paths.
 /** Whether `canvasCommentFromThread` carries this anchor without loss: a point, a node, an edge. */
 function flatCanCarry(anchor: AnnotationAnchor): boolean {
@@ -346,10 +340,9 @@ function flatCanCarry(anchor: AnnotationAnchor): boolean {
 }
 
 function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
-  // `commentToFields` is still what refuses a non-finite anchor, loudly and
-  // before anything is stored — a thread whose anchor fails the schema would
-  // be dropped by every reader instead.
-  commentToFields(comment)
+  // Refuses a non-finite anchor loudly and before anything is stored — a
+  // thread whose anchor fails the schema would be dropped by every reader.
+  assertWritableComment(comment)
   migrateCanvasCommentsToThreads(doc)
   const incoming = threadFromCanvasComment(comment)
   const held = readCommentThreads(doc).find((thread) => thread.id === comment.id)
