@@ -216,3 +216,21 @@ canvas data could not be read." error screen that failed main three times in
 four days. Wait for the LAST write of the flow (here the pointer naming the
 row) and assert what the next step opened, not only that it rendered.
 Mutation: without the pointer wait, the stronger final assertion failed 4 of 6.
+
+### skip-waiting-ignored-on-the-runner
+
+**The PWA update-lifecycle smoke (`verify`) times out at "the page to reload
+onto a controller" on the runner's Chrome stable and passes locally.** The
+smoke serves the built app, installs a worker, deploys a second one, clicks
+the update toast's Reload and expects the page to come back under the new
+worker. Measured on Chrome 154 (the runner's), 2 of 3 runs: thirty seconds
+after the click the FIRST document is still there, the new worker still reads
+`installed` (never activated), and the console is empty — so the `SKIP_WAITING`
+the toast's Reload sends through Workbox either never reached the waiting
+worker or was not acted on. Chromium 141 here passes 6 of 6. The smoke now
+prints, on that timeout, which document holds the page, every worker's state,
+every message the page posted to a worker since the click, and what a direct
+`SKIP_WAITING` from the page then does — read that dump before re-running:
+"posted, not honoured" is the browser's, "never posted" is the toast's. One
+re-run is the only permitted answer until the dump says which.
+
