@@ -85,8 +85,10 @@ const PROSE_SHAPE =
 
 /** Names that are SUPPOSED to resolve to nothing, each with the sentence that makes it so. */
 const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/provider.ts#hasBranches':
-    "names the since-retired branches backend's capability to say a markdown body never had one",
+  '.claude/skills/measured-change/SKILL.md#HeaderBranchChip':
+    'a measured component that has since been deleted; the sentence records what was measured of it',
+  '.claude/skills/testing-techniques/resources/configuration.md#HeaderBranchChip':
+    'a measured component that has since been deleted; the sentence records what was measured of it',
   'apps/web/src/lib/loro-codemirror-sync.ts#isInitDispatch':
     'a flag in the upstream binding this file was deliberately NOT copied from; the comment names it to say what it avoids',
   'packages/mcp-server/src/server/backup-restore.ts#ERR_FS_CP_EEXIST':

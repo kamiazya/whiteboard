@@ -114,8 +114,6 @@ function isBareSourcePointer(name: string, line: string, previous: string): bool
 const DELIBERATE: Record<string, string> = {
   'apps/web/src/lib/keeper-parity.test.ts#src/hooks/useBranches.ts':
     'the comment is about its ABSENCE — it stopped reaching the daemon and the ledger refuses an entry naming a module that no longer does',
-  'apps/web/src/lib/provider.ts#provider.capability-reach.test.ts':
-    'past tense about a deleted guard — "could never have refused" is the argument for deleting it, and a present-tense pointer would invert it',
   'tools/arch-lint/src/stryker-targets.test.ts#api-contracts/libraries.ts':
     'the comment IS the record that these three names went stale while the score stayed plausible; correcting them destroys what it says',
   'tools/arch-lint/src/stryker-targets.test.ts#routes/canvas-thumbnail.ts': 'same sentence',
