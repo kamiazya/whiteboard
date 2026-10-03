@@ -85,8 +85,8 @@ export function resolveServerModeExposure(
 }
 
 /**
- * Local-daemon is loopback-only regardless of externalUrl. This mirrors the
- * pre-startup guard in `daemon-auth-binding.ts` so the policy is consistent
+ * Local-daemon is loopback-only regardless of externalUrl, by the same
+ * `isLoopbackHost` the database location reads, so the policy is consistent
  * across both entry points.
  */
 function localDaemonExposure(input: ServerModeExposureInput): ServerModeExposureDecision {
