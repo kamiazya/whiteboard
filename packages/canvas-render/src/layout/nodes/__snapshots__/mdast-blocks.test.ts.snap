@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`layoutMdastBlocks — golden block layout > matches the committed golden bbox/geometry snapshot 1`] = `
+exports[`typesetMdastBlocks — golden block layout > matches the committed golden bbox/geometry snapshot 1`] = `
 {
   "nodes": [
     {

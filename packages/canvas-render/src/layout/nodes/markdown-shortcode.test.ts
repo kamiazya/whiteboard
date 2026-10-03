@@ -17,7 +17,7 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 600, fontFamily: 'sans-serif' }
 
@@ -30,7 +30,7 @@ const options = { measure: createFakeMeasure(), maxWidth: 600, fontFamily: 'sans
  * was wrong. A red test has to be red for its own reason.
  */
 function drawn(root: MdastRoot): string {
-  const scene = layoutMdastBlocks(root, options)
+  const scene = typesetMdastBlocks(root, options)
   return scene.nodes
     .flatMap((node) => ('runs' in node ? (node.runs ?? []).map((run) => run.text) : []))
     .join(' ')

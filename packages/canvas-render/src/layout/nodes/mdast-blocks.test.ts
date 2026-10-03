@@ -4,13 +4,13 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 import type { EmbeddedCanvasBox, EmbeddedCanvasMiniature } from './mdast-layout-options.js'
 
 const measure = createFakeMeasure()
 const options = { measure, maxWidth: 600, fontFamily: 'sans-serif' }
 
-describe('layoutMdastBlocks — semantic provenance', () => {
+describe('typesetMdastBlocks — semantic provenance', () => {
   const root: MdastRoot = {
     type: 'root',
     children: [
@@ -61,7 +61,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
     ],
   }
 
-  const scene = layoutMdastBlocks(root, options)
+  const scene = typesetMdastBlocks(root, options)
 
   it('recovers heading level as a structured field', () => {
     const headings = scene.nodes.filter((n) => n.kind === 'heading')
@@ -106,7 +106,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
         },
       ],
     }
-    const titled = layoutMdastBlocks(bare, {
+    const titled = typesetMdastBlocks(bare, {
       ...options,
       resolveTitle: (documentId) =>
         documentId === '01ARZ3NDEKTSV4RRFFQ69G5FAV' ? 'Login flow' : undefined,
@@ -114,7 +114,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
     const titledRun = titled.nodes.flatMap((n) => (n.kind === 'paragraph' ? n.runs : []))[0]
     expect(titledRun?.text).toBe('Login flow')
 
-    const untitled = layoutMdastBlocks(bare, options)
+    const untitled = typesetMdastBlocks(bare, options)
     const untitledRun = untitled.nodes.flatMap((n) => (n.kind === 'paragraph' ? n.runs : []))[0]
     expect(untitledRun?.text).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
   })
@@ -131,7 +131,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
         },
       ],
     }
-    const scene2 = layoutMdastBlocks(labeled, { ...options, resolveTitle: () => 'Login flow' })
+    const scene2 = typesetMdastBlocks(labeled, { ...options, resolveTitle: () => 'Login flow' })
     const run = scene2.nodes.flatMap((n) => (n.kind === 'paragraph' ? n.runs : []))[0]
     expect(run?.text).toBe('my label')
   })
@@ -150,7 +150,7 @@ describe('layoutMdastBlocks — semantic provenance', () => {
   })
 })
 
-describe('layoutMdastBlocks — golden block layout', () => {
+describe('typesetMdastBlocks — golden block layout', () => {
   const root: MdastRoot = {
     type: 'root',
     children: [
@@ -202,12 +202,12 @@ describe('layoutMdastBlocks — golden block layout', () => {
   }
 
   it('matches the committed golden bbox/geometry snapshot', () => {
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     expect(scene).toMatchSnapshot()
   })
 })
 
-describe('layoutMdastBlocks — node-kind coverage', () => {
+describe('typesetMdastBlocks — node-kind coverage', () => {
   it('renders each remaining mdast node kind without throwing, per its documented fallback', () => {
     const root: MdastRoot = {
       type: 'root',
@@ -247,21 +247,21 @@ describe('layoutMdastBlocks — node-kind coverage', () => {
       ],
     }
 
-    expect(() => layoutMdastBlocks(root, options)).not.toThrow()
-    const scene = layoutMdastBlocks(root, options)
+    expect(() => typesetMdastBlocks(root, options)).not.toThrow()
+    const scene = typesetMdastBlocks(root, options)
     expect(scene.nodes.some((n) => n.kind === 'rawHtml')).toBe(true)
     expect(scene.nodes.some((n) => n.kind === 'unresolvedReference')).toBe(true)
     expect(scene.nodes.some((n) => n.kind === 'svgFragment')).toBe(true)
   })
 })
 
-describe('layoutMdastBlocks — default math fallback', () => {
+describe('typesetMdastBlocks — default math fallback', () => {
   it('sizes a math fragment from the dimensions a real renderer reports', () => {
     const root: MdastRoot = {
       type: 'root',
       children: [{ type: 'math', value: 'x^2', meta: null }],
     }
-    const scene = layoutMdastBlocks(root, {
+    const scene = typesetMdastBlocks(root, {
       ...options,
       renderMath: () => ({ svg: '<g data-math/>', width: 120, height: 48 }),
     })
@@ -273,7 +273,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
 
     // A reported width past the column clamps to it; a plain-string result
     // keeps the source-line-count fallback height exactly as before.
-    const wide = layoutMdastBlocks(root, {
+    const wide = typesetMdastBlocks(root, {
       ...options,
       renderMath: () => ({ svg: '<g/>', width: 10_000, height: 48 }),
     })
@@ -290,7 +290,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
         { type: 'code', lang: 'ts', meta: null, value: 'const x = 1' },
       ],
     }
-    const scene = layoutMdastBlocks(root, {
+    const scene = typesetMdastBlocks(root, {
       ...options,
       renderDiagram: (lang) =>
         lang === 'mermaid' ? { svg: '<g data-diagram/>', width: 200, height: 100 } : undefined,
@@ -305,7 +305,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
 
     // A throwing renderer degrades to the plain code block (total-layout
     // rule), never an aborted layout.
-    const throwing = layoutMdastBlocks(root, {
+    const throwing = typesetMdastBlocks(root, {
       ...options,
       renderDiagram: () => {
         throw new Error('boom')
@@ -323,7 +323,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
         { type: 'paragraph', children: [{ type: 'text', value: 'after' }] },
       ],
     }
-    const scene = layoutMdastBlocks(root, {
+    const scene = typesetMdastBlocks(root, {
       ...options,
       renderMath: () => {
         throw new Error('boom')
@@ -342,7 +342,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
       type: 'root',
       children: [{ type: 'math', value: '</text><script>alert(1)</script><text>', meta: null }],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const fragment = scene.nodes.find((n) => n.kind === 'svgFragment')
     expect(fragment?.kind).toBe('svgFragment')
     if (fragment?.kind !== 'svgFragment') throw new Error('unreachable')
@@ -353,7 +353,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
   })
 })
 
-describe('layoutMdastBlocks — inline cursor', () => {
+describe('typesetMdastBlocks — inline cursor', () => {
   it('advances a horizontal cursor across runs so they do not overlap on one line', () => {
     const root: MdastRoot = {
       type: 'root',
@@ -368,7 +368,7 @@ describe('layoutMdastBlocks — inline cursor', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -413,7 +413,7 @@ describe('layoutMdastBlocks — inline cursor', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -443,7 +443,7 @@ describe('layoutMdastBlocks — inline cursor', () => {
         { type: 'paragraph', children: [{ type: 'text', value: 'next block' }] },
       ],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const [multiLine, nextBlock] = scene.nodes
     expect(multiLine.kind).toBe('paragraph')
     expect(nextBlock.kind).toBe('paragraph')
@@ -456,13 +456,13 @@ describe('layoutMdastBlocks — inline cursor', () => {
   })
 })
 
-describe('layoutMdastBlocks — text run baseline', () => {
+describe('typesetMdastBlocks — text run baseline', () => {
   it('carries a measured ascent baseline while leaving bbox.y as the line top', () => {
     const root: MdastRoot = {
       type: 'root',
       children: [{ type: 'heading', depth: 1, children: [{ type: 'text', value: 'Heading' }] }],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const heading = scene.nodes.find((n) => n.kind === 'heading')
     expect(heading?.kind).toBe('heading')
     if (heading?.kind !== 'heading') throw new Error('unreachable')
@@ -483,14 +483,14 @@ describe('layoutMdastBlocks — text run baseline', () => {
   })
 })
 
-describe('layoutMdastBlocks — word wrap', () => {
+describe('typesetMdastBlocks — word wrap', () => {
   it('wraps a paragraph whose text overflows maxWidth onto multiple lines, each run contained', () => {
     const narrow = { measure, maxWidth: 60, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three four' }] }],
     }
-    const scene = layoutMdastBlocks(root, narrow)
+    const scene = typesetMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -515,7 +515,7 @@ describe('layoutMdastBlocks — word wrap', () => {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: 'unbreakabletoken' }] }],
     }
-    const scene = layoutMdastBlocks(root, narrow)
+    const scene = typesetMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -533,7 +533,7 @@ describe('layoutMdastBlocks — word wrap', () => {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: 'ab' }] }],
     }
-    const scene = layoutMdastBlocks(root, tiny)
+    const scene = typesetMdastBlocks(root, tiny)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
     expect(paragraph.runs.map((run) => run.text)).toEqual(['a', 'b'])
@@ -547,7 +547,7 @@ describe('layoutMdastBlocks — word wrap', () => {
         type: 'root',
         children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three' }] }],
       }
-      expect(() => layoutMdastBlocks(root, bad)).not.toThrow()
+      expect(() => typesetMdastBlocks(root, bad)).not.toThrow()
     }
   })
 
@@ -562,7 +562,7 @@ describe('layoutMdastBlocks — word wrap', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, narrow)
+    const scene = typesetMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -584,7 +584,7 @@ describe('layoutMdastBlocks — word wrap', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, narrow)
+    const scene = typesetMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -616,7 +616,7 @@ describe('layoutMdastBlocks — word wrap', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, narrow)
+    const scene = typesetMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -659,7 +659,7 @@ describe('layoutMdastBlocks — word wrap', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, narrow)
+    const scene = typesetMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -689,7 +689,7 @@ describe('layoutMdastBlocks — word wrap', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, narrow)
+    const scene = typesetMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -702,21 +702,21 @@ describe('layoutMdastBlocks — word wrap', () => {
   })
 })
 
-describe('layoutMdastBlocks — single render path', () => {
+describe('typesetMdastBlocks — single render path', () => {
   it('produces a deep-equal scene for preview, spatial-text-node, and export callers', () => {
     const root: MdastRoot = {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: 'shared content' }] }],
     }
-    const preview = layoutMdastBlocks(root, options)
-    const spatialTextNode = layoutMdastBlocks(root, options)
-    const exportRender = layoutMdastBlocks(root, options)
+    const preview = typesetMdastBlocks(root, options)
+    const spatialTextNode = typesetMdastBlocks(root, options)
+    const exportRender = typesetMdastBlocks(root, options)
     expect(preview).toEqual(spatialTextNode)
     expect(spatialTextNode).toEqual(exportRender)
   })
 })
 
-describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
+describe('typesetMdastBlocks — whitespace at inline-run boundaries', () => {
   // XML (and therefore SVG <text>) collapses leading/trailing whitespace,
   // so a run whose TEXT carries a boundary space paints its first glyph a
   // space-width left of where layout measured it — "`inline code` and"
@@ -741,7 +741,7 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.kind).toBe('paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
@@ -776,7 +776,7 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: 'kept  double\nsoft' }] }],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
     expect(paragraph.runs.map((r) => r.text)).toEqual(['kept double soft'])
@@ -796,7 +796,7 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
         },
       ],
     }
-    const scene = layoutMdastBlocks(root, options)
+    const scene = typesetMdastBlocks(root, options)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
     expect(paragraph.runs.map((r) => r.text)).toEqual(['a', 'b'])
@@ -805,7 +805,7 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
   })
 })
 
-describe('layoutMdastBlocks — embed body resolution', () => {
+describe('typesetMdastBlocks — embed body resolution', () => {
   const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
   const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
   const C = '01BX5ZZKBKACTAV9WEVGEMMVS0'
@@ -823,7 +823,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
 
   it("lays out a block embed's resolved body under an embedResolved node, advancing the cursor", () => {
     const root = rootOf([para('before'), embedPara(A), para('after')])
-    const scene = layoutMdastBlocks(root, {
+    const scene = typesetMdastBlocks(root, {
       ...options,
       resolveEmbed: (id) =>
         id === A ? { title: 'Target', root: rootOf([para('embedded body')]) } : undefined,
@@ -848,7 +848,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
       [A]: rootOf([para('in A'), embedPara(B)]),
       [B]: rootOf([para('in B'), embedPara(A)]),
     }
-    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A)]), {
       ...options,
       resolveEmbed: (id) => (docs[id] ? { root: docs[id] } : undefined),
     })
@@ -870,7 +870,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
       [C]: rootOf([embedPara(D)]),
       [D]: rootOf([para('too deep')]),
     }
-    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A)]), {
       ...options,
       resolveEmbed: (id) => (docs[id] ? { root: docs[id] } : undefined),
     })
@@ -896,11 +896,11 @@ describe('layoutMdastBlocks — embed body resolution', () => {
   })
 
   it('a missing target and a throwing resolver both degrade to unresolvable', () => {
-    const missing = layoutMdastBlocks(rootOf([embedPara(A)]), {
+    const missing = typesetMdastBlocks(rootOf([embedPara(A)]), {
       ...options,
       resolveEmbed: () => undefined,
     })
-    const throwing = layoutMdastBlocks(rootOf([embedPara(A)]), {
+    const throwing = typesetMdastBlocks(rootOf([embedPara(A)]), {
       ...options,
       resolveEmbed: () => {
         throw new Error('boom')
@@ -923,7 +923,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
         ],
       },
     ])
-    const scene = layoutMdastBlocks(root, {
+    const scene = typesetMdastBlocks(root, {
       ...options,
       resolveEmbed: (id) => (id === A ? { title: 'Target note', root: rootOf([]) } : undefined),
     })
@@ -933,7 +933,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
   })
 })
 
-describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
+describe('typesetMdastBlocks — a block embed whose target is a canvas', () => {
   const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
   type Flow = import('@kamiazya/whiteboard-model/mdast').MdastFlowContent
   const embedPara = (documentId: string): Flow => ({
@@ -970,7 +970,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
 
   it('lays the target out as a framed miniature under a linked title, advancing the cursor', () => {
     const boxes: EmbeddedCanvasBox[] = []
-    const scene = layoutMdastBlocks(rootOf([para('before'), embedPara(A), para('after')]), {
+    const scene = typesetMdastBlocks(rootOf([para('before'), embedPara(A), para('after')]), {
       ...options,
       resolveEmbed,
       layoutEmbeddedCanvas: (c, box) => {
@@ -1009,7 +1009,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   })
 
   it('without a canvas composer the block degrades to an unresolvable placeholder', () => {
-    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), { ...options, resolveEmbed })
+    const scene = typesetMdastBlocks(rootOf([embedPara(A)]), { ...options, resolveEmbed })
     const node = scene.nodes[0]
     if (node.kind !== 'embedPlaceholder') throw new Error('expected placeholder')
     expect(node.reason).toBe('unresolvable')
@@ -1017,7 +1017,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   })
 
   it('a throwing composer keeps the framed title and drops only the miniature', () => {
-    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A)]), {
       ...options,
       resolveEmbed,
       layoutEmbeddedCanvas: () => {
@@ -1032,7 +1032,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   it('the caller-supplied embed path seeds cycle detection', () => {
     // A canvas text node whose body embeds the canvas it is drawn in: the
     // composer lays the body out with itself already on the path.
-    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A)]), {
       ...options,
       resolveEmbed,
       layoutEmbeddedCanvas,
@@ -1044,7 +1044,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   })
 
   it('the caller-supplied embed path counts toward the depth cap', () => {
-    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A)]), {
       ...options,
       resolveEmbed,
       layoutEmbeddedCanvas,
@@ -1056,7 +1056,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   })
 })
 
-describe('layoutMdastBlocks — a #fragment narrows an embed to the part it names', () => {
+describe('typesetMdastBlocks — a #fragment narrows an embed to the part it names', () => {
   const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
   type Flow = import('@kamiazya/whiteboard-model/mdast').MdastFlowContent
   const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
@@ -1092,7 +1092,7 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
 
   it('a group label hands the composer only that group and its members, under a breadcrumb title', () => {
     const seen: SpatialCanvas[] = []
-    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Launch')]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A, 'Launch')]), {
       ...options,
       resolveEmbed: (id) => (id === A ? { title: 'Board', canvas } : undefined),
       layoutEmbeddedCanvas: (c, box) => {
@@ -1110,7 +1110,7 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
   })
 
   it('a fragment the canvas does not hold is an unresolvable placeholder that still names it', () => {
-    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Nope')]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A, 'Nope')]), {
       ...options,
       resolveEmbed: (id) => (id === A ? { title: 'Board', canvas } : undefined),
       layoutEmbeddedCanvas: (_c, box) => ({ nodes: [], w: box.maxWidth, h: 0 }),
@@ -1122,7 +1122,7 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
   })
 
   it('a heading lays out that section of a note and nothing after it', () => {
-    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Plan')]), {
+    const scene = typesetMdastBlocks(rootOf([embedPara(A, 'Plan')]), {
       ...options,
       resolveEmbed: (id) => (id === A ? { title: 'Note', root: note } : undefined),
     })
@@ -1132,7 +1132,7 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
   })
 
   it('an inline reference with a fragment reads as a breadcrumb and carries it on the link', () => {
-    const scene = layoutMdastBlocks(
+    const scene = typesetMdastBlocks(
       rootOf([
         {
           type: 'paragraph',
@@ -1151,7 +1151,7 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
   })
 })
 
-describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
+describe('typesetMdastBlocks — a fenced line is fitted to its panel', () => {
   // The fake measure is 0.6em per character, and code sets at 85% of the
   // 16px body, so a character is 8.16px wide.
   const maxWidth = 200
@@ -1168,7 +1168,7 @@ describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
   }
 
   it('keeps every run inside the panel, not merely inside the node', () => {
-    const scene = layoutMdastBlocks(root, { ...options, maxWidth })
+    const scene = typesetMdastBlocks(root, { ...options, maxWidth })
     const code = scene.nodes.find((node) => node.kind === 'codeBlock')
     if (code === undefined || code.kind !== 'codeBlock') throw new Error('expected a codeBlock')
     const panelRight = code.bbox.x + code.bbox.w
@@ -1178,7 +1178,7 @@ describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
   })
 
   it('marks the run it cut, and leaves the one that fits alone', () => {
-    const scene = layoutMdastBlocks(root, { ...options, maxWidth })
+    const scene = typesetMdastBlocks(root, { ...options, maxWidth })
     const code = scene.nodes.find((node) => node.kind === 'codeBlock')
     if (code === undefined || code.kind !== 'codeBlock') throw new Error('expected a codeBlock')
     expect((code.runs ?? []).map((run) => run.truncated)).toEqual([true, undefined])
@@ -1186,7 +1186,7 @@ describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
   })
 })
 
-describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () => {
+describe('typesetMdastBlocks — a table row is as tall as its tallest cell', () => {
   const root: MdastRoot = {
     type: 'root',
     children: [
@@ -1226,7 +1226,7 @@ describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () 
   }
 
   it('never paints a cell run below its own row', () => {
-    const scene = layoutMdastBlocks(root, { ...options, maxWidth: 240 })
+    const scene = typesetMdastBlocks(root, { ...options, maxWidth: 240 })
     const table = scene.nodes.find((node) => node.kind === 'table')
     if (table?.kind !== 'table') throw new Error('expected a table')
     for (const row of table.rows) {
@@ -1240,7 +1240,7 @@ describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () 
   })
 
   it('stacks the rows without overlap and reports the total height', () => {
-    const scene = layoutMdastBlocks(root, { ...options, maxWidth: 240 })
+    const scene = typesetMdastBlocks(root, { ...options, maxWidth: 240 })
     const table = scene.nodes.find((node) => node.kind === 'table')
     if (table?.kind !== 'table') throw new Error('expected a table')
     const rows = table.rows
@@ -1270,7 +1270,7 @@ describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () 
  * character checkbox exports as a tofu box. A path would scale wrongly
  * instead: `scaleScene` deliberately leaves `svgFragment` content alone.
  */
-describe('layoutMdastBlocks — task list markers', () => {
+describe('typesetMdastBlocks — task list markers', () => {
   const taskList = (checked: boolean | undefined): MdastRoot => ({
     type: 'root',
     children: [
@@ -1289,7 +1289,7 @@ describe('layoutMdastBlocks — task list markers', () => {
   })
 
   const itemOf = (root: MdastRoot) => {
-    const blocks = layoutMdastBlocks(root, options).nodes
+    const blocks = typesetMdastBlocks(root, options).nodes
     const list = blocks.find((block) => block.kind === 'list')
     if (list?.kind !== 'list') throw new Error('no list')
     const item = list.items[0]

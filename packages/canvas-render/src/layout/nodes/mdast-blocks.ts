@@ -273,7 +273,7 @@ function layoutPhrasing(
     // A run with a backdrop occupies its padding IN FLOW, exactly as CSS
     // horizontal padding does. Without this the pill is drawn wider than the
     // cursor advanced and the next run paints over its right edge — observed
-    // as `layoutMdastBlocks` running into the word after it.
+    // as `typesetMdastBlocks` running into the word after it.
     const padX = isFinitePositive(extra.backdropPadXPx) ? extra.backdropPadXPx : 0
     runs.push({
       kind: 'textRun',
@@ -1125,7 +1125,7 @@ function layoutCanvasEmbedBlock(
  * feeds preview, a spatial text node host, and export — there is no
  * separate HTML renderer.
  */
-export function layoutMdastBlocks(root: MdastRoot, options: MdastLayoutOptions): Scene {
+export function typesetMdastBlocks(root: MdastRoot, options: MdastLayoutOptions): Scene {
   const cursor: Cursor = { y: 0, x: 0 }
   const resolved = resolveTheme(options)
   const nodes = root.children.map((child) =>
@@ -1210,7 +1210,7 @@ export function fitBlocksToHeight(nodes: readonly SceneNode[], maxHeight: number
   const kept: SceneNode[] = []
   let truncated = false
   for (const entry of nodes) {
-    // `layoutMdastBlocks` never emits an edge (the one variant with no
+    // `typesetMdastBlocks` never emits an edge (the one variant with no
     // `bbox`); that guard is for the type checker, not runtime.
     if (entry.kind === 'edge') continue
     if (entry.bbox.y + entry.bbox.h <= maxHeight) {

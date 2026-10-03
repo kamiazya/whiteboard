@@ -2,7 +2,7 @@ import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { withReferenceSeams } from '../references/seams.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { layoutMdastBlocks as layoutBlocks } from './nodes/mdast-blocks.js'
+import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import {
@@ -54,7 +54,7 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
 export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOptions): Scene {
   const options = withReferenceSeams(input)
   const { canvasAppearance, style, fontAvailable, ...rest } = options
-  return layoutBlocks(root, {
+  return typesetMdastBlocks(root, {
     layoutEmbeddedCanvas: (canvas, box) =>
       fitSceneIntoBox(
         layoutSpatialCanvas(canvas, {

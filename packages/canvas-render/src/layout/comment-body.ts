@@ -38,7 +38,7 @@ import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { MARKDOWN_THEME_COMPACT, MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
-import { layoutMdastBlocks } from './nodes/mdast-blocks.js'
+import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
 
 /**
@@ -127,11 +127,11 @@ export function layoutCommentBody(text: string, options: CommentBodyLayoutOption
     root = literalRoot(text)
   }
   try {
-    return layoutMdastBlocks(root, mdast)
+    return typesetMdastBlocks(root, mdast)
   } catch (err) {
     // A tree that parses and will not lay out is the same failure to a
     // reader: the comment still has to be on screen.
     onParseFailure?.(err)
-    return layoutMdastBlocks(literalRoot(text), mdast)
+    return typesetMdastBlocks(literalRoot(text), mdast)
   }
 }

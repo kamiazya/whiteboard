@@ -66,7 +66,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // degrades to, and both are pinned by named tests that were
     // mutation-checked by hand (swapping in the document theme fails them
     // with `expected 30 to be 24`). The rest is delegation to
-    // `layoutMdastBlocks`, which the lane already mutates.
+    // `typesetMdastBlocks`, which the lane already mutates.
     //
     // 58 since `layout/nodes/task-checkbox.ts`, and outside the lane for the
     // same shape of reason: it is geometry with no branch worth mutating

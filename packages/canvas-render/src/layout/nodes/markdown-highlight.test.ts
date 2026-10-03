@@ -8,7 +8,7 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 600, fontFamily: 'sans-serif' }
 const SYNTAX = {
@@ -23,7 +23,7 @@ const root: MdastRoot = {
 }
 
 const codeRuns = (opts: Record<string, unknown>) => {
-  const scene = layoutMdastBlocks(root, { ...options, ...opts })
+  const scene = typesetMdastBlocks(root, { ...options, ...opts })
   const code = scene.nodes.find((node) => node.kind === 'codeBlock')
   if (code === undefined || code.kind !== 'codeBlock') throw new Error('expected a codeBlock')
   return code.runs ?? []
@@ -94,7 +94,7 @@ describe('highlightCode is a seam, and the palette stays here', () => {
       type: 'root',
       children: [{ type: 'code', lang: 'ts', meta: null, value: 'x'.repeat(400) }],
     }
-    const scene = layoutMdastBlocks(wide, {
+    const scene = typesetMdastBlocks(wide, {
       ...options,
       maxWidth: 200,
       syntax: SYNTAX,

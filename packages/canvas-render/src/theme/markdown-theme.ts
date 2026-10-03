@@ -5,7 +5,7 @@
 //
 // This is DATA, not a resolver: unlike `SpatialAppearanceResolver`, nothing
 // here varies per node, so a swap point would be a parameter with one
-// caller. `layoutMdastBlocks` reads the frozen constant below.
+// caller. `typesetMdastBlocks` reads the frozen constant below.
 //
 // Every colour is ONE neutral at three opacities rather than a light and a
 // dark palette, and that is a load-bearing choice, not a shortcut. Markdown
@@ -13,7 +13,7 @@
 // ancestor sets one — the seam apps/web's editor uses to keep body text
 // legible on its dark canvas (SpatialEditor's `fill: editorTextFill(theme)`).
 // A per-mode markdown palette would need the mode threaded into
-// `layoutMdastBlocks` from four call sites that do not have it, and would
+// `typesetMdastBlocks` from four call sites that do not have it, and would
 // still leave body text mode-driven from outside. Alpha over the inherited
 // surface needs none of that: the same value reads on white and on near-
 // black, and `fillOpacity` on a run modulates the INHERITED fill rather than
@@ -123,7 +123,7 @@ export const MARKDOWN_THEME_NODE: MarkdownTheme = Object.freeze({
  * an object: the markdown editor's preview pane, which runs to the readable
  * measure instead of a node's width.
  *
- * One theme cannot serve both. `layoutMdastBlocks` lays out a 280px node and a
+ * One theme cannot serve both. `typesetMdastBlocks` lays out a 280px node and a
  * full-width preview through the same code, and the compression that stops a
  * heading eating a third of a node leaves the same heading timid on a page.
  * Two frozen constants rather than a scale factor, because the ratios are not
