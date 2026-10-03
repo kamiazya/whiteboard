@@ -26,14 +26,22 @@ import {
 
 // Storage starts as visibility-before-enforcement: rows expose where bytes are
 // accumulating before the app applies caps, LRU, or category-specific cleanup.
-// Each category keeps a stable row hook and reserved action slot so future
-// Optimize / Cleanup controls can target the exact object they act on.
+// Each category keeps a stable row hook and reserved action slot so a control
+// sits on the row whose bytes it changes.
 
 const CATEGORIES: CategoryDescriptor[] = [
-  { key: 'blobs', label: 'Canvas snapshots', description: 'Latest Loro doc per canvas' },
+  // Labelled from what the daemon keeps in each place. The `blobs` key is the
+  // wire contract's and predates that layout: its only writer is deleting a
+  // document (the trash restores from it), while documents, deltas and
+  // versions are in the database and uploaded images are under `files`.
+  {
+    key: 'blobs',
+    label: 'Deleted documents',
+    description: 'Recoverable from trash',
+  },
   { key: 'files', label: 'Uploaded files', description: 'Image / asset uploads' },
-  { key: 'exports', label: 'Exports', description: 'PNG / JSON files you exported' },
-  { key: 'db', label: 'Metadata DB', description: 'Workspaces, names, pins, version rows' },
+  { key: 'exports', label: 'Exports', description: 'PNG / SVG files you exported' },
+  { key: 'db', label: 'Database', description: 'Documents, history and index (SQLite)' },
   { key: 'other', label: 'Other', description: 'Unclassified files in the data dir' },
 ]
 
@@ -75,6 +83,11 @@ function humanizeAge(seconds: number): string {
   if (seconds < 3600) return RELATIVE_TIME_FORMAT.format(-Math.round(seconds / 60), 'minute')
   if (seconds < 86_400) return RELATIVE_TIME_FORMAT.format(-Math.round(seconds / 3600), 'hour')
   return RELATIVE_TIME_FORMAT.format(-Math.round(seconds / 86_400), 'day')
+}
+
+function autoOptimisedLine(lastAutoCompactedAt: number | null | undefined, now: number): string {
+  if (!lastAutoCompactedAt) return 'Never auto-optimised'
+  return `Auto-optimised ${humanizeAge(Math.max(0, Math.floor((now - lastAutoCompactedAt) / 1000)))}`
 }
 
 /** The storage report, or the reason it could not be read. */
@@ -281,42 +294,42 @@ export function StorageReportCard() {
 
   // One entry per row that HAS a control. A row with no entry still gets the
   // reserved slot, so adding one later does not nudge the others.
-  const rowActions: Partial<Record<StorageCategory, RowAction>> = {
-    blobs: {
-      icon: Sparkles,
-      idleLabel: 'Optimize',
-      busyLabel: 'Optimizing…',
-      ariaLabel: 'Optimize all documents',
-      busy: optimizing,
-      run: () => void optimizeAll(),
-      // Prefer the freshest signal: a transient status from the user's last
-      // click wins over the persisted lastAutoCompactedAt timestamp.
-      status:
-        optimizeStatus ??
-        (report?.lastAutoCompactedAt
-          ? `Auto-optimised ${humanizeAge(
-              Math.max(0, Math.floor((now - report.lastAutoCompactedAt) / 1000)),
-            )}`
-          : 'Never auto-optimised'),
-    },
-    files: {
-      icon: Eraser,
-      idleLabel: 'Cleanup',
-      busyLabel: 'Cleaning…',
-      ariaLabel: 'Clean up dangling files',
-      busy: cleaningFiles,
-      run: () => void cleanupDanglingFiles(),
-      status: cleanFilesStatus,
-    },
-    db: {
-      icon: Eraser,
-      idleLabel: 'Cleanup',
-      busyLabel: 'Cleaning…',
-      ariaLabel: 'Cleanup sandwiched auto-versions',
-      busy: pruningVersions,
-      run: () => void pruneSandwichedAutoVersions(),
-      status: pruneVersionsStatus,
-    },
+  const rowActions: Partial<Record<StorageCategory, readonly RowAction[]>> = {
+    files: [
+      {
+        icon: Eraser,
+        idleLabel: 'Cleanup',
+        busyLabel: 'Cleaning…',
+        ariaLabel: 'Clean up dangling files',
+        busy: cleaningFiles,
+        run: () => void cleanupDanglingFiles(),
+        status: cleanFilesStatus,
+      },
+    ],
+    // Both act on records the database holds: optimize-all compacts them and
+    // the prune drops version rows, so neither belongs on the trash row.
+    db: [
+      {
+        icon: Sparkles,
+        idleLabel: 'Optimize',
+        busyLabel: 'Optimizing…',
+        ariaLabel: 'Optimize all documents',
+        busy: optimizing,
+        run: () => void optimizeAll(),
+        // Prefer the freshest signal: a transient status from the user's last
+        // click wins over the persisted lastAutoCompactedAt timestamp.
+        status: optimizeStatus ?? autoOptimisedLine(report?.lastAutoCompactedAt, now),
+      },
+      {
+        icon: Eraser,
+        idleLabel: 'Cleanup',
+        busyLabel: 'Cleaning…',
+        ariaLabel: 'Cleanup sandwiched auto-versions',
+        busy: pruningVersions,
+        run: () => void pruneSandwichedAutoVersions(),
+        status: pruneVersionsStatus,
+      },
+    ],
   }
 
   const ageSeconds = updatedAt === null ? null : Math.max(0, Math.floor((now - updatedAt) / 1000))
@@ -367,7 +380,7 @@ export function StorageReportCard() {
             key={descriptor.key}
             descriptor={descriptor}
             bucket={report?.byCategory[descriptor.key] ?? { bytes: 0, files: 0 }}
-            action={rowActions[descriptor.key]}
+            actions={rowActions[descriptor.key] ?? []}
           />
         ))}
       </ul>

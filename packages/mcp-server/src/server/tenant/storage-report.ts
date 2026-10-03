@@ -28,7 +28,7 @@ import { storeAreaOf } from './data-layout.js'
 // the Storage tab ask for a category this walk never produces and get a
 // permanent 0 B row instead of a failure.
 //
-// `exports` holds the PNG / JSON files a user exported. It is kept out of
+// `exports` holds the PNG / SVG files a user exported. It is kept out of
 // "other" because it is legitimate user data the UI must not invite them to
 // delete.
 export type StorageReport = StorageReportPayload
