@@ -272,7 +272,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#DocumentRow': 57,
-  'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#TreeItem': 80,
+  'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#TreeItem': 51,
   // Raised 992 -> 1008: the two list effects stopped repeating one another on
   // a mount, and the lines are the guard plus the paragraph saying which run
   // it skips and which it must not.
@@ -288,7 +288,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 81,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,
-  'apps/web/src/components/workspace-files/WorkspaceFolderTree.tsx#FolderItem': 68,
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 60,
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
