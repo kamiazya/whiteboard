@@ -90,8 +90,7 @@ export const LEDGER: Ledger = {
   accountBindings: { authenticator: text, subject: text, accountId: text, createdAt: integer },
   invitations: {
     id: text,
-    tokenHash: textOrNull,
-    email: textOrNull,
+    tokenHash: text,
     invitedBy: text,
     createdAt: integer,
     expiresAt: integer,

@@ -181,13 +181,10 @@ interface WorkspaceReplicaKeysTable {
   createdAt: Timestamp
 }
 
-// ADR-0046 decision 6: `tokenHash` is a one-time link, stored hashed. `email`
-// was the retired email-invitation path's column; nothing writes it now, and
-// it stays until a migration drops it with its index.
+// ADR-0046 decision 6: `tokenHash` is a one-time link, stored hashed.
 interface InvitationsTable {
   id: string
-  tokenHash: string | null
-  email: string | null
+  tokenHash: string
   invitedBy: string
   createdAt: Timestamp
   expiresAt: Timestamp
