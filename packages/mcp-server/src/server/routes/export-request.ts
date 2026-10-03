@@ -17,7 +17,7 @@ import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
  * An empty body is a valid export request — every option has a default — so
  * only a body that is PRESENT and unreadable refuses.
  */
-export function parseOptionalJsonBody<S extends z.ZodType>(
+function parseOptionalJsonBody<S extends z.ZodType>(
   rawText: string,
   schema: S,
 ): { body: z.infer<S> } | { error: ApiErrorBody } {
