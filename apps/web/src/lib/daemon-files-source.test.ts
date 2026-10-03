@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
+import { createFakeFilesDaemon } from '../test-utils/fake-files-daemon.js'
+import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { createDaemonFilesSource } from './daemon-files-source.js'
 
@@ -619,3 +621,11 @@ describe('createDaemonFilesSource list and trash reads', () => {
     expect(counts).toMatchObject({ documents: 2, trash: 2 })
   })
 })
+
+describeWorkspaceFilesSourceConformance('createDaemonFilesSource', async (fixture) =>
+  createDaemonFilesSource(
+    createFakeFilesDaemon({ rows: fixture.documents ?? [], trashed: fixture.trashed ?? [] }),
+    BASE,
+    'ws',
+  ),
+)

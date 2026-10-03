@@ -13,6 +13,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
@@ -401,5 +402,35 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     await expect(createLocalFilesSource().readStencilLibrary?.()).resolves.toEqual({
       lakehouse: { displayName: 'Lakehouse', color: '3', facets: {} },
     })
+  })
+})
+
+describe('createLocalFilesSource conformance', () => {
+  beforeEach(clearWhiteboardDb)
+
+  describeWorkspaceFilesSourceConformance('createLocalFilesSource', async (fixture) => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const workspaceId = getBrowserWorkspaceId()
+    for (const document of fixture.documents ?? []) {
+      const entry = await index.createDocument({
+        workspaceId,
+        path: document.path,
+        kind: document.kind,
+        ...(document.name === undefined ? {} : { name: document.name }),
+      })
+      const doc = new Loro()
+      if (document.body !== undefined) writeMarkdownBody(doc, document.body)
+      if (document.tags !== undefined)
+        writeCoreFacets(doc, { type: 'note', tags: [...document.tags] })
+      if (document.facets !== undefined) writeFacets(doc, document.facets as never)
+      await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
+    }
+    for (const gone of fixture.trashed ?? []) {
+      const entry = await index.createDocument({ workspaceId, path: gone.path, kind: gone.kind })
+      await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
+      await index.deleteDocument({ workspaceId, path: gone.path })
+    }
+    return createLocalFilesSource({ index })
   })
 })
