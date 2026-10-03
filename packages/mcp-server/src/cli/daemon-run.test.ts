@@ -4,8 +4,9 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
 
-const { loadDaemonRecordMock, startHttpServerMock } = vi.hoisted(() => ({
-  loadDaemonRecordMock: vi.fn(async () => null),
+const { loadDaemonRecordMock, isPidAliveMock, startHttpServerMock } = vi.hoisted(() => ({
+  loadDaemonRecordMock: vi.fn(async (): Promise<unknown> => null),
+  isPidAliveMock: vi.fn((_pid: number) => false),
   startHttpServerMock: vi.fn(async () => ({
     socketPath: '/run/user/1000/whiteboard/d.sock',
     close: vi.fn(async () => undefined),
@@ -18,8 +19,10 @@ vi.mock('../daemon/daemon-registry.js', () => ({
   loadDaemonRecord: loadDaemonRecordMock,
   saveDaemonRecord: vi.fn(async () => undefined),
   deleteDaemonRecord: vi.fn(async () => undefined),
-  isPidAlive: vi.fn(() => false),
 }))
+
+// daemon-run.ts takes liveness from shared/process-alive, not from the registry.
+vi.mock('../shared/process-alive.js', () => ({ isPidAlive: isPidAliveMock }))
 
 vi.mock('../server/http-server.js', () => ({
   startHttpServer: startHttpServerMock,
@@ -49,6 +52,40 @@ describe('runDaemonRun listens on its socket alone', () => {
     expect(options).not.toHaveProperty('port')
     expect(options).not.toHaveProperty('host')
     expect(typeof options.socketPath).toBe('string')
+  })
+})
+
+describe('runDaemonRun refuses to start over a daemon that is still running', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  const RECORD = { pid: 4242, socketPath: '/run/user/1000/whiteboard/other.sock' }
+
+  it('refuses, naming how to stop it, and never starts a server', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(RECORD)
+    isPidAliveMock.mockReturnValueOnce(true)
+    const outcome = await runDaemonRun({
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: {},
+    })
+    expect(outcome).toEqual({
+      kind: 'refused',
+      message: expect.stringContaining('whiteboard daemon stop'),
+    })
+    expect(isPidAliveMock).toHaveBeenCalledWith(RECORD.pid)
+    expect(startHttpServerMock).not.toHaveBeenCalled()
+  })
+
+  it('starts over a record whose process is gone', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(RECORD)
+    isPidAliveMock.mockReturnValueOnce(false)
+    const outcome = await runDaemonRun({
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: {},
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -1,4 +1,6 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,11 +8,15 @@ import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.
 import { defaultFetchPing, runServerDoctor, SERVER_DOCTOR_CHECK_IDS } from './server-doctor.js'
 
 let dataDir: string
+let statusServer: Server | undefined
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'whiteboard-server-doctor-test-'))
 })
 afterEach(async () => {
+  const open = statusServer
+  statusServer = undefined
+  if (open) await new Promise<void>((resolve) => open.close(() => resolve()))
   await rm(dataDir, { recursive: true, force: true })
 })
 
@@ -250,24 +256,22 @@ describe('runServerDoctor', () => {
 
   // ─── 11. Broad record permissions ─────────────────────────────────────────
 
-  it('broad record permissions → server.record_permissions warning (POSIX)', async () => {
-    await writeServerRecord(makeRecord())
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
-      isPidAlive: () => false, // keep identity skipped to isolate permissions check
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
-      readRecordMode: () => 0o644,
-    })
-    // Only check permissions status — on Windows-platform test runs this
-    // would be skipped, but we inject readRecordMode unconditionally so
-    // the check only looks at the platform discriminator.
-    // Since we can't override process.platform in this test, we just verify
-    // the check exists and is either warning (POSIX) or skipped (win32).
-    const permCheck = checkById(result.checks, 'server.record_permissions')
-    expect(['warning', 'skipped']).toContain(permCheck.status)
-  })
+  // Windows never reads POSIX mode bits, so the check is skipped there by design.
+  it.skipIf(process.platform === 'win32')(
+    'broad record permissions → server.record_permissions warning (POSIX)',
+    async () => {
+      await writeServerRecord(makeRecord())
+      const { result } = await runServerDoctor({
+        flags: { ...VALID_FLAGS, dataDir },
+        env: {},
+        isPidAlive: () => false, // keep identity skipped to isolate permissions check
+        fetchJwks: async () => ({ ok: true, hasKeys: true }),
+        checkDataDir: () => 'ok',
+        readRecordMode: () => 0o644,
+      })
+      expect(checkById(result.checks, 'server.record_permissions').status).toBe('warning')
+    },
+  )
 
   it('broad record permissions with win32 platform → skipped via readRecordMode returning null', async () => {
     // Simulate Windows by having readRecordMode return null (record unreadable)
@@ -643,5 +647,102 @@ describe('the record-permissions check on Windows', () => {
 
     expect(checkById(result.checks, 'server.record_permissions').status).toBe('warning')
     expect(readRecordMode).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ─── Default seams: real filesystem and real HTTP ───────────────────────────
+// Every case above injects checkDataDir / fetchRuntimeStatus; these leave them
+// at their defaults so the mapping from a real errno or status code to a
+// check is what is under test.
+
+describe('server doctor default seams', () => {
+  const base = { env: {}, fetchJwks: async () => ({ ok: true, hasKeys: true }) }
+
+  async function serveStatus(status: number, body: string): Promise<number> {
+    const srv = createServer((_req, res) => {
+      res.statusCode = status
+      res.end(body)
+    })
+    statusServer = srv
+    await new Promise<void>((resolve) => srv.listen(0, '127.0.0.1', resolve))
+    return (srv.address() as AddressInfo).port
+  }
+
+  async function runtimeStatusCheckAgainst(status: number, body: string) {
+    const port = await serveStatus(status, body)
+    await writeServerRecord(makeRecord({ port }))
+    const { result } = await runServerDoctor({
+      ...base,
+      flags: { ...VALID_FLAGS, dataDir },
+      isPidAlive: () => true,
+      verifyIdentity: async () => true,
+      fetchPing: async () => ({ ok: true, pidMatches: true }),
+      readRecordMode: () => 0o600,
+      checkDataDir: () => 'ok',
+    })
+    return checkById(result.checks, 'server.runtime_status')
+  }
+
+  it('a data dir that does not exist is "does not exist", not "not writable"', async () => {
+    const { result } = await runServerDoctor({
+      ...base,
+      flags: { ...VALID_FLAGS, dataDir: join(dataDir, 'absent') },
+    })
+    const c = checkById(result.checks, 'server.data_dir')
+    expect(c.status).toBe('error')
+    expect(c.summary).toBe('Data directory does not exist')
+  })
+
+  it('a writable data dir is ok', async () => {
+    const { result } = await runServerDoctor({ ...base, flags: { ...VALID_FLAGS, dataDir } })
+    expect(checkById(result.checks, 'server.data_dir').status).toBe('ok')
+  })
+
+  it('a record that exists but cannot be read is a warning, never "found and valid"', async () => {
+    await mkdir(join(dataDir, 'server-mode.json'))
+    const { result } = await runServerDoctor({
+      ...base,
+      flags: { ...VALID_FLAGS, dataDir },
+      checkDataDir: () => 'ok',
+    })
+    const c = checkById(result.checks, 'server.record')
+    expect(c.status).toBe('warning')
+    expect(c.summary).toBe('Server record exists but cannot be read')
+  })
+
+  it('a missing record does not read a mode: permissions are skipped for that reason', async () => {
+    const { result } = await runServerDoctor({
+      ...base,
+      flags: { ...VALID_FLAGS, dataDir },
+      checkDataDir: () => 'ok',
+      readRecordMode: () => {
+        throw new Error('must not be read without a record')
+      },
+    })
+    expect(checkById(result.checks, 'server.record_permissions').summary).toBe(
+      'Skipped because the server record is missing or malformed',
+    )
+  })
+
+  it.each([401, 403])('a %i from /api/runtime/status is reported as protected', async (status) => {
+    const c = await runtimeStatusCheckAgainst(status, 'nope')
+    expect(c.status).toBe('ok')
+    expect(c.summary).toBe('Runtime status endpoint is properly protected')
+  })
+
+  it('an unprotected status body naming a secret field is a warning', async () => {
+    const c = await runtimeStatusCheckAgainst(200, JSON.stringify({ jwksUri: 'https://x' }))
+    expect(c.status).toBe('warning')
+  })
+
+  it('an unprotected, clean status body is ok with the no-leak summary', async () => {
+    const c = await runtimeStatusCheckAgainst(200, JSON.stringify({ ok: true }))
+    expect(c.status).toBe('ok')
+    expect(c.summary).toBe('Runtime status endpoint responded without detected leaks')
+  })
+
+  it('a 500 from /api/runtime/status is an error', async () => {
+    const c = await runtimeStatusCheckAgainst(500, 'boom')
+    expect(c.status).toBe('error')
   })
 })

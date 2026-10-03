@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
 import { signsInWithBrowser } from '../server/security/oidc-relying-party.js'
 import { serverRunDryRunOutputSchema, serverRunReadyOutputSchema } from './operator-json.js'
@@ -468,5 +468,51 @@ describe('runServerRun — sign-in configuration', () => {
     expect(
       captured?.map((p) => [p.id, signsInWithBrowser(p) ? p.clientSecretValue : undefined]),
     ).toEqual([['corp', 'abc']])
+  })
+})
+
+describe('runServerRun — data dir reaches the server it starts', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  // config.js reads WHITEBOARD_DATA_DIR once at import, so the flag only takes
+  // effect if it is exported before startServer loads the server graph.
+  function startServerSeeing(seen: { dataDir?: string | undefined }): StartServerFn {
+    return async (opts) => {
+      seen.dataDir = process.env.WHITEBOARD_DATA_DIR
+      return {
+        port: opts.port,
+        host: opts.host,
+        startedAt: new Date().toISOString(),
+        resolvedDataDir: '/tmp/mock-server-data',
+        instanceId: 'mock-instance-id',
+        close: async () => {},
+      }
+    }
+  }
+
+  it('exports --data-dir as WHITEBOARD_DATA_DIR before startServer runs', async () => {
+    vi.stubEnv('WHITEBOARD_DATA_DIR', undefined)
+    const seen: { dataDir?: string | undefined } = {}
+    await runServerRun({
+      flags: dryRunFlags({ dryRun: false, dataDir: '/tmp/wb-flag-data-dir' }),
+      env: VALID_ENV,
+      startServer: startServerSeeing(seen),
+      writeRecord: vi.fn(),
+      deleteRecord: vi.fn(),
+    })
+    expect(seen.dataDir).toBe('/tmp/wb-flag-data-dir')
+  })
+
+  it('leaves WHITEBOARD_DATA_DIR alone when no data dir was configured', async () => {
+    vi.stubEnv('WHITEBOARD_DATA_DIR', undefined)
+    const seen: { dataDir?: string | undefined } = { dataDir: 'untouched' }
+    await runServerRun({
+      flags: dryRunFlags({ dryRun: false }),
+      env: VALID_ENV,
+      startServer: startServerSeeing(seen),
+      writeRecord: vi.fn(),
+      deleteRecord: vi.fn(),
+    })
+    expect(seen.dataDir).toBeUndefined()
   })
 })
