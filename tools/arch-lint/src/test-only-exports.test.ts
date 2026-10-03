@@ -250,6 +250,10 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/facet-engine/src/registry.ts#FacetPlugin':
+    'the contract a plugin package implements (ADR-0013), the type a second bundled plugin would import; workspace-stencils.test.ts holds a hand-written one to it',
+  'packages/mcp-server/src/cli/native-host.ts#keepHostAliveOnUnhandledRejection':
+    'the guard runHost arms in the same file, exported so native-host.test.ts can prove a rejection is logged and the process survives',
   'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_TTL_MS':
     'half of the refresh-to-TTL ratio that keeps a stalled loop from lapsing a live backup’s marker, held by backup-in-progress.defaults.test.ts',
   'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_REFRESH_MS':
