@@ -66,3 +66,14 @@ describe('a style random stream keyed by node identity', () => {
     }
   })
 })
+
+// The retrieval scoreboard, the routing corpus and the doc screenshots all
+// draw from this stream; a change to its sequence silently moves every one.
+describe('styleRandomFromSeed sequence', () => {
+  it('is the mulberry32 stream for a fixed seed', () => {
+    const next = styleRandomFromSeed(0x5eed)
+    expect([next(), next(), next()]).toEqual([
+      0.7100320369936526, 0.286336648510769, 0.9519026265479624,
+    ])
+  })
+})

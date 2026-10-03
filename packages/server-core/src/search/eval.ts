@@ -20,6 +20,8 @@
  * That is the whole reason this file exists rather than a one-line average.
  */
 
+import { styleRandomFromSeed } from '@kamiazya/whiteboard-canvas-render'
+
 /**
  * documentPath -> relevance grade, 1..3. Anything absent is grade 0, not
  * relevant. The scale itself is documented on `JudgedQuery.relevant`,
@@ -64,22 +66,6 @@ export function recallAt(ranked: readonly string[], judgments: Judgments, k: num
 export function reciprocalRank(ranked: readonly string[], judgments: Judgments, k: number): number {
   const index = ranked.slice(0, k).findIndex((path) => judgments[path] !== undefined)
   return index === -1 ? 0 : 1 / (index + 1)
-}
-
-/**
- * A seeded generator, because every number this file produces is sampled
- * and a scoreboard that moves when nothing changed is not a scoreboard.
- * mulberry32 — small, and its quality is far beyond what resampling needs.
- */
-function rng(seed: number): () => number {
-  let state = seed >>> 0
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0
-    let t = state
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
 }
 
 const mean = (values: readonly number[]): number =>
@@ -152,7 +138,7 @@ export function pairedPermutationTest(
   options: { trials?: number; seed?: number } = {},
 ): PermutationResult {
   const trials = options.trials ?? 10_000
-  const next = rng(options.seed ?? 20260823)
+  const next = styleRandomFromSeed(options.seed ?? 20260823)
   const observed = mean(deltas)
   const target = Math.abs(observed)
   let atLeastAsExtreme = 0
@@ -191,7 +177,7 @@ export function bootstrapCi(
 ): ConfidenceInterval {
   const resamples = options.resamples ?? 10_000
   const level = options.level ?? 0.95
-  const next = rng(options.seed ?? 20260823)
+  const next = styleRandomFromSeed(options.seed ?? 20260823)
   const n = values.length
   const means: number[] = []
   for (let sample = 0; sample < resamples; sample++) {
@@ -275,7 +261,7 @@ export function randomBaseline(options: {
 }): BaselineScores {
   const { corpusSize, relevantCount, k } = options
   const trials = options.trials ?? 10_000
-  const next = rng(options.seed ?? 20260823)
+  const next = styleRandomFromSeed(options.seed ?? 20260823)
   const paths = Array.from({ length: corpusSize }, (_, i) => `d${i}`)
   const judgments: Record<string, 1 | 2 | 3> = {}
   for (let i = 0; i < Math.min(relevantCount, corpusSize); i++) judgments[`d${i}`] = 2
