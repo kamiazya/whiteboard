@@ -59,6 +59,21 @@ closed, not an individual remark.
 the only way to close one: nothing deletes a comment, because what a
 conversation accumulates is the reason a decision was taken.
 
+## Read and answer comments from an agent
+
+An agent reaches the same conversations through MCP, on either document
+kind. `wb_document_get` returns each document's `threads` beside its content —
+every thread whole: where it is anchored, whether it is open or resolved, and
+every message with its author and time. A document nobody has commented on
+carries no `threads`. It is the one read that works on a markdown note;
+`wb_canvas_snapshot` lists a canvas's comments too, but only the opening
+message of each thread.
+
+`wb_thread_edit` writes to the layer: open a thread, reply to one, resolve or
+reopen it. Its answer is the document's threads, in the same whole shape, so
+a reply shows the conversation it joined. Nothing deletes a thread, for an
+agent any more than for a person.
+
 ## What happens when the text moves
 
 A markdown comment stores the passage it quotes plus a little of the text

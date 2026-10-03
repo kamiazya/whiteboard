@@ -98,6 +98,63 @@ describe('wb_canvas_snapshot tool', () => {
     expect(() => canvasSnapshotSchema.parse(result)).not.toThrow()
   })
 
+  test('carries what dresses a node and an edge: facets, tags and bends, and nothing when there are none', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'dressed',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 60,
+            text: 'Approve?',
+            facets: { 'visual.shape/v0': { shape: 'diamond' } },
+            tags: ['kind:decision', 'urgent'],
+          }),
+          textNode({ id: 'plain', x: 0, y: 200, width: 200, height: 60, text: 'Done' }),
+        ],
+        edges: [
+          {
+            id: 'bent',
+            from: { node: 'dressed' },
+            to: { node: 'plain' },
+            bends: [{ x: 300, y: 100 }],
+            facets: { 'visual.stroke/v0': { dash: 'dashed' } },
+            tags: ['status:failing'],
+          },
+          { id: 'straight', from: { node: 'plain' }, to: { node: 'dressed' } },
+        ],
+      })
+    })
+
+    const result = await createCanvasSnapshotTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+    })
+
+    expect(result.nodes.find((n) => n.id === 'dressed')).toMatchObject({
+      facets: { 'visual.shape/v0': { shape: 'diamond' } },
+      tags: ['kind:decision', 'urgent'],
+    })
+    expect(result.edges.find((e) => e.id === 'bent')).toMatchObject({
+      bends: [{ x: 300, y: 100 }],
+      facets: { 'visual.stroke/v0': { dash: 'dashed' } },
+      tags: ['status:failing'],
+    })
+    // An undressed element costs no bytes: this payload is sized for a context window.
+    for (const bare of [
+      result.nodes.find((n) => n.id === 'plain'),
+      result.edges.find((e) => e.id === 'straight'),
+    ]) {
+      expect(bare).not.toHaveProperty('facets')
+      expect(bare).not.toHaveProperty('tags')
+      expect(bare).not.toHaveProperty('bends')
+    }
+    expect(() => canvasSnapshotSchema.parse(result)).not.toThrow()
+  })
+
   test('reports lock state, and only for the locked elements', async () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {

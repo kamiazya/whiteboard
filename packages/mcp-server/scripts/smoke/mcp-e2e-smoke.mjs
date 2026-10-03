@@ -617,6 +617,24 @@ async function placementNamingAndDeletionRoundTrip(ctx) {
   }
   console.log('[e2e] document.move → placed at archive/named, the reference to it followed')
 
+  // A spatial document has no frontmatter title, so `name` on the move is the
+  // only way an agent can rename one.
+  const board = await createDocument({ path: 'e2e-rename-board', kind: 'spatial', name: 'Before' })
+  const renamed = await callTool('wb_workspace_edit', {
+    workspaceId: WORKSPACE_ID,
+    ops: [{ op: 'document.move', documentId: board.documentId, name: 'After' }],
+  })
+  if (renamed.results?.[0]?.path !== 'e2e-rename-board') {
+    throw new Error(`an in-place rename moved or lost the path: ${JSON.stringify(renamed)}`)
+  }
+  const afterRename = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
+  if (afterRename.documents.find((d) => d.documentId === board.documentId)?.name !== 'After') {
+    throw new Error(
+      `document.move with a name did not rename the board: ${JSON.stringify(renamed)}`,
+    )
+  }
+  console.log('[e2e] document.move with a name → the spatial board is renamed in place')
+
   // document.delete: a throwaway document, deleted and gone from the list.
   const doomed = await createDocument({ path: 'doomed', kind: 'spatial' })
   const deletion = await deleteDocument({ documentId: doomed.documentId })
@@ -1212,7 +1230,14 @@ async function aFreeEndedLineAndEdgeTargetFacets(ctx) {
       `the edge vanished after an edge-target facet write: ${JSON.stringify(afterEdgeFacet.edges)}`,
     )
   }
-  console.log('[e2e] wb_facet_set → edge-target facet stored on the edge')
+  // The snapshot is what a blind agent reads a board through, so the facet it
+  // just wrote has to be visible there, not only in wb_document_get.
+  if (storedEdge.facets?.['visual.edges/v0']?.routing !== 'orthogonal') {
+    throw new Error(`wb_canvas_snapshot dropped the edge facet: ${JSON.stringify(storedEdge)}`)
+  }
+  console.log(
+    '[e2e] wb_facet_set → edge-target facet stored on the edge, read back by the snapshot',
+  )
 
   // A node-target facet on an edge is refused by the same target check the
   // canvas and node branches use, from the third side.
@@ -1843,7 +1868,7 @@ async function theAnnotationLayerThroughWidgetShapes(ctx) {
     ],
   })
   const threadId = opened.threads?.[0]?.id
-  if (threadId === undefined || opened.threads[0]?.messageCount !== 1) {
+  if (threadId === undefined || opened.threads[0]?.messages?.length !== 1) {
     throw new Error(`thread.add did not report its thread: ${JSON.stringify(opened)}`)
   }
   const replied = await callTool('wb_thread_edit', {
@@ -1851,9 +1876,10 @@ async function theAnnotationLayerThroughWidgetShapes(ctx) {
     documentId: noteId,
     ops: [{ op: 'message.add', threadId, body: 'smoke reply' }],
   })
-  if (replied.threads?.[0]?.messageCount !== 2) {
+  if (replied.threads?.[0]?.messages?.length !== 2) {
     throw new Error(`message.add did not append: ${JSON.stringify(replied)}`)
   }
+  await theConversationIsReadable({ noteId, replied })
   const closed = await callTool('wb_thread_edit', {
     workspaceId: WORKSPACE_ID,
     documentId: noteId,
@@ -1862,7 +1888,35 @@ async function theAnnotationLayerThroughWidgetShapes(ctx) {
   if (closed.threads?.[0]?.status !== 'resolved') {
     throw new Error(`thread.resolve did not close the thread: ${JSON.stringify(closed)}`)
   }
-  console.log('[e2e] wb_thread_edit → thread.add / message.add / thread.resolve on a markdown note')
+  console.log(
+    '[e2e] wb_thread_edit → thread.add / message.add / thread.resolve on a markdown note, read back by wb_document_get',
+  )
+}
+
+/**
+ * A conversation is READABLE: the reply to a `wb_thread_edit` carries both
+ * bodies, and so does `wb_document_get`, a read that writes nothing and works
+ * on a markdown note, which no other tool reads threads from.
+ */
+async function theConversationIsReadable({ noteId, replied }) {
+  const bodiesOf = (threads) => (threads?.[0]?.messages ?? []).map((message) => message.body)
+  if (bodiesOf(replied.threads).join('|') !== 'smoke thread|smoke reply') {
+    throw new Error(`wb_thread_edit did not return the messages: ${JSON.stringify(replied)}`)
+  }
+  const readBack = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [noteId],
+  })
+  const readThreads = readBack.documents?.[0]?.threads
+  if (bodiesOf(readThreads).join('|') !== 'smoke thread|smoke reply') {
+    throw new Error(`wb_document_get did not carry the thread: ${JSON.stringify(readBack)}`)
+  }
+  if (
+    readThreads[0].messages[0].author !== 'agent:smoke' ||
+    readThreads[0].anchor.kind !== 'text'
+  ) {
+    throw new Error(`wb_document_get lost the author or anchor: ${JSON.stringify(readThreads)}`)
+  }
 }
 
 /**

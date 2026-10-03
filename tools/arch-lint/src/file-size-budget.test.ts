@@ -403,7 +403,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and why its follow report costs wire bytes and no visible ones — the
   // prose a pinned scoreboard carries instead of a changelog.
   // 963 -> 966: `wb_canvas_edit`'s row and the two totals say why they moved +58.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 966,
+  // 966 -> 994: the rows for the readable annotation layer, the snapshot's
+  // dressing and the in-place rename, each with why it moved.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 994,
   // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
   // strict. A mutation showed the loose form (`typeof title === 'string'`)
   // stays green with the refusal DELETED, so without the note the next
@@ -489,7 +491,10 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the
   // distribution smokes' helpers did.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2678,
+  // 2678 -> 2732: the steps that read a markdown thread back through
+  // `wb_document_get`, rename a spatial board in place, and read an edge facet
+  // through the snapshot.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2732,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

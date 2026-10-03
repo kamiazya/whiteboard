@@ -8,6 +8,7 @@ import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.j
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool } from './document-get.js'
 import { saveDocumentSnapshot } from './document-io.js'
+import { createThreadEditTool } from './thread-edit.js'
 
 /**
  * Wraps a real DocumentIndex, replacing only resolveDocumentById's answer.
@@ -276,5 +277,51 @@ describe('wb_document_get reads a document in its own format', () => {
     await expect(
       createDocumentGetTool(brokenDeps).execute({ workspaceId: 'ws', documentIds: [documentId] }),
     ).rejects.toThrow(/the store is down/)
+  })
+})
+
+describe('wb_document_get carries the annotation layer', () => {
+  async function threadOn(deps: ServerDeps, documentId: string) {
+    await createThreadEditTool(deps).execute({
+      workspaceId: 'ws',
+      documentId,
+      ops: [
+        { op: 'thread.add', threadId: 'th-read', anchor: { kind: 'document' }, body: 'opening' },
+        { op: 'message.add', threadId: 'th-read', body: 'the reply', author: 'agent:reader' },
+      ],
+    })
+  }
+
+  it.each([
+    'markdown',
+    'spatial',
+  ] as const)('a %s document with a two-message thread returns both bodies', async (kind) => {
+    const deps = makeDeps()
+    const documentId = await createDoc(deps, kind)
+    await threadOn(deps, documentId)
+
+    const [result] = (
+      await createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentIds: [documentId] })
+    ).documents
+
+    expect(result?.threads?.map((t) => t.messages.map((m) => m.body))).toEqual([
+      ['opening', 'the reply'],
+    ])
+    expect(result?.threads?.[0]).toMatchObject({
+      id: 'th-read',
+      status: 'open',
+      anchor: { kind: 'document' },
+    })
+  })
+
+  it('a document nobody commented on carries no threads key at all', async () => {
+    const deps = makeDeps()
+    const documentId = await createDoc(deps, 'markdown')
+
+    const [result] = (
+      await createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentIds: [documentId] })
+    ).documents
+
+    expect(result).not.toHaveProperty('threads')
   })
 })

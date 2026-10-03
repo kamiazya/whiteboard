@@ -197,7 +197,9 @@ describe('wb_thread_edit within ONE batch', () => {
       ],
     })
 
-    expect(result.threads).toEqual([{ id: 'th-batch', status: 'open', messageCount: 2 }])
+    expect(result.threads.map((thread) => [thread.id, thread.status])).toEqual([
+      ['th-batch', 'open'],
+    ])
     const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(doc)[0]?.messages.map((m) => m.body)).toEqual([
       'opened in this batch',
@@ -243,5 +245,39 @@ describe('wb_thread_edit within ONE batch', () => {
     // m2 is free, and taking it would overwrite the slot the peer is most
     // likely to fill next.
     expect(ours?.id).toBe('th-1-m4')
+  })
+
+  test('returns each thread whole: anchor, status, and every message with its author and time', async () => {
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store)
+    const tool = createThreadEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'thread.add',
+          threadId: 'th-whole',
+          anchor: { kind: 'text', quote: { exact: 'migration' }, start: 4, end: 13 },
+          body: 'first remark',
+          author: 'agent:reviewer',
+        },
+        { op: 'message.add', threadId: 'th-whole', body: 'second remark', author: 'agent:author' },
+        { op: 'thread.resolve', threadId: 'th-whole' },
+      ],
+    })
+
+    const [thread] = result.threads
+    expect(thread).toMatchObject({
+      id: 'th-whole',
+      status: 'resolved',
+      anchor: { kind: 'text', quote: { exact: 'migration' }, start: 4, end: 13 },
+    })
+    expect(thread?.messages.map((m) => [m.body, m.author])).toEqual([
+      ['first remark', 'agent:reviewer'],
+      ['second remark', 'agent:author'],
+    ])
+    expect(thread?.messages.every((m) => typeof m.createdAt === 'string')).toBe(true)
   })
 })

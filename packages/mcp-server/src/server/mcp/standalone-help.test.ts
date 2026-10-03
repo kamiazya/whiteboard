@@ -18,4 +18,16 @@ describe('WHITEBOARD_INSTRUCTIONS', () => {
   it('spells its possessives', () => {
     expect(WHITEBOARD_INSTRUCTIONS).not.toMatch(/\banyone screen\b/)
   })
+
+  // A render shows an embed as its address unless `embedReferences` is set, so
+  // a sentence promising that rendering draws embeds without naming the
+  // switch reads an unresolved `![[path]]` as a failed embed.
+  it('names embedReferences wherever it says a render draws what is embedded', () => {
+    const sentences = WHITEBOARD_INSTRUCTIONS.replace(/\s+/g, ' ').split(/(?<=\.)\s/)
+    const claims = sentences.filter(
+      (sentence) => /\brender/i.test(sentence) && /embed/i.test(sentence),
+    )
+    expect(claims.length).toBeGreaterThan(0)
+    for (const claim of claims) expect(claim).toContain('embedReferences')
+  })
 })

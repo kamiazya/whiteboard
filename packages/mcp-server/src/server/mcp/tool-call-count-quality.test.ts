@@ -306,7 +306,12 @@ describe('what an errand costs in tool calls', () => {
         // precisely because it is not guaranteed to: the two changes touch
         // different facets of the same listing, and a change that touched
         // the same one would not have.
-        responseBytes: 14058,
+        // Then 14,058 -> 14,196: +138 because the board the write answers with
+        // now says what dresses each node (its facets and tags), where the
+        // snapshot used to drop them. The same bytes are the read a blind
+        // agent was told to make (`wb_canvas_snapshot`'s row on rung 1);
+        // the call count does not move.
+        responseBytes: 14196,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
@@ -392,7 +397,12 @@ describe('what an errand costs in tool calls', () => {
         // for the sake of bytes — this is the by-product of freeing the
         // colour channel for a second semantic axis, and it is stated here
         // so the row is not read as a separate saving.
-        responseBytes: 1966,
+        // Then 1,966 -> 3,450: +1,484, the six boxes' own stencil facets and
+        // tags now echoed in the board this edit answers with — about 250
+        // bytes a dressed box. This is the price of the snapshot telling
+        // the truth about what a node wears: before, the answer to "dress
+        // six boxes" never said they were dressed. One call either way.
+        responseBytes: 3450,
       },
       // 2,060 -> 2,056 when an auto-placed box took the board's own width
       // instead of a flat 260. Four bytes, and what they are worth reading
