@@ -31,11 +31,10 @@ const XML_ATTR_ESCAPES: ReadonlyArray<readonly [RegExp, string]> = [
 // Built via the RegExp constructor (rather than a literal) so the control
 // character ranges below don't trip Biome's noControlCharactersInRegex,
 // which only flags regex literals.
-const XML_CONTROL_CHARS_SOURCE = '[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F]'
-const XML_LONE_SURROGATE_SOURCE =
-  '[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]'
+const XML_CONTROL_CHARS_SOURCE = String.raw`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]`
+const XML_LONE_SURROGATE_SOURCE = String.raw`[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]`
 /** U+FFFE and U+FFFF are XML 1.0 noncharacters, forbidden alongside the C0/C1 controls above. */
-const XML_NONCHARACTERS_SOURCE = '[\\uFFFE\\uFFFF]'
+const XML_NONCHARACTERS_SOURCE = String.raw`[\uFFFE\uFFFF]`
 const XML_INVALID_CHARS = new RegExp(
   `${XML_CONTROL_CHARS_SOURCE}|${XML_LONE_SURROGATE_SOURCE}|${XML_NONCHARACTERS_SOURCE}`,
   'g',

@@ -110,6 +110,8 @@ async function readWriteBody(
  * for `tag` answered every document), which is the failure a daemon's strict
  * bodies already refuse — a caller must learn its value did not take effect.
  */
+const quoted = (keys: readonly string[]): string => keys.map((key) => `"${key}"`).join(', ')
+
 function readsQuery(allowed: readonly string[]): MiddlewareHandler {
   return async (c, next) => {
     const unknown = Object.keys(c.req.queries()).filter((key) => !allowed.includes(key))
@@ -117,10 +119,7 @@ function readsQuery(allowed: readonly string[]): MiddlewareHandler {
     const read =
       allowed.length === 0 ? 'this route reads no query string' : `it reads ${allowed.join(', ')}`
     return c.json(
-      errorBody(
-        'invalid_request',
-        `unknown query parameter ${unknown.map((key) => `"${key}"`).join(', ')}; ${read}`,
-      ),
+      errorBody('invalid_request', `unknown query parameter ${quoted(unknown)}; ${read}`),
       400,
     )
   }

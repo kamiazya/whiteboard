@@ -168,7 +168,7 @@ function listWorkspaces(routes: FakeDaemonRoutes): Promise<Response> {
 
 function createWorkspace(routes: FakeDaemonRoutes, init?: RequestInit): Promise<Response> {
   const body = createWorkspaceRequestSchema.safeParse(
-    JSON.parse(String(init?.body ?? 'null')) as unknown,
+    JSON.parse(typeof init?.body === 'string' ? init.body : 'null') as unknown,
   )
   if (!body.success) return Promise.resolve(jsonResponse({ title: 'displayName is required' }, 400))
   const { displayName } = body.data

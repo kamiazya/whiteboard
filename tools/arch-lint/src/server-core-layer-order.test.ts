@@ -296,7 +296,7 @@ describe('server-core layer order', () => {
   })
 
   it('holds the ledger at its declared ceiling', () => {
-    expect(Object.keys(UPWARD_EDGES).length).toBe(UPWARD_EDGES_CEILING)
+    expect(Object.keys(UPWARD_EDGES)).toHaveLength(UPWARD_EDGES_CEILING)
   })
 
   it('has no loop among its directories', () => {

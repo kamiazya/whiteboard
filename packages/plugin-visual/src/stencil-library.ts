@@ -125,5 +125,6 @@ export function readStencilLibrary(
     const parsed = libraryStencilSchema.safeParse(stencil)
     if (parsed.success) valid.push([name, parsed.data])
   }
-  return Object.fromEntries(valid.sort(([left], [right]) => (left < right ? -1 : 1)))
+  valid.sort(([left], [right]) => (left < right ? -1 : 1))
+  return Object.fromEntries(valid)
 }

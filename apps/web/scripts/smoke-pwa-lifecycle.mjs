@@ -102,9 +102,8 @@ async function until(label, read, describe) {
     if (value) return value
     if (Date.now() > deadline) {
       const seen = describe ? await describe().catch((err) => `describe failed: ${err}`) : undefined
-      throw new Error(
-        `timed out waiting for ${label}${seen === undefined ? '' : `\n${JSON.stringify(seen, null, 2)}`}`,
-      )
+      const detail = seen === undefined ? '' : `\n${JSON.stringify(seen, null, 2)}`
+      throw new Error(`timed out waiting for ${label}${detail}`)
     }
     await new Promise((r) => setTimeout(r, 100))
   }

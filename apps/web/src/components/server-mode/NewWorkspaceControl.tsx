@@ -10,7 +10,7 @@
  */
 import { membershipRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import { messageOf } from '@kamiazya/whiteboard-model'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { workspaceHandle } from '../../lib/workspace-handle.js'
@@ -69,11 +69,19 @@ function NameField({
   value,
   error,
   onChange,
-}: {
+  onEscape,
+}: Readonly<{
   value: string
   error: string | null
   onChange: (next: string) => void
-}) {
+  onEscape: () => void
+}>) {
+  // The form exists because the person asked for it, so moving focus into
+  // it is following them rather than taking it.
+  const input = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    input.current?.focus()
+  }, [])
   return (
     <>
       <label htmlFor="new-workspace-name" className="text-sm text-muted-foreground">
@@ -81,10 +89,7 @@ function NameField({
       </label>
       <input
         id="new-workspace-name"
-        // The form exists because the person asked for it, so moving focus
-        // into it is following them rather than taking it.
-        // biome-ignore lint/a11y/noAutofocus: opened by an explicit click
-        autoFocus
+        ref={input}
         enterKeyHint="done"
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -93,6 +98,7 @@ function NameField({
           if (event.key === 'Enter' && isImeComposingKeydown(event.nativeEvent)) {
             event.preventDefault()
           }
+          if (event.key === 'Escape') onEscape()
         }}
         aria-invalid={error !== null}
         aria-describedby={error === null ? undefined : 'new-workspace-error'}
@@ -110,10 +116,10 @@ function NameField({
 function NewWorkspaceForm({
   workspaces,
   onCancel,
-}: {
+}: Readonly<{
   workspaces: KeeperWorkspaces
   onCancel: () => void
-}) {
+}>) {
   const [name, setName] = useState('')
   const { busy, error, submit, clearError } = useCreate(workspaces)
   return (
@@ -123,13 +129,16 @@ function NewWorkspaceForm({
         event.preventDefault()
         submit(name)
       }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape') return
-        clearError()
-        onCancel()
-      }}
     >
-      <NameField value={name} error={error} onChange={setName} />
+      <NameField
+        value={name}
+        error={error}
+        onChange={setName}
+        onEscape={() => {
+          clearError()
+          onCancel()
+        }}
+      />
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={busy || name.trim() === ''}>
           Create
@@ -142,7 +151,7 @@ function NewWorkspaceForm({
   )
 }
 
-export function NewWorkspaceControl({ workspaces }: { workspaces: KeeperWorkspaces }) {
+export function NewWorkspaceControl({ workspaces }: Readonly<{ workspaces: KeeperWorkspaces }>) {
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
   if (workspaces.source.create === undefined) return null

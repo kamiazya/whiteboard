@@ -68,8 +68,8 @@ describe('replicaPageState', () => {
   const keys = allKeyInputs()
 
   it('the fixture reaches every membership refusal reason and both non-refusal withheld reasons', () => {
-    expect(REFUSAL_REASONS.length).toBe(7)
-    expect(keys.length).toBe(12)
+    expect(REFUSAL_REASONS).toHaveLength(7)
+    expect(keys).toHaveLength(12)
   })
 
   it('is exhaustive: every (key x remembered) input maps to exactly one of the six states, 24 total', () => {
