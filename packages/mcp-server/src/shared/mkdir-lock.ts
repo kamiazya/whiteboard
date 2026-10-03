@@ -81,10 +81,6 @@ export interface MkdirLockOptions {
   timeoutMs?: number
 }
 
-// Runs `fn` while holding the exclusive lock at `lockDirPath`. Callers must
-// ensure the lock's parent directory already exists. Waits (polling every
-// `retryDelayMs`) for a concurrent holder to release, reclaiming the lock
-// early if that holder's recorded pid is dead, and gives up after
 /**
  * One attempt at the exclusive create. `false` means somebody else holds it,
  * which is the only failure this function answers for — anything other than
@@ -124,6 +120,10 @@ async function waitForHolder(
   await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
 }
 
+// Runs `fn` while holding the exclusive lock at `lockDirPath`. Callers must
+// ensure the lock's parent directory already exists. Waits (polling every
+// `retryDelayMs`) for a concurrent holder to release, reclaiming the lock
+// early if that holder's recorded pid is dead, and gives up after
 // `timeoutMs`.
 export async function withMkdirLock<T>(
   lockDirPath: string,
