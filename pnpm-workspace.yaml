@@ -51,6 +51,11 @@ catalog:
   # One version everywhere, because a break-opportunity difference between the
   # browser and Node would desync the byte-identical-SVG guarantee.
   css-line-break: "^2.1.0"
+  # Node's type declarations. An optional peer of vitest and vite, so two
+  # versions in the lockfile split each of them into two store entries, and a
+  # run from inside a package then loads a different vitest than the one
+  # `@fast-check/vitest` bound to. One range here keeps it one entry.
+  "@types/node": "^24"
   "@vitest/coverage-v8": "^5.0.0"
   # the html reporter and `vitest --ui`; the only surfaces that persist a
   # browser traceView replay (measured: the flag alone writes nothing).

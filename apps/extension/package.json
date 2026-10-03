@@ -17,7 +17,7 @@
     "@kamiazya/whiteboard-daemon-client": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24",
+    "@types/node": "catalog:",
     "playwright": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
