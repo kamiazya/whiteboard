@@ -385,7 +385,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/tidy.test.ts': 1176,
   // 1266 -> 1301: a referenced canvas arriving in the form canvas_view
   // sends it (JSON Canvas) reaches the viewer as the model.
-  'packages/canvas-viewer/src/widget-entry.test.tsx': 1301,
+  // 1301 -> 1340: the refresh asking for the style the last result drew, which
+  // needs the file's embedded-host and fake-App setup.
+  'packages/canvas-viewer/src/widget-entry.test.tsx': 1340,
   // 1308 -> 1324: an unchanged canvas reconciling to no ops, which the
   // "writes only what changed" test above it could not see.
   // 1324 -> 1354: the delete cascade pinned over ink — anchored ink goes,
@@ -497,7 +499,9 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `wb_document_get`, rename a spatial board in place, read an edge facet
   // through the snapshot, and the session-end checkpoint phase (whose body
   // lives in `smoke/lib`).
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2735,
+  // 2735 -> 2698: the canvas_view theme-font steps, with the widget's
+  // refresh-keeps-the-theme step, left for `smoke/lib/canvas-view-theme.mjs`.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2698,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

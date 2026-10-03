@@ -21,6 +21,16 @@ describe("the widget's outbound tool calls against the server's input schemas", 
     expect(canvasViewInputSchema.safeParse(call.arguments).success).toBe(true)
   })
 
+  it('canvas_view refresh repeats the style a result echoed, and the server accepts it', () => {
+    const call = canvasViewCall({ ...target, style: 'document' })
+    expect(call.arguments).toEqual({ ...target, style: 'document' })
+    expect(canvasViewInputSchema.safeParse(call.arguments).success).toBe(true)
+  })
+
+  it('canvas_view refresh sends no style key when the result echoed none', () => {
+    expect(canvasViewCall(target).arguments).toEqual(target)
+  })
+
   it('a comment pinned on a point is accepted by wb_canvas_edit', () => {
     const call = commentAddCall(target, { x: 12, y: 34 }, 'move this')
     expect(call.name).toBe('wb_canvas_edit')

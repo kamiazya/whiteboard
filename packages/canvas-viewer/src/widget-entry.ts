@@ -4,7 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
-import { resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
+import { resolveCanvasPalette, type SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { dataUriToBytes } from './font-loading.js'
 import { type CanvasViewerHandle, mountCanvasViewer } from './mount.js'
@@ -169,6 +169,13 @@ function announceComment(
     })
 }
 
+type OnValidResult = (
+  workspaceId: string | undefined,
+  documentId: string | undefined,
+  scene: ViewerScene,
+  style: SpatialRenderStyle | undefined,
+) => void
+
 /** Counts applied results, so a late font load can tell whether it is stale. */
 let appliedGeneration = 0
 
@@ -176,11 +183,7 @@ function applyToolResult(
   payload: unknown,
   container: HTMLElement,
   remount: (mount: () => CanvasViewerHandle) => void,
-  onValidResult: (
-    workspaceId: string | undefined,
-    documentId: string | undefined,
-    scene: ViewerScene,
-  ) => void,
+  onValidResult: OnValidResult,
 ): void {
   if (isErrorResult(payload)) {
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
@@ -219,7 +222,7 @@ function applyToolResult(
   appliedGeneration += 1
   const generation = appliedGeneration
   remount(mount)
-  onValidResult(workspaceId, documentId, result.value)
+  onValidResult(workspaceId, documentId, result.value, style)
   // The widget's one exception to its zero-network rule (ADR-0011's
   // 2026-09-10 note): a theme's family, from the pinned catalogue origin,
   // and only while actually drawing that theme. The scene is already on
@@ -258,7 +261,11 @@ async function mountFromHost(
   // real). BOTH ids, because every follow-up call's strict input schema
   // requires the workspaceId alongside the documentId — a result carrying
   // only one of them enables nothing.
-  let committed: { workspaceId: string; documentId: string } | undefined
+  //
+  // `style` is the look the latest result was drawn under: every refresh asks
+  // for it again, since `canvas_view` answers the bundled look to a call that
+  // names none.
+  let committed: { workspaceId: string; documentId: string; style?: SpatialRenderStyle } | undefined
   // The validated scene, kept for click-to-anchor hit-testing: a click
   // inside a node's stored box names that node as the comment's target, so
   // the pin follows the node rather than the spot it happened to occupy.
@@ -266,13 +273,9 @@ async function mountFromHost(
   let refreshControl: ReturnType<typeof createRefreshControl> | undefined
   let commentControl: ReturnType<typeof createCommentControl> | undefined
 
-  const commitResult = (
-    workspaceId: string | undefined,
-    documentId: string | undefined,
-    scene: ViewerScene,
-  ): void => {
+  const commitResult: OnValidResult = (workspaceId, documentId, scene, style) => {
     if (workspaceId === undefined || documentId === undefined) return
-    committed = { workspaceId, documentId }
+    committed = { workspaceId, documentId, ...(style === undefined ? {} : { style }) }
     committedScene = scene
     refreshControl?.show()
     commentControl?.show()
