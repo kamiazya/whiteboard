@@ -249,6 +249,24 @@ describe('semantic fusion', () => {
     expect(out.results.map((r) => r.documentId)).toEqual([storage])
   })
 
+  it('an embedder that throws still reports 1-based lexical ranks and no semantic rank', async () => {
+    const deps = makeDeps()
+    const { write } = await seed(deps)
+    await write('untitled-3', '容量メモ', 'quota quota quota')
+    const broken: Embedder = {
+      id: 'broken@v1',
+      dimensions: 3,
+      embed: () => Promise.reject(new Error('model unavailable')),
+    }
+    const out = await createDocumentSearchTool({ ...deps, embedder: broken }).execute({
+      workspaceId: WS,
+      query: 'quota',
+    })
+    expect(out.results).toHaveLength(2)
+    expect(out.results.map((r) => r.lexicalRank)).toEqual([1, 2])
+    expect(out.results.map((r) => r.semanticRank)).toEqual([undefined, undefined])
+  })
+
   it('embeds each document once and re-embeds only what changed', async () => {
     const deps = makeDeps()
     const { storage } = await seed(deps)
