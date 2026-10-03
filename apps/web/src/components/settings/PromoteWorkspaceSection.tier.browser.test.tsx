@@ -1,11 +1,10 @@
 /**
  * web-browser layer: renders the real section through the real
  * createDaemonFetch/listWorkspaces/Zod path against a stubbed daemon, and
- * captures the PR figure for the read-plane tier line (ADR-0042 S6).
+ * pins the read-plane tier line (ADR-0042).
  */
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { page } from 'vitest/browser'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
 import { jsonResponse } from '../../test-utils/json-response.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
@@ -28,13 +27,5 @@ describe('PromoteWorkspaceSection tier line', () => {
 
     const line = await screen.findByText(REPLICA_TIER_COPY.offline)
     expect(line.getAttribute('role')).toBeNull()
-
-    const before = document.querySelectorAll('[role="status"]').length
-
-    await page.screenshot({
-      path: '../../../../../tmp/screenshots/s6-tier-line.png',
-    })
-
-    expect(document.querySelectorAll('[role="status"]').length).toBe(before)
   })
 })

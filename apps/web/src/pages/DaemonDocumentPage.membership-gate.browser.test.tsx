@@ -10,7 +10,6 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
 import { jsonResponse } from '../test-utils/json-response.js'
 import '../index.css'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
@@ -125,7 +124,6 @@ describe('the daemon page answers a not_a_member refusal', () => {
     const status = await screen.findByTestId('replica-live-status')
     expect(status.textContent).toContain('removed from this workspace')
 
-    await page.screenshot({ path: '../../../../tmp/screenshots/s8c/removed.png' })
     expect(sentPaths.some((p) => p.includes('/pairing/'))).toBe(false)
   })
 })
