@@ -91,11 +91,11 @@ async function serverModeGrant(
   c: Context,
   authStrategy: AsyncAuthStrategy,
   requiredScopes: readonly AuthScope[],
-  people: ServerModeAuthPeople | undefined,
+  people: ServerModeAuthPeople,
 ): Promise<GrantOutcome> {
-  const signedIn = people === undefined ? undefined : await sessionGrant(c, people, requiredScopes)
+  const signedIn = await sessionGrant(c, people, requiredScopes)
   const outcome = signedIn ?? (await bearerGrant(c, authStrategy, requiredScopes, people))
-  return people === undefined ? outcome : refuseDeactivated(people, outcome)
+  return refuseDeactivated(people, outcome)
 }
 
 // ADR-0049 decision 4. Every later gate already answers nobody for a
@@ -143,7 +143,7 @@ async function bearerGrant(
   c: Context,
   authStrategy: AsyncAuthStrategy,
   requiredScopes: readonly AuthScope[],
-  people: ServerModeAuthPeople | undefined,
+  people: ServerModeAuthPeople,
 ): Promise<GrantOutcome> {
   const decision = await authStrategy.authorize({
     method: c.req.method.toUpperCase(),
@@ -153,7 +153,7 @@ async function bearerGrant(
   })
   if (!decision.ok) return { refusal: decision }
   const { context, person, bearer } = decision
-  if (person !== undefined && people !== undefined) {
+  if (person !== undefined) {
     // ADR-0049 decision 4, before anything else: a deactivated user is nobody
     // to `profileForBinding`, so past here they would be taken for a
     // newcomer. Every bearer — `/mcp`'s as well as `/api`'s — comes through.
@@ -186,7 +186,7 @@ async function bearerBecomesUser(
 
 export function createServerModeApiAuthMiddleware(
   authStrategy: AsyncAuthStrategy,
-  people?: ServerModeAuthPeople,
+  people: ServerModeAuthPeople,
 ): MiddlewareHandler {
   return async (c, next) => {
     const method = c.req.method.toUpperCase()
@@ -212,11 +212,8 @@ export function createServerModeApiAuthMiddleware(
     }
     const resolved = await serverModeGrant(c, authStrategy, routeScope.scopes, people)
     if ('refusal' in resolved) return buildServerModeAuthFailResponse(resolved.refusal)
-    if (people === undefined) return next()
     rememberGrant(c, resolved.grant)
-    const refused = await membershipRefusalFor(c, resolved.grant, people.members, {
-      membersOnlyByDefault: true,
-    })
+    const refused = await membershipRefusalFor(c, resolved.grant, people.members)
     return refused ?? next()
   }
 }

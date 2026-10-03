@@ -80,9 +80,9 @@ describe('workspaceAccess — operator-issued kinds (arm 1)', () => {
   })
 })
 
-describe('workspaceAccess — member-less workspace (arm 2)', () => {
-  it('admits an unbound session when the workspace has zero members', async () => {
-    expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('admitted')
+describe('workspaceAccess — member-less workspace', () => {
+  it('asks an unbound session for a person when the workspace has zero members', async () => {
+    expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
   })
 })
 
@@ -157,10 +157,6 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
     expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
   })
 
-  it('a workspace that never had a member keeps origin trust', async () => {
-    expect(await workspaceAccess(UNBOUND_SESSION, 'ws-never-had-one', members)).toBe('admitted')
-  })
-
   it('removing one member does not change another bound member’s answer', async () => {
     const removed = await members.ensureProfile({
       binding: passkeyBinding(ORIGIN, 'cred-removed'),
@@ -218,30 +214,22 @@ describe('workspaceAccess — any authenticator', () => {
   })
 })
 
-// ADR-0046 decision 10: a keeper many people sign in to treats every
-// workspace as members-only from the start, not only once it has a member.
-describe('workspaceAccess — members-only by default', () => {
+// ADR-0046 decision 10: every workspace is members-only from the start, not
+// only once it has a member — nobody forgot to close one that was never open.
+describe('workspaceAccess — members-only from the start', () => {
   const person = { authenticator: 'oidc:https://sso.corp.example', subject: 'ada-1' }
 
   it('refuses a workspace that has never had a member', async () => {
     const grant: ResolvedGrant = { kind: 'signed-in', scopes: [], person }
-    expect(await workspaceAccess(grant, WS, members, { membersOnlyByDefault: true })).toBe(
-      'not_a_member',
-    )
-    // The local daemon's rule, for contrast: an unclaimed workspace is open.
-    expect(await workspaceAccess(grant, WS, members)).toBe('admitted')
+    expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
   })
 
   it('admits a member, and still asks for a person when there is none', async () => {
     const profile = await members.ensureProfile({ binding: person, displayName: 'Ada' })
     await members.addMember(WS, profile.id)
     const signedIn: ResolvedGrant = { kind: 'signed-in', scopes: [], person }
-    expect(await workspaceAccess(signedIn, WS, members, { membersOnlyByDefault: true })).toBe(
-      'admitted',
-    )
+    expect(await workspaceAccess(signedIn, WS, members)).toBe('admitted')
     const nobody: ResolvedGrant = { kind: 'external-bearer', scopes: [] }
-    expect(await workspaceAccess(nobody, 'ws-2', members, { membersOnlyByDefault: true })).toBe(
-      'requires_person_session',
-    )
+    expect(await workspaceAccess(nobody, 'ws-2', members)).toBe('requires_person_session')
   })
 })

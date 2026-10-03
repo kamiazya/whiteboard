@@ -1,21 +1,18 @@
 /**
- * The ONE membership decision (ADR-0041 L1, ADR-0042 d3-d4): a workspace
- * that has EVER had a member admits its document/sync routes only to a
- * session bound to a passkey whose MemberProfile is a CURRENT member of
- * THAT workspace. A workspace that has never had a member keeps origin
- * trust — a personal daemon never needs a passkey. Removing a workspace's
- * last member does NOT revert it to origin trust (user decision
- * 2026-09-21): it stays person-gated, now admitting nobody until a member
- * is added again — see `MemberProfileStore.membersOnly` and the 0030
- * migration.
+ * The ONE membership decision (ADR-0041 L1, ADR-0042 d3-d4, ADR-0046
+ * decision 10): every workspace is members-only, including one that has never
+ * had a member. A document or sync route admits only a session bound to a
+ * person whose MemberProfile is a CURRENT member of THAT workspace; a
+ * workspace nobody has joined admits nobody until someone is added, so none
+ * is open because it was forgotten. Removing a workspace's last member does
+ * not reopen it either (user decision 2026-09-21).
  *
- * Every membership-gated surface (replica-key today; the route-scope-
- * registry gate and the SSE sync routes later) calls this rather than
- * keeping its own copy. When membership was consulted by replica-key.ts
- * alone, an L1 revoke killed a removed person's bound SESSIONS but left
- * their browser's origin-only pairing token able to read and write every
- * other route — a revoke that bites only the offline replica key is not a
- * revoke.
+ * The server-mode `/api` middleware, the `/mcp` tool-call gate and the
+ * handlers that decide membership themselves (the workspace list, the SSE
+ * transport) all call this rather than keeping a copy: a revoke that bit only
+ * the offline replica key would leave a removed person's other credentials
+ * reading and writing every other route. The local daemon never mounts it —
+ * it has one person and no membership (ADR-0050 decision 3).
  */
 import type { MembershipRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import type { ResolvedGrant } from './credential-resolver.js'
@@ -39,22 +36,12 @@ export const OPERATOR_ISSUED_KINDS = [
 export type WorkspaceAccessDecision = 'admitted' | 'requires_person_session' | 'not_a_member'
 export type MembershipDenial = Exclude<WorkspaceAccessDecision, 'admitted'>
 
-export interface WorkspaceAccessOptions {
-  /** ADR-0046 decision 10: on a keeper many people sign in to, a workspace
-   *  that has never had a member is closed rather than open — nobody forgot
-   *  to close it, because it was never open. */
-  readonly membersOnlyByDefault?: boolean
-}
-
 export async function workspaceAccess(
   grant: ResolvedGrant,
   workspaceId: string,
   members: MemberProfileStore,
-  { membersOnlyByDefault = false }: WorkspaceAccessOptions = {},
 ): Promise<WorkspaceAccessDecision> {
   if ((OPERATOR_ISSUED_KINDS as readonly string[]).includes(grant.kind)) return 'admitted'
-
-  if (!membersOnlyByDefault && !(await members.membersOnly(workspaceId))) return 'admitted'
 
   if (grant.person === undefined) return 'requires_person_session'
 
