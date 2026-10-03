@@ -9,6 +9,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import {
   type ApiErrorBody,
+  issueText,
   WorkspaceNotFoundForCallerError,
 } from '@kamiazya/whiteboard-server-core'
 import type { z } from 'zod'
@@ -177,7 +178,7 @@ export function refusedBy(validate: () => void): { error: string; message: strin
  */
 export function refusalReason(error: z.ZodError, fallback: string): string {
   const unknown = error.issues.filter((issue) => issue.code === 'unrecognized_keys')
-  return unknown.length === 0 ? fallback : unknown.map((issue) => issue.message).join('; ')
+  return unknown.length === 0 ? fallback : unknown.map(issueText).join('; ')
 }
 
 /** `refusalReason` as the Problem Details body the `{ title }` routes answer with. */

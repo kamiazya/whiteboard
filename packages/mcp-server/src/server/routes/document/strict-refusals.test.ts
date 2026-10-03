@@ -75,4 +75,21 @@ describe('a strict request refuses with the key it did not recognise', () => {
     expect(res.status).toBe(400)
     expect(apiErrorReason(await res.json())).toContain('zzz')
   })
+
+  it('names the object a nested unrecognised key sits in', async () => {
+    const app = createDocumentRouter({
+      scope: testStoreScope(),
+      serverDeps,
+      autoVersionQuietMs: 60_000,
+    })
+
+    const res = await app.request(`${DOC}/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'l', operator: { kind: 'human', zzz: 1 } }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(apiErrorReason(await res.json())).toBe('operator: Unrecognized key: "zzz"')
+  })
 })
