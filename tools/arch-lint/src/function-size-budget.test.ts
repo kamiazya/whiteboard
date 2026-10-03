@@ -558,11 +558,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The update fan-out subscribes at construction from the deps the root hands
   // down, where a per-process memoized fallback used to resolve its own.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 52,
-  // The methods that start from a binding (`profileForBinding`, `isDeactivated`,
-  // `ensureProfile`) live in `bindingLookups`, the user listing in `usersOf` and
-  // the role lookup in `roleIn`, in the same file, so the membership insert and
-  // its clear still sit together here.
-  'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   // The setter's write-side validation and the boolean answer to the lazy-row
   // hazard (ADR-0042 decision 1 addendum) both belong beside tierFor/effectiveTier
   // rather than in a second file over the same table; rotateKey (rotation
