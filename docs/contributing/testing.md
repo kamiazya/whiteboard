@@ -36,6 +36,15 @@ pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
 ```
 
+A pull request that touches test files also runs CI's `stress-changed-tests` job: every changed
+test file five times in fresh processes, then once with `--repeats=3` in one process, once for the
+browser projects and once for the rest. A test that passes alone but leaves state behind for its own
+next repetition (a fixed id seeded into IndexedDB with no per-test reset, say) is first seen red
+there. `node .claude/scripts/stress-changed.mjs` runs the same thing locally against the files
+changed since `origin/main` (`--base=<ref>` to change the base, `--only=node` or `--only=browser`
+for one leg, `--dry-run` to print the plan); a test in `tools/arch-lint` keeps it in step with the
+job.
+
 ---
 
 ## Test Layer Selection

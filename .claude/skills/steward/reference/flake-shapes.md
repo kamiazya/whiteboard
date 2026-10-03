@@ -124,6 +124,24 @@ Two obvious causes were refuted by measurement rather than argument: cutting
 `--maxWorkers` to 4 made it WORSE (33–39s, 40% more wall clock), and the
 shared-IndexedDB theory died on the twelve-file run.
 
+### seeded-identity-without-reset
+
+**A fixed identity seeded into a persistent store with no per-test reset passes
+once and fails its own second repetition.** The store outlives the test —
+IndexedDB, OPFS, a data dir — so a test that seeds a fixed document path into
+it finds that path already there on the next pass of `--repeats=3`, and the
+keeper refuses: `DocumentPathTakenError: Document path "…" already exists`. Five
+fresh processes pass it (each process claims a clean database); only the
+in-process repeat reaches it, which is why it is first seen red on the PR's
+`Repeat changed tests in-process (3x)` step, never in a local single run.
+`local-list-documents-timing.browser.test.ts` was exactly this.
+
+Fix: reset in `beforeEach` (`beforeEach(clearWhiteboardDb)`), not once in
+`beforeAll` — a repeat reruns the test body, not the file's setup. A UNIQUE
+per-run prefix (a counter folded into the path) is the other safe form.
+Reproduce before pushing with `node .claude/scripts/stress-changed.mjs`, which
+runs the job's two steps over the files you changed.
+
 ### teardown-wipes-dom
 
 **A test's own teardown wiping the DOM out from under React.**
