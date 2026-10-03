@@ -67,8 +67,15 @@ function installDaemon(
           ),
         )
       }
-      if (url.endsWith('/names')) return Promise.resolve(jsonResponse({ names: [] }))
-      if (url.endsWith('/document-tags')) return Promise.resolve(jsonResponse({ tags: [] }))
+      if (url.endsWith('/names')) {
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      }
+      if (url.endsWith('/document-tags')) {
+        return Promise.resolve(
+          jsonResponse({ documents: [], contents: [], library: {}, inUse: [] }),
+        )
+      }
+      if (url.endsWith('/trash')) return Promise.resolve(jsonResponse({ entries: [] }))
       return Promise.resolve(jsonResponse({ documents: [] }))
     }),
   )

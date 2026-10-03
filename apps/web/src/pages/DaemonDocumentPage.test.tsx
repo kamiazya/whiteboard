@@ -751,6 +751,14 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
+          if (url.endsWith('/document-tags')) {
+            return Promise.resolve(
+              jsonResponse({ documents: [], contents: [], library: {}, inUse: [] }),
+            )
+          }
+          if (url.endsWith('/names')) {
+            return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+          }
           return Promise.resolve(jsonResponse({}))
         },
       )

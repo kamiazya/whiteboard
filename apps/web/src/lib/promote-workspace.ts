@@ -51,7 +51,7 @@ import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
-import { daemonContractError, logDaemonContractError } from './daemon-contract-error.js'
+import { daemonContractError } from './daemon-contract-error.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
 
@@ -228,7 +228,7 @@ async function promoteWorkspaceUnsafe(
   }
   const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
   if (!promoted.success) {
-    logDaemonContractError(daemonContractError(promoteUrl, promoted.error))
+    daemonContractError(promoteUrl, promoted.error)
     return { kind: 'failed', reason: 'The daemon answered the move with an unexpected response.' }
   }
 

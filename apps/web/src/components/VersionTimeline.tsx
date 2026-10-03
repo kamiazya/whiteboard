@@ -8,7 +8,7 @@ import { CardContent } from '../components/ui/card.js'
 import { ScrollArea } from '../components/ui/scroll-area.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { DaemonContractError, logDaemonContractError } from '../lib/daemon-contract-error.js'
+import { DaemonContractError } from '../lib/daemon-contract-error.js'
 import { type PastDocument, VersionsRequestError } from '../lib/versions-backend.js'
 import { SquiggleLoader } from './SquiggleLoader.js'
 import { formatRelative } from './workspace-files/format-relative.js'
@@ -157,7 +157,6 @@ function reportVersionsFailure(
     return false
   }
   if (err instanceof DaemonContractError) {
-    logDaemonContractError(err)
     return true
   }
   log.error('versions request threw', err)

@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../../test-utils/logged-failures.js'
 import { useDocumentNames } from './useDocumentNames'
 
 function jsonResponse(body: unknown, ok = true): Response {
@@ -36,11 +37,13 @@ describe('useDocumentNames', () => {
         daemonFetch,
       }),
     )
-    // The malformed payload throws inside workspaceNamesSchema.parse, caught by
-    // the hook's best-effort try/catch — state stays at the initial empty value.
+    // The malformed payload is refused as a contract mismatch, which the
+    // hook's best-effort catch swallows — state stays at the initial empty
+    // value, and the record is what says which route disagreed.
     await waitFor(() => {
       expect(daemonFetch).toHaveBeenCalled()
     })
+    await expectLoggedFailure('/api/workspaces/ws1/names failed its contract at documents')
     expect(result.current.effectiveNames).toEqual({ documents: {}, pinned: [] })
   })
 

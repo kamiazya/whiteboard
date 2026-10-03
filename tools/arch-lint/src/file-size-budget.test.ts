@@ -356,8 +356,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The index page's whole surface — switching, creating, deleting, trash,
   // names, the duplicate flow — in one file. Its daemon fake is
   // `test-utils/fake-daemon-fetch.ts` now, answering through
-  // the api-contract schemas; what is left over budget is the cases.
-  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2073,
+  // the api-contract schemas; what is left over budget is the cases. Raised
+  // by the four lines the shared `otherReadBody` import takes once biome
+  // splits it, which replaced three hand-written invalid catch-all bodies.
+  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2077,
   'apps/web/src/pages/SettingsPage.test.tsx': 839,
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
   'packages/canvas-render/src/layout/comments.test.ts': 823,

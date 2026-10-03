@@ -57,6 +57,7 @@ function installFetchMock(
     okfByDocumentId: {
       '01ARZ3NDEKTSV4RRFFQ69G5FA0': {
         markdown: OKF_DOC,
+        body: '# Palette decisions',
         frontmatter: { type: 'note', title: 'Design' },
       },
     },

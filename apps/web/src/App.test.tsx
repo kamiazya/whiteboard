@@ -796,14 +796,16 @@ describe('App daemon provider state', () => {
     // writes the address, and the page follows the address.
     vi.stubGlobal(
       'fetch',
-      vi.fn(() =>
+      vi.fn((input: RequestInfo | URL) =>
         Promise.resolve(
-          jsonResponse({
-            workspaces: [
-              { workspaceId: 'w1', segment: 'design' },
-              { workspaceId: 'w2', segment: 'sandbox' },
-            ],
-          }),
+          String(input).endsWith('/api/fonts')
+            ? jsonResponse({ fonts: [] })
+            : jsonResponse({
+                workspaces: [
+                  { workspaceId: 'w1', segment: 'design' },
+                  { workspaceId: 'w2', segment: 'sandbox' },
+                ],
+              }),
         ),
       ),
     )

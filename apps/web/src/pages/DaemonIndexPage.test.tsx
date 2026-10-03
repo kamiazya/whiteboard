@@ -12,7 +12,11 @@ import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
-import { installFakeDaemonFetch, withSummaryDefaults } from '../test-utils/fake-daemon-fetch.js'
+import {
+  installFakeDaemonFetch,
+  otherReadBody,
+  withSummaryDefaults,
+} from '../test-utils/fake-daemon-fetch.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
@@ -1170,7 +1174,7 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces/ws-a/documents')) {
         return Promise.resolve(jsonResponse({ documents: [] }))
       }
-      return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      return Promise.resolve(otherReadBody(url))
     })
     vi.stubGlobal('fetch', fetchMock)
     const onOpenDocument = vi.fn()
@@ -1206,7 +1210,7 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces/ws-a/documents')) {
         return Promise.resolve(jsonResponse({ documents: [] }))
       }
-      return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      return Promise.resolve(otherReadBody(url))
     })
     vi.stubGlobal('fetch', fetchMock)
     const onOpenDocument = vi.fn()
@@ -1272,7 +1276,7 @@ describe('DaemonIndexPage', () => {
           }),
         )
       }
-      return Promise.resolve(jsonResponse({ names: {} }))
+      return Promise.resolve(otherReadBody(url))
     })
     vi.stubGlobal('fetch', fetchMock)
     const onOpenDocument = vi.fn()

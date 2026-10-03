@@ -512,6 +512,11 @@ describe('createDaemonFilesSource tag reads', () => {
 })
 
 describe('createDaemonFilesSource list and trash reads', () => {
+  const writeAnswer = (url: string) =>
+    url.endsWith('/restore')
+      ? jsonResponse({ restored: { documentId: 'id-gone', path: 'old/plan' } })
+      : jsonResponse({ workspaceId: 'ws', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'fresh' })
+
   /** Counts each route this source reads, and answers them all plausibly. */
   function countingFetch() {
     const counts = { documents: 0, names: 0, tags: 0, trash: 0, writes: 0 }
@@ -520,7 +525,7 @@ describe('createDaemonFilesSource list and trash reads', () => {
       const method = init?.method ?? 'GET'
       if (method !== 'GET') {
         counts.writes += 1
-        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+        return Promise.resolve(writeAnswer(url))
       }
       if (url.endsWith('/document-tags')) {
         counts.tags += 1

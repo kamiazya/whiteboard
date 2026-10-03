@@ -462,6 +462,35 @@ describe('StorageReportCard', () => {
     })
   })
 
+  it('reports which route disagreed when a workspace answers an optimize in a shape the page cannot read', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') return Promise.resolve(jsonResponse(PAYLOAD))
+      if (url === '/api/workspaces') {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }] }))
+      }
+      if (url.endsWith('/documents/optimize-all')) {
+        return Promise.resolve(jsonResponse({ saved: 'lots' }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+    })
+    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
+    fireEvent.click(blobsActions.querySelector('button')!)
+
+    await waitFor(() => {
+      expect(blobsActions.textContent ?? '').toMatch(/Optimize failed/i)
+    })
+    await expectLoggedFailure('/documents/optimize-all failed its contract')
+  })
+
   it('shows "Cleanup failed" when the dangling-files workspaces list request itself fails', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
