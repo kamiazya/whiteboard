@@ -181,8 +181,9 @@ interface WorkspaceReplicaKeysTable {
   createdAt: Timestamp
 }
 
-// ADR-0046 decision 6. Exactly one of `tokenHash` (a one-time link, stored
-// hashed) and `email` (an address a provider must assert verified) is set.
+// ADR-0046 decision 6: `tokenHash` is a one-time link, stored hashed. `email`
+// was the retired email-invitation path's column; nothing writes it now, and
+// it stays until a migration drops it with its index.
 interface InvitationsTable {
   id: string
   tokenHash: string | null
@@ -221,9 +222,9 @@ interface SignInAttemptsTable {
 }
 
 // Whether a workspace has ever had a member — set once by `addMember`'s
-// first insert, never cleared by `revokeL1Membership` (user decision
-// 2026-09-21: removing the sole member does not revert a workspace to
-// origin trust). Outside `workspaces` on purpose; see the 0030 migration.
+// first insert, never cleared when the last member is removed
+// (`WorkspaceRoles.remove`; user decision 2026-09-21: removing the sole
+// member does not revert a workspace to origin trust). Outside `workspaces` on purpose; see the 0030 migration.
 interface WorkspaceMembersOnlyTable {
   workspaceId: string
   since: Timestamp

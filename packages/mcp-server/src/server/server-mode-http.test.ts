@@ -178,7 +178,6 @@ describe('startServerModeHttp', () => {
       scopes: ['openid'],
       admission: {
         createAccounts: true,
-        honourEmailInvitations: false,
         bearerClients: ['claude-code'],
       },
     }
@@ -200,7 +199,7 @@ describe('startServerModeHttp', () => {
       clientId: 'wb',
       clientSecret: { env: 'CORP_SECRET' },
       scopes: ['openid'],
-      admission: { createAccounts: true, honourEmailInvitations: false },
+      admission: { createAccounts: true },
       clientSecretValue: 's3cret',
     }
     const startPromise = startServerModeHttp({ ...makeOptions(), signInProviders: [provider] })
@@ -223,7 +222,7 @@ describe('startServerModeHttp', () => {
       clientId: 'wb',
       clientSecret: { env: 'CORP_SECRET' },
       scopes: ['openid'],
-      admission: { createAccounts: true, honourEmailInvitations: false },
+      admission: { createAccounts: true },
       clientSecretValue: 's3cret',
     }
     const startPromise = startServerModeHttp({ ...makeOptions(), signInProviders: [provider] })

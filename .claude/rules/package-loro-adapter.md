@@ -231,6 +231,12 @@ implementations live in the composition roots.
   — it is what a discriminant on the resource would have to beat if that
   question is ever reopened.
 
+- **The retired Excalidraw `elements` list is carried, never read.** `content-sync`
+  copies it through as a value so a save loses nothing, but no reader consumes
+  it: counts, file GC and export treat a document holding only it as empty. Do
+  not add one, and do not probe for it with `getMovableList('elements')`, which
+  creates the root container as a side effect.
+
 - **A record written before [ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)
   stored all of this under the FORMAT's extension key**, because the model
   was the format. `liftLegacyExtension` converts a stored node or edge on
