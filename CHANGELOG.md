@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.1.0](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.20...whiteboard-plugin-v0.1.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** audit wave 12 — refusals name what is missing, one definition per keeper, animate and email invitations removed ([#2035](https://github.com/kamiazya/whiteboard/issues/2035))
+* **mcp:** agents read back their proposals, a workspace's stencil library reaches the inspector, and file GC keeps every picture in use (audit wave 11) ([#2034](https://github.com/kamiazya/whiteboard/issues/2034))
+* **mcp:** agents read comments, rename boards and read node facets, and a moved document keeps its checkpoint (audit wave 10) ([#2033](https://github.com/kamiazya/whiteboard/issues/2033))
+
+### Features
+
+* **mcp-server:** the local daemon runs on Windows over a named pipe, and the native host registers there ([#1970](https://github.com/kamiazya/whiteboard/issues/1970)) ([dfb036d](https://github.com/kamiazya/whiteboard/commit/dfb036d5a9769334f73091b3dd08bd9231e299b1))
+* **mcp:** agents read back their proposals, a workspace's stencil library reaches the inspector, and file GC keeps every picture in use (audit wave 11) ([#2034](https://github.com/kamiazya/whiteboard/issues/2034)) ([258a0fd](https://github.com/kamiazya/whiteboard/commit/258a0fd942ea05f66020a5c475a8fbb546e5f24b))
+* **mcp:** agents read comments, rename boards and read node facets, and a moved document keeps its checkpoint (audit wave 10) ([#2033](https://github.com/kamiazya/whiteboard/issues/2033)) ([a71f44f](https://github.com/kamiazya/whiteboard/commit/a71f44f3d0b3ac5ef5cc9f2c1bc30419fa60e3f2))
+* **mcp:** audit wave 12 — refusals name what is missing, one definition per keeper, animate and email invitations removed ([#2035](https://github.com/kamiazya/whiteboard/issues/2035)) ([5860032](https://github.com/kamiazya/whiteboard/commit/5860032455d64a1b19d6ea799a4a769d83ff2da7))
+* **mcp:** the local daemon listens on its socket alone ([#1983](https://github.com/kamiazya/whiteboard/issues/1983)) ([39820a5](https://github.com/kamiazya/whiteboard/commit/39820a55543c8d600ae04fe97a5c0247461eb1f8))
+* **web:** make a daemon-kept copy readable offline from Settings ([#1981](https://github.com/kamiazya/whiteboard/issues/1981)) ([c95f5bb](https://github.com/kamiazya/whiteboard/commit/c95f5bbb35ad481717071be6c5979346fd9140a6))
+* **web:** the browser keeper declares its workspace capacity (ADR-0044) ([#1995](https://github.com/kamiazya/whiteboard/issues/1995)) ([d6c4ec8](https://github.com/kamiazya/whiteboard/commit/d6c4ec861a2e7195fc7183080d62d22828121ac5))
+
+
+### Bug Fixes
+
+* a restore stays inside the data directory and an empty token refuses to start, and the mutation lane's survivors are pinned where they live (audit wave 9b) ([#2032](https://github.com/kamiazya/whiteboard/issues/2032)) ([0df849f](https://github.com/kamiazya/whiteboard/commit/0df849fbc035d1e2d4352a2ed91e9033c81cc36d))
+* a stopped daemon no longer reads as a revoked pairing, and unsaved changes are said in plain sight ([#1964](https://github.com/kamiazya/whiteboard/issues/1964)) ([9c6c42d](https://github.com/kamiazya/whiteboard/commit/9c6c42de87ca74c67b168b905c4e58d56e37cb30))
+* audit wave 5a — server mode gets the live audience, one boot sequence for three roots, warm MCP caches, agent writes take checkpoints, and auto-compact is declared background work ([#2018](https://github.com/kamiazya/whiteboard/issues/2018)) ([1cfdb77](https://github.com/kamiazya/whiteboard/commit/1cfdb7708e1fd4b0b27397f680f07d65747960c0))
+* audit wave 5b — client URLs built once and pinned to the routes, operator JSON parsed before it prints, tolerant browser-parsed answers, the schema held to the migrated database, and the legacy create route retired ([#2020](https://github.com/kamiazya/whiteboard/issues/2020)) ([ff5540c](https://github.com/kamiazya/whiteboard/commit/ff5540ca2b3139e65e90315f59835ca666b935f7))
+* audit wave 5c — the offline replica page reports a failed save, routes are handed a data layout, and the realm check, auth-marker scrub, workspace-id pattern, store double and migration harness are each declared once ([#2021](https://github.com/kamiazya/whiteboard/issues/2021)) ([9b65927](https://github.com/kamiazya/whiteboard/commit/9b65927bfb2b578cb4a422a12ae742ab9742d4a3))
+* audit wave 6a — the drawing skill's edge example parses again and every doc tool call is held to its schema, /auth URLs are built once and pinned, routes refuse a bad address or body from one helper, and the receiving side of a transfer is tested ([#2024](https://github.com/kamiazya/whiteboard/issues/2024)) ([c599b9c](https://github.com/kamiazya/whiteboard/commit/c599b9c7093c9f69dce561275a25fdde9c1eddaa))
+* audit wave 7a — a published install's agent and daemon see each other's writes, the StoreScope reaches every router and worker, the browser refuses what the daemon would, enums degrade where only displayed, and ten surviving mutations turn red ([#2027](https://github.com/kamiazya/whiteboard/issues/2027)) ([e97b20d](https://github.com/kamiazya/whiteboard/commit/e97b20d5fd85e59d1f32dcf2324f3c8c11ae911f))
+* audit wave 7b — knip judges every private barrel, mcp-server's layer reversals go 8 to 1, the sync frames are named for what they carry, the test-type ledger falls to four errors, and the two main flakes are root-caused ([#2028](https://github.com/kamiazya/whiteboard/issues/2028)) ([68406d4](https://github.com/kamiazya/whiteboard/commit/68406d44e579d9ac248cf226d344b65fa98a8b12))
+* **daemon:** an open page keeps the daemon from stopping as idle ([#1962](https://github.com/kamiazya/whiteboard/issues/1962)) ([72bbad1](https://github.com/kamiazya/whiteboard/commit/72bbad1b3849b0a3fe6ef1102d5c098fb6e96f0b))
+* **mcp-server:** a page on the SSE transport counts as a browser on its document ([#1968](https://github.com/kamiazya/whiteboard/issues/1968)) ([8a5dcce](https://github.com/kamiazya/whiteboard/commit/8a5dcce81f48179bc4361c7198d79e82be086d42))
+* **mcp:** exchange a sign-in code at the public callback address ([#1988](https://github.com/kamiazya/whiteboard/issues/1988)) ([f395bc2](https://github.com/kamiazya/whiteboard/commit/f395bc2e75d9e5060d942804ed3ad19a1b79ed10))
+* **mcp:** refuse a data dir another user owns ([#1984](https://github.com/kamiazya/whiteboard/issues/1984)) ([dcdd8ec](https://github.com/kamiazya/whiteboard/commit/dcdd8ec818d3e29ae8eb8601f9464ba7fd3c8f0a))
+* one definition each for the node cascade, the widget's canvas_view contract, compaction's address, the write lock, and the sync contracts ([#2006](https://github.com/kamiazya/whiteboard/issues/2006)) ([70954b0](https://github.com/kamiazya/whiteboard/commit/70954b0ad243d995ea1000e357b438d5211ad117))
+* **server-core:** a /api/v1 write takes its workspace and document from the URL, never from the body ([#2010](https://github.com/kamiazya/whiteboard/issues/2010)) ([c12d57a](https://github.com/kamiazya/whiteboard/commit/c12d57ac3dc3100a60bb853980ed48b282efa412))
+* **server-core:** audit wave 5f — the subpaths daemon-client imports stay off the heavy graph, plugin-visual's default entry is held React-free, the scorers leave canvas-render's barrel, and the daemon's tests find the repo root through one helper ([#2022](https://github.com/kamiazya/whiteboard/issues/2022)) ([d4a81ff](https://github.com/kamiazya/whiteboard/commit/d4a81ffd8644f9966c2ab745a363fb93fc1e34d2))
+* the keeper reconciles instead of resyncing what it cannot read, agents are told where `default` is, and four boundary guards close their blind spots (audit wave 9a) ([#2031](https://github.com/kamiazya/whiteboard/issues/2031)) ([5a9037f](https://github.com/kamiazya/whiteboard/commit/5a9037fc86d33620873df393558acc39891df446))
+* **web:** a copy kept through the extension is named by the extension, not its reserved address ([#1961](https://github.com/kamiazya/whiteboard/issues/1961)) ([b501034](https://github.com/kamiazya/whiteboard/commit/b50103443df5e80e41ce105d9c9af174d86d1a2f))
+* **web:** a workspace the daemon lists but refuses settles instead of looping, and says it is gone ([#1960](https://github.com/kamiazya/whiteboard/issues/1960)) ([86f82e7](https://github.com/kamiazya/whiteboard/commit/86f82e797b37d49172b4c8f6b5f1239e4577942d))
+* **web:** audit wave 5g — the shell store publishes a browser keeper's storage-health change, and 48 repo-policy guards leave the daemon package for the pre-push project ([#2023](https://github.com/kamiazya/whiteboard/issues/2023)) ([b26d56e](https://github.com/kamiazya/whiteboard/commit/b26d56ea36ee8834a115ebf772bdb469656ef611))
+* **web:** Enter right after a closing ]] writes a newline, not an accept of a stale list ([#1957](https://github.com/kamiazya/whiteboard/issues/1957)) ([16041d0](https://github.com/kamiazya/whiteboard/commit/16041d03523dbbe9c5ee86ca2808d836e382a9a6))
+* **web:** receive a transferred workspace on the server-mode keeper, authorised by its session ([#1985](https://github.com/kamiazya/whiteboard/issues/1985)) ([f3fba04](https://github.com/kamiazya/whiteboard/commit/f3fba04a70111b2f10ec16071e7b98daad42b22b))
+* **web:** the extension presence probe is called off when its page unmounts ([#1955](https://github.com/kamiazya/whiteboard/issues/1955)) ([6d4288c](https://github.com/kamiazya/whiteboard/commit/6d4288c04f948e5a1c4b57a6050dc5559fda6166))
+* **web:** the popover offers the extension instead of the loopback probe once it answers ([#1963](https://github.com/kamiazya/whiteboard/issues/1963)) ([d63db70](https://github.com/kamiazya/whiteboard/commit/d63db709dd00cc22bf06d881ff714fa00b78b4db))
+
 ## [0.0.20](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.19...whiteboard-plugin-v0.0.20) (2026-09-27)
 
 
