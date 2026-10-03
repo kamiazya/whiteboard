@@ -66,7 +66,9 @@ to theme a canvas there. A theme id nothing registered is refused with the list 
 theme's jittered geometry or glow unless it asks. Pass `style`:
 
 - `"document"` draws the theme the canvas names.
-- a theme id such as `"visual.sketch"` previews that theme without storing it.
+- a theme id such as `"visual.sketch"` previews that theme without storing it. An id nothing
+  registered is refused with the list of registered ids, the same as on a write, rather than
+  drawing the clean look.
 - `"clean"` (the default) ignores the document's theme.
 
 On a **markdown document** `style` reaches the boards its body embeds with `![[board]]`: a note

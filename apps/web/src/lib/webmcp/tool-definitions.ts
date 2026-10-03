@@ -18,8 +18,8 @@ const emptyObjectJsonSchema = {
 /**
  * A read-only WebMCP tool this app registers via `useBrowserToolRegistry`.
  * `resultSchema` is a static JSON Schema literal (not derived via
- * zod-to-json-schema) so it can be imported unchanged by the Node-side
- * canary script without a TypeScript build step; `tool-definitions.test.ts`
+ * zod-to-json-schema) so it is the exact value handed to the browser's tool
+ * registry, with no runtime conversion step to drift; `tool-definitions.test.ts`
  * asserts it stays in agreement with the Zod result schema the executor
  * actually parses against. `execute`'s return type is derived from the
  * generic `Result` schema (via `z.infer`) rather than widened to

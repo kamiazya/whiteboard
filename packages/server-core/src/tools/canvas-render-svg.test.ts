@@ -246,6 +246,33 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
     expect(result.svg).not.toContain('wb-glow')
   })
 
+  // A typo drew the clean look and answered 200 with no signal, so an agent
+  // asking for a theme could not tell it had not got one. The write path
+  // refuses the same id with the registered ones; the read path now does too.
+  test('refuses a theme id no plugin registered, naming what is', async () => {
+    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const refused = tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'visual.sktech',
+    })
+    await expect(refused).rejects.toThrow(/visual\.sktech/)
+    await expect(refused).rejects.toThrow(/registered: visual\.sketch, visual\.neon/)
+  })
+
+  test('refuses it before reading the document, so a typo costs no render', async () => {
+    const tool = createCanvasRenderSvgTool(makeDeps(new FakeDocumentStore()))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        embedReferences: false,
+        style: 'visual.nope',
+      }),
+    ).rejects.toThrow(/no theme "visual\.nope" is registered/)
+  })
+
   test('the input schema defaults style to clean and refuses a bare name', () => {
     const base = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }
     expect(canvasRenderSvgInputSchema.parse(base).style).toBe('clean')

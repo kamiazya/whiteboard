@@ -188,8 +188,9 @@ is the caller's choice, through one `style` field with one meaning everywhere it
 It appears on `wb_scene_render`, and on the daemon's `POST …/export` (PNG) and
 `POST …/export-svg` request bodies. The default is `clean` so an agent reading SVG never pays
 for a theme's jittered geometry or glow unasked, and a `wb_canvas_snapshot` layout analysis
-never moves because a theme did. A theme id nothing registered draws clean and is reported as a
-degradation, never an error.
+never moves because a theme did. A theme id nothing registered is refused — `wb_scene_render` answers
+an error and the two export routes a `400 invalid_request` — naming the registered ids, the way a
+theme write does.
 
 A themed render also comes back on that theme's **paper**: the background is the theme
 palette's surface for the mode asked for (`theme: "dark"` on a neon canvas gives `#030711`),

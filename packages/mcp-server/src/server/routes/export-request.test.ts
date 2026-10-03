@@ -3,9 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+import { exportRequestSchema } from '../../shared/api-contracts/export.js'
+import { exportSvgRequestSchema } from '../../shared/api-contracts/export-svg.js'
 import {
   defaultExportPath,
   documentMissingBody,
+  parseExportBody,
   parseOptionalJsonBody,
   resolveRequestedOutputPath,
 } from './export-request.js'
@@ -88,5 +91,42 @@ describe('the shared bodies', () => {
     const b = defaultExportPath('/exports', 'board', 'png')
     expect(a).toMatch(/^\/exports\/board-.*\.png$/)
     expect(a).not.toBe(b)
+  })
+})
+
+describe.each([
+  ['png', exportRequestSchema],
+  ['svg', exportSvgRequestSchema],
+] as const)('parseExportBody (%s)', (_format, requestSchema) => {
+  it.each([
+    'clean',
+    'document',
+    'visual.sketch',
+    'visual.neon',
+  ])('lets style %s through', (style) => {
+    expect(parseExportBody(JSON.stringify({ style }), requestSchema)).toEqual({ body: { style } })
+  })
+
+  it('lets an empty body through', () => {
+    expect(parseExportBody('', requestSchema)).toEqual({ body: {} })
+  })
+
+  it('refuses a style naming no registered theme, with every registered id', () => {
+    const parsed = parseExportBody(JSON.stringify({ style: 'visual.nope' }), requestSchema)
+    expect(parsed).toMatchObject({
+      error: {
+        error: 'invalid_request',
+        message: expect.stringContaining('"visual.nope"'),
+      },
+    })
+    expect(parsed).toMatchObject({
+      error: { message: expect.stringContaining('visual.sketch, visual.neon') },
+    })
+  })
+
+  it('keeps the body check first: malformed JSON is still malformed JSON', () => {
+    expect(parseExportBody('{nope', requestSchema)).toEqual({
+      error: { error: 'invalid_request', message: 'malformed JSON' },
+    })
   })
 })

@@ -26,6 +26,10 @@ const log = getLogger('compose-canvas-scene')
 // Keyed by every `SpatialLayoutDegradation['kind']`, so a kind added in
 // canvas-render is a compile error here rather than a silently unreported
 // degradation.
+//
+// `unknown-theme` reads as the CANVAS naming the theme because that is the only
+// way it reaches here: a caller's own `style` id is refused before a scene is
+// composed (`unknownStyleRefusal`), so the subject is never the caller.
 const DEGRADATION_MESSAGE: Record<SpatialLayoutDegradation['kind'], string> = {
   'body-parse-failed': 'text node body failed to parse as markdown; falling back to literal text',
   'unsupported-background-style': 'group backgroundStyle not supported; rendering as cover',

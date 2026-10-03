@@ -15,7 +15,7 @@ import { onDocumentAction } from './document/path-route.js'
 import {
   defaultExportPath,
   documentMissingBody,
-  parseOptionalJsonBody,
+  parseExportBody,
   resolveRequestedOutputPath,
 } from './export-request.js'
 
@@ -73,7 +73,7 @@ export function createExportRouter(options: ExportRouterOptions) {
     'post',
     'export',
     async (c, workspaceId, path) => {
-      const parsedBody = parseOptionalJsonBody(await c.req.text(), exportRequestSchema)
+      const parsedBody = parseExportBody(await c.req.text(), exportRequestSchema)
       if ('error' in parsedBody) return c.json(parsedBody.error, 400)
       const body = parsedBody.body
 

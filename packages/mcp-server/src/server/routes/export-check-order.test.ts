@@ -76,6 +76,25 @@ describe.each(ROUTES)('$format export refusal order on a missing document', (rou
     await expect(res.json()).resolves.toMatchObject({ error: 'invalid_request' })
   })
 
+  it('tells the caller its style names no registered theme, and which do, before it says the document is missing', async () => {
+    const res = await post(JSON.stringify({ style: 'visual.nope' }))
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('invalid_request')
+    expect(body.message).toContain('visual.nope')
+    expect(body.message).toContain('visual.sketch')
+    expect(body.message).toContain('visual.neon')
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
+  })
+
+  it('lets a registered theme id, "clean" and "document" through to the missing-document answer', async () => {
+    for (const style of ['visual.sketch', 'clean', 'document']) {
+      const res = await post(JSON.stringify({ style }))
+      expect(res.status, style).toBe(404)
+    }
+  })
+
   it('tells the caller its output path is refused before it says the document is missing', async () => {
     const res = await post(JSON.stringify({ outputPath: 'relative/out' }))
     expect(res.status).toBe(400)
