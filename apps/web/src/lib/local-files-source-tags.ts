@@ -48,17 +48,14 @@ function partition(
  * or its row's kind moves — the listing's tag chips and the vocabulary in use
  * both read it.
  *
- * Without it every list reloads and parses EVERY document, and a document read
- * is not the 2.9ms the search corpus measured: each one reopens the workspace
- * record, so the cost per document grows with the workspace (measured 12ms,
- * 20ms and 37ms per document at 25, 50 and 100 documents, real IndexedDB). The
- * stamp is a millisecond timestamp, so two writes inside one millisecond read
- * as one, which the corpus already accepts.
+ * Without it every list reloads and parses EVERY document. The stamp is a
+ * millisecond timestamp, so two writes inside one millisecond read as one,
+ * which the corpus already accepts.
  *
  * An unreadable document is not yielded by `read` and bears nothing here: it
  * lists tagless rather than failing the list, and is asked for again next time.
- * ponytail: the first list of a session still reads every document; open the
- * workspace record once per list, or persist the facts, when that wait shows.
+ * ponytail: the first list of a session still reads and parses every document;
+ * persist the facts when that wait shows.
  */
 export function createTagBearersCache(
   read: (entries: readonly WorkspaceDocumentEntry[]) => AsyncIterable<ReadDocument>,

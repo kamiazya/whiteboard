@@ -47,13 +47,81 @@ import {
 } from './local-document-summary.js'
 import { createTagBearersCache } from './local-files-source-tags.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
-import { loadDocumentContent } from './workspace-content.js'
+import {
+  type ContentRecord,
+  lazyContentRecord,
+  loadDocumentContent,
+  projectDocumentContent,
+} from './workspace-content.js'
 
 /** One document read from the store, with its content already read as the half its kind names. */
 interface LoadedDocument {
   documentId: string
   doc: LoroDoc
   content: DocumentContent
+}
+
+type ReadableEntry = { documentId: string; path: string; kind?: DocumentKind }
+
+/**
+ * One document's current content. A walk passes the workspace record it
+ * opened once, so N documents cost one open; a lone read opens its own.
+ */
+async function loadCurrentDocFrom(
+  loro: LoroStoreLike,
+  entry: WorkspaceDocumentEntry,
+  record?: () => Promise<ContentRecord>,
+): Promise<LoroDoc> {
+  const doc =
+    record === undefined
+      ? await loadDocumentContent(entry.documentId, { loro })
+      : await projectDocumentContent(await record(), entry.documentId, { loro })
+  if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
+  return doc
+}
+
+/**
+ * Every document's content, read and its KIND resolved, skipping what this
+ * build cannot read.
+ *
+ * Four methods here each wrote this walk out — list, load, branch on
+ * markdown vs spatial — and the branch is the one place the two stop being
+ * interchangeable, so `readDocumentContent` makes it: the document's own
+ * recorded kind, the index row's after it, and a canvas for a document that
+ * names neither. Skipping rather than failing is the rule everywhere it
+ * appears, and for one reason: a rename that repairs nine references of ten
+ * beats one that repairs none, and a panel that lists a tagless row beats
+ * one that does not open.
+ *
+ * The workspace record is opened once for the walk, and only if a document is
+ * read at all.
+ */
+async function* readDocumentsFrom(
+  loro: LoroStoreLike,
+  entries: readonly ReadableEntry[],
+): AsyncGenerator<LoadedDocument> {
+  const record = lazyContentRecord()
+  for (const entry of entries) {
+    let doc: LoroDoc
+    try {
+      doc = await loadCurrentDocFrom(
+        loro,
+        { documentId: entry.documentId, path: entry.path },
+        record,
+      )
+    } catch {
+      continue
+    }
+    let content: DocumentContent
+    try {
+      content = readDocumentContent(doc, entry.kind)
+    } catch {
+      // A canvas this build cannot parse is the same miss as an unreadable
+      // document: it carries nothing anyone here can read.
+      continue
+    }
+    yield { documentId: entry.documentId, doc, content }
+  }
 }
 
 /**
@@ -244,46 +312,9 @@ export function createLocalFilesSource(
     }
   }
 
-  async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<LoroDoc> {
-    const doc = await loadDocumentContent(entry.documentId, { loro })
-    if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
-    return doc
-  }
-
-  /**
-   * Every document's content, read and its KIND resolved, skipping what this
-   * build cannot read.
-   *
-   * Four methods here each wrote this walk out — list, load, branch on
-   * markdown vs spatial — and the branch is the one place the two stop being
-   * interchangeable, so `readDocumentContent` makes it: the document's own
-   * recorded kind, the index row's after it, and a canvas for a document that
-   * names neither. Skipping rather than failing is the rule everywhere it
-   * appears, and for one reason: a rename that repairs nine references of ten
-   * beats one that repairs none, and a panel that lists a tagless row beats
-   * one that does not open.
-   */
-  async function* readableDocuments(
-    entries: readonly { documentId: string; path: string; kind?: DocumentKind }[],
-  ): AsyncGenerator<LoadedDocument> {
-    for (const entry of entries) {
-      let doc: LoroDoc
-      try {
-        doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
-      } catch {
-        continue
-      }
-      let content: DocumentContent
-      try {
-        content = readDocumentContent(doc, entry.kind)
-      } catch {
-        // A canvas this build cannot parse is the same miss as an unreadable
-        // document: it carries nothing anyone here can read.
-        continue
-      }
-      yield { documentId: entry.documentId, doc, content }
-    }
-  }
+  const loadCurrentDoc = (entry: WorkspaceDocumentEntry, record?: () => Promise<ContentRecord>) =>
+    loadCurrentDocFrom(loro, entry, record)
+  const readableDocuments = (entries: readonly ReadableEntry[]) => readDocumentsFrom(loro, entries)
 
   const bearersByDocument = createTagBearersCache(readableDocuments)
 
@@ -300,12 +331,15 @@ export function createLocalFilesSource(
    * than dropping out of results entirely, and that miss is NOT cached —
    * the next search should try the document again.
    */
-  async function searchableTextsFor(entry: WorkspaceDocumentEntry): Promise<string[]> {
+  async function searchableTextsFor(
+    entry: WorkspaceDocumentEntry,
+    record: () => Promise<ContentRecord>,
+  ): Promise<string[]> {
     const stamp = entry.updatedAt ?? ''
     const cached = corpus.get(entry.documentId)
     if (cached !== undefined && cached.stamp === stamp) return cached.texts
     try {
-      const doc = await loadCurrentDoc(entry)
+      const doc = await loadCurrentDoc(entry, record)
       const texts = searchableTexts(readDocumentContent(doc, entry.kind))
       corpus.set(entry.documentId, { stamp, texts })
       return texts
@@ -411,12 +445,13 @@ export function createLocalFilesSource(
       if (query.trim() === '') return []
       const entries = await this.listDocuments()
       const searchable: SearchableDocument[] = []
+      const record = lazyContentRecord()
       for (const entry of entries) {
         searchable.push({
           documentId: entry.documentId,
           path: entry.path,
           ...optional('name', entry.name),
-          texts: await searchableTextsFor(entry),
+          texts: await searchableTextsFor(entry, record),
         })
       }
       const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
