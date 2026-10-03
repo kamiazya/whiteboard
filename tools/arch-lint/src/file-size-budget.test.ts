@@ -476,8 +476,8 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `wb_document_get`, rename a spatial board in place, read an edge facet
   // through the snapshot, and the session-end checkpoint phase (whose body
   // lives in `smoke/lib`).
-  // 2735 -> 2698: the canvas_view theme-font steps, with the widget's
-  // refresh-keeps-the-theme step, left for `smoke/lib/canvas-view-theme.mjs`.
+  // The canvas_view theme-font steps, with the widget's refresh-keeps-the-theme
+  // step, live in `smoke/lib/canvas-view-theme.mjs`.
   'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2698,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
