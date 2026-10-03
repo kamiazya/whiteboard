@@ -19,14 +19,13 @@ const admissionArb: fc.Arbitrary<ProviderAdmission> = fc
   .record(
     {
       createAccounts: fc.boolean(),
-      honourEmailInvitations: fc.boolean(),
       allowedEmailDomains: domainsArb,
       googleHostedDomains: domainsArb,
       requiredClaims: fc.record({
         groups: fc.uniqueArray(fc.constantFrom(...GROUPS), { minLength: 1 }),
       }),
     },
-    { requiredKeys: ['createAccounts', 'honourEmailInvitations'] },
+    { requiredKeys: ['createAccounts'] },
   )
   .map((raw) => providerAdmissionSchema.parse(raw))
 
@@ -46,7 +45,7 @@ const inputArb: fc.Arbitrary<AdmissionInput> = fc.record({
   admission: admissionArb,
   claims: claimsArb,
   account: fc.constantFrom('exists' as const, 'new' as const),
-  invitation: fc.constantFrom('none' as const, 'link' as const, 'email' as const),
+  invitation: fc.constantFrom('none' as const, 'link' as const),
 })
 
 const usesEmail = (a: ProviderAdmission) =>

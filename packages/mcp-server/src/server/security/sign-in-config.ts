@@ -22,9 +22,6 @@ export const providerAdmissionSchema = z
   .object({
     // Decision 4: invitation-only unless the operator says otherwise.
     createAccounts: z.boolean().default(false),
-    // Decision 6: an invitation addressed to an email, honoured only when this
-    // provider asserts the same address verified.
-    honourEmailInvitations: z.boolean().default(false),
     allowedEmailDomains: z.array(domainSchema).min(1).optional(),
     // Google's `hd` claim: the Workspace domain the account belongs to.
     googleHostedDomains: z.array(domainSchema).min(1).optional(),

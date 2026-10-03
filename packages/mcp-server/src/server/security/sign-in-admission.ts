@@ -22,7 +22,6 @@ export type AdmissionRefusal =
   | 'hosted_domain_not_allowed'
   | 'claim_not_satisfied'
   | 'not_invited'
-  | 'email_invitations_disabled'
   | 'rule_refused'
 
 export type AdmissionDecision =
@@ -45,9 +44,8 @@ export interface AdmissionInput {
   readonly claims: VerifiedClaims
   /** Whether the binding already resolves to an account. */
   readonly account: 'exists' | 'new'
-  /** What invitation, if any, the sign-in arrived with. For `email`, the
-   *  caller has already matched the invitation's address to `claims.email`. */
-  readonly invitation: 'none' | 'link' | 'email'
+  /** What invitation, if any, the sign-in arrived with. */
+  readonly invitation: 'none' | 'link'
   readonly codeRules?: readonly AdmissionRule[]
 }
 
@@ -105,9 +103,6 @@ function routeToAccount(input: AdmissionInput): AdmissionDecision {
   switch (input.invitation) {
     case 'link':
       return ADMITTED
-    case 'email':
-      if (!input.admission.honourEmailInvitations) return refuse('email_invitations_disabled')
-      return emailVerified(input.claims) ? ADMITTED : refuse('email_unverified')
     case 'none':
       return input.admission.createAccounts ? ADMITTED : refuse('not_invited')
   }

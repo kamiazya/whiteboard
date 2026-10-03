@@ -19,6 +19,14 @@ Built:
 - decision 10, members-only workspaces in server mode, on the HTTP API and on
   `/mcp` alike.
 
+> **Note (2026-10-03):** the second invitation kind in decision 6, an invitation
+> addressed to an email, was removed before anything could create one. No route
+> or command ever produced it, so the `honourEmailInvitations` provider option,
+> its admission arm and the store methods behind it are gone, and a
+> configuration that still names the option is refused at startup. The
+> invitation link is the only invitation; revoking one is not built. The
+> `invitations.email` column is still in the schema, unused.
+
 ## Context
 
 ADR-0045 split the login identity (an ACCOUNT, keeper-wide) from who that

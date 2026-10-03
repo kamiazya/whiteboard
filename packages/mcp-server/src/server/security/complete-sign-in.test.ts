@@ -200,26 +200,6 @@ describe('completeSignIn — somebody new', () => {
     expect(done).toEqual({ ok: false, reason: 'invitation_unusable' })
   })
 
-  it('honours an email invitation only where the provider opted in', async () => {
-    await deps.invitations.createForEmail({
-      email: 'ada@corp.example',
-      invitedBy: 'p-bob',
-      now: T0,
-      ttlMs: HOUR,
-    })
-    expect(await completeSignIn(deps, { provider: provider(), claims: ada, now: T0 + 1 })).toEqual({
-      ok: false,
-      reason: 'not_invited',
-    })
-    const done = await completeSignIn(deps, {
-      provider: provider({ honourEmailInvitations: true }),
-      claims: ada,
-      now: T0 + 1,
-    })
-    expect(done.ok).toBe(true)
-    expect(await deps.invitations.openForEmail('ada@corp.example', T0 + 2)).toBeNull()
-  })
-
   it('does not spend a link on a person the rules refuse', async () => {
     const strict = provider({ allowedEmailDomains: ['corp.example'] })
     const { token } = await deps.invitations.createLink({

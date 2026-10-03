@@ -15,12 +15,20 @@ const google = {
 }
 
 describe('signInConfigSchema', () => {
-  it('defaults every provider to invitation-only, email invitations off', () => {
+  it('defaults every provider to invitation-only', () => {
     const config = signInConfigSchema.parse({ providers: [google] })
-    expect(config.providers[0]?.admission).toEqual({
-      createAccounts: false,
-      honourEmailInvitations: false,
+    expect(config.providers[0]?.admission).toEqual({ createAccounts: false })
+  })
+
+  // Nothing creates an invitation addressed to an email, so a config that
+  // still switches the option on must fail at startup naming it rather than
+  // read as a setting that takes effect.
+  it('refuses the retired honourEmailInvitations option, naming it', () => {
+    const result = signInConfigSchema.safeParse({
+      providers: [{ ...google, admission: { honourEmailInvitations: true } }],
     })
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result.error?.issues)).toContain('honourEmailInvitations')
   })
 
   it('accepts several named providers, each with its own rules', () => {

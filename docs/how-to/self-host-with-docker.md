@@ -104,7 +104,6 @@ What the `admission` block can say:
 | Key | Meaning |
 |---|---|
 | `createAccounts` | Whether a person the rules admit gets an account on first sign-in. Default `false`: only invited people do. |
-| `honourEmailInvitations` | Whether an invitation addressed to an email is honoured when this provider asserts that email verified. Default `false`. |
 | `allowedEmailDomains` | Only addresses in these domains, matched exactly (a subdomain is not the domain). |
 | `googleHostedDomains` | Only Google Workspace accounts of these domains (Google's `hd` claim). |
 | `requiredClaims` | Each named claim must carry one of the listed values, e.g. `groups: [whiteboard]`. |

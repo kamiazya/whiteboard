@@ -119,27 +119,6 @@ describe('admit — who may get a NEW account', () => {
     })
   })
 
-  it('honours an email invitation only where the provider opted in, and only verified', () => {
-    expect(admit(input({ account: 'new', invitation: 'email' }))).toEqual({
-      admitted: false,
-      reason: 'email_invitations_disabled',
-    })
-    const rules = { honourEmailInvitations: true }
-    expect(admit(input({ rules, account: 'new', invitation: 'email' }))).toEqual({
-      admitted: true,
-    })
-    expect(
-      admit(
-        input({
-          rules,
-          account: 'new',
-          invitation: 'email',
-          claims: { ...verified, email_verified: false },
-        }),
-      ),
-    ).toEqual({ admitted: false, reason: 'email_unverified' })
-  })
-
   it('creates an account on its own only when the provider opted in', () => {
     expect(admit(input({ rules: { createAccounts: true }, account: 'new' }))).toEqual({
       admitted: true,
@@ -152,7 +131,7 @@ describe('admit — who may get a NEW account', () => {
   it('never lets an invitation or auto-creation bypass the sign-in rules', () => {
     const rules = { allowedEmailDomains: ['corp.example'], createAccounts: true }
     const outsider = { ...verified, email: 'eve@elsewhere.example' }
-    for (const invitation of ['none', 'link', 'email'] as const) {
+    for (const invitation of ['none', 'link'] as const) {
       expect(admit(input({ rules, account: 'new', invitation, claims: outsider }))).toEqual({
         admitted: false,
         reason: 'email_domain_not_allowed',
