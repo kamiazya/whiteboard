@@ -40,8 +40,53 @@ describe('what counts as host reach', () => {
     ['process.env', 'export const x = process.env.WHITEBOARD_SECRET_THING\n'],
     ['process.env', "export const x = process.env['HOME']\n"],
     ['node:fs', "export const load = () => import('node:fs/promises')\n"],
+    // The spellings a `process.env` property match walks past.
+    ['process.env', 'const { env } = process\nexport const x = env.HOME\n'],
+    ['process.env', 'const { env: vars } = process\nexport const x = vars.HOME\n'],
+    ['process.env', "export const x = process['env'].HOME\n"],
+    ['process.env', 'export const x = (globalThis as { process: NodeJS.Process }).process?.env\n'],
+    ['process.env', "export const x = globalThis['process'].env\n"],
+    ['process.env', 'const p = process\nexport const x = p.env\n'],
+    ['process.env', 'let env\n;({ env } = process)\nexport const x = env\n'],
   ])('finds %s', (kind, source) => {
     expect(kindsOf(source)).toEqual([kind])
+  })
+
+  // The module is a reach of its own (`cwd`, `exit`, `platform`), and an
+  // environment read through it is the second kind.
+  it.each([
+    [['node:process'], "import { cwd } from 'node:process'\nexport const x = cwd\n"],
+    [
+      ['node:process', 'process.env'],
+      "import { env } from 'node:process'\nexport const x = env.HOME\n",
+    ],
+    [
+      ['node:process', 'process.env'],
+      "import { env as vars } from 'process'\nexport const x = vars.HOME\n",
+    ],
+    [
+      ['node:process', 'process.env'],
+      "import proc from 'node:process'\nexport const x = proc.env.HOME\n",
+    ],
+    [
+      ['node:process', 'process.env'],
+      "import * as proc from 'node:process'\nexport const x = proc['env']\n",
+    ],
+    [['node:process'], "export const load = () => import('node:process')\n"],
+  ])('finds %j through the process module', (kinds, source) => {
+    expect(kindsOf(source)).toEqual(kinds)
+  })
+
+  it("does not take another object's env for the process environment", () => {
+    expect(
+      kindsOf(
+        [
+          'declare const config: { env: string }',
+          'const { env } = config',
+          'export const x = [env, config.env, config["env"]]',
+        ].join('\n'),
+      ),
+    ).toEqual([])
   })
 
   it('leaves alone what is not the host: a type-only import and a pure builtin', () => {
@@ -50,6 +95,7 @@ describe('what counts as host reach', () => {
         [
           "import type { Stats } from 'node:fs'",
           "import type { Kysely } from 'kysely'",
+          "import type { env } from 'node:process'",
           "import { join } from 'node:path'",
           'export const x = join',
         ].join('\n'),
