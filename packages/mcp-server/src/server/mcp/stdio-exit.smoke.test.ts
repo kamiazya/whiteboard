@@ -9,13 +9,13 @@ const entry = resolve(root, 'src/server/mcp/stdio.ts')
 describe('stdio exit smoke', () => {
   it('exits promptly when stdin is closed (parent disconnect)', async () => {
     await runStdioExitSmoke({ entry, root, trigger: 'stdin-end' })
-  }, 15_000)
+  }, 20_000)
 
   it('exits promptly on SIGTERM', async () => {
     await runStdioExitSmoke({ entry, root, trigger: 'SIGTERM' })
-  }, 15_000)
+  }, 20_000)
 
   it('exits promptly on SIGINT', async () => {
     await runStdioExitSmoke({ entry, root, trigger: 'SIGINT' })
-  }, 15_000)
+  }, 20_000)
 })

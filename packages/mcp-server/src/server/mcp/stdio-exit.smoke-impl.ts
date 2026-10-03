@@ -12,6 +12,14 @@ export interface RunStdioExitSmokeOptions {
   trigger: 'stdin-end' | 'SIGTERM' | 'SIGINT'
   /** Bound on how long we wait for the child to exit after the trigger. */
   exitTimeoutMs?: number
+  /**
+   * Bound on how long we wait for the initialize response first. Separate
+   * from the exit bound on purpose: the exit is what this smoke measures,
+   * while the start is a cold `tsx` load of the whole server, which on a
+   * runner already running the other smokes takes longer than the exit
+   * budget allows for and is not the thing under test.
+   */
+  startupTimeoutMs?: number
 }
 
 function spawnMcpChild(
@@ -40,6 +48,7 @@ export async function runStdioExitSmoke({
   root,
   trigger,
   exitTimeoutMs = 5000,
+  startupTimeoutMs = 12_000,
 }: RunStdioExitSmokeOptions): Promise<void> {
   const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-stdio-exit-'))
   const child = spawnMcpChild(entry, root, tmpDataDir)
@@ -95,7 +104,7 @@ export async function runStdioExitSmoke({
       })}\n`,
     )
 
-    const deadline = Date.now() + exitTimeoutMs
+    const deadline = Date.now() + startupTimeoutMs
     while (!sawInitializeResponse && Date.now() < deadline) {
       // A child that has already died can never produce the response we're
       // waiting for; fail immediately instead of spinning until the timeout.
@@ -108,7 +117,9 @@ export async function runStdioExitSmoke({
       await new Promise((r) => setTimeout(r, 50))
     }
     if (!sawInitializeResponse) {
-      throw new Error(`[stdio-exit-smoke] never observed initialize response\n${stderrBuf}`)
+      throw new Error(
+        `[stdio-exit-smoke] never observed initialize response within ${startupTimeoutMs}ms\n${stderrBuf}`,
+      )
     }
     child.stdin.write(
       `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })}\n`,
