@@ -39,6 +39,7 @@ import {
   removeStaleEntriesFromConfig,
   resolveMainCheckoutRoot,
   resolvesToAnotherProjectEntry,
+  stdioProxyRootOf,
   verifyPostWrite,
 } from './wire-worktree-mcp-lib.mjs'
 
@@ -184,7 +185,7 @@ function mainCheckoutRoot(repoRoot) {
   }
 }
 
-function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOverride, claudeCliAvailableOverride }) {
+function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOverride, claudeCliAvailableOverride, mainCheckoutRootOverride }) {
   const repoRoot = resolve(worktreeRoot)
   const mainCheckout = isMainCheckoutOverride ?? isMainCheckout(repoRoot)
 
@@ -204,6 +205,7 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
     return
   }
 
+  const mainRoot = mainCheckoutRootOverride ?? mainCheckoutRoot(repoRoot)
   const desired = buildDesiredConfig({ repoRoot, isMainCheckout: false })
   const target = [desired.command, ...desired.args].join(' ')
 
@@ -232,7 +234,7 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
     resolvesToAnotherProjectEntry({
       config: existingConfig,
       repoRoot,
-      mainRoot: mainCheckoutRoot(repoRoot),
+      mainRoot,
       name: desired.name,
     })
   ) {
@@ -256,7 +258,10 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
   }
 
   const effectiveConfig = readConfig()
-  const effective = readExistingEntry(effectiveConfig, repoRoot, desired.name)
+  // The add lands under the main checkout's key; the worktree's own key is the fallback for a
+  // CLI that keys by the directory it ran in.
+  const effective =
+    readExistingEntry(effectiveConfig, mainRoot, desired.name) ?? readExistingEntry(effectiveConfig, repoRoot, desired.name)
   const verified = verifyPostWrite(effective, desired)
   if (verified.outcome === 'wired') {
     log(`[wire-worktree-mcp] wired "${desired.name}" -> \`${target}\``)
@@ -282,13 +287,20 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
   // ~/.claude.json are absolute paths in the OS's native form, so on
   // Windows join() itself already returns backslashes and a hardcoded '/'
   // would never match, silently sweeping nothing.
-  const registered = Object.keys(config.projects)
+  const keyedByWorktree = Object.keys(config.projects)
     .filter((projectPath) => projectPath.startsWith(join(mainCheckoutRoot, '.claude', 'worktrees') + sep))
     .map((projectPath) => {
       const entry = config.projects[projectPath]?.mcpServers?.whiteboard
       return entry ? { name: 'whiteboard', path: resolve(projectPath) } : null
     })
     .filter((entry) => entry !== null)
+
+  // `claude mcp add --scope local` keys a worktree's registration by the MAIN checkout, so the
+  // entry wiring wrote lives there and names the worktree only in its args.
+  const mainKey = resolve(mainCheckoutRoot)
+  const mainKeyProject = Object.keys(config.projects).find((projectPath) => resolve(projectPath) === mainKey)
+  const pointedAt = stdioProxyRootOf(config.projects[mainKeyProject]?.mcpServers?.whiteboard)
+  const registered = pointedAt === null ? keyedByWorktree : [...keyedByWorktree, { name: 'whiteboard', path: pointedAt, projectKey: mainKeyProject }]
 
   const actions = planStaleSweep(registered, liveWorktreePaths)
   if (actions.length === 0) {
@@ -339,6 +351,7 @@ export async function main({
     log,
     isMainCheckoutOverride,
     claudeCliAvailableOverride,
+    mainCheckoutRootOverride,
   })
 }
 

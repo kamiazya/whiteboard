@@ -6,7 +6,7 @@
 // repo) and points the script at it via CLEANUP_WORKTREES_REPO_ROOT.
 
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -177,4 +177,27 @@ test('finds the main checkout when invoked through a linked worktree copy', () =
   })
   assert.doesNotMatch(output, /nothing to clean/, 'must not silently no-op from a linked worktree')
   assert.match(output, /would remove lane-merged/)
+})
+
+test('a real run sweeps the MCP registration a removed worktree left under the main checkout key, and a dry run does not', () => {
+  const scratch = makeScratch()
+  const { repoDir } = setupRepos(scratch)
+  const mainRoot = realpathSync(repoDir)
+  const home = join(scratch, 'home')
+  mkdirSync(home)
+  const claudeJson = join(home, '.claude.json')
+  const proxy = (root) => `${root}/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs`
+  const dead = join(mainRoot, '.claude', 'worktrees', 'gone')
+  const seeded = JSON.stringify({
+    projects: { [mainRoot]: { mcpServers: { whiteboard: { type: 'stdio', command: 'node', args: [proxy(dead)], env: {} } } } },
+  })
+  writeFileSync(claudeJson, seeded)
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLEANUP_WORKTREES_REPO_ROOT: repoDir }
+
+  execFileSync('node', [scriptPath, '--dry-run'], { cwd: repoDir, encoding: 'utf-8', env })
+  assert.equal(readFileSync(claudeJson, 'utf-8'), seeded, 'a dry run must not edit ~/.claude.json')
+
+  const output = execFileSync('node', [scriptPath], { cwd: repoDir, encoding: 'utf-8', env })
+  assert.match(output, /sweep: removed stale "whiteboard" registration/)
+  assert.equal(JSON.parse(readFileSync(claudeJson, 'utf-8')).projects[mainRoot].mcpServers.whiteboard, undefined)
 })

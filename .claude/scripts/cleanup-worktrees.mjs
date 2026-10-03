@@ -6,6 +6,9 @@
 //
 //   node .claude/scripts/cleanup-worktrees.mjs [--dry-run] [--store-prune] [--include-fresh]
 //
+// It also drops the `whiteboard` MCP registration (~/.claude.json) of a worktree that no longer
+// exists, which `wire-worktree-mcp.mjs --sweep` finds.
+//
 // Safety: a worktree with uncommitted changes or an unmerged branch is always
 // left alone and reported — nothing here ever discards work.
 
@@ -199,6 +202,20 @@ for (const entry of entries) {
 }
 
 git(['worktree', 'prune'])
+
+// `claude mcp add --scope local` keys a worktree's registration by the main checkout, so removing
+// the worktree leaves it behind pointing at a proxy script that no longer exists.
+if (!dryRun) {
+  try {
+    const sweep = execFileSync('node', [join(__dirname, 'wire-worktree-mcp.mjs'), '--sweep'], {
+      cwd: repoRoot,
+      encoding: 'utf-8',
+    })
+    process.stdout.write(sweep)
+  } catch (error) {
+    console.warn(`warning: could not sweep stale MCP registrations: ${error.message}`)
+  }
+}
 
 if (storePrune && !dryRun) {
   console.log('pruning pnpm store…')

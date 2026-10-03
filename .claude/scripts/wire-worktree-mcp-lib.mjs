@@ -4,7 +4,9 @@
 // `claude` CLI invocation or filesystem/network I/O so the classify/plan
 // decisions are unit-testable without ever touching the real, developer-
 // global ~/.claude.json.
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
+
+const PROXY_SEGMENTS = ['packages', 'mcp-server', 'scripts', 'dev', 'mcp-http-stdio-proxy.mjs']
 
 /**
  * Derives the desired registration for a worktree: that worktree's own
@@ -28,8 +30,23 @@ export function buildDesiredConfig({ repoRoot, isMainCheckout = false, name = 'w
   return {
     name,
     command: 'node',
-    args: [join(repoRoot, 'packages', 'mcp-server', 'scripts', 'dev', 'mcp-http-stdio-proxy.mjs')],
+    args: [join(repoRoot, ...PROXY_SEGMENTS)],
   }
+}
+
+/**
+ * The checkout a stdio-proxy registration was written for, or null when the entry is not one of
+ * this script's registrations (an `npx` entry, an http entry, a proxy path of another layout).
+ * Only those are ever candidates for the sweep: anything else under the main checkout's key was
+ * put there by hand and is not this script's to remove.
+ *
+ * @param {unknown} entry
+ */
+export function stdioProxyRootOf(entry) {
+  if (!isPlainObject(entry) || entry.type !== 'stdio' || !Array.isArray(entry.args) || entry.args.length !== 1) return null
+  const script = resolve(String(entry.args[0]))
+  const suffix = join(...PROXY_SEGMENTS)
+  return script.endsWith(sep + suffix) ? script.slice(0, script.length - suffix.length - 1) : null
 }
 
 /**
@@ -119,17 +136,24 @@ export function assertNotTrackedSettingsPath(targetPath) {
 }
 
 /**
- * Given registered worktree-scoped entries and the set of live worktree
- * paths (from `git worktree list`), classifies entries whose directory no
- * longer exists as stale and emits removal actions. Live entries are left
- * untouched.
+ * Given registered entries and the set of live worktree paths (from `git
+ * worktree list`, which includes the main checkout), classifies entries whose
+ * directory no longer exists as stale and emits removal actions. Live entries
+ * are left untouched.
  *
- * @param {Array<{ name: string, path: string }>} registered
+ * `path` is the checkout the entry points at; `projectKey` is the
+ * ~/.claude.json project it is stored under, which is only the same thing for
+ * an entry keyed by its own worktree. `claude mcp add --scope local` keys by
+ * the MAIN checkout, so an entry for a worktree usually sits under that key.
+ *
+ * @param {Array<{ name: string, path: string, projectKey?: string }>} registered
  * @param {string[]} liveWorktreePaths
  */
 export function planStaleSweep(registered, liveWorktreePaths) {
   const live = new Set(liveWorktreePaths)
-  return registered.filter((entry) => !live.has(entry.path)).map((entry) => ({ action: 'remove', name: entry.name, path: entry.path }))
+  return registered
+    .filter((entry) => !live.has(entry.path))
+    .map((entry) => ({ action: 'remove', name: entry.name, path: entry.path, ...(entry.projectKey === undefined ? {} : { projectKey: entry.projectKey }) }))
 }
 
 /**
@@ -167,16 +191,17 @@ export function resolveMainCheckoutRoot({ worktreeListPorcelain, gitCommonDir } 
  * and leaves the atomic file write to the thin I/O entry.
  *
  * @param {{ projects?: Record<string, { mcpServers?: Record<string, unknown> }> }} config
- * @param {Array<{ action: 'remove', name: string, path: string }>} actions
+ * @param {Array<{ action: 'remove', name: string, path: string, projectKey?: string }>} actions
  */
 export function removeStaleEntriesFromConfig(config, actions) {
   const projects = { ...(config.projects ?? {}) }
   for (const action of actions) {
-    const project = projects[action.path]
+    const key = action.projectKey ?? action.path
+    const project = projects[key]
     if (!project?.mcpServers?.[action.name]) continue
     const mcpServers = { ...project.mcpServers }
     delete mcpServers[action.name]
-    projects[action.path] = { ...project, mcpServers }
+    projects[key] = { ...project, mcpServers }
   }
   return { ...config, projects }
 }
