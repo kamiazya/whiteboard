@@ -95,14 +95,49 @@ function check(label, ok) {
 
 // A navigation destroys the execution context mid-evaluate, so a poll that
 // reads the page has to treat that as "not yet" rather than as a failure.
-async function until(label, read) {
+async function until(label, read, describe) {
   const deadline = Date.now() + STEP_TIMEOUT_MS
   for (;;) {
     const value = await read().catch(() => undefined)
     if (value) return value
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`)
+    if (Date.now() > deadline) {
+      const seen = describe ? await describe().catch((err) => `describe failed: ${err}`) : undefined
+      throw new Error(
+        `timed out waiting for ${label}${seen === undefined ? '' : `\n${JSON.stringify(seen, null, 2)}`}`,
+      )
+    }
     await new Promise((r) => setTimeout(r, 100))
   }
+}
+
+// What the page holds when a step gives up: which document this is, which
+// worker controls it and what the registration carries, beside the browser's
+// console tail — the first run on a CI runner timed out on the reload step
+// and the bare message could not say which of those had not happened.
+const workerSummary = (page) =>
+  page.evaluate(async () => {
+    const sw = (w) => (w ? { url: w.scriptURL, state: w.state } : null)
+    const reg = await navigator.serviceWorker.getRegistration()
+    return {
+      href: location.href,
+      firstDocument: window.__smokeFirstDocument,
+      controller: sw(navigator.serviceWorker.controller),
+      installing: sw(reg?.installing),
+      waiting: sw(reg?.waiting),
+      active: sw(reg?.active),
+    }
+  })
+
+const consoleTail = []
+function tailConsole(page) {
+  page.on('console', (m) => {
+    consoleTail.push(`[${m.type()}] ${m.text()}`)
+    if (consoleTail.length > 40) consoleTail.shift()
+  })
+  page.on('pageerror', (err) => {
+    consoleTail.push(`[pageerror] ${err.message}`)
+    if (consoleTail.length > 40) consoleTail.shift()
+  })
 }
 
 const controllerVersion = (page) =>
@@ -157,11 +192,14 @@ async function acceptUpdate(page, toast) {
     window.__smokeFirstDocument = true
   })
   await toast.getByRole('button', { name: 'Reload' }).click()
-  await until('the page to reload onto a controller', () =>
-    page.evaluate(
-      () =>
-        window.__smokeFirstDocument === undefined && navigator.serviceWorker.controller !== null,
-    ),
+  await until(
+    'the page to reload onto a controller',
+    () =>
+      page.evaluate(
+        () =>
+          window.__smokeFirstDocument === undefined && navigator.serviceWorker.controller !== null,
+      ),
+    async () => ({ ...(await workerSummary(page)), console: consoleTail }),
   )
   check(
     "the toast's Reload moves the page onto the new worker",
@@ -246,6 +284,8 @@ const browser = await chromium.launch({
 try {
   const origin = `http://127.0.0.1:${server.address().port}/`
   const page = await (await browser.newContext()).newPage()
+  tailConsole(page)
+  console.log(`[smoke-pwa-lifecycle] ${browser.browserType().name()} ${browser.version()}`)
   await installAndControl(page, origin)
   const toast = await waitForUpdate(page)
   await acceptUpdate(page, toast)
