@@ -11,6 +11,7 @@ import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { acceptTransferredRecord } from './accept-transferred-record.js'
 
 const DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -84,18 +85,30 @@ describe('acceptTransferredRecord refusals', () => {
       fetch: () => keeper({ promote: () => jsonResponse({ error: 'forbidden' }, 403) }),
       reason: 'This keeper refused the merge (403).',
     },
+  ])('reports $name as a failed result with its reason', async ({ fetch, reason }) => {
+    expect(await accept(fetch())).toEqual({ ok: false, reason })
+  })
+
+  it.each([
     {
       name: 'an ok answer that fails the promote schema',
-      fetch: () => keeper({ promote: () => jsonResponse({ ok: true, attested: 'yes' }) }),
-      reason: 'This keeper answered the merge with an unexpected response.',
+      promote: () => jsonResponse({ ok: true, attested: 'yes' }),
+      path: 'attested',
     },
     {
       name: 'an ok answer that is not JSON',
-      fetch: () => keeper({ promote: () => new Response('merged', { status: 200 }) }),
-      reason: 'This keeper answered the merge with an unexpected response.',
+      promote: () => new Response('merged', { status: 200 }),
+      path: '(root)',
     },
-  ])('reports $name as a failed result with its reason', async ({ fetch, reason }) => {
-    expect(await accept(fetch())).toEqual({ ok: false, reason })
+  ])('reports $name as an unexpected response and logs where it disagreed', async ({
+    promote,
+    path,
+  }) => {
+    expect(await accept(keeper({ promote }))).toEqual({
+      ok: false,
+      reason: 'This keeper answered the merge with an unexpected response.',
+    })
+    await expectLoggedFailure(`/workspace-document/promote failed its contract at ${path}`)
   })
 
   it('refuses a snapshot that does not decode without asking the keeper anything', async () => {

@@ -214,7 +214,7 @@ describe('DaemonDocumentPage versions', () => {
       await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
 
       vi.unstubAllGlobals()
-      await expectLoggedFailure('POST /versions response did not match')
+      await expectLoggedFailure('save version from the History panel failed DaemonContractError')
     })
 
     it('shows an inline error when the save request fails', async () => {

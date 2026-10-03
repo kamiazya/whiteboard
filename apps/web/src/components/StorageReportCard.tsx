@@ -15,6 +15,11 @@ import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
+import {
+  DaemonContractError,
+  daemonContractError,
+  logDaemonContractError,
+} from '../lib/daemon-contract-error.js'
 import { formatBytes } from '../lib/format-bytes.js'
 import { sweepWorkspaces, useMaintenanceRunner } from './storage-maintenance.js'
 import {
@@ -83,8 +88,11 @@ async function readStorageReport(
   try {
     const res = await fetchApi(storageReportApiUrl())
     if (!res.ok) return { error: `HTTP ${res.status}` }
-    return { report: storageReportPayloadSchema.parse(await res.json()) }
+    const parsed = storageReportPayloadSchema.safeParse(await res.json())
+    if (!parsed.success) throw daemonContractError(storageReportApiUrl(), parsed.error)
+    return { report: parsed.data }
   } catch (err) {
+    if (err instanceof DaemonContractError) logDaemonContractError(err)
     return { error: messageOf(err, String(err)) }
   }
 }

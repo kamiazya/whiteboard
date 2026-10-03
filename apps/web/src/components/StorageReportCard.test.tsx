@@ -2,7 +2,9 @@ import { storageCategorySchema } from '@kamiazya/whiteboard-daemon-client/api-co
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { DAEMON_CONTRACT_COPY } from '../lib/daemon-contract-error.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { drainSchedulerMacrotasks } from '../test-utils/scheduler-drain.js'
 import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
@@ -61,6 +63,22 @@ describe('StorageReportCard', () => {
       await vi.advanceTimersByTimeAsync(500)
     })
     expect(daemonFetch).toHaveBeenCalledWith('/api/workspaces')
+  })
+
+  it('tells the person one generic sentence, not the issue JSON, when the report fails its contract', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ ...PAYLOAD, totalBytes: 'a lot' })),
+    )
+
+    const { container } = render(<StorageReportCard />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+
+    expect(container.textContent).toContain(DAEMON_CONTRACT_COPY)
+    expect(container.textContent).not.toContain('totalBytes')
+    await expectLoggedFailure('/api/runtime/storage failed its contract at totalBytes')
   })
 
   it('has no Logs row or log-prune control: the daemon keeps no log file', async () => {

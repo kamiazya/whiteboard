@@ -65,6 +65,7 @@ import type { z } from 'zod'
 // lives in its own module so a SharedWorker can use it without this file's
 // schema graph.
 import { createDaemonFetch } from './daemon-auth-fetch.js'
+import { daemonContractError } from './daemon-contract-error.js'
 
 export { createDaemonFetch }
 
@@ -93,7 +94,7 @@ async function parseProblemDetails(res: Response): Promise<{ message: string; bo
 async function fetchAndParse<T>(
   fetchFn: typeof globalThis.fetch,
   url: string,
-  schema: { parse: (input: unknown) => T },
+  schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
   const res = await fetchFn(url, init)
@@ -102,11 +103,9 @@ async function fetchAndParse<T>(
     throw new DaemonApiError(message, res.status, body)
   }
   const json = await res.json()
-  try {
-    return schema.parse(json)
-  } catch {
-    throw new Error('Response failed schema validation.')
-  }
+  const parsed = schema.safeParse(json)
+  if (!parsed.success) throw daemonContractError(url, parsed.error)
+  return parsed.data
 }
 
 export function listWorkspaces(

@@ -8,6 +8,7 @@ import { CardContent } from '../components/ui/card.js'
 import { ScrollArea } from '../components/ui/scroll-area.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { DaemonContractError, logDaemonContractError } from '../lib/daemon-contract-error.js'
 import { type PastDocument, VersionsRequestError } from '../lib/versions-backend.js'
 import { SquiggleLoader } from './SquiggleLoader.js'
 import { formatRelative } from './workspace-files/format-relative.js'
@@ -155,8 +156,8 @@ function reportVersionsFailure(
     log.error('versions request failed', { status: err.status, ...where })
     return false
   }
-  if (err instanceof Error && err.message.includes('schema validation')) {
-    log.error('versions response failed schema validation', where)
+  if (err instanceof DaemonContractError) {
+    logDaemonContractError(err)
     return true
   }
   log.error('versions request threw', err)

@@ -14,6 +14,7 @@ import {
   setDocumentDisplayName,
   updateDocument,
 } from './daemon-api-client.js'
+import { DAEMON_CONTRACT_COPY, DaemonContractError } from './daemon-contract-error.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
@@ -126,7 +127,11 @@ describe('listWorkspaces', () => {
 
   it('rejects a malformed response body without returning raw JSON', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ workspaces: [{ nope: true }] }))
-    await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toThrow(/validation/i)
+    const failure = await listWorkspaces(fetchFn, DAEMON_BASE_URL).catch((err: unknown) => err)
+    expect(failure).toBeInstanceOf(DaemonContractError)
+    expect((failure as DaemonContractError).message).toBe(DAEMON_CONTRACT_COPY)
+    expect((failure as DaemonContractError).route).toContain('/workspaces')
+    expect((failure as DaemonContractError).issues[0]?.path.slice(0, 2)).toEqual(['workspaces', 0])
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
@@ -177,7 +182,9 @@ describe('listDocuments', () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(jsonResponse({ documents: [{ path: 'main', updatedAt: '2026-01-01' }] }))
-    await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/validation/i)
+    const failure = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1').catch((err: unknown) => err)
+    expect(failure).toBeInstanceOf(DaemonContractError)
+    expect((failure as DaemonContractError).issues[0]?.path).toEqual(['documents', 0, 'id'])
   })
 
   it('preserves a recorded kind', async () => {
@@ -192,7 +199,9 @@ describe('listDocuments', () => {
 
   it('rejects a malformed response body without returning raw JSON', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ documents: [{ path: 1 }] }))
-    await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/validation/i)
+    await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toBeInstanceOf(
+      DaemonContractError,
+    )
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
@@ -226,9 +235,9 @@ describe('createDocument', () => {
 
   it('rejects a malformed response body without returning raw JSON', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ nope: true }))
-    await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'spatial')).rejects.toThrow(
-      /validation/i,
-    )
+    await expect(
+      createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'spatial'),
+    ).rejects.toBeInstanceOf(DaemonContractError)
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
@@ -404,7 +413,9 @@ describe('createWorkspace', () => {
 
   it('rejects a malformed response body without returning raw JSON', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ nope: true }, 201))
-    await expect(createWorkspace(fetchFn, DAEMON_BASE_URL, 'X')).rejects.toThrow(/validation/i)
+    await expect(createWorkspace(fetchFn, DAEMON_BASE_URL, 'X')).rejects.toBeInstanceOf(
+      DaemonContractError,
+    )
   })
 
   it('surfaces the daemon reason for a refused segment', async () => {

@@ -51,6 +51,7 @@ import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
+import { daemonContractError, logDaemonContractError } from './daemon-contract-error.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
 
@@ -216,7 +217,8 @@ async function promoteWorkspaceUnsafe(
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
   // plus the explicit checkpoints a person's move leaves behind.
-  const res = await fetch(`${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`, {
+  const promoteUrl = `${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`
+  const res = await fetch(promoteUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),
@@ -226,6 +228,7 @@ async function promoteWorkspaceUnsafe(
   }
   const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
   if (!promoted.success) {
+    logDaemonContractError(daemonContractError(promoteUrl, promoted.error))
     return { kind: 'failed', reason: 'The daemon answered the move with an unexpected response.' }
   }
 
