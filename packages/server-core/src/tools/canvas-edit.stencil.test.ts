@@ -17,6 +17,7 @@ import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   resolveNodeShape,
   resolveNodeStencil,
+  STENCIL_LIBRARY_PATH,
   visualPlugin,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
@@ -28,7 +29,6 @@ import {
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasEditInputSchema, createCanvasEditTool } from './canvas-edit.js'
 import { loadDocument } from './document-io.js'
-import { STENCIL_LIBRARY_PATH } from './stencil-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'

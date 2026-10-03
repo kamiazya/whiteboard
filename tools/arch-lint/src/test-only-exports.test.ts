@@ -246,7 +246,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/server-core/src/tools/canvas-edit-placement.ts#PLACEMENT_COLUMNS',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewInputSchema',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewOutputSchema',
-  'packages/server-core/src/tools/stencil-library.ts#STENCIL_LIBRARY_PATH',
   'packages/server-core/src/tools/version-restore.ts#versionRestoreOutputSchema',
 ]
 
@@ -356,7 +355,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 156
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 26
+const PUBLISHED_CEILING = 25
 
 const DIRS = [
   'apps',

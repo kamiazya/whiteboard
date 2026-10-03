@@ -21,10 +21,6 @@ import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboa
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
 
-// The constant is plugin-visual's, where the browser keeper reads it too; the
-// daemon's barrel and its callers keep naming it from here.
-export { STENCIL_LIBRARY_PATH }
-
 /**
  * What to answer when the WORKSPACE itself does not exist. Stated by every
  * caller rather than defaulted, because the two right answers are opposite
