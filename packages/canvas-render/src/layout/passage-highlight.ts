@@ -128,7 +128,7 @@ const squash = (value: string): string => value.replace(/\s+/g, ' ')
  * are told apart by how much of the remembered surroundings each has —
  * the same rule `resolveTextAnchor` applies to the source.
  */
-export function findPassage(
+function findPassage(
   rendered: string,
   quote: TextQuoteSelector,
 ): { readonly start: number; readonly end: number } | null {

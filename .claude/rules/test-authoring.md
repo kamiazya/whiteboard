@@ -31,7 +31,9 @@ The write-time rules, so the skill is a lookup rather than a prerequisite:
 8. A count proves the subject is present beside every allowlist walk and every property.
 9. A skip is probed, never inferred, and impossible on CI.
 10. A title is an identifier: behaviour, not chronology or a count/ordinal of something that grows; unique in its `describe`.
-11. Wait for a condition (`vi.waitFor`, `expect.poll`, fake timers), never for time; the sleep ledger only goes down.
+11. Wait for a condition (`vi.waitFor`, `expect.poll`, fake timers), never for time; the sleep ledger
+    only goes down, and reads `test-utils/**` and `*-contract.ts` helpers too, so a sleep in a
+    shared helper is ledgered with a reason.
 12. Before pushing: five fresh-process runs of the file, then one inside its whole project.
 13. A threshold computed from the run divides by the dimension the fixture grows, and the
     growth loop floors that dimension — otherwise the slower machine gets the stricter test.

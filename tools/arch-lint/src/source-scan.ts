@@ -34,9 +34,17 @@ export function walkSourceFiles(dir: string, out: string[] = []): string[] {
   return out
 }
 
-/** A test file, or a helper only tests import. */
+/**
+ * A test file, or a helper only tests import: a `test-utils` directory, or a
+ * `_test-*` basename beside the code it seeds (the shape
+ * `no-test-utils-in-production` admits as a test-only importer).
+ */
 export function isTestPath(path: string): boolean {
-  return /\.(test|spec)\.tsx?$/.test(path) || path.split(sep).includes('test-utils')
+  return (
+    /\.(test|spec)\.tsx?$/.test(path) ||
+    path.split(sep).includes('test-utils') ||
+    /^_test-.*\.tsx?$/.test(path.split(sep).at(-1) ?? '')
+  )
 }
 
 /**
