@@ -1,3 +1,5 @@
+import { isLoopbackHostname } from './loopback-host.js'
+
 // Provisional production origin for the hosted app.
 // Update to the confirmed canonical domain once it is assigned.
 export const PROVISIONAL_PRODUCTION_ORIGIN = 'https://kamiazya-whiteboard.pages.dev' as const
@@ -39,8 +41,7 @@ export function classifyPagesOrigin(candidate: string): PagesOriginClass {
   if (url.protocol !== 'https:') return 'insecure'
 
   const host = url.hostname
-  // `URL.hostname` keeps an IPv6 literal's brackets.
-  if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') return 'localhost'
+  if (isLoopbackHostname(host)) return 'localhost'
 
   if (candidate === PROVISIONAL_PRODUCTION_ORIGIN) return 'production'
 

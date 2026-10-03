@@ -27,7 +27,7 @@
 // wiring is a future concern; the codes are stable so callers can switch on
 // them without a flag day.
 
-import { isLoopbackHost } from '../daemon-auth-binding.js'
+import { isLoopbackHost } from '../../shared/loopback-host.js'
 import { canonicalizeOriginPatternEntry, parseOriginPatternEntry } from './origin-pattern.js'
 
 function bracketIpv6(host: string): string {

@@ -31,6 +31,9 @@ describe('resolveDatabaseLocation', () => {
     expect(resolveDatabaseLocation(DATA_DIR, { [DB_URL_ENV]: 'http://127.0.0.1:8080' }).url).toBe(
       'http://127.0.0.1:8080',
     )
+    expect(resolveDatabaseLocation(DATA_DIR, { [DB_URL_ENV]: 'http://[::1]:8080' }).url).toBe(
+      'http://[::1]:8080',
+    )
   })
 
   /**
