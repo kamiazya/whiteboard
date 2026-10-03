@@ -326,7 +326,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 338,
+  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 303,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.

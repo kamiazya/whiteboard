@@ -1,5 +1,6 @@
 import { describe } from 'vitest'
 import { describeDocumentIndexConformance } from './document-index-conformance.js'
+import { describeDocumentPinsConformance } from './document-pins-conformance.js'
 import { InMemoryDocumentIndex } from './in-memory-document-index.js'
 
 // The same suite the sqlite store answers to, run here so the double cannot
@@ -15,4 +16,11 @@ describe('InMemoryDocumentIndex', () => {
       seedWorkspace: async (entry) => index.createWorkspace(entry),
     }
   })
+})
+
+describe('InMemoryDocumentIndex pins', () => {
+  describeDocumentPinsConformance(async () => ({
+    index: new InMemoryDocumentIndex(),
+    dispose: async () => {},
+  }))
 })

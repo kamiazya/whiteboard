@@ -57,9 +57,11 @@ export interface WorkspaceFilesSource {
   ): Promise<void>
   /**
    * Pin or unpin a document, which is what decides `pinOrder` on the next
-   * list read. OPTIONAL: pinning is workspace state the daemon keeps, and a
-   * browser workspace has nowhere to keep it — the panel omits the
-   * affordance rather than offering one that cannot persist.
+   * list read. OPTIONAL because the pinned list is the workspace record's,
+   * and a keeper whose index keeps none omits the member — the panel then
+   * leaves out the affordance rather than offering a pin that cannot persist.
+   * Both shipped keepers answer it, which `keeper-parity.test.ts` states
+   * member by member.
    */
   setPinned?(entry: Pick<WorkspaceDocumentEntry, 'path'>, pinned: boolean): Promise<void>
   /**

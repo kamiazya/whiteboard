@@ -99,6 +99,12 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     return withWorkspaceWriteLock(input.workspaceId, () => super.setDocumentName(input))
   }
 
+  override async setDocumentPinned(
+    input: Parameters<LoroWorkspaceDocumentIndex['setDocumentPinned']>[0],
+  ): Promise<void> {
+    return withWorkspaceWriteLock(input.workspaceId, () => super.setDocumentPinned(input))
+  }
+
   override async restoreDocument(
     input: Parameters<LoroWorkspaceDocumentIndex['restoreDocument']>[0],
   ): ReturnType<LoroWorkspaceDocumentIndex['restoreDocument']> {

@@ -266,6 +266,45 @@ function stencilLibraryContract(factory: FilesSourceFactory): void {
   })
 }
 
+function pinContract(factory: FilesSourceFactory): void {
+  describe('pins', () => {
+    const fixture = {
+      documents: [
+        { path: 'a', kind: 'markdown' as const },
+        { path: 'b', kind: 'markdown' as const },
+        { path: 'c', kind: 'markdown' as const },
+      ],
+    }
+    const pinOrderOf = async (source: WorkspaceFilesSource) =>
+      Object.fromEntries(
+        (await source.listDocuments()).map((entry) => [entry.path, entry.pinOrder]),
+      )
+
+    it('lists nothing as pinned until a document is pinned', async () => {
+      const source = await factory(fixture)
+      expect(await pinOrderOf(source)).toEqual({ a: undefined, b: undefined, c: undefined })
+    })
+
+    it('shows pinOrder in the order documents were pinned, and unpinning removes it', async () => {
+      const source = await factory(fixture)
+      expect(source.setPinned).toBeDefined()
+      await source.setPinned?.({ path: 'c' }, true)
+      await source.setPinned?.({ path: 'a' }, true)
+      expect(await pinOrderOf(source)).toEqual({ a: 1, b: undefined, c: 0 })
+
+      await source.setPinned?.({ path: 'c' }, false)
+      expect(await pinOrderOf(source)).toEqual({ a: 0, b: undefined, c: undefined })
+    })
+
+    it('keeps a pin on its document across a rename', async () => {
+      const source = await factory(fixture)
+      await source.setPinned?.({ path: 'b' }, true)
+      await source.renameDocumentPath('b', 'z')
+      expect(await pinOrderOf(source)).toMatchObject({ z: 0 })
+    })
+  })
+}
+
 function trashContract(factory: FilesSourceFactory): void {
   describe('trash', () => {
     const trashed = { trashed: [{ path: 'old/plan', kind: 'markdown' as const }] }
@@ -305,6 +344,7 @@ export function describeWorkspaceFilesSourceConformance(
     writeContract(factory)
     tagLibraryContract(factory)
     stencilLibraryContract(factory)
+    pinContract(factory)
     trashContract(factory)
   })
 }

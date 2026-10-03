@@ -6,12 +6,14 @@ import type {
   DeleteDocumentInput,
   DocumentEntry,
   DocumentIndex,
+  DocumentPins,
   ListDocumentsInput,
   MoveDocumentInput,
   RenameWorkspaceInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
+  SetDocumentPinnedInput,
   WorkspaceEntry,
 } from '../index.js'
 import {
@@ -36,10 +38,12 @@ import {
  * one. That is an accident of the runtime, not a design to copy: a store that
  * awaits mid-operation has to arrange it deliberately.
  */
-export class InMemoryDocumentIndex implements DocumentIndex {
+export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
   readonly #workspaces = new Map<string, WorkspaceEntry>()
   /** Keyed by workspace, then by path — so a workspace's set is one lookup. */
   readonly #documents = new Map<string, Map<string, DocumentEntry>>()
+  /** Pinned documentIds per workspace, in pin order. */
+  readonly #pinned = new Map<string, string[]>()
 
   #inWorkspace(workspaceId: string): Map<string, DocumentEntry> {
     let documents = this.#documents.get(workspaceId)
@@ -168,6 +172,36 @@ export class InMemoryDocumentIndex implements DocumentIndex {
       return
     }
     throw new DocumentNotFoundError(workspaceId, documentId)
+  }
+
+  async setDocumentPinned({
+    workspaceId,
+    documentId,
+    pinned,
+  }: SetDocumentPinnedInput): Promise<void> {
+    const held = [...this.#inWorkspace(workspaceId).values()].some(
+      (entry) => entry.documentId === documentId,
+    )
+    if (!held) throw new DocumentNotFoundError(workspaceId, documentId)
+    const current = this.#pinned.get(workspaceId) ?? []
+    if (pinned) {
+      if (!current.includes(documentId)) this.#pinned.set(workspaceId, [...current, documentId])
+    } else {
+      this.#pinned.set(
+        workspaceId,
+        current.filter((id) => id !== documentId),
+      )
+    }
+  }
+
+  async listPinnedDocuments({ workspaceId }: ListDocumentsInput): Promise<string[]> {
+    if (!this.#workspaces.has(workspaceId)) {
+      throw new WorkspaceNotFoundError(workspaceId)
+    }
+    const live = new Set(
+      [...this.#inWorkspace(workspaceId).values()].map((entry) => entry.documentId),
+    )
+    return (this.#pinned.get(workspaceId) ?? []).filter((id) => live.has(id))
   }
 
   async listDocuments({ workspaceId }: ListDocumentsInput): Promise<DocumentEntry[]> {

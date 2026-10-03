@@ -25,6 +25,7 @@ import {
   importWorkspaceSubtree,
   moveWorkspaceNodeToPath,
   pruneEmptyFolders,
+  readPinnedDocumentIds,
   readTrashEntries,
   readWorkspaceDocuments,
   readWorkspaceNodes,
@@ -32,6 +33,7 @@ import {
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  setWorkspacePinned,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type {
@@ -41,12 +43,14 @@ import type {
   DeleteDocumentInput,
   DocumentEntry,
   DocumentIndex,
+  DocumentPins,
   ListDocumentsInput,
   MoveDocumentInput,
   RenameWorkspaceInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
+  SetDocumentPinnedInput,
   WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import {
@@ -84,7 +88,7 @@ function rewritten(path: string, from: string, to: string): string {
   return path === from ? to : `${to}${path.slice(from.length)}`
 }
 
-export class LoroWorkspaceDocumentIndex implements DocumentIndex {
+export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins {
   /**
    * `blobs` is required, not optional.
    *
@@ -305,6 +309,28 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
         documentId: input.documentId,
         ...(input.name === undefined ? {} : { name: input.name }),
       })
+      await this.docs.save(input.workspaceId, doc)
+    })
+  }
+
+  /**
+   * Filtered to documents the tree still holds: the pinned list is a
+   * container of ids beside the tree, and a delete removes the node without
+   * touching it.
+   */
+  async listPinnedDocuments(input: ListDocumentsInput): Promise<string[]> {
+    const doc = await this.#open(input.workspaceId)
+    const live = new Set(readWorkspaceDocuments(doc).map((entry) => entry.documentId))
+    return readPinnedDocumentIds(doc).filter((id) => live.has(id))
+  }
+
+  async setDocumentPinned(input: SetDocumentPinnedInput): Promise<void> {
+    return this.#serialise(input.workspaceId, async () => {
+      const doc = await this.#open(input.workspaceId)
+      if (resolveWorkspaceDocumentById(doc, input.documentId) === null) {
+        throw new DocumentNotFoundError(input.workspaceId, input.documentId)
+      }
+      setWorkspacePinned(doc, input.documentId, input.pinned)
       await this.docs.save(input.workspaceId, doc)
     })
   }

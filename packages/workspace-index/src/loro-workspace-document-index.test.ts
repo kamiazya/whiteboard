@@ -15,7 +15,10 @@ import {
   WorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
-import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
+import {
+  describeDocumentIndexConformance,
+  describeDocumentPinsConformance,
+} from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
@@ -128,6 +131,16 @@ describe('LoroWorkspaceDocumentIndex', () => {
       index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
       dispose: async () => {},
       seedWorkspace: (entry) => docs.seedWorkspace(entry),
+    }
+  })
+})
+
+describe('LoroWorkspaceDocumentIndex pins', () => {
+  describeDocumentPinsConformance(async () => {
+    const docs = inMemoryWorkspaceDocs()
+    return {
+      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
+      dispose: async () => {},
     }
   })
 })

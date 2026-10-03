@@ -20,7 +20,11 @@ import {
   STENCIL_LIBRARY_PATH,
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-plugin-visual'
-import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  type DocumentIndex,
+  hasDocumentPins,
+  WorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import {
   fullTextSearch,
@@ -91,6 +95,69 @@ async function readLibrary<T>(
     return read(readFacets(await load(library)))
   } catch {
     return read(undefined)
+  }
+}
+
+/**
+ * Each pinned document's position in the pinned list, which IS its `pinOrder`
+ * — the same reading the daemon source takes of its names route. An index
+ * that keeps no pinned list lists everything unpinned.
+ */
+async function readPinOrder(index: DocumentIndex): Promise<ReadonlyMap<string, number>> {
+  if (!hasDocumentPins(index)) return new Map()
+  const pinned = await index.listPinnedDocuments({ workspaceId: getBrowserWorkspaceId() })
+  return new Map(pinned.map((documentId, position) => [documentId, position]))
+}
+
+/**
+ * Present exactly when the index keeps a pinned list, so a keeper that cannot
+ * pin omits the member rather than offering a pin that cannot persist. The
+ * seam names a path; the index pins an id.
+ */
+function pinMembers(index: DocumentIndex): Pick<WorkspaceFilesSource, 'setPinned'> {
+  if (!hasDocumentPins(index)) return {}
+  return {
+    async setPinned(entry, pinned) {
+      const workspaceId = getBrowserWorkspaceId()
+      const resolved = await index.resolveDocument({ workspaceId, path: entry.path })
+      if (resolved === null) throw new Error(`No document at "${entry.path}" to pin`)
+      await index.setDocumentPinned({ workspaceId, documentId: resolved.documentId, pinned })
+    },
+  }
+}
+
+/**
+ * Present exactly when the index keeps a trash (the tree index does; the port
+ * does not promise one). Structural rather than instanceof, for the same
+ * cross-realm reason ports' isWorkspaceNotFoundError exists.
+ */
+function trashMembers(
+  index: DocumentIndex,
+): Pick<WorkspaceFilesSource, 'listTrash' | 'restoreFromTrash'> {
+  if (!('listTrash' in index && 'restoreDocument' in index)) return {}
+  const folding = index as FoldingBrowserIndex
+  return {
+    async listTrash() {
+      const rows = await folding.listTrash({ workspaceId: getBrowserWorkspaceId() })
+      return rows.map((row) => ({
+        documentId: row.documentId,
+        path: row.path,
+        deletedAt: row.deletedAt,
+      }))
+    },
+    async restoreFromTrash(documentId) {
+      const restored = await folding.restoreDocument({
+        workspaceId: getBrowserWorkspaceId(),
+        documentId,
+      })
+      // null means nothing came back — surfacing it is what lets the
+      // section show its restore error instead of silently reloading
+      // with the row still there. The daemon path already rejects here
+      // (its route answers 404); the two keepers must agree.
+      if (restored === null) {
+        throw new Error(`Nothing restorable for "${documentId}"`)
+      }
+    },
   }
 }
 
@@ -273,6 +340,7 @@ export function createLocalFilesSource(
         throw err
       }
       if (entries.length === 0) return []
+      const pinOrderById = await readPinOrder(index)
       const stamps = await clock(entries.map((entry) => entry.documentId))
       // Tags for search and the filter chips: the local spelling of the
       // daemon's tag projection. A board's own tags are the document's
@@ -296,6 +364,7 @@ export function createLocalFilesSource(
         ...optional('carriedTags', carriedById.get(entry.documentId)),
         ...optional('updatedAt', stamps.get(entry.documentId)),
         ...optional('contentDigest', entry.contentDigest),
+        ...optional('pinOrder', pinOrderById.get(entry.documentId)),
       }))
     },
 
@@ -400,35 +469,7 @@ export function createLocalFilesSource(
       return (await loadCurrentDoc(entry)).export({ mode: 'snapshot' })
     },
 
-    // Present exactly when the index keeps a trash (the tree index does; the
-    // port does not promise one). Structural rather than instanceof, for the
-    // same cross-realm reason ports' isWorkspaceNotFoundError exists.
-    ...('listTrash' in index && 'restoreDocument' in index
-      ? {
-          async listTrash() {
-            const rows = await (index as FoldingBrowserIndex).listTrash({
-              workspaceId: getBrowserWorkspaceId(),
-            })
-            return rows.map((row) => ({
-              documentId: row.documentId,
-              path: row.path,
-              deletedAt: row.deletedAt,
-            }))
-          },
-          async restoreFromTrash(documentId: string) {
-            const restored = await (index as FoldingBrowserIndex).restoreDocument({
-              workspaceId: getBrowserWorkspaceId(),
-              documentId,
-            })
-            // null means nothing came back — surfacing it is what lets the
-            // section show its restore error instead of silently reloading
-            // with the row still there. The daemon path already rejects here
-            // (its route answers 404); the two keepers must agree.
-            if (restored === null) {
-              throw new Error(`Nothing restorable for "${documentId}"`)
-            }
-          },
-        }
-      : {}),
+    ...pinMembers(index),
+    ...trashMembers(index),
   }
 }

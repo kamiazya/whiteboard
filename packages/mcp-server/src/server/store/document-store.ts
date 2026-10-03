@@ -152,8 +152,8 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
   }
 }
 
-/** The tree index delete/rename go through, so a daemon delete evacuates the same way a port delete does. */
-async function workspaceTreeIndex(scope: StoreScope): Promise<LoroWorkspaceDocumentIndex> {
+/** The tree index delete/rename/pin go through, so a daemon delete evacuates the same way a port delete does. */
+export async function workspaceTreeIndex(scope: StoreScope): Promise<LoroWorkspaceDocumentIndex> {
   return new CacheCoherentDocumentIndex(
     cacheBackedWorkspaceDocs(scope),
     new FsBlobStore(blobsRoot(scope.dataDir, scope.layout.tenantId), scope.dataDir),

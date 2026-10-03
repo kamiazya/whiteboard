@@ -402,3 +402,94 @@ describe('each answer is checked, so none of them can be a word in front of an o
     expect(entry.why.split(/\s+/).length).toBeGreaterThan(8)
   })
 })
+
+/**
+ * Where the `WorkspaceFilesSource` seam is optional, a keeper that leaves a
+ * member out is a decision.
+ *
+ * The module-level ledger above is keyed by FILE, so both files-source
+ * bindings are classified `both-keepers` once and the members inside them are
+ * invisible to it: a keeper could drop `setPinned` and the panel would just
+ * stop offering Pin there, with every suite green. That is how the browser
+ * keeper went without pins while the tutorial taught them. The seam keeps its
+ * members optional so a test double need not answer them, which is exactly
+ * why the omission needs its own ledger.
+ *
+ * Empty today: both keepers answer every optional member. An entry is
+ * `<member>@<keeper>` and carries the same `missing` / `followUp` a `gap`
+ * above does.
+ */
+const FILES_SOURCE_OMISSIONS: Record<
+  string,
+  { readonly missing: string; readonly followUp: string }
+> = {}
+
+const FILES_SOURCE_KEEPERS = {
+  daemon: '/src/lib/daemon-files-source.ts',
+  browser: '/src/lib/local-files-source.ts',
+} as const
+
+/** The members `WorkspaceFilesSource` declares optional, from its own source. */
+function optionalFilesSourceMembers(): string[] {
+  const text = code(sources['/src/lib/files-source.ts'] ?? '')
+  const body = /export interface WorkspaceFilesSource \{([\s\S]*?)\n\}/.exec(text)?.[1] ?? ''
+  return [...body.matchAll(/^ {2}(\w+)\?[(:]/gm)].map(([, name]) => name ?? '').sort()
+}
+
+/**
+ * Whether a keeper's source DEFINES the member: a property key or a method
+ * name, never a call through another object (`index.listTrash(`) or a string
+ * (`'listTrash' in index`), which is why the lookbehind refuses a dot.
+ */
+function definesMember(keeperSource: string, member: string): boolean {
+  return new RegExp(String.raw`(?<![.\w'"])(?:async\s+)?${member}\s*(?::|\()`).test(
+    code(keeperSource),
+  )
+}
+
+function filesSourceOmissions(): string[] {
+  const omitted: string[] = []
+  for (const member of optionalFilesSourceMembers()) {
+    for (const [keeper, path] of Object.entries(FILES_SOURCE_KEEPERS)) {
+      if (!definesMember(sources[path] ?? '', member)) omitted.push(`${member}@${keeper}`)
+    }
+  }
+  return omitted.sort()
+}
+
+describe('an optional WorkspaceFilesSource member a keeper omits is a decision', () => {
+  it.each([
+    ['setPinned: (entry, pinned) => run(entry, pinned)', true],
+    ['async setPinned(entry, pinned) {', true],
+    ['...(cond ? { async setPinned(entry: E) {} } : {})', true],
+    ['await index.setPinned(entry, pinned)', false],
+    ["'setPinned' in index", false],
+    ['// setPinned: () => {}', false],
+  ])('recognises %s as defining the member: %s', (text, defines) => {
+    expect(definesMember(text, 'setPinned')).toBe(defines)
+  })
+
+  it('finds the optional members and both keepers, so an empty ledger is not an empty scan', () => {
+    const members = optionalFilesSourceMembers()
+    expect(members).toEqual(expect.arrayContaining(['setPinned', 'listTrash', 'listTagsInUse']))
+    expect(members.length).toBeGreaterThanOrEqual(6)
+    for (const path of Object.values(FILES_SOURCE_KEEPERS)) {
+      expect(sources[path], `${path} is not among the scanned sources`).toBeDefined()
+    }
+  })
+
+  it('lists exactly the omissions FILES_SOURCE_OMISSIONS declares', () => {
+    assertScannedLedger(filesSourceOmissions(), FILES_SOURCE_OMISSIONS, {
+      unclassified:
+        'a keeper no longer defines an optional WorkspaceFilesSource member and FILES_SOURCE_OMISSIONS does not say so — restore the member, or add `<member>@<keeper>` with the missing behaviour and its follow-up',
+      stale:
+        'these FILES_SOURCE_OMISSIONS entries name a member the keeper now defines, or one the seam no longer has — delete the entry',
+    })
+  })
+
+  const declared = Object.entries(FILES_SOURCE_OMISSIONS)
+  it.each(declared)('%s names a follow-up that can be picked up', (_key, entry) => {
+    expect(entry.followUp).toMatch(/#\d+|issues\/[a-z0-9]+(-[a-z0-9]+)+/)
+    expect(entry.missing.split(/\s+/).length).toBeGreaterThan(8)
+  })
+})
