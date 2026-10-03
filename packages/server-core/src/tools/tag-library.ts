@@ -20,8 +20,8 @@ import {
   tagLibraryObjection,
 } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
+import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateDocument } from './document-io.js'
 import { listWorkspaceDocuments, type UnknownWorkspace } from './stencil-library.js'
 
 // The constant is plugin-visual's, where the browser keeper reads it too; the

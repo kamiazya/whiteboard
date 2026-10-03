@@ -2,10 +2,10 @@
 // batch has a fixed ceiling.
 
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { DOCUMENT_ID, EMPTY, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { canvasEditInputSchema, createCanvasEditTool } from './canvas-edit.js'
-import { loadDocument } from './document-io.js'
 
 async function addNode(node: Record<string, unknown>) {
   const store = new FakeDocumentStore()

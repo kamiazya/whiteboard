@@ -4,6 +4,7 @@ import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard
 import { isWorkspaceSegmentTakenError, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
+import { saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   WorkspaceDocumentNotFoundError,
@@ -21,7 +22,6 @@ import type {
   wbDocumentResolveOutputSchema,
 } from './document-crud.schemas.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
-import { saveDocumentSnapshot } from './document-io.js'
 import { createDocumentSetTool, parseWritableOkf } from './document-set.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 

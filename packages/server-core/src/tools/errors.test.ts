@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { SnapshotNotFoundError } from './document-io.js'
+import { SnapshotNotFoundError } from '../document-io.js'
 import { EdgeNotFoundError, NodeNotFoundError } from './errors.js'
 
 describe('server-core tool errors', () => {

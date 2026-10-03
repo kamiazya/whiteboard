@@ -8,6 +8,7 @@ import {
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -19,7 +20,6 @@ import {
   SNAPSHOT_MAX_NODES,
   SNAPSHOT_TEXT_MAX_CHARS,
 } from './canvas-snapshot.js'
-import { SnapshotNotFoundError } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'

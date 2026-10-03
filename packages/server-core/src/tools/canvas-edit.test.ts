@@ -18,6 +18,7 @@ import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
+import { loadDocument } from '../document-io.js'
 import type { AgentActivity } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -33,7 +34,6 @@ import {
   PLACEMENT_GUTTER_PX,
 } from './canvas-edit.js'
 import { canvasEditOutputSchema } from './canvas-edit-ops.js'
-import { loadDocument } from './document-io.js'
 
 describe('wb_canvas_edit tool', () => {
   test('builds a whole diagram in one call and answers with the resulting board', async () => {

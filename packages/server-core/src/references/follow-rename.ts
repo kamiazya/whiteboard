@@ -36,8 +36,8 @@ import {
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
 import type { LoroDoc } from 'loro-crdt'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../tools/document-io.js'
 import { factsCacheFor } from './content-source.js'
 
 export interface FollowRenameInput {

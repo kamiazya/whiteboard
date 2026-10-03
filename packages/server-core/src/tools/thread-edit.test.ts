@@ -18,6 +18,7 @@ import {
 import type { AnnotationAnchor, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -25,7 +26,6 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { createThreadEditTool } from './thread-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'

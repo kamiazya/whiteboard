@@ -3,6 +3,7 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
 import { type ApiErrorBody, errorBody, invalidRequestBody, issueText } from './api-errors.js'
+import { SnapshotNotFoundError } from './document-io.js'
 import { factsCacheFor } from './references/content-source.js'
 import { vectorCacheFor } from './search/document-vector-cache.js'
 import { SEARCH_QUERY_KEYS, searchInputFromQuery, searchWireName } from './search-query.js'
@@ -34,7 +35,6 @@ import {
   wbDocumentResolveInputSchema,
 } from './tools/document-crud.schemas.js'
 import { createDocumentGetTool } from './tools/document-get.js'
-import { SnapshotNotFoundError } from './tools/document-io.js'
 import {
   createDocumentSearchTool,
   documentSearchInputSchema,

@@ -11,6 +11,7 @@ import {
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
+import { loadDocument, saveDocumentBodySnapshot } from '../document-io.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -25,7 +26,6 @@ import {
 import { CanvasEditSession } from './canvas-edit-session.js'
 import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
-import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 import { withWorkspaceWrite } from './write-lock.js'

@@ -9,8 +9,8 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateDocument } from './document-io.js'
 import { DocumentSerializeError } from './errors.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'

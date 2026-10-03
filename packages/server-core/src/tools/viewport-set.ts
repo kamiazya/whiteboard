@@ -1,9 +1,9 @@
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { viewportRequestParamsSchema } from '../viewport-request.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { loadDocument } from './document-io.js'
 import { DocumentKindMismatchError, NodeNotFoundError } from './errors.js'
 
 // The routing keys first, then the shared params by their one declaration —

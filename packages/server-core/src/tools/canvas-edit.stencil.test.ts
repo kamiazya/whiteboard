@@ -21,6 +21,7 @@ import {
   visualPlugin,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -28,7 +29,6 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasEditInputSchema, createCanvasEditTool } from './canvas-edit.js'
-import { loadDocument } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'

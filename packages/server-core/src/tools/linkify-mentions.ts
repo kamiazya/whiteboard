@@ -1,8 +1,8 @@
 import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { linkifyMentionsIn } from '@kamiazya/whiteboard-reference-graph'
+import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
-import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 
 import type { LinkifyMentionsInput, LinkifyMentionsOutput } from './linkify-mentions.schemas.js'
 

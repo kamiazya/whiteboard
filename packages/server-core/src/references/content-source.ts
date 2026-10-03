@@ -1,6 +1,6 @@
 import { ContentFactsCache, type DocumentContentSource } from '@kamiazya/whiteboard-reference-graph'
+import { loadDocument, SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadDocument, SnapshotNotFoundError } from '../tools/document-io.js'
 
 /** The daemon's side of `reference-graph`'s port: its document store. */
 function contentSourceFromDeps(deps: ServerDeps): DocumentContentSource {

@@ -9,11 +9,11 @@
 import { okfTimestampSchema, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { createCanvasSnapshotTool } from './canvas-snapshot.js'
-import { loadDocument } from './document-io.js'
 
 const NODE: SpatialCanvas['nodes'][number] = textNode({
   id: 'n1',

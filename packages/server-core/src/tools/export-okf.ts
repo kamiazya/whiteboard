@@ -7,9 +7,9 @@ import {
   readMarkdownBody,
   readTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { BARE_BODY_TYPE } from './document-crud.js'
-import { loadDocument } from './document-io.js'
 import { DocumentKindMismatchError, DocumentSerializeError } from './errors.js'
 
 /**

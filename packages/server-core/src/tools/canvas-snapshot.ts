@@ -24,11 +24,11 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { loadDocument } from '../document-io.js'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadDocument } from './document-io.js'
 import { type PublishedNodeKind, publishedKind } from './published-node-kind.js'
 
 /**

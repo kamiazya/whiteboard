@@ -13,8 +13,8 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
+import { saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { saveDocumentSnapshot } from './document-io.js'
 
 /**
  * Turning one `wb_canvas_edit` batch into a proposal (ADR-0029 decision 7).

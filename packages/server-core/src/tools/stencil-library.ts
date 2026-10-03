@@ -22,8 +22,8 @@ import {
   VISUAL_STENCILS_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadOrCreateDocument } from './document-io.js'
 import { FacetWriteRejectedError } from './errors.js'
 
 /**

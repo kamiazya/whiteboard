@@ -5,10 +5,10 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { SnapshotNotFoundError } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
 

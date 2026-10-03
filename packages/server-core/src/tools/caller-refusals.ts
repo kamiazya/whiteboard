@@ -1,9 +1,9 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import { SnapshotNotFoundError } from '../document-io.js'
 import {
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundForCallerError,
 } from './document-crud.errors.js'
-import { SnapshotNotFoundError } from './document-io.js'
 
 /**
  * What a tool tells a caller whose address names nothing, decided once for the

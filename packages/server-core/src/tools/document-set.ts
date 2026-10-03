@@ -19,9 +19,9 @@ import {
 import { documentIdSchema, okfActorSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 

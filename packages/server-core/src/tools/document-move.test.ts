@@ -1,10 +1,10 @@
 import { readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, it } from 'vitest'
+import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { wbDocumentCreate } from './document-crud.js'
-import { loadOrCreateDocument } from './document-io.js'
 import { wbDocumentMove } from './document-move.js'
 import { createDocumentSetTool } from './document-set.js'
 

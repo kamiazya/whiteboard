@@ -1,7 +1,7 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadDocument, saveDocumentSnapshot } from '../tools/document-io.js'
 
 /**
  * Stores a node carrying `embed` straight into a spatial document. The tool

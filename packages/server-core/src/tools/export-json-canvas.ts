@@ -1,8 +1,8 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadDocument } from './document-io.js'
 
 /**
  * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this

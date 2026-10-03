@@ -20,9 +20,9 @@ import {
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.js'
 import { withWorkspaceWrite } from './write-lock.js'
 

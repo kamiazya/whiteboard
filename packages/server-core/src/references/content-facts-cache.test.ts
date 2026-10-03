@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../tools/document-io.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import { factsCacheFor } from './content-source.js'
 

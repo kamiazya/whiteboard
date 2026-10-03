@@ -1,11 +1,11 @@
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../tools/document-io.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import { followReferencesAfterRename } from './follow-rename.js'
 

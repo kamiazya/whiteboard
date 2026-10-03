@@ -10,9 +10,9 @@ import {
   VISUAL_TAGS_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
+import { loadOrCreateDocument } from '../document-io.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { loadOrCreateDocument } from './document-io.js'
 import { FacetWriteRejectedError } from './errors.js'
 import { createFacetSetTool } from './facet-set.js'
 
