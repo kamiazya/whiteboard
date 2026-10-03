@@ -103,10 +103,14 @@ export interface VersionStore {
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
+// The `branchName` column outlived the branch (ADR-0029): every version is on
+// this one lane, so the store writes and publishes the constant and nothing
+// reads the stored value. Drop the column, then this, together.
+const VERSION_BRANCH = 'main'
+
 interface VersionRow {
   id: string
   documentId: string
-  branchName: string
   auto: number
   label: string | null
   // '' means the row records no operator at all. It has to be spelled on
@@ -150,7 +154,7 @@ function rowToEntry(row: VersionRow): VersionEntry {
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
     auto: row.auto === 1,
-    branchName: row.branchName,
+    branchName: VERSION_BRANCH,
     ...(row.label !== null ? { label: row.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(row.restoredFrom !== null ? { restoredFrom: row.restoredFrom } : {}),
@@ -187,7 +191,6 @@ function versionRow({
   id,
   documentId,
   workspaceId,
-  branchName,
   opts,
   operator,
   elementCount,
@@ -198,7 +201,6 @@ function versionRow({
   id: string
   documentId: string
   workspaceId: string
-  branchName: string
   opts: SaveVersionOpts
   operator: SaveVersionOpts['operator']
   elementCount: number
@@ -210,7 +212,7 @@ function versionRow({
     id,
     documentId,
     workspaceId,
-    branchName,
+    branchName: VERSION_BRANCH,
     auto: opts.auto ? 1 : 0,
     label: opts.label ?? null,
     operatorKind: operator?.kind ?? '',
@@ -238,7 +240,6 @@ function savedVersion({
   path,
   createdAt,
   elementCount,
-  branchName,
   operator,
   opts,
 }: {
@@ -246,7 +247,6 @@ function savedVersion({
   path: string
   createdAt: number
   elementCount: number
-  branchName: string
   operator: SaveVersionOpts['operator']
   opts: SaveVersionOpts
 }): VersionEntry {
@@ -256,7 +256,7 @@ function savedVersion({
     createdAt: new Date(createdAt).toISOString(),
     elementCount,
     auto: opts.auto,
-    branchName,
+    branchName: VERSION_BRANCH,
     ...(opts.label !== undefined ? { label: opts.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
@@ -294,8 +294,6 @@ export class FileVersionStore implements VersionStore {
     // queue keeps the lock contract uniform — all "things that might
     // change what GC considers referenced" run serially.
     return withWorkspaceWriteLock(workspaceId, async () => {
-      // The column outlived the branch (ADR-0029): every version is on 'main'.
-      const branchName = 'main'
       const id = nanoid(12)
       validateVersionId(id)
 
@@ -329,7 +327,6 @@ export class FileVersionStore implements VersionStore {
             id,
             documentId,
             workspaceId,
-            branchName,
             opts,
             operator,
             elementCount,
@@ -344,7 +341,7 @@ export class FileVersionStore implements VersionStore {
 
       await this.prune(documentId)
 
-      return savedVersion({ id, path, createdAt, elementCount, branchName, operator, opts })
+      return savedVersion({ id, path, createdAt, elementCount, operator, opts })
     })
   }
 
@@ -441,9 +438,8 @@ export class FileVersionStore implements VersionStore {
     if (!documentId) return { deletedCount: 0, deletedIds: [] }
     const rows = await db
       .selectFrom('versions')
-      .select(['id', 'branchName', 'auto', 'createdAt'])
+      .select(['id', 'auto', 'createdAt'])
       .where('documentId', '=', documentId)
-      .orderBy('branchName', 'asc')
       .orderBy('createdAt', 'asc')
       .orderBy('id', 'asc')
       .execute()
@@ -451,7 +447,7 @@ export class FileVersionStore implements VersionStore {
     // Which rows go is the mechanic's call (@kamiazya/whiteboard-history);
     // the rows and the delete are this store's.
     const toDelete = sandwichedAutoVersionIds(
-      rows.map((row) => ({ id: row.id, branchName: row.branchName, auto: row.auto === 1 })),
+      rows.map((row) => ({ id: row.id, auto: row.auto === 1 })),
     )
     if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
     await db

@@ -42,13 +42,6 @@ function makeCreateBackend() {
   return (workspaceId: string, path: string) => new FakeBackend(workspaceId, path)
 }
 
-// WorkspaceTopBar's canvas switcher dropdown is real Radix — open on
-// pointerDown, select on pointerUp (see WorkspaceTopBar.test.tsx for the
-// same pattern). Rendering into document.body (per every render call in
-// this file) keeps the portal content inside React's event-delegation root.
-// Exact match: HeaderBranchChip's "Switch branch (current: <name>)" button
-// also contains the canvas path as a substring, so a loose regex match is
-// ambiguous now that WorkspaceTopBar renders both in the same header.
 // Switching document from inside the editor is the Connections chip's job:
 // the header's own switcher was retired (finding a document is the document
 // browser's work), and a backlink row opening its source is the remaining

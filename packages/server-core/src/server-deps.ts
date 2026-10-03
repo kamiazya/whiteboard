@@ -367,7 +367,6 @@ export interface VersionHistory {
     options: {
       auto: boolean
       label?: string
-      branchName?: string
       operator?: OperatorInfo
       /** Set when this point is the merge a restore produced; see `versionEntrySchema`. */
       restoredFrom?: string

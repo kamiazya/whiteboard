@@ -73,7 +73,6 @@ describe('BrowserVersionStore (real IndexedDB)', () => {
       label: 'first',
       auto: false,
       elementCount: 1,
-      branchName: 'main',
     })
 
     // A reload: nothing held in memory survives, only IndexedDB.
@@ -110,23 +109,21 @@ describe('automatic checkpoints', () => {
     await clearWhiteboardDb()
   })
 
-  it('records a checkpoint as automatic and on the branch it was taken from', async () => {
+  it('records a checkpoint as automatic and keeps that on the row the panel lists', async () => {
     const { index, workspaceId, documentId } = await seedDocument('canvas-auto')
     const docs = new BrowserWorkspaceDocs()
     await writeContent(docs, documentId, 'work')
     const store = new BrowserVersionStore({ docs, index })
 
-    const auto = await store.save(workspaceId, 'canvas-auto', {
-      auto: true,
-      branchName: 'wide-layout',
-    })
+    const auto = await store.save(workspaceId, 'canvas-auto', { auto: true })
 
-    expect(auto).toMatchObject({ auto: true, branchName: 'wide-layout' })
+    expect(auto).toMatchObject({ auto: true })
+    expect(auto).not.toHaveProperty('branchName')
     // Read back rather than trusting the return: the row is what the panel
     // lists, and a field the save answers but does not persist would pass a
     // return-value assertion and show nothing in the history.
     const listed = await new BrowserVersionStore({ docs, index }).list(workspaceId, 'canvas-auto')
-    expect(listed).toEqual([expect.objectContaining({ auto: true, branchName: 'wide-layout' })])
+    expect(listed).toEqual([expect.objectContaining({ auto: true })])
   })
 
   it("leaves a manual save's own defaults alone, so a row written before this reads as it did", async () => {
@@ -137,7 +134,7 @@ describe('automatic checkpoints', () => {
 
     const manual = await store.save(workspaceId, 'canvas-manual', { label: 'by hand' })
 
-    expect(manual).toMatchObject({ auto: false, branchName: 'main' })
+    expect(manual).toMatchObject({ auto: false })
   })
 
   it('keeps the newest 50 automatic checkpoints and lets the older ones go, sparing manual saves', async () => {

@@ -43,36 +43,24 @@ export function autoVersionsOverCap(
 
 export interface SandwichCandidate {
   readonly id: string
-  readonly branchName: string
   readonly auto: boolean
 }
 
 /**
- * The automatic checkpoints strictly BETWEEN a branch's first and last
+ * The automatic checkpoints strictly BETWEEN a document's first and last
  * manual save — the sandwich a person's own saves already bracket, where an
  * automatic one adds a row and no information.
  *
- * `rows` are every row of the document in the order they are kept
- * (branch, then time, then id). A branch with fewer than two manual saves
- * has no sandwich and is left alone.
+ * `rows` are every row of the document in the order they are kept (time,
+ * then id). A document with fewer than two manual saves has no sandwich and
+ * is left alone.
  */
 export function sandwichedAutoVersionIds(rows: readonly SandwichCandidate[]): string[] {
-  const byBranch = new Map<string, SandwichCandidate[]>()
-  for (const row of rows) {
-    const list = byBranch.get(row.branchName) ?? []
-    list.push(row)
-    byBranch.set(row.branchName, list)
-  }
-  return [...byBranch.values()].flatMap(sandwichedIn)
-}
-
-/** One branch's sandwiched automatic rows, in keeping order. */
-function sandwichedIn(list: readonly SandwichCandidate[]): string[] {
-  const manual = list.flatMap((row, i) => (row.auto ? [] : [i]))
+  const manual = rows.flatMap((row, i) => (row.auto ? [] : [i]))
   const first = manual[0]
   const last = manual.at(-1)
   if (first === undefined || last === undefined) return []
-  return list
+  return rows
     .slice(first + 1, last)
     .filter((row) => row.auto)
     .map((row) => row.id)
