@@ -18,12 +18,16 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
-/** Every `.ts`/`.tsx` under `dir`, skipping `node_modules` and `dist`. */
+/**
+ * Every `.ts`/`.tsx` under `dir`, skipping `node_modules`, `dist` and `tmp`.
+ * `tmp` holds git-ignored scratch (a Stryker sandbox is a full copy of a
+ * package's source), and no tracked source lives in a directory of that name.
+ */
 export function walkSourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules' || entry === 'dist') continue
+      if (entry === 'node_modules' || entry === 'dist' || entry === 'tmp') continue
       walkSourceFiles(full, out)
     } else if (/\.(ts|tsx)$/.test(entry)) out.push(full)
   }
