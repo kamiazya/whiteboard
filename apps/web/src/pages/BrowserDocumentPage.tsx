@@ -221,14 +221,14 @@ function useBrowserDocument(
   // switchDocument when the URL disagrees with the already-loaded documentId, and
   // by the time navigate() below lands, location.pathname already equals
   // path — so the other effect sees no drift left to act on.
-  const isFirstCanvasUrlSyncRef = useRef(true)
+  const isFirstDocumentUrlSyncRef = useRef(true)
   useEffect(() => {
     if (documentPath === null) return
     const handle = browserWorkspaceHandleOrNull()
     if (handle === null) return
     const path = documentRoutePath(handle, documentPath)
-    const isFirstSync = isFirstCanvasUrlSyncRef.current
-    isFirstCanvasUrlSyncRef.current = false
+    const isFirstSync = isFirstDocumentUrlSyncRef.current
+    isFirstDocumentUrlSyncRef.current = false
     if (location.pathname === path) return
     // The SEARCH rides along: this writes the address of the document already
     // loaded, so a bare pathname drops a query the reader arrived with — which

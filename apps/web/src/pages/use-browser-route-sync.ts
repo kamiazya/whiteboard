@@ -92,7 +92,7 @@ function applyRouteSyncAction(
  * hook) is what protects against a rapid back-back-back burst landing a
  * stale canvas.
  *
- * `lastKnownCanvasIdRef` distinguishes the two ways this effect's own
+ * `lastKnownDocumentIdRef` distinguishes the two ways this effect's own
  * dependencies can change. A switcher-driven `switchDocument()` updates
  * `documentId` BEFORE the sibling effect's `navigate()` has updated
  * `location`, so without it this effect sees a stale pathname still naming
@@ -122,14 +122,14 @@ export function useBrowserRouteSync({
   switchDocument: (id: string) => Promise<boolean>
   documentsEnumeratedRef: RefObject<boolean>
 }): void {
-  const lastKnownCanvasIdRef = useRef<string | null>(null)
+  const lastKnownDocumentIdRef = useRef<string | null>(null)
   useEffect(() => {
     // Only a run with a LOADED document records one, and it records before
     // deciding anything — a run that finds nothing to do still establishes
     // which document was loaded.
     if (documentId === null || documentPath === null) return
-    const lastKnownDocumentId = lastKnownCanvasIdRef.current
-    lastKnownCanvasIdRef.current = documentId
+    const lastKnownDocumentId = lastKnownDocumentIdRef.current
+    lastKnownDocumentIdRef.current = documentId
 
     const action = routeSyncAction({
       pathname,

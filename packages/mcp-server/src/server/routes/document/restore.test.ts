@@ -742,8 +742,12 @@ describe('overwrite restore reconciles instead of replacing', () => {
       },
     )
     expect(restoreRes.status).toBe(409)
-    const body = (await restoreRes.json()) as { error: string }
+    const body = (await restoreRes.json()) as { error: string; message: string }
     expect(body.error).toBe('output_exists')
+    // A restore target is any document, not a canvas.
+    expect(body.message).toBe(
+      'Target document "canvas-b" already exists. Pass overwrite=true to replace it.',
+    )
   })
 
   // The overlay a client shows while a restore runs is driven by these two

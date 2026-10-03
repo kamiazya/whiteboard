@@ -110,7 +110,7 @@ const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 // The address-bar half of that page, extracted so the page's own hook stays
-// under the complexity budget: `lastKnownCanvasIdRef` moved THERE, not away.
+// under the complexity budget: `lastKnownDocumentIdRef` moved THERE, not away.
 const BROWSER_ROUTE_SYNC = './pages/use-browser-route-sync.ts'
 // The page's automatic-checkpoint wiring, extracted when its file-size budget
 // said so; same SCREEN by the same rule the panel's hooks are.
@@ -441,11 +441,11 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
   currentDocumentIdRef:
     'no subject: mirrors the document on screen, reassigned every render — it exists so a duplicate that started under one document can tell, after its awaits, whether it is still the one being looked at. Clearing it on a switch would remove the only thing that knows a switch happened',
-  isFirstCanvasUrlSyncRef:
+  isFirstDocumentUrlSyncRef:
     'no subject: whether this MOUNT has synced the URL once, which picks replace over push — resetting it per document would make every switch a replace and flatten the history it exists to keep',
   enumeratedRef:
     'no subject: whether listDocuments has answered at all, which is about the page’s lifetime rather than one document',
-  lastKnownCanvasIdRef:
+  lastKnownDocumentIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
   shortcutHandledRef: 'no subject: a once-per-page-load flag for the ?new=canvas launcher param',
 }

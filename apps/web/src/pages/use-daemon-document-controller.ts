@@ -5,7 +5,7 @@ import type {
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  createDocument as createCanvasApi,
+  createDocument as createDocumentApi,
   deleteDocument as deleteDocumentApi,
   listDocuments,
   listWorkspaces as listWorkspacesApi,
@@ -196,7 +196,7 @@ export function useDaemonDocumentController(
       setCreateError(null)
       try {
         // What the legacy route defaulted this to; the affordance says canvas.
-        const created = await createCanvasApi(
+        const created = await createDocumentApi(
           daemonFetch,
           daemonBaseUrl,
           workspaceId,

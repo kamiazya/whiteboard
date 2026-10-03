@@ -17,7 +17,7 @@ type WorkspaceInfo = {
   documents: DocumentInfo[]
 }
 
-async function summarizeCanvas(
+async function summarizeDocument(
   workspaceId: string,
   path: string,
   scope: StoreScope,
@@ -81,7 +81,7 @@ export function createDebugRouter(options: CreateDebugRouterOptions) {
       workspaces.map(async ({ workspaceId }) => {
         const documents = await listDocuments(workspaceId, options.scope)
         const canvasInfos = await Promise.all(
-          documents.map(({ path }) => summarizeCanvas(workspaceId, path, options.scope)),
+          documents.map(({ path }) => summarizeDocument(workspaceId, path, options.scope)),
         )
         return { workspaceId, documents: canvasInfos }
       }),
