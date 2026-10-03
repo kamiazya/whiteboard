@@ -1,5 +1,5 @@
 // How one editor command reaches the Loro document: the fine-grained write
-// for the target it names, the full-canvas resync it falls back to, and the
+// for the target it names, the whole-canvas reconcile it falls back to, and the
 // key a debounce window dedupes repeat edits to one target under. Pure over
 // the containers it is handed; the session owns the debounce, the undo
 // manager and everything that outlives one write.
@@ -7,6 +7,7 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   markThreadPassages,
+  reconcileSpatialCanvas,
   type SpatialBatchWriter,
   setCommentThreadStatus,
   withDocumentBatch,
@@ -15,7 +16,6 @@ import {
   writeCommentThread,
   writeCoreFacets,
   writeMarkdownBody,
-  writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
   writeThreadMessage,
@@ -34,7 +34,7 @@ const log = getAppLogger('document-sync')
  * write while still keeping edits to DIFFERENT targets separate. Commands
  * with no mapped target (see `writeCommandTarget`'s `default` case) get a
  * fresh key per call — each one already falls back to a full
- * `writeSpatialCanvas` resync, so there is nothing to dedupe.
+ * whole-canvas reconcile, so there is nothing to dedupe.
  */
 let unmappedCommandCounter = 0
 export function commandTargetKey(command: EditorCommand): string {
@@ -97,7 +97,7 @@ export function commandTargetKey(command: EditorCommand): string {
 /**
  * Writes exactly the node/edge the command targets into its own LoroMap
  * entry (via crdt's `writeSpatialNode`/`writeSpatialEdge`, the
- * same field-projection `writeSpatialCanvas` uses), and returns whether it
+ * same field projection the whole-canvas write uses), and returns whether it
  * could — false when the command's target id is missing from `next` (see
  * commitToDoc's fallback rule). This is what preserves the node-level CRDT
  * merge granularity a whole-document rewrite would discard: a concurrent
@@ -106,6 +106,7 @@ export function commandTargetKey(command: EditorCommand): string {
 function writeCommandTarget(
   host: LoroDoc,
   doc: DocumentContainers,
+  prev: SpatialCanvas,
   next: SpatialCanvas,
   command: EditorCommand,
 ): boolean {
@@ -142,7 +143,7 @@ function writeCommandTarget(
     case 'reply-to-thread':
       // Always "handled", like set-body below and for the same reason: the
       // fallback writes the whole SpatialCanvas, and a conversation lives in
-      // the threads plane BESIDE it — a full resync would rewrite the canvas
+      // the threads plane BESIDE it — a whole-canvas reconcile would rewrite the canvas
       // and never touch the message. There is no missing-target case to fall
       // back from either: writeThreadMessage is a documented no-op for a
       // thread this replica does not hold, which is deliberate (replying must
@@ -165,15 +166,14 @@ function writeCommandTarget(
       // also rewrites the board and the body. A commit each would be four
       // independent deltas for one press — see `withDocumentBatch` for the
       // measurement and for what a transport dying between them left behind.
-      // The canvas write is the full resync deliberately: a proposal reaches
-      // whatever elements it names, and there is no single target to write
-      // fine-grained.
+      // The canvas write is a whole-canvas reconcile deliberately: a proposal
+      // reaches whatever it names, so there is no single target to write.
       withDocumentBatch(doc, (writer) => {
         for (const change of command.changes) {
           writer.setProposedChangeStatus(command.proposalId, change.id, command.decision)
         }
         if (command.decision !== 'adopted') return
-        writer.writeSpatialCanvas(next)
+        writer.reconcileSpatialCanvas(prev, next)
         // And the OTHER subject a proposal can have (ADR-0029 decision 6).
         // `applyCommand` folds the canvas and cannot reach a body, so a
         // passage adopted here would otherwise close its change against a
@@ -230,7 +230,7 @@ function writeCommandTarget(
     case 'batch': {
       // Pre-validate BEFORE any write: a batch is all-or-nothing at this
       // layer. One unsupported member (or a missing target) sends the WHOLE
-      // batch down the full-resync fallback — still exactly one commit and
+      // batch down the whole-canvas fallback — still exactly one commit and
       // one undo step, just with whole-canvas granularity.
       if (!command.commands.every((sub) => isBatchWritable(sub, next))) return false
       withSpatialBatch(doc, (writer) => {
@@ -247,7 +247,7 @@ function writeCommandTarget(
  * The leaf kinds a batch can write fine-grained: exactly the operations
  * `SpatialBatchWriter` exposes. `delete-edge` is deliberately included here
  * even though the non-batch path has no case for it (multi-delete needs
- * it); the other kinds fall back to the full resync as a whole batch.
+ * it); the other kinds fall back to the whole-canvas reconcile as a whole batch.
  */
 function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boolean {
   switch (command.kind) {
@@ -326,27 +326,33 @@ function writeSubCommand(
 
 /**
  * Primary path: a fine-grained write of just the command's target node/edge.
- * Fallback: a full `writeSpatialCanvas(doc, next)` resync, used when the
- * command's target id is not present in `next` (an unmapped/unknown command
- * kind, or a target the command set has no delete for), or when the
- * fine-grained write itself throws. Both paths converge on the same `next`
- * canvas — `writeSpatialCanvas` deletes any node/edge id no longer present,
- * so the fallback is also what recovers from a node/edge removed from `next`
- * without a corresponding command.
+ * Fallback: a whole-canvas `reconcileSpatialCanvas(doc, prev, next)`, used
+ * when the command's target id is not present in `next` (an unmapped/unknown
+ * command kind, or a target the command set has no delete for), or when the
+ * fine-grained write itself throws. The reconcile deletes only what `prev`
+ * held and `next` dropped, so it also recovers from a node/edge removed from
+ * `next` without a corresponding command.
+ *
+ * `prev` is the canvas the editor held when the edit began. It is never
+ * re-read from `doc`: `next` comes from `readSpatialCanvas`, which omits any
+ * record this build's schema cannot read, and a write that deleted every
+ * stored id absent from `next` would erase a newer client's records as an op
+ * that ships to every replica.
  */
 export function commitToDoc(
   host: LoroDoc,
   doc: DocumentContainers,
+  prev: SpatialCanvas,
   next: SpatialCanvas,
   command: EditorCommand,
 ): void {
   try {
-    if (writeCommandTarget(host, doc, next, command)) return
-    log.warn('editor command target missing from next canvas; falling back to full resync', {
+    if (writeCommandTarget(host, doc, prev, next, command)) return
+    log.warn('editor command target missing from next canvas; reconciling the whole canvas', {
       command,
     })
   } catch (err) {
-    log.warn('fine-grained Loro write failed; falling back to full resync', err)
+    log.warn('fine-grained Loro write failed; reconciling the whole canvas', err)
   }
-  writeSpatialCanvas(doc, next)
+  reconcileSpatialCanvas(doc, prev, next)
 }

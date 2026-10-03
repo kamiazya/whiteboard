@@ -326,7 +326,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the locks lifted as sub-modules, the undo one handed `dropQueuedWrite`
   // rather than the queue itself. Both document pages already sit behind one
   // `DocumentBackend`, so that port is not what is left to do.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 856,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 864,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 139,

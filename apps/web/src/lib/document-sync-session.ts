@@ -600,6 +600,11 @@ export function createDocumentSyncSession(
   // final state for every target in the queue.
   const pendingTargets = new Map<string, EditorCommand>()
   let latestNext: SpatialCanvas | null = null
+  // The canvas the editor held at the window's FIRST edit: what a whole-canvas
+  // reconcile may delete against. Never re-read from the doc at commit time —
+  // a peer record merged inside the window would then count as visible to
+  // this edit and be deleted by it.
+  let windowStart: SpatialCanvas | null = null
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   // Body text the editor binding wrote at its positions and has not
   // committed: the ops are in the doc (a read sees them) and ride the same
@@ -618,6 +623,7 @@ export function createDocumentSyncSession(
     }
     const targetDoc = doc
     const next = latestNext
+    const prev = windowStart
     const commands = next === null ? [] : [...pendingTargets.values()]
     pendingTargets.clear()
     latestNext = null
@@ -634,7 +640,8 @@ export function createDocumentSyncSession(
           // scheduling and commit throws here, and must fail only this
           // target — guardedCommit's contract is that the chain never
           // rejects.
-          if (next !== null) commitToDoc(targetDoc, contentOf(targetDoc), next, command)
+          if (next !== null)
+            commitToDoc(targetDoc, contentOf(targetDoc), prev ?? next, next, command)
         } catch (err) {
           log.error('scene commit failed; skipping this target', err)
         }
@@ -984,6 +991,7 @@ export function createDocumentSyncSession(
     // Published immediately (not debounced) so a controlled SpatialEditor's
     // own re-render reflects the edit right away; only the Loro write is
     // debounced in the background.
+    if (latestNext === null) windowStart = currentCanvas
     currentCanvas = next
     notify(next, 'local')
     if (!doc) return

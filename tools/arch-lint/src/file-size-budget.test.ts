@@ -188,7 +188,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `dropQueuedWrite`, because the debounce timer and the queue stay closed
   // over by the factory (`function-size-budget.test.ts` carries the same path
   // for `createDocumentSyncSession`).
-  'apps/web/src/lib/document-sync-session.ts': 1159,
+  'apps/web/src/lib/document-sync-session.ts': 1167,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
