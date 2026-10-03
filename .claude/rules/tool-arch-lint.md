@@ -336,10 +336,9 @@ count: an adapter holding a store's TYPE is the same coupling.
 (`modules: string[]`, a reason each); everything else in the mechanics layer,
 and `daemon/`, is a mechanic an adapter must ledger. A module in `security/` or
 `tenant/` is not entitled by its directory — `user-deletion` and
-`storage-report` are neither `*-store` nor `data-layout`, and the old directory
-patterns waved both through (`createApp` now hands the runtime route its
-storage report, so that edge is gone). Add an entitlement by name; the list
-is both-sided, so an entitled module no adapter imports fails too.
+`storage-report` are neither `*-store` nor `data-layout`, and a directory
+pattern waved both through. Add an entitlement by name; the list is
+both-sided, so an entitled module no adapter imports fails too.
 
 **What counts as a mechanic is wider than `store/`**: a `security/*-store` (the
 people, session, key and invitation rows), anything under the daemon's own
@@ -595,12 +594,9 @@ one-word reason each fail, naming the file.
 
 It pins the VIEW BOX too, from the same BRAND.md line. That box read
 `88x66` in the doc while every surface drawing the bare mark used `88x56`, so
-the DOC was the odd one out (user decision, 2026-09-11) — and the fix for a
-disagreement nobody could see is to make one side derive from the other:
-change the number in BRAND.md and every mark surface is reported until it
-follows.
-
-That needs one distinction the guard cannot infer, so `SURFACES` classifies
+the DOC was the odd one out, and the fix for a disagreement nobody could see
+is to make one side derive from the other: change the number in BRAND.md and
+every mark surface is reported until it follows. That needs one distinction the guard cannot infer, so `SURFACES` classifies
 every file the scan finds as either `mark` (draws the bare signature, must
 use the stated box) or `composes: <what it adds>` (needs a box of its own).
 Both sides are guarded, which is the point: a new brand surface cannot be
@@ -639,6 +635,13 @@ visible only as a timeout somewhere else. Directory WALKS are still repeated
 per word and deliberately so: deduping them saves 9ms of the 255, which does
 not buy a second thing to keep true.
 
+## `store-interface-reach.test.ts`
+
+Every method an interface in `security/*-store.ts` or `store/*-store.ts`
+declares needs a SHIPPED caller by name (`knip` cannot see interface members;
+two methods only tests called survived it) or a both-sided ledger entry. By
+name, so a method sharing one with an unrelated call (`list`) reads as used.
+
 ## `read-failure-as-absence.test.ts`
 
 A file read (`readFile`/`readFileSync`) whose `catch` answers `null`,
@@ -651,8 +654,8 @@ is not hypothetical: the daemon identity and the macaroon root key were both
 REPLACED on any read failure, which a secret at mode 0o000 reaches.
 
 Narrow on purpose. The wider family — any failure answered as an absence —
-was 328 production sites when measured, most of them right (platform probes,
-user input), and a scan that cries wolf gets deleted. Mutation-checked four
+was 328 production sites when measured, most of them right, and a scan that
+cries wolf gets deleted. Mutation-checked four
 ways, the fourth being the one that matters: reverting
 `readSecretFileIfPresentSync` to answer `null` for any error fails it.
 
@@ -662,8 +665,7 @@ ways, the fourth being the one that matters: reverting
 stored record the reader skipped is deleted, as an op that ships — so no
 non-test source outside `packages/loro-adapter` may call them; a writer takes
 `reconcileSpatialCanvas(doc, prev, next)` with the canvas it last published
-as `prev`. The keeper's three writers (9a) and the web editor's whole-canvas
-fallback and proposal adopt (10) were the instances.
+as `prev`.
 
 ## The pointer guards read prose, and a comment names no occasion
 
