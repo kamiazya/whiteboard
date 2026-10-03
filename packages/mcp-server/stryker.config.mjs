@@ -1,6 +1,13 @@
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+
 /** @type {import('@stryker-mutator/core').PartialStrykerOptions} */
 export default {
-  plugins: ['@stryker-mutator/vitest-runner'],
+  // Resolved from THIS file rather than named: Stryker loads a bare plugin name
+  // from its own location in the pnpm store, where this package's dependency
+  // is not resolvable, and the lane then fails with no TestRunner plugin.
+  plugins: [require.resolve('@stryker-mutator/vitest-runner')],
   testRunner: 'vitest',
   vitest: {
     configFile: 'vitest.stryker.config.ts',
