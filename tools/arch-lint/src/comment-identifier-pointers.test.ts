@@ -167,7 +167,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
  */
 const FOREIGN_NAMES: Readonly<Record<string, readonly string[]>> = {
   'vitest, Stryker and Biome options and APIs the testing skills explain': [
-    'fsModuleCache',
     'detectAsyncLeaks',
     'frameLocator',
     'toBeInViewport',
