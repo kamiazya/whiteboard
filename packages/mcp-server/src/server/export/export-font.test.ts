@@ -90,3 +90,36 @@ describe('resolveExportFontFaces', () => {
     }
   })
 })
+
+describe('readFontFamilyName reads every shape a face may record its family in', () => {
+  type Names = Parameters<typeof readFontFamilyName>[0]
+  const face = (names: unknown) => ({ names }) as unknown as Names
+
+  it('prefers the English entry of the windows record', () => {
+    expect(
+      readFontFamilyName(face({ windows: { fontFamily: { ja: 'ヨモギ', en: 'Yomogi' } } })),
+    ).toBe('Yomogi')
+  })
+
+  it('takes the first entry when the record has no English one', () => {
+    expect(readFontFamilyName(face({ windows: { fontFamily: { ja: 'ヨモギ' } } }))).toBe('ヨモギ')
+  })
+
+  it('falls through to the macintosh record, then to the flat shape the typings advertise', () => {
+    expect(readFontFamilyName(face({ macintosh: { fontFamily: { en: 'Mac Only' } } }))).toBe(
+      'Mac Only',
+    )
+    expect(readFontFamilyName(face({ fontFamily: 'Flat String' }))).toBe('Flat String')
+    expect(readFontFamilyName(face({ fontFamily: { en: 'Flat Locale' } }))).toBe('Flat Locale')
+  })
+
+  it('skips a record whose name is empty and answers undefined when none carries one', () => {
+    expect(
+      readFontFamilyName(
+        face({ windows: { fontFamily: { en: '' } }, macintosh: { fontFamily: { en: 'Second' } } }),
+      ),
+    ).toBe('Second')
+    expect(readFontFamilyName(face({ windows: { fontFamily: { en: '' } } }))).toBeUndefined()
+    expect(readFontFamilyName(face({}))).toBeUndefined()
+  })
+})

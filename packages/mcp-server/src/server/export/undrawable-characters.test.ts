@@ -7,7 +7,7 @@
 // The information to say so is already on hand — `charToGlyphIndex` is what
 // the measurer uses to decide when to fall back to the estimator. This makes
 // it an answer instead of an internal detail.
-import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 import { undrawableCharacters as undrawableIn } from './undrawable-characters.js'
@@ -79,5 +79,25 @@ describe('undrawableCharacters', () => {
     })
 
     expect(missing).toEqual(['グ', 'ル', 'ー', 'プ', '矢', '印'])
+  })
+})
+
+describe('undrawableCharacters reads every node kind that draws text', () => {
+  const geo = { x: 0, y: 0, width: 200, height: 60 }
+
+  test('a file node is drawn by its file name', async () => {
+    const missing = await undrawableCharacters({
+      nodes: [fileNode({ id: 'f', ...geo, file: 'ノート' })],
+      edges: [],
+    })
+    expect(missing).toEqual(['ノ', 'ー', 'ト'])
+  })
+
+  test('a link node is drawn by its url', async () => {
+    const missing = await undrawableCharacters({
+      nodes: [linkNode({ id: 'l', ...geo, url: 'https://example.com/日本' })],
+      edges: [],
+    })
+    expect(missing).toEqual(['日', '本'])
   })
 })

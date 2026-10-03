@@ -284,3 +284,14 @@ describe('applyConfigFileToEnvAndLogLevel', () => {
     }
   })
 })
+
+describe('loadConfigFile refuses a file whose root is not an object', () => {
+  it.each([
+    ['a list', '["logLevel", "debug"]'],
+    ['a string', '"logLevel: debug"'],
+    ['a number', '42'],
+  ])('%s', (_name, body) => {
+    writeFileSync(join(dir, '.whiteboardrc.json'), body)
+    expect(() => loadConfigFile(dir)).toThrow(/expected an object at the root/)
+  })
+})

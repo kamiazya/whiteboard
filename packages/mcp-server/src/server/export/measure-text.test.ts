@@ -305,3 +305,16 @@ describe('a descriptor naming an installed family', () => {
     expect(bold.advanceWidth).toBeGreaterThan(regular.advanceWidth)
   })
 })
+
+describe('the export measurer picks the bold face from 600 up, as CSS (and resvg) does', () => {
+  afterEach(() => _resetExportMeasureTextCacheForTests())
+
+  it('measures weight 600 with the bold face, and 599 with the regular one', async () => {
+    const measure = await opentypeMeasureText()
+    const text = 'Hello, bold world'
+    const width = (weight: number) => measure(text, font(16, { weight })).advanceWidth
+    expect(width(600)).toBe(width(700))
+    expect(width(599)).toBe(width(400))
+    expect(width(600)).toBeGreaterThan(width(599))
+  })
+})

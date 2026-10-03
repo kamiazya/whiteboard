@@ -5,17 +5,20 @@
  */
 import {
   chmodSync,
+  chownSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { ROOT_IS_SOMEONE_ELSES } from '../shared/test-utils/root-is-someone-elses.js'
 import {
   clearStaleSocket,
   daemonSocketPath,
@@ -28,6 +31,20 @@ beforeEach(() => {
   scratch = mkdtempSync(join(tmpdir(), 'wb-socket-'))
 })
 afterEach(() => rmSync(scratch, { recursive: true, force: true }))
+
+// Probed rather than inferred from getuid(): whether this process may hand a
+// directory to another uid is decided by capabilities, not by being root.
+const CAN_CHOWN_AWAY: boolean = (() => {
+  const probe = mkdtempSync(join(tmpdir(), 'wb-chown-probe-'))
+  try {
+    chownSync(probe, 12345, 12345)
+    return process.getuid?.() !== 12345
+  } catch {
+    return false
+  } finally {
+    rmSync(probe, { recursive: true, force: true })
+  }
+})()
 
 describe('daemonSocketPath', () => {
   it('lives under the per-user runtime directory, one socket per data dir', () => {
@@ -89,6 +106,30 @@ describe('prepareSocketDirectory', () => {
     chmodSync(dir, 0o755)
     expect(() => prepareSocketDirectory(dir)).toThrow(/owner-only/)
   })
+
+  // lstat, not stat: a link to an owner-only directory would otherwise pass
+  // both checks while the socket landed wherever the link points.
+  it('refuses a symlink standing where the directory should be, even one aimed at an owner-only directory', () => {
+    const real = join(scratch, 'real')
+    mkdirSync(real, { mode: 0o700 })
+    const link = join(scratch, 'link')
+    symlinkSync(real, link)
+    expect(() => prepareSocketDirectory(link)).toThrow(/not a directory this user owns/)
+  })
+
+  it.skipIf(!CAN_CHOWN_AWAY)('refuses an owner-only directory that belongs to another uid', () => {
+    const dir = join(scratch, 'theirs')
+    mkdirSync(dir, { mode: 0o700 })
+    chownSync(dir, 12345, 12345)
+    expect(() => prepareSocketDirectory(dir)).toThrow(/not a directory this user owns/)
+  })
+
+  it.skipIf(!ROOT_IS_SOMEONE_ELSES)(
+    'refuses a directory owned by root when this user is not root',
+    () => {
+      expect(() => prepareSocketDirectory('/')).toThrow(/not a directory this user owns/)
+    },
+  )
 })
 
 describe('clearStaleSocket', () => {
@@ -136,5 +177,28 @@ describe('listenOnSocket', () => {
     expect(refusal).toMatch(/XDG_RUNTIME_DIR/)
     expect(refusal).toMatch(/TMPDIR/)
     expect(existsSync(dir)).toBe(false)
+  })
+})
+
+describe('listenOnSocket path-length ceiling', () => {
+  const limit = process.platform === 'darwin' ? 103 : 107
+  const pathOfBytes = (bytes: number) => {
+    const prefix = join(scratch, 'w', '')
+    return `${prefix}${'s'.repeat(bytes - Buffer.byteLength(prefix) - '.sock'.length)}.sock`
+  }
+
+  it(`binds a path of exactly ${limit} bytes`, async () => {
+    const path = pathOfBytes(limit)
+    expect(Buffer.byteLength(path)).toBe(limit)
+    const listener = await listenOnSocket(() => new Response('ok'), path)
+    expect(existsSync(path)).toBe(true)
+    await listener.close()
+  })
+
+  it(`refuses a path of ${limit + 1} bytes, naming the limit`, async () => {
+    const path = pathOfBytes(limit + 1)
+    await expect(listenOnSocket(() => new Response('ok'), path)).rejects.toThrow(
+      new RegExp(`over the ${limit}-byte limit`),
+    )
   })
 })
