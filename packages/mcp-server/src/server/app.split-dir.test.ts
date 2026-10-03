@@ -207,6 +207,26 @@ describe('createApp over a dir the process global does not name', () => {
     )
   })
 
+  for (const [first, second] of [
+    [1_000, 2_000],
+    [2_000, 1_000],
+  ] as const) {
+    it(`reports the newest compaction stamp across workspaces (${first} then ${second})`, async () => {
+      const { app, boot } = await bootBoth()
+      const a = await boot.serverDeps.workspaceDocuments.get(WS)
+      setWorkspaceLastCompactedAt(a, first)
+      await boot.serverDeps.workspaceDocuments.save(WS, a)
+      const b = await boot.serverDeps.workspaceDocuments.get(SERVED_ONLY_WORKSPACE)
+      setWorkspaceLastCompactedAt(b, second)
+      await boot.serverDeps.workspaceDocuments.save(SERVED_ONLY_WORKSPACE, b)
+
+      const res = await app.request('/api/runtime/storage')
+      expect(
+        ((await res.json()) as { lastAutoCompactedAt: number | null }).lastAutoCompactedAt,
+      ).toBe(2_000)
+    })
+  }
+
   it('walks the served dir for the storage report', async () => {
     const { app } = await bootBoth()
     type Report = { byCategory: { other: { bytes: number; files: number } } }

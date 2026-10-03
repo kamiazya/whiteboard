@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -15,7 +16,8 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so the module loads after the mocks resolve.
-const { clearDocCacheForTests } = await import('./doc-cache.js')
+const { clearDocCacheForTests, getOrLoad } = await import('./doc-cache.js')
+const { storeScope } = await import('./store-scope.js')
 const { getDoc } = await import('./document-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -50,5 +52,29 @@ describe('getDoc', () => {
     const docA = await getDoc('session1', 'canvas-a')
     const docB = await getDoc('session1', 'canvas-b')
     expect(docA).not.toBe(docB)
+  })
+})
+
+describe('the LRU bound', () => {
+  beforeEach(() => clearDocCacheForTests())
+  afterEach(() => clearDocCacheForTests())
+  const scope = () => storeScope('/tmp/doc-cache-lru')
+
+  it('holds 32 documents and evicts the least recently used on the 33rd', async () => {
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      return new LoroDoc()
+    }
+    for (let i = 0; i < 32; i++) await getOrLoad('ws', `d${i}`, load, scope())
+    for (let i = 0; i < 32; i++) await getOrLoad('ws', `d${i}`, load, scope())
+    expect(loads).toBe(32)
+
+    await getOrLoad('ws', 'd32', load, scope())
+    expect(loads).toBe(33)
+    await getOrLoad('ws', 'd1', load, scope())
+    expect(loads).toBe(33)
+    await getOrLoad('ws', 'd0', load, scope())
+    expect(loads).toBe(34)
   })
 })
