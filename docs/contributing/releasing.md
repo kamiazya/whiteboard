@@ -58,6 +58,7 @@ credentials are requested.
 4. `release.yml` detects `mcp_release_created == true` and runs both publish jobs.
 5. `force_publish_tag` input: can re-publish a specific tag (e.g. after a transient
    OIDC failure). Must match `mcp-server-v<semver>`; rejected before checkout otherwise.
+   The `publish_npm` and `publish_docker` inputs (both default on) choose which halves run.
 
 ### Publish gate scope: publishability, not correctness
 
@@ -274,12 +275,13 @@ To re-publish a corrected tarball for the same version, you must bump the versio
 UI or the GitHub API. Coordinate with any downstream users before removing an image.
 
 **Force-publish via release.yml**: Use `force_publish_tag` input to re-run publishing
-for an existing tag (e.g., after a transient OIDC failure or a failed image push). A
-dispatch runs both `publish-mcp` and `docker-publish-sign`: `npm publish` is attempted
-again, so it fails on a version npm already has, and the image push re-tags `latest`.
-The image job does not wait on the npm job, so the failed `npm publish` does not stop it,
-but there is no way to run only one of the two. The tag must match `mcp-server-v<semver>`
-and the `production-npm` and `production-docker` environments must approve.
+for an existing tag (e.g., after a transient OIDC failure or a failed image push). The
+`publish_npm` and `publish_docker` booleans (both default on) choose which halves run, so
+either can be retried alone: `npm publish` fails on a version npm already has, so retry
+only a failed image push with `publish_npm` off, and `docker-publish-sign` re-tags
+`latest` when it runs. A dispatch with no tag runs neither. The tag must match
+`mcp-server-v<semver>` and the `production-npm` and `production-docker` environments
+must approve.
 
 ---
 
