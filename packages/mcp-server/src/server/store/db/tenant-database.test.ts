@@ -235,6 +235,34 @@ describe('what a tenant-bound handle refuses rather than guessing', () => {
     ).rejects.toThrow(/tenantId/)
   })
 
+  // The column that moves a row is refused wherever it sits in the SET list,
+  // not only when it is the sole column.
+  it('an update that moves a row to another tenant among other columns', async () => {
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    await a.insertInto('workspaceMembersOnly').values({ workspaceId: 'w', since: 1 }).execute()
+    for (const set of [
+      { since: 2, tenantId: 'other' },
+      { tenantId: 'other', since: 2 },
+    ]) {
+      await expect(
+        a
+          .updateTable('workspaceMembersOnly')
+          .set(set as any)
+          .execute(),
+      ).rejects.toThrow(/tenantId/)
+    }
+    const row = await a.selectFrom('workspaceMembersOnly').selectAll().executeTakeFirstOrThrow()
+    expect(row.since).toBe(1)
+  })
+
+  it('leaves an update of ordinary columns alone', async () => {
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    await a.insertInto('workspaceMembersOnly').values({ workspaceId: 'w', since: 1 }).execute()
+    await a.updateTable('workspaceMembersOnly').set({ since: 2 }).execute()
+    const row = await a.selectFrom('workspaceMembersOnly').selectAll().executeTakeFirstOrThrow()
+    expect(row.since).toBe(2)
+  })
+
   it('a whole raw statement, which it has no tree to scope', async () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
     await expect(sql`select * from workspaceMembersOnly`.execute(a)).rejects.toThrow(

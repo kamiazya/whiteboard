@@ -97,6 +97,24 @@ describe('completeSignIn — a person already here', () => {
     expect((await deps.sessions.open(silent.sessionToken, T0 + 1))?.authenticatedAt).toBeNull()
   })
 
+  // A malformed `auth_time` must not become a stored authentication time
+  // that administration would then read as fresh or stale at random.
+  it.for([
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['NaN', Number.NaN],
+    ['a string', '1700000000'],
+  ] as const)('records no authentication time for an auth_time that is %s', async ([, bad]) => {
+    const binding = { authenticator: providerAuthenticator(provider()), subject: 'ada-1' }
+    await deps.members.ensureProfile({ binding, displayName: 'Ada' })
+    const done = await completeSignIn(deps, {
+      provider: provider(),
+      claims: { ...ada, auth_time: bad },
+      now: T0,
+    })
+    if (!done.ok) throw new Error('sign-in refused')
+    expect((await deps.sessions.open(done.sessionToken, T0 + 1))?.authenticatedAt).toBeNull()
+  })
+
   // Decision 5: rules are re-checked at EVERY sign-in, so a person who left
   // the allowed domain is refused even though their user still exists.
   it('refuses an existing user who no longer satisfies the rules', async () => {
@@ -139,6 +157,16 @@ describe('completeSignIn — somebody new', () => {
     const done = await completeSignIn(deps, { provider: provider(), claims: ada, now: T0 })
     expect(done).toEqual({ ok: false, reason: 'not_invited' })
     expect(await accountCount()).toBe(0)
+  })
+
+  it('admits an uninvited person where the provider opens accounts, and creates their account', async () => {
+    const done = await completeSignIn(deps, {
+      provider: provider({ createAccounts: true }),
+      claims: ada,
+      now: T0,
+    })
+    expect(done.ok).toBe(true)
+    expect(await accountCount()).toBe(1)
   })
 
   it('creates the user through a valid link and spends the link', async () => {
@@ -330,6 +358,41 @@ describe('completeSignIn — an invitation into a workspace', () => {
       now: T0 + 1,
     })
     expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(true)
+  })
+})
+
+describe('completeSignIn — rules supplied in code', () => {
+  // A code rule refuses what the declared rules admit, and sees the provider
+  // and the verified claims; it is how a distribution narrows admission.
+  it('refuses a person a code rule refuses, handing the rule the provider and claims', async () => {
+    const seen: unknown[] = []
+    const withRule: CompleteSignInDeps = {
+      ...deps,
+      codeRules: [
+        (input) => {
+          seen.push(input)
+          return { admit: false, reason: 'not on the roster' }
+        },
+      ],
+    }
+    const done = await completeSignIn(withRule, {
+      provider: provider({ createAccounts: true }),
+      claims: ada,
+      now: T0,
+    })
+    expect(done).toEqual({ ok: false, reason: 'rule_refused' })
+    expect(seen).toEqual([{ providerId: 'corp', claims: ada }])
+    expect(await accountCount()).toBe(0)
+  })
+
+  it('lets a person through when every code rule admits them', async () => {
+    const withRule: CompleteSignInDeps = { ...deps, codeRules: [() => ({ admit: true })] }
+    const done = await completeSignIn(withRule, {
+      provider: provider({ createAccounts: true }),
+      claims: ada,
+      now: T0,
+    })
+    expect(done.ok).toBe(true)
   })
 })
 

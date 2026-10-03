@@ -145,6 +145,54 @@ describe('gatedByMembership', () => {
     expect(await members.isWorkspaceMember('ws-fresh', profile.id)).toBe('member')
   })
 
+  // A batch refused before it minted anything has no workspace to grant: its
+  // own error must reach the caller rather than a failure from the grant.
+  it('rethrows the error of a batch that failed before minting, and makes nobody a member', async () => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    const gated = gatedByMembership(
+      {
+        edit: {
+          name: 'wb_edit',
+          async execute(_input: { workspaceId?: string; createWorkspace?: boolean }) {
+            throw new Error('refused before minting')
+          },
+        },
+      },
+      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
+    ).edit
+    await expect(
+      asAda(() => gated.execute({ workspaceId: 'fresh', createWorkspace: true })),
+    ).rejects.toThrow(/refused before minting/)
+    expect(await members.isWorkspaceMember('ws-fresh', profile.id)).not.toBe('member')
+  })
+
+  // Two people creating the same new segment at once: the winner minted it and
+  // is its first member by the time the loser's batch finishes, and a
+  // workspace that already has members is not the loser's to join.
+  it('does not make the creator a member of a workspace that is already members-only', async () => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    const bob = await members.ensureProfile({
+      binding: { authenticator: 'oidc:test', subject: 'bob' },
+      displayName: 'Bob',
+    })
+    const gated = gatedByMembership(
+      {
+        edit: {
+          name: 'wb_edit',
+          async execute(_input: { workspaceId?: string; createWorkspace?: boolean }) {
+            workspaces.set('fresh', { workspaceId: 'ws-fresh', segment: 'fresh' })
+            await members.addMember('ws-fresh', bob.id)
+            return { ok: true }
+          },
+        },
+      },
+      { resolveWorkspace: async (h: string) => workspaces.get(h) ?? null },
+    ).edit
+    await asAda(() => gated.execute({ workspaceId: 'fresh', createWorkspace: true }))
+    expect(await members.isWorkspaceMember('ws-fresh', profile.id)).not.toBe('member')
+    expect(await members.isWorkspaceMember('ws-fresh', bob.id)).toBe('member')
+  })
+
   // The gate selects on the workspace field, so a call without it must not be
   // a way to skip the gate: it fails closed unless the tool is allowlisted.
   it('refuses a call that names no workspace, and runs nothing', async () => {

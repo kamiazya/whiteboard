@@ -374,11 +374,12 @@ describe('parseServerModeEnvConfig — type / enum validation', () => {
     expect(result.code).toBe('server_mode_env.jwt_clock_skew_invalid')
   })
 
-  it('JWKS URI with credentials → jwks_uri_credentials_forbidden', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_JWKS_URI: 'https://user:pass@auth.example.com/.well-known/jwks.json',
-    })
+  it.each([
+    ['a username and a password', 'https://user:pass@auth.example.com/.well-known/jwks.json'],
+    ['a username only', 'https://user@auth.example.com/.well-known/jwks.json'],
+    ['a password only', 'https://:secret@auth.example.com/.well-known/jwks.json'],
+  ])('JWKS URI with %s → jwks_uri_credentials_forbidden', (_label, uri) => {
+    const result = parseServerModeEnvConfig({ ...VALID_ENV, WHITEBOARD_SERVER_JWKS_URI: uri })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.code).toBe('server_mode_env.jwks_uri_credentials_forbidden')

@@ -131,6 +131,17 @@ describe('providerAuthenticator', () => {
 })
 
 // ADR-0046 decision 2: a reverse proxy that has already signed the person in.
+describe('a provider that declares half a client', () => {
+  it.for([
+    ['a client id without its secret', { ...google, clientSecret: undefined }, 'clientSecret'],
+    ['a secret without its client id', { ...google, clientId: undefined }, 'clientId'],
+  ] as const)('names the missing field for %s', ([, provider, missing]) => {
+    const result = signInConfigSchema.safeParse({ providers: [provider] })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((i) => i.path.join('.'))).toContain(`providers.0.${missing}`)
+  })
+})
+
 describe('a trusted-header provider', () => {
   const proxy = {
     id: 'corp-proxy',
@@ -178,6 +189,14 @@ describe('a trusted-header provider', () => {
       '::/0',
     ]) {
       expect(parse({ ...proxy, trustedAddresses: [bad] }).success, bad).toBe(false)
+    }
+  })
+
+  // The widest range accepted is /1 and the narrowest a host route: the
+  // bounds themselves are admitted, one step outside either is not.
+  it('accepts /1 and the full-width prefix of each address family', () => {
+    for (const ok of ['10.0.0.0/1', '10.0.0.1/32', '::/1', '::1/128']) {
+      expect(parse({ ...proxy, trustedAddresses: [ok] }).success, ok).toBe(true)
     }
   })
 
