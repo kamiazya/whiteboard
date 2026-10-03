@@ -114,9 +114,51 @@ describe('a store holding an entry this build cannot read', () => {
     expect(loadWrappedKey(DAEMON, 'ws-1')).toEqual(BLOB)
   })
 
-  it('keeps them when another key is saved', () => {
+  const rawRecord = () =>
+    JSON.parse(localStorage.getItem('whiteboard:replica-sealed-keys') ?? '{}') as Record<
+      string,
+      unknown
+    >
+
+  it('keeps them, byte for byte in storage, when another key is saved', () => {
     seedWithUnreadable()
     saveWrappedKey(OTHER, 'ws-2', BLOB)
     expect(loadWrappedKey(DAEMON, 'ws-1')).toEqual(BLOB)
+    expect(rawRecord()['from-a-newer-build']).toEqual({ ...BLOB, addedByANewerBuild: true })
+  })
+
+  it('keeps them when another key is dropped', () => {
+    seedWithUnreadable()
+    dropWrappedKey(DAEMON, 'ws-1')
+    expect(rawRecord()).toEqual({
+      'from-a-newer-build': { ...BLOB, addedByANewerBuild: true },
+    })
+  })
+
+  it('lets a save replace an unreadable entry under its own key', () => {
+    seedWithUnreadable()
+    const key = `${DAEMON}\u0000ws-1`
+    const raw = rawRecord()
+    localStorage.setItem(
+      'whiteboard:replica-sealed-keys',
+      JSON.stringify({ ...raw, [key]: { ...BLOB, addedByANewerBuild: true } }),
+    )
+    expect(loadWrappedKey(DAEMON, 'ws-1')).toBeNull()
+
+    saveWrappedKey(DAEMON, 'ws-1', BLOB)
+
+    expect(rawRecord()[key]).toEqual(BLOB)
+  })
+
+  it('removes an unreadable entry when its own key is dropped', () => {
+    const key = `${DAEMON}\u0000ws-1`
+    localStorage.setItem(
+      'whiteboard:replica-sealed-keys',
+      JSON.stringify({ [key]: { ...BLOB, addedByANewerBuild: true } }),
+    )
+
+    dropWrappedKey(DAEMON, 'ws-1')
+
+    expect(rawRecord()).toEqual({})
   })
 })
