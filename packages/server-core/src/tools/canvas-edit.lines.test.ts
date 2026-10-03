@@ -201,3 +201,66 @@ describe('wb_canvas_edit — ink the batch never mentions', () => {
     expect(stored?.lines?.map((line) => line.id)).toEqual(['l1'])
   })
 })
+
+/**
+ * Edges and lines answer to one id space: a comment's `targetEdgeId` and a
+ * proposal's change both name an element by id, so a line carrying an edge's
+ * id is ambiguous rather than merely untidy.
+ */
+describe('wb_canvas_edit — one id space for edges and lines', () => {
+  const TWO_BOXES_ONE_EDGE: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' }),
+      textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' }),
+    ],
+    edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
+  }
+
+  test('line.add with the id of an existing edge is refused naming the id at the op', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, TWO_BOXES_ONE_EDGE)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'line.add',
+            line: {
+              id: 'e',
+              from: { kind: 'point', point: { x: 0, y: 0 } },
+              to: { kind: 'point', point: { x: 9, y: 9 } },
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/ops\[0\] \(line\.add\).*"e".*edge/)
+  })
+
+  test('edge.add with the id of an existing line is refused naming the id at the op', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      ...TWO_BOXES_ONE_EDGE,
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 9, y: 9 } },
+        },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'edge.add', edge: { id: 'l1', from: { node: 'a' }, to: { node: 'b' } } }],
+      }),
+    ).rejects.toThrow(/ops\[0\] \(edge\.add\).*"l1".*line/)
+  })
+})

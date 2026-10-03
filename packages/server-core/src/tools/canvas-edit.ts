@@ -10,7 +10,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { CanvasEditError, fail } from './canvas-edit-error.js'
+import { CanvasEditError, describeIssues, fail } from './canvas-edit-error.js'
 import { applyCanvasOp, type CanvasEditContext } from './canvas-edit-handlers.js'
 import {
   type CanvasEditInput,
@@ -387,9 +387,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
     throw new CanvasEditError(
       input.ops.length - 1,
       'batch',
-      `the resulting canvas is not valid: ${parsed.error.issues}
-            .map((issue) => issue.message)
-            .join('; ')}`,
+      `the resulting canvas is not valid: ${describeIssues(parsed.error)}`,
     )
   }
 

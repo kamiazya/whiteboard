@@ -22,7 +22,7 @@ import {
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
-import { fail } from './canvas-edit-error.js'
+import { describeIssues, fail } from './canvas-edit-error.js'
 import type { geometryEntrySchema, Target } from './canvas-edit-ops.js'
 import {
   overlaps,
@@ -381,7 +381,7 @@ export class CanvasEditSession {
     return this.edges.map((edge) => edge.id)
   }
 
-  issues = (error: z.ZodError): string => error.issues.map((issue) => issue.message).join('; ')
+  issues = (error: z.ZodError): string => describeIssues(error)
   patchNode = (
     index: number,
     opName: string,

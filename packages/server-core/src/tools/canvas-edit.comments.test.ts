@@ -214,3 +214,27 @@ describe('wb_canvas_edit comment ops', () => {
     ])
   })
 })
+
+describe('wb_canvas_edit comment anchors on fractional nodes', () => {
+  test('comment.add on a node at fractional coordinates rounds the derived anchor to whole pixels', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [textNode({ id: 'n1', x: 0.4, y: 10.7, width: 200.5, height: 80, text: 'content' })],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'comment.add', comment: { targetNodeId: 'n1', text: 'rename this' } }],
+    })
+
+    const [comment] = await storedComments(store)
+    expect(Number.isInteger(comment?.x)).toBe(true)
+    expect(Number.isInteger(comment?.y)).toBe(true)
+    expect(comment?.x).toBe(201)
+    expect(comment?.y).toBe(11)
+  })
+})
