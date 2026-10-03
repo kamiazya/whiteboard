@@ -31,6 +31,10 @@ describe('scanReferences', () => {
     expect(scanReferences('[[never closed')).toEqual([])
   })
 
+  it('a half-closed reference is skipped, and the next one is still found', () => {
+    expect(scanReferences('[[a] and [[b]]').map((match) => match.target)).toEqual(['b'])
+  })
+
   it('splits a #fragment off the target, keeping the alias and the bang', () => {
     const refs = scanReferences(`[[plans/q4#Launch|the launch]] ![[${ID}#Launch]]`)
     expect(refs).toEqual([

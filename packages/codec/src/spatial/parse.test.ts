@@ -37,6 +37,23 @@ describe('parseSpatial failure classes (total parser — never throws)', () => {
     expect(result.error.stage).toBe('json-canvas-schema')
   })
 
+  it('duplicate node id -> stage "json-canvas-schema"', () => {
+    const result = parseSpatial(
+      JSON.stringify({
+        nodes: [
+          { id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'a' },
+          { id: 'n1', type: 'text', x: 20, y: 0, width: 10, height: 10, text: 'b' },
+        ],
+        edges: [],
+      }),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected failure')
+    expect(result.error.stage).toBe('json-canvas-schema')
+    expect(result.error.issues.map((issue) => issue.message)).toContain('duplicate node id "n1"')
+  })
+
   it('duplicate edge id -> stage "json-canvas-schema"', () => {
     const result = parseSpatial(
       JSON.stringify({

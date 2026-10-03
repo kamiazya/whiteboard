@@ -207,6 +207,33 @@ describe('resolveReferences', () => {
     ])
   })
 
+  it('resolves a bare [[ULID]] reference nested inside strong emphasis', () => {
+    const root = {
+      type: 'root' as const,
+      children: [
+        {
+          type: 'paragraph' as const,
+          children: [
+            {
+              type: 'strong' as const,
+              children: [{ type: 'text' as const, value: `see [[${ULID}]]` }],
+            },
+          ],
+        },
+      ],
+    }
+    const resolved = resolveReferences(root)
+
+    const paragraphNode = resolved.children[0]
+    if (paragraphNode.type !== 'paragraph') throw new Error('expected paragraph')
+    const strong = paragraphNode.children[0]
+    if (strong.type !== 'strong') throw new Error('expected strong')
+    expect(strong.children).toEqual([
+      { type: 'text', value: 'see ' },
+      { type: 'wikiLink', documentId: ULID, alias: undefined },
+    ])
+  })
+
   it('does not hang on a pathological unterminated ![[ + many backslashes', () => {
     const pathological = `![[${'\\'.repeat(50000)}`
     const root = paragraph(pathological)
