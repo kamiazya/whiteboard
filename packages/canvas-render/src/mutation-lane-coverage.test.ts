@@ -284,9 +284,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // 100 since `finite-box.ts` became the one definition of a box with
     // finite sides, which three SVG leaves and two layout leaves each spelled
     // for themselves. A predicate the painting suites pin at every call.
+    //
+    // 101 since `layout/edges/route-ends.ts`: the record types the router's
+    // two path builders take, so their ten positional parameters cannot be
+    // handed over in the wrong order. Types only, nothing to mutate.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 20,
-      production: 100,
+      production: 101,
     })
   })
 

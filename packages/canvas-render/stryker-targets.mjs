@@ -82,7 +82,7 @@ export const MUTATED = [
   // Its first report is why `inline-junction.test.ts` exists: 16 of 20
   // survivors came back `judged by 0 tests` and the rest by one, because
   // nothing NAMED the module — the boundary suite reaches it through
-  // `layoutMdastBlocks`, and the wrapping scoreboard that would price it is
+  // `typesetMdastBlocks`, and the wrapping scoreboard that would price it is
   // excluded from the lane for run time. Seven of those survivors were then
   // applied by hand against the direct tests and every one went red, 1 to 9
   // tests each. One — `headCharacter`'s whitespace branch — had killed
