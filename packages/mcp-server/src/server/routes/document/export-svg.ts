@@ -4,7 +4,10 @@ import { messageOf } from '@kamiazya/whiteboard-model'
 import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { ExportResponse } from '../../../shared/api-contracts/export.js'
-import { exportSvgRequestSchema } from '../../../shared/api-contracts/export-svg.js'
+import {
+  type ExportSvgRequest,
+  exportSvgRequestSchema,
+} from '../../../shared/api-contracts/export-svg.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
@@ -49,7 +52,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
     async (c, workspaceId, path) => {
       const parsedBody = parseOptionalJsonBody(await c.req.text(), exportSvgRequestSchema)
       if ('error' in parsedBody) return c.json(parsedBody.error, 400)
-      const body = parsedBody.body
+      const body: ExportSvgRequest = parsedBody.body
 
       const exportsDir = options.scope.layout.exportsDir(workspaceId)
       const resolved = await resolveRequestedOutputPath(body, workspaceId, exportsDir)
