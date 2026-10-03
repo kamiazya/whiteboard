@@ -22,6 +22,9 @@ vi.mock('./app-logger.js', async (importOriginal) => {
   }
 })
 
+// The pull lazy-loads the workspace-docs module (and loro with it); the first
+// case to reach it would pay that graph inside a 1s `vi.waitFor`.
+import './browser-workspace-docs.js'
 import {
   resetReplicaRefreshForTests,
   scheduleReplicaPush,
@@ -194,6 +197,48 @@ describe('scheduleReplicaRefresh', () => {
     expect(cache).toHaveBeenCalledTimes(2)
   })
 
+  it('a fresh entry recorded for another daemon does not hold the dedupe for this one', async () => {
+    const OTHER = 'http://127.0.0.1:4000'
+    const cache = vi.fn().mockImplementation(async () => ({
+      kind: 'ok' as const,
+      syncedAt: new Date().toISOString(),
+      documentCount: 1,
+    }))
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
+    // The same workspace id is now claimed by another daemon, freshly.
+    scheduleReplicaRefresh(deps({ cache, daemonBaseUrl: OTHER }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(2))
+    expect(createUserSettingsStore().load().storage.replicas?.[WS]?.daemonBaseUrl).toBe(OTHER)
+
+    // BASE has refreshed this session, but the fresh claim is not its own.
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(3))
+  })
+
+  it('a cancel that arrives after the pull began leaves it claimed, so a second resolve does not double it', async () => {
+    let finishPull: (() => void) | undefined
+    const cache = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPull = () =>
+            resolve({ kind: 'ok', syncedAt: new Date().toISOString(), documentCount: 1 })
+        }),
+    )
+    const cancel = scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
+
+    cancel()
+    const schedule = vi.fn()
+    scheduleReplicaRefresh(deps({ cache, schedule }))
+
+    expect(schedule).not.toHaveBeenCalled()
+    finishPull?.()
+    await vi.waitFor(() =>
+      expect(createUserSettingsStore().load().storage.replicas?.[WS]).toBeDefined(),
+    )
+  })
+
   it('a failed pull is retried on the next resolve, not abandoned for the session', async () => {
     const cache = vi
       .fn()
@@ -327,6 +372,30 @@ describe('scheduleReplicaPush', () => {
       ...over,
     }
   }
+
+  it('is claimed until it finishes, so a second resolve schedules nothing', () => {
+    const schedule = vi.fn()
+    scheduleReplicaPush(pushDeps({ schedule }) as never)
+    scheduleReplicaPush(pushDeps({ schedule }) as never)
+
+    expect(schedule).toHaveBeenCalledTimes(1)
+  })
+
+  it('is claimed per daemon and workspace, so another daemon holding the same id is its own push', () => {
+    const schedule = vi.fn()
+    scheduleReplicaPush(pushDeps({ schedule }) as never)
+    scheduleReplicaPush(pushDeps({ schedule, daemonBaseUrl: 'http://127.0.0.1:4000' }) as never)
+
+    expect(schedule).toHaveBeenCalledTimes(2)
+  })
+
+  it('a cancel before its slot comes up releases the claim', () => {
+    const schedule = vi.fn()
+    scheduleReplicaPush(pushDeps({ schedule }) as never)()
+    scheduleReplicaPush(pushDeps({ schedule }) as never)
+
+    expect(schedule).toHaveBeenCalledTimes(2)
+  })
 
   it('a dirty replica ships, and the registry keeps its other fields', async () => {
     seedEntry(FRONTIER_SYNCED)

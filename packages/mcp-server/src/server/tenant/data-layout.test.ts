@@ -2,15 +2,19 @@ import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { FsBlobStore } from '../store/fs/fs-blob-store.js'
 import {
   blobShardDir,
   blobShardPath,
   blobsRoot,
   isAnyTenantBlobsPath,
+  isBlobShardName,
+  isTenantBlobsRootUnderTenants,
   listTenants,
   moveLegacyDataDirUnderTenant,
   parseBlobShard,
+  storeAreaOf,
   tenantRoot,
   workspaceFilesDir,
 } from './data-layout.js'
@@ -40,6 +44,24 @@ describe('where a tenant keeps its files', () => {
   it('keeps one tenant out of another tenant root', () => {
     expect(tenantRoot(dataDir, SELF)).not.toBe(tenantRoot(dataDir, OTHER))
     expect(blobsRoot(dataDir, OTHER).startsWith(tenantRoot(dataDir, OTHER))).toBe(true)
+  })
+})
+
+describe('whether a tenant id builds a blob root directly under tenants/', () => {
+  it('accepts an ordinary tenant id, one that has no directory yet included', async () => {
+    expect(await isTenantBlobsRootUnderTenants(dataDir, SELF)).toBe(true)
+    expect(await isTenantBlobsRootUnderTenants(dataDir, '01JTENANT0000000000000000A')).toBe(true)
+  })
+
+  it.each([
+    ['climbs out of the data directory', '../../../outside'],
+    ['is the parent directory', '..'],
+    ['is the current directory', '.'],
+    ['is empty', ''],
+    ['holds a separator', 'a/b'],
+    ['climbs and comes back', 'a/../../b'],
+  ])('refuses a tenant id that %s', async (_why, tenantId) => {
+    expect(await isTenantBlobsRootUnderTenants(dataDir, tenantId)).toBe(false)
   })
 })
 
@@ -94,6 +116,21 @@ describe('moving a data directory written before tenants existed', () => {
     ])
   })
 
+  it.each([
+    ['models', 'models'],
+    ['the staging area', PENDING_WRITES_DIRNAME],
+    ['tenants', 'tenants'],
+  ])('leaves %s alone even when it holds a directory named files', async (_name, dirname) => {
+    await mkdir(join(dataDir, dirname, 'files'), { recursive: true })
+
+    expect(await moveLegacyDataDirUnderTenant(dataDir, SELF)).toEqual({
+      blobs: false,
+      workspaces: [],
+    })
+    expect(await readdir(join(dataDir, dirname))).toEqual(['files'])
+    expect(await readdir(dataDir)).toEqual([dirname])
+  })
+
   it('is a no-op the second time, so a restart does not move a live tenant back', async () => {
     await seedLegacy()
     await moveLegacyDataDirUnderTenant(dataDir, SELF)
@@ -133,6 +170,37 @@ describe('what a keeper-wide pass has to walk', () => {
       isAnyTenantBlobsPath(dataDir, join(workspaceFilesDir(dataDir, SELF, 'ws-1'), 'a.png')),
     ).toBe(false)
   })
+
+  it('does not take a sibling that only shares the tenants directory name prefix', () => {
+    expect(isAnyTenantBlobsPath(dataDir, join(dataDir, 'tenants-old', SELF, 'blobs', 'ab'))).toBe(
+      false,
+    )
+    expect(isAnyTenantBlobsPath(dataDir, join(dataDir, 'tenants-old', 'blobs', 'ab'))).toBe(false)
+  })
+
+  it('does not count a stray file under tenants/ as a tenant', async () => {
+    await mkdir(blobsRoot(dataDir, SELF), { recursive: true })
+    await writeFile(join(dataDir, 'tenants', '.DS_Store'), 'x')
+    expect(await listTenants(dataDir)).toEqual([SELF])
+  })
+})
+
+describe('which store a path under the data directory is in', () => {
+  const area = (...parts: string[]) => storeAreaOf(dataDir, join(dataDir, ...parts))
+
+  it('names the blob store, a workspace files directory and an exports directory', () => {
+    expect(area('tenants', SELF, 'blobs', 'ab', 'cd')).toBe('blobs')
+    expect(area('tenants', SELF, 'workspaces', 'ws-1', 'files', 'a.png')).toBe('files')
+    expect(area('ws-1', 'exports', 'out.svg')).toBe('exports')
+  })
+
+  it('answers null for everything else, including what sits beside a workspace files directory', () => {
+    expect(area('whiteboard.db')).toBeNull()
+    expect(area('fonts', 'a.woff2')).toBeNull()
+    expect(area('tenants', SELF, 'workspaces', 'ws-1')).toBeNull()
+    expect(area('tenants', SELF, 'workspaces', 'ws-1', 'notes', 'a.txt')).toBeNull()
+    expect(area('tenants', SELF, 'something-else')).toBeNull()
+  })
 })
 
 describe('where a content digest sits under a blob root', () => {
@@ -146,6 +214,11 @@ describe('where a content digest sits under a blob root', () => {
   it('reads back as the digest it was written from', () => {
     const [shard, entry] = [digest.slice(0, 2), digest.slice(2)]
     expect(parseBlobShard(shard, entry)).toBe(digest)
+  })
+
+  it('takes exactly two lowercase hex characters as a shard name', () => {
+    expect(isBlobShardName('ab')).toBe(true)
+    for (const name of ['', 'a', 'abc', 'AB', 'zz', 'a-']) expect(isBlobShardName(name)).toBe(false)
   })
 
   it('refuses anything not named as a shard wrote it', () => {

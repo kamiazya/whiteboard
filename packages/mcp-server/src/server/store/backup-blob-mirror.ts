@@ -19,6 +19,7 @@ import { dirname, join, posix, relative, sep } from 'node:path'
 import { blobRefSchema } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
+import { isSafePathSegment, isSafeRelativePosixPath } from '../../shared/path-containment.js'
 import { sha256Hex } from '../../shared/sha256.js'
 import { writeFileAtomic } from '../../shared/write-file-atomic.js'
 import { getLogger } from '../log.js'
@@ -56,6 +57,16 @@ const BLOB_MANIFEST_FILENAME = 'blobs.json'
 // The digest's shape is the `BlobRef` contract's, not restated here.
 const DIGEST = blobRefSchema.shape.digestHex
 
+// A manifest is an artifact a restore reads from somewhere it does not
+// control, and these two strings are joined under the target data directory
+// there. Refused at the schema so no reader of the manifest has to remember to
+// check; `materialiseMirroredBlobs` checks the destination again, because the
+// schema guards what is read and not what is later built from it.
+const TENANT_ID = z.string().refine(isSafePathSegment, 'a tenant id is one path segment')
+const FILE_PATH = z
+  .string()
+  .refine(isSafeRelativePosixPath, 'a file path is relative, with no `.`, `..` or empty segment')
+
 /**
  * Which blobs one backup references.
  *
@@ -79,7 +90,7 @@ const tenantReferencesSchema = z.object({
    * the same path. Written by nothing today; read for backups that predate
    * the version thumbnail's retirement.
    */
-  files: z.record(z.string(), DIGEST),
+  files: z.record(FILE_PATH, DIGEST),
 })
 
 /**
@@ -105,7 +116,7 @@ const mirrorLocationSchema = z.enum(['self', 'parent'])
  */
 const manifestSchema = z.object({
   schemaVersion: z.literal(3),
-  tenants: z.record(z.string(), tenantReferencesSchema),
+  tenants: z.record(TENANT_ID, tenantReferencesSchema),
   mirror: mirrorLocationSchema,
 })
 
@@ -113,7 +124,7 @@ const manifestSchema = z.object({
 const legacyManifestSchema = z.object({
   schemaVersion: z.literal(2),
   blobs: z.array(DIGEST),
-  files: z.record(z.string(), DIGEST),
+  files: z.record(FILE_PATH, DIGEST),
   mirror: mirrorLocationSchema,
 })
 

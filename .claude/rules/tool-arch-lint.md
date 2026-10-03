@@ -342,8 +342,8 @@ count: an adapter holding a store's TYPE is the same coupling.
 and `daemon/`, is a mechanic an adapter must ledger. A module in `security/` or
 `tenant/` is not entitled by its directory — `user-deletion` and
 `storage-report` are neither `*-store` nor `data-layout`, and the old directory
-patterns waved both through (`routes/runtime.ts -> tenant/storage-report` is
-ledgered until the report is handed to the route). Add an entitlement by name.
+patterns waved both through (`createApp` now hands the runtime route its
+storage report, so that edge is gone). Add an entitlement by name.
 
 **What counts as a mechanic is wider than `store/`**: a `security/*-store` (the
 people, session, key and invitation rows), anything under the daemon's own

@@ -11,12 +11,13 @@
 import type { BlobStore, RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import {
   blobRefKey,
+  DocumentPathTakenError,
   WorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { describe } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
@@ -128,5 +129,50 @@ describe('LoroWorkspaceDocumentIndex', () => {
       dispose: async () => {},
       seedWorkspace: (entry) => docs.seedWorkspace(entry),
     }
+  })
+})
+
+// Folders exist only in the tree, so these arrangements cannot be written
+// against the port-wide suite: a row-backed index has no folder to empty or to
+// collide with.
+describe('LoroWorkspaceDocumentIndex folders', () => {
+  const WS = 'ws-folders'
+
+  async function makeIndex(): Promise<LoroWorkspaceDocumentIndex> {
+    const docs = inMemoryWorkspaceDocs()
+    const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
+    await index.createWorkspace({ workspaceId: WS })
+    return index
+  }
+
+  it('frees the path of a folder a move emptied', async () => {
+    const index = await makeIndex()
+    await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'markdown' })
+    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+    await index.moveDocument({ workspaceId: WS, from: 'a/b', to: 'c' })
+
+    // A folder left standing at `a` would occupy the path and refuse this.
+    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a', 'c'])
+  })
+
+  it('refuses to move one of two siblings onto the folder they share, and changes nothing', async () => {
+    const index = await makeIndex()
+    await index.createDocument({ workspaceId: WS, path: 'a/x', kind: 'markdown' })
+    await index.createDocument({ workspaceId: WS, path: 'a/y', kind: 'markdown' })
+
+    // `a/y` stays below `a`, so the move does not vacate the folder.
+    const rejection = await index
+      .moveDocument({ workspaceId: WS, from: 'a/x', to: 'a' })
+      .then(() => null)
+      .catch((err: unknown) => err)
+
+    expect(rejection).toBeInstanceOf(DocumentPathTakenError)
+    expect((rejection as DocumentPathTakenError).path).toBe('a')
+    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+      'a/x',
+      'a/y',
+    ])
   })
 })

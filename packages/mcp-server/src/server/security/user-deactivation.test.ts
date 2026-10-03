@@ -55,6 +55,18 @@ describe('createUserDeactivation', () => {
     expect(await sessions.resolve(bobs, 1)).toEqual(bob)
   })
 
+  it('leaves a session for the same subject under a different authenticator', async () => {
+    const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    const namesake = { authenticator: 'oidc:https://other.example', subject: ada.subject }
+    const adas = await sessions.create(ada, 0, HOUR)
+    const namesakes = await sessions.create(namesake, 0, HOUR)
+
+    await deactivation.deactivate(user.id, 1_000)
+
+    expect(await sessions.resolve(adas, 1)).toBeNull()
+    expect(await sessions.resolve(namesakes, 1)).toEqual(namesake)
+  })
+
   it('keeps the user’s memberships, so reactivating restores their access too', async () => {
     const user = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
     await members.addMember('ws-1', user.id)

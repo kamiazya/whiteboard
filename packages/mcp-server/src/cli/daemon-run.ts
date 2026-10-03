@@ -159,7 +159,15 @@ async function resolveStartupToken(
   options: DaemonRunOptions,
 ): Promise<{ token: string } | { outcome: DaemonRunOutcome }> {
   if (!options.tokenStdin) {
-    return { token: (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN ?? nanoid(32) }
+    const fromEnv = (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN
+    // Set-but-empty is refused, never minted over: the operator believes they
+    // chose a token, and a silently different one is as wrong as none.
+    if (fromEnv === '') {
+      return {
+        outcome: { kind: 'input-error', message: 'WHITEBOARD_DAEMON_TOKEN is set but empty.' },
+      }
+    }
+    return { token: fromEnv ?? nanoid(32) }
   }
   let token: string
   try {

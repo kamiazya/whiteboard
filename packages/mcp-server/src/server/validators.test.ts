@@ -2,11 +2,22 @@ import { documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-mode
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
 import {
+  ValidationError,
   validateDocumentPath,
   validateFileId,
   validateVersionId,
   validateWorkspaceId,
 } from './validators.js'
+
+function rejection(run: () => unknown): ValidationError {
+  try {
+    run()
+  } catch (error) {
+    if (error instanceof ValidationError) return error
+    throw error
+  }
+  throw new Error('expected a ValidationError, but nothing was thrown')
+}
 
 describe('shared validators', () => {
   it('accepts valid session ids, paths, and ids', () => {
@@ -102,5 +113,54 @@ describe('validateDocumentPath / documentPathSchema conformance', () => {
     ),
   ])('accept exactly the same strings', (path) => {
     expect(documentPathSchema.safeParse(path).success).toBe(accepts(path))
+  })
+})
+
+// The conformance blocks above pin WHICH strings are refused. These pin WHY, since
+// the validator's whole job over the schema is the per-cause explanation a caller reads.
+describe('validator rejection reasons', () => {
+  it.each([
+    ['', 'invalid_document_path', /path is empty/],
+    ['a b', 'invalid_document_path', /segment "a b" contains whitespace/],
+    ['a/b\tc', 'invalid_document_path', /segment "b\tc" contains whitespace/],
+    ['a.b', 'invalid_document_path', /segment "a\.b" contains '\.'/],
+    ['-a', 'invalid_document_path', /segment "-a" leading hyphen is not allowed/],
+    ['a/-b', 'invalid_document_path', /segment "-b" leading hyphen is not allowed/],
+    ['a-', 'invalid_document_path', /segment "a-" trailing hyphen is not allowed/],
+    ['a-/b', 'invalid_document_path', /segment "a-" trailing hyphen is not allowed/],
+    ['a//b', 'invalid_document_path', /segment "" empty segment/],
+    ['/a', 'invalid_document_path', /segment "" empty segment/],
+    ['a\u00e9', 'invalid_document_path', /segment "a\u00e9" contains invalid character/],
+  ])('validateDocumentPath(%j) says why', (path, code, message) => {
+    const error = rejection(() => validateDocumentPath(path))
+    expect(error.error).toBe(code)
+    expect(error.message).toMatch(message)
+  })
+
+  it.each([
+    ['', /workspaceId is empty/],
+    ['a b', /only ASCII letters, digits, "_" and "-" are allowed/],
+    ['a.b', /only ASCII letters, digits, "_" and "-" are allowed/],
+  ])('validateWorkspaceId(%j) says why', (id, message) => {
+    const error = rejection(() => validateWorkspaceId(id))
+    expect(error.error).toBe('invalid_workspace_id')
+    expect(error.message).toMatch(message)
+  })
+
+  it('names the kind of identifier in the error code', () => {
+    expect(rejection(() => validateVersionId('a.b')).error).toBe('invalid_version_id')
+    expect(rejection(() => validateFileId('a.b')).error).toBe('invalid_file_id')
+  })
+
+  // The cap is a second rule behind the character class: an over-long id is
+  // made only of allowed characters, so only its length can refuse it.
+  it.each([
+    { kind: 'version id', validate: validateVersionId, cap: 64 },
+    { kind: 'file id', validate: validateFileId, cap: 128 },
+  ])('caps a $kind at $cap characters', ({ kind, validate, cap }) => {
+    expect(validate('a'.repeat(cap))).toHaveLength(cap)
+    const error = rejection(() => validate('a'.repeat(cap + 1)))
+    expect(error.error).toBe(`invalid_${kind.replace(' ', '_')}`)
+    expect(error.message).toContain(`exceeds ${cap} character limit`)
   })
 })

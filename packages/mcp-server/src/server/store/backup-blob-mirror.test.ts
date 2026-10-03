@@ -199,6 +199,24 @@ describe('the backup blob mirror', () => {
     expect(shards).toEqual([createHash('sha256').update('real blob').digest('hex').slice(0, 2)])
   })
 
+  it('leaves a stray entry inside a shard alone, and does not record it as a blob', async () => {
+    const digest = await putBlob('real blob')
+    // What an interrupted write leaves beside real content.
+    await writeFile(
+      join(
+        blobsRoot(dataDir, SELF_HOST_TENANT_ID),
+        digest.slice(0, 2),
+        `${digest.slice(2)}.partial`,
+      ),
+      'half',
+    )
+
+    const references = await mirrorBlobsIntoBackup(dataDir, backupRoot)
+
+    expect([...selfBlobs(references)]).toEqual([digest])
+    expect(await readdir(join(backupRoot, 'blobs', digest.slice(0, 2)))).toEqual([digest.slice(2)])
+  })
+
   it('is content, not just a name: a mirrored blob reads back byte for byte', async () => {
     const digest = await putBlob('the actual bytes')
     await mirrorBlobsIntoBackup(dataDir, backupRoot)
@@ -350,6 +368,98 @@ describe('the backup blob mirror', () => {
         }
       },
     )
+
+    /**
+     * A manifest is read from a backup somebody else may have produced, and the
+     * tenant ids and file paths in it are joined under a directory on restore.
+     * Refused where it is read, so no caller has to remember to.
+     */
+    describe('naming a path', () => {
+      const digest = createHash('sha256').update('named').digest('hex')
+
+      async function backupWithManifest(manifest: unknown): Promise<string> {
+        const dir = join(backupRoot, '2026-01-04T00-00-00.000Z')
+        await mkdir(dir, { recursive: true })
+        await writeFile(join(dir, 'blobs.json'), JSON.stringify(manifest))
+        return dir
+      }
+
+      it('accepts a nested relative file path and an ordinary tenant id', async () => {
+        const dir = await backupWithManifest({
+          schemaVersion: 3,
+          mirror: 'self',
+          tenants: { 'tenant-01': { blobs: [], files: { 'thumbs/deep/a.png': digest } } },
+        })
+        expect(await readBackupBlobManifest(dir)).toEqual({
+          mirror: 'self',
+          tenants: { 'tenant-01': { blobs: new Set(), files: { 'thumbs/deep/a.png': digest } } },
+        })
+      })
+
+      it.each([
+        ['climbs', '../escaped.txt'],
+        ['climbs after a segment', 'a/../../escaped.txt'],
+        ['is absolute', '/escaped.txt'],
+        ['has an empty segment', 'a//b'],
+        ['has a dot segment', 'a/./b'],
+        ['uses a backslash', 'a\\b'],
+        ['is empty', ''],
+      ])('refuses a files key that %s', async (_why, key) => {
+        const current = await backupWithManifest({
+          schemaVersion: 3,
+          mirror: 'self',
+          tenants: { 'self-host': { blobs: [], files: { [key]: digest } } },
+        })
+        await expect(readBackupBlobManifest(current)).rejects.toBeInstanceOf(
+          BackupManifestUnusableError,
+        )
+        const legacy = join(backupRoot, '2026-01-05T00-00-00.000Z')
+        await mkdir(legacy, { recursive: true })
+        await writeFile(
+          join(legacy, 'blobs.json'),
+          JSON.stringify({ schemaVersion: 2, mirror: 'self', blobs: [], files: { [key]: digest } }),
+        )
+        await expect(readBackupBlobManifest(legacy)).rejects.toBeInstanceOf(
+          BackupManifestUnusableError,
+        )
+      })
+
+      it.each([
+        ['climbs', '../outside'],
+        ['is the parent directory', '..'],
+        ['is the current directory', '.'],
+        ['is empty', ''],
+        ['holds a separator', 'a/b'],
+        ['holds a backslash', 'a\\b'],
+      ])('refuses a tenant id that %s', async (_why, tenantId) => {
+        const dir = await backupWithManifest({
+          schemaVersion: 3,
+          mirror: 'self',
+          tenants: { [tenantId]: { blobs: [], files: {} } },
+        })
+        await expect(readBackupBlobManifest(dir)).rejects.toBeInstanceOf(
+          BackupManifestUnusableError,
+        )
+      })
+    })
+
+    it('throws on a manifest of a version this build does not know, rather than answering null', async () => {
+      const unknown = join(backupRoot, '2026-01-06T00-00-00.000Z')
+      await mkdir(unknown, { recursive: true })
+      await writeFile(
+        join(unknown, 'blobs.json'),
+        JSON.stringify({ schemaVersion: 4, mirror: 'self', tenants: {} }),
+      )
+      await expect(readBackupBlobManifest(unknown)).rejects.toBeInstanceOf(
+        BackupManifestUnusableError,
+      )
+    })
+
+    it('throws on a manifest path that is not a readable file, whoever is reading it', async () => {
+      const odd = join(backupRoot, '2026-01-07T00-00-00.000Z')
+      await mkdir(join(odd, 'blobs.json'), { recursive: true })
+      await expect(readBackupBlobManifest(odd)).rejects.toBeInstanceOf(BackupManifestUnusableError)
+    })
 
     it('throws on a manifest that is there but cannot be read', async () => {
       const broken = join(backupRoot, '2026-01-02T00-00-00.000Z')

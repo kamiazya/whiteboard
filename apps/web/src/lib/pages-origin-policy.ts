@@ -32,18 +32,15 @@ export function classifyPagesOrigin(candidate: string): PagesOriginClass {
   if (url.hostname.includes('*')) return 'non-bare-origin'
 
   // Bare-origin: scheme + host + optional port, nothing else (no path, query, hash, credentials).
-  // Credentials are also caught by origin normalisation, but checked explicitly for clarity.
-  if (url.origin !== candidate || url.username !== '' || url.password !== '') {
-    return 'non-bare-origin'
-  }
+  // `URL.origin` carries none of those, so any candidate that has one differs from it.
+  if (url.origin !== candidate) return 'non-bare-origin'
 
   // Insecure scheme check before hostname checks so http://localhost returns 'insecure'.
   if (url.protocol !== 'https:') return 'insecure'
 
   const host = url.hostname
-  if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1') {
-    return 'localhost'
-  }
+  // `URL.hostname` keeps an IPv6 literal's brackets.
+  if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') return 'localhost'
 
   if (candidate === PROVISIONAL_PRODUCTION_ORIGIN) return 'production'
 

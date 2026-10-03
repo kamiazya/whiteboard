@@ -145,6 +145,27 @@ describe('resolveHostedRuntimeConfig', () => {
     }
   })
 
+  it('rejects the production host on a non-default port as a custom domain, not as production', () => {
+    expect(() =>
+      resolveHostedRuntimeConfig({ publicOrigin: 'https://kamiazya-whiteboard.pages.dev:8443' }),
+    ).toThrow(/custom domain/i)
+  })
+
+  it('rejects a host that merely ends in the pages domain as a custom domain, not as a preview', () => {
+    expect(() =>
+      resolveHostedRuntimeConfig({ publicOrigin: 'https://notkamiazya-whiteboard.pages.dev' }),
+    ).toThrow(/custom domain/i)
+  })
+
+  it('rejects the IPv6 loopback with the generic copy, as it does every loopback', () => {
+    expect(() => resolveHostedRuntimeConfig({ publicOrigin: 'https://[::1]:5173' })).toThrow(
+      RuntimeConfigPolicyError,
+    )
+    expect(() => resolveHostedRuntimeConfig({ publicOrigin: 'https://[::1]:5173' })).not.toThrow(
+      /custom domain/i,
+    )
+  })
+
   it('custom domain rejection message does not expose the raw origin value', () => {
     let message = ''
     try {

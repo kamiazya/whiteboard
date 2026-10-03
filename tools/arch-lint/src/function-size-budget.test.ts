@@ -621,7 +621,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,
   'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 73,
   'packages/ports/src/test-utils/blob-store-conformance.ts#describeBlobStoreConformance': 127,
-  'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 673,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 720,
   'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 639,
   // +4: the two v1 POST routes refuse a body that names the URL's own
   // workspace or document before parsing — two lines each, the refusal

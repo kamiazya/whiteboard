@@ -3,10 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
 import { createMemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
 import { membershipAdmit } from '../security/membership-gate.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
-import { requiresDaemonAuth } from './auth.js'
+import { createDaemonAuthMiddleware, requiresDaemonAuth } from './auth.js'
 
 describe('requiresDaemonAuth', () => {
   it('default-requires bearer auth for every /api method, not just mutations', () => {
@@ -74,5 +75,28 @@ describe('membershipAdmit', () => {
     const body = (await res.json()) as { decision: string }
     expect(body.decision).toBe('requires_person_session')
     expect(body.decision).not.toBe('admitted')
+  })
+
+  it('hands the grant the middleware resolved to a handler that decides membership itself', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'auth-membership-remembered-'))
+    dbHandle = await createIsolatedDb({ dataDir: dir })
+    const members = createMemberProfileStore(dbHandle.db)
+    const person = passkeyBinding('https://example.test', 'member-cred')
+    const profile = await members.ensureProfile({ binding: person, displayName: 'Member' })
+    await members.addMember('ws1', profile.id)
+
+    const grant: ResolvedGrant = { kind: 'signed-in', scopes: ['workspace:read'], person }
+    const resolver: CredentialResolver = { resolve: async () => grant }
+    const admit = membershipAdmit(members)
+    const app = new Hono()
+    app.use('/api/*', createDaemonAuthMiddleware(resolver))
+    app.get('/api/workspaces/ws1', async (c) => c.json({ decision: await admit(c, 'ws1') }))
+
+    const res = await app.request('/api/workspaces/ws1')
+
+    // Were the grant not remembered, `admit` would find none and answer
+    // `requires_person_session`; only the middleware's own grant names a member.
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ decision: 'admitted' })
   })
 })

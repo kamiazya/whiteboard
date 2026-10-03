@@ -13,8 +13,8 @@ paths:
   listing entry and a `LoroDoc`.
 - **What the graph answers** (`ReferenceAggregate`, `mentionsOfIn`,
   `unlinkedNameSpans`): backlinks and unlinked mentions, computed from those
-  facts. The aggregate is the one query engine; an event feed, if one lands,
-  fills the same structure rather than becoming a second answer.
+  facts. The aggregate is the one query engine, fed one upsert per listed
+  document by `backlinksIn`; there is no event feed.
 - **The digest-validated cache** (`ContentFactsCache`): facts kept between
   reads and re-extracted only for a document whose listing `contentDigest`
   moved. The digest is a hash of the MERGED content, computed at read time by
@@ -71,5 +71,6 @@ recording: two answers that drift with every test green.
   `server-core` (`references/content-facts-cache.test.ts`), beside the
   command-model property (`reference-semantics.property.test.ts`) that
   checks the cached answers against a fresh scan after every command.
-- `reference-aggregate.property.test.ts` holds the aggregate's convergence
-  under shuffled, duplicated event streams.
+- `reference-aggregate.property.test.ts` holds the aggregate's
+  order-independence over a listing and its backlinks against an independent
+  inverse-of-forward-references oracle.

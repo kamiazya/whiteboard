@@ -67,17 +67,10 @@ type OriginPatternFailureReason =
   | 'wildcard_not_leftmost'
   | 'wildcard_multi_label'
   | 'wildcard_suffix_too_short'
-  | 'wildcard_ip_suffix'
 
 export type OriginPatternParseResult =
   | { ok: true; pattern: OriginPattern }
   | { ok: false; reason: OriginPatternFailureReason }
-
-const IPV4_LIKE = /^\d{1,3}(\.\d{1,3}){3}$/
-
-function isIpLiteralSuffix(suffix: string): boolean {
-  return IPV4_LIKE.test(suffix)
-}
 
 // Parses a single configured allowlist entry that may be an exact https(s)
 // origin or a leftmost-label wildcard subdomain pattern. Exact entries are
@@ -130,13 +123,10 @@ export function parseOriginPatternEntry(entry: string): OriginPatternParseResult
   }
   if (restLabels.length < 2) return { ok: false, reason: 'wildcard_suffix_too_short' }
 
-  // Defense in depth only: WHATWG URL parsing already throws before this
-  // point for the common case of an IPv4-shaped suffix (e.g.
-  // "*.127.0.0.1" fails to parse as a URL at all, surfacing as
-  // 'unparseable' above), but this catches any suffix that manages to
-  // reach here looking like a bare IPv4 address.
+  // No IP-literal check is needed: WHATWG URL parsing already threw above for a
+  // suffix whose last label is numeric, so every IPv4-shaped one reads as
+  // 'unparseable'.
   const suffixHost = restLabels.join('.')
-  if (isIpLiteralSuffix(suffixHost)) return { ok: false, reason: 'wildcard_ip_suffix' }
 
   const pattern = originPatternSchema.parse({
     kind: 'wildcard-subdomain',

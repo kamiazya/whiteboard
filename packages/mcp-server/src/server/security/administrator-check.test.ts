@@ -55,6 +55,17 @@ describe('createAdministratorCheck', () => {
     expect(await check.isAdministrator(bob!)).toBe(false)
   })
 
+  it('does not admit the same subject under another authenticator than the configuration names', async () => {
+    const check = createAdministratorCheck({
+      admins: createTenantAdministratorStore(handle.db),
+      members,
+      configured,
+    })
+    // A subject is only unique within its identity provider: ada-1 at another
+    // IdP is a different person.
+    expect(await check.isAdministrator({ ...ada!, authenticator: 'other-idp' })).toBe(false)
+  })
+
   it('admits a user the tenant appointed', async () => {
     const admins = createTenantAdministratorStore(handle.db)
     const user = await members.ensureProfile({ binding: bob!, displayName: 'Bob' })

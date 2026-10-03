@@ -92,4 +92,64 @@ describe('createReplicaSaveQueue', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(order).toEqual(['start a', 'end a', 'start b', 'end b'])
   })
+
+  it('with no debounce given, waits half a second of quiet before saving', async () => {
+    const save = vi.fn<(record: string) => Promise<void>>().mockResolvedValue(undefined)
+    const queue = createReplicaSaveQueue<string>({ save, onHealth: () => undefined })
+    queue.schedule('a')
+
+    await vi.advanceTimersByTimeAsync(499)
+    expect(save).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(save.mock.calls).toEqual([['a']])
+  })
+
+  it('restarts the quiet window on every schedule', async () => {
+    const save = vi.fn<(record: string) => Promise<void>>().mockResolvedValue(undefined)
+    const { queue } = setup(save)
+    queue.schedule('a')
+    await vi.advanceTimersByTimeAsync(99)
+    queue.schedule('b')
+    await vi.advanceTimersByTimeAsync(99)
+    expect(save).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(save.mock.calls).toEqual([['b']])
+  })
+
+  it('flush after the save has landed saves nothing again', async () => {
+    const save = vi.fn<(record: string) => Promise<void>>().mockResolvedValue(undefined)
+    const { queue } = setup(save)
+    queue.schedule('a')
+    await vi.advanceTimersByTimeAsync(100)
+
+    queue.flush()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+
+  it('retry takes the save now and cancels the one still waiting, so the record is saved once', async () => {
+    const save = vi.fn<(record: string) => Promise<void>>().mockResolvedValue(undefined)
+    const { queue } = setup(save)
+    queue.schedule('a')
+
+    queue.retry()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(save.mock.calls).toEqual([['a']])
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+
+  it('retry with nothing ever scheduled saves nothing', async () => {
+    const save = vi.fn<(record: string) => Promise<void>>().mockResolvedValue(undefined)
+    const { queue } = setup(save)
+
+    queue.retry()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(save).not.toHaveBeenCalled()
+  })
 })

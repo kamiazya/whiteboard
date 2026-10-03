@@ -12,11 +12,15 @@ export function parseBearerAuthorizationHeader(header: string | undefined): stri
   return token
 }
 
+// An ABSENT token is the one open daemon. An empty string is a configuration
+// slip (`FOO=`, a blank `.env` line) and must not read as "no authentication":
+// it matches no presented bearer, because `parseBearerAuthorizationHeader`
+// never yields an empty one, so every caller is refused.
 export function isAuthorized(
   authorization: string | undefined,
   token: string | undefined,
 ): boolean {
-  if (!token) return true
+  if (token === undefined) return true
   const parsed = parseBearerAuthorizationHeader(authorization)
   return parsed !== null && timingSafeEqualStrings(parsed, token)
 }

@@ -19,8 +19,7 @@ export {
  * Content facts come through the stamp-validated ContentFactsCache: only
  * documents whose frontier moved since the last request are reloaded. The
  * per-request ReferenceAggregate build over cached facts is in-memory map
- * work and stays; the aggregate remains the one query engine an event feed
- * would also fill.
+ * work and stays; the aggregate is the one query engine, rebuilt per request.
  */
 export async function computeBacklinks(
   deps: ServerDeps,

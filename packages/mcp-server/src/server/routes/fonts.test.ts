@@ -130,6 +130,26 @@ describe('GET /api/fonts/:id/file', () => {
     expect(await res.text()).toBe('font-bytes')
   })
 
+  it('serves the file of the font asked for when others are installed too', async () => {
+    const [first, second] = FONT_CATALOGUE
+    await mkdir(fontsDir(), { recursive: true })
+    await writeFile(join(fontsDir(), `${first!.id}.ttf`), 'first-bytes')
+    await writeFile(join(fontsDir(), `${second!.id}.ttf`), 'second-bytes')
+
+    expect(await (await serve().request(`/api/fonts/${second!.id}/file`)).text()).toBe(
+      'second-bytes',
+    )
+    expect(await (await serve().request(`/api/fonts/${first!.id}/file`)).text()).toBe('first-bytes')
+  })
+
+  it('answers 404 for a catalogued font that is not installed while another one is', async () => {
+    const [installed, other] = FONT_CATALOGUE
+    await mkdir(fontsDir(), { recursive: true })
+    await writeFile(join(fontsDir(), `${installed!.id}.ttf`), 'bytes')
+
+    expect((await serve().request(`/api/fonts/${other!.id}/file`)).status).toBe(404)
+  })
+
   it('answers 404 for a font that is catalogued but not installed, and for an unknown id', async () => {
     expect((await serve().request(`/api/fonts/${FONT_CATALOGUE[0]!.id}/file`)).status).toBe(404)
     expect((await serve().request('/api/fonts/nobody/file')).status).toBe(404)

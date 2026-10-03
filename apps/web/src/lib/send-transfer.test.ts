@@ -232,6 +232,76 @@ describe('sending a transfer through a window at the destination', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
 
+  it('mints a different nonce for each attempt, so a stale window cannot answer a new one', async () => {
+    const minted: string[] = []
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const popup = fakePopup()
+      const { nonce: _supplied, ...options } = baseOptions(popup)
+      const sent = sendTransfer(options)
+      const url = String(options.openWindow.mock.calls[0]?.[0])
+      minted.push(/nonce=([0-9a-f]{32})$/.exec(url)?.[1] ?? '')
+      popup.closed = true
+      await sent
+    }
+    expect(minted[0]).toMatch(/^[0-9a-f]{32}$/)
+    expect(minted[1]).toMatch(/^[0-9a-f]{32}$/)
+    expect(minted[0]).not.toBe(minted[1])
+    expect(minted[0]).not.toBe('0'.repeat(32))
+  })
+
+  it('posts one offer however many times the destination says it is ready', async () => {
+    const popup = fakePopup()
+    const sent = sendTransfer(baseOptions(popup))
+    const ready = {
+      type: 'transfer-ready',
+      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+      nonce: NONCE,
+    }
+    arrive(KEEPER, ready)
+    arrive(KEEPER, ready)
+    await vi.waitFor(() => expect(popup.posted.length).toBeGreaterThanOrEqual(1))
+    // Closing the window settles the attempt, which is the point after which
+    // any second offer would already have been posted.
+    popup.closed = true
+    await sent
+    expect(popup.posted).toHaveLength(1)
+  })
+
+  it.each([
+    ['a result whose ok is not a boolean', { ok: 'maybe' }],
+    [
+      'a success that names no workspace',
+      { ok: true, promotedDocumentIds: [], shadowedPaths: [], attested: true },
+    ],
+    ['a refusal with no reason', { ok: false }],
+  ])('settles as a refusal rather than hanging on %s', async (_label, fields) => {
+    const popup = fakePopup()
+    const sent = sendTransfer(baseOptions(popup))
+    arrive(KEEPER, { type: 'transfer-result', nonce: NONCE, ...fields })
+    // The window closing is the backstop a hung attempt would fall back to; it
+    // must lose to the unreadable result, which is what names the cause.
+    popup.closed = true
+    await expect(sent).resolves.toEqual({
+      ok: false,
+      reason: 'The keeper answered with a result this app could not read.',
+    })
+  })
+
+  it('stops polling the window once a result settles the attempt', async () => {
+    vi.useFakeTimers()
+    const popup = fakePopup()
+    const sent = sendTransfer(baseOptions(popup))
+    expect(vi.getTimerCount()).toBe(1)
+    arrive(KEEPER, {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: false,
+      reason: 'declined',
+    })
+    await expect(sent).resolves.toEqual({ ok: false, reason: 'declined' })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('reports a blocked popup as something the person can act on', async () => {
     const result = await sendTransfer(baseOptions(null))
     expect(result.ok).toBe(false)
@@ -283,6 +353,11 @@ describe('checking the destination a person typed', () => {
     expect(parseDestination('http://localhost:3099', SELF_ORIGIN).ok).toBe(true)
     expect(parseDestination('http://127.0.0.1:3099', SELF_ORIGIN).ok).toBe(true)
     expect(parseDestination('http://keeper.example', SELF_ORIGIN).ok).toBe(false)
+  })
+  it('does not take a host that merely begins with a loopback name for this machine', () => {
+    expect(parseDestination('http://localhost.evil.example', SELF_ORIGIN).ok).toBe(false)
+    expect(parseDestination('http://127.0.0.1.evil.example', SELF_ORIGIN).ok).toBe(false)
+    expect(parseDestination('http://evil.example/localhost', SELF_ORIGIN).ok).toBe(false)
   })
   it('refuses something that is not an address, and this app itself', () => {
     expect(parseDestination('keeper.example', SELF_ORIGIN).ok).toBe(false)

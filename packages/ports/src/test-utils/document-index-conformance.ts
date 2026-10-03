@@ -295,6 +295,40 @@ export function describeDocumentIndexConformance(
     })
   })
 
+  it('renames a folder to an extension of its own name, leaving a prefix-sharing sibling alone', async () => {
+    await withIndex(async (index) => {
+      // `design-v2` starts with `design` but is not inside it: a rename to it
+      // is an ordinary move, and `design-system` must not travel along.
+      await index.createDocument({ workspaceId: WS, path: 'design/a', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'design-system/b', kind: 'markdown' })
+
+      await index.moveDocument({ workspaceId: WS, from: 'design', to: 'design-v2' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+        'design-system/b',
+        'design-v2/a',
+      ])
+    })
+  })
+
+  it('does not read a destination that merely extends the source as a collision', async () => {
+    await withIndex(async (index) => {
+      // `design/a` produces `x/a`; `x-system/a` shares the destination's
+      // spelling as a prefix but sits at a different path altogether.
+      await index.createDocument({ workspaceId: WS, path: 'design/a', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'design-system/a', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'x-system/a', kind: 'markdown' })
+
+      await index.moveDocument({ workspaceId: WS, from: 'design', to: 'x' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+        'design-system/a',
+        'x/a',
+        'x-system/a',
+      ])
+    })
+  })
+
   it('refuses a move into the moving subtree', async () => {
     await withIndex(async (index) => {
       await index.createDocument({ workspaceId: WS, path: 'a', kind: 'spatial' })
@@ -306,6 +340,19 @@ export function describeDocumentIndexConformance(
 
       expect(await index.resolveDocument({ workspaceId: WS, path: 'a' })).not.toBeNull()
       expect(await index.resolveDocument({ workspaceId: WS, path: 'a/x' })).not.toBeNull()
+    })
+  })
+
+  it('deletes a document whose name merely prefixes a sibling', async () => {
+    await withIndex(async (index) => {
+      await index.createDocument({ workspaceId: WS, path: 'design', kind: 'spatial' })
+      await index.createDocument({ workspaceId: WS, path: 'design-system', kind: 'spatial' })
+
+      await index.deleteDocument({ workspaceId: WS, path: 'design' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+        'design-system',
+      ])
     })
   })
 

@@ -9,10 +9,13 @@ import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
-import { ALL_AUTH_SCOPES } from './auth-strategy.js'
+import { ALL_AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
-import { createServerModeApiAuthMiddleware } from './server-mode-middleware.js'
+import {
+  createServerModeApiAuthMiddleware,
+  createServerModeMcpAuthMiddleware,
+} from './server-mode-middleware.js'
 import {
   createSignInSessionStore,
   SESSION_COOKIE,
@@ -172,5 +175,47 @@ describe('server mode — a session changes nothing from another origin', () => 
     ['no origin at all', undefined],
   ] as const)('ignores the session on a write from %s', async ([, origin]) => {
     expect((await writeAs(origin)).status).toBe(401)
+  })
+})
+
+describe('server mode — /mcp asks its bearer for mcp:call', () => {
+  // "Bearer <scope>,<scope>" holds exactly those scopes, and the strategy
+  // refuses 403 when any scope the route asked for is missing — the shape the
+  // real resource-server strategy answers an insufficient token with.
+  const scoped: AsyncAuthStrategy = {
+    async authorize({ authorizationHeader, requiredScopes }) {
+      const held = (authorizationHeader?.replace(/^Bearer /, '') ?? '').split(',')
+      if (requiredScopes.some((scope) => !held.includes(scope))) {
+        return { ok: false, status: 403, code: 'auth.forbidden' }
+      }
+      return {
+        ok: true,
+        context: {
+          kind: 'oauth-resource-server',
+          subject: 'ada',
+          scopes: held as AuthScope[],
+        },
+        person: { authenticator: ISSUER, subject: 'ada' },
+      }
+    },
+  }
+
+  const mcp = (authorization: string) => {
+    const mcpApp = new Hono()
+    mcpApp.use(
+      '/mcp',
+      createServerModeMcpAuthMiddleware(scoped, { members, sessions, origin: ORIGIN }),
+    )
+    mcpApp.post('/mcp', (c) => c.json({ reached: true }))
+    return mcpApp.request('/mcp', { method: 'POST', headers: { authorization } })
+  }
+
+  it('lets a token carrying mcp:call through', async () => {
+    expect((await mcp('Bearer canvas:read,mcp:call')).status).toBe(200)
+  })
+
+  it('refuses a token that lacks mcp:call, whatever else it holds', async () => {
+    expect((await mcp('Bearer canvas:read')).status).toBe(403)
+    expect((await mcp('Bearer ')).status).toBe(403)
   })
 })

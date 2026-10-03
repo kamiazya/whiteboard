@@ -50,6 +50,25 @@ describe('saveWrappedKey / loadWrappedKey', () => {
     expect(loadWrappedKey(DAEMON, 'ws-1')).toEqual(next)
   })
 
+  it('keeps pairs whose spellings would run together apart', () => {
+    // Without a separator these two pairs concatenate to the same string.
+    saveWrappedKey('http://127.0.0.1:1', '23', BLOB)
+    const other = { ...BLOB, ct: 'GBkaGxwdHh8gISIj' }
+    saveWrappedKey('http://127.0.0.1:12', '3', other)
+
+    expect(loadWrappedKey('http://127.0.0.1:1', '23')).toEqual(BLOB)
+    expect(loadWrappedKey('http://127.0.0.1:12', '3')).toEqual(other)
+  })
+
+  it('files a record under the daemon, a NUL and the workspace id', () => {
+    saveWrappedKey(`${DAEMON}/`, 'ws-1', BLOB)
+
+    // A record written by an earlier tab or build is found by this exact key,
+    // so the on-disk spelling is part of the contract, not an implementation detail.
+    const raw = JSON.parse(localStorage.getItem('whiteboard:replica-sealed-keys') ?? '{}')
+    expect(Object.keys(raw)).toEqual([`${DAEMON}\u0000ws-1`])
+  })
+
   it('reads a record it cannot parse as absent rather than throwing', () => {
     localStorage.setItem(
       'whiteboard:replica-sealed-keys',
