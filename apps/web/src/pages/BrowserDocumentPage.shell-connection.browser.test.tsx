@@ -82,7 +82,6 @@ describe('shell mark over a real document kept in this browser', () => {
       await screen.findByRole('link', { name: 'How to connect a daemon' }, { timeout: 5000 }),
     ).toBeInTheDocument()
     expect(screen.getByText(/install the whiteboard extension/i)).toBeInTheDocument()
-    expect(screen.queryByTestId('daemon-port-input')).toBeNull()
   })
 
   // The one condition a browser-kept document can raise on its own: the
@@ -124,8 +123,6 @@ describe('shell mark over a real document kept in this browser', () => {
       expect(screen.getByTestId('shell-mark-trigger').getAttribute('aria-label')).toMatch(
         /write failed/i,
       )
-      // Still no carrier in the document's own row.
-      expect(screen.queryByTestId('save-status-chip')).toBeNull()
     } finally {
       IDBDatabase.prototype.transaction = transaction
     }

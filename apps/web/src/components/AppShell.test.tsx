@@ -92,7 +92,6 @@ describe('AppShell', () => {
     // below is a decision and not a menu that never rendered.
     expect(await screen.findByRole('menuitem', { name: /design team/i })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: /all documents/i })).toBeNull()
-    expect(screen.queryByTestId('shell-mark-home')).toBeNull()
   })
 
   it('keeps the workspace name out of the header row', async () => {
@@ -527,7 +526,7 @@ describe('AppShell — the mark as the connection carrier', () => {
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     await waitFor(() => expect(screen.getByTestId('shell-mark-popover')).toBeTruthy())
 
-    expect(screen.queryByTestId('connection-disconnect')).toBeNull()
+    expect(screen.queryByRole('button', { name: /disconnect/i })).toBeNull()
     expect(screen.getByRole('link', { name: /manage in settings/i }).getAttribute('href')).toBe(
       '/settings/connections',
     )

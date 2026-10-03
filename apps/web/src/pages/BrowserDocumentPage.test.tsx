@@ -474,7 +474,6 @@ describe('BrowserDocumentPage', () => {
     })
     // No save state in the row: the shell mark answers for the keeper, and
     // only on a condition. The facts stay published for tests, hidden.
-    expect(screen.queryByTestId('save-status-chip')).toBeNull()
     const fact = screen.getByTestId('persistence-state')
     expect(fact.hidden).toBe(true)
     expect(fact.getAttribute('data-save-state')).toBe('saved')

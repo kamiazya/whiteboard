@@ -33,7 +33,7 @@ describe('ConnectionStatus chip', () => {
     fireEvent.click(screen.getByTestId('shell-mark-trigger'))
 
     const popover = screen.getByTestId('shell-mark-popover')
-    expect(screen.queryByTestId('connection-disconnect')).toBeNull()
+    expect(screen.queryByRole('button', { name: /disconnect/i })).toBeNull()
     // It still says where the data is, and points at where the action lives.
     expect(popover.textContent).toMatch(/127\.0\.0\.1:3099/)
     expect(screen.getByRole('link', { name: /settings/i }).getAttribute('href')).toBe(
