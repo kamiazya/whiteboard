@@ -299,4 +299,67 @@ describe('runNativeHost', () => {
     page.close()
     await page.done
   })
+
+  it('forwards the daemon response headers back to the page, except a cookie', async () => {
+    await startDaemon((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json', etag: '"v1"', 'set-cookie': 'x=1' })
+      res.end('{}')
+    })
+    const page = connectPage()
+
+    page.send({ type: 'request', id: 'r1', method: 'GET', path: '/api/x', headers: {} })
+    await page.until((m) => m.some((x) => x.type === 'end'))
+
+    const head = page.received.find((m) => m.type === 'head')
+    expect(head?.type === 'head' && head.headers['content-type']).toBe('application/json')
+    expect(head?.type === 'head' && head.headers.etag).toBe('"v1"')
+    expect(head?.type === 'head' && head.headers['set-cookie']).toBeUndefined()
+    page.close()
+    await page.done
+  })
+
+  // A frame that fails the schema is answered under its id when it carries a
+  // usable one (1 to 64 characters), and dropped otherwise: the page cannot be
+  // told which request it concerned. `hello` is the marker that every frame
+  // before it has been handled.
+  it('answers a malformed frame bad-request when its id is usable, and drops it otherwise', async () => {
+    const page = connectPage()
+
+    page.send({ type: 'request', id: 'a' })
+    page.send({ type: 'request', id: 'b'.repeat(64) })
+    page.send({ type: 'request', id: 'c'.repeat(65) })
+    page.send({ type: 'request', id: '' })
+    page.send({ type: 'hello' })
+    await page.until((m) => m.some((x) => x.type === 'hello'))
+
+    const answered = page.received.flatMap((m) => (m.type === 'error' ? [m.id] : []))
+    expect(answered).toEqual(['a', 'b'.repeat(64)])
+    page.close()
+    await page.done
+  })
+
+  it('survives a frame that is not an object', async () => {
+    const page = connectPage()
+
+    page.send(42)
+    page.send(null)
+    page.send('text')
+    page.send({ type: 'hello' })
+    await page.until((m) => m.some((x) => x.type === 'hello'))
+
+    expect(page.received.filter((m) => m.type === 'error')).toEqual([])
+    page.close()
+    await expect(page.done).resolves.toBeUndefined()
+  })
+})
+
+describe('bodyChunks', () => {
+  it('emits no empty trailing chunk when the body is an exact multiple of the cap', () => {
+    const chunks = bodyChunks(Buffer.alloc(BRIDGE_CHUNK_BYTES * 2, 7))
+
+    expect(chunks).toHaveLength(2)
+    expect(chunks.every((chunk) => chunk.length > 0)).toBe(true)
+    expect(bodyChunks(Buffer.alloc(0))).toEqual([])
+    expect(bodyChunks(Buffer.alloc(BRIDGE_CHUNK_BYTES + 1))).toHaveLength(2)
+  })
 })

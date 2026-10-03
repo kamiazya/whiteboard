@@ -86,12 +86,41 @@ test('mutation-comment: no report path is a usage error, exit 2', () => {
   assert.equal(run(comment, ['--marker', 'x']).status, 2)
 })
 
-test('mutation-comment: --equivalents is imported and a recorded survivor is excluded', () => {
+// The ledger must be the module the flag names: an empty one cannot tell a flag that is read from
+// one that is ignored, so this survivor is recorded in it and must leave the table.
+test('mutation-comment: --equivalents imports the ledger, so a recorded survivor is counted, not listed', () => {
+  const equivalentsReport = join(dir, 'equivalents-report.json')
+  writeFileSync(
+    equivalentsReport,
+    JSON.stringify({
+      files: {
+        'src/a.ts': {
+          source: 'const x = a > b\n',
+          mutants: [
+            {
+              mutatorName: 'EqualityOperator',
+              replacement: 'a >= b',
+              status: 'Survived',
+              location: { start: { line: 1, column: 11 }, end: { line: 1, column: 16 } },
+            },
+          ],
+        },
+      },
+    }),
+  )
   const eq = join(dir, 'eq.mjs')
-  writeFileSync(eq, 'export const KNOWN_EQUIVALENT = {}\n')
-  const r = run(comment, [report, '--equivalents', eq])
-  assert.equal(r.status, 0)
-  assert.match(r.stdout, /src\/a\.ts/)
+  writeFileSync(
+    eq,
+    "export const KNOWN_EQUIVALENT = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }\n",
+  )
+
+  const withLedger = run(comment, [equivalentsReport, '--equivalents', eq])
+  assert.equal(withLedger.status, 0)
+  assert.doesNotMatch(withLedger.stdout, /\| `src\/a\.ts:1`/)
+  assert.match(withLedger.stdout, /already recorded as equivalent/)
+
+  const without = run(comment, [equivalentsReport])
+  assert.match(without.stdout, /\| `src\/a\.ts:1`/)
 })
 
 test('mutation-comment: originalSource spans lines — first line tail, middle lines, last line head', () => {
