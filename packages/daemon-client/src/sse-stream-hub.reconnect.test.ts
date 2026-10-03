@@ -197,9 +197,12 @@ describe('stream connect refusals', () => {
   it('stops the retry loop on a 401 from the stream connect', async () => {
     const d = statusDaemon([401, 'open', 'open'])
     const hub = new SseStreamHub({ fetch: d.fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
-    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
-    await vi.waitFor(() => expect(d.requests()).toBe(1))
-    await new Promise((r) => setTimeout(r, 100))
+    const refused = vi.fn()
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: refused })
+    // The hub marks itself refused before it announces, so by the time the
+    // callback arrives the loop can no longer connect again: the count holds
+    // without waiting on time.
+    await vi.waitFor(() => expect(refused).toHaveBeenCalledTimes(1))
     expect(d.requests()).toBe(1)
     expect(d.opened()).toBe(0)
     hub.close()
