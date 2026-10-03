@@ -23,9 +23,12 @@ describe('parseOptionalJsonBody', () => {
   })
 
   it('refuses a body the schema rejects, naming the stray key', () => {
-    const result = parseOptionalJsonBody('{"zzz":1}', schema)
-    expect('error' in result && result.error.error).toBe('invalid_request')
-    expect('error' in result && result.error.message).toContain('zzz')
+    expect(parseOptionalJsonBody('{"zzz":1}', schema)).toEqual({
+      error: expect.objectContaining({
+        error: 'invalid_request',
+        message: expect.stringContaining('zzz'),
+      }),
+    })
   })
 
   it('answers the parsed body when it fits', () => {
