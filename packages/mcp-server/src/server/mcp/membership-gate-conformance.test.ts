@@ -11,15 +11,15 @@ import { createServer, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { FakeVersionHistory } from '@kamiazya/whiteboard-server-core/test-utils/fake-version-history'
 import { describe, expect, it } from 'vitest'
 import type { ResolvedGrant } from '../security/credential-resolver.js'
-import {
-  gatedByMembership,
-  runAsMcpCaller,
-  WORKSPACE_OPTIONAL_TOOLS,
-} from '../security/mcp-caller.js'
+import { gatedByMembership, runAsMcpCaller } from '../security/mcp-caller.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
 import { liveDocuments } from '../store/live-documents.js'
 import { connectDocumentTools } from './_test-document-tools-client.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
+
+// The tools whose input leaves workspaceId optional, in registration order.
+// `wb_facet_list` with none answers the deployment's facet registry alone.
+const WORKSPACE_OPTIONAL = ['wb_facet_list']
 
 function realTools() {
   return createServer({
@@ -41,24 +41,17 @@ describe('the membership gate over the registered tools', () => {
   })
 
   // A required field is what the gate selects on; an optional one is a way
-  // to skip it. The allowlist is the one deliberate exception, and each entry
-  // is a registered tool, so a retired tool cannot leave a permission behind.
-  it('requires workspaceId on every tool except the allowlisted ones', async () => {
+  // to skip it. The one deliberate exception is written out here, apart from
+  // the gate's own list, so the two have to agree: a tool whose schema leaves
+  // the field optional must be one the gate lets through, and no other.
+  it('requires workspaceId on every tool except the one that answers without it', async () => {
     const { tools } = await connectDocumentTools()
-    for (const tool of tools) {
-      const required = tool.inputSchema.required ?? []
-      const allowlisted = WORKSPACE_OPTIONAL_TOOLS.has(tool.name)
-      expect(
-        required.includes('workspaceId') || allowlisted,
-        `${tool.name} has no required workspaceId and is not allowlisted`,
-      ).toBe(true)
-      if (allowlisted) {
-        expect(tool.inputSchema.properties).toHaveProperty('workspaceId')
-        expect(required).not.toContain('workspaceId')
-      }
-    }
-    for (const name of WORKSPACE_OPTIONAL_TOOLS) {
-      expect(ALL_REGISTERED_TOOLS as readonly string[]).toContain(name)
+    const optional = tools
+      .filter((tool) => !(tool.inputSchema.required ?? []).includes('workspaceId'))
+      .map((tool) => tool.name)
+    expect(optional).toEqual(WORKSPACE_OPTIONAL)
+    for (const tool of tools.filter((t) => WORKSPACE_OPTIONAL.includes(t.name))) {
+      expect(tool.inputSchema.properties).toHaveProperty('workspaceId')
     }
   })
 
@@ -82,18 +75,20 @@ describe('the membership gate over the registered tools', () => {
     }
   })
 
-  it('refuses every tool that names no workspace, except the allowlisted ones', async () => {
+  it('lets through, naming no workspace, exactly the tools whose schema allows it', async () => {
     const gated = gatedByMembership(realTools(), { resolveWorkspace: async () => null })
     const grant: ResolvedGrant = { kind: 'external-bearer', scopes: ['mcp:call'] }
     const members = { membersOnly: async () => true } as unknown as MemberProfileStore
+    const passed: string[] = []
     for (const tool of Object.values(gated)) {
-      if (WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) continue
-      await expect(
-        runAsMcpCaller({ grant, members }, () =>
-          (tool as { execute(input: unknown): Promise<unknown> }).execute({}),
-        ),
-        tool.name,
-      ).rejects.toThrow(/workspace_required/)
+      const outcome = await runAsMcpCaller({ grant, members }, () =>
+        (tool as { execute(input: unknown): Promise<unknown> }).execute({}),
+      ).then(
+        () => 'ran',
+        (error: Error) => (/workspace_required/.test(error.message) ? 'refused' : 'ran'),
+      )
+      if (outcome === 'ran') passed.push(tool.name)
     }
+    expect(passed).toEqual(WORKSPACE_OPTIONAL)
   })
 })

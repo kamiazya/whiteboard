@@ -39,7 +39,7 @@ interface WorkspaceScopedTool {
  * deployment's facet registry, which belongs to no workspace. Naming one
  * still goes through the gate.
  */
-export const WORKSPACE_OPTIONAL_TOOLS: ReadonlySet<string> = new Set(['wb_facet_list'])
+const WORKSPACE_OPTIONAL_TOOLS: ReadonlySet<string> = new Set(['wb_facet_list'])
 
 interface WorkspaceScopedInput {
   readonly workspaceId?: unknown
