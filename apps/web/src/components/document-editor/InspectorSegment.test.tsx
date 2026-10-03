@@ -68,7 +68,7 @@ describe('InspectorSegment', () => {
   // ADR-0029 decision 9's place. Proposals sit beside comments rather than
   // beside history because both are what somebody put ON this document
   // through the annotation layer — ADR-0026's residents — where history is
-  // what the document WAS. (User decision, this session.)
+  // what the document WAS.
   it('offers Proposals at nought, pressable, the way Comments is', () => {
     render(
       <InspectorSegment

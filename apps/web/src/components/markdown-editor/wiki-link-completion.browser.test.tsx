@@ -133,8 +133,8 @@ describe('wiki link completion (real browser)', () => {
   })
 
   it('the preview catches up with an accepted completion once the debounce settles', async () => {
-    // The dogfood report: on a phone, accepting a completion left the
-    // preview disagreeing with the source. The controlled round-trip is
+    // On a phone, accepting a completion left the preview disagreeing with
+    // the source. The controlled round-trip is
     // value -> onChange -> value -> debounced preview; this pins that an
     // accept (a programmatic dispatch, not typing) travels the whole way.
     function Harness() {

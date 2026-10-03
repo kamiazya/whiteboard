@@ -53,8 +53,8 @@ import { type DrawnPath, withGroupMates } from './ink-hit.js'
 
 /**
  * The surfaces an element kind has to be answered for. Each one is a place a
- * line was forgotten; the list is the shape of this session's bug report,
- * not a taxonomy invented in advance.
+ * line was forgotten; the list is the surfaces where a kind was actually
+ * missed, not a taxonomy invented in advance.
  */
 type EditorSurface =
   | 'press'

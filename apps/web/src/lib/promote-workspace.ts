@@ -3,10 +3,10 @@
  * ANOTHER KEEPER's workspace, identity and history intact.
  *
  * The destination is `keeperBaseUrl` and has always been a plain parameter.
- * It was called `daemonBaseUrl` until 2026-09-22 because the local daemon
- * was the only thing that could receive one — a name that made the transfer
- * read as daemon-shaped when nothing about it is. ADR-0023 makes the
- * destination the workspace's new KEEPER, so that is the word. A browser
+ * It is not called `daemonBaseUrl`: a daemon is only one kind of keeper, and
+ * a name saying so would make the transfer read as daemon-shaped when nothing
+ * about it is. ADR-0023 makes the destination the workspace's new KEEPER, so
+ * that is the word. A browser
  * transfers directly to a SaaS or a self-hosted server with no daemon hop
  * (user decision, 2026-09-22); the receiving route is not gated on
  * `authMode`, so server mode already answers it.

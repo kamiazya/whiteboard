@@ -824,8 +824,8 @@ describe('App daemon provider state', () => {
   it('mounts the document once the workspace identity settles after first paint', async () => {
     // `boot.ts` bounds the identity resolve at 3s and renders DEGRADED past
     // it — a stale tab blocking the IndexedDB version upgrade is the
-    // realistic way there, and this PR's own v15 migration is exactly such an
-    // upgrade. Past that bound the identity settles while React is already
+    // realistic way there, and an IndexedDB schema-version migration is exactly
+    // such an upgrade. Past that bound the identity settles while React is already
     // mounted, and a module-level accessor that nobody subscribes to updates
     // without re-rendering anything: the deep link stays on the index, and
     // `browserHandle === null` disables every navigation out of it. Not a

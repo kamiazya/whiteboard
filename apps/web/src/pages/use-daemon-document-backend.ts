@@ -3,8 +3,8 @@
  * that belongs to a connection rather than to the page: whether the daemon
  * refused it.
  *
- * Extracted from `DaemonDocumentPage`'s own hook (audit-triage 2026-09-21,
- * item 6 slice 4) along the seam its closures already drew: everything here
+ * Kept apart from `DaemonDocumentPage` along the seam its closures draw:
+ * everything here
  * reads the pairing payload and the controller's resolved (workspace, path,
  * documents) and nothing else, and nothing outside reads its parts
  * separately — `contentDocumentId` travels with the backend because they
