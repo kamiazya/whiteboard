@@ -87,10 +87,9 @@ async function seedFreshFile(
   await writeFile(join(dir, `${fileId}${ext}`), Buffer.alloc(bytes, 0xcd))
 }
 
-// Retired legacy shape — kept ONLY for the two tests below that specifically
-// pin legacy-doc behavior (the additive pass, and tombstone semantics that
-// exist only in this shape). Every other test seeds through the current
-// nodes-model fixture (spatial-doc.js) instead.
+// The retired 'elements' shape, for the tests that pin that nothing reads
+// it any more. Every other test seeds through the current nodes-model fixture
+// (spatial-doc.js) instead.
 function makeDocWithImage(fileId: string): LoroDoc {
   const doc = new LoroDoc()
   const list = doc.getMovableList('elements')
@@ -154,42 +153,16 @@ describe('purgeDanglingFiles', () => {
     expect(remaining).toEqual(['used-a.png', 'used-b.png'])
   })
 
-  it('legacy elements doc: referenced file survives the purge (additive pass)', async () => {
-    // Pre-migration docs that were never resaved through the current
-    // nodes/edges model still store their images in the retired 'elements'
-    // movable list — collectFromDoc's second pass must keep protecting
-    // them even though every current doc uses the nodes-model pass above.
+  it('a doc holding only the retired elements list protects no file', async () => {
+    // Nothing converts that list into nodes and no reader draws it, so an
+    // image only it names is as unreachable as an orphan upload.
     await saveDocument('ws_legacy', 'page', makeDocWithImage('legacy-image'))
     await seedFile('ws_legacy', 'legacy-image', '.png', 321)
 
     const result = await purgeDanglingFiles('ws_legacy')
 
-    expect(result.purgedCount).toBe(0)
-    const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_legacy'))
-    ).sort()
-    expect(remaining).toEqual(['legacy-image.png'])
-  })
-
-  it('legacy isDeleted=true element does not protect its fileId', async () => {
-    // The tombstone concept exists only in the legacy 'elements' shape —
-    // the nodes model has no isDeleted flag, a removed node is simply
-    // absent from the map.
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    const map = list.insertContainer(0, new LoroMap())
-    map.set('id', 'tombstone')
-    map.set('type', 'image')
-    map.set('fileId', 'soft-deleted')
-    map.set('isDeleted', true)
-    doc.commit()
-    await saveDocument('ws_b', 'tombstoned', doc)
-
-    await seedFile('ws_b', 'soft-deleted', '.png', 800)
-
-    const result = await purgeDanglingFiles('ws_b')
     expect(result.purgedCount).toBe(1)
-    expect(result.purgedBytes).toBe(800)
+    expect(result.purgedBytes).toBe(321)
   })
 
   it('returns zero counts for a workspace with no files dir yet', async () => {
@@ -197,10 +170,7 @@ describe('purgeDanglingFiles', () => {
     expect(result).toEqual({ purgedCount: 0, purgedBytes: 0 })
   })
 
-  it('mixed workspace: a legacy-elements doc and a nodes-model doc each protect their own file, an aged orphan is still purged', async () => {
-    // Pins the two-pass walker running in ONE scan: a workspace mid-
-    // migration has some documents still in the legacy shape and some
-    // already resaved through the current model.
+  it('mixed workspace: a nodes-model doc protects its file while a legacy-elements doc does not', async () => {
     await saveDocument('ws_mixed', 'legacy-page', makeDocWithImage('legacy-ref'))
     await saveDocument('ws_mixed', 'nodes-page', makeSpatialDocWithImage('nodes-ref'))
 
@@ -210,12 +180,12 @@ describe('purgeDanglingFiles', () => {
 
     const result = await purgeDanglingFiles('ws_mixed')
 
-    expect(result.purgedCount).toBe(1)
-    expect(result.purgedBytes).toBe(30)
+    expect(result.purgedCount).toBe(2)
+    expect(result.purgedBytes).toBe(40)
     const remaining = (
       await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_mixed'))
     ).sort()
-    expect(remaining).toEqual(['legacy-ref.png', 'nodes-ref.png'])
+    expect(remaining).toEqual(['nodes-ref.png'])
   })
 
   it('does not protect an upload whose id merely matches a plain (non-asset:) file value', async () => {

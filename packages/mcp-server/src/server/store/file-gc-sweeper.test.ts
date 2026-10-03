@@ -2,8 +2,9 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setImmediate as realSetImmediate, setTimeout as realSetTimeout } from 'node:timers'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { makeSpatialDocWithImage } from '../../shared/test-utils/spatial-doc.js'
 import {
   workspaceDir as tenantWorkspaceDir,
   workspaceFilesDir,
@@ -663,27 +664,12 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
     // Uses the REAL default purge fn (no `purge` override) to prove
     // createFileGcSweeper wires its internally-constructed FileVersionStore
     // into purgeDanglingFiles, not just that a caller-supplied stub works.
-    await saveDocument(
-      'ws_v',
-      'evolving',
-      (() => {
-        const doc = new LoroDoc()
-        const list = doc.getMovableList('elements')
-        const map = list.insertContainer(0, new LoroMap())
-        map.set('id', 'el-version-only')
-        map.set('type', 'image')
-        map.set('fileId', 'version-only')
-        map.set('isDeleted', false)
-        doc.commit()
-        return doc
-      })(),
-    )
+    await saveDocument('ws_v', 'evolving', makeSpatialDocWithImage('version-only'))
     const store = new FileVersionStore()
     await store.save('ws_v', 'evolving', await loadDocument('ws_v', 'evolving'), { auto: false })
 
     const live = await loadDocument('ws_v', 'evolving')
-    const list = live.getMovableList('elements')
-    if (list.length > 0) list.delete(0, list.length)
+    writeSpatialCanvas(live, { nodes: [], edges: [] })
     live.commit()
     await saveDocument('ws_v', 'evolving', live, { overwrite: true })
 

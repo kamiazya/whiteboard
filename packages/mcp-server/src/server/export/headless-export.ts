@@ -10,10 +10,8 @@ import { readFacets, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { readTagLibrary, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { carriesATag, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-server-core'
-import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
-import { getLogger } from '../log.js'
 import { documentExists, getDoc } from '../store/document-store.js'
 import type { StoreScope } from '../store/store-scope.js'
 import {
@@ -22,8 +20,6 @@ import {
   renderSpatialCanvasToPng,
   renderSpatialCanvasToSvg,
 } from './headless-renderer.js'
-
-const log = getLogger('headless-export')
 
 // Derived from exportRequestSchema (zod-schema-discipline) instead of
 // hand-written, so a wire-field rename/removal in the schema is caught at
@@ -36,43 +32,15 @@ export type HeadlessCanvasExportOptions = Pick<
   'padding' | 'scale' | 'theme' | 'style'
 >
 
-// `doc.getMovableList(name)` CREATES the root container as a side effect of
-// the call alone (even with no explicit write or commit) — it is not a
-// read-only probe. `getShallowValue()` reflects only containers that
-// already exist, so checking for the 'elements' key there — then reading
-// the existing container's length via `getContainerById` — detects legacy
-// data without ever mutating a normal (non-legacy) canvas's doc.
-function hasLegacyElements(doc: LoroDoc): boolean {
-  const containerId = doc.getShallowValue().elements
-  if (typeof containerId !== 'string') return false
-  const container = doc.getContainerById(containerId)
-  return container !== undefined && 'length' in container && container.length > 0
-}
-
-// Test-only: exercises the non-mutating probe directly against a bare
-// LoroDoc, isolated from document-store's own (separate, pre-existing)
-// legacy-list-migration probe on the load path.
-export const _hasLegacyElementsForTests = hasLegacyElements
-
-// Shared by both format entry points below: reads the persisted doc and
-// derives its spatial canvas. A doc whose spatial layer is empty but which
-// still carries a legacy Excalidraw `elements` list is not an error — it is
-// pre-migration data — so it degrades to a valid empty export with a
-// named warning rather than rendering nothing with no explanation.
+// Reads the persisted doc and derives its spatial canvas. A doc holding only
+// the retired Excalidraw `elements` list has no nodes and exports as an empty
+// canvas, the same as every other surface shows it.
 async function readCanvas(
   workspaceId: string,
   path: string,
   scope: StoreScope,
 ): Promise<SpatialCanvas> {
-  const doc = await getDoc(workspaceId, path, scope)
-  const canvas = readSpatialCanvas(doc)
-  if (canvas.nodes.length === 0 && hasLegacyElements(doc)) {
-    log.warning(
-      { workspaceId, path },
-      'canvas has no spatial nodes but carries legacy Excalidraw elements; exporting an empty canvas',
-    )
-  }
-  return canvas
+  return readSpatialCanvas(await getDoc(workspaceId, path, scope))
 }
 
 /**

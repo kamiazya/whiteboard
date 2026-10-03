@@ -50,6 +50,15 @@ function appendElement(doc: LoroDoc, id: string, type = 'rectangle'): void {
   doc.commit()
 }
 
+function nodesDoc(count: number): LoroDoc {
+  return makeSpatialDoc({
+    nodes: Array.from({ length: count }, (_, i) =>
+      textNode({ id: `n${i}`, text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+    ),
+    edges: [],
+  })
+}
+
 function countElements(doc: LoroDoc): number {
   const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
   return list.filter((e) => !e.isDeleted).length
@@ -73,10 +82,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('save records elementCount and returns a VersionEntry', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    appendElement(doc, 'e2')
-    appendElement(doc, 'e3')
+    const doc = nodesDoc(3)
     const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
     expect(entry.id).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(entry.path).toBe('canvas-a')
@@ -176,18 +182,13 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(listed?.elementCount).toBe(3)
   })
 
-  it('save falls back to counting alive legacy elements for a pre-migration doc', async () => {
+  it('save counts nothing for a doc holding only the retired elements list', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
     appendElement(doc, 'e2')
-    const list = doc.getMovableList('elements')
-    const dead = list.insertContainer(list.length, new LoroMap())
-    dead.set('id', 'e3')
-    dead.set('isDeleted', true)
-    doc.commit()
 
     const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    expect(entry.elementCount).toBe(2)
+    expect(entry.elementCount).toBe(0)
   })
 
   it('save keeps its fail-soft 0 when the spatial read throws', async () => {
@@ -302,13 +303,10 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('filters list by path and returns newest first', async () => {
-    const a = new LoroDoc()
-    appendElement(a, 'a1')
+    const a = nodesDoc(1)
     await store.save('sess-1', 'canvas-a', a, { auto: true })
 
-    const b = new LoroDoc()
-    appendElement(b, 'b1')
-    appendElement(b, 'b2')
+    const b = nodesDoc(2)
     await store.save('sess-1', 'canvas-b', b, { auto: true })
 
     await store.save('sess-1', 'canvas-a', a, { auto: false, label: 'v2' })

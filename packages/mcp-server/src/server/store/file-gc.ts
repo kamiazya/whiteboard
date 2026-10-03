@@ -62,47 +62,13 @@ function workspaceFilesDir(scope: StoreScope, workspaceId: string): string {
   )
 }
 
-/**
- * One entry of the legacy `elements` list, as three plain reads.
- *
- * A CONTAINER entry answers through `.get`; a plain-VALUE entry — the shape a
- * workspace-tree projection carries a legacy list in — is its own record and
- * answers through `toJSON()` or directly. Asking that question once here is
- * what lets the caller read the three fields without repeating it per field.
- */
-function legacyElementFields(el: unknown): {
-  type: unknown
-  isDeleted: unknown
-  fileId: unknown
-} | null {
-  if (!el || typeof el !== 'object') return null
-  if (typeof (el as { get?: unknown }).get === 'function') {
-    const get = (el as { get: (k: string) => unknown }).get.bind(el)
-    return { type: get('type'), isDeleted: get('isDeleted'), fileId: get('fileId') }
-  }
-  const obj =
-    (el as { toJSON?: () => Record<string, unknown> }).toJSON?.() ?? (el as Record<string, unknown>)
-  return { type: obj.type, isDeleted: obj.isDeleted, fileId: obj.fileId }
-}
-
-// Walk a single doc state and collect fileIds referenced by it. Two passes,
-// both additive into the same sink:
-//
-// 1. The CURRENT model — collectImageRefIds, the walk shared with the
-//    browser's promote transfer so the two sides cannot drift on what
-//    counts as a live reference.
-// 2. The legacy 'elements' movable list — retired, but a pre-migration doc
-//    that was never resaved through the current model still stores its
-//    images there, so this pass stays as a fallback rather than a rewrite.
+// Walk a single doc state and collect the fileIds it references —
+// collectImageRefIds, the walk shared with the browser's promote transfer so
+// the two sides cannot drift on what counts as a live reference. The retired
+// 'elements' list is not walked: nothing converts it into nodes and no reader
+// draws it, so an image only it names is unreachable.
 function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
   for (const id of collectImageRefIds(doc)) sink.add(id)
-
-  const list = doc.getMovableList('elements')
-  for (let i = 0; i < list.length; i++) {
-    const fields = legacyElementFields(list.get(i))
-    if (fields === null || fields.type !== 'image' || fields.isDeleted === true) continue
-    if (typeof fields.fileId === 'string' && fields.fileId.length > 0) sink.add(fields.fileId)
-  }
 }
 
 // Internal-only description of a canvas/version that GC could not safely

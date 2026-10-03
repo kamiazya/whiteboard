@@ -25,22 +25,44 @@ const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 const { getDoc, saveDocument } = await import('../store/document-store.js')
 const { createDebugRouter } = await import('./debug.js')
 
-function makeDocWithElements(visible: number, tombstones: number): LoroDoc {
+function makeDocWithNodes(count: number): LoroDoc {
+  return makeSpatialDoc({
+    nodes: Array.from({ length: count }, (_, i) =>
+      textNode({ id: `n${i}`, text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+    ),
+    edges: [],
+  })
+}
+
+// The retired Excalidraw list: a document holding only it has no nodes.
+function makeDocWithRetiredElements(count: number): LoroDoc {
   const doc = new LoroDoc()
   const list = doc.getMovableList('elements')
-  for (let i = 0; i < visible; i++) {
+  for (let i = 0; i < count; i++) {
     const map = list.insertContainer(list.length, new LoroMap())
-    map.set('id', `vis-${i}`)
+    map.set('id', `el-${i}`)
     map.set('type', 'rectangle')
-  }
-  for (let i = 0; i < tombstones; i++) {
-    const map = list.insertContainer(list.length, new LoroMap())
-    map.set('id', `dead-${i}`)
-    map.set('type', 'rectangle')
-    map.set('isDeleted', true)
   }
   doc.commit()
   return doc
+}
+
+async function nodeCountsAt(workspaceId: string): Promise<Record<string, number>> {
+  const app = createDebugRouter({
+    scope: testStoreScope(),
+    credentialResolver: createCredentialResolver({}),
+  })
+  const res = await app.request('/api/debug')
+  expect(res.status).toBe(200)
+  const json = (await res.json()) as {
+    workspaces: Array<{
+      workspaceId: string
+      documents: Array<{ path: string; nodeCount: number }>
+    }>
+  }
+  const documents = json.workspaces.find((w) => w.workspaceId === workspaceId)?.documents
+  expect(documents).toBeDefined()
+  return Object.fromEntries(documents!.map((d) => [d.path, d.nodeCount]))
 }
 
 describe('GET /api/debug', () => {
@@ -62,54 +84,15 @@ describe('GET /api/debug', () => {
     clearDocCacheForTests()
   })
 
-  it('returns session and canvas element counts for visible and tombstoned elements', async () => {
+  it("reports each document's node count", async () => {
     await mkdir(join(tempDir, 'sess-a'), { recursive: true })
-    await saveDocument('sess-a', 'canvas-1', makeDocWithElements(3, 2))
-    await saveDocument('sess-a', 'canvas-2', makeDocWithElements(1, 0))
+    await saveDocument('sess-a', 'canvas-1', makeDocWithNodes(3))
+    await saveDocument('sess-a', 'canvas-2', makeDocWithNodes(1))
 
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({}),
-    })
-    const res = await app.request('/api/debug')
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as {
-      workspaces: Array<{
-        workspaceId: string
-        documents: Array<{
-          path: string
-          totalElements: number
-          visibleElements: number
-          tombstones: number
-          cached: boolean
-        }>
-      }>
-      cache: { size: number; keys: string[] }
-    }
-
-    const session = json.workspaces.find((s) => s.workspaceId === 'sess-a')
-    expect(session).toBeDefined()
-    const c1 = session!.documents.find((c) => c.path === 'canvas-1')
-    const c2 = session!.documents.find((c) => c.path === 'canvas-2')
-    expect(c1).toEqual(
-      expect.objectContaining({
-        path: 'canvas-1',
-        totalElements: 5,
-        visibleElements: 3,
-        tombstones: 2,
-      }),
-    )
-    expect(c2).toEqual(
-      expect.objectContaining({
-        path: 'canvas-2',
-        totalElements: 1,
-        visibleElements: 1,
-        tombstones: 0,
-      }),
-    )
+    expect(await nodeCountsAt('sess-a')).toEqual({ 'canvas-1': 3, 'canvas-2': 1 })
   })
 
-  it('reports the real node count for a nodes-model canvas instead of 0', async () => {
+  it('counts nodes only, not the edges between them', async () => {
     await mkdir(join(tempDir, 'sess-nodes'), { recursive: true })
     const doc = makeSpatialDoc({
       nodes: [
@@ -126,80 +109,20 @@ describe('GET /api/debug', () => {
     })
     await saveDocument('sess-nodes', 'canvas-1', doc)
 
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({}),
-    })
-    const res = await app.request('/api/debug')
-    const json = (await res.json()) as {
-      workspaces: Array<{
-        workspaceId: string
-        documents: Array<{
-          path: string
-          totalElements: number
-          visibleElements: number
-          tombstones: number
-        }>
-      }>
-    }
-    const session = json.workspaces.find((s) => s.workspaceId === 'sess-nodes')
-    const canvas = session?.documents.find((c) => c.path === 'canvas-1')
-    expect(canvas).toEqual(
-      expect.objectContaining({
-        path: 'canvas-1',
-        totalElements: 2,
-        visibleElements: 2,
-        tombstones: 0,
-      }),
-    )
+    expect(await nodeCountsAt('sess-nodes')).toEqual({ 'canvas-1': 2 })
   })
 
-  it('ignores stale legacy tombstones once a canvas has migrated to the nodes model', async () => {
-    await mkdir(join(tempDir, 'sess-mixed'), { recursive: true })
-    const doc = makeSpatialDoc({
-      nodes: [textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
-      edges: [],
-    })
-    const legacy = doc.getMovableList('elements')
-    const map = legacy.insertContainer(legacy.length, new LoroMap())
-    map.set('id', 'stale-dead')
-    map.set('type', 'rectangle')
-    map.set('isDeleted', true)
-    doc.commit()
-    await saveDocument('sess-mixed', 'canvas-1', doc)
+  it('counts no nodes for a document holding only the retired elements list', async () => {
+    await mkdir(join(tempDir, 'sess-retired'), { recursive: true })
+    await saveDocument('sess-retired', 'canvas-1', makeDocWithRetiredElements(2))
 
-    const app = createDebugRouter({
-      scope: testStoreScope(),
-      credentialResolver: createCredentialResolver({}),
-    })
-    const res = await app.request('/api/debug')
-    const json = (await res.json()) as {
-      workspaces: Array<{
-        workspaceId: string
-        documents: Array<{
-          path: string
-          totalElements: number
-          visibleElements: number
-          tombstones: number
-        }>
-      }>
-    }
-    const session = json.workspaces.find((s) => s.workspaceId === 'sess-mixed')
-    const canvas = session?.documents.find((c) => c.path === 'canvas-1')
-    expect(canvas).toEqual(
-      expect.objectContaining({
-        path: 'canvas-1',
-        totalElements: 1,
-        visibleElements: 1,
-        tombstones: 0,
-      }),
-    )
+    expect(await nodeCountsAt('sess-retired')).toEqual({ 'canvas-1': 0 })
   })
 
   it('marks only documents touched through getDoc as cached in the cache section', async () => {
     await mkdir(join(tempDir, 'sess-cache'), { recursive: true })
-    await saveDocument('sess-cache', 'touched', makeDocWithElements(1, 0))
-    await saveDocument('sess-cache', 'untouched', makeDocWithElements(1, 0))
+    await saveDocument('sess-cache', 'touched', makeDocWithNodes(1))
+    await saveDocument('sess-cache', 'untouched', makeDocWithNodes(1))
 
     // Only touched documents should appear in cache.
     await getDoc('sess-cache', 'touched')
