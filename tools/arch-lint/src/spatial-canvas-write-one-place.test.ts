@@ -25,11 +25,17 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { countNamedUses } from './named-use-scan.js'
 import { REPO_ROOT, SCAN_ROOTS } from './scan-roots.js'
-import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
+import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const OWNER = 'packages/loro-adapter/src/'
-const CALL = /\bwriteSpatialCanvas(?:Into)?\s*\(/
+const WRITE_NAMES = ['writeSpatialCanvas', 'writeSpatialCanvasInto']
+const ENVELOPE_NAMES = ['writeFacets', 'writeCoreFacets', 'writeTrustFacets']
+
+/** Uses of a name however spelled: bare, qualified, bracketed or through an aliased import. */
+const usesAny = (names: readonly string[], source: string, fileName = 'fixture.ts'): boolean =>
+  countNamedUses(fileName, source, names) > 0
 
 const files: string[] = []
 for (const root of SCAN_ROOTS) walkSourceFiles(join(REPO_ROOT, root), files)
@@ -42,6 +48,8 @@ const FIXTURES: readonly { readonly source: string; readonly calls: boolean }[] 
   { source: 'writeSpatialCanvas(doc, next)', calls: true },
   { source: 'writeSpatialCanvasInto(doc, next)', calls: true },
   { source: 'writer.writeSpatialCanvas (next)', calls: true },
+  { source: 'import { writeSpatialCanvas as save } from "x"\nsave(doc, next)', calls: true },
+  { source: "bridge['writeSpatialCanvasInto'](doc, next)", calls: true },
   { source: 'import { writeSpatialCanvas } from "x"', calls: false },
   { source: '// writeSpatialCanvas(doc, next) is the resync', calls: false },
   { source: "log.warn('writeSpatialCanvas(doc, next)')", calls: false },
@@ -51,7 +59,7 @@ const FIXTURES: readonly { readonly source: string; readonly calls: boolean }[] 
 describe('the whole-canvas resync stays inside loro-adapter', () => {
   it('recognises a call in every spelling, and not a mention', () => {
     for (const { source, calls } of FIXTURES) {
-      expect(CALL.test(stripCommentsAndStrings(source)), source).toBe(calls)
+      expect(usesAny(WRITE_NAMES, source), source).toBe(calls)
     }
   })
 
@@ -63,7 +71,7 @@ describe('the whole-canvas resync stays inside loro-adapter', () => {
 
   it('has no caller in a composition root or another package', () => {
     const callers = production
-      .filter(({ path }) => CALL.test(stripCommentsAndStrings(readFileSync(path, 'utf8'))))
+      .filter(({ path }) => usesAny(WRITE_NAMES, readFileSync(path, 'utf8'), path))
       .map(({ rel }) => rel)
     expect(
       callers,
@@ -72,7 +80,6 @@ describe('the whole-canvas resync stays inside loro-adapter', () => {
   })
 })
 
-const ENVELOPE_CALL = /\b(?:writeFacets|writeCoreFacets|writeTrustFacets)\s*\(/
 /** The one production file that replaces a document's envelope wholesale. */
 const ENVELOPE_REPLACERS = ['packages/server-core/src/tools/document-set.ts']
 
@@ -80,6 +87,8 @@ const ENVELOPE_FIXTURES: readonly { readonly source: string; readonly calls: boo
   { source: 'writeFacets(doc, facets)', calls: true },
   { source: 'writeCoreFacets(doc, meta)', calls: true },
   { source: 'writeTrustFacets (doc, trust)', calls: true },
+  { source: 'import { writeFacets as put } from "x"\nput(doc, facets)', calls: true },
+  { source: "bridge['writeCoreFacets'](doc, meta)", calls: true },
   { source: 'import { writeFacets } from "x"', calls: false },
   { source: '// writeCoreFacets(doc, meta) replaces the bucket', calls: false },
   { source: 'reconcileFacets(doc, prev, next)', calls: false },
@@ -88,11 +97,11 @@ const ENVELOPE_FIXTURES: readonly { readonly source: string; readonly calls: boo
 
 describe('the envelope resyncs stay inside loro-adapter and document.set', () => {
   const callsEnvelope = (path: string): boolean =>
-    ENVELOPE_CALL.test(stripCommentsAndStrings(readFileSync(path, 'utf8')))
+    usesAny(ENVELOPE_NAMES, readFileSync(path, 'utf8'), path)
 
   it('recognises a call in every spelling, and not a mention', () => {
     for (const { source, calls } of ENVELOPE_FIXTURES) {
-      expect(ENVELOPE_CALL.test(stripCommentsAndStrings(source)), source).toBe(calls)
+      expect(usesAny(ENVELOPE_NAMES, source), source).toBe(calls)
     }
   })
 

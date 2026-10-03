@@ -12,9 +12,16 @@ import { collectModuleSpecifiers } from './scanner.js'
  * its storage just as surely, and no import of anything under `store/` shows it.
  *
  * Named as the ledger spells them. `node:fs/promises` and `node:fs` are one
- * kind, because what matters is that the file touches the disk.
+ * kind, because what matters is that the file touches the disk. A SQL driver
+ * (`kysely`, `libsql`, `@libsql/*`) is the same reach by another door: it opens
+ * a database file without naming `node:fs`.
  */
-type HostReachKind = 'node:fs' | 'node:os' | 'node:child_process' | 'process.env'
+export type HostReachKind =
+  | 'node:fs'
+  | 'node:os'
+  | 'node:child_process'
+  | 'process.env'
+  | 'storage-driver'
 
 function kindOfSpecifier(specifier: string): HostReachKind | undefined {
   const bare = specifier.startsWith('node:') ? specifier.slice('node:'.length) : specifier
@@ -22,6 +29,9 @@ function kindOfSpecifier(specifier: string): HostReachKind | undefined {
   if (root === 'fs') return 'node:fs'
   if (root === 'os') return 'node:os'
   if (root === 'child_process') return 'node:child_process'
+  if (specifier === 'kysely' || specifier === 'libsql' || specifier.startsWith('@libsql/')) {
+    return 'storage-driver'
+  }
   return undefined
 }
 
