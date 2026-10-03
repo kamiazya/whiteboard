@@ -100,9 +100,9 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
     What is shown is a CONDITION — an edit unsaved past `STUCK_AFTER_MS`, or
     a write the store refused — and "is it saved" is answered on asking, in
     the mark's popover, with the time the last write landed.
-  - **version dot** — retired. `HeaderVersionDot` ("are there edits no named
-    version holds yet?") was removed with the version history rework
-    (#1245); the History panel is where a named version is taken and seen.
+  - **version dot** — not a header signal. "Are there edits no named version
+    holds yet?" is answered in the History panel, where a named version is
+    taken and seen.
   - **AppShell gear's attention dot** — brand blue, actionable-todo only.
 
   Anything else stateful in chrome needs this list amended first, takes
@@ -310,34 +310,6 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   what the keeper counted — so the answer is MERGED into the row, never
   substituted for it. Replacing dropped the count until something else
   happened to reload the list.
-- **The version timeline shows every lane, and offers restore on one.** It
-  used to filter its rows to the branch HEAD is on, which made `mini-graph.ts`'s
-  own documented rule — "rows on other branches use a ring dot" — unreachable
-  from production: every row it drew was active by construction, and the
-  renderer did not even branch on it. The only way to see another variation's
-  history was to switch onto it first.
-
-  Now the lane carries the answer: solid on the lane you are on, a ring on the
-  others, each keeping its own `BranchMeta.color` on the stroke so a ring still
-  reads as its lane.
-
-  **Restore stays on HEAD's lane.** Showing another variation's history is not
-  the same as offering to restore from it, and what restoring one variation's
-  version INTO another means is undecided — an affordance acting on an
-  undecided semantic is worse than none. So a row on another lane is a plain
-  container, not a disabled button: disabled announces "unavailable", which is
-  the wrong story about a row that is doing its job.
-
-  The empty state moved with the filter. It is the document's history now, not
-  one lane's, so an empty list means there is nothing anywhere.
-
-  **A row on another lane says which lane, and a row on yours does not.** The
-  ring answers "not the one you are on" and stops there; colour is not a name,
-  so with two variations open a reader has a row of history and no way to tell
-  whose. The lane you ARE on is the frame the whole panel is read in — naming
-  it on every row states the obvious and makes the exceptions harder to find,
-  which is the same reason the shell names the current workspace once rather
-  than on each document.
 - **Each switcher row says how much is in that workspace.** A list of names
   gives no reason to pick one; the count is what makes it readable. It reads
   as part of the row rather than as a column, so a keeper that does not count
@@ -617,7 +589,7 @@ so a reader who never opens the source can still find one. The card composes
 shared parts:
 `annotations/message-meta.tsx` (who and when), `ReplyComposer` (the box,
 Cmd/Ctrl+Enter, the empty guard, the draft that belongs to one thread) and
-`ThreadReplies` (the replies under the subject line).
+`ThreadMessage` (every message of the thread, the subject line included).
 
 Three things every such surface needs are INTRINSIC to the canvas root, so a
 new one gets them without being wired — each was forgotten once, on the
@@ -987,7 +959,7 @@ being the last surface to carry it is exactly the drift that matrix exists
 to make visible, and it had no row to be visible in.
 
 Read status is a separate question and NOT answered here. `commentThreadSchema`
-carries no `readAt`/`readBy`, and adding one needs an answer to "whose read"
+carries no read-status field, and adding one needs an answer to "whose read"
 that this app cannot give — `commentMessageSchema.author` is optional
 because a browser-kept workspace has no signed-in author. Last-activity is
 what can be said honestly today, and it is what both a per-device read

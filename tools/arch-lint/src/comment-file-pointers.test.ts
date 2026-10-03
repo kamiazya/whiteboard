@@ -25,7 +25,10 @@ import { REPO_ROOT } from './scan-roots.js'
 // It reads `.claude/**/*.md` as well, and every line of it rather than the
 // comment lines, because that markdown IS the comment: it auto-loads into
 // every session, so a pointer that has gone stale there is read aloud to
-// whoever opens the repo next. Widening it found 25 more, eleven of them in
+// whoever opens the repo next. It also reads a package's README and `apps/web`'s
+// DESIGN.md and BRAND.md, which name source files the same way and went stale
+// the same way (the model package's README listed a module that was gone).
+// Widening it found 25 more, eleven of them in
 // one rule file describing a surface ADR-0029 deleted. The scan stops at
 // `.claude/` rather than all markdown on the same ground — `docs/` is read
 // when somebody goes looking, not handed over unasked.
@@ -192,14 +195,25 @@ function unresolvedOnLine(
   return names
 }
 
+/**
+ * Source, the `.claude` markdown, and the documents a package keeps beside its
+ * code (README, and `apps/web`'s DESIGN and BRAND): a README is the front door
+ * and names `src` files the way a comment does, with no comment marker.
+ */
+function isScannedFile(path: string): boolean {
+  return (
+    /\.tsx?$/.test(path) ||
+    (path.startsWith('.claude/') && path.endsWith('.md')) ||
+    /^(?:packages|apps)\/[^/]+\/(?:README|DESIGN|BRAND)\.md$/.test(path)
+  )
+}
+
 function unresolvedPointers(): Pointer[] {
   const tracked = trackedFiles()
   const byBasename = new Set(tracked.map((path) => basename(path)))
   const found: Pointer[] = []
   const seen = new Set<string>()
-  const scanned = tracked.filter(
-    (path) => /\.tsx?$/.test(path) || (path.startsWith('.claude/') && path.endsWith('.md')),
-  )
+  const scanned = tracked.filter(isScannedFile)
   for (const file of scanned) {
     const wholeFile = file.endsWith('.md')
     const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
@@ -233,6 +247,8 @@ describe('a filename in a comment, backticked or a bare test file, names a file 
     const tracked = trackedFiles()
     expect(tracked.length).toBeGreaterThan(1000)
     expect(UNRESOLVED.length).toBeLessThan(40)
+    expect(tracked.filter(isScannedFile)).toContain('packages/model/README.md')
+    expect(tracked.filter(isScannedFile)).toContain('apps/web/DESIGN.md')
   })
 
   it('has no pointer at a file that is gone', () => {
