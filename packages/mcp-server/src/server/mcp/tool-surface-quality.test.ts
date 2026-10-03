@@ -610,7 +610,8 @@ describe('what the tool table costs to read', () => {
       // what keeps `wb_facet_set`'s refusal a one-call recovery.
       wb_facet_list: {
         visibleBytes: 1208,
-        wireBytes: 3558,
+        // +33 wire, 0 visible: the title names the arms the description carries.
+        wireBytes: 3591,
         descriptionWords: 99,
         parameters: 3,
         undescribed: 0,
@@ -657,7 +658,8 @@ describe('what the tool table costs to read', () => {
         visibleBytes: 3330,
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 4262,
+        // +14 wire more: the title names tags and every object a facet reaches.
+        wireBytes: 4276,
         descriptionWords: 176,
         parameters: 12,
         undescribed: 1,
@@ -978,8 +980,9 @@ describe('what the tool table costs to read', () => {
       // facets, tags and bends wherever a board is answered.
       // Then -366 for `embed` and +14,591 for the stored proposal schema in
       // wb_document_get's output (see those rows).
-      // Then -29 and +183, the same bytes as visible.
-      wireBytes: 129724,
+      // Then -29 and +183, the same bytes as visible; then +47, the two
+      // facet tools' titles.
+      wireBytes: 129771,
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate` left, `mode` described).
       parameters: 331,

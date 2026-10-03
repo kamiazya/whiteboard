@@ -29,7 +29,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   // Document tools (server-core)
   wb_facet_set: {
     profile: MUTATING_IDEMPOTENT,
-    title: 'Set the OKF frontmatter facets of a document',
+    title: 'Tag and set facets on documents, canvases, nodes and edges',
   },
   wb_canvas_edit: {
     // Destructive because a batch may carry node.remove / edge.remove, and
@@ -46,7 +46,10 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     title: 'Comment on a document through its annotation layer',
   },
   wb_body_edit: { profile: MUTATING, title: "Replace passages of a document's body" },
-  wb_facet_list: { profile: READ_ONLY, title: 'List the facets this deployment registered' },
+  wb_facet_list: {
+    profile: READ_ONLY,
+    title: "List registered facets, a workspace's stencils, tags in use and tag library",
+  },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_viewport_set: {
     // Mutating rather than read-only: it changes what a human is looking at.

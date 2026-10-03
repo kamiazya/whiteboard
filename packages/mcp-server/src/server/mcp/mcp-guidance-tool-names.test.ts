@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 import { buildDrawDiagramPrompt, WHITEBOARD_INSTRUCTIONS } from './standalone-help.js'
+import { TOOL_PROFILES } from './tool-profiles.js'
 
 /**
  * Text this server hands to a client or an agent, where a tool name would be
@@ -56,5 +57,52 @@ describe('MCP guidance text', () => {
       'wb_workspace_edit',
       'canvas_view',
     ])
+  })
+})
+
+/**
+ * The draw-diagram prompt is the "a person just asked you to draw" case, and
+ * `wb_canvas_edit` stores a default-mode batch as a proposal nobody sees. A
+ * prompt that never says `apply` sends the agent into a drawing that stays
+ * empty on screen; one that says to read back or to export contradicts the
+ * tool's own description (the result carries the board) and names a step that
+ * has no tool behind it.
+ */
+describe('draw-diagram prompt', () => {
+  const prompt = buildDrawDiagramPrompt('a goal', 'architecture')
+
+  it('says to write with mode "apply", since a default write is a proposal', () => {
+    expect(prompt).toContain('wb_canvas_edit')
+    expect(prompt).toContain('mode: "apply"')
+  })
+
+  it('does not ask for a read-back the edit result already carries, nor an export no tool offers', () => {
+    expect(prompt).not.toMatch(/read the document back/i)
+    expect(prompt).not.toMatch(/\bexport\b/i)
+  })
+
+  it('names the one render tool', () => {
+    expect(prompt).toContain('wb_scene_render')
+  })
+})
+
+/**
+ * A title is read beside the description and says less, so one that names a
+ * single arm of a multi-arm tool teaches a model the others do not exist.
+ */
+describe('TOOL_PROFILES titles of the facet tools', () => {
+  it('wb_facet_set names tags, facets, and every object they reach', () => {
+    const title = TOOL_PROFILES.wb_facet_set?.title ?? ''
+    for (const word of [/tag/i, /facet/i, /document/i, /canvas/i, /node/i, /edge/i]) {
+      expect(title, `"${title}" misses ${word}`).toMatch(word)
+    }
+    expect(title).not.toMatch(/frontmatter/i)
+  })
+
+  it('wb_facet_list names the registry, stencils, tags in use and the tag library', () => {
+    const title = TOOL_PROFILES.wb_facet_list?.title ?? ''
+    for (const word of [/facet/i, /stencil/i, /tags in use/i, /tag library/i]) {
+      expect(title, `"${title}" misses ${word}`).toMatch(word)
+    }
   })
 })
