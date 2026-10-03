@@ -35,6 +35,31 @@ function spawnMcpChild(
   })
 }
 
+async function waitForInitializeResponse(
+  child: ChildProcessWithoutNullStreams,
+  seen: () => boolean,
+  stderr: () => string,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!seen() && Date.now() < deadline) {
+    // A child that has already died can never produce the response we're
+    // waiting for; fail immediately instead of spinning until the timeout.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(
+        `[stdio-exit-smoke] child exited before sending an initialize response ` +
+          `(code=${child.exitCode} signal=${child.signalCode})\n${stderr()}`,
+      )
+    }
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  if (!seen()) {
+    throw new Error(
+      `[stdio-exit-smoke] never observed initialize response within ${timeoutMs}ms\n${stderr()}`,
+    )
+  }
+}
+
 /**
  * Spawns the real stdio entry, performs a full MCP initialize handshake so
  * the server is actually up and connected to the transport, then applies
@@ -104,23 +129,12 @@ export async function runStdioExitSmoke({
       })}\n`,
     )
 
-    const deadline = Date.now() + startupTimeoutMs
-    while (!sawInitializeResponse && Date.now() < deadline) {
-      // A child that has already died can never produce the response we're
-      // waiting for; fail immediately instead of spinning until the timeout.
-      if (child.exitCode !== null || child.signalCode !== null) {
-        throw new Error(
-          `[stdio-exit-smoke] child exited before sending an initialize response ` +
-            `(code=${child.exitCode} signal=${child.signalCode})\n${stderrBuf}`,
-        )
-      }
-      await new Promise((r) => setTimeout(r, 50))
-    }
-    if (!sawInitializeResponse) {
-      throw new Error(
-        `[stdio-exit-smoke] never observed initialize response within ${startupTimeoutMs}ms\n${stderrBuf}`,
-      )
-    }
+    await waitForInitializeResponse(
+      child,
+      () => sawInitializeResponse,
+      () => stderrBuf,
+      startupTimeoutMs,
+    )
     child.stdin.write(
       `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })}\n`,
     )
