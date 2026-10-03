@@ -1,5 +1,5 @@
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from '../document-path-tree.js'
+import { generateDocumentId, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
+import { findDescendantPath, planSubtreeMove } from '../document-path-tree.js'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,

@@ -8,7 +8,6 @@ import {
   readDocumentKind,
   readWorkspaceDocuments,
   readWorkspaceMeta,
-  readWorkspaceNodes,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceLastCompactedAt,
@@ -37,6 +36,7 @@ import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad, peekDoc } from './doc-cache.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
+import { moveEvictingCache } from './moved-paths.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
@@ -638,17 +638,9 @@ export async function renameDocumentPath(
     const documentId = entry.documentId
     if (oldPath === newPath) return { documentId }
 
-    // The paths whose cache keys this move invalidates, collected BEFORE
-    // the move because the tree is the only record of the subtree.
-    const movedPaths =
-      workspaceDoc === null
-        ? []
-        : readWorkspaceNodes(workspaceDoc)
-            .map((node) => node.path)
-            .filter((path) => path === oldPath || path.startsWith(`${oldPath}/`))
-
-    await moveThroughIndex(workspaceId, oldPath, newPath, scope)
-    evictMovedPaths(workspaceId, movedPaths, oldPath, newPath, scope)
+    await moveEvictingCache(workspaceId, oldPath, newPath, scope, workspaceDoc, () =>
+      moveThroughIndex(workspaceId, oldPath, newPath, scope),
+    )
     return { documentId }
   })
 }
@@ -673,32 +665,6 @@ async function moveThroughIndex(
       throw new ConflictError(`Document "${workspaceId}/${err.path}" already exists`)
     }
     throw err
-  }
-}
-
-/**
- * Force the next `getDoc()` to reload under every key the move touched.
- *
- * A SOURCE path: a caller still reading through it should lazily create a
- * fresh canvas rather than resurrect the moved doc's cached instance. A
- * DESTINATION path: a snapshot or update-route call against it before this
- * move can lazily cache an empty phantom doc there, and leaving that phantom
- * cached would shadow the just-moved canvas's real content.
- */
-function evictMovedPaths(
-  workspaceId: string,
-  movedPaths: readonly string[],
-  oldPath: string,
-  newPath: string,
-  scope: StoreScope,
-): void {
-  for (const from of movedPaths) {
-    evictDoc(workspaceId, from, scope)
-    evictDoc(
-      workspaceId,
-      from === oldPath ? newPath : `${newPath}${from.slice(oldPath.length)}`,
-      scope,
-    )
   }
 }
 

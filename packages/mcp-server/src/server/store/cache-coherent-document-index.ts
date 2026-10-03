@@ -1,4 +1,3 @@
-import { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type BlobStore,
   type CreateWorkspaceInput,
@@ -15,6 +14,7 @@ import {
 import { checkpointAfterMove, checkpointAfterRemoval } from './auto-checkpoint.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc } from './doc-cache.js'
+import { moveEvictingCache } from './moved-paths.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -122,24 +122,15 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     // and its write — the update then lazily recreates the source path and a
     // phantom duplicate survives the rename.
     return withWorkspaceWriteLock(input.workspaceId, async () => {
-      // Collected BEFORE the move: afterwards the tree is the only record of
-      // the subtree, under its new paths.
       const workspaceDoc = await openWorkspaceDocIfStored(input.workspaceId, this.scope)
-      const movedPaths =
-        workspaceDoc === null
-          ? []
-          : readWorkspaceNodes(workspaceDoc)
-              .map((node) => node.path)
-              .filter((path) => path === input.from || path.startsWith(`${input.from}/`))
-      await super.moveDocument(input)
-      for (const from of movedPaths) {
-        evictDoc(input.workspaceId, from, this.scope)
-        evictDoc(
-          input.workspaceId,
-          from === input.from ? input.to : `${input.to}${from.slice(input.from.length)}`,
-          this.scope,
-        )
-      }
+      await moveEvictingCache(
+        input.workspaceId,
+        input.from,
+        input.to,
+        this.scope,
+        workspaceDoc,
+        () => super.moveDocument(input),
+      )
       // A pending automatic checkpoint is keyed by path too, and the keeper
       // resolves that path when it saves: left under the old name it would
       // fail against a document that is no longer there.

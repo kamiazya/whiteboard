@@ -27,7 +27,14 @@
  */
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeFile, nodeText, withNodeFile, withNodeText } from '@kamiazya/whiteboard-model'
+import {
+  isSelfOrDescendant,
+  nodeFile,
+  nodeText,
+  rebasePath,
+  withNodeFile,
+  withNodeText,
+} from '@kamiazya/whiteboard-model'
 import { scanReferences } from './scan.js'
 
 /**
@@ -123,15 +130,11 @@ export function movesForPathChange(
   from: string,
   to: string,
 ): DocumentMove[] {
-  const prefix = `${from}/`
   const moves: DocumentMove[] = []
   for (const entry of entries) {
     const movedId = entry.documentId ?? entry.id
-    if (movedId === undefined) continue
-    if (entry.path === from) moves.push({ movedId, from, to })
-    else if (entry.path.startsWith(prefix)) {
-      moves.push({ movedId, from: entry.path, to: to + entry.path.slice(from.length) })
-    }
+    if (movedId === undefined || !isSelfOrDescendant(entry.path, from)) continue
+    moves.push({ movedId, from: entry.path, to: rebasePath(entry.path, from, to) })
   }
   return moves
 }

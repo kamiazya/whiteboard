@@ -35,7 +35,7 @@ import {
   setWorkspaceDocumentName,
   setWorkspacePinned,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'
 import type {
   BlobStore,
   CreateDocumentInput,
@@ -60,7 +60,6 @@ import {
   DocumentNotFoundError,
   DocumentPathContestedError,
   DocumentPathTakenError,
-  isSelfOrDescendant,
   resolveWorkspaceHandle,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
@@ -81,11 +80,6 @@ export interface WorkspaceRegistry {
    * missing feature but a rename that silently does nothing.
    */
   renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
-}
-
-/** `a/b/c` -> `a/b/x` when the subtree at `a/b` moves to `a/b/x`. */
-function rewritten(path: string, from: string, to: string): string {
-  return path === from ? to : `${to}${path.slice(from.length)}`
 }
 
 export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins {
@@ -437,7 +431,7 @@ function moveCollision(
 ): string | undefined {
   const vacated = vacatedPaths(nodes, moving)
   const collisions = moving
-    .map((node) => rewritten(node.path, from, to))
+    .map((node) => rebasePath(node.path, from, to))
     .filter((produced) => !vacated.has(produced))
     .flatMap((produced) => {
       const occupant = nodes.find((other) => other.path === produced)

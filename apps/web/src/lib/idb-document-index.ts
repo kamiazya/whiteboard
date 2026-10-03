@@ -13,7 +13,7 @@
  * transaction, or the guarantee is gone while the code still looks careful.
  */
 
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import {
   type CreateDocumentInput,
   type CreateWorkspaceInput,
@@ -27,7 +27,6 @@ import {
   DocumentPathTakenError,
   documentEntrySchema,
   findDescendantPath,
-  isSelfOrDescendant,
   type ListDocumentsInput,
   type MoveDocumentInput,
   planSubtreeMove,

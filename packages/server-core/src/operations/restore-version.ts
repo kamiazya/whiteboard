@@ -4,7 +4,7 @@ import {
   reconcileDocContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentPathSchema } from '@kamiazya/whiteboard-model'
+import { documentPathSchema, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import { countAliveNodes } from '../document-counts.js'
@@ -219,7 +219,7 @@ async function restoreSubtree(
 
   const pastWorkspace = await versions.loadWorkspaceAt(workspaceId, versionId)
   if (pastWorkspace === null) return { kind: 'subtree-needs-workspace-version' }
-  const inSubtree = (p: string) => p === path || p.startsWith(`${path}/`)
+  const inSubtree = (p: string) => isSelfOrDescendant(p, path)
   const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
     node.type === 'document' && inSubtree(node.path) ? [node] : [],
   )

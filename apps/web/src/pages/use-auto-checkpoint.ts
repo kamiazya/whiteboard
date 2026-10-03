@@ -1,5 +1,6 @@
 import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { type CheckpointScheduler, createCheckpointScheduler } from '@kamiazya/whiteboard-history'
+import { rebasePath } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserVersionStore } from '../lib/browser-version-store.js'
@@ -16,12 +17,6 @@ const log = getAppLogger('browser-document-page')
 export interface CheckpointPair {
   readonly signal: () => void
   readonly flush: () => void
-}
-
-/** Where a document at `path` is once `from` (it, or a folder above it) has become `to`. */
-function pathAfterMove(path: string, from: string, to: string): string {
-  if (path === from) return to
-  return path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : path
 }
 
 interface LivePath {
@@ -42,7 +37,7 @@ function followBroadcast(
 ): void {
   if (message.type === 'document-moved') {
     checkpoints.moved(workspaceId, message.from, message.to)
-    if (live.path !== null) live.path = pathAfterMove(live.path, message.from, message.to)
+    if (live.path !== null) live.path = rebasePath(live.path, message.from, message.to)
   } else if (message.type === 'document-removed') {
     checkpoints.removed(workspaceId, message.path)
     if (live.path === message.path) {
