@@ -68,12 +68,11 @@ import {
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
+import { applyCommand, type EditorCommand } from '../../lib/spatial/commands.js'
 import {
-  applyCommand,
   buildFragmentInsertCommand,
   DUPLICATE_OFFSET_PX,
-  type EditorCommand,
-} from '../../lib/spatial/commands.js'
+} from '../../lib/spatial/fragment-insert.js'
 import type { Box, ResizeHandleKind } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'

@@ -343,7 +343,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // named constant beside the function rather than a comment inside it.
   'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 79,
   'apps/web/src/lib/spatial/commands.ts#applyCommand': 132,
-  'apps/web/src/lib/spatial/commands.ts#buildFragmentInsertCommand': 84,
+  'apps/web/src/lib/spatial/fragment-insert.ts#buildFragmentInsertCommand': 84,
   'apps/web/src/lib/spatial/freehand.ts#freehandLine': 58,
   'apps/web/src/lib/spatial/geometry.ts#findFreeSpot': 64,
   'apps/web/src/lib/spatial/minimap.ts#fitMinimap': 52,

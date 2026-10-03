@@ -143,9 +143,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `element-verb-parity.test.ts` holds every verb to every collection, and a
   // stroke stores as much as a relation does. What has already left: which
   // collection a selected ink id came from (`ink-commands.ts`) and the tag
-  // list rules (`lib/spatial/tags.ts`). The next shrink is the line arms
-  // leaving as a sibling the way the ink-id family did.
-  'apps/web/src/lib/spatial/commands.ts': 1504,
+  // list rules (`lib/spatial/tags.ts`), the z-order block (`z-order.ts`) and
+  // the paste/duplicate builder (`fragment-insert.ts`). The next shrink is the
+  // line arms leaving as a sibling the way the ink-id family did.
+  'apps/web/src/lib/spatial/commands.ts': 1314,
   // The markdown host: CodeMirror's extensions, the preview column and the
   // conversation and proposal markers drawn beside it. What has a seam has
   // already left — the pane scroll sync and the preview geometry it shares
@@ -351,7 +352,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // verbs where every row is one example is what stops the next one being
   // added without one. It grows one row per verb the parity matrix reports,
   // which is the growth it is for.
-  'apps/web/src/lib/spatial/commands.test.ts': 2072,
+  'apps/web/src/lib/spatial/commands.test.ts': 1681,
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.
