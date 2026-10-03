@@ -539,14 +539,15 @@ export function useDocumentSync(
   )
 
   // Keyboard intercept for undo/redo — SpatialEditor has no undo/redo buttons
-  // of its own, so the keyboard is the only entry point.
+  // of its own, so the keyboard is the only entry point. Off during a restore.
   useEffect(() => {
+    if (restoreInProgress) return
     const onKeyDown = (ev: KeyboardEvent) => handleUndoRedoKey(ev, loroUndo, loroRedo)
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => {
       window.removeEventListener('keydown', onKeyDown, { capture: true })
     }
-  }, [loroUndo, loroRedo])
+  }, [loroUndo, loroRedo, restoreInProgress])
 
   const onChange = useCallback((next: SpatialCanvas, command: EditorCommand) => {
     sessionRef.current?.onChange(next, command)

@@ -372,6 +372,24 @@ describe('useDocumentSync', () => {
     expect(result.current.canvas.nodes[0]).toMatchObject({ x: 0, y: 0 })
   })
 
+  it('leaves Ctrl+Z alone while a restore is rewriting the document', async () => {
+    // The shortcut is a window listener, so locking the editor's subtree does
+    // not reach it; an undo taken mid-restore would be applied to content the
+    // restore is about to replace.
+    const backend = makeFakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+
+    await hydrate(backend, TEXT_CANVAS)
+    await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
+    act(() => {
+      backend._ctrl.handlers!.onRestoreStarted({ label: 'v3' } as never)
+    })
+
+    act(dispatchCtrlZ)
+
+    expect(result.current.canvas.nodes[0]).toMatchObject({ x: 10, y: 20 })
+  })
+
   it('leaves Ctrl+Z alone while a text field has it', async () => {
     // The keystroke belongs to whatever is being typed in. Taking it here
     // would undo the CANVAS under someone editing a label, which is a step

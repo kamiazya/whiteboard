@@ -194,7 +194,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // keys carry its name.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1632,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 88,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 89,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 100,
   // The document picker and the URL dialog live in
@@ -302,7 +302,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // undecided, not foreign, while its silent renewal is outstanding.
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 361,
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 362,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
@@ -346,7 +346,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The Duplicate and Delete verbs' screen state and dialogs each live in
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 450,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 451,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity
@@ -355,7 +355,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 335,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 338,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (`exactOptionalPropertyTypes`), and splitting it further would cut the

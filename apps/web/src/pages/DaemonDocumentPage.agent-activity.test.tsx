@@ -1,5 +1,9 @@
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, waitFor } from '@testing-library/react'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AGENT_HIGHLIGHT_MS } from '../hooks/use-agent-activity.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
@@ -25,6 +29,18 @@ const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 // proves the page actually subscribed it to `onAgentActivity`.
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
+function twoNodesJoinedByAnEdge(): Uint8Array {
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, {
+    nodes: [
+      textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'left' }),
+      textNode({ id: 'b', x: 400, y: 0, width: 120, height: 60, text: 'right' }),
+    ],
+    edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+  })
+  return doc.export({ mode: 'snapshot' })
+}
+
 describe('DaemonDocumentPage agent-activity wiring', () => {
   let backend: FakeDocumentBackend | null = null
 
@@ -45,13 +61,13 @@ describe('DaemonDocumentPage agent-activity wiring', () => {
     localStorage.clear()
   })
 
-  async function mountPage(): Promise<void> {
+  async function mountPage(seed?: () => Uint8Array): Promise<void> {
     await act(async () => {
       renderInRouter(
         <DaemonDocumentPage
           daemonBaseUrl={DAEMON_BASE_URL}
           createBackend={() => {
-            backend = new FakeDocumentBackend()
+            backend = new FakeDocumentBackend(seed)
             return backend
           }}
         />,
@@ -109,5 +125,54 @@ describe('DaemonDocumentPage agent-activity wiring', () => {
     })
 
     expect(document.querySelector('[data-testid="agent-presence-chip"]')).toBeNull()
+  })
+
+  it('outlines an edge an agent touched when no node was', async () => {
+    // An edge-only edit (a relabel, a recolour) reaches the browser as
+    // `touched: { nodes: [], edges: [...] }`; outlining nodes alone left such
+    // an edit with no cue on the board.
+    await mountPage(twoNodesJoinedByAnEdge)
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
+        'right',
+      ),
+    )
+
+    await act(async () => {
+      backend?.handlers?.onAgentActivity?.({
+        operator: { kind: 'ai', actor: 'process:daemon-1' },
+        touched: { nodes: [], edges: ['e1'] },
+        summary: 'relabelled 1 edge',
+      })
+    })
+
+    const outlines = document.querySelector('[data-testid="agent-touch-outlines"]')
+    expect(outlines?.querySelector('polyline[data-edge-id="e1"]')).toBeTruthy()
+    expect(outlines?.querySelectorAll('rect')).toHaveLength(0)
+  })
+
+  it('lets the edge outline fade with the node outline', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await mountPage(twoNodesJoinedByAnEdge)
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
+        'right',
+      ),
+    )
+
+    await act(async () => {
+      backend?.handlers?.onAgentActivity?.({
+        operator: { kind: 'ai', actor: 'process:daemon-1' },
+        touched: { nodes: [], edges: ['e1'] },
+        summary: 'relabelled 1 edge',
+      })
+    })
+    expect(document.querySelector('[data-testid="agent-touch-outlines"]')).toBeTruthy()
+
+    await act(async () => {
+      vi.advanceTimersByTime(AGENT_HIGHLIGHT_MS + 100)
+    })
+
+    expect(document.querySelector('[data-testid="agent-touch-outlines"]')).toBeNull()
   })
 })

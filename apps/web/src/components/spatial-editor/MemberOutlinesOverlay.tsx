@@ -22,6 +22,23 @@ export interface MemberOutlinesOverlayProps {
    */
   readonly stroke?: string
   readonly testId?: string
+  /**
+   * Outline exactly these edges, whatever their ends. Without it an edge is
+   * outlined only when BOTH ends are members, which is what a selection's
+   * area actions follow; an agent's edit can reach an edge alone.
+   */
+  readonly outlinedEdgeIds?: ReadonlySet<string>
+}
+
+/** The edges the outline marks: the named ones, else those inside the members. */
+function outlinedEdges(
+  edges: MemberOutlinesOverlayProps['edges'],
+  members: readonly NodeBox[],
+  named: ReadonlySet<string> | undefined,
+): MemberOutlinesOverlayProps['edges'] {
+  if (named !== undefined) return edges.filter((edge) => named.has(edge.id))
+  const memberIds = new Set(members.map((member) => member.id))
+  return edges.filter((edge) => endIn(edge.from, memberIds) && endIn(edge.to, memberIds))
 }
 
 export function MemberOutlinesOverlay({
@@ -31,6 +48,7 @@ export function MemberOutlinesOverlay({
   zoom,
   stroke = 'var(--manipulation)',
   testId = 'member-outlines',
+  outlinedEdgeIds,
 }: MemberOutlinesOverlayProps) {
   return (
     <svg
@@ -48,27 +66,23 @@ export function MemberOutlinesOverlay({
         area actions like recolor, so the highlight marks them along
         with the member boxes — an edge leaving the area does not
         follow and stays unmarked. */}
-      {(() => {
-        const memberIds = new Set(selectionMembers.map((member) => member.id))
-        return edges
-          .filter((edge) => endIn(edge.from, memberIds) && endIn(edge.to, memberIds))
-          .flatMap((edge) => {
-            const routed = edgePaths.find((entry) => entry.id === edge.id)
-            return routed === undefined ? [] : [{ id: edge.id, path: routed.path }]
-          })
-          .map(({ id, path }) => (
-            <polyline
-              key={`edge-${id}`}
-              data-edge-id={id}
-              points={path.map((p) => `${p.x},${p.y}`).join(' ')}
-              fill="none"
-              stroke={stroke}
-              strokeWidth={2.5 / zoom}
-              strokeLinecap="round"
-              opacity={0.5}
-            />
-          ))
-      })()}
+      {outlinedEdges(edges, selectionMembers, outlinedEdgeIds)
+        .flatMap((edge) => {
+          const routed = edgePaths.find((entry) => entry.id === edge.id)
+          return routed === undefined ? [] : [{ id: edge.id, path: routed.path }]
+        })
+        .map(({ id, path }) => (
+          <polyline
+            key={`edge-${id}`}
+            data-edge-id={id}
+            points={path.map((p) => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={2.5 / zoom}
+            strokeLinecap="round"
+            opacity={0.5}
+          />
+        ))}
       {selectionMembers.map(({ id, box }) => (
         <rect
           key={id}

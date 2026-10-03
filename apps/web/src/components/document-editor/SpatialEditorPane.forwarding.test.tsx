@@ -33,6 +33,7 @@ const passedThrough: Required<SpatialEditorPassedThrough> = {
   onToggleNodeLock: () => {},
   onToggleEdgeLock: () => {},
   agentTouchedNodeIds: new Set(['n2']),
+  agentTouchedEdgeIds: new Set(['e2']),
   threads: [],
   proposals: [],
   tagLibrary: { tags: {} },

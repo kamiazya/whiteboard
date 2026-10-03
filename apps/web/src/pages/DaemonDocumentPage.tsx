@@ -499,6 +499,7 @@ function useDaemonDocument(
     spatial: {
       editorRef: spatialEditorRef,
       agentTouchedNodeIds: agentActivity.touchedNodeIds,
+      agentTouchedEdgeIds: agentActivity.touchedEdgeIds,
       children: <AgentPresenceChip summary={agentActivity.summary} />,
     },
     ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),
