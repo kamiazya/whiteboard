@@ -190,6 +190,14 @@ async function waitForUpdate(page) {
 async function acceptUpdate(page, toast) {
   await page.evaluate(() => {
     window.__smokeFirstDocument = true
+    // Every message the page sends a worker, so a step that gives up can say
+    // whether the toast's Reload ever asked the waiting worker to skip.
+    window.__smokePosted = []
+    const post = ServiceWorker.prototype.postMessage
+    ServiceWorker.prototype.postMessage = function (...args) {
+      window.__smokePosted.push({ to: this.state, message: JSON.stringify(args[0]) })
+      return post.apply(this, args)
+    }
   })
   await toast.getByRole('button', { name: 'Reload' }).click()
   await until(
@@ -199,7 +207,24 @@ async function acceptUpdate(page, toast) {
         () =>
           window.__smokeFirstDocument === undefined && navigator.serviceWorker.controller !== null,
       ),
-    async () => ({ ...(await workerSummary(page)), console: consoleTail }),
+    async () => ({
+      ...(await workerSummary(page)),
+      posted: await page.evaluate(() => window.__smokePosted),
+      console: consoleTail,
+      // Whether the waiting worker honours a skip at all from this page: the
+      // same message the toast's path sends, posted directly, then its state.
+      afterDirectSkip: await page.evaluate(async () => {
+        const reg = await navigator.serviceWorker.getRegistration()
+        reg?.waiting?.postMessage({ type: 'SKIP_WAITING' })
+        await new Promise((r) => setTimeout(r, 3000))
+        const sw = (w) => (w ? { url: w.scriptURL, state: w.state } : null)
+        return {
+          waiting: sw(reg?.waiting),
+          active: sw(reg?.active),
+          firstDocument: window.__smokeFirstDocument,
+        }
+      }),
+    }),
   )
   check(
     "the toast's Reload moves the page onto the new worker",
