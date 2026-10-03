@@ -138,7 +138,12 @@ describe('documentWritten', () => {
         (workspaceId: string, path: string, doc: LoroDoc) => {
           signalled.push({ workspaceId, path, doc })
         },
-        { flush: async () => undefined, stop: () => undefined },
+        {
+          flush: async () => undefined,
+          stop: () => undefined,
+          moved: () => undefined,
+          removed: () => undefined,
+        },
       ),
     )
     const doc = new LoroDoc()
@@ -158,7 +163,12 @@ describe('documentWritten', () => {
   it('takes no checkpoint for a write the index does not place, and still schedules compaction', async () => {
     const signal = vi.fn()
     installAutoCheckpoint(
-      Object.assign(signal, { flush: async () => undefined, stop: () => undefined }),
+      Object.assign(signal, {
+        flush: async () => undefined,
+        stop: () => undefined,
+        moved: () => undefined,
+        removed: () => undefined,
+      }),
     )
 
     await documentWritten({

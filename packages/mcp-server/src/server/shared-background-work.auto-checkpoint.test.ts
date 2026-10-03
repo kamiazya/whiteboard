@@ -32,7 +32,7 @@ function fakeScheduler() {
     (workspaceId: string, path: string) => {
       signalled.push(`${workspaceId}/${path}`)
     },
-    { flush, stop: () => undefined },
+    { flush, stop: () => undefined, moved: () => undefined, removed: () => undefined },
   )
   return { scheduler, signalled, flush }
 }

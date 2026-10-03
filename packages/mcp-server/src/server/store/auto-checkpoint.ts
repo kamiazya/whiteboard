@@ -36,3 +36,18 @@ export function uninstallAutoCheckpointForTests(): void {
 export function checkpointAfterWrite(workspaceId: string, path: string, doc: LoroDoc): void {
   installed?.(workspaceId, path, doc)
 }
+
+/**
+ * "This document, and everything below it, now lives at `to`." Called by the
+ * index that performs the move, so every path that moves a document — the
+ * agent tool, the HTTP rename, the daemon's own — takes the pending
+ * checkpoint along rather than leaving it to fail against the old name.
+ */
+export function checkpointAfterMove(workspaceId: string, from: string, to: string): void {
+  installed?.moved(workspaceId, from, to)
+}
+
+/** "This document is gone" — its pending checkpoint has nothing left to record. */
+export function checkpointAfterRemoval(workspaceId: string, path: string): void {
+  installed?.removed(workspaceId, path)
+}

@@ -517,7 +517,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/facet-ui/src/derived-form.tsx#FieldInput': 90,
   'packages/facet-ui/src/facet-catalog-picker.tsx#FacetCatalogPicker': 79,
   'packages/facet-ui/src/option-group.tsx#FacetOption': 57,
-  'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 99,
+  'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 87,
   'packages/mcp-server/src/cli/daemon-doctor.ts#runDaemonDoctor': 73,
   'packages/mcp-server/src/cli/daemon-run.ts#runDaemonRun': 86,
   'packages/mcp-server/src/cli/daemon-status.ts#runDaemonStatus': 84,

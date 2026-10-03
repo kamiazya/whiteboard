@@ -491,10 +491,11 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the
   // distribution smokes' helpers did.
-  // 2678 -> 2732: the steps that read a markdown thread back through
-  // `wb_document_get`, rename a spatial board in place, and read an edge facet
-  // through the snapshot.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2732,
+  // 2678 -> 2735: the steps that read a markdown thread back through
+  // `wb_document_get`, rename a spatial board in place, read an edge facet
+  // through the snapshot, and the session-end checkpoint phase (whose body
+  // lives in `smoke/lib`).
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2735,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

@@ -23,6 +23,7 @@ import {
   commentAddCall,
 } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 import { watchChild } from './lib/child-watch.mjs'
+import { anAutomaticCheckpointFollowsAMoveOrDelete } from './lib/session-end-checkpoint.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
@@ -2712,6 +2713,8 @@ const PHASES = [
   versionsAreSavedAndListed,
   versionsAreRestoredCopiedAndRolledBack,
   anImportedDocumentIsFoundAndRoundTrips,
+  () =>
+    anAutomaticCheckpointFollowsAMoveOrDelete({ childArgs, root, rpcTimeoutMs: RPC_TIMEOUT_MS }),
 ]
 
 async function main() {
