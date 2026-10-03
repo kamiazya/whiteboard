@@ -19,10 +19,10 @@
  */
 import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { arbitraryForSchema, sameSchema } from '@kamiazya/whiteboard-model/test-utils'
-import { afterAll, describe, expect } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import type { z } from 'zod'
 import { apiErrorBodySchema } from './api-errors.js'
-import { type SearchQueryInput, searchQueryString } from './search-query.js'
+import { SEARCH_QUERY_KEYS, type SearchQueryInput, searchQueryString } from './search-query.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import {
   MISSING_DOCUMENT_ID,
@@ -321,8 +321,10 @@ describe('every /api/v1 route answers or refuses with a reason, never a 5xx', ()
       }
       // A body naming the URL's own field is refused by name — a 400 whose
       // reason is the request, not a 404 for the foreign workspace it named,
-      // which is what acting on the body would answer.
-      if (request.body?.kind === 'smuggled') {
+      // which is what acting on the body would answer. A URL whose own
+      // workspace does not exist is refused before any body is read, so only
+      // an existing one is held to it.
+      if (request.body?.kind === 'smuggled' && request.path.startsWith(ws(SEEDED_WORKSPACE_ID))) {
         expect(response.status, detail).toBe(400)
         expect(JSON.parse(text), detail).toMatchObject({ error: 'invalid_request' })
       }
@@ -336,6 +338,31 @@ describe('every /api/v1 route answers or refuses with a reason, never a 5xx', ()
         const refusal = apiErrorBodySchema.safeParse(JSON.parse(text))
         expect(refusal.success, `${detail}\n${JSON.stringify(refusal.error?.issues)}`).toBe(true)
       }
+    })
+  }
+
+  // A GET route that ignores a query key answers as if the caller's filter
+  // had applied (`tags` for `tag` listed every document), so each one refuses
+  // what it does not read — whichever route the key is aimed at.
+  const readOnly = ROUTES.filter((route) => route.method === 'GET')
+  it('has GET rows to hold the unknown-key rule to', () => {
+    expect(readOnly.length).toBeGreaterThanOrEqual(6)
+  })
+  for (const route of readOnly) {
+    const unknownKey = fc
+      .stringMatching(/^[a-z]{3,8}$/)
+      .filter((key) => !SEARCH_QUERY_KEYS.includes(key))
+    fcTest.prop(
+      [route.request.filter((request) => request.seeded), unknownKey],
+      withDefaults({ numRuns: 20 }),
+    )(`${route.name} refuses an unknown query key`, async (request, key) => {
+      const { app } = await seededServer()
+      const joiner = request.path.includes('?') ? '&' : '?'
+      const path = `${request.path}${joiner}${key}=1`
+      const response = await app.fetch(new Request(`http://fuzz${path}`))
+      const text = await response.text()
+      expect(response.status, `GET ${path} -> ${response.status} ${text.slice(0, 200)}`).toBe(400)
+      expect(JSON.parse(text)).toMatchObject({ error: 'invalid_request' })
     })
   }
 

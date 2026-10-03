@@ -11,7 +11,7 @@ export type {
   OkfMarkdownFrontmatter,
 } from './okf/schema.js'
 export { okfMarkdownDocumentSchema, okfMarkdownFrontmatterSchema } from './okf/schema.js'
-export { serializeOkf } from './okf/serialize.js'
+export { OkfNotYamlSafeError, serializeOkf } from './okf/serialize.js'
 export { yamlSafeValueSchema } from './okf/yaml-safe.js'
 export { documentReferenceMarkup, referenceMarkup } from './references/markup.js'
 export type { AliasResolver } from './references/resolve.js'

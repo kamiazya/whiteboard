@@ -1,14 +1,15 @@
 import { DocumentPathTakenError, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
-import type { Context } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
-import { type ApiErrorBody, errorBody, invalidRequestBody } from './api-errors.js'
+import { type ApiErrorBody, errorBody, invalidRequestBody, issueText } from './api-errors.js'
 import { factsCacheFor } from './references/content-source.js'
 import { vectorCacheFor } from './search/document-vector-cache.js'
-import { searchInputFromQuery } from './search-query.js'
+import { SEARCH_QUERY_KEYS, searchInputFromQuery, searchWireName } from './search-query.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyEditTool } from './tools/body-edit.js'
+import { inTheCallersWords, unknownWorkspaceRefusal } from './tools/caller-refusals.js'
 import { createCanvasEditTool } from './tools/canvas-edit.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createCanvasSnapshotTool } from './tools/canvas-snapshot.js'
@@ -39,8 +40,9 @@ import {
   documentSearchInputSchema,
   SearchNeedsQueryOrFilterError,
 } from './tools/document-search.js'
-import { OkfParseError } from './tools/document-set.js'
+import { OKF_YAML_SAFE_STAGE, OkfParseError } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
+import { DocumentKindMismatchError } from './tools/errors.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetListTool } from './tools/facet-list.js'
 import { createFacetSetTool } from './tools/facet-set.js'
@@ -102,6 +104,100 @@ async function readWriteBody(
   return smuggled ? { refusal: smuggled } : { body: { ...body } }
 }
 
+/**
+ * A GET route reads the query keys it declares and refuses the rest. Ignoring
+ * one reads as success while the filter the caller meant never applied (`tags`
+ * for `tag` answered every document), which is the failure a daemon's strict
+ * bodies already refuse — a caller must learn its value did not take effect.
+ */
+function readsQuery(allowed: readonly string[]): MiddlewareHandler {
+  return async (c, next) => {
+    const unknown = Object.keys(c.req.queries()).filter((key) => !allowed.includes(key))
+    if (unknown.length === 0) return next()
+    const read =
+      allowed.length === 0 ? 'this route reads no query string' : `it reads ${allowed.join(', ')}`
+    return c.json(
+      errorBody(
+        'invalid_request',
+        `unknown query parameter ${unknown.map((key) => `"${key}"`).join(', ')}; ${read}`,
+      ),
+      400,
+    )
+  }
+}
+
+/**
+ * The search route's refusals in the query string's own spelling: the input
+ * schema is the tool's (`query`, `tags`), and a caller of the URL never typed
+ * either.
+ */
+function invalidSearchRequestBody(error: z.ZodError): ApiErrorBody {
+  const reasons = error.issues.map((issue) =>
+    issueText({
+      ...issue,
+      path: issue.path.map((part, at) => (at === 0 ? searchWireName(String(part)) : part)),
+    }),
+  )
+  return errorBody('invalid_request', reasons.join('; '))
+}
+
+/** `POST …/documents` can create the workspace it names (`createWorkspace`), so it cannot be refused for lacking one here. */
+const MAY_MINT_WORKSPACE = /^POST \/api\/v1\/workspaces\/[^/]+\/documents$/
+
+type RouteContext = Context<{ Variables: { workspaceId: string } }>
+
+/**
+ * The workspace handle is resolved HERE, once per request, and every handler
+ * reads the result rather than the raw path parameter.
+ *
+ * Middleware rather than a call in each handler: resolving twice in one
+ * request is the failure this ordering exists to prevent — everything
+ * downstream keys on the resolved id (write locks, document caches, sync
+ * docKeys), and two independent resolutions can disagree the moment a
+ * segment moves between workspaces mid-flight.
+ *
+ * A handle nothing answers to is refused in the one voice the tools use: a
+ * route that let the lookup fail on its own said it differently (advice to
+ * ADD, the id the caller never typed). A create is the one request that may
+ * name a workspace it is about to make.
+ */
+function resolvesWorkspace(deps: ServerDeps): MiddlewareHandler<{
+  Variables: { workspaceId: string }
+}> {
+  return async (c, next) => {
+    const handle = c.req.param('workspaceId')
+    const workspaceId = await resolveWorkspaceId(deps.documentIndex, handle)
+    const unresolved =
+      workspaceId === handle &&
+      !MAY_MINT_WORKSPACE.test(`${c.req.method} ${c.req.path}`) &&
+      (await deps.documentIndex.resolveWorkspace(handle)) === null
+    if (unresolved) {
+      const refusal = await unknownWorkspaceRefusal(handle, deps.knownWorkspaceHandles)
+      return c.json(errorBody('workspace_not_found', refusal.message), 404)
+    }
+    c.set('workspaceId', workspaceId)
+    await next()
+  }
+}
+
+/**
+ * A refusal in the words the caller used: its handle, not the id the handle
+ * resolved to. The status follows the ORIGINAL error's class — re-saying a
+ * message builds a plain `Error`, which no class check would recognise.
+ */
+function refusingIn(deps: ServerDeps) {
+  return async (c: RouteContext, err: unknown) => {
+    const said = await inTheCallersWords(err, {
+      index: deps.documentIndex,
+      handle: c.req.param('workspaceId') ?? '',
+      workspaceId: c.get('workspaceId'),
+      documentId: c.req.param('documentId'),
+    })
+    const cause = said instanceof WorkspaceDocumentNotFoundError ? said : err
+    return mapDocumentError(c, cause, said instanceof Error ? said.message : undefined)
+  }
+}
+
 export function createServer(deps: ServerDeps) {
   const app = new Hono<{ Variables: { workspaceId: string } }>()
   // The stamp-validated facts cache is held by the deps, not this server: /mcp
@@ -109,20 +205,8 @@ export function createServer(deps: ServerDeps) {
   // cache. Backlinks, tags and search share it, whichever write path changed a document.
   const factsCache = factsCacheFor(deps)
 
-  /**
-   * The workspace handle is resolved HERE, once per request, and every handler
-   * below reads the result rather than the raw path parameter.
-   *
-   * Middleware rather than a call in each handler: resolving twice in one
-   * request is the failure this ordering exists to prevent — everything
-   * downstream keys on the resolved id (write locks, document caches, sync
-   * docKeys), and two independent resolutions can disagree the moment a
-   * segment moves between workspaces mid-flight.
-   */
-  app.use('/api/v1/workspaces/:workspaceId/*', async (c, next) => {
-    c.set('workspaceId', await resolveWorkspaceId(deps.documentIndex, c.req.param('workspaceId')))
-    await next()
-  })
+  app.use('/api/v1/workspaces/:workspaceId/*', resolvesWorkspace(deps))
+  const refuse = refusingIn(deps)
 
   app.post('/api/v1/workspaces/:workspaceId/documents', async (c) => {
     const read = await readWriteBody(c)
@@ -138,11 +222,11 @@ export function createServer(deps: ServerDeps) {
       const result = await wbDocumentCreate(deps, parsed.data)
       return c.json(result, 201)
     } catch (err) {
-      return mapDocumentError(c, err)
+      return refuse(c, err)
     }
   })
 
-  app.get('/api/v1/workspaces/:workspaceId/documents', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/documents', readsQuery([]), async (c) => {
     const parsed = wbDocumentListInputSchema.safeParse({ workspaceId: c.get('workspaceId') })
     if (!parsed.success) {
       return c.json(invalidRequestBody(parsed.error), 400)
@@ -151,11 +235,11 @@ export function createServer(deps: ServerDeps) {
       const result = await wbDocumentList(deps, parsed.data)
       return c.json(result, 200)
     } catch (err) {
-      return mapDocumentError(c, err)
+      return refuse(c, err)
     }
   })
 
-  app.get('/api/v1/workspaces/:workspaceId/documents/:documentId', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/documents/:documentId', readsQuery([]), async (c) => {
     const parsed = wbDocumentResolveInputSchema.safeParse({
       workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
@@ -167,7 +251,7 @@ export function createServer(deps: ServerDeps) {
       const result = await wbDocumentResolve(deps, parsed.data)
       return c.json(result, 200)
     } catch (err) {
-      return mapDocumentError(c, err)
+      return refuse(c, err)
     }
   })
 
@@ -183,15 +267,11 @@ export function createServer(deps: ServerDeps) {
       const result = await wbDocumentDelete(deps, parsed.data)
       return c.json(result, 200)
     } catch (err) {
-      return mapDocumentError(c, err)
+      return refuse(c, err)
     }
   })
 
-  // Read-only OKF projection of one document, over HTTP so a browsing UI
-  // (workspace file tree) can open one without an MCP client. Deliberately
-  // still OKF-specific: this is a different surface from the MCP tools, and
-  // the tree wants markdown regardless of what wb_document_get would choose.
-  app.get('/api/v1/workspaces/:workspaceId/search', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/search', readsQuery(SEARCH_QUERY_KEYS), async (c) => {
     const parsed = documentSearchInputSchema.safeParse({
       workspaceId: c.get('workspaceId'),
       ...searchInputFromQuery({
@@ -200,16 +280,25 @@ export function createServer(deps: ServerDeps) {
       }),
     })
     if (!parsed.success) {
-      return c.json(invalidRequestBody(parsed.error), 400)
+      return c.json(invalidSearchRequestBody(parsed.error), 400)
     }
     try {
       return c.json(await tools.documentSearch.execute(parsed.data))
     } catch (err) {
-      return mapDocumentError(c, err)
+      if (err instanceof SearchNeedsQueryOrFilterError) {
+        return c.json(
+          errorBody(
+            'search_needs_query_or_filter',
+            'Nothing to search for: pass `q` (words to match), or `tag` / `kind` (a filter to answer alone), or both.',
+          ),
+          400,
+        )
+      }
+      return refuse(c, err)
     }
   })
 
-  app.get('/api/v1/workspaces/:workspaceId/document-tags', async (c) => {
+  app.get('/api/v1/workspaces/:workspaceId/document-tags', readsQuery([]), async (c) => {
     const parsed = documentTagsInputSchema.safeParse({ workspaceId: c.get('workspaceId') })
     if (!parsed.success) {
       return c.json(invalidRequestBody(parsed.error), 400)
@@ -217,7 +306,7 @@ export function createServer(deps: ServerDeps) {
     try {
       return c.json(await computeDocumentTags(deps, parsed.data, factsCache))
     } catch (err) {
-      return mapDocumentError(c, err)
+      return refuse(c, err)
     }
   })
 
@@ -238,47 +327,51 @@ export function createServer(deps: ServerDeps) {
       if (err instanceof NamelessLinkifyTargetError) {
         return c.json(errorBody('nameless_link_target', err.message), 400)
       }
-      return mapDocumentError(c, err)
+      return refuse(c, err)
     }
   })
 
-  app.get('/api/v1/workspaces/:workspaceId/documents/:documentId/backlinks', async (c) => {
-    const parsed = backlinksInputSchema.safeParse({
-      workspaceId: c.get('workspaceId'),
-      documentId: c.req.param('documentId'),
-    })
-    if (!parsed.success) {
-      return c.json(invalidRequestBody(parsed.error), 400)
-    }
-    try {
-      return c.json(await computeBacklinks(deps, parsed.data, factsCache))
-    } catch (err) {
-      return mapDocumentError(c, err)
-    }
-  })
-
-  app.get('/api/v1/workspaces/:workspaceId/documents/:documentId/okf', async (c) => {
-    const parsed = exportOkfInputSchema.safeParse({
-      workspaceId: c.get('workspaceId'),
-      documentId: c.req.param('documentId'),
-    })
-    if (!parsed.success) {
-      return c.json(invalidRequestBody(parsed.error), 400)
-    }
-    try {
-      const result = await exportOkf(deps, parsed.data)
-      return c.json(result, 200)
-    } catch (err) {
-      // A tree node whose doc was never written (created but never
-      // imported/edited) has no OKF projection — a read miss, not a 500.
-      // `mapDocumentError` only knows document-crud's index-level errors, so
-      // the store-level miss is answered here.
-      if (err instanceof SnapshotNotFoundError) {
-        return c.json(errorBody('document_not_found', err.message), 404)
+  app.get(
+    '/api/v1/workspaces/:workspaceId/documents/:documentId/backlinks',
+    readsQuery([]),
+    async (c) => {
+      const parsed = backlinksInputSchema.safeParse({
+        workspaceId: c.get('workspaceId'),
+        documentId: c.req.param('documentId'),
+      })
+      if (!parsed.success) {
+        return c.json(invalidRequestBody(parsed.error), 400)
       }
-      return mapDocumentError(c, err)
-    }
-  })
+      try {
+        return c.json(await computeBacklinks(deps, parsed.data, factsCache))
+      } catch (err) {
+        return refuse(c, err)
+      }
+    },
+  )
+
+  // Read-only OKF projection of one markdown document, over HTTP so a browsing
+  // UI (workspace file tree) can open one without an MCP client; a spatial
+  // document is refused as `wb_document_get` would not read it as OKF either.
+  app.get(
+    '/api/v1/workspaces/:workspaceId/documents/:documentId/okf',
+    readsQuery([]),
+    async (c) => {
+      const parsed = exportOkfInputSchema.safeParse({
+        workspaceId: c.get('workspaceId'),
+        documentId: c.req.param('documentId'),
+      })
+      if (!parsed.success) {
+        return c.json(invalidRequestBody(parsed.error), 400)
+      }
+      try {
+        const result = await exportOkf(deps, parsed.data)
+        return c.json(result, 200)
+      } catch (err) {
+        return refuse(c, err)
+      }
+    },
+  )
 
   const tools = {
     // The document READ operations are exposed HERE as tool objects, not only
@@ -325,44 +418,68 @@ export function createServer(deps: ServerDeps) {
   }
 }
 
-function mapDocumentError(c: Context, err: unknown) {
-  if (err instanceof WorkspaceDocumentNotFoundError) {
-    return c.json(errorBody('document_not_found', err.message), 404)
-  }
+interface Refusal {
+  readonly matches: (err: unknown) => boolean
+  readonly code: (err: unknown) => string
+  readonly status: 400 | 404 | 409
+}
+
+const refusalOf = (
+  cls: abstract new (...args: never[]) => Error,
+  code: string | ((err: never) => string),
+  status: Refusal['status'],
+): Refusal => ({
+  matches: (err) => err instanceof cls,
+  code: typeof code === 'string' ? () => code : (err) => code(err as never),
+  status,
+})
+
+/**
+ * The errors a route answers rather than lets escape, in the order they are
+ * tried. Each is a request that is well-formed to a server that is fine: only
+ * the caller can send something the operation admits, so none is a 500.
+ */
+const REFUSALS: readonly Refusal[] = [
+  refusalOf(WorkspaceDocumentNotFoundError, 'document_not_found', 404),
+  // A document created and indexed but never written has no stored bytes —
+  // a read miss, and not a workspace-level one.
+  refusalOf(SnapshotNotFoundError, 'document_not_found', 404),
+  // The route reads one format; a document in the other is a conflict with
+  // what it is, which only reading it by its own kind resolves.
+  refusalOf(DocumentKindMismatchError, 'document_kind_mismatch', 409),
   // The tool layer's own error carries advice for an MCP caller; the index's
   // spelling of the same condition escapes untranslated from tools that call
   // `documentIndex.listDocuments` directly (backlinks, document-tags), and a
   // typo'd workspaceId must read as 404, not 500.
-  if (err instanceof WorkspaceNotFoundForCallerError || isWorkspaceNotFoundError(err)) {
-    return c.json(errorBody('workspace_not_found', err.message), 404)
-  }
-  if (err instanceof DocumentPathTakenError) {
-    return c.json(errorBody('document_path_taken', err.message), 409)
-  }
+  {
+    matches: (err) =>
+      err instanceof WorkspaceNotFoundForCallerError || isWorkspaceNotFoundError(err),
+    code: () => 'workspace_not_found',
+    status: 404,
+  },
+  refusalOf(DocumentPathTakenError, 'document_path_taken', 409),
   // The caller asked to create a workspace under a handle that cannot be a
-  // segment (ADR-0019). 400, not 500: the request is well-formed and the
-  // server is fine — the NAME is the problem, and only the caller can pick
+  // segment (ADR-0019): the NAME is the problem, and only the caller can pick
   // another one.
-  // Same reason: a search naming neither words nor a filter is a request
-  // the schema admits and the tool has nothing to do with.
-  if (err instanceof SearchNeedsQueryOrFilterError) {
-    return c.json(errorBody('search_needs_query_or_filter', err.message), 400)
-  }
-  if (err instanceof WorkspaceSegmentUnusableError) {
-    return c.json(errorBody('workspace_segment_unusable', err.message), 400)
-  }
-  // A markdown body the schema admits (any string) that OKF cannot parse:
-  // the reason names the stage, and only the caller can supply a body that
-  // reaches the next one.
-  if (err instanceof OkfParseError) {
-    return c.json(errorBody('okf_parse_failed', err.message), 400)
-  }
-  // A tag the workspace's own library does not admit (ADR-0040 decision 5).
-  // 400 for the same reason: the request is well-formed and the server is
-  // fine — only the caller can send a value the declaration admits, and the
-  // message names the ones it does.
-  if (err instanceof TagLibraryError) {
-    return c.json(errorBody('tag_not_in_library', err.message), 400)
-  }
-  throw err
+  refusalOf(WorkspaceSegmentUnusableError, 'workspace_segment_unusable', 400),
+  // A markdown body the schema admits (any string) that OKF cannot parse: the
+  // reason names the stage, and only the caller can supply a body that
+  // reaches the next one. A value YAML cannot carry has a code of its own, so
+  // a client can tell "fix this value" from "this is not OKF".
+  refusalOf(
+    OkfParseError,
+    (err: OkfParseError) =>
+      err.stage === OKF_YAML_SAFE_STAGE ? 'okf_not_yaml_safe' : 'okf_parse_failed',
+    400,
+  ),
+  // A tag the workspace's own library does not admit (ADR-0040 decision 5);
+  // the message names the ones it does.
+  refusalOf(TagLibraryError, 'tag_not_in_library', 400),
+]
+
+/** `said` is the reason as the caller's own words re-state it; the error's own message otherwise. */
+function mapDocumentError(c: Context, err: unknown, said?: string) {
+  const refusal = REFUSALS.find((candidate) => candidate.matches(err))
+  if (refusal === undefined) throw err
+  return c.json(errorBody(refusal.code(err), said ?? (err as Error).message), refusal.status)
 }

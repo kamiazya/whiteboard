@@ -132,6 +132,24 @@ describe('canvas CRUD routes', () => {
     expect(apiErrorReason(malformed)).toContain('OKF parse failed at frontmatter-schema:')
   })
 
+  it('POST a markdown document whose frontmatter holds a value YAML cannot carry returns a code of its own', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'note',
+        kind: 'markdown',
+        markdown: '---\ntype: note\nweird: .nan\n---\n\nbody\n',
+        createWorkspace: true,
+      }),
+    })
+    expect(res.status).toBe(400)
+    const refused = await res.json()
+    expect(refused).toMatchObject({ error: 'okf_not_yaml_safe' })
+    expect(apiErrorReason(refused)).toContain('weird: NaN is not yaml-safe')
+  })
+
   it('POST a markdown document whose tag the workspace library forbids returns 400, not 500', async () => {
     const app = makeApp()
     // The library is a document like any other, declared through the same

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseOkf } from './parse.js'
-import { serializeOkf } from './serialize.js'
+import { OkfNotYamlSafeError, serializeOkf } from './serialize.js'
 
 describe('serializeOkf', () => {
   it('emits facets-domain keys in canonical lexicographic order regardless of authoring order', () => {
@@ -51,13 +51,21 @@ describe('serializeOkf', () => {
     }
   })
 
-  it('surfaces a typed error instead of throwing when a facet value is not yaml-safe', () => {
-    expect(() =>
+  it('throws a typed error naming the key when a facet value is not yaml-safe', () => {
+    let thrown: unknown
+    try {
       serializeOkf({
         frontmatter: { type: 'note', facets: { 'x.y/v1': { bad: Number.NaN } } },
         body: '',
-      }),
-    ).toThrow(/yaml-safe/)
+      })
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(OkfNotYamlSafeError)
+    expect((thrown as OkfNotYamlSafeError).issues).toMatchObject([
+      { path: ['facets', 'x.y/v1', 'bad'], message: 'NaN is not yaml-safe' },
+    ])
+    expect((thrown as Error).message).toMatch(/yaml-safe/)
   })
 })
 
