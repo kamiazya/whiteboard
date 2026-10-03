@@ -17,8 +17,9 @@ import { z } from 'zod'
  *    content would need merge semantics of its own. This aggregate is a
  *    projection, rebuildable from the store at any time.
  * 2. **Extraction happens at the persistence boundary.** A document's facts
- *    are extracted whole from a persisted snapshot — CRDT concurrency is resolved inside Loro before anything
- *    reaches this layer, so the aggregate never observes a mid-merge state.
+ *    are extracted whole from a persisted snapshot — CRDT concurrency is
+ *    resolved inside Loro before anything reaches this layer, so the
+ *    aggregate never observes a mid-merge state.
  * 3. **Global joins stay outside the CRDT.** `[[Name]]` resolution depends
  *    on the workspace's name table (a document gains a backlink when a
  *    THIRD document's rename breaks a name's uniqueness — neither endpoint
