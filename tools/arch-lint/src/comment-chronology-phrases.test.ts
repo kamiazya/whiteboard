@@ -22,9 +22,10 @@ import { trackedFiles } from './tracked-files.js'
 // The same holds for the markers of WHEN a comment was written: an issue or PR
 // number, "this increment", "the next slice", "until 2026-09-19", and a slice
 // label such as `S4b` — which two unrelated pieces of work each used for their
-// own. `slice` alone stays free (a slice of an array, of the changed files), as
-// does `#130`, React's own minified-error number. Name the module or the
-// mechanism instead; `git blame` names the change.
+// own, and `wave N`, a numbered batch of work. `slice` alone stays free (a
+// slice of an array, of the changed files), as does `#130`, React's own
+// minified-error number. Name the module or the mechanism instead; `git blame`
+// names the change.
 
 const PHRASES: ReadonlyArray<{ readonly pattern: RegExp; readonly name: string }> = [
   { pattern: /\baudit-triage\b/i, name: 'audit-triage' },
@@ -42,6 +43,7 @@ const PHRASES: ReadonlyArray<{ readonly pattern: RegExp; readonly name: string }
   { pattern: /\b(?:until|since) 20\d\d-\d\d-\d\d\b/, name: 'until/since a date' },
   { pattern: /\b(?:this|same) session measured\b/i, name: 'this session measured' },
   { pattern: /\bS(?:[3-9]|10)[ab]?\b/, name: 'slice label' },
+  { pattern: /\bwave \d+\b/i, name: 'wave number' },
 ]
 
 /**
@@ -104,6 +106,7 @@ describe('a source comment names the rule, not the working session that produced
     expect(phrasesIn('  // the replica-key holder (dual-plane collapse S4b)')).toEqual([
       'slice label',
     ])
+    expect(phrasesIn("  // wave 7's deletions were found by hand")).toEqual(['wave number'])
     // Not a comment, and "session" as the app's own noun.
     expect(phrasesIn('  // React throws #130 with no name in it')).toEqual([])
     expect(

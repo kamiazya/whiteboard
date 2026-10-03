@@ -2,8 +2,8 @@
  * Exports that only a test uses, and nothing else ships.
  *
  * Knip counts a test's import as a use, so a symbol kept alive only by its own
- * test is invisible to it: wave 7's deletions of `resolveEdgeStyle` and
- * `isOriginAllowedForServerMode` were found by hand, and the class re-accrues
+ * test is invisible to it (`resolveEdgeStyle` and `isOriginAllowedForServerMode`
+ * lived that way until someone found them by hand), and the class re-accrues
  * with every refactor that leaves its tests behind. The scan is
  * `test-only-exports-scan.ts`; this holds what it finds from both sides.
  *

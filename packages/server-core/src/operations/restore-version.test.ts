@@ -606,7 +606,7 @@ describe('restoreVersion subtree mode', () => {
  * branches had actually joined.
  *
  * The row is what carries the REASON. The topology is already derivable
- * from the stored frontiers (`cmpFrontiers` answers -1/1/0/undefined, and
+ * from the stored frontiers (Loro's `cmpFrontiers` answers -1/1/0/undefined, and
  * undefined is a real branch point), but no amount of frontier arithmetic
  * can say WHY the branches met — the same reason a merge commit carries a
  * message.

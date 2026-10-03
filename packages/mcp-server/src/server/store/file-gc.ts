@@ -29,15 +29,20 @@ import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
-// Garbage-collect files in a workspace's files directory that are not
-// referenced by any live canvas in the workspace — and, when a versionStore
-// is supplied, by any saved past version state either.
+// Garbage-collect files in a workspace's files directory that no document
+// uses. Used means referenced by a live document or a trashed one (a restore
+// brings it back under the same id) and, when a versionStore is supplied, by
+// any saved past version state.
 //
 // Live-only mode (no versionStore) is cheap and works well for workspaces
 // that do not depend on saved-version restore for image fidelity. Pass a
 // VersionStore to walk every saved version's reconstructed state too;
 // that protects images that only the past states reference, at the cost
-// of one Loro fork+checkout per version per canvas.
+// of one Loro fork+checkout per version per document.
+//
+// A scan that cannot read something it must judge (a version, a trash entry,
+// a workspace node this build does not understand) refuses to purge rather
+// than read the absence as "unused".
 
 const log = getLogger('file-gc')
 

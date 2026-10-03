@@ -5,7 +5,7 @@
 // Design: a completion-rescheduled ONE-SHOT setTimeout, unref'd — never
 // setInterval. Unlike a store that piggybacks its lazy prune on a
 // high-frequency operation it already runs, file-gc has no natural hook: a
-// full pass (Loro fork+checkout per branch/version per canvas, across every
+// full pass (Loro fork+checkout per version per document, across every
 // workspace) is too expensive to run inline on every mutation. A `setInterval`
 // would also keep the daemon's event loop alive for the process lifetime even
 // when idle; an unref'd one-shot timer that only reschedules itself once its
@@ -272,8 +272,8 @@ export interface FileGcSweeperOptions {
 
 interface FileGcSweeperStopOptions {
   // Caps how long stop() waits for an in-flight pass before returning. A
-  // full pass can be expensive (Loro fork+checkout per branch/version per
-  // canvas, across every workspace), and stop() is invoked from the daemon's
+  // full pass can be expensive (Loro fork+checkout per version per
+  // document, across every workspace), and stop() is invoked from the daemon's
   // shutdown path (idle timeout, explicit shutdown route, normal close) --
   // without a cap, shutdown blocks for the entire remaining pass duration.
   // The in-flight pass itself is NOT cancelled: it keeps running in the

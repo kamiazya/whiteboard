@@ -55,7 +55,7 @@ export const MUTATED = [
   'src/tidy.ts',
   // Split out of `tidy.ts` and covered for that reason: `buildUnits` is
   // where that file's mutation residue moved once its scoreboard existed,
-  // and `membershipOf` is what the idempotence fix reads. Leaving it out
+  // and `mostlyInside` is what the idempotence fix reads. Leaving it out
   // would have SHRUNK what the lane sees while the report kept looking the
   // same, which is the failure this list's pinned counts exist to stop.
   'src/tidy-units.ts',

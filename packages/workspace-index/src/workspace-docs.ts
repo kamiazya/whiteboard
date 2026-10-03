@@ -18,7 +18,7 @@ export interface WorkspaceDocCursor {
  *
  * `updates` is returned rather than merely applied because a caller that
  * catches a SHARED document up usually has an audience for it — the daemon's
- * websocket fan-out sends these bytes on to every connected client, which is
+ * SSE fan-out sends these bytes on to every connected client, which is
  * how a browser attached to one instance learns what another instance wrote.
  * Deriving them again from the doc afterwards is not possible: only the
  * catch-up knows which ops were new.
