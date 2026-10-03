@@ -20,7 +20,12 @@ import {
   type TagBearerKind,
   tagsInUse,
 } from '@kamiazya/whiteboard-model'
-import { readStencilLibrary, readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  readStencilLibrary,
+  readTagLibrary,
+  STENCIL_LIBRARY_PATH,
+  TAG_LIBRARY_PATH,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import {
   fullTextSearch,
@@ -282,12 +287,12 @@ export function createLocalFilesSource(
   }
 
   return {
-    // One well-known path per library, the daemon's convention
-    // (`TAG_LIBRARY_PATH`, `STENCIL_LIBRARY_PATH`): nothing here can ask the
-    // index which document carries a facet either, and the two keepers must
-    // agree on where a library lives.
-    readTagLibrary: () => readLibrary(index, loadCurrentDoc, 'tags', readTagLibrary),
-    readStencilLibrary: () => readLibrary(index, loadCurrentDoc, 'stencils', readStencilLibrary),
+    // One well-known path per library, the same constants the daemon reads:
+    // nothing here can ask the index which document carries a facet either,
+    // and the two keepers must agree on where a library lives.
+    readTagLibrary: () => readLibrary(index, loadCurrentDoc, TAG_LIBRARY_PATH, readTagLibrary),
+    readStencilLibrary: () =>
+      readLibrary(index, loadCurrentDoc, STENCIL_LIBRARY_PATH, readStencilLibrary),
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       const bearers: { what: TagBearerKind; tags: readonly string[] }[] = []

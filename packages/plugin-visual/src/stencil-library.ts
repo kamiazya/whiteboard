@@ -20,6 +20,25 @@ import { z } from 'zod'
 export const VISUAL_STENCILS_KEY = 'visual.stencils/v0'
 
 /**
+ * Where a workspace keeps its library.
+ *
+ * A CONVENTION, and a deliberate one rather than a placeholder. The document
+ * declares itself by carrying `visual.stencils/v0` — that facet is the
+ * definition — but nothing can ask the index *which documents carry a
+ * facet*, so finding it otherwise means opening every markdown document in
+ * the workspace on every write that names a stencil. One well-known path
+ * costs one lookup, and gives "where do I put my stencils" a single answer,
+ * which is worth more to a model than flexibility is.
+ *
+ * The upgrade is named: when an index can answer that question, this becomes
+ * the DEFAULT rather than the rule, and a workspace may spread its
+ * vocabulary over several documents.
+ *
+ * Declared beside the reader because BOTH keepers look the document up by it.
+ */
+export const STENCIL_LIBRARY_PATH = 'stencils'
+
+/**
  * `visual.stencils/v0` — the facet that makes a DOCUMENT a workspace's
  * stencil library (ADR-0034 decision 4; the authoring format was settled on
  * 2026-09-11 and this is it).

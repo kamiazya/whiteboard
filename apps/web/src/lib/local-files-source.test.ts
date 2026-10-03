@@ -10,6 +10,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -362,7 +363,7 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     ])
   })
 
-  it('reads the tag library the document at `tags` declares, and answers none without one', async () => {
+  it('reads the tag library the document at the tag library path declares, and answers none without one', async () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const store = new LoroStore()
@@ -370,7 +371,7 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     await expect(before.readTagLibrary?.()).resolves.toEqual({})
     const library = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
-      path: 'tags',
+      path: TAG_LIBRARY_PATH,
       kind: 'markdown',
     })
     const doc = new Loro()
@@ -384,14 +385,14 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     })
   })
 
-  it('reads the stencil library the document at `stencils` declares, and answers none without one', async () => {
+  it('reads the stencil library the document at the stencil library path declares, and answers none without one', async () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const store = new LoroStore()
     await expect(createLocalFilesSource().readStencilLibrary?.()).resolves.toEqual({})
     const library = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
-      path: 'stencils',
+      path: STENCIL_LIBRARY_PATH,
       kind: 'markdown',
     })
     const doc = new Loro()

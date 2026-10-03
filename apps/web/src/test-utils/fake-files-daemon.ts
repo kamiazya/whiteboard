@@ -10,7 +10,12 @@
  * is the source's mapping of that answer.
  */
 import { type TagBearerKind, tagsInUse } from '@kamiazya/whiteboard-model'
-import { readStencilLibrary, readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  readStencilLibrary,
+  readTagLibrary,
+  STENCIL_LIBRARY_PATH,
+  TAG_LIBRARY_PATH,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { jsonResponse } from './json-response.js'
 
 export interface FakeFilesDaemonRow {
@@ -57,8 +62,8 @@ function tagsAnswer(state: State) {
       .map((row) => ({ documentId: row.id, tags: [...(row.tags ?? [])] })),
     contents: [],
     inUse: tagsInUse(bearers),
-    library: readTagLibrary(facetsAt('tags')),
-    stencils: readStencilLibrary(facetsAt('stencils')),
+    library: readTagLibrary(facetsAt(TAG_LIBRARY_PATH)),
+    stencils: readStencilLibrary(facetsAt(STENCIL_LIBRARY_PATH)),
   }
 }
 

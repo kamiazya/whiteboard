@@ -35,6 +35,19 @@ import { z } from 'zod'
 export const VISUAL_TAGS_KEY = 'visual.tags/v0'
 
 /**
+ * Where a workspace keeps its tag library: the same kind of CONVENTION as
+ * `STENCIL_LIBRARY_PATH`, for the same reason — nothing can ask the index
+ * which documents carry a facet, so one well-known path costs one lookup
+ * and gives "where do I declare my keys" a single answer. The upgrade is
+ * the same too: a default rather than a rule once an index can answer.
+ *
+ * Declared beside the reader because BOTH keepers look the document up by it,
+ * and a path each spelled for itself would let one stop reading a library the
+ * other still finds.
+ */
+export const TAG_LIBRARY_PATH = 'tags'
+
+/**
  * A key or a value: the scoped-tag grammar's own identifier. Checked here,
  * at the write, because a library declaring `Health` would describe a key
  * decision 1 refuses to write on anything.

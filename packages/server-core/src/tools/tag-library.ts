@@ -15,6 +15,7 @@ import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   readTagLibrary,
+  TAG_LIBRARY_PATH,
   type TagLibrary,
   tagLibraryObjection,
 } from '@kamiazya/whiteboard-plugin-visual'
@@ -23,14 +24,9 @@ import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
 import { listWorkspaceDocuments, type UnknownWorkspace } from './stencil-library.js'
 
-/**
- * Where a workspace keeps its tag library: the same kind of CONVENTION as
- * `STENCIL_LIBRARY_PATH`, for the same reason — nothing can ask the index
- * which documents carry a facet, so one well-known path costs one lookup
- * and gives "where do I declare my keys" a single answer. The upgrade is
- * the same too: a default rather than a rule once an index can answer.
- */
-export const TAG_LIBRARY_PATH = 'tags'
+// The constant is plugin-visual's, where the browser keeper reads it too; the
+// daemon's barrel and its callers keep naming it from here.
+export { TAG_LIBRARY_PATH }
 
 /**
  * What the document at `tags` declares, or nothing — for a workspace

@@ -16,27 +16,14 @@ import {
   withWorkspaceStencils,
 } from '@kamiazya/whiteboard-facet-engine'
 import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
-import { readStencilLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { readStencilLibrary, STENCIL_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
 
-/**
- * Where a workspace keeps its library.
- *
- * A CONVENTION, and a deliberate one rather than a placeholder. The document
- * declares itself by carrying `visual.stencils/v0` — that facet is the
- * definition — but nothing can ask the index *which documents carry a
- * facet*, so finding it otherwise means opening every markdown document in
- * the workspace on every write that names a stencil. One well-known path
- * costs one lookup, and gives "where do I put my stencils" a single answer,
- * which is worth more to a model than flexibility is.
- *
- * The upgrade is named: when an index can answer that question, this becomes
- * the DEFAULT rather than the rule, and a workspace may spread its
- * vocabulary over several documents.
- */
-export const STENCIL_LIBRARY_PATH = 'stencils'
+// The constant is plugin-visual's, where the browser keeper reads it too; the
+// daemon's barrel and its callers keep naming it from here.
+export { STENCIL_LIBRARY_PATH }
 
 /**
  * What to answer when the WORKSPACE itself does not exist. Stated by every
