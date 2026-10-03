@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { writeMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
@@ -405,6 +405,30 @@ describe('GET /versions/:id/document', () => {
     const body = (await res.json()) as { kind: string; canvas: { nodes: { id: string }[] } }
     expect(body.kind).toBe('spatial')
     expect(body.canvas.nodes.map((n) => n.id)).toEqual(['kept'])
+  })
+
+  it('answers a markdown document its body when only the workspace entry records the kind', async () => {
+    // A document the web editor saved carries its kind on the workspace node
+    // and nothing on the document itself, so the content read has to fall
+    // back to the entry rather than read a note as an empty canvas.
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
+    )
+    const note = new LoroDoc()
+    writeMarkdownBody(note, '# the plan')
+    note.commit()
+    await saveDocument('session1', 'note', note, { kind: 'markdown' })
+    const saved = await app.request('/api/workspaces/session1/documents/note/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'before' }),
+    })
+    const { version } = (await saved.json()) as { version: { id: string } }
+
+    const res = await app.request(
+      `/api/workspaces/session1/documents/note/versions/${version.id}/document`,
+    )
+    expect(await res.json()).toEqual({ kind: 'markdown', body: '# the plan' })
   })
 
   it('refuses a version id that belongs to another document, as restore does', async () => {

@@ -1,4 +1,4 @@
-import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { BrowserVersionStore } from './browser-version-store.js'
@@ -63,9 +63,7 @@ export function createBrowserVersionsBackend(deps: {
       // keeper that never held one could still implement it.
       const past = await deps.store.loadPast(getBrowserWorkspaceId(), path, versionId)
       if (past === null) return null
-      return deps.kind === 'markdown'
-        ? { kind: 'markdown', body: readMarkdownBody(past) }
-        : { kind: 'spatial', canvas: readSpatialCanvas(past) }
+      return readDocumentContent(past, deps.kind)
     },
     async restore(_workspaceId, path, versionId) {
       const workspaceId = getBrowserWorkspaceId()

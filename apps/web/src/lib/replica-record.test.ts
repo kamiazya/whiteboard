@@ -58,6 +58,12 @@ describe('replica record', () => {
     expect(readReplicaContent(doc, { documentId: SP, kind: 'spatial' }).kind).toBe('spatial')
   })
 
+  it('reads an entry with no kind as spatial, the kind every pre-kind document was', () => {
+    // The daemon's readers answer a kind recorded nowhere the same way.
+    const doc = record()
+    expect(readReplicaContent(doc, { documentId: SP }).kind).toBe('spatial')
+  })
+
   it('writes a body into the record, where a read finds it', () => {
     const doc = record()
     writeReplicaMarkdown(doc, MD, '# Plan, edited')

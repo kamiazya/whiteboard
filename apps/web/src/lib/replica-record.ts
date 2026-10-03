@@ -13,10 +13,10 @@ import {
   referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
+import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   documentContainers,
-  readMarkdownBody,
-  readSpatialCanvas,
+  readDocumentContent,
   readWorkspaceDocuments,
   reconcileSpatialCanvas,
   writeMarkdownBody,
@@ -29,10 +29,12 @@ import type { linkTitles } from './link-entries.js'
 /** The workspace record a replica is: one CRDT holding every document. */
 export type ReplicaRecord = LoroDoc
 
-/** What a selected document holds, read out of the record. */
-export type ReplicaContent =
-  | { kind: 'spatial'; canvas: SpatialCanvas }
-  | { kind: 'markdown'; body: string }
+/**
+ * What a selected document holds, read out of the record. The shape the
+ * daemon answers a past version with, so one reader's output is assignable to
+ * the other's and neither can grow a field the other lacks.
+ */
+export type ReplicaContent = VersionDocumentResponse
 
 /**
  * The record's documents in the web entry type. The two agree except that
@@ -56,10 +58,7 @@ export function readReplicaContent(
   record: ReplicaRecord,
   entry: Pick<WorkspaceDocumentEntry, 'documentId' | 'kind'>,
 ): ReplicaContent {
-  const containers = documentContainers(record, entry.documentId)
-  return entry.kind === 'spatial'
-    ? { kind: 'spatial', canvas: readSpatialCanvas(containers) }
-    : { kind: 'markdown', body: readMarkdownBody(containers) }
+  return readDocumentContent(documentContainers(record, entry.documentId), entry.kind)
 }
 
 export function writeReplicaMarkdown(

@@ -4,16 +4,13 @@ import {
   saveVersionRequestSchema,
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import {
-  readDocumentKind,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type { RequestOperator } from '@kamiazya/whiteboard-server-core'
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
+import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
-import { getDoc } from '../../store/document-store.js'
+import { getDoc, listDocuments } from '../../store/document-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import {
@@ -84,6 +81,24 @@ function saveVersionIssueMessage(error: z.ZodError): string {
   return refusalReason(error, fallback)
 }
 
+/**
+ * A past state as the contract answers it. The workspace entry's kind is the
+ * fallback: a document the web editor saved records its kind on the node and
+ * nowhere in its own content, which would otherwise preview a note as an
+ * empty canvas.
+ */
+async function pastContent(
+  past: LoroDoc,
+  workspaceId: string,
+  path: string,
+  scope: StoreScope,
+): Promise<VersionDocumentResponse> {
+  const entryKind = (await listDocuments(workspaceId, scope)).find(
+    (entry) => entry.path === path,
+  )?.kind
+  return readDocumentContent(past, entryKind)
+}
+
 // GET /api/workspaces/:workspaceId/documents/:path/versions
 // POST /api/workspaces/:workspaceId/documents/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
@@ -141,10 +156,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
             404,
           )
 
-        const response: VersionDocumentResponse =
-          readDocumentKind(past) === 'markdown'
-            ? { kind: 'markdown', body: readMarkdownBody(past) }
-            : { kind: 'spatial', canvas: readSpatialCanvas(past) }
+        const response = await pastContent(past, workspaceId, path, scope)
         return c.json(response)
       } catch (err) {
         const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)

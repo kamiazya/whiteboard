@@ -9,17 +9,12 @@
  * carries no reference to bytes the daemon never stored.
  */
 
-import {
-  readCoreFacets,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import type { DocumentFileAdapter } from './document-file-contract.js'
 import { uploadRefusalReason } from './image-upload-policy.js'
+import { readLoadedFileDocument } from './read-loaded-file-document.js'
 
 const log = getAppLogger('daemon-file-adapter')
 
@@ -59,15 +54,7 @@ export function createDaemonFileAdapter({
         if (!res.ok) return undefined
         const doc = new Loro()
         doc.import(new Uint8Array(await res.arrayBuffer()))
-        // One snapshot, every read: the doc used to be discarded after the
-        // canvas read, which is why neither facets nor the body need a
-        // second request.
-        const body = readMarkdownBody(doc)
-        return {
-          canvas: readSpatialCanvas(doc) as SpatialCanvas,
-          facets: readCoreFacets(doc),
-          ...(body.length > 0 ? { body } : {}),
-        }
+        return readLoadedFileDocument(doc)
       } catch (err) {
         log.warn('referenced document load failed', { ref, err })
         return undefined

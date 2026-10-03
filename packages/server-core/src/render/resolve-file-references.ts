@@ -1,9 +1,5 @@
 import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
-import {
-  readDocumentKind,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, documentPathSchema, type WorkspaceId } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
@@ -67,14 +63,10 @@ export async function loadReferencedDocument(
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(snapshot.manifest, snapshot.chunks))
-  // Neither known reads as spatial, the kind every pre-kind document was —
-  // the same fallback wb_scene_render takes for the document it renders.
-  const kind = readDocumentKind(doc) ?? entry.kind ?? 'spatial'
-  if (kind === 'markdown') {
-    return { documentId: entry.documentId, ...name, body: readMarkdownBody(doc) }
+  const content = readDocumentContent(doc, entry.kind)
+  return {
+    documentId: entry.documentId,
+    ...name,
+    ...(content.kind === 'markdown' ? { body: content.body } : { canvas: content.canvas }),
   }
-  if (kind === 'spatial') {
-    return { documentId: entry.documentId, ...name, canvas: readSpatialCanvas(doc) }
-  }
-  return { documentId: entry.documentId, ...name }
 }

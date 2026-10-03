@@ -10,6 +10,7 @@ export type { DocumentContainers } from './containers.js'
 export { MARKDOWN_BODY_KEY } from './containers.js'
 export { contentDigestOfDocument } from './content-digest.js'
 export { type DocumentBatchWriter, withDocumentBatch } from './document-batch.js'
+export { type DocumentContent, readDocumentContent } from './document-content.js'
 export {
   readCoreFacets,
   readDocumentKind,

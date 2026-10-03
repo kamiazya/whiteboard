@@ -61,6 +61,23 @@ describe('loadBrowserReference', () => {
     expect(source).toEqual({ documentId: entry.documentId, body: 'legacy body', name: 'Old Note' })
   })
 
+  it('a document no index row names reads as spatial, the kind every pre-kind document was', async () => {
+    // Conformance with the daemon's readers: a kind recorded nowhere is
+    // spatial on every keeper, so a pre-kind canvas is drawn as a canvas.
+    const documentId = '01ARZ3NDEKTSV4RRFFQ69G5FBZ'
+    const doc = new Loro()
+    writeSpatialCanvas(doc, {
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'a canvas' })],
+      edges: [],
+    })
+    await new LoroStore().save(documentId, doc.export({ mode: 'snapshot' }))
+
+    const source = await loadBrowserReference(documentId)
+    await expectLoggedFailure('document entry load failed')
+    expect(source?.canvas?.nodes.map((node) => node.id)).toEqual(['n1'])
+    expect(source?.body).toBeUndefined()
+  })
+
   it('a workspace that could not be OPENED is not a document with no content', async () => {
     // The other half of the same lie: the tree read failed, so the legacy
     // row's "no record here" is the only answer left — and on its own it
