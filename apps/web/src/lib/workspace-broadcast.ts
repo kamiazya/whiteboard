@@ -38,6 +38,16 @@ const workspaceBroadcastSchema = z.discriminatedUnion('type', [
     documentId: z.string().min(1),
     version: versionEntrySchema,
   }),
+  // A document, and everything below it, now lives at `to`.
+  z.object({
+    type: z.literal('document-moved'),
+    from: z.string().min(1),
+    to: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal('document-removed'),
+    path: z.string().min(1),
+  }),
 ])
 
 export type WorkspaceBroadcast = z.infer<typeof workspaceBroadcastSchema>
@@ -73,20 +83,36 @@ export function listenToWorkspace(
 }
 
 /**
- * Announces a saved version to every end on the record, THIS tab's included —
- * which is how the page that saved it re-reads its own history column. A
- * fresh channel rather than a connection's, since a sending object never
- * hears itself.
+ * Posts one message to every end on the record, THIS tab's included. A fresh
+ * channel rather than a connection's, since a sending object never hears
+ * itself — and so the page that caused the change is told as well as the
+ * other tabs.
  */
+function announce(workspaceId: string, message: WorkspaceBroadcast): void {
+  if (typeof BroadcastChannel === 'undefined') return
+  const channel = new BroadcastChannel(channelName(workspaceId))
+  channel.postMessage(workspaceBroadcastSchema.parse(message))
+  channel.close()
+}
+
+/** A saved version, so the page that saved it re-reads its own history column. */
 export function announceVersion(
   workspaceId: string,
   documentId: string,
   version: VersionEntry,
 ): void {
-  if (typeof BroadcastChannel === 'undefined') return
-  const channel = new BroadcastChannel(channelName(workspaceId))
-  channel.postMessage(
-    workspaceBroadcastSchema.parse({ type: 'version-created', documentId, version }),
-  )
-  channel.close()
+  announce(workspaceId, { type: 'version-created', documentId, version })
+}
+
+/**
+ * A document changed path. Pending work keyed by the old path — an automatic
+ * checkpoint inside its quiet window — would otherwise fail against a path
+ * that no longer resolves.
+ */
+export function announceDocumentMoved(workspaceId: string, from: string, to: string): void {
+  announce(workspaceId, { type: 'document-moved', from, to })
+}
+
+export function announceDocumentRemoved(workspaceId: string, path: string): void {
+  announce(workspaceId, { type: 'document-removed', path })
 }

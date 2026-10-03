@@ -43,6 +43,7 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
+import { announceDocumentMoved, announceDocumentRemoved } from './workspace-broadcast.js'
 
 const log = getAppLogger('folding-browser-index')
 
@@ -214,7 +215,8 @@ export class FoldingBrowserIndex implements DocumentIndex {
 
   async moveDocument(input: MoveDocumentInput): Promise<void> {
     await this.ensureFolded()
-    return this.inner.moveDocument(input)
+    await this.inner.moveDocument(input)
+    announceDocumentMoved(input.workspaceId, input.from, input.to)
   }
 
   async setDocumentName(input: SetDocumentNameInput): Promise<void> {
@@ -243,12 +245,14 @@ export class FoldingBrowserIndex implements DocumentIndex {
   async deleteDocument(input: DeleteDocumentInput): Promise<void> {
     await this.ensureFolded()
     if ((await this.inner.resolveDocument(input)) !== null) {
-      return this.inner.deleteDocument(input)
+      await this.inner.deleteDocument(input)
+    } else {
+      // A fold-skipped document lives only in the legacy row; deleting it there
+      // is what lets a user clear a damaged document instead of keeping an
+      // error screen forever.
+      await this.legacy.deleteDocument(input)
     }
-    // A fold-skipped document lives only in the legacy row; deleting it there
-    // is what lets a user clear a damaged document instead of keeping an
-    // error screen forever.
-    return this.legacy.deleteDocument(input)
+    announceDocumentRemoved(input.workspaceId, input.path)
   }
 }
 
