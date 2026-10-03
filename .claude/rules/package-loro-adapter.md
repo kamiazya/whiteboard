@@ -239,6 +239,21 @@ implementations live in the composition roots.
   does. Every write uses the model's names, so a record converges the first
   time anything saves it.
 
+- **A document's content by kind is `readDocumentContent(doc, entryKind?)`,
+  nowhere else.** The document's own recorded kind wins, then the entry's,
+  then spatial, because spatial is the only kind that existed before kinds.
+  `tools/arch-lint`'s `document-content-one-place.test.ts` fails a file
+  outside this package that reads both halves unless it is ledgered with a
+  reason.
+
+- **An edit that started from a read applies `reconcileFacets` /
+  `reconcileCoreFacets` (or `reconcileSpatialCanvas`), never
+  `writeFacets` / `writeCoreFacets`.** The write forms replace the stored
+  bucket outright, so a concurrent edit to a field the caller did not touch
+  is lost; the reconcile forms diff against what the caller last read.
+  `document.set` is the only wholesale replacer, and
+  `spatial-canvas-write-one-place.test.ts` enforces it for the canvas.
+
   This is load-bearing, not tidy. The model is `.strict()` now, so a stored
   node still carrying the old key FAILS its schema and the read drops what
   fails: measured in `legacy-extension.test.ts`, removing the lift makes

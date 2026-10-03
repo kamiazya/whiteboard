@@ -106,9 +106,10 @@ Three things a mechanical move does not see, and what catches each now:
 
 ## What the other guards already cover
 
-- `tools/arch-lint/src/web-app-boundary.test.ts` — what
-  this app may import from `@kamiazya/whiteboard-mcp` (browser-safe
-  subpaths only) and that no relative import reaches the daemon's `src/`.
+- `tools/arch-lint/src/web-app-boundary.test.ts` — that this app imports
+  `@kamiazya/whiteboard-mcp` not at all, bare or subpath (the browser-safe
+  client half is `daemon-client`), and that no relative import reaches the
+  daemon's `src/`.
 - `src/entry-graph-loro-free.test.ts` — `App.tsx`'s static closure never
   reaches loro; the workspace machinery stays behind the lazy page boundary.
 - `src/component-reach.test.ts` — every component under `components/` and

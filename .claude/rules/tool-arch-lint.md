@@ -476,14 +476,15 @@ transitive closure of its VALUE imports (`route-closure.ts`, on
 with three named cut seams — `log.ts`, `workspace-handle.ts`, `mcp/server.ts` — that a lift would
 replace with a handed-in dependency. A seam must itself be Node-bound and be
 reached by a ledgered file, or it is a fake cut. Each ledger entry states its
-`role` (a `router` is a file that mounts `new Hono(`; six of the twelve were
-middleware, helpers and registries) and its `blockedBy`, which is checked
+`role` (a `router` is a file that mounts `new Hono(`; about half the ledger
+is middleware, helpers and registries) and its `blockedBy`, which is checked
 against the closure, so Node arriving through a helper edits an entry instead of
 passing. Three counts are pinned by equality in `CLOSURE_COUNTS` (clean files,
-files held only by the seams, routers among those), measured 2 / 5 / 2.
+files held only by the seams, routers among those); the test holds the numbers
+and ADR-0052 the decision they inform, so this file restates neither.
 
-A closure over import specifiers alone says nine of twelve once the seams are
-cut; this says six because it counts an ambient `Buffer` (in `sync-streams.ts`,
+A closure over import specifiers alone says more are liftable once the seams
+are cut than this does, because this counts an ambient `Buffer` (in `sync-streams.ts`,
 reached through the audience registry, and in `security/timing-safe.ts`) the way
 the direct class always has. `store/corrupt-stored-data` is entered, not called a
 mechanic, for the reason `MECHANICS_NOT_SCANNED` gives. It owns its own matcher
