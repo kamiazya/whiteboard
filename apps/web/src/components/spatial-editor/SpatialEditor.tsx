@@ -93,6 +93,7 @@ import { firstImageFile } from '../../lib/image-upload-policy.js'
 import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
+import { trySetPointerCapture } from '../../lib/pointer-capture.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
@@ -340,23 +341,6 @@ const EDGE_HIT_TOLERANCE_PX = 6
  */
 const LONG_PRESS_MENU_MS = 500
 const DEFAULT_TEST_ID = 'spatial-editor'
-/**
- * Pointer capture is best-effort chrome, not a correctness requirement: a
- * browser can reject it (e.g. `NotFoundError` for a pointerId the platform
- * has no active record of, which synthetic/programmatic pointer dispatch
- * can trigger). This component registers no window-level fallback
- * listeners, so a rejected/lost capture is instead recovered via
- * `onLostPointerCapture`, which cancels whatever gesture is in flight —
- * see its handler below.
- */
-function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
-  try {
-    root.setPointerCapture(pointerId)
-  } catch {
-    // best-effort — see doc comment above
-  }
-}
-
 /**
  * A committed body that lays out TALLER than its stored box gets a follow-up
  * resize, so content never overflows the border.
