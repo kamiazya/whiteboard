@@ -39,7 +39,7 @@ export function handleCorruptStoredData(
  * no document instead of minting a phantom row; routes answer that refusal
  * as 404 — the caller named a document that does not exist.
  */
-export function handleDocumentNotFound(
+function handleDocumentNotFound(
   err: unknown,
 ): { status: 404; body: { error: 'not_found'; message: string } } | null {
   if (isDocumentNotFoundError(err)) {

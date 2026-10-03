@@ -5,13 +5,13 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { WorkspaceNotFoundForCallerError } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
-import { handleDocumentNotFound, notFoundAs, workspaceNotFoundAs } from './_shared.js'
+import { firstOwned, notFoundAs, STORED_DOCUMENT_ANSWERS, workspaceNotFoundAs } from './_shared.js'
 
 describe('the not-found translations over the port error', () => {
   const absent = new DocumentNotFoundError('ws', 'notes/a')
 
   it('answers a metadata writer absence as 404 with the error message', () => {
-    expect(handleDocumentNotFound(absent)).toEqual({
+    expect(firstOwned(absent, STORED_DOCUMENT_ANSWERS)).toEqual({
       status: 404,
       body: { error: 'not_found', message: absent.message },
     })
@@ -38,7 +38,7 @@ describe('the not-found translations over the port error', () => {
   })
 
   it('leaves an unrelated error to the caller', () => {
-    expect(handleDocumentNotFound(new Error('boom'))).toBeNull()
+    expect(firstOwned(new Error('boom'), STORED_DOCUMENT_ANSWERS)).toBeNull()
     expect(notFoundAs('gone')(new Error('boom'))).toBeNull()
   })
 })
