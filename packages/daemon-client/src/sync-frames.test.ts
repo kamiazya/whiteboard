@@ -37,13 +37,13 @@ describe('versionCreatedMessageSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('rejects missing branchName', () => {
+  it('accepts a version row that carries no branchName', () => {
     const { branchName: _, ...versionWithout } = VALID_VERSION_CREATED.version
     const result = versionCreatedMessageSchema.safeParse({
       ...VALID_VERSION_CREATED,
       version: versionWithout,
     })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
   })
 
   it('rejects missing elementCount', () => {

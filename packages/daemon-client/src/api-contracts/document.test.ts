@@ -219,9 +219,9 @@ describe('versionEntrySchema', () => {
     expect(versionEntrySchema.safeParse({ ...valid, elementCount: NaN }).success).toBe(false)
   })
 
-  it('rejects missing branchName', () => {
+  it('accepts a row that carries no branchName', () => {
     const { branchName: _omit, ...missing } = valid
-    expect(versionEntrySchema.safeParse(missing).success).toBe(false)
+    expect(versionEntrySchema.safeParse(missing).success).toBe(true)
   })
 })
 

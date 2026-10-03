@@ -303,6 +303,13 @@ describe('api-contracts: the enums that degrade, degrade', () => {
     branchName: 'main',
   }
 
+  it('lists a version row from a daemon that no longer sends branchName', () => {
+    const { branchName: _retired, ...withoutBranch } = version
+    const parsed = listVersionsResponseSchema.parse({ versions: [withoutBranch] })
+    expect(parsed.versions).toHaveLength(1)
+    expect(parsed.versions[0]?.branchName).toBeUndefined()
+  })
+
   it('reads an operator kind it has no word for as system, keeping the row', () => {
     const parsed = listVersionsResponseSchema.parse({
       versions: [{ ...version, operator: { kind: 'a-newer-actor' } }],
