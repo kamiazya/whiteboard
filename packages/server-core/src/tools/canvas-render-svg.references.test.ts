@@ -34,7 +34,11 @@ function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
  * `wb_document_set` writes one — a single `okf-body` text node — because
  * that IS a markdown document's stored shape on this side.
  */
-async function seedWorkspace(store: FakeDocumentStore, ref: string) {
+async function seedWorkspace(
+  store: FakeDocumentStore,
+  ref: string,
+  note: { readonly path: string; readonly name?: string } = { path: 'notes', name: 'Weekly' },
+) {
   // `seed`, not `createDocument`: the index ASSIGNS an id, and these tests
   // need the reference in the file node to name the document they seeded.
   store.documentIndex.seed({
@@ -45,10 +49,10 @@ async function seedWorkspace(store: FakeDocumentStore, ref: string) {
   })
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
-    path: 'notes',
+    path: note.path,
     documentId: NOTE_ID,
     kind: 'markdown',
-    name: 'Weekly',
+    ...(note.name === undefined ? {} : { name: note.name }),
   })
 
   await seedDoc(store, DOCUMENT_ID, (doc) => {
@@ -217,6 +221,26 @@ describe('reference resolution edge cases', () => {
     })
 
     expect(result.svg).toContain('Weekly')
+    expect(result.svg).not.toContain(NOTE_ID)
+  })
+})
+
+describe('a referenced document with no display name', () => {
+  test('is labelled by its path rather than its raw id', async () => {
+    // A document an agent creates is mostly unnamed; the web labels it
+    // `displayName ?? path`, and the render must not fall back to the id.
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, NOTE_ID, { path: 'notes/unnamed' })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: true,
+      style: 'clean',
+    })
+
+    expect(result.svg).toContain('notes/unnamed')
     expect(result.svg).not.toContain(NOTE_ID)
   })
 })

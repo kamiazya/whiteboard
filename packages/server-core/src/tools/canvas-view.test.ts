@@ -31,7 +31,10 @@ function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
   })
 }
 
-async function seedWorkspace(store: FakeDocumentStore) {
+async function seedWorkspace(
+  store: FakeDocumentStore,
+  note: { readonly path: string; readonly name?: string } = { path: 'notes', name: 'Weekly' },
+) {
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'board',
@@ -40,10 +43,10 @@ async function seedWorkspace(store: FakeDocumentStore) {
   })
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
-    path: 'notes',
+    path: note.path,
     documentId: NOTE_ID,
     kind: 'markdown',
-    name: 'Weekly',
+    ...(note.name === undefined ? {} : { name: note.name }),
   })
   await seedDoc(store, DOCUMENT_ID, (doc) => {
     writeDocumentKind(doc, 'spatial')
@@ -240,6 +243,16 @@ describe('canvas_view tool', () => {
     expect(reference?.name).toBe('Weekly')
     expect(reference?.body).toContain('# Weekly notes')
     expect(reference?.canvas).toBeUndefined()
+  })
+
+  test('names a referenced document that has no display name by its path', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, { path: 'notes/unnamed' })
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(result.references[NOTE_ID]?.name).toBe('notes/unnamed')
   })
 
   test("names what the canvas's own text nodes embed, so the widget can resolve them", async () => {
