@@ -1,4 +1,4 @@
-import { nodeIdSchema } from '@kamiazya/whiteboard-model'
+import { MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM, nodeIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -34,7 +34,16 @@ export const viewportRequestParamsSchema = z
     elementIds: z.array(nodeIdSchema).optional(),
     scrollX: z.number().finite().optional(),
     scrollY: z.number().finite().optional(),
-    zoom: z.number().finite().optional(),
+    // Bounded by the editor's own range: an unbounded zoom is acted on or
+    // dropped by the page while the tool still reports delivery.
+    zoom: z
+      .number()
+      .min(MIN_VIEWPORT_ZOOM)
+      .max(MAX_VIEWPORT_ZOOM)
+      .optional()
+      .describe(
+        `Scale, ${MIN_VIEWPORT_ZOOM} to ${MAX_VIEWPORT_ZOOM}; 1 is actual size (not a percentage).`,
+      ),
   })
   .strict()
 

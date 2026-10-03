@@ -99,7 +99,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/lib/sealed-document-store.ts#encodeEnvelope',
   'apps/web/src/lib/seen-documents.ts#recordSeen',
   'apps/web/src/lib/spatial/freehand.ts#simplifyStroke',
-  'apps/web/src/lib/spatial/viewport.ts#clampZoom',
   'apps/web/src/lib/theme-fonts.ts#loadedThemeFaces',
   'apps/web/src/lib/theme-fonts.ts#themeFontFamilies',
   'apps/web/src/lib/user-settings-store.ts#defaultUserSettings',
@@ -354,7 +353,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 156
+const DEBT_CEILING = 155
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 25

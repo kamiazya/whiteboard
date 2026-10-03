@@ -72,6 +72,35 @@ describe('wb_viewport_set tool', () => {
     })
   })
 
+  test.each([
+    [['zzz']],
+    [['a', 'zzz']],
+  ])('refuses elementIds naming a node that is not on the canvas, whether or not a browser is watching (%j)', async (elementIds) => {
+    // A typo'd id would otherwise frame nothing and still answer delivered,
+    // and with no browser open it would read the same as a correct id.
+    const store = new FakeDocumentStore()
+    await seed(store)
+    const sent: ViewportRequest[] = []
+    const watched = createViewportSetTool({
+      ...makeDeps(store),
+      clientNotifier: {
+        agentActivity: () => {},
+        versionCreated: () => {},
+        restoreProgress: () => {},
+        requestViewport: async (request) => {
+          sent.push(request)
+          return true
+        },
+      },
+    })
+    const headless = createViewportSetTool(makeDeps(store))
+    const input = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, elementIds }
+
+    await expect(watched.execute(input)).rejects.toThrow(/zzz/)
+    await expect(headless.execute(input)).rejects.toThrow(/zzz/)
+    expect(sent).toEqual([])
+  })
+
   test('reports delivered:false rather than failing when no browser is watching', async () => {
     // A headless daemon is the normal case, not an error — an agent that
     // cannot tell the difference would treat every headless run as broken.

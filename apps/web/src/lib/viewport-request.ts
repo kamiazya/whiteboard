@@ -1,5 +1,6 @@
 import type { ViewportRequestPayload } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import type { SpatialEditorHandle } from './spatial/editor-handle.js'
+import { clampZoom } from './spatial/viewport.js'
 /**
  * Maps a daemon-driven `viewport_request` onto a mounted `SpatialEditor`'s
  * imperative handle. `mode` is optional on the wire
@@ -20,6 +21,10 @@ import type { SpatialEditorHandle } from './spatial/editor-handle.js'
  * identity viewport (0, 0, 1) rather than to some previously-observed
  * viewport, keeping this function pure and total.
  *
+ * `zoom` is clamped to the editor's own range here as well as bounded by the
+ * contract, so a frame from a daemon that did not bound it still cannot leave
+ * the pan/zoom non-finite.
+ *
  * A `null` handle (no editor mounted) is a no-op, matching the rest of this
  * session's degrade-rather-than-throw callback convention.
  */
@@ -36,7 +41,7 @@ export function applyViewportRequest(
   handle.setViewport({
     x: payload.scrollX ?? 0,
     y: payload.scrollY ?? 0,
-    zoom: payload.zoom ?? 1,
+    zoom: clampZoom(payload.zoom ?? 1),
   })
 }
 
