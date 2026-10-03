@@ -127,12 +127,30 @@ const sourceTokenArbitrary = fc.constantFrom(
   ' ',
 )
 
+// Two rich inline nodes side by side (`*a*_b_` reads back as one emphasis
+// holding `a**b`: CommonMark's rule of three) is an ambiguity of the markdown
+// writer for any text, the same one round-trip.property.test.ts caps at one
+// rich node per run — so a body whose parse holds two is not this property's.
+function holdsAdjacentRichInlines(node: { type?: string; children?: unknown[] }): boolean {
+  if (!Array.isArray(node.children)) return false
+  const children = node.children as { type?: string; children?: unknown[] }[]
+  if (node.type !== 'root' && children.filter((child) => child.type !== 'text').length > 1)
+    return true
+  return children.some(holdsAdjacentRichInlines)
+}
+
 const sourceBodyArbitrary = fc
   .array(sourceTokenArbitrary, { minLength: 1, maxLength: 10 })
   .map((tokens) => tokens.join(''))
   .filter((body) => body.trim() === body && /\[\[[^\]|]+(\|[^\]]*)?\]\]/.test(body))
+  .filter((body) => !holdsAdjacentRichInlines(parseMarkdownBody(body)))
 
 describe('the writer keeps reference syntax readable', () => {
+  fcTest('the generator leaves the rule-of-three shape to the markdown writer', () => {
+    expect(holdsAdjacentRichInlines(parseMarkdownBody('*[[x]]*_[[x]]_'))).toBe(true)
+    expect(holdsAdjacentRichInlines(parseMarkdownBody('[[x]] *a* [[y]]'))).toBe(false)
+  })
+
   fcTest.prop([rootArbitrary], withDefaults({ numRuns: 60 }))(
     'resolveReferences(parse(stringify(x))) equals x for typed wikiLink and embed nodes',
     (root) => {
