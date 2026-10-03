@@ -9,7 +9,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
-import type { SpatialAppearanceResolver } from '../nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 
 const measure = createFakeMeasure()

@@ -12,7 +12,7 @@ import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../measure.js'
-import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 // Deliberately NOT the shared `createFakeMeasure`, which ignores

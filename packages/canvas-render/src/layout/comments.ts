@@ -18,6 +18,7 @@
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isFrame, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { SpatialCommentAppearance } from '../theme/spatial-appearance.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 import {
   commentLeaderEnd,
@@ -25,7 +26,6 @@ import {
   placeCommentBubble,
 } from './comment-placement.js'
 import type { RegionChrome, ResolvedLayoutOptions } from './layout-options.js'
-import type { SpatialCommentAppearance } from './nodes/spatial-appearance.js'
 import { contentExtent } from './scene-extent.js'
 import { translateScene } from './translate-scene.js'
 

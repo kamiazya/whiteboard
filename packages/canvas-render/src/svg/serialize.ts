@@ -10,7 +10,8 @@
  * streaming or per-group patching consumer would consume.
  */
 
-import { escapeXmlAttr, escapeXmlText, formatCoord } from './format.js'
+import { escapeXmlAttr, escapeXmlText } from '../xml-escape.js'
+import { formatCoord } from './format.js'
 import { isVNode, type RawXmlChild, type SvgChild, type SvgVNode } from './vnode.js'
 
 function isRawXml(child: SvgChild): child is RawXmlChild {

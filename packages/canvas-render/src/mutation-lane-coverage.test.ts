@@ -288,9 +288,18 @@ describe('the mutation lane covers what it says it covers', () => {
     // 101 since `layout/edges/route-ends.ts`: the record types the router's
     // two path builders take, so their ten positional parameters cannot be
     // handed over in the wrong order. Types only, nothing to mutate.
+    //
+    // 102 with `highlight/code-token.ts`: the tokeniser's output types, moved
+    // below `layout/` so the tokeniser does not import a layout module. Types
+    // only, nothing to mutate.
+    //
+    // 103 and 21 with `xml-escape.ts`, the escaping half of `svg/format.ts`,
+    // moved to the package root so `layout/` and `svg/` can both import it.
+    // IN the lane, because the file it left was: the move changes nothing the
+    // lane saw.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 20,
-      production: 101,
+      mutated: 21,
+      production: 103,
     })
   })
 

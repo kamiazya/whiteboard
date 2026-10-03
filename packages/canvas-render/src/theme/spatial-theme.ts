@@ -23,8 +23,8 @@
 import type { CanvasColor, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind } from '@kamiazya/whiteboard-model'
 import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
+import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,

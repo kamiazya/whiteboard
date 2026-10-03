@@ -10,11 +10,8 @@ import type { PaletteTokens, ThemeTokens } from '@kamiazya/whiteboard-facet-engi
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
-import type {
-  SpatialAppearanceResolver,
-  SpatialNodeAppearance,
-} from '../layout/nodes/spatial-appearance.js'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from './markdown-theme.js'
+import type { SpatialAppearanceResolver, SpatialNodeAppearance } from './spatial-appearance.js'
 import type { SpatialPalette } from './spatial-palette.js'
 import { createSpatialTheme, type SpatialThemeMode } from './spatial-theme.js'
 

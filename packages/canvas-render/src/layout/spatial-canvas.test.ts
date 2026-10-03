@@ -16,8 +16,8 @@ import type {
 import { describe, expect, it, vi } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { outlineContains } from './nodes/node-outline.js'
-import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
 import {
   layoutSpatialCanvas,

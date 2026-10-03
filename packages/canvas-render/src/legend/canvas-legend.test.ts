@@ -5,7 +5,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { canvasLegend } from './canvas-legend.js'
 
 const box = (id: string, extra: Partial<SpatialNode> = {}): SpatialNode =>

@@ -8,7 +8,7 @@ import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboar
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
-import type { SpatialAppearanceResolver } from '../nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'

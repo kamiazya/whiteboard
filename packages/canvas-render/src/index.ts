@@ -42,6 +42,7 @@ export type {
 } from '@kamiazya/whiteboard-scene'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
+export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-token.js'
 export {
   resolveCanvasPalette,
   resolveCanvasThemeFontFamily,
@@ -67,9 +68,6 @@ export type { FittedBlocks } from './layout/nodes/mdast-blocks.js'
 export {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
-  type CodeToken,
-  type CodeTokenLines,
-  type CodeTokenRole,
   type EmbeddedCanvasBox,
   type EmbeddedCanvasMiniature,
   type MdastLayoutOptions,
@@ -85,10 +83,6 @@ export {
   outlineEntryPoint,
   resolveShapeTable,
 } from './layout/nodes/node-outline.js'
-export type {
-  SpatialAppearanceResolver,
-  SpatialNodeAppearance,
-} from './layout/nodes/spatial-appearance.js'
 export { scaleScene } from './layout/scale-scene.js'
 export { seedFromId, styleRandomFromSeed } from './layout/seed.js'
 export type {
@@ -151,7 +145,7 @@ export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
 export type { SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
-export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
+export { formatCoord } from './svg/format.js'
 export type { IconTable } from './svg/icon.js'
 export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
 export { renderSceneToKeyedSvg } from './svg/keyed.js'
@@ -171,6 +165,10 @@ export {
   MARKDOWN_THEME_DOCUMENT,
   MARKDOWN_THEME_NODE,
 } from './theme/markdown-theme.js'
+export type {
+  SpatialAppearanceResolver,
+  SpatialNodeAppearance,
+} from './theme/spatial-appearance.js'
 export type { SpatialGeometry } from './theme/spatial-geometry.js'
 export { SPATIAL_THEME_GEOMETRY } from './theme/spatial-geometry.js'
 export type {
@@ -187,3 +185,4 @@ export { createThemedAppearance, paletteFromTokens } from './theme/theme-asset.j
 export { type ThemeFont, themeFontSchema } from './theme/theme-font.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyBoxes, tidyNodes } from './tidy.js'
+export { escapeXmlAttr, escapeXmlText } from './xml-escape.js'

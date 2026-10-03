@@ -33,12 +33,12 @@ import { z } from 'zod'
 import type { MeasureText } from '../measure.js'
 import type { ResolvedReference } from '../references/resolved.js'
 import type { ReferenceSeams } from '../references/seams.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import type { SpatialGeometry } from '../theme/spatial-geometry.js'
 import type { EdgeAnchorOverride } from './edges/edge-sides.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
 import type { ShapeTable } from './nodes/node-outline.js'
-import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import type { NodePassage } from './passage-highlight.js'
 
 /**

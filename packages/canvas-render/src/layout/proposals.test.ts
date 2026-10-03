@@ -14,7 +14,7 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()

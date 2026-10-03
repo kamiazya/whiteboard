@@ -27,7 +27,7 @@ import {
   scoreProposalDensity,
 } from '../test-utils/annotation-density-metrics.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()
