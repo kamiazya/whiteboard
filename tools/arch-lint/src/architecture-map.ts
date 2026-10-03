@@ -138,14 +138,14 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   // Top-level mechanisms kept beside the server's roots, counted since the
   // finder took the mechanics layer's own definition (`adapter-reach.ts`) for
   // what a mechanic is. `files.ts` writes an upload through `atomic-write` and
-  // the export routes resolve a caller-chosen path through `output-path`, the
+  // the export routes' shared request helper resolves a caller-chosen path
+  // through `output-path`, the
   // storage rules an operation over files would own; `mcp-apps.ts` reads the
   // daemon's `config` for the widget it serves. The type-only edge from
   // `document-output-path-error.ts` is the error shape of that same resolution.
   'mcp/mcp-apps.ts -> server/config',
   'routes/document-output-path-error.ts -> server/output-path',
-  'routes/document/export-svg.ts -> server/output-path',
-  'routes/export.ts -> server/output-path',
+  'routes/export-request.ts -> server/output-path',
   'routes/files.ts -> server/atomic-write',
   // The one helper every address-parsing route shares. Its own reach is the
   // workspace registry the store holds at module level; handing it the registry
@@ -225,8 +225,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Then 28 -> 27, when it handed the route the compaction stamp the same way
  * (`readLatestCompactedAt`), so the route opens no workspace record itself.
+ *
+ * Then 27 -> 26, when the two export routes' reach into `output-path` became
+ * the one request helper both call.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 27
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 26
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

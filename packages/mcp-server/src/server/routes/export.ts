@@ -1,78 +1,23 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import { messageOf } from '@kamiazya/whiteboard-model'
-import {
-  type ApiErrorBody,
-  invalidRequestBody,
-  type LiveDocuments,
-} from '@kamiazya/whiteboard-server-core'
+import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import { nanoid } from 'nanoid'
 import type { z } from 'zod'
 import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { isErrnoCode } from '../../shared/errno.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
-import { OutputPathError, validateOutputPath } from '../output-path.js'
 import type { StoreScope } from '../store/store-scope.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 import { onDocumentAction } from './document/path-route.js'
-import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
-
-/**
- * An empty body is a valid export request — every option has a default — so
- * only a body that is PRESENT and unreadable refuses.
- */
-function parseExportBody(
-  rawText: string,
-): { body: z.infer<typeof exportRequestSchema> } | { error: ApiErrorBody } {
-  if (rawText.length === 0) return { body: {} }
-  let json: unknown
-  try {
-    json = JSON.parse(rawText)
-  } catch {
-    return { error: { error: 'invalid_request', message: 'malformed JSON' } }
-  }
-  const parsed = exportRequestSchema.safeParse(json)
-  if (!parsed.success) {
-    return { error: invalidRequestBody(parsed.error) }
-  }
-  return { body: parsed.data }
-}
-
-/**
- * `undefined` means the caller named no path, which is not a refusal — the
- * handler then writes to the workspace's default exports directory. A path
- * that IS named is checked before anything is rendered: relative paths and
- * pre-existing files (unless `overwrite`) refuse here rather than after the
- * render they would have wasted.
- */
-async function resolveExportOutputPath(
-  body: { outputPath?: string; overwrite?: boolean },
-  workspaceId: string,
-  layout: DataLayout,
-): Promise<
-  { outputPath: string | undefined } | { error: ApiErrorBody; status: ContentfulStatusCode }
-> {
-  if (typeof body.outputPath !== 'string' || body.outputPath.length === 0) {
-    return { outputPath: undefined }
-  }
-  try {
-    await validateOutputPath(
-      body.outputPath,
-      body.overwrite === true,
-      layout.exportsDir(workspaceId),
-    )
-  } catch (err) {
-    if (err instanceof OutputPathError) {
-      const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
-      return { error: errBody, status }
-    }
-    throw err
-  }
-  return { outputPath: body.outputPath }
-}
+import {
+  defaultExportPath,
+  documentMissingBody,
+  parseOptionalJsonBody,
+  resolveRequestedOutputPath,
+} from './export-request.js'
 
 /**
  * The render, with the one failure that belongs to the REQUEST rather than
@@ -128,13 +73,17 @@ export function createExportRouter(options: ExportRouterOptions) {
     'post',
     'export',
     async (c, workspaceId, path) => {
-      const parsedBody = parseExportBody(await c.req.text())
+      const parsedBody = parseOptionalJsonBody(await c.req.text(), exportRequestSchema)
       if ('error' in parsedBody) return c.json(parsedBody.error, 400)
       const body = parsedBody.body
 
       // Validated up front, before rendering, so the caller does not waste a
       // render on a write that will fail.
-      const resolved = await resolveExportOutputPath(body, workspaceId, options.scope.layout)
+      const resolved = await resolveRequestedOutputPath(
+        body,
+        workspaceId,
+        options.scope.layout.exportsDir(workspaceId),
+      )
       if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
 
@@ -144,11 +93,7 @@ export function createExportRouter(options: ExportRouterOptions) {
       // blank PNG. Reject up front with 404 so callers learn about the typo
       // instead of shipping the silently-empty file.
       if (!(await documentExists(workspaceId, path))) {
-        const errBody: ApiErrorBody = {
-          error: 'not_found',
-          message: `Canvas not found: ${workspaceId}/${path}`,
-        }
-        return c.json(errBody, 404)
+        return c.json(documentMissingBody(workspaceId, path), 404)
       }
 
       const rendered = await renderedExport(workspaceId, path, body, options.scope)
@@ -200,15 +145,6 @@ async function renderHeadless(
   }
 }
 
-// A plain PNG: the headless renderer no longer embeds scene JSON, so a
-// `.excalidraw.png` suffix would falsely claim the file is re-importable as
-// a scene.
-function defaultExportPath(exportsDir: string, path: string): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const fileName = `${path}-${timestamp}-${nanoid(6)}.png`
-  return join(exportsDir, fileName)
-}
-
 // The millisecond timestamp + nanoid(6) suffix is only probabilistically
 // unique, not guaranteed — two exports racing in the same millisecond could
 // still collide. `wx` makes the create fail loudly (EEXIST) instead of
@@ -225,7 +161,7 @@ async function writeDefaultOutput(
 ): Promise<string> {
   let lastFilePath: string | undefined
   for (let attempt = 0; attempt < MAX_DEFAULT_PATH_ATTEMPTS; attempt++) {
-    const filePath = defaultExportPath(layout.exportsDir(workspaceId), path)
+    const filePath = defaultExportPath(layout.exportsDir(workspaceId), path, 'png')
     lastFilePath = filePath
     await mkdir(dirname(filePath), { recursive: true })
     try {
