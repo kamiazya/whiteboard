@@ -27,7 +27,12 @@
     "allowJs": true,
     "checkJs": false,
     "jsx": "react-jsx",
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    // The server config's unused-name checks guard shipped code. Tests carry
+    // fixture locals and unread destructured bindings on purpose, and the
+    // ledger (scripts/typecheck-tests-debt.json) holds their type errors to a known set.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts", "vitest*.ts"],
   // Explicit and empty: the server config's exclude list is exactly what this
