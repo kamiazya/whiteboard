@@ -11,14 +11,10 @@
  */
 
 import { escapeXmlAttr, escapeXmlText, formatCoord } from './format.js'
-import type { RawXmlChild, SvgChild, SvgVNode } from './vnode.js'
+import { isVNode, type RawXmlChild, type SvgChild, type SvgVNode } from './vnode.js'
 
 function isRawXml(child: SvgChild): child is RawXmlChild {
   return typeof child === 'object' && child !== null && 'raw' in child
-}
-
-function isVNode(child: SvgChild): child is SvgVNode {
-  return typeof child === 'object' && child !== null && 'tag' in child
 }
 
 function openTag(node: SvgVNode, selfClose: boolean): string {

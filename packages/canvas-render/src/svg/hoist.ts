@@ -15,7 +15,14 @@
  * application lets lifts compose through nested containers.
  */
 
-import type { SvgAttrs, SvgAttrValue, SvgChild, SvgDef, SvgVNode } from './vnode.js'
+import {
+  isVNode,
+  type SvgAttrs,
+  type SvgAttrValue,
+  type SvgChild,
+  type SvgDef,
+  type SvgVNode,
+} from './vnode.js'
 
 /** The SVG-inherited presentation attributes this backend emits. `role`,
  * `mask`, and `xml:space` are deliberately absent: not inheritance-safe
@@ -32,10 +39,6 @@ const HOISTABLE = [
 
 /** Containers legal to receive inherited paint and emitted by this backend. */
 const CONTAINERS = new Set(['g', 'a'])
-
-function isVNode(child: SvgChild): child is SvgVNode {
-  return typeof child === 'object' && child !== null && 'tag' in child
-}
 
 function rebuild(
   node: SvgVNode,
