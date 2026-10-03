@@ -3,8 +3,10 @@
 // scene reflects it — the path an agent-written facet with no quick band
 // would otherwise be invisible on.
 
+import { withWorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -143,6 +145,48 @@ it('a stencil picked in the panel draws its silhouette, not only the record', ()
   fireEvent.click(panel.querySelector('input[aria-label="Datastore"]') as HTMLInputElement)
   expect(latest.canvas.nodes[0]?.facets?.['visual.shape/v0']).toEqual({ kind: 'cylinder' })
   expect(container.querySelectorAll('svg g[data-wb-key] polygon').length).toBe(before - 1)
+})
+
+// ADR-0034 decision 4: a workspace's own library extends the vocabulary, so the
+// registry the editor is handed is what the panel offers and the writer accepts.
+it('a stencil from the registry the editor was handed is offered and applied', () => {
+  const registry = withWorkspaceStencils(bundledFacetRegistry, {
+    lakehouse: {
+      displayName: 'Lakehouse',
+      color: '3',
+      facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+    },
+  })
+  const latest: { canvas: SpatialCanvas } = { canvas: initial }
+  function Host() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+          facetRegistry={registry}
+        />
+      </div>
+    )
+  }
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  const entry = [...menu.querySelectorAll('button')].find((b) => b.textContent?.includes('Facets'))
+  fireEvent.click(entry as HTMLElement)
+  const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
+
+  fireEvent.click(panel.querySelector('input[aria-label="Lakehouse"]') as HTMLInputElement)
+  expect(latest.canvas.nodes[0]?.facets?.['visual.stencil/v0']).toEqual({
+    stencil: 'workspace.lakehouse',
+  })
+  expect(latest.canvas.nodes[0]?.color).toBe('3')
 })
 
 // ADR-0040 decision 6: a box is tagged from the same panel, and a tag

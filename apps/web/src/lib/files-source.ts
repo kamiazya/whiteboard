@@ -1,4 +1,5 @@
 import type { WorkspaceDocumentTagsResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { WorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentKind, ExtensionFacets } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
@@ -110,6 +111,13 @@ export interface WorkspaceFilesSource {
    * it. OPTIONAL for the same reason `listTagsInUse` is.
    */
   readTagLibrary?(): Promise<TagLibrary>
+  /**
+   * The stencils the workspace's own library document declares (ADR-0034
+   * decision 4), or `{}`. The editor's Stencil chips offer them beside the
+   * deployment's and its writer accepts them. OPTIONAL for the same reason
+   * `readTagLibrary` is.
+   */
+  readStencilLibrary?(): Promise<WorkspaceStencils>
 }
 
 /** One row of the vocabulary: the daemon-client contract's own row shape. */

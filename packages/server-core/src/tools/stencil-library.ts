@@ -10,7 +10,11 @@
  * workspace's own CONTENT, so it is read per workspace, from a document,
  * and composed on top.
  */
-import { type FacetRegistry, withWorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
+import {
+  type FacetRegistry,
+  type WorkspaceStencils,
+  withWorkspaceStencils,
+} from '@kamiazya/whiteboard-facet-engine'
 import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
 import { readStencilLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
@@ -75,12 +79,29 @@ export async function workspaceFacetRegistry(
   // one listing however many things it reads from the workspace.
   listed?: readonly DocumentEntry[],
 ): Promise<FacetRegistry> {
-  const base = deps.facetRegistry
+  return withWorkspaceStencils(
+    deps.facetRegistry,
+    await workspaceStencilLibrary(deps, workspaceId, unknownWorkspace, listed),
+  )
+}
+
+/**
+ * What the library document declares, or `{}` — the value
+ * `workspaceFacetRegistry` composes and a client composes for itself, so
+ * the editor and the tools read one definition of "this workspace's
+ * stencils".
+ */
+export async function workspaceStencilLibrary(
+  deps: ServerDeps,
+  workspaceId: string,
+  unknownWorkspace: UnknownWorkspace,
+  listed?: readonly DocumentEntry[],
+): Promise<WorkspaceStencils> {
   const entries = listed ?? (await listWorkspaceDocuments(deps, workspaceId, unknownWorkspace))
   const library = entries.find((entry) => entry.path === STENCIL_LIBRARY_PATH)
-  if (library === undefined) return base
+  if (library === undefined) return {}
   const doc = await loadOrCreateDocument(deps, workspaceId, library.documentId)
-  return withWorkspaceStencils(base, readStencilLibrary(readFacets(doc)))
+  return readStencilLibrary(readFacets(doc))
 }
 
 export async function listWorkspaceDocuments(

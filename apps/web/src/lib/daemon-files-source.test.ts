@@ -416,6 +416,24 @@ describe('createDaemonFilesSource tags in use', () => {
   })
 })
 
+describe('createDaemonFilesSource stencil library', () => {
+  it('answers the stencils the tags route carries, in the same round trip as the tag library', async () => {
+    const stencils = { lakehouse: { displayName: 'Lakehouse', color: '3' } }
+    const fetchImpl = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/document-tags'))
+        return Promise.resolve(
+          jsonResponse({ documents: [], contents: [], inUse: [], library: {}, stencils }),
+        )
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    const source = createDaemonFilesSource(fetchImpl, 'http://daemon.test', 'ws-1')
+    await expect(source.readStencilLibrary?.()).resolves.toEqual({
+      lakehouse: { ...stencils.lakehouse, facets: {} },
+    })
+  })
+})
+
 describe('createDaemonFilesSource tag reads', () => {
   /** Counts `/document-tags` and answers everything else plausibly. */
   function countingTagFetch(tagStatus = 200) {

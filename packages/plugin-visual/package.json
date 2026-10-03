@@ -37,6 +37,10 @@
       "types": "./src/render.ts",
       "import": "./src/render.ts"
     },
+    "./stencil-library": {
+      "types": "./src/stencil-library.ts",
+      "import": "./src/stencil-library.ts"
+    },
     "./tag-library": {
       "types": "./src/tag-library.ts",
       "import": "./src/tag-library.ts"

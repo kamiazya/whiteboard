@@ -382,4 +382,24 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
       health: { exclusive: true, values: { ok: { color: '4' } } },
     })
   })
+
+  it('reads the stencil library the document at `stencils` declares, and answers none without one', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const store = new LoroStore()
+    await expect(createLocalFilesSource().readStencilLibrary?.()).resolves.toEqual({})
+    const library = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'stencils',
+      kind: 'markdown',
+    })
+    const doc = new Loro()
+    writeFacets(doc, {
+      'visual.stencils/v0': { stencils: { lakehouse: { displayName: 'Lakehouse', color: '3' } } },
+    } as never)
+    await store.save(library.documentId, doc.export({ mode: 'snapshot' }))
+    await expect(createLocalFilesSource().readStencilLibrary?.()).resolves.toEqual({
+      lakehouse: { displayName: 'Lakehouse', color: '3', facets: {} },
+    })
+  })
 })

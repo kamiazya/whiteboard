@@ -97,7 +97,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/document-editor/InspectorPanel.tsx#InspectorPanel': 139,
   'apps/web/src/components/document-editor/InspectorSegment.tsx#InspectorSegment': 56,
   'apps/web/src/components/document-editor/NodeTextEditorOverlay.tsx#NodeTextEditorOverlay': 103,
-  'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 86,
+  'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
   'apps/web/src/components/document-editor/use-node-in-editor.tsx#useNodeInEditor': 56,
   'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentFacetsEditor': 117,
   'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentProperties': 110,
@@ -192,7 +192,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The component itself: a `forwardRef` function expression, the largest
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1630,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1632,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 88,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
@@ -308,7 +308,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
   'apps/web/src/lib/clipboard-fragment.ts#remintClipboardFragment': 55,
   'apps/web/src/lib/daemon-file-adapter.ts#createDaemonFileAdapter': 70,
-  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 93,
+  'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 94,
   'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
   // The undo path takes back a write still inside the debounce window, which
   // has to reach the timer and the queue this factory closes over — so it
@@ -346,7 +346,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The Duplicate and Delete verbs' screen state and dialogs each live in
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 449,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 450,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity
@@ -355,7 +355,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 334,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 335,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (`exactOptionalPropertyTypes`), and splitting it further would cut the

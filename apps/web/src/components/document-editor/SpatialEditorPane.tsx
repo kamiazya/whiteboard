@@ -40,6 +40,7 @@ type PassedThrough = Pick<
   | 'proposals'
   | 'tagLibrary'
   | 'tagSuggestions'
+  | 'facetRegistry'
 >
 
 export interface SpatialEditorPaneProps extends PassedThrough {
@@ -101,6 +102,7 @@ export function SpatialEditorPane({
   agentTouchedNodeIds,
   threads,
   proposals,
+  facetRegistry,
 }: SpatialEditorPaneProps) {
   // The overlay's markdown editor reads the seams as functions; it builds
   // them from the same wire the canvas posts to its worker.
@@ -144,6 +146,7 @@ export function SpatialEditorPane({
         onToggleEdgeLock={onToggleEdgeLock}
         threads={threads}
         proposals={proposals}
+        {...(facetRegistry === undefined ? {} : { facetRegistry })}
         paletteLeading={<HistoryCluster {...history} />}
       />
       {nodeInEditor.editing !== null && (

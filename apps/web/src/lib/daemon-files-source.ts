@@ -177,6 +177,7 @@ export function createDaemonFilesSource(
     async readTagLibrary() {
       return (await tags.read()).library
     },
+    readStencilLibrary: async () => (await tags.read()).stencils,
     listDocuments: () => list.read(),
 
     createDocument: (path: string, kind: DocumentKind, name?: string) =>

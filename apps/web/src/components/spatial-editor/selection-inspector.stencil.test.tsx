@@ -5,6 +5,7 @@
 // write becomes editor commands — these tests drive the real panel and apply
 // whatever commands it emits.
 
+import { type FacetRegistry, withWorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
@@ -34,7 +35,11 @@ const baseCanvas = (facets?: Record<string, unknown>, color?: string): SpatialCa
 })
 
 /** The inspector over a canvas that applies every command it emits, as the editor's eager chain does. */
-function Harness(props: { initial: SpatialCanvas; onCanvas: (canvas: SpatialCanvas) => void }) {
+function Harness(props: {
+  initial: SpatialCanvas
+  onCanvas: (canvas: SpatialCanvas) => void
+  registry?: FacetRegistry
+}) {
   const [canvas, setCanvas] = useState(props.initial)
   const apply = (commands: readonly EditorCommand[]) => {
     const next = commands.reduce(applyCommand, canvas)
@@ -50,13 +55,18 @@ function Harness(props: { initial: SpatialCanvas; onCanvas: (canvas: SpatialCanv
       extraIds={new Set(['n2'])}
       tagSuggestions={undefined}
       tagLibrary={undefined}
+      {...(props.registry === undefined ? {} : { facetRegistry: props.registry })}
       variant="dock"
       onCommands={apply}
     />
   )
 }
 
-function choose(label: string, initial = baseCanvas()): () => SpatialCanvas {
+function choose(
+  label: string,
+  initial = baseCanvas(),
+  registry?: FacetRegistry,
+): () => SpatialCanvas {
   let latest = initial
   render(
     <Harness
@@ -64,6 +74,7 @@ function choose(label: string, initial = baseCanvas()): () => SpatialCanvas {
       onCanvas={(next) => {
         latest = next
       }}
+      {...(registry === undefined ? {} : { registry })}
     />,
   )
   fireEvent.click(screen.getByRole('radio', { name: label }))
@@ -113,6 +124,31 @@ describe('choosing a stencil in the inspector', () => {
     expect(facetsOf(choose('None', dressed)(), 'n1')).toEqual({
       'planning.due/v0': { date: '2026-10-03' },
     })
+  })
+})
+
+describe('a workspace stencil library the registry carries', () => {
+  const library = {
+    lakehouse: {
+      displayName: 'Lakehouse',
+      color: '3',
+      facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+    },
+  }
+  const registry = withWorkspaceStencils(bundledFacetRegistry, library)
+
+  it('offers its stencil as a chip and dresses the selection with it', () => {
+    const canvas = choose('Lakehouse', baseCanvas(), registry)()
+    expect(facetsOf(canvas, 'n1')).toEqual({
+      'visual.shape/v0': { kind: 'hexagon' },
+      'visual.stencil/v0': { stencil: 'workspace.lakehouse' },
+    })
+    expect(canvas.nodes.find((node) => node.id === 'n1')?.color).toBe('3')
+  })
+
+  it('is not offered when the panel only knows the bundled registry', () => {
+    render(<Harness initial={baseCanvas()} onCanvas={() => {}} />)
+    expect(screen.queryByRole('radio', { name: 'Lakehouse' })).toBeNull()
   })
 })
 

@@ -13,6 +13,7 @@
  * Slots carry the chrome only one keeper has today, placed by the page at
  * a named position rather than by a keeper branch inside it.
  */
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentKind, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import type { ReactNode, RefObject } from 'react'
 import type { ConnectionsPanelProps } from '../components/connections/ConnectionsPanel.js'
@@ -134,6 +135,8 @@ export interface DocumentPageModel {
    * board alone.
    */
   readonly tags?: TagVocabulary
+  /** The deployment's registry plus the workspace's stencil library; bundled while unread. */
+  readonly facetRegistry?: FacetRegistry
   readonly slots: {
     /** Alerts in the document actions row, before the ⋯ menu. */
     readonly rowAlerts?: ReactNode

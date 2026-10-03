@@ -61,6 +61,7 @@
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasEdge,
   CanvasLine,
@@ -209,6 +210,8 @@ export interface SpatialEditorProps {
    * every tag row offers its values and refuses what it forbids.
    */
   readonly tagLibrary?: TagLibrary
+  /** The registry the inspector's Stencil chips read: the deployment's plus the workspace's library. */
+  readonly facetRegistry?: FacetRegistry
   /** Tags in use anywhere in the workspace, offered by every tag row beside the board's own. */
   readonly tagSuggestions?: readonly string[]
   /**
@@ -376,6 +379,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       canvas,
       onChange,
       tagLibrary,
+      facetRegistry,
       tagSuggestions,
       externalVersion,
       measure,
@@ -1993,6 +1997,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             extraIds={extraIds}
             tagSuggestions={tagSuggestions}
             tagLibrary={tagLibrary}
+            {...(facetRegistry === undefined ? {} : { facetRegistry })}
             variant={inspectorIsSheet ? 'sheet' : 'dock'}
             onCommands={(commands) => applyResult({ state: { kind: 'idle' }, commands })}
           />

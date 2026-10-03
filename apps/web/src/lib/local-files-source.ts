@@ -15,11 +15,12 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
+  type ExtensionFacets,
   type SpatialCanvas,
   type TagBearerKind,
   tagsInUse,
 } from '@kamiazya/whiteboard-model'
-import { readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { readStencilLibrary, readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import {
   fullTextSearch,
@@ -107,6 +108,23 @@ function listedTagsOf(read: LoadedDocument): {
   for (const node of canvas.nodes) for (const tag of node.tags ?? []) carried.add(tag)
   for (const edge of canvas.edges) for (const tag of edge.tags ?? []) carried.add(tag)
   return { own: canvas.tags ?? [], carried: [...carried] }
+}
+
+/** A library document's value, or what `read` answers for none: absent, unreadable or malformed. */
+async function readLibrary<T>(
+  index: DocumentIndex,
+  load: (entry: WorkspaceDocumentEntry) => Promise<Loro>,
+  path: string,
+  read: (facets: ExtensionFacets | undefined) => T,
+): Promise<T> {
+  const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+  const library = entries.find((entry) => entry.path === path)
+  if (library === undefined) return read(undefined)
+  try {
+    return read(readFacets(await load(library)))
+  } catch {
+    return read(undefined)
+  }
 }
 
 /**
@@ -264,19 +282,12 @@ export function createLocalFilesSource(
   }
 
   return {
-    async readTagLibrary() {
-      // One well-known path, the daemon's convention (`TAG_LIBRARY_PATH`):
-      // nothing here can ask the index which document carries a facet
-      // either, and the two keepers must agree on where a library lives.
-      const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
-      const library = entries.find((entry) => entry.path === 'tags')
-      if (library === undefined) return {}
-      try {
-        return readTagLibrary(readFacets(await loadCurrentDoc(library)))
-      } catch {
-        return {}
-      }
-    },
+    // One well-known path per library, the daemon's convention
+    // (`TAG_LIBRARY_PATH`, `STENCIL_LIBRARY_PATH`): nothing here can ask the
+    // index which document carries a facet either, and the two keepers must
+    // agree on where a library lives.
+    readTagLibrary: () => readLibrary(index, loadCurrentDoc, 'tags', readTagLibrary),
+    readStencilLibrary: () => readLibrary(index, loadCurrentDoc, 'stencils', readStencilLibrary),
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       const bearers: { what: TagBearerKind; tags: readonly string[] }[] = []

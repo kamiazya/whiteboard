@@ -115,6 +115,8 @@ export interface SelectionInspectorProps {
   readonly extraIds: ReadonlySet<string>
   readonly tagSuggestions: readonly string[] | undefined
   readonly tagLibrary: TagLibrary | undefined
+  /** What the Stencil chips offer and the writer accepts; the deployment's when absent. */
+  readonly facetRegistry?: FacetRegistry
   readonly variant: 'sheet' | 'dock'
   readonly onCommands: (commands: readonly EditorCommand[]) => void
 }
@@ -127,16 +129,17 @@ export interface SelectionInspectorProps {
  */
 export function SelectionInspector(props: SelectionInspectorProps) {
   const { canvas, selectedId, extraIds, tagLibrary, onCommands } = props
+  const registry = props.facetRegistry ?? bundledFacetRegistry
   const subject = inspectorSubject(canvas, selectedId, props.selectedEdgeId)
   if (subject === undefined) return null
   return (
     <FacetFormPanel
       subject={subject}
-      registry={bundledFacetRegistry}
+      registry={registry}
       // What the board already wrote into free-entry fields, so a second
       // classification is a pick. Recomputed per render while the panel is
       // open: one pass over the nodes' facets.
-      suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
+      suggestions={collectFieldSuggestions(canvas.nodes, registry)}
       tagSuggestions={[...collectCanvasTags(canvas), ...(props.tagSuggestions ?? [])]}
       {...(tagLibrary === undefined ? {} : { tagLibrary })}
       variant={props.variant}
@@ -145,7 +148,15 @@ export function SelectionInspector(props: SelectionInspectorProps) {
       }
       onWrite={(key, payload) =>
         onCommands(
-          facetWriteCommands(props.currentCanvas(), subject, selectedId, extraIds, key, payload),
+          facetWriteCommands(
+            props.currentCanvas(),
+            subject,
+            selectedId,
+            extraIds,
+            key,
+            payload,
+            registry,
+          ),
         )
       }
     />
