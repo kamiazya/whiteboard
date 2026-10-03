@@ -51,7 +51,7 @@ import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
-import { daemonContractError, logDaemonContractError } from './daemon-contract-error.js'
+import { daemonContractError } from './daemon-contract-error.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
 
@@ -135,11 +135,12 @@ export async function promoteWorkspace(
 }
 
 /**
- * The image references the record's spatial documents carry, each mapped to
- * its owning document's path (the address the daemon's file route wants).
- * The walk itself is collectImageRefIds — shared with the daemon-side GC's
+ * The image references the record's documents carry, each mapped to its
+ * owning document's path (the address the daemon's file route wants). The
+ * walk itself is collectImageRefIds — shared with the daemon-side GC's
  * live-state pass, so the two sides cannot drift on what counts as a live
- * reference. Markdown documents embed images only through spatial nodes.
+ * reference: image nodes, frame backgrounds, and inline images in a text node
+ * or a markdown document's body.
  */
 function collectImageRefs(
   record: Parameters<typeof readWorkspaceDocuments>[0],
@@ -147,7 +148,6 @@ function collectImageRefs(
 ): Map<string, string> {
   const refs = new Map<string, string>()
   for (const entry of entries) {
-    if (entry.kind !== 'spatial') continue
     for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
       if (!refs.has(fileId)) refs.set(fileId, entry.path)
     }
@@ -228,7 +228,7 @@ async function promoteWorkspaceUnsafe(
   }
   const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
   if (!promoted.success) {
-    logDaemonContractError(daemonContractError(promoteUrl, promoted.error))
+    daemonContractError(promoteUrl, promoted.error)
     return { kind: 'failed', reason: 'The daemon answered the move with an unexpected response.' }
   }
 

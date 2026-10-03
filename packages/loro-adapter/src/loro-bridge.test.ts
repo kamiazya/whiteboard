@@ -1146,7 +1146,7 @@ describe('canvas comments bridge', () => {
     expect(undoManager.canUndo()).toBe(false)
 
     // A batch that swallowed this would let a NaN anchor delete the comment
-    // for every reader — the same failure commentToFields' loud refusal
+    // for every reader — the same failure assertWritableComment's loud refusal
     // exists to prevent on the committing path. The throw happens before
     // the poisoned comment is ever written, so it never reaches the doc at
     // all — only OTHER (written before the throw) is pending, uncommitted.

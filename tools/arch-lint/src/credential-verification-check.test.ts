@@ -31,9 +31,8 @@ const SCAN_DIR = 'packages/mcp-server/src'
 
 /**
  * Each primitive is the last step of "is this secret genuine" for one
- * credential kind. `.validate(` is matched only through a `pairingTokens`
- * receiver: `validate` alone is far too common a method name, and a scan that
- * cries wolf is a scan people delete.
+ * credential kind. Only a call counts (`name(`): an import or a re-export of
+ * the name checks nothing, and a scan that cries wolf is a scan people delete.
  */
 const PRIMITIVES: readonly { readonly pattern: RegExp; readonly what: string }[] = [
   { pattern: /\bisAuthorized\s*\(/, what: 'the daemon-token comparison' },

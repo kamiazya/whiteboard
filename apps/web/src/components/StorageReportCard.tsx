@@ -15,11 +15,7 @@ import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
-import {
-  DaemonContractError,
-  daemonContractError,
-  logDaemonContractError,
-} from '../lib/daemon-contract-error.js'
+import { parseDaemonResponse } from '../lib/daemon-contract-error.js'
 import { formatBytes } from '../lib/format-bytes.js'
 import { sweepWorkspaces, useMaintenanceRunner } from './storage-maintenance.js'
 import {
@@ -88,11 +84,14 @@ async function readStorageReport(
   try {
     const res = await fetchApi(storageReportApiUrl())
     if (!res.ok) return { error: `HTTP ${res.status}` }
-    const parsed = storageReportPayloadSchema.safeParse(await res.json())
-    if (!parsed.success) throw daemonContractError(storageReportApiUrl(), parsed.error)
-    return { report: parsed.data }
+    return {
+      report: parseDaemonResponse(
+        storageReportApiUrl(),
+        storageReportPayloadSchema,
+        await res.json(),
+      ),
+    }
   } catch (err) {
-    if (err instanceof DaemonContractError) logDaemonContractError(err)
     return { error: messageOf(err, String(err)) }
   }
 }
@@ -201,10 +200,8 @@ export function StorageReportCard() {
           const swept = await sweepWorkspaces(
             fetchApi,
             optimizeAllApiUrl,
-            (saved, body) => {
-              const parsed = compactWorkspaceResultSchema.parse(body)
-              return saved + (parsed.beforeBytes - parsed.afterBytes)
-            },
+            compactWorkspaceResultSchema,
+            (saved, answer) => saved + (answer.beforeBytes - answer.afterBytes),
             0,
           )
           if (swept === null) return null
@@ -233,8 +230,8 @@ export function StorageReportCard() {
           const swept = await sweepWorkspaces(
             fetchApi,
             pruneSandwichedApiUrl,
-            (deleted, body) =>
-              deleted + pruneSandwichedVersionsResponseSchema.parse(body).totalDeleted,
+            pruneSandwichedVersionsResponseSchema,
+            (deleted, answer) => deleted + answer.totalDeleted,
             0,
           )
           if (swept === null) return null
@@ -263,13 +260,11 @@ export function StorageReportCard() {
           const swept = await sweepWorkspaces(
             fetchApi,
             purgeDanglingApiUrl,
-            (acc, body) => {
-              const parsed = purgeResultSchema.parse(body)
-              return {
-                bytes: acc.bytes + parsed.purgedBytes,
-                count: acc.count + parsed.purgedCount,
-              }
-            },
+            purgeResultSchema,
+            (acc, answer) => ({
+              bytes: acc.bytes + answer.purgedBytes,
+              count: acc.count + answer.purgedCount,
+            }),
             { bytes: 0, count: 0 },
           )
           if (swept === null) return null

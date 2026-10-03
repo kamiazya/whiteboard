@@ -32,21 +32,6 @@ export interface CategoryDescriptor {
   key: StorageCategory
   label: string
   description: string
-  // Optional soft cap. When the row's bytes pass this threshold the row
-  // surfaces a "near / over cap" hint. No auto-prune happens here; this
-  // component only makes growth visible before any cleanup policy runs.
-  softCapBytes?: number
-}
-
-/**
- * What the small print under a row's size says: the cap warning when there
- * is one to give, and the file count otherwise.
- */
-function capNote(bytes: number, softCapBytes: number | undefined, files: number): string {
-  if (softCapBytes === undefined) return `${files} files`
-  if (bytes > softCapBytes) return 'Over soft cap — please uninstall unused'
-  if (bytes > softCapBytes * 0.8) return 'Approaching soft cap'
-  return `${files} files`
 }
 
 /**
@@ -96,8 +81,7 @@ export function StorageCategoryRow({
   bucket: { bytes: number; files: number }
   action: RowAction | undefined
 }) {
-  const { key, label, description, softCapBytes } = descriptor
-  const overCap = softCapBytes !== undefined && bucket.bytes > softCapBytes
+  const { key, label, description } = descriptor
   return (
     <li key={key} data-storage-row={key} className="flex items-center gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
@@ -105,15 +89,8 @@ export function StorageCategoryRow({
         <div className="text-xs text-muted-foreground truncate">{description}</div>
       </div>
       <div className="shrink-0 text-right font-mono text-xs tabular-nums">
-        <div className={overCap ? 'text-destructive' : undefined}>
-          {formatBytes(bucket.bytes)}
-          {softCapBytes !== undefined && (
-            <span className="text-muted-foreground"> / {formatBytes(softCapBytes)}</span>
-          )}
-        </div>
-        <div className="text-[10px] text-muted-foreground">
-          {capNote(bucket.bytes, softCapBytes, bucket.files)}
-        </div>
+        <div>{formatBytes(bucket.bytes)}</div>
+        <div className="text-[10px] text-muted-foreground">{bucket.files} files</div>
       </div>
       <RowActions categoryKey={key} action={action} />
     </li>

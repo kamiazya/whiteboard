@@ -1,4 +1,3 @@
-import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { ensureWorkspaceId } from '../server/current-workspace.js'
 import { getDb } from '../server/store/db/index.js'
@@ -60,7 +59,6 @@ async function prepareSelfHostDataDir(dataDir: string): Promise<void> {
 export async function bootSelfHostDeps(
   dataDir: string,
   options: {
-    readonly plugins?: readonly FacetPlugin[]
     /**
      * Whether a refusal for an unknown workspace may list the ones that
      * exist. Only a root whose caller can already see every workspace sets
@@ -78,7 +76,7 @@ export async function bootSelfHostDeps(
   await prepareSelfHostDataDir(dataDir)
   const db = await getDb(dataDir)
   const scope = storeScope(dataDir)
-  const deps = resolveSelfHostServerDeps(db, dataDir, options)
+  const deps = resolveSelfHostServerDeps(db, dataDir)
   return {
     db,
     serverDeps:

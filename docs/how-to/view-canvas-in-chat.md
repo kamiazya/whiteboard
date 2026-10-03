@@ -39,7 +39,8 @@ no need to switch to a browser tab to see what the agent drew.
 On clients whose MCP Apps host advertises the `serverTools` capability, the widget
 shows a small **Refresh** button once the initial `canvas_view` result has loaded. It
 re-invokes `canvas_view` for the same document through the host (using the workspace
-and document ids the result echoed) and swaps in the latest scene — you do not need
+and document ids the result echoed, and the `style` it was drawn in, so a themed
+board stays themed) and swaps in the latest scene — you do not need
 to leave the chat or call the tool again by hand. On clients that do not advertise
 `serverTools`, or when the widget cannot confirm a host connection at all, the button
 never appears; call `canvas_view` again to see a fresh snapshot instead.

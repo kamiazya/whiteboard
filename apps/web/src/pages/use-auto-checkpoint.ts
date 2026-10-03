@@ -5,7 +5,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserVersionStore } from '../lib/browser-version-store.js'
 import type { VersionsRecordSeam } from '../lib/browser-versions-backend.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { listenToWorkspace } from '../lib/workspace-broadcast.js'
+import { listenToWorkspace, type WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
 
 const log = getAppLogger('browser-document-page')
 
@@ -24,35 +24,63 @@ function pathAfterMove(path: string, from: string, to: string): string {
   return path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : path
 }
 
+interface LivePath {
+  path: string | null
+  /** Where the document was when it was deleted, until it comes back. */
+  removedAt: string | null
+}
+
+/**
+ * Where a document is now, which a restore needs to tell apart from some other
+ * document returning: it comes back under the path it was deleted from.
+ */
+function followBroadcast(
+  checkpoints: CheckpointScheduler,
+  workspaceId: string,
+  live: LivePath,
+  message: WorkspaceBroadcast,
+): void {
+  if (message.type === 'document-moved') {
+    checkpoints.moved(workspaceId, message.from, message.to)
+    if (live.path !== null) live.path = pathAfterMove(live.path, message.from, message.to)
+  } else if (message.type === 'document-removed') {
+    checkpoints.removed(workspaceId, message.path)
+    if (live.path === message.path) {
+      live.removedAt = live.path
+      live.path = null
+    }
+  } else if (message.type === 'document-restored' && live.removedAt === message.path) {
+    live.path = message.path
+    live.removedAt = null
+  }
+}
+
 function useLivePath(
   checkpoints: CheckpointScheduler,
   documentPath: string | null,
   listen: typeof listenToWorkspace,
-): { path: string | null } {
+): LivePath {
   // Where this document lives NOW, which the page's snapshot does not say: it
   // is read once, at load, while the files panel — here or in another tab —
   // can move or delete the document under a pending checkpoint. A checkpoint
   // is keyed by path and the store resolves that path when it saves, so one
   // left under the old name fails against a path that no longer exists.
-  // Null once the document is gone: nothing is left to record, and arming
+  // Null while the document is gone: nothing is left to record, and arming
   // another would only report a failure for an operation that succeeded.
   // Keyed on the scheduler and the path it was seeded from, so it starts over
   // with whatever document the page switches to. Updated in place: nothing
   // renders from it, and a render per move would only re-create the pair.
-  const live = useMemo(() => ({ path: documentPath }), [checkpoints, documentPath])
+  const live = useMemo<LivePath>(
+    () => ({ path: documentPath, removedAt: null }),
+    [checkpoints, documentPath],
+  )
   useEffect(() => {
     // A page that mounts before the workspace resolves has no record to hear.
     const workspaceId = browserWorkspaceIdOrNull()
     if (workspaceId === null) return undefined
-    const end = listen(workspaceId, (message) => {
-      if (message.type === 'document-moved') {
-        checkpoints.moved(workspaceId, message.from, message.to)
-        if (live.path !== null) live.path = pathAfterMove(live.path, message.from, message.to)
-      } else if (message.type === 'document-removed') {
-        checkpoints.removed(workspaceId, message.path)
-        if (live.path === message.path) live.path = null
-      }
-    })
+    const end = listen(workspaceId, (message) =>
+      followBroadcast(checkpoints, workspaceId, live, message),
+    )
     return () => end.close()
   }, [checkpoints, live, listen])
   return live
@@ -100,6 +128,27 @@ function armCheckpoint(
  * that owns its doc supplies the seam instead. Reading `backend` alone here is
  * what left a note arming no checkpoint ever.
  */
+/**
+ * Every flush still in flight. A flush outlives the page that fired it (an
+ * unmount cannot await), so a test that tears a page down and then deletes
+ * the database would otherwise race the checkpoint it just released — the
+ * save then finds no record and warns, in whichever test happens to be
+ * running. `settleAutoCheckpoints` is the one thing a test may await before
+ * clearing storage; production never needs it, since nothing there deletes
+ * the database under a page it has just left.
+ */
+const inFlight = new Set<Promise<void>>()
+
+function trackFlush(flush: Promise<void>): void {
+  const settled = flush.catch(() => {}).finally(() => inFlight.delete(settled))
+  inFlight.add(settled)
+}
+
+export async function settleAutoCheckpoints(): Promise<void> {
+  // Sequential on purpose: a flush that lands while we wait may add another.
+  while (inFlight.size > 0) await Promise.all(inFlight)
+}
+
 export function useAutoCheckpoint(
   recordSource: VersionsRecordSeam | null,
   versionStore: Pick<BrowserVersionStore, 'save' | 'isUnchangedSinceLastVersion'>,
@@ -117,12 +166,15 @@ export function useAutoCheckpoint(
         }),
       onError: (err) => log.warn('automatic checkpoint failed', err),
     })
-    // Re-created per record source, so nothing pending survives leaving this
-    // document for another (the effect below stops the outgoing one).
+    // Re-created per record source, so nothing pending outlives leaving this
+    // document for another (the effect below takes the outgoing one's).
   }, [recordSource, versionStore])
 
-  // Nothing pending survives leaving this document for another.
-  useEffect(() => () => checkpoints.stop(), [checkpoints])
+  // Leaving a document inside its quiet window is a person finishing with it,
+  // so the pause it was waiting for is taken now — the way a tab closing
+  // takes it — rather than dropped. `flush` also clears the timers it fires,
+  // so nothing is left armed on a page that is gone.
+  useEffect(() => () => trackFlush(checkpoints.flush()), [checkpoints])
 
   const live = useLivePath(checkpoints, documentPath, listen)
 
@@ -142,7 +194,7 @@ export function useAutoCheckpoint(
       // than making it wrong.
       flush: () => {
         signal()
-        void checkpoints.flush()
+        trackFlush(checkpoints.flush())
       },
     }
   }, [recordSource, checkpoints, live])

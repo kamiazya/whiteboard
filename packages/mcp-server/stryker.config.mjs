@@ -8,6 +8,10 @@ export default {
   // from its own location in the pnpm store, where this package's dependency
   // is not resolvable, and the lane then fails with no TestRunner plugin.
   plugins: [require.resolve('@stryker-mutator/vitest-runner')],
+  // Stryker's default is 5 minutes, and the initial run is one runner executing
+  // every selected test serially, so a loaded box reads as a config error.
+  // measured: 2026-10-03 15 min on 4 cores at load 50 (3.6 CPU-minutes)
+  dryRunTimeoutMinutes: 30,
   testRunner: 'vitest',
   vitest: {
     configFile: 'vitest.stryker.config.ts',

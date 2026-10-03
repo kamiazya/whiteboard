@@ -21,9 +21,11 @@ import type { NodeInEditor } from './use-node-in-editor.js'
  * reason, one hook earlier.
  *
  * Prop types are `Pick`ed from the components they reach rather than
- * restated, so this file cannot drift from the editor's own contract.
+ * restated, so this file cannot drift from the editor's own contract, and
+ * the picked props are spread rather than listed again, so a picked key
+ * cannot be dropped on the way (`SpatialEditorPane.forwarding.test.tsx`).
  */
-type PassedThrough = Pick<
+export type SpatialEditorPassedThrough = Pick<
   SpatialEditorProps,
   | 'canvas'
   | 'onChange'
@@ -40,9 +42,10 @@ type PassedThrough = Pick<
   | 'proposals'
   | 'tagLibrary'
   | 'tagSuggestions'
+  | 'facetRegistry'
 >
 
-export interface SpatialEditorPaneProps extends PassedThrough {
+export interface SpatialEditorPaneProps extends SpatialEditorPassedThrough {
   /** Keys the editor on canvas identity — see the comment at the render. */
   editorKey: string
   /**
@@ -88,20 +91,13 @@ export function SpatialEditorPane({
   className,
   editorRef,
   children,
-  canvas,
-  onChange,
-  externalVersion,
-  theme,
-  fileRefOptions,
-  missingFileRef,
-  lockedNodeIds,
-  lockedEdgeIds,
-  onToggleNodeLock,
-  onToggleEdgeLock,
-  agentTouchedNodeIds,
-  threads,
-  proposals,
+  // Everything else is the editor's, handed over whole: a key picked into
+  // `SpatialEditorPassedThrough` reaches the editor by construction, where a
+  // list restated here let two of them (`tagLibrary`, `tagSuggestions`) be
+  // picked, typed and silently dropped.
+  ...editorProps
 }: SpatialEditorPaneProps) {
+  const { canvas, theme } = editorProps
   // The overlay's markdown editor reads the seams as functions; it builds
   // them from the same wire the canvas posts to its worker.
   const overlaySeams = useMemo(
@@ -128,22 +124,10 @@ export function SpatialEditorPane({
             : undefined
         }
         ref={editorRef}
-        agentTouchedNodeIds={agentTouchedNodeIds}
-        canvas={canvas}
-        onChange={onChange}
-        externalVersion={externalVersion}
-        theme={theme}
-        fileRefOptions={fileRefOptions}
+        {...editorProps}
         onOpenFileRef={onOpenDocument}
-        missingFileRef={missingFileRef}
         {...fileSeams}
-        lockedNodeIds={lockedNodeIds}
-        lockedEdgeIds={lockedEdgeIds}
-        onToggleNodeLock={onToggleNodeLock}
         onOpenInEditor={nodeInEditor.open}
-        onToggleEdgeLock={onToggleEdgeLock}
-        threads={threads}
-        proposals={proposals}
         paletteLeading={<HistoryCluster {...history} />}
       />
       {nodeInEditor.editing !== null && (

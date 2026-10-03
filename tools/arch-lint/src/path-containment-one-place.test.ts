@@ -19,13 +19,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { countNamedUses } from './named-use-scan.js'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const SHARED_WALK = 'packages/mcp-server/src/shared/path-containment.ts'
 
-/** A call to `realpath` or `realpathSync`, awaited, qualified or bare. */
-const REALPATH_CALL = /\brealpath(?:Sync)?\s*\(/g
+const REALPATH_NAMES = ['realpath', 'realpathSync']
 
 /**
  * Calls outside the shared module, by file, with what each one is for.
@@ -50,15 +50,9 @@ const LEDGER: Readonly<Record<string, { calls: number; why: string }>> = {
   },
 }
 
-function code(source: string): string {
-  return source
-    .split('\n')
-    .filter((line) => !/^\s*(?:\/\/|\/\*|\*)/.test(line))
-    .join('\n')
-}
-
-function calls(source: string): number {
-  return code(source).match(REALPATH_CALL)?.length ?? 0
+/** Uses of `realpath`/`realpathSync` however spelled: bare, qualified, `.native`, bracketed or aliased. */
+function calls(source: string, fileName = 'fixture.ts'): number {
+  return countNamedUses(fileName, source, REALPATH_NAMES)
 }
 
 const files = SCAN_ROOTS.flatMap((root) => walkSourceFiles(join(REPO_ROOT, root))).filter(
@@ -76,11 +70,14 @@ describe('path containment is answered in one place', () => {
     expect(calls("import { realpath } from 'node:fs/promises'")).toBe(0)
     expect(calls('// realpath(target) in a comment')).toBe(0)
     expect(calls('const p = realpathNearestExisting(target)')).toBe(0)
+    expect(calls("import { realpath as rp } from 'node:fs/promises'\nawait rp(target)")).toBe(1)
+    expect(calls('const p = fs.realpathSync.native(target)')).toBe(1)
+    expect(calls("const p = await fsp['realpath'](target)")).toBe(1)
   })
 
   it('scans a tree worth scanning, and the shared walk still holds the primitive', () => {
     expect(mcpFiles.length).toBeGreaterThan(200)
-    expect(calls(readFileSync(join(REPO_ROOT, SHARED_WALK), 'utf8'))).toBe(1)
+    expect(calls(readFileSync(join(REPO_ROOT, SHARED_WALK), 'utf8'), SHARED_WALK)).toBe(1)
   })
 
   it('no mcp-server file outside the shared walk calls realpath beyond its ledgered uses', () => {
@@ -88,7 +85,7 @@ describe('path containment is answered in one place', () => {
     for (const path of mcpFiles) {
       const rel = relativeToRepo(path)
       if (rel === SHARED_WALK) continue
-      const count = calls(readFileSync(path, 'utf8'))
+      const count = calls(readFileSync(path, 'utf8'), path)
       if (count > 0) found[rel] = count
     }
     const ledgered = Object.fromEntries(

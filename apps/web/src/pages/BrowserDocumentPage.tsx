@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
+import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
@@ -148,6 +149,7 @@ function useBrowserDocument(
     [store, resolvedLoro],
   )
   const tagVocabulary = useTagVocabulary(tagsSource)
+  const facetRegistry = useStencilRegistry(tagsSource)
   const currentUpdatedAt = loaded.updatedAt
   // Called HERE rather than with the rest of the state above: it reads
   // `currentUpdatedAt`, and it OWNS the enumerated flag the URL -> document
@@ -569,6 +571,7 @@ function useBrowserDocument(
     },
     spatial: {},
     ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),
+    facetRegistry,
     slots: documentActions,
   }
 

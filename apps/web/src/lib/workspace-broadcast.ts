@@ -48,6 +48,11 @@ const workspaceBroadcastSchema = z.discriminatedUnion('type', [
     type: z.literal('document-removed'),
     path: z.string().min(1),
   }),
+  // A deleted document is back at `path`, under the documentId it had.
+  z.object({
+    type: z.literal('document-restored'),
+    path: z.string().min(1),
+  }),
 ])
 
 export type WorkspaceBroadcast = z.infer<typeof workspaceBroadcastSchema>
@@ -115,4 +120,12 @@ export function announceDocumentMoved(workspaceId: string, from: string, to: str
 
 export function announceDocumentRemoved(workspaceId: string, path: string): void {
   announce(workspaceId, { type: 'document-removed', path })
+}
+
+/**
+ * A document is back from the trash. A page held open on it nulled its path
+ * when it was deleted and would otherwise arm nothing for the rest of its life.
+ */
+export function announceDocumentRestored(workspaceId: string, path: string): void {
+  announce(workspaceId, { type: 'document-restored', path })
 }

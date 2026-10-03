@@ -29,9 +29,11 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   createDocumentV1ResponseSchema,
+  type DocumentOkfV1Response,
   documentApiUrl,
   documentNameApiUrl,
   documentOkfApiUrl,
+  documentOkfV1ResponseSchema,
   documentPathApiUrl,
   documentRecordApiUrl,
   documentsV1ApiUrl,
@@ -92,7 +94,7 @@ export interface FakeDaemonRoutes {
   onUpdateDocument?: (workspaceId: string, path: string, bytes: Uint8Array) => void
   onSetDocumentName?: (workspaceId: string, path: string, name: string) => void
   /** The OKF the preview route answers, by document id. */
-  okfByDocumentId?: Record<string, { markdown: string; frontmatter: Record<string, unknown> }>
+  okfByDocumentId?: Record<string, DocumentOkfV1Response>
   /** When set, the documents fetch resolves only after this promise settles. */
   delayDocuments?: Promise<void>
   /** Same, for the workspaces list. Consulted per call, so a test can leave
@@ -224,6 +226,19 @@ interface Route {
 
 const notFound = () => jsonResponse({ title: 'Not found' }, 404)
 
+/**
+ * A valid answer for the reads a page makes beside its workspace and document
+ * lists, for a hand-written fetch stub that only means to say something about
+ * one route. A body this does not describe is one the page's contract refuses.
+ */
+export function otherReadBody(url: string): Response {
+  if (url.endsWith('/trash')) return jsonResponse({ entries: [] })
+  if (url.endsWith('/document-tags')) {
+    return jsonResponse({ documents: [], contents: [], library: {}, inUse: [] })
+  }
+  return jsonResponse({ documents: {}, pinned: [] })
+}
+
 /** The table, in match order: a more specific suffix before the bare document. */
 const ROUTES: readonly Route[] = [
   { pattern: WORKSPACES, method: 'GET', handle: (routes) => listWorkspaces(routes) },
@@ -259,7 +274,7 @@ const ROUTES: readonly Route[] = [
     method: 'GET',
     handle: (routes, m) => {
       const okf = routes.okfByDocumentId?.[seg(m, 2)]
-      return okf ? jsonResponse(okf) : notFound()
+      return okf ? jsonResponse(documentOkfV1ResponseSchema.parse(okf)) : notFound()
     },
   },
   {

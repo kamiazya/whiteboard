@@ -166,7 +166,7 @@ vi.mock('./pages/DaemonIndexPage.js', () => ({
   },
 }))
 
-// S4b's replica-key-holder wiring: watched through this spy rather than
+// The replica-key holder's wiring: watched through this spy rather than
 // through a real IndexedDB round-trip — App's own contract is WHICH daemon
 // (and whose credentials) it hands the holder, not what the holder then
 // does with them (replica-store.browser.test.tsx covers that separately).
@@ -216,7 +216,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
       daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
       token: '',
     })
-    // S4b: the resolved daemon reaches the replica-key holder too, not only
+    // The resolved daemon reaches the replica-key holder too, not only
     // the page.
     await vi.waitFor(() => {
       expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith({
@@ -290,7 +290,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     // replica-refresh.ts omits it when a daemon workspace has none). A
     // registry lookup keyed on `segment` alone, or a replica branch gated
     // to index routes, would both miss this and fall through to the
-    // browser flow instead of the locked states ADR-0042 S5 ships.
+    // browser flow instead of the locked states ADR-0042 specifies.
     const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA1'
     rememberDaemon(BRIDGE_DAEMON_BASE_URL, {
       replicas: {
@@ -341,7 +341,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
 
     await screen.findByTestId('browser-index-page')
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
-    // S4b: no resolved daemon means the replica-key holder is told to
+    // No resolved daemon means the replica-key holder is told to
     // disconnect too, so a stale held key does not keep answering.
     await vi.waitFor(() => {
       expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(null)
@@ -796,14 +796,16 @@ describe('App daemon provider state', () => {
     // writes the address, and the page follows the address.
     vi.stubGlobal(
       'fetch',
-      vi.fn(() =>
+      vi.fn((input: RequestInfo | URL) =>
         Promise.resolve(
-          jsonResponse({
-            workspaces: [
-              { workspaceId: 'w1', segment: 'design' },
-              { workspaceId: 'w2', segment: 'sandbox' },
-            ],
-          }),
+          String(input).endsWith('/api/fonts')
+            ? jsonResponse({ fonts: [] })
+            : jsonResponse({
+                workspaces: [
+                  { workspaceId: 'w1', segment: 'design' },
+                  { workspaceId: 'w2', segment: 'sandbox' },
+                ],
+              }),
         ),
       ),
     )

@@ -16,7 +16,7 @@
  * dangerous direction, since the scan then reports clean.
  */
 import { readdirSync, statSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { join } from 'node:path'
 
 /**
  * Every `.ts`/`.tsx` under `dir`, skipping `node_modules`, `dist` and `tmp`.
@@ -35,16 +35,60 @@ export function walkSourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 /**
- * A test file, or a helper only tests import: a `test-utils` directory, or a
- * `_test-*` basename beside the code it seeds (the shape
- * `no-test-utils-in-production` admits as a test-only importer).
+ * What a path IS to the build, so "shipped or not" is answered once.
+ *
+ * - `test`: a `.test`/`.spec` file.
+ * - `test-support`: a helper only tests import — a `test-utils`/`testing`/
+ *   `__tests__`/`fixtures`/`test-config` directory, a `-test-utils` file, or a
+ *   `_test-*` basename beside the code it seeds.
+ * - `harness`: runs a BUILT artefact (`.smoke-impl`, `.distribution-impl`,
+ *   `.stress`, an `e2e` directory), never part of one.
+ * - `bench`: a `.bench` file.
+ * - `docs-snapshot`: the doc-screenshot browser tests under `docs-snapshots`.
+ *
+ * Everything else is `shipped`. Separators are normalised, so an absolute or a
+ * repo-relative path of either flavour classifies the same.
+ */
+export type PathCategory =
+  | 'shipped'
+  | 'test'
+  | 'test-support'
+  | 'harness'
+  | 'bench'
+  | 'docs-snapshot'
+
+export function classifyPath(path: string): PathCategory {
+  const p = path.replaceAll('\\', '/')
+  const base = p.slice(p.lastIndexOf('/') + 1)
+  if (/\.(test|spec)\.[a-z]+$/.test(base)) return 'test'
+  if (/\.bench\.[a-z]+$/.test(base)) return 'bench'
+  if (/\.(smoke-impl|distribution-impl|stress)\./.test(base) || /(^|\/)e2e\//.test(p)) {
+    return 'harness'
+  }
+  if (/(^|\/)docs-snapshots\//.test(p)) return 'docs-snapshot'
+  if (
+    /(^|\/)(test-utils|testing|__tests__|fixtures|test-config)\//.test(p) ||
+    /-test-utils\.[a-z]+$/.test(base) ||
+    base.startsWith('_test-')
+  ) {
+    return 'test-support'
+  }
+  return 'shipped'
+}
+
+/** Every category but `shipped` is code that never reaches a user. */
+export function isShippedPath(path: string): boolean {
+  return classifyPath(path) === 'shipped'
+}
+
+/**
+ * A test, or a helper only tests import (`test` and `test-support`). Benches,
+ * harnesses and doc snapshots are NOT here: a guard that must skip them too
+ * asks `isShippedPath`.
  */
 export function isTestPath(path: string): boolean {
-  return (
-    /\.(test|spec)\.tsx?$/.test(path) ||
-    path.split(sep).includes('test-utils') ||
-    /^_test-.*\.tsx?$/.test(path.split(sep).at(-1) ?? '')
-  )
+  const category = classifyPath(path)
+  return category === 'test' || category === 'test-support'
 }
 
 /**

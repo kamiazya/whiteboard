@@ -4,8 +4,9 @@
 # Design for this repo (pnpm monorepo, heavy git-worktree automation):
 #  - pre-commit: format (non-blocking, auto-fixed) + secretlint (BLOCKING — stops secret
 #    and absolute home-dir path leaks before they enter git history).
-#  - the real gate lives on pre-push, run only by the integrator who pushes — it mirrors
-#    CI so a broken build / failing test / typecheck error is caught before it leaves the machine.
+#  - the real gate lives on pre-push, run only by the integrator who pushes — typecheck,
+#    lint and the architecture guards, so a push CI would reject for those is caught before it
+#    leaves the machine. No test suite runs there: CI runs those.
 #
 # Note that a correct config here is NOT sufficient: another tool appending its own block
 # to .git/hooks/<name> makes ITS exit status the script's, silently reducing every command
@@ -95,7 +96,9 @@ pre-push:
     # It is NOT free. It and `pnpm -r typecheck` are the two long commands of
     # a push, and which is longer depends on the box: three interleaved quiet
     # rounds measured arch-lint at 32-50s wall / ~53s CPU against typecheck's
-    # 42-60s wall / ~80s CPU, while under heavy load (average 18-25 on 4 CPUs)
+    # 42-60s wall / ~80s CPU; a later measurement, with the project grown to
+    # 1430 tests, read arch-lint at 87s user + 6s sys against typecheck's 71s +
+    # 10s. Under heavy load (average 18-25 on 4 CPUs)
     # the two came in near-equal (133s against 130s). Contention swings every
     # number here by 2-4x, so the invariant is "these are the two long
     # commands", not any one reading — re-measure before quoting one. It stays

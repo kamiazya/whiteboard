@@ -39,7 +39,7 @@ export interface DaemonPageStateInput {
    */
   documentAtPath: boolean
   /** The daemon refused the resolve/document read on membership grounds
-   *  (ADR-0041/0042 S8) — read from `DaemonApiError.body` through
+   *  (ADR-0041/0042) — read from `DaemonApiError.body` through
    *  `membershipRefusal`, never from a controller-field guess. */
   refusal: MembershipRefusalState | null
 }

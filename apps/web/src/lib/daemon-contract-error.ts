@@ -28,24 +28,30 @@ export class DaemonContractError extends Error {
   }
 }
 
-/** The error for a response that failed its contract. Building it reports nothing; see `logDaemonContractError`. */
-export function daemonContractError(route: string, error: z.ZodError): DaemonContractError {
-  return new DaemonContractError(route, error.issues)
-}
-
 /**
- * Reports a mismatch where a person is shown the failure, so the log says
- * which route and field disagreed while the screen says one generic sentence.
+ * The error for a response that failed its contract, reported on the way out.
  *
- * Reported by the caller that surfaces the failure rather than where the
- * parse fails: a read a caller deliberately swallows (a names list that falls
- * back to empty) is not a failure anyone sees, and logging it at the throw
- * would put an error record behind every such fallback.
+ * Reported where it is BUILT, which is where the parse fails: a surfacing
+ * site reduces it to one sentence (or swallows it into a fallback), so the
+ * route and the field that disagreed would otherwise exist nowhere. Callers
+ * throw what this returns and never log it again, so a mismatch is one record.
  *
  * The first issue's path is in the message line, not only the data, because a
  * console shows an object collapsed and a message is what gets searched.
  */
-export function logDaemonContractError({ route, issues }: DaemonContractError): void {
-  const path = issues[0]?.path.join('.') || '(root)'
-  log.error(`response from ${route} failed its contract at ${path}`, { route, issues })
+export function daemonContractError(route: string, error: z.ZodError): DaemonContractError {
+  const failure = new DaemonContractError(route, error.issues)
+  const path = failure.issues[0]?.path.join('.') || '(root)'
+  log.error(`response from ${route} failed its contract at ${path}`, {
+    route,
+    issues: failure.issues,
+  })
+  return failure
+}
+
+/** Parses a daemon answer, throwing (and so reporting) a `DaemonContractError` rather than a bare `ZodError`. */
+export function parseDaemonResponse<T>(route: string, schema: z.ZodType<T>, json: unknown): T {
+  const parsed = schema.safeParse(json)
+  if (!parsed.success) throw daemonContractError(route, parsed.error)
+  return parsed.data
 }

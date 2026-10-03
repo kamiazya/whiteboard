@@ -99,4 +99,13 @@ describe('DocumentStore method DTOs', () => {
     expect(readFrontierResultSchema.safeParse(null).success).toBe(true)
     expect(readFrontierResultSchema.safeParse({ frontier }).success).toBe(true)
   })
+
+  it('loadSnapshot: refuses a chunk list shorter than manifest.chunkCount even when the bytes still sum to totalBytes', () => {
+    const payload = {
+      manifest: { chunkCount: 2, totalBytes: 4, maxChunkBytes: 4 },
+      chunks: [{ index: 0, of: 2, bytes: new Uint8Array([1, 2, 3, 4]) }],
+      frontier,
+    }
+    expect(loadSnapshotResultSchema.safeParse(payload).success).toBe(false)
+  })
 })

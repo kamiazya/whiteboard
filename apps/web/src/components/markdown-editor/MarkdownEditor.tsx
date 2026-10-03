@@ -816,7 +816,7 @@ export function MarkdownEditor({
           // session that never left write mode. An empty strip claims the
           // document has no shape, which is worse than no rail. Laying the
           // document out for the rail when no preview is running is the
-          // worker pool's job — the increment after this one.
+          // worker pool's job, which this rail does not have.
           <MinimapRail
             blocks={railBlocks}
             viewport={railViewport}

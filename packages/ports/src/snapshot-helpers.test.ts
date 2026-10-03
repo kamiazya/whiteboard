@@ -198,4 +198,19 @@ describe('reassembleSnapshot', () => {
       expect((error as SnapshotReassemblyError).code).toBe('INVALID_MANIFEST')
     }
   })
+
+  it('refuses an empty final chunk as WRONG_BYTE_LENGTH', () => {
+    const manifest = { chunkCount: 2, totalBytes: 4, maxChunkBytes: 4 }
+    const chunks = [
+      { index: 0, of: 2, bytes: bytesOf(4) },
+      { index: 1, of: 2, bytes: new Uint8Array() },
+    ]
+    try {
+      reassembleSnapshot(manifest, chunks)
+      expect.unreachable('should refuse')
+    } catch (error) {
+      expect(error).toBeInstanceOf(SnapshotReassemblyError)
+      expect((error as SnapshotReassemblyError).code).toBe('WRONG_BYTE_LENGTH')
+    }
+  })
 })

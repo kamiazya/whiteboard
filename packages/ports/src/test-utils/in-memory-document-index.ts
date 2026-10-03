@@ -164,7 +164,7 @@ export class InMemoryDocumentIndex implements DocumentIndex {
     for (const [path, entry] of documents) {
       if (entry.documentId !== documentId) continue
       const { name: _dropped, ...rest } = entry
-      documents.set(path, { ...rest, ...(name === undefined ? {} : { name }) })
+      documents.set(path, { ...rest, ...(name?.trim() ? { name } : {}) })
       return
     }
     throw new DocumentNotFoundError(workspaceId, documentId)

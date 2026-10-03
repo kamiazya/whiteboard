@@ -13,6 +13,8 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { RefObject } from 'react'
 import { useCallback } from 'react'
+import type { z } from 'zod'
+import { parseDaemonResponse } from '../lib/daemon-contract-error.js'
 
 /** What a sweep produced, plus how many workspaces refused it. */
 export interface SweepResult<T> {
@@ -30,28 +32,37 @@ export interface SweepResult<T> {
  * says so explicitly. Reporting "Saved" or "Already optimal" on a partial
  * failure would tell the user everything succeeded when it did not.
  *
+ * Every answer is read through `schema`, so a response the page cannot read is
+ * reported with its route like any other daemon contract mismatch.
+ *
  * Sequential on purpose: the doc-cache eviction inside each compact stays
  * coherent only if one workspace finishes before the next begins.
  */
-export async function sweepWorkspaces<T>(
+export async function sweepWorkspaces<T, R>(
   fetchApi: typeof globalThis.fetch,
   pathFor: (workspaceId: string) => string,
-  accumulate: (total: T, body: unknown) => T,
+  schema: z.ZodType<R>,
+  accumulate: (total: T, answer: R) => T,
   seed: T,
 ): Promise<SweepResult<T> | null> {
   const listed = await fetchApi(workspacesApiUrl())
   if (!listed.ok) return null
-  const { workspaces } = listWorkspacesResponseSchema.parse(await listed.json())
+  const { workspaces } = parseDaemonResponse(
+    workspacesApiUrl(),
+    listWorkspacesResponseSchema,
+    await listed.json(),
+  )
 
   let total = seed
   let failedWorkspaces = 0
   for (const { workspaceId } of workspaces) {
-    const res = await fetchApi(pathFor(workspaceId), { method: 'POST' })
+    const url = pathFor(workspaceId)
+    const res = await fetchApi(url, { method: 'POST' })
     if (!res.ok) {
       failedWorkspaces += 1
       continue
     }
-    total = accumulate(total, await res.json())
+    total = accumulate(total, parseDaemonResponse(url, schema, await res.json()))
   }
   return { total, failedWorkspaces }
 }

@@ -187,7 +187,7 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     // Two calls: ask what may be named, then name it. The id is read out of
     // the answer rather than written into the errand, because an errand
     // that hard-codes `workspace.lakehouse` measures an agent that already
-    // knew — which is the one thing this increment does not assume.
+    // knew — which is the one thing this corpus does not assume.
     //
     // The path it replaces cost THREE, and none of them was discovery: list
     // the workspace's documents, get the one at `stencils`, and parse its

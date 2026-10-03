@@ -4,9 +4,9 @@ import {
   readDocumentKind,
   readFacets,
   readSpatialCanvas,
+  reconcileCoreFacets,
+  reconcileFacets,
   reconcileSpatialCanvas,
-  writeCoreFacets,
-  writeFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
@@ -623,19 +623,20 @@ async function setDocumentFacets(
   sets: Record<string, unknown>,
   deletions: readonly string[],
 ): Promise<FacetSetOutput['updated'][number]> {
-  const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...sets }
+  const storedFacets = readFacets(doc)
+  const mergedFacets: ExtensionFacets = { ...storedFacets, ...sets }
   for (const key of deletions) delete mergedFacets[key]
-  if (input.facets !== undefined) writeFacets(doc, mergedFacets)
+  // Applied against what was read, so an entry this build's reader dropped
+  // (a newer client's facet) is left alone rather than resynced away.
+  if (input.facets !== undefined) reconcileFacets(doc, storedFacets, mergedFacets)
 
   let tags: string[] | undefined
   if (input.tags !== undefined) {
     const core = readCoreFacets(doc)
     if (core === undefined) throw new DocumentHasNoFrontmatterError(documentId)
     tags = applyTagChange(core.tags, input.tags)
-    // The whole core bucket goes back, tags included: writeCoreFacets
-    // replaces rather than merges, and an omitted `tags` would drop them.
     const { tags: _previous, ...rest } = core
-    writeCoreFacets(doc, tags.length === 0 ? rest : { ...rest, tags })
+    reconcileCoreFacets(doc, core, tags.length === 0 ? rest : { ...rest, tags })
   }
 
   await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)

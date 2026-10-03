@@ -289,3 +289,95 @@ test('main --sweep: removes stale entries via a config write, keeps live entries
   assert.equal(writtenConfig.projects[stalePath].mcpServers.whiteboard, undefined)
   assert.deepEqual(writtenConfig.projects[alivePath].mcpServers.whiteboard, { type: 'http', url: 'y' })
 })
+
+const PROXY_SUFFIX = 'packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs'
+
+function stdioEntry(root) {
+  return { type: 'stdio', command: 'node', args: [`${root}/${PROXY_SUFFIX}`], env: {} }
+}
+
+test('main: `claude mcp add` from a linked worktree lands under the main checkout key, and the post-write check reads that key', async () => {
+  const mainRoot = '/repo'
+  const worktree = '/repo/.claude/worktrees/wt-a'
+  let readCalls = 0
+  const logs = []
+  await main({
+    argv: [worktree],
+    isMainCheckoutOverride: false,
+    claudeCliAvailableOverride: true,
+    mainCheckoutRootOverride: mainRoot,
+    spawn: () => fakeSpawnOk(),
+    readConfig: () => {
+      readCalls += 1
+      return readCalls === 1 ? { projects: {} } : { projects: { [mainRoot]: { mcpServers: { whiteboard: stdioEntry(worktree) } } } }
+    },
+    writeConfig: () => {},
+    log: (msg) => logs.push(msg),
+  })
+
+  assert.ok(logs.some((line) => /^\[wire-worktree-mcp\] wired "whiteboard" -> /.test(line)), JSON.stringify(logs))
+  assert.ok(!logs.some((line) => /does not match/.test(line)), JSON.stringify(logs))
+})
+
+test('main --sweep: drops the main checkout key\'s entry once the worktree its args name is gone', async () => {
+  const mainRoot = resolve('/repo')
+  const gone = resolve('/repo/.claude/worktrees/gone')
+  let writtenConfig
+  const logs = []
+  await main({
+    argv: ['--sweep'],
+    mainCheckoutRootOverride: mainRoot,
+    liveWorktreePathsOverride: [mainRoot],
+    spawn: () => fakeSpawnOk(),
+    readConfig: () => ({
+      projects: { [mainRoot]: { mcpServers: { whiteboard: stdioEntry(gone), other: { type: 'http', url: 'x' } } } },
+    }),
+    writeConfig: (config) => {
+      writtenConfig = config
+    },
+    log: (msg) => logs.push(msg),
+  })
+
+  assert.ok(writtenConfig, `expected a config write, got: ${JSON.stringify(logs)}`)
+  assert.equal(writtenConfig.projects[mainRoot].mcpServers.whiteboard, undefined)
+  assert.deepEqual(writtenConfig.projects[mainRoot].mcpServers.other, { type: 'http', url: 'x' })
+})
+
+test('main --sweep: keeps the main checkout key\'s entry while its args name a live worktree or the checkout itself', async () => {
+  const mainRoot = resolve('/repo')
+  const alive = resolve('/repo/.claude/worktrees/alive')
+  for (const root of [alive, mainRoot]) {
+    let writes = 0
+    await main({
+      argv: ['--sweep'],
+      mainCheckoutRootOverride: mainRoot,
+      liveWorktreePathsOverride: [mainRoot, alive],
+      spawn: () => fakeSpawnOk(),
+      readConfig: () => ({ projects: { [mainRoot]: { mcpServers: { whiteboard: stdioEntry(root) } } } }),
+      writeConfig: () => {
+        writes += 1
+      },
+      log: () => {},
+    })
+    assert.equal(writes, 0, `entry naming ${root} must survive`)
+  }
+})
+
+test('main --sweep: leaves a main checkout entry that is not this script\'s stdio proxy registration untouched', async () => {
+  const mainRoot = resolve('/repo')
+  let writes = 0
+  await main({
+    argv: ['--sweep'],
+    mainCheckoutRootOverride: mainRoot,
+    liveWorktreePathsOverride: [mainRoot],
+    spawn: () => fakeSpawnOk(),
+    readConfig: () => ({
+      projects: { [mainRoot]: { mcpServers: { whiteboard: { type: 'stdio', command: 'npx', args: ['@kamiazya/whiteboard-mcp@latest'] } } } },
+    }),
+    writeConfig: () => {
+      writes += 1
+    },
+    log: () => {},
+  })
+  assert.equal(writes, 0)
+})

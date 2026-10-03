@@ -26,7 +26,7 @@ interface Harness {
  * files panel announces is delivered by hand here and by the real channel in
  * the browser tests.
  */
-function mount(documentPath: string): Harness {
+function mount(documentPath: string): Harness & { readonly unmount: () => void } {
   const save = vi.fn<(workspaceId: string, path: string) => Promise<VersionEntry>>(
     async (_workspaceId, path) => ({ id: `v-${path}`, path }) as unknown as VersionEntry,
   )
@@ -34,7 +34,7 @@ function mount(documentPath: string): Harness {
   const doc = new LoroDoc()
   doc.getMap('m').set('k', 'v')
   doc.commit()
-  const { result } = renderHook(() =>
+  const { result, unmount } = renderHook(() =>
     useAutoCheckpoint(
       { readRecord: (read) => read(doc, 'doc-1'), applyRestore: async () => {} },
       { save, isUnchangedSinceLastVersion: async () => false },
@@ -45,7 +45,7 @@ function mount(documentPath: string): Harness {
       },
     ),
   )
-  return { save, result, hear: (message) => hear(message) }
+  return { save, result, unmount, hear: (message) => hear(message) }
 }
 
 describe('useAutoCheckpoint when the document changes path inside the quiet window', () => {
@@ -109,6 +109,37 @@ describe('useAutoCheckpoint when the document changes path inside the quiet wind
     expect(save).not.toHaveBeenCalled()
   })
 
+  it('arms the edits that follow the document coming back from the trash', async () => {
+    const { save, result, hear } = mount('a')
+    hear({ type: 'document-removed', path: 'a' })
+    hear({ type: 'document-restored', path: 'a' })
+    result.current.signal()
+    await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+
+    expect(save.mock.calls.map(([, path]) => path)).toEqual(['a'])
+  })
+
+  it('arms the edits that follow a moved document coming back from the trash', async () => {
+    const { save, result, hear } = mount('a')
+    hear({ type: 'document-moved', from: 'a', to: 'b' })
+    hear({ type: 'document-removed', path: 'b' })
+    hear({ type: 'document-restored', path: 'b' })
+    result.current.signal()
+    await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+
+    expect(save.mock.calls.map(([, path]) => path)).toEqual(['b'])
+  })
+
+  it('stays silent when some other document is restored', async () => {
+    const { save, result, hear } = mount('a')
+    hear({ type: 'document-removed', path: 'a' })
+    hear({ type: 'document-restored', path: 'b' })
+    result.current.signal()
+    await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('keeps the pending checkpoint when a different document is deleted', async () => {
     const { save, result, hear } = mount('a')
     result.current.signal()
@@ -117,5 +148,58 @@ describe('useAutoCheckpoint when the document changes path inside the quiet wind
     await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
 
     expect(save.mock.calls.map(([, path]) => path)).toEqual(['a'])
+  })
+})
+
+describe('useAutoCheckpoint when the page unmounts inside the quiet window', () => {
+  beforeEach(() => {
+    setBrowserWorkspaceIdForTests(WORKSPACE)
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    resetBrowserWorkspaceIdForTests()
+  })
+
+  it('takes the pending checkpoint rather than dropping it', async () => {
+    const { save, result, unmount } = mount('a')
+    result.current.signal()
+
+    unmount()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(save.mock.calls.map(([, path]) => path)).toEqual(['a'])
+  })
+
+  it('takes it once, with no timer left to take it again', async () => {
+    const { save, result, unmount } = mount('a')
+    result.current.signal()
+
+    unmount()
+    await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS * 2)
+
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+
+  it('takes it under the path the document moved to', async () => {
+    const { save, result, hear, unmount } = mount('a')
+    result.current.signal()
+    hear({ type: 'document-moved', from: 'a', to: 'b' })
+
+    unmount()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(save.mock.calls.map(([, path]) => path)).toEqual(['b'])
+  })
+
+  it('takes none for a document that was deleted', async () => {
+    const { save, result, hear, unmount } = mount('a')
+    result.current.signal()
+    hear({ type: 'document-removed', path: 'a' })
+
+    unmount()
+    await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS * 2)
+
+    expect(save).not.toHaveBeenCalled()
   })
 })

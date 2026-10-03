@@ -23,6 +23,7 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ServerModeShell, SignOutControl } from '../components/server-mode/ServerModeShell.js'
 import { buttonVariants } from '../components/ui/button.js'
 import { workspacePath } from '../lib/app-routes.js'
+import { parseDaemonResponse } from '../lib/daemon-contract-error.js'
 import { listMemberWorkspaces, type MemberWorkspace } from '../lib/member-workspaces.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
 import { ReceiveTransferPage } from './ReceiveTransferPage.js'
@@ -42,7 +43,11 @@ function useProviders(fetchFn: Fetch): Providers | null {
   useEffect(() => {
     let live = true
     void fetchFn(authProvidersUrl())
-      .then(async (res) => (res.ok ? signInProvidersResponseSchema.parse(await res.json()) : null))
+      .then(async (res) =>
+        res.ok
+          ? parseDaemonResponse(authProvidersUrl(), signInProvidersResponseSchema, await res.json())
+          : null,
+      )
       .catch(() => null)
       .then((body) => {
         if (live) setProviders(body?.providers ?? [])
@@ -126,7 +131,11 @@ interface Signed {
 }
 
 async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
-  const session = signInSessionResponseSchema.parse(await (await fetchFn(authSessionUrl())).json())
+  const session = parseDaemonResponse(
+    authSessionUrl(),
+    signInSessionResponseSchema,
+    await (await fetchFn(authSessionUrl())).json(),
+  )
   if (!session.signedIn) return null
   return { user: session.user, workspaces: await listMemberWorkspaces(fetchFn) }
 }
@@ -205,7 +214,11 @@ function SignedInOnly({
     let live = true
     void fetchFn(authSessionUrl())
       .then(async (res) => {
-        const session = signInSessionResponseSchema.parse(await res.json())
+        const session = parseDaemonResponse(
+          authSessionUrl(),
+          signInSessionResponseSchema,
+          await res.json(),
+        )
         return session.signedIn ? session.user : null
       })
       .catch(() => null)

@@ -10,6 +10,7 @@ export type { DocumentContainers } from './containers.js'
 export { MARKDOWN_BODY_KEY } from './containers.js'
 export { contentDigestOfDocument } from './content-digest.js'
 export { type DocumentBatchWriter, withDocumentBatch } from './document-batch.js'
+export { type DocumentContent, readDocumentContent } from './document-content.js'
 export {
   readCoreFacets,
   readDocumentKind,
@@ -20,6 +21,7 @@ export {
   writeFacets,
   writeTrustFacets,
 } from './document-envelope.js'
+export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
 export { collectImageRefIds } from './image-refs.js'
 export {
   CONTENT_CONTAINER_KEYS,
@@ -82,6 +84,7 @@ export {
   setWorkspacePinned,
   type TrashEntry,
   trashEntrySchema,
+  unreadableWorkspaceNodes,
   updateWorkspaceDocumentMeta,
   WORKSPACE_META_KEY,
   WORKSPACE_TRASH_KEY,

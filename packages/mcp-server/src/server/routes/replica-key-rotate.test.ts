@@ -149,7 +149,7 @@ describe('POST /api/workspaces/:workspaceId/replica-key/rotate', () => {
 
   // The bar is runtime:admin, not member-scoped — a passkey-bound member
   // session (ALL_AUTH_SCOPES under the accepted v1 posture) still reaches
-  // it, the same honest limit #1752 recorded for the tier route: this bar
+  // it, the same honest limit the tier route records: this bar
   // does not today separate an operator from a paired browser session.
 
   it('never mints a workspaces row as a side effect', async () => {

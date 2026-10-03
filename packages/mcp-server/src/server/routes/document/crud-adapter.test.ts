@@ -3,7 +3,7 @@
  * operations, not second implementations of them.
  *
  * The two used to be separate code paths performing the same delete, and
- * only one of them cleaned up (#1035). Sharing the pieces closed that gap
+ * only one of them cleaned up. Sharing the pieces closed that gap
  * one piece at a time; sharing the OPERATION is what stops the next piece
  * from drifting, because there is no longer a second sequence to forget to
  * update.
@@ -297,7 +297,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   })
 
   // The refusal has to travel OUT of the operation and past the bracket's
-  // cleanup — a refused delete destroys nothing (#1066). Covered here rather
+  // cleanup — a refused delete destroys nothing. Covered here rather
   // than only through the default wiring, because the seam is the only place
   // "the cleanup did not run" is observable at all.
   it('surfaces the descendant refusal as 409 without entering cleanup', async () => {

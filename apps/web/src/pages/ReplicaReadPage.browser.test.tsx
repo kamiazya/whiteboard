@@ -409,7 +409,7 @@ describe('ReplicaReadPage', () => {
 describe('ReplicaReadPage states', () => {
   it('locked (cold start): Reconnect transitions to readable without a remount', async () => {
     await seedReplica()
-    // Cold start: nobody has asked S4a for this workspace's key yet in
+    // Cold start: nobody has asked the session-key holder for this workspace's key yet in
     // THIS render — clearing it reproduces a fresh tab that never held it.
     connectReplicaKeeper(null)
     forgetAllForTests()

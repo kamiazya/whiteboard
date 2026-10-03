@@ -328,3 +328,11 @@ export const proposalSchema = z
   .strict()
 
 export type Proposal = z.infer<typeof proposalSchema>
+
+/** The first `p<n>` no proposal on this document already holds. */
+export function mintProposalId(taken: ReadonlySet<string>): string {
+  for (let i = 1; ; i++) {
+    const candidate = `p${i}`
+    if (!taken.has(candidate)) return candidate
+  }
+}

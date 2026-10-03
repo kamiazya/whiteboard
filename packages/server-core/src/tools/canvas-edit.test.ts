@@ -1779,7 +1779,7 @@ describe('the node extension on the write side', () => {
     expect(parsed.snapshot.nodes[0]).toMatchObject({ width: 120.5, height: 40.25 })
   })
 
-  test("takes the model's own embed and facets, and refuses the retired extension key", () => {
+  test("takes the model's own facets, and refuses the retired extension key and an embed", () => {
     const parse = (fields: Record<string, unknown>) =>
       canvasEditInputSchema.parse({
         workspaceId: 'ws',
@@ -1792,19 +1792,13 @@ describe('the node extension on the write side', () => {
     // while the model WAS the format; since ADR-0037 the model has no such
     // key anywhere, so publishing one told a reader of `tools/list`
     // something untrue about the thing it was writing.
-    const embed = parse({ embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' } })
-    expect(embed.op === 'node.add' && embed.node.embed).toEqual({
-      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
-    })
+    // `embed` is not part of the published input: nothing draws it, so an
+    // agent writing one would get a backlink and a plain box.
+    expect(() => parse({ embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' } })).toThrow()
     const facets = parse({ facets: { 'example.kanban/v1': { status: 'todo' } } })
     expect(facets.op === 'node.add' && facets.node.facets).toEqual({
       'example.kanban/v1': { status: 'todo' },
     })
-
-    // STRUCTURAL now, where a hand-written `.refine` used to spell it out:
-    // `nodeEmbedSchema` requires `documentId`, so an embed naming no
-    // document cannot be expressed rather than being caught after the fact.
-    expect(() => parse({ embed: { versionRef: 'v1' } })).toThrow()
 
     // The second half of the old write schema does NOT dissolve, and this is
     // what would silently regress if someone derived `facets` straight from

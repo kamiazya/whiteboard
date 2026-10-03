@@ -63,6 +63,11 @@ export interface SvgVNode {
   readonly defs?: ReadonlyArray<SvgDef>
 }
 
+/** A child that is an element, as opposed to text, raw markup or a nested list. */
+export function isVNode(child: SvgChild): child is SvgVNode {
+  return typeof child === 'object' && child !== null && 'tag' in child
+}
+
 export interface SvgDef {
   readonly id: string
   readonly node: SvgVNode

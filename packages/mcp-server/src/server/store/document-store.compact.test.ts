@@ -61,7 +61,7 @@ function declinedFor(records: { scope: string; msg: string; data?: unknown }[]):
 /**
  * The workspace's compaction stamp, or null when nothing has compacted yet.
  *
- * Takes no path on purpose: compaction folds the WORKSPACE record (S4b/S7),
+ * Takes no path on purpose: compaction folds the WORKSPACE record,
  * so there is one stamp per workspace and not one per document.
  */
 async function readLastCompactedAt(): Promise<number | null> {
@@ -250,7 +250,7 @@ describe('compactWorkspace', () => {
     expect(stamp!).toBeGreaterThanOrEqual(before)
     expect(stamp!).toBeLessThanOrEqual(after)
 
-    // Workspace-level mirror (dual-plane collapse S4b): compaction operates
+    // Workspace-level mirror: compaction operates
     // on the workspace record's oplog, so the shared timestamp lives on the
     // workspace meta — and only successful compaction writes it, same as the
     // row stamp ('untouched' compacted nothing above).

@@ -10,6 +10,7 @@ import {
   walk,
 } from './scan-roots.js'
 import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
+import { classifyPath } from './source-scan.js'
 
 // docs/contributing/review-checklist.md says "Files stay under 800 lines",
 // and until this guard existed nothing enforced it — 17 files already over
@@ -57,8 +58,9 @@ function isScannedSourceFile(absolutePath: string): boolean {
   return !isExcludedPath(absolutePath)
 }
 
+/** `test` only: support files, benches and harnesses are shipped-ledger material here, since size is a property of any source file. */
 function isTestFile(absolutePath: string): boolean {
-  return /\.test\.tsx?$/.test(absolutePath)
+  return classifyPath(absolutePath) === 'test'
 }
 
 function isScannedTestFile(absolutePath: string): boolean {
@@ -157,7 +159,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the rationale beside that wiring buys lines at the price of what the
   // lines were for, so it is not met that way.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 879,
-  // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
+  // The ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it. The next
   // shrink is the PREFERENCE half (candidate generation, from
   // `facingLaneWindow` through `shouldAdoptCandidate`) as a sibling the same
@@ -174,9 +176,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The workspace tree over a Loro doc: node lookup, the stored-plane skip
   // (a `plane:` key a branch-era record still carries is kept out of the
   // projection and the content save) and the fold that carries a nested
-  // container instead of flattening it. The content-sync rule the tree write,
+  // container instead of flattening it, and the unreadable-node report the file
+  // GC fails closed on. The content-sync rule the tree write,
   // the standalone restore and the projection all apply is `content-sync.ts`.
-  'packages/loro-adapter/src/workspace-tree.ts': 945,
+  'packages/loro-adapter/src/workspace-tree.ts': 959,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
@@ -302,14 +305,6 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
  * A shrink-only ratchet never demands shrinkage, so it does not fight a
  * test that honestly needs its setup — it only stops one growing unwatched.
  */
-// Ten entries moved when ADR-0038's branch met ADR-0040's: two features
-// touching the same files, and a test file grows with what it covers. The
-// large ones are the two pinned SCOREBOARDS (`tool-surface-quality`, +89, and
-// `editor-state.property`, +72) and the two command ledgers
-// (`commands.test`, +111, `canvas-edit.test`, +33) — each one a table where a
-// moved row is a reason somebody has to write down, so the growth IS the
-// record. `gestures.test` and this file itself are new entries rather than
-// raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The app shell's wiring cases: every route, the daemon address, the
   // workspace id's two sources, the replica-key holder and the read-plane
@@ -319,12 +314,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/App.test.tsx': 1373,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
-  // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
-  // `connectReplicaKeeper` wiring every existing move/demote test now needs,
-  // since the pull those flows drive is sealed.
-  // Raised 1053 -> 1086: ADR-0039's 2026-09-22 addendum makes a registered
-  // passkey the precondition for moving, so all twenty renders arrange one.
-  // Raised 1086 -> 1089: app-logger reaches the console in browser tests now,
+  // Every move/demote test arranges the `/replica-key` route, the
+  // `connectReplicaKeeper` wiring (the pull those flows drive is sealed) and a
+  // registered passkey (ADR-0039: moving requires one), and claims the warn the
+  // deferred-demote case provokes now that app-logger reaches the console.
   // so the deferred-demote case claims the warn it provokes (import + two lines).
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 887,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
@@ -334,42 +327,41 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // modelled` the run DOES produce), plus the census that prints on a green
   // run — a floor is a claim about a distribution, and a number printed only
   // on failure is one draw from its left tail.
-  // Raised 2815 -> 2864: the directed scripts for the four rare chains, whose
-  // statistical floors no sample size makes safe, and the setup both runs share.
+  // The directed scripts for the four rare chains, whose statistical floors
+  // no sample size makes safe, and the setup both runs share.
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2864,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
-  // Raised 1666 -> 1863 for the v19 -> v20 upgrade block (S4b's plaintext
-  // replica discard): the seed fixture, the chunk-range no-op case, and the
-  // drop-and-leaves-others-byte-identical test.
-  // Raised 1863 -> 1892: the v20 idempotency case now seeds a post-v20
-  // sealed replica row so the version guard has something it would delete.
+  // The v19 -> v20 upgrade block (the plaintext replica discard): the seed
+  // fixture, the chunk-range no-op case, the drop-and-leaves-others-byte-identical
+  // test, and the idempotency case that seeds a post-v20 sealed replica row so
+  // the version guard has something it would delete.
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
-  // Raised 2768 -> 2855 for the three cases pinning that undo: the document
-  // agreeing with the screen after an undo and after a redo, and a taken-back
-  // write settling as saved rather than reading as pending forever.
+  // The three cases pinning undo: the document agreeing with the screen after an
+  // undo and after a redo, and a taken-back write settling as saved rather than
+  // reading as pending forever.
   'apps/web/src/lib/document-sync-session.test.ts': 2662,
   // One example per rule of every command arm, ink included: a table of ink
   // verbs where every row is one example is what stops the next one being
   // added without one. It grows one row per verb the parity matrix reports,
   // which is the growth it is for.
   'apps/web/src/lib/spatial/commands.test.ts': 1681,
-  // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
-  // which needs a line saying why a wait here reports more than "it expired"
-  // — this test has failed twice on CI from branches that cannot reach it.
-  // 1068 -> 1078: its SIBLING, the note-body embed, has failed the same way
-  // twice more, so it takes the same instrument and the note says the two
-  // are one subject.
+  // The embed-preview waits use `waitForOrSayWhen`, which needs a line saying why
+  // a wait here reports more than "it expired"; both the page embed and its
+  // sibling, the note-body embed, have failed on CI from branches that cannot
+  // reach them, so the note covers the two as one subject.
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1076,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
-  // Raised 876 -> 914 for the cancel case: the page's effect cleanup has to
-  // stop the replica refresh and the push it armed, and both schedulers'
-  // mocks have to answer a spy cancel rather than undefined.
+  // The cancel case: the page's effect cleanup has to stop the replica refresh
+  // and the push it armed, and both schedulers' mocks have to answer a spy
+  // cancel rather than undefined.
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 890,
   // The index page's whole surface — switching, creating, deleting, trash,
   // names, the duplicate flow — in one file. Its daemon fake is
-  // `test-utils/fake-daemon-fetch.ts` now (2221 -> 2073), answering through
-  // the api-contract schemas; what is left over budget is the cases.
-  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2073,
+  // `test-utils/fake-daemon-fetch.ts` now, answering through
+  // the api-contract schemas; what is left over budget is the cases. Raised
+  // by the four lines the shared `otherReadBody` import takes once biome
+  // splits it, which replaced three hand-written invalid catch-all bodies.
+  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2077,
   'apps/web/src/pages/SettingsPage.test.tsx': 839,
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1448,
   'packages/canvas-render/src/layout/comments.test.ts': 823,
@@ -377,56 +369,48 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,
   'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
-  // Raised 1200 -> 1240 for the curved-line layout case: the seam the
+  // The curved-line layout case: the seam the
   // freehand pen rides, from facet through style to a rounded scene node.
   'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1240,
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   'packages/canvas-render/src/tidy.test.ts': 1176,
-  // 1266 -> 1301: a referenced canvas arriving in the form canvas_view
+  // A referenced canvas arriving in the form canvas_view
   // sends it (JSON Canvas) reaches the viewer as the model.
-  'packages/canvas-viewer/src/widget-entry.test.tsx': 1301,
-  // 1308 -> 1324: an unchanged canvas reconciling to no ops, which the
-  // "writes only what changed" test above it could not see.
-  // 1324 -> 1354: the delete cascade pinned over ink — anchored ink goes,
-  // free ink stays, the line's lock goes with it.
-  // 1354 -> 1356: the import block names the envelope and body modules the
-  // bridge was split into.
+  // The refresh asking for the style the last result drew, which needs the
+  // file's embedded-host and fake-App setup.
+  'packages/canvas-viewer/src/widget-entry.test.tsx': 1340,
+  // An unchanged canvas reconciling to no ops, which the "writes only what
+  // changed" test above it could not see; the delete cascade pinned over ink
+  // (anchored ink goes, free ink stays, the line's lock goes with it); and the
+  // import block naming the envelope and body modules the bridge is split into.
   'packages/loro-adapter/src/loro-bridge.test.ts': 1356,
-  // 963 -> 976 at the merge with main. Both sides moved the same totals and
-  // both REASONS were kept, because each explains a different change the
-  // merged table now holds; only the numbers were re-measured. A scoreboard
-  // whose rows are pinned exactly is one whose history is prose, so a merge
-  // of two histories costs lines rather than losing one of them.
-  // 961 -> 964: the harness hands the tools the bundled registry, now that
-  // the seam is required and the tools fall back to nothing.
-  // 964 -> 977: the `document.move` arm's row, re-pinned with why it moved
-  // and why its follow report costs wire bytes and no visible ones — the
-  // prose a pinned scoreboard carries instead of a changelog.
-  // 963 -> 966: `wb_canvas_edit`'s row and the two totals say why they moved +58.
-  // 966 -> 994: the rows for the readable annotation layer, the snapshot's
-  // dressing and the in-place rename, each with why it moved.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 994,
-  // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
-  // strict. A mutation showed the loose form (`typeof title === 'string'`)
-  // stays green with the refusal DELETED, so without the note the next
-  // reader loosens it again.
-  // 1311 -> 1319: every router it builds is handed the test wiring now that routers
-  // compose nothing of their own.
+  // A scoreboard whose rows are pinned exactly is one whose history is prose, so
+  // each row says why it moved rather than a changelog: the harness handing the
+  // tools the bundled registry (the seam is required and the tools fall back to
+  // nothing), the `document.move` arm's row and why its follow report costs wire
+  // bytes and no visible ones, `wb_canvas_edit`'s row and the two totals, and the
+  // rows for the readable annotation layer, the snapshot's dressing and the
+  // in-place rename, the node input losing `embed`, and `proposals` on wb_document_get.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1011,
+  // The not-JSON refusal's assertion carries the reason it is strict: a mutation
+  // showed the loose form (`typeof title === 'string'`) stays green with the
+  // refusal DELETED, so without the note the next reader loosens it again. Every
+  // router it builds is handed the test wiring, since routers compose nothing of
+  // their own.
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1024,
-  // 881 -> 901 when compaction became workspace-keyed: one test pins that
-  // saves to two documents of one workspace collapse into one compaction.
+  // One test pins that saves to two documents of one workspace collapse into one
+  // compaction, since compaction is workspace-keyed.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
-  // 861 -> 863: the tool-write half of the race says which lock it holds.
+  // The tool-write half of the race says which lock it holds.
   'packages/mcp-server/src/server/store/document-store.test.ts': 863,
   // +17 for the tenant layout: this file's subject IS filesystem paths, so
   // every seed now names a tenant's workspaces root, and three symlink seeds
   // gained the parent mkdir that root needs. Splitting it instead would have
   // duplicated ~148 lines of vi.mock/hoisted setup into the second file.
   'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 1002,
-  // 3143 -> 3176: the agent-activity summary's only assertion was
-  // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
-  // pinning its wording and order.
+  // The agent-activity summary's wording and order are pinned by a case of their
+  // own, because the one assertion it had (`toMatch(/\S/)`) a mutation proved vacuous.
   // The describes that stand alone (`region.set`, `node.add within a group`,
   // line ops) live in `canvas-edit.<topic>.test.ts` siblings over
   // `_test-canvas-edit.ts`; what remains is the tool's core and sizing cases.
@@ -493,11 +477,13 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // spawned server, whose state each step builds on. The next shrink is the
   // steps leaving as modules that take the shared client, the way the
   // distribution smokes' helpers did.
-  // 2678 -> 2735: the steps that read a markdown thread back through
+  // The steps that read a markdown thread back through
   // `wb_document_get`, rename a spatial board in place, read an edge facet
   // through the snapshot, and the session-end checkpoint phase (whose body
   // lives in `smoke/lib`).
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2735,
+  // The canvas_view theme-font steps, with the widget's refresh-keeps-the-theme
+  // step, live in `smoke/lib/canvas-view-theme.mjs`.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2702,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

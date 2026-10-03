@@ -51,10 +51,6 @@ embedded canvas — importing it would close a cycle, and passing it keeps
 the dependency pointing one way. `compose-node.ts` takes that entry the same
 way, as `ResolvedLayoutOptions.layoutNestedCanvas`.
 
-`spatial-canvas.ts` re-exports what it used to declare, so no importer had
-to change. That is deliberate: a move that also rewrote every call site
-would be two changes in one diff.
-
 The split was made because the two clusters were measured to have ZERO
 production imports between each other while sitting in one flat directory,
 so the directory gave a reader no signal which of two unrelated engines a
@@ -792,13 +788,15 @@ the table alone.
     plus the alias, title and extras tables over what it names — and
     `referenceSeamsFromWire` rebuilds it across a `postMessage`;
     `apps/web`'s editor builds its seams from the wire it posts, so the two
-    threads cannot disagree. Before it a text node's `![[note]]` drew a
-    placeholder on both; `referenceTargets` scans text-node bodies now.
+    threads cannot disagree; `referenceTargets` scans text-node bodies too.
     What a seam answers (`ResolvedReference` and kin) is
     `references/resolved.ts`, so the producer never imports the layout.
     `referenceWireFor` cuts a wire to what a canvas's layout can read, so
     one widened for a drafted body (the overlay's preview) leaves that
-    canvas's seams, worker request and content cache alone. Decision #11
+    canvas's seams, worker request and content cache alone. What counts as
+    a stored picture for `imageTargets` and `referenceWireFor` is model's
+    `storedImageRefs`, the definition the keeper's file GC reads too, so a
+    picture it keeps is one every layout can draw. Decision #11
     names the drift class; `tools/arch-lint`'s
     `reference-seams-check.test.ts` refuses a seam defined outside this
     directory.

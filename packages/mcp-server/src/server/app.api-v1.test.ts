@@ -1,9 +1,8 @@
 /**
  * The daemon mounts server-core's /api/v1 document surface when given
- * ServerDeps. Until this slice, createServer(deps) was only used for its
- * MCP tools — the HTTP app it returns was never mounted, so the workspace
- * tree (documentId + path world) was unreachable over HTTP even though the
- * routes existed. The mount sits under the same /api/* daemon auth as every
+ * ServerDeps, so the workspace tree (documentId + path world) is reachable
+ * over HTTP and not only through the MCP tools createServer(deps) also
+ * registers. The mount sits under the same /api/* daemon auth as every
  * other API route.
  */
 

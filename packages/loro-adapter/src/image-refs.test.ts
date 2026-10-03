@@ -1,4 +1,4 @@
-import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { collectImageRefIds } from './image-refs.js'
@@ -31,5 +31,32 @@ describe('collectImageRefIds', () => {
 
   it('a canvas with no file nodes yields an empty set', () => {
     expect(collectImageRefIds(seed([]))).toEqual(new Set())
+  })
+
+  it('also collects a frame background and an inline image in a text node', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        groupNode({
+          id: 'g',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 200,
+          label: 'F',
+          background: 'asset:bg',
+        }),
+        textNode({ id: 't', x: 0, y: 0, width: 100, height: 40, text: '![x](asset:inline)' }),
+      ],
+      edges: [],
+    })
+    expect(collectImageRefIds(doc)).toEqual(new Set(['bg', 'inline']))
+  })
+
+  it("collects an inline image in a markdown document's body", () => {
+    const doc = new LoroDoc()
+    doc.getText('body').insert(0, 'see ![p](asset:md-1)')
+    doc.commit()
+    expect(collectImageRefIds(doc)).toEqual(new Set(['md-1']))
   })
 })

@@ -7,11 +7,7 @@
  * two declarations sharing an id say the same thing in the same bytes.
  */
 
-import type { SvgChild, SvgDef, SvgVNode } from './vnode.js'
-
-function isVNode(child: SvgChild): child is SvgVNode {
-  return typeof child === 'object' && child !== null && 'tag' in child
-}
+import { isVNode, type SvgChild, type SvgDef, type SvgVNode } from './vnode.js'
 
 /** The VNodes a child holds at its top level: itself, or those in its nested arrays. */
 function* vnodesIn(child: SvgChild): Iterable<SvgVNode> {

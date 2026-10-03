@@ -94,11 +94,9 @@ is **currently empty**.
 
 `type-cycle-check.ts` is the same graph with `import type` edges kept, because a
 type-only edge never fails at load and so the value scan above is blind to a
-loop closed by one. It is not harmless: measured 2026-10-01 over the same file
-set, it found **12** strongly connected components the value scan called clean
-(canvas-render's 15-file knot among them, which contradicted that package's
-decision 14 — the seams' producer imported the layout back for two types),
-all since broken, so `KNOWN_TYPE_CYCLES` is **currently empty**. It is the
+loop closed by one. It is not harmless: its first run found twelve components the value
+scan called clean, all since broken, so `KNOWN_TYPE_CYCLES` is **currently
+empty**. It is the
 ledger, pinned from both sides like the others: a
 component not listed fails naming its members, and a listed one that stopped
 being a component fails as stale. Each entry carries a REASON, since unlike a
@@ -410,20 +408,13 @@ whole value is that it shrinks.
 
 **`ADAPTER_SCAN_EXEMPT_FILES`** carries by FILE what the wiring exemption —
 a directory list (`di/`, `app.ts`, `http-server.ts`) — misses: a composition
-root living inside an adapter tree. It is EMPTY today: no composition root
-sits inside an adapter tree. The stdio root is `server/stdio-root.ts`, and
-`mcp/server.ts` is a library that takes the deps it is handed. It is separate from
+root living inside an adapter tree. It is EMPTY today. It is separate from
 `ADAPTERS_REACHING_MECHANICS` on purpose: an exemption is a CLASSIFICATION,
 not debt, and a composition root's edges will never shrink.
 
-The other file that reached `store/db` from under `mcp/` was moved instead of
-exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
-`http-server.ts` called it, so it is now `server/current-workspace.ts` — which
-also retires a name that said `session` about a workspace.
-
 ## `mcp-server-layer-order.test.ts`: the layers inside the Node root
 
-`apps/web/src/layer-order.test.ts` pins that root's layers and has an emptied
+`web-layer-order.test.ts` pins that root's layers and has an emptied
 ledger. `packages/mcp-server/src` had only ADR-0018's one-way scan, so a store
 importing a route and `shared/` importing the server logger were both planted
 (`store/names-store.ts`, `shared/sha256.ts`) and passed the whole project. The
@@ -476,14 +467,15 @@ transitive closure of its VALUE imports (`route-closure.ts`, on
 with three named cut seams — `log.ts`, `workspace-handle.ts`, `mcp/server.ts` — that a lift would
 replace with a handed-in dependency. A seam must itself be Node-bound and be
 reached by a ledgered file, or it is a fake cut. Each ledger entry states its
-`role` (a `router` is a file that mounts `new Hono(`; six of the twelve were
-middleware, helpers and registries) and its `blockedBy`, which is checked
+`role` (a `router` is a file that mounts `new Hono(`; about half the ledger
+is middleware, helpers and registries) and its `blockedBy`, which is checked
 against the closure, so Node arriving through a helper edits an entry instead of
 passing. Three counts are pinned by equality in `CLOSURE_COUNTS` (clean files,
-files held only by the seams, routers among those), measured 2 / 5 / 2.
+files held only by the seams, routers among those); the test holds the numbers
+and ADR-0052 the decision they inform, so this file restates neither.
 
-A closure over import specifiers alone says nine of twelve once the seams are
-cut; this says six because it counts an ambient `Buffer` (in `sync-streams.ts`,
+A closure over import specifiers alone says more are liftable once the seams
+are cut than this does, because this counts an ambient `Buffer` (in `sync-streams.ts`,
 reached through the audience registry, and in `security/timing-safe.ts`) the way
 the direct class always has. `store/corrupt-stored-data` is entered, not called a
 mechanic, for the reason `MECHANICS_NOT_SCANNED` gives. It owns its own matcher
@@ -699,6 +691,19 @@ that date a comment to the work that produced it (`audit-triage`, `dogfood
 report`, `this PR`, "decision, this session", "this session's bug report");
 bare `this session` is NOT banned because the app's own noun hits about 50
 legitimate comments. Its ledger is empty and shrink-only.
+
+## `classifyPath` and `countNamedUses`: what every guard answers once
+
+"Is this file shipped or a test" is `classifyPath` in `source-scan.ts`
+(`shipped | test | test-support | harness | bench | docs-snapshot`); a guard
+states which categories it treats as shipped, and one that differs says why
+in a line. Eleven local `isTestFile`/`isShipped` copies disagreed on 28 files
+and hid three test-only exports. A one-place guard matches USES of a name
+through `countNamedUses` (`named-use-scan.ts`), never a regex on its text, so
+an alias or a bracket access cannot walk past it. A permission list
+(`MECHANICS_NOT_SCANNED`, `MECHANIC_DIRS`, a vocabulary `exempt` array) is
+guarded from both sides. Host reach counts a storage driver (`kysely`,
+`libsql`, `@libsql/*`).
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 

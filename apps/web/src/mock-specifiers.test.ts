@@ -18,7 +18,7 @@
  * package's existence is the lockfile's job.
  *
  * Sources are read via `?raw` glob, not `node:fs` — apps/web is browser-only
- * (the same reason `layer-order.test.ts` reads them that way).
+ * (the layer-order guard in tools/arch-lint reads them through the TypeScript AST for the same reason).
  */
 
 import { describe, expect, it } from 'vitest'

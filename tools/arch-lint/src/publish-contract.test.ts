@@ -103,7 +103,7 @@ describe('publish contract', () => {
   // The LICENSE file is not what a plugin user reads: the marketplace card and both
   // plugin manifests declare a license of their own, and nothing derived them from the
   // root package. All three sat on MIT for the whole life of the Apache-2.0 relicense
-  // (#304) because the existing guard above only asserts the LICENSE file EXISTS.
+  // because the existing guard above only asserts the LICENSE file EXISTS.
   // Derived from the root package rather than pinned to a literal, so a later relicense
   // moves one field and this follows.
   it('declares the repo license consistently across every distribution manifest', () => {

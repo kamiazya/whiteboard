@@ -14,7 +14,7 @@
  */
 import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 
-/** What the S4a holder knows about this workspace's key, at the moment the page asks. */
+/** What the session-key holder knows about this workspace's key, at the moment the page asks. */
 export type ReplicaKeyInput = 'readable' | 'missing' | { withheld: WithheldReason }
 
 export const REPLICA_PAGE_STATES = [

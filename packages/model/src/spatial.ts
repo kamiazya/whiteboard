@@ -36,7 +36,7 @@ const facetsFieldSchema = extensionFacetsSchema.optional().catch(undefined)
  * The document a node shows inline — the one piece of content JSON Canvas 1.0
  * cannot express, and the reason its extension key exists at all.
  */
-export const nodeEmbedSchema = z
+const nodeEmbedSchema = z
   .object({
     documentId: documentIdSchema,
     versionRef: z.string().min(1).optional(),
@@ -448,13 +448,13 @@ export const canvasEdgeSchema = z
      * ledger declares them `extension` — JSON Canvas 1.0 has no waypoint, so
      * a strict reader gets the computed route instead.
      *
-     * They lived in `visual.path/v0` until this slice, and that was the
+     * They lived in `visual.path/v0` once, and that was the
      * ADR's own worked example of the cost the old binding imposed: adding a
      * field to an edge cost a facet definition, an `EdgeRouter` contract and
      * the extraction of `packages/scene`. The seam stays — it was worth
      * building — and the concept comes home.
      *
-     * Sub-pixel, like every other coordinate since this slice: the drag no
+     * Sub-pixel, like every other coordinate: the drag no
      * longer has to round before it writes.
      */
     bends: bendsFieldSchema,
@@ -505,7 +505,7 @@ export const canvasLineSchema = z
 
 export type CanvasLine = z.infer<typeof canvasLineSchema>
 
-function findDuplicateId(ids: string[]): string | undefined {
+export function findDuplicateId(ids: string[]): string | undefined {
   const seen = new Set<string>()
   for (const id of ids) {
     if (seen.has(id)) return id

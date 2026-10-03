@@ -22,7 +22,7 @@ export function commentMenuItems({
   // reply box is already open — a menu row would be a third gesture to the
   // act this surface exists for, and a second place for the same one.
   //
-  // And no Edit row either, since 2026-09-08. It opened a pre-filled compose
+  // And no Edit row either. It would open a pre-filled compose
   // bubble over the pin, which could only ever rewrite `messages[0]` —
   // editing there wrote the flat comment's `text`, and a reply is not in it.
   // Editing lives on the message now, in the card, where it can name WHICH

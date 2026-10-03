@@ -7,6 +7,7 @@ import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
+import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import type { CommentsRailWrite } from '../lib/comments-rail-write.js'
@@ -406,6 +407,7 @@ function useDaemonDocument(
     [daemonFetch, daemonBaseUrl, tagsWorkspaceId],
   )
   const tagVocabulary = useTagVocabulary(tagsSource)
+  const facetRegistry = useStencilRegistry(tagsSource)
 
   const pageState = deriveDaemonPageState({
     loading: controller.loading,
@@ -500,6 +502,7 @@ function useDaemonDocument(
       children: <AgentPresenceChip summary={agentActivity.summary} />,
     },
     ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),
+    facetRegistry,
     ...daemonConnectionsSlot({
       canvas,
       connections,

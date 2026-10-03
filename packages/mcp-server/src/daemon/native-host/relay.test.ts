@@ -255,4 +255,48 @@ describe('runNativeHost', () => {
       expect.objectContaining({ type: 'error', id: 'r3', reason: 'daemon-unreachable' }),
     ])
   })
+
+  // The page is untrusted: a frame node's http client would throw on must be
+  // answered, not take the host down for every request after it.
+  it.each([
+    ['a newline in a header value', { method: 'GET', headers: { accept: 'text/plain\nx: y' } }],
+    ['a non-Latin-1 header value', { method: 'GET', headers: { accept: 'caf\u00e9\u4e2d' } }],
+    ['a method that is not a token', { method: 'BAD METHOD', headers: {} }],
+    ['a method the bridge does not carry', { method: 'TRACE', headers: {} }],
+  ])('refuses %s and stays alive for the next frame', async (_name, frame) => {
+    await startDaemon((_req, res) => res.end('ok'))
+    const page = connectPage()
+
+    page.send({ type: 'request', id: 'bad', path: '/api/runtime/ping', ...frame })
+    await page.until((m) => m.some((x) => x.type === 'error' && x.id === 'bad'))
+    expect(page.received).toEqual([
+      expect.objectContaining({ type: 'error', id: 'bad', reason: 'bad-request' }),
+    ])
+
+    page.send({
+      type: 'request',
+      id: 'next',
+      method: 'GET',
+      path: '/api/runtime/ping',
+      headers: {},
+    })
+    await page.until((m) => m.some((x) => x.type === 'end' && x.id === 'next'))
+    page.close()
+    await page.done
+  })
+
+  // A credential the daemon record holds is the host's own input, and node
+  // refuses a header value it cannot send synchronously.
+  it('answers the frame when the daemon credential cannot be sent as a header', async () => {
+    const page = connectPage(async () => ({ socketPath, token: 'bad\ntoken' }))
+
+    page.send({ type: 'request', id: 'r4', method: 'GET', path: '/api/runtime/ping', headers: {} })
+    await page.until((m) => m.length > 0)
+
+    expect(page.received).toEqual([
+      expect.objectContaining({ type: 'error', id: 'r4', reason: 'daemon-unreachable' }),
+    ])
+    page.close()
+    await page.done
+  })
 })

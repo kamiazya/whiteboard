@@ -1093,6 +1093,45 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     )
   })
 
+  describe('the style a refresh asks for', () => {
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
+    }
+    const resultDrawnIn = (style?: string) => ({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene, style },
+    })
+
+    async function refreshAfter(...results: ReturnType<typeof resultDrawnIn>[]) {
+      stubEmbeddedIframeParent()
+      connectMock.mockImplementation(async () => undefined)
+      await importFreshWidgetEntry()
+      await Promise.resolve()
+      await Promise.resolve()
+      for (const result of results) fakeAppInstances[0].ontoolresult?.(result)
+      callServerToolMock.mockResolvedValueOnce(resultDrawnIn())
+      queryRefreshButton()?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    }
+
+    it('is the one the last result echoed, so a themed canvas stays themed', async () => {
+      await refreshAfter(resultDrawnIn('document'))
+      expect(callServerToolMock).toHaveBeenCalledWith({
+        name: 'canvas_view',
+        arguments: { workspaceId: 'ws-1', documentId: 'ws/path', style: 'document' },
+      })
+    })
+
+    it('is none once the latest result was drawn clean', async () => {
+      await refreshAfter(resultDrawnIn('document'), resultDrawnIn())
+      expect(callServerToolMock).toHaveBeenCalledWith({
+        name: 'canvas_view',
+        arguments: { workspaceId: 'ws-1', documentId: 'ws/path' },
+      })
+    })
+  })
+
   it('keeps the current view and resets the in-flight guard when callServerTool rejects', async () => {
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)

@@ -57,6 +57,7 @@ function installFetchMock(
     okfByDocumentId: {
       '01ARZ3NDEKTSV4RRFFQ69G5FA0': {
         markdown: OKF_DOC,
+        body: '# Palette decisions',
         frontmatter: { type: 'note', title: 'Design' },
       },
     },
@@ -213,7 +214,7 @@ describe('DaemonIndexPage tree view', () => {
     expect(screen.getByText(/Select a document/)).not.toBeNull()
   })
 
-  // The move route has existed since #888 with no caller at all. This is it.
+  // The move route's caller: renaming a document in the files tab.
   it('renames a document to a new path, and the panes follow it', async () => {
     // The daemon's own semantics, in miniature: a move takes the subtree.
     let docs = [

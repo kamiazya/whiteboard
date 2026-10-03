@@ -1,8 +1,7 @@
 /**
- * The shared object-URL cache. Two of these cases are CodeRabbit findings on
- * the PR that extracted it, each verified against the code before being
- * acted on — a rejecting loader took the whole batch down, and a URL minted
- * after cleanup was dropped where nothing could ever revoke it.
+ * The shared object-URL cache. Two of these cases pin failure modes a
+ * straightforward cache has: a rejecting loader takes the whole batch down,
+ * and a URL minted after cleanup is dropped where nothing could ever revoke it.
  */
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

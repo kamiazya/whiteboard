@@ -1,8 +1,13 @@
 import {
+  readCoreFacets,
   readDocumentKind,
+  readFacets,
   readSpatialCanvas,
+  writeCoreFacets,
   writeDocumentKind,
+  writeFacets,
   writeSpatialCanvas,
+  writeTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
@@ -250,6 +255,122 @@ describe('a keeper edit leaves the records its reader could not parse', () => {
     const after = await stored(store)
     expect(readSpatialCanvas(after).tags).toEqual(['urgent'])
     expectSurvivors(after)
+  })
+})
+
+// The three envelope buckets hold entries a newer client wrote and this
+// build's readers drop: a core field the schema does not know, a facet key
+// outside the grammar, a trust field of a later family. A write that states
+// the bucket from what the reader saw would delete each one.
+function plantUnreadableEnvelope(doc: LoroDoc): void {
+  doc.getMap('core').set('futureCoreField', { nested: 1 })
+  doc.getMap('facets').set('Bad Key', { from: 'the future' })
+  doc.getMap('trust').set('futureTrustField', 'kept')
+  doc.commit()
+}
+
+async function seedMarkdown(): Promise<FakeDocumentStore> {
+  const store = new FakeDocumentStore()
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+  await seedDoc(store, DOCUMENT_ID, (doc) => {
+    writeDocumentKind(doc, 'markdown')
+    writeCoreFacets(doc, { type: 'note', tags: ['kept'] })
+    writeFacets(doc, { 'example.kanban/v1': { status: 'todo' } })
+    writeTrustFacets(doc, { generated: { by: 'someone', at: '2026-01-01T00:00:00Z' } })
+    plantUnreadableEnvelope(doc)
+    expect(readCoreFacets(doc)).toEqual({ type: 'note', tags: ['kept'] })
+    expect(Object.keys(readFacets(doc))).toEqual(['example.kanban/v1'])
+  })
+  return store
+}
+
+async function storedDocument(store: FakeDocumentStore): Promise<LoroDoc> {
+  const loaded = await store.loadSnapshot({
+    docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+  })
+  if (loaded === null) throw new Error('nothing stored')
+  const doc = new LoroDoc()
+  doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+  return doc
+}
+
+describe('a keeper edit leaves the envelope entries its reader could not parse', () => {
+  test('wb_facet_set tags and facets on a document keep an unknown core field, facet key and trust field', async () => {
+    const store = await seedMarkdown()
+    const tool = createFacetSetTool(
+      makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+    )
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['urgent'] },
+      facets: { 'example.kanban/v1': { status: 'done' } },
+    })
+
+    const after = await storedDocument(store)
+    expect(readCoreFacets(after)?.tags).toEqual(['kept', 'urgent'])
+    expect(readFacets(after)).toEqual({ 'example.kanban/v1': { status: 'done' } })
+    expect(after.getMap('core').get('futureCoreField')).toEqual({ nested: 1 })
+    expect(after.getMap('facets').get('Bad Key')).toEqual({ from: 'the future' })
+    expect(after.getMap('trust').get('futureTrustField')).toBe('kept')
+  })
+
+  test('wb_facet_set deleting a facet and every tag still removes what the reader could see', async () => {
+    const store = await seedMarkdown()
+    const tool = createFacetSetTool(
+      makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+    )
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { remove: ['kept'] },
+      facets: { 'example.kanban/v1': null },
+    })
+
+    const after = await storedDocument(store)
+    expect(readCoreFacets(after)).toEqual({ type: 'note' })
+    expect(readFacets(after)).toEqual({})
+    expect(after.getMap('core').get('futureCoreField')).toEqual({ nested: 1 })
+    expect(after.getMap('facets').get('Bad Key')).toEqual({ from: 'the future' })
+  })
+
+  test('wb_facet_set on the canvas keeps a valid facet read beside an out-of-grammar key', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [],
+        edges: [],
+        facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+      })
+      doc.getMap('canvas').set('facets', {
+        'visual.theme/v0': { theme: 'visual.neon' },
+        'Bad Key': { from: 'the future' },
+      })
+      doc.commit()
+      // The subject is present: the stored bucket holds a key outside the grammar.
+      expect(Object.keys(doc.getMap('canvas').get('facets') as object)).toContain('Bad Key')
+    })
+    const tool = createFacetSetTool(
+      makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+    )
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    })
+
+    const after = await storedDocument(store)
+    expect(after.getMap('canvas').get('facets')).toEqual({
+      'visual.theme/v0': { theme: 'visual.neon' },
+      'visual.edges/v0': { routing: 'orthogonal' },
+      'Bad Key': { from: 'the future' },
+    })
   })
 })
 

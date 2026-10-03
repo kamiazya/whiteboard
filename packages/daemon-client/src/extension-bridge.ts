@@ -33,6 +33,16 @@ const apiPathSchema = z.string().refine((path) => {
   return resolved.host === 'localhost' && `${resolved.pathname}${resolved.search}` === path
 }, 'must be a path under /api/ that the URL parser leaves unchanged')
 
+/**
+ * RFC 9110 section 5.5: a field value is visible Latin-1 plus space and tab,
+ * never a line break or another control character. It is the grammar node's
+ * http client enforces by throwing, so the contract refuses what the host
+ * would otherwise fail to send.
+ */
+const headerValueSchema = z
+  .string()
+  .regex(/^[\t\x20-\x7e\x80-\xff]*$/, 'must be a valid HTTP field value')
+
 export const bridgeMethodSchema = z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'])
 
 export type BridgeMethod = z.infer<typeof bridgeMethodSchema>
@@ -61,7 +71,7 @@ export const pageToHostSchema = z.discriminatedUnion('type', [
     id: idSchema,
     method: bridgeMethodSchema,
     path: apiPathSchema,
-    headers: z.record(z.string(), z.string()),
+    headers: z.record(z.string(), headerValueSchema),
     /** base64 */
     body: z.string().optional(),
   }),

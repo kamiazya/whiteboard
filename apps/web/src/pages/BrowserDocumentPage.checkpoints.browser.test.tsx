@@ -68,13 +68,14 @@ async function seedDocument(): Promise<{ index: FoldingBrowserIndex; documentId:
  * a legitimate answer, but only with a reason — a bare exemption is the
  * omission with a word in front of it.
  */
-type Trigger = 'quiet-timer' | 'page-exit-flush'
+type Trigger = 'quiet-timer' | 'page-exit-flush' | 'in-app-navigation'
 type Coverage = 'covered' | `not modelled: ${string}`
 
 const CHECKPOINT_COVERAGE = {
   spatial: {
     'quiet-timer': 'covered',
     'page-exit-flush': 'covered',
+    'in-app-navigation': 'covered',
   },
   markdown: {
     'quiet-timer': 'covered',
@@ -84,6 +85,8 @@ const CHECKPOINT_COVERAGE = {
     // and the quiet-timer case above already exercises that for markdown.
     'page-exit-flush':
       "not modelled: same pair as the quiet timer above, which covers this kind's record source",
+    'in-app-navigation':
+      "not modelled: the unmount effect is the hook's, kind-blind, and the quiet-timer case covers this kind's record source",
   },
 } satisfies Record<DocumentKind, Record<Trigger, Coverage>>
 
@@ -148,6 +151,50 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
       },
       { timeout: 5000 },
     )
+  })
+
+  // Leaving for the index inside the quiet window. The unmount used to drop
+  // the pending checkpoint, so the History row a person expects after
+  // navigating away never appeared, while closing the tab did leave one.
+  it('leaves a checkpoint behind when the person navigates away inside the quiet window', async () => {
+    exercised.add('spatial/in-app-navigation')
+    const { index } = await seedDocument()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      renderPage(<BrowserDocumentPage initialPath="canvas-a" />)
+      await waitFor(
+        () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+        { timeout: 5000 },
+      )
+      await userEvent.click(await screen.findByTestId('select-tool-button'))
+      await userEvent.dblClick(screen.getByTestId('spatial-editor-container'))
+      // Saved means the edit has committed, which is what arms the checkpoint.
+      await waitFor(
+        () =>
+          expect(
+            document
+              .querySelector('[data-testid="persistence-state"]')
+              ?.getAttribute('data-save-state'),
+          ).toBe('saved'),
+        { timeout: 10_000 },
+      )
+
+      const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+      const workspaceId = getBrowserWorkspaceId()
+      expect(await store.list(workspaceId, 'canvas-a')).toEqual([])
+
+      cleanup()
+
+      await waitFor(
+        async () => {
+          const rows = await store.list(workspaceId, 'canvas-a')
+          expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+        },
+        { timeout: 5000 },
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // The OTHER trigger, and the one a person actually meets: the panel promises
@@ -319,6 +366,42 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
       } finally {
         vi.useRealTimers()
         asked.mockRestore()
+      }
+    })
+
+    // The page nulled its path when the document went, and a restore from
+    // another tab brings it back under the same path: edits after that must
+    // arm again rather than leave the page recording nothing for good.
+    it('checkpoints the edits that follow a restore from the trash', async () => {
+      const { index, documentId } = await seedDocument()
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        await mountAndEdit()
+        const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+        const workspaceId = getBrowserWorkspaceId()
+
+        const removed = nextBroadcast('document-removed')
+        await index.deleteDocument({ workspaceId, path: 'canvas-a' })
+        await removed
+        const restored = nextBroadcast('document-restored')
+        await index.restoreDocument({ workspaceId, documentId })
+        await restored
+
+        // Elsewhere than the first double-click, which now lands on its node.
+        await userEvent.dblClick(screen.getByTestId('spatial-editor-container'), {
+          position: { x: 200, y: 150 },
+        })
+        await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+
+        await waitFor(
+          async () => {
+            const rows = await store.list(workspaceId, 'canvas-a')
+            expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+          },
+          { timeout: 5000 },
+        )
+      } finally {
+        vi.useRealTimers()
       }
     })
   })

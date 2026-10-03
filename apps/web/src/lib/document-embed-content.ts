@@ -10,11 +10,7 @@
  */
 
 import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
-import {
-  readCoreFacets,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
@@ -26,6 +22,7 @@ import type {
 } from './document-file-contract.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
+import { readLoadedFileDocument } from './read-loaded-file-document.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 const log = getAppLogger('document-embed-content')
@@ -84,17 +81,7 @@ async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocum
   try {
     const doc = await loadDocumentContent(documentId)
     if (doc === null) return undefined
-    // One load, every read — the doc used to be discarded after the canvas
-    // read, which is why neither facets nor the body need a second store
-    // round-trip.
-    const body = readMarkdownBody(doc)
-    const name = await loadDocumentName(documentId)
-    return {
-      canvas: readSpatialCanvas(doc),
-      facets: readCoreFacets(doc),
-      ...(name !== undefined ? { name } : {}),
-      ...(body.length > 0 ? { body } : {}),
-    }
+    return readLoadedFileDocument(doc, await loadDocumentName(documentId))
   } catch (err) {
     log.warn('embedded document load failed', { documentId, err })
     return undefined
@@ -119,8 +106,12 @@ export async function loadBrowserReference(
     if (doc === null) return undefined
     const entry = await loadDocumentEntry(documentId)
     const name = entry?.name !== undefined ? { name: entry.name } : {}
-    if (entry?.kind === 'spatial') return { documentId, ...name, canvas: readSpatialCanvas(doc) }
-    return { documentId, ...name, body: readMarkdownBody(doc) }
+    const content = readDocumentContent(doc, entry?.kind)
+    return {
+      documentId,
+      ...name,
+      ...(content.kind === 'markdown' ? { body: content.body } : { canvas: content.canvas }),
+    }
   } catch (err) {
     // Reported AND re-thrown: `undefined` here means "this document has no
     // content", which the prefetch caches as terminal — so answering it for

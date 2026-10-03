@@ -13,7 +13,6 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
@@ -73,7 +72,6 @@ describe('an editor command with no fine-grained write', () => {
     await vi.advanceTimersByTimeAsync(300)
 
     expect(storedNodeIds(session)).toEqual(['a', 'future-node'])
-    await expectLoggedFailure('editor command target missing')
     session.dispose()
   })
 
@@ -91,7 +89,6 @@ describe('an editor command with no fine-grained write', () => {
     await vi.advanceTimersByTimeAsync(300)
 
     expect(storedNodeIds(session)).toEqual(['a', 'future-node', 'peer'])
-    await expectLoggedFailure('editor command target missing')
     session.dispose()
   })
 })

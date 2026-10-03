@@ -236,7 +236,7 @@ function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
     // re-reads on a switch and one that does not. Two more triggers for the
     // same aborted-startTransition mount (a Back while a lazy chunk loads
     // returns to THIS mount, never remounting): `filesRevision` follows this
-    // page's OWN writes (create below, delete dialog — #1325's fix), and
+    // page's OWN writes (create below, delete dialog), and
     // `revision` follows the ROUTE returning here (see the prop's doc) so a
     // return re-reads even when the write was not this page's own.
   }, [

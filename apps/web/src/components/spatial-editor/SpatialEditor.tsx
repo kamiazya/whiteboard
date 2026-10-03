@@ -61,6 +61,7 @@
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasEdge,
   CanvasLine,
@@ -93,6 +94,7 @@ import { firstImageFile } from '../../lib/image-upload-policy.js'
 import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
+import { trySetPointerCapture } from '../../lib/pointer-capture.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
@@ -208,6 +210,8 @@ export interface SpatialEditorProps {
    * every tag row offers its values and refuses what it forbids.
    */
   readonly tagLibrary?: TagLibrary
+  /** The registry the inspector's Stencil chips read: the deployment's plus the workspace's library. */
+  readonly facetRegistry?: FacetRegistry
   /** Tags in use anywhere in the workspace, offered by every tag row beside the board's own. */
   readonly tagSuggestions?: readonly string[]
   /**
@@ -341,23 +345,6 @@ const EDGE_HIT_TOLERANCE_PX = 6
 const LONG_PRESS_MENU_MS = 500
 const DEFAULT_TEST_ID = 'spatial-editor'
 /**
- * Pointer capture is best-effort chrome, not a correctness requirement: a
- * browser can reject it (e.g. `NotFoundError` for a pointerId the platform
- * has no active record of, which synthetic/programmatic pointer dispatch
- * can trigger). This component registers no window-level fallback
- * listeners, so a rejected/lost capture is instead recovered via
- * `onLostPointerCapture`, which cancels whatever gesture is in flight —
- * see its handler below.
- */
-function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
-  try {
-    root.setPointerCapture(pointerId)
-  } catch {
-    // best-effort — see doc comment above
-  }
-}
-
-/**
  * A committed body that lays out TALLER than its stored box gets a follow-up
  * resize, so content never overflows the border.
  *
@@ -392,6 +379,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       canvas,
       onChange,
       tagLibrary,
+      facetRegistry,
       tagSuggestions,
       externalVersion,
       measure,
@@ -1765,8 +1753,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // A canvas editor's interaction surface has no static-content semantics
           // HTML/ARIA can describe more precisely than "application" — this is
           // the same documented tradeoff drawing/whiteboard editors commonly
-          // make. A dedicated a11y parallel-DOM projection is future work, not
-          // this slice's scope.
+          // make. A dedicated a11y parallel-DOM projection is future work.
           role="application"
           aria-label="Spatial canvas editor"
           // Click-focusable (not tab-reachable): edge selection focuses this
@@ -2010,6 +1997,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             extraIds={extraIds}
             tagSuggestions={tagSuggestions}
             tagLibrary={tagLibrary}
+            {...(facetRegistry === undefined ? {} : { facetRegistry })}
             variant={inspectorIsSheet ? 'sheet' : 'dock'}
             onCommands={(commands) => applyResult({ state: { kind: 'idle' }, commands })}
           />

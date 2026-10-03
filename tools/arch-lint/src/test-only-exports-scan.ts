@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { isShippedPath } from './source-scan.js'
 
 /** A source file as the scan reads it. `path` is repo-relative and `/`-separated. */
 export interface ScannedFile {
@@ -43,17 +44,12 @@ export interface TestOnlyExport extends ExportDef {
 }
 
 /**
- * A test, or a file only tests import: the vocabulary of a path that means
- * "this is not shipped". Smoke and distribution harnesses count, since they run
- * a built artefact and are never part of one.
+ * Not shipped: every category but `shipped` — tests, their support files, and
+ * the smoke, bench and doc-snapshot harnesses — since none ships, an export
+ * only they use is test-only.
  */
 export function isTestFile(path: string): boolean {
-  return (
-    /\.(test|spec)\.[a-z]+$/.test(path) ||
-    /(^|\/)(test-utils|testing|__tests__|fixtures|e2e|docs-snapshots)(\/|$)/.test(path) ||
-    /-test-utils\.[a-z]+$/.test(path) ||
-    /\.(smoke-impl|distribution-impl|stress)\./.test(path)
-  )
+  return !isShippedPath(path)
 }
 
 /** A file whose exports are test scaffolding by name, or a tool that polices the repo. */
@@ -61,7 +57,6 @@ function isExemptDefiner(path: string): boolean {
   return (
     path.startsWith('tools/arch-lint/') ||
     path.startsWith('tools/checks/') ||
-    /(^|\/)_test-[^/]*$/.test(path) ||
     /(^|[./-])test-helpers?\.[a-z]+$/.test(path)
   )
 }

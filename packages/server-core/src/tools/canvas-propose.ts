@@ -2,6 +2,7 @@ import { readProposals, writeProposal } from '@kamiazya/whiteboard-loro-adapter'
 import {
   edgePatchFieldsSchema,
   linePatchFieldsSchema,
+  mintProposalId,
   type NodePatchFields,
   nodePatchField,
   nodePatchFieldsSchema,
@@ -273,14 +274,6 @@ function proposedChangesFromDiff(before: SpatialCanvas, after: SpatialCanvas): P
       removed: (line) => ({ op: 'line.remove', lineId: line.id, assumed: line }),
     }),
   ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-}
-
-/** The first `p<n>` no proposal on this document already holds. */
-function mintProposalId(taken: ReadonlySet<string>): string {
-  for (let i = 1; ; i++) {
-    const candidate = `p${i}`
-    if (!taken.has(candidate)) return candidate
-  }
 }
 
 /**

@@ -320,3 +320,104 @@ export function formatReport({ recurrences, singles, unattributedRuns }, windowD
   )
   return lines.join('\n')
 }
+
+// ---------------------------------------------------------------------------
+// Failures that are not vitest annotations.
+//
+// The window above only sees a failed `ci` run, so a failed image push, a
+// cancelled scheduled lane or a failed advisory audit was visible to nobody
+// but whoever opened the Actions tab. The rule here is the one the vitest
+// half uses — what a later success retires — applied to what each of these
+// is actually a statement about.
+
+const FAILED_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure'])
+
+/** The `release.yml` jobs whose failure strands an artifact rather than failing a check. */
+export const PUBLISH_JOBS = ['publish-mcp', 'docker-publish-sign']
+
+/**
+ * Whether a `release` run is worth fetching the jobs of.
+ *
+ * Every push to main runs the workflow and nearly all of them skip every
+ * publish job, so reading jobs for all of them costs one API call per push
+ * for nothing. Only a run that failed, was dispatched by hand, or is
+ * release-please's own merge can have run a publish job — and the last of
+ * those is what supplies the later SUCCESS that retires an earlier failure.
+ */
+export function inspectPublishJobs(run) {
+  return (
+    FAILED_CONCLUSIONS.has(run.conclusion) ||
+    run.event === 'workflow_dispatch' ||
+    /^chore(\([^)]*\))?!?: release\b/.test(run.title ?? '')
+  )
+}
+
+/**
+ * Publish jobs whose newest real run did not succeed.
+ *
+ * Judged per JOB, never per run: the push after the failed release runs the
+ * workflow again with every publish job skipped, the run concludes
+ * `success`, and a run-level "last success" would call the stranded image
+ * healed. A skipped job says nothing either way, so it is not evidence.
+ *
+ * @param runs `{ runId, createdAt, jobs: { name, conclusion }[] }[]`, any order
+ */
+export function unhealedPublishJobs(runs) {
+  const unhealed = []
+  for (const job of PUBLISH_JOBS) {
+    let newest = null
+    for (const run of runs) {
+      const conclusion = run.jobs?.find((candidate) => candidate.name === job)?.conclusion
+      if (conclusion !== 'success' && !FAILED_CONCLUSIONS.has(conclusion)) continue
+      if (newest === null || instantIsAfter(run.createdAt, newest.createdAt)) {
+        newest = { job, runId: run.runId, createdAt: run.createdAt, conclusion }
+      }
+    }
+    if (newest !== null && newest.conclusion !== 'success') unhealed.push(newest)
+  }
+  return unhealed
+}
+
+/**
+ * A workflow's runs that failed or were cancelled after its newest success,
+ * or null when nothing has. A run still in progress has no conclusion yet and
+ * is neither.
+ *
+ * @param runs `{ runId, createdAt, conclusion }[]`, any order
+ */
+export function unhealedWorkflowRuns(runs) {
+  let lastSuccessAt = null
+  for (const run of runs) {
+    if (run.conclusion === 'success' && (lastSuccessAt === null || instantIsAfter(run.createdAt, lastSuccessAt))) {
+      lastSuccessAt = run.createdAt
+    }
+  }
+  const failed = runs.filter(
+    (run) => FAILED_CONCLUSIONS.has(run.conclusion) && (lastSuccessAt === null || instantIsAfter(run.createdAt, lastSuccessAt)),
+  )
+  if (failed.length === 0) return null
+  const newest = failed.reduce((a, b) => (instantIsAfter(b.createdAt, a.createdAt) ? b : a))
+  return {
+    count: failed.length,
+    newest: { runId: newest.runId, createdAt: newest.createdAt, conclusion: newest.conclusion },
+    lastSuccessAt,
+  }
+}
+
+/** One block, or '' when nothing is unhealed — the caller prints nothing for ''. */
+export function formatUnhealedReport({ publishJobs, workflows }) {
+  if (publishJobs.length === 0 && workflows.length === 0) return ''
+  const lines = ['[flake-watch] failures on main that no later success has retired (not test failures):', '']
+  for (const entry of publishJobs) {
+    lines.push(
+      `  release: ${entry.job} ${entry.conclusion} on ${entry.createdAt.slice(0, 10)} (run ${entry.runId}), and no later run of that job succeeded — the artifact it publishes may be missing.`,
+    )
+  }
+  for (const entry of workflows) {
+    const since = entry.lastSuccessAt === null ? 'no success on record' : `last success ${entry.lastSuccessAt.slice(0, 10)}`
+    lines.push(
+      `  ${entry.workflow}: ${entry.count} run(s) failed or were cancelled since (newest ${entry.newest.conclusion} ${entry.newest.createdAt.slice(0, 10)}, run ${entry.newest.runId}); ${since}.`,
+    )
+  }
+  return lines.join('\n')
+}

@@ -1,6 +1,6 @@
 /**
  * `DocumentStore` decorator that keeps a daemon-kept workspace's replica as
- * ciphertext at rest (ADR-0042 decision 2, over S1's `sealBytes`/`openBytes`
+ * ciphertext at rest (ADR-0042 decision 2, over `sealBytes`/`openBytes`
  * primitive in `@kamiazya/whiteboard-daemon-client/read-plane`).
  *
  * The inner store (production: `IdbDocumentStore`) never learns this exists —
@@ -54,7 +54,7 @@ import type {
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 
 /**
- * What S4's in-memory session-key holder answers for one document.
+ * What the in-memory session-key holder answers for one document.
  * `'plaintext'` is `replica-store.ts`'s routing answer for a ref this build
  * never seals — a browser-kept workspace, or any `document:*` ref — so the
  * ONE factory can hand every construction the same decorator instead of
@@ -170,7 +170,7 @@ export class SealedDocumentStore implements DocumentStore {
 
   /**
    * Asked every time, never cached in a field: the whole point of routing a
-   * key through a provider is that S4 may answer differently call to call
+   * key through a provider is that the holder may answer differently call to call
    * (a fresh epoch, or a session that has since locked; 'plaintext' never
    * changes for a given ref, but asking costs nothing extra to route on).
    */
@@ -275,7 +275,7 @@ export class SealedDocumentStore implements DocumentStore {
    * be transformed on the way out either, and the key is not even asked: an
    * empty manifest hides nothing, so a withheld or unreachable session still
    * answers instead of refusing metadata about a document with no bytes.
-   * Otherwise the key is resolved (S4a memoises, so a replica pays one
+   * Otherwise the key is resolved (the holder memoises, so a replica pays one
    * mint) to decide whether `openManifest`'s arithmetic applies.
    */
   async #openManifestArm(

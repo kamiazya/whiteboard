@@ -15,18 +15,19 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
+  type ExtensionFacets,
   type SpatialCanvas,
   type TagBearerKind,
   tagsInUse,
 } from '@kamiazya/whiteboard-model'
-import { readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { readStencilLibrary, readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import {
   fullTextSearch,
   type SearchableDocument,
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
-import type { Loro } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
@@ -48,8 +49,8 @@ import { loadDocumentContent } from './workspace-content.js'
  * its parsed canvas because every caller that wants a board wants that.
  */
 type LoadedDocument =
-  | { documentId: string; kind: 'markdown'; doc: Loro }
-  | { documentId: string; kind: 'spatial'; doc: Loro; canvas: SpatialCanvas }
+  | { documentId: string; kind: 'markdown'; doc: LoroDoc }
+  | { documentId: string; kind: 'spatial'; doc: LoroDoc; canvas: SpatialCanvas }
 
 /**
  * Rewrite one document's references in place, answering whether anything
@@ -107,6 +108,23 @@ function listedTagsOf(read: LoadedDocument): {
   for (const node of canvas.nodes) for (const tag of node.tags ?? []) carried.add(tag)
   for (const edge of canvas.edges) for (const tag of edge.tags ?? []) carried.add(tag)
   return { own: canvas.tags ?? [], carried: [...carried] }
+}
+
+/** A library document's value, or what `read` answers for none: absent, unreadable or malformed. */
+async function readLibrary<T>(
+  index: DocumentIndex,
+  load: (entry: WorkspaceDocumentEntry) => Promise<LoroDoc>,
+  path: string,
+  read: (facets: ExtensionFacets | undefined) => T,
+): Promise<T> {
+  const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+  const library = entries.find((entry) => entry.path === path)
+  if (library === undefined) return read(undefined)
+  try {
+    return read(readFacets(await load(library)))
+  } catch {
+    return read(undefined)
+  }
 }
 
 /**
@@ -192,7 +210,7 @@ export function createLocalFilesSource(
     }
   }
 
-  async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
+  async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<LoroDoc> {
     const doc = await loadDocumentContent(entry.documentId, { loro })
     if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
     return doc
@@ -214,7 +232,7 @@ export function createLocalFilesSource(
   ): AsyncGenerator<LoadedDocument> {
     for (const entry of entries) {
       if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
-      let doc: Loro
+      let doc: LoroDoc
       try {
         doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
       } catch {
@@ -264,19 +282,12 @@ export function createLocalFilesSource(
   }
 
   return {
-    async readTagLibrary() {
-      // One well-known path, the daemon's convention (`TAG_LIBRARY_PATH`):
-      // nothing here can ask the index which document carries a facet
-      // either, and the two keepers must agree on where a library lives.
-      const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
-      const library = entries.find((entry) => entry.path === 'tags')
-      if (library === undefined) return {}
-      try {
-        return readTagLibrary(readFacets(await loadCurrentDoc(library)))
-      } catch {
-        return {}
-      }
-    },
+    // One well-known path per library, the daemon's convention
+    // (`TAG_LIBRARY_PATH`, `STENCIL_LIBRARY_PATH`): nothing here can ask the
+    // index which document carries a facet either, and the two keepers must
+    // agree on where a library lives.
+    readTagLibrary: () => readLibrary(index, loadCurrentDoc, 'tags', readTagLibrary),
+    readStencilLibrary: () => readLibrary(index, loadCurrentDoc, 'stencils', readStencilLibrary),
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       const bearers: { what: TagBearerKind; tags: readonly string[] }[] = []

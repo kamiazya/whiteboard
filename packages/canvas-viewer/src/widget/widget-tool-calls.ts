@@ -6,13 +6,29 @@
 // widget test and be refused at runtime. Keeping the builders free of imports
 // lets the other end — mcp-server's test and its e2e smoke — import the very
 // bytes the widget sends and run them through the server's own input schema.
+// Only type imports, which leave no runtime import behind.
+
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 
 export type CommentAnchor = { x: number; y: number; targetNodeId?: string }
 
-export function canvasViewCall(target: { workspaceId: string; documentId: string }) {
+/**
+ * `style` is the look the last result was drawn under. `canvas_view` echoes
+ * the style it was asked for and defaults to the bundled one, so a refresh that
+ * leaves it out would redraw a themed canvas clean.
+ */
+export function canvasViewCall(target: {
+  workspaceId: string
+  documentId: string
+  style?: SpatialRenderStyle
+}) {
   return {
     name: 'canvas_view' as const,
-    arguments: { workspaceId: target.workspaceId, documentId: target.documentId },
+    arguments: {
+      workspaceId: target.workspaceId,
+      documentId: target.documentId,
+      ...(target.style === undefined ? {} : { style: target.style }),
+    },
   }
 }
 

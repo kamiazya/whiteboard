@@ -124,8 +124,8 @@ describe('AppShell', () => {
   it('still offers creation when the address names no workspace, which is the empty daemon', async () => {
     // A daemon holding nothing serves `/`, so the address carries no handle.
     // The switcher is the ONLY place creation is offered, so hiding it there
-    // left a fresh daemon with no way to make its first workspace — while
-    // this increment's whole point is that the keeper can now honour one.
+    // left a fresh daemon with no way to make its first workspace, though
+    // the keeper can honour one.
     const create = vi.fn(() =>
       Promise.resolve({ workspaceId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', segment: 'first' }),
     )
@@ -141,7 +141,7 @@ describe('AppShell', () => {
   it('keeps a row document count through a rename, which only changes identity', async () => {
     // `onRenamed` is handed a WorkspaceEntry — the three identity layers and
     // nothing else — while the row it replaces is a WorkspaceRow carrying the
-    // count this increment added. Replacing rather than merging dropped the
+    // count. Replacing rather than merging dropped the
     // count until the shell happened to reload the list.
     const rename = vi.fn(() =>
       Promise.resolve({

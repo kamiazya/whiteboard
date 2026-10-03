@@ -641,7 +641,7 @@ describe('listDocuments', () => {
     expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
-  // Pinned counterexample from the S5a parity scoreboard (shrunk by
+  // Pinned counterexample from the parity scoreboard (shrunk by
   // fast-check): create('a/y' as markdown) then an explicit-kind re-save
   // left the row saying 'spatial' while the tree node still said
   // 'markdown' — the kind sync above only wrote the row.

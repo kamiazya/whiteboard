@@ -306,8 +306,8 @@ function ShellBar({
           // the address names no workspace. A daemon holding nothing serves
           // `/`, and this menu is the only place creation is offered — so
           // requiring a handle here left a fresh daemon with no way to make
-          // its first workspace, which is the one thing this increment set out
-          // to make possible. With no handle the menu simply has no current
+          // its first workspace, the one thing this menu exists to make
+          // possible. With no handle the menu simply has no current
           // row: the rename section is already behind `active !== undefined`,
           // so it degrades to a list and a create button on its own.
           workspaces ? (

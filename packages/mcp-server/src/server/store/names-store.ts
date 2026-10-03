@@ -40,7 +40,7 @@ export async function loadWorkspaceNames(
     .select(['displayName'])
     .where('id', '=', workspaceId)
     .executeTakeFirst()
-  // Document names and pins answer from the workspace record (S7): the
+  // Document names and pins answer from the workspace record: the
   // tree is what every replica converges on, and the boot fold carries any
   // pre-fold row-only state into it before this can be asked.
   const documents: Record<string, string> = {}
@@ -96,7 +96,7 @@ export async function setDocumentDisplayName(
   validateDocumentPath(path)
   const trimmed = name.trim()
   const documentId = await requireDocumentAtPath(workspaceId, path, scope)
-  // The workspace record is the only home this write has (S7): the rows are
+  // The workspace record is the only home this write has: the rows are
   // no longer maintained, so a failure here surfaces to the caller. Under
   // the workspace write lock like every other read-modify-write of the
   // record — the open and the save must see no concurrent tree write.
@@ -124,8 +124,8 @@ export async function setDocumentPinned(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const documentId = await requireDocumentAtPath(workspaceId, path, scope)
-  // The workspace record's pinned list is the only home this write has
-  // (S7): the rows are no longer maintained, so a failure surfaces. Locked
+  // The workspace record's pinned list is the only home this write has:
+  // the rows are no longer maintained, so a failure surfaces. Locked
   // for the same reason as setDocumentDisplayName above.
   await withWorkspaceWriteLock(workspaceId, async () => {
     const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)

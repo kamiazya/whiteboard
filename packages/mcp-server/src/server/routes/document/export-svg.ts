@@ -1,72 +1,23 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import { messageOf } from '@kamiazya/whiteboard-model'
-import {
-  type ApiErrorBody,
-  invalidRequestBody,
-  type LiveDocuments,
-} from '@kamiazya/whiteboard-server-core'
+import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import { nanoid } from 'nanoid'
 import type { ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
 } from '../../../shared/api-contracts/export-svg.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
-import { OutputPathError, validateOutputPath } from '../../output-path.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
-import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
+import {
+  defaultExportPath,
+  documentMissingBody,
+  parseOptionalJsonBody,
+  resolveRequestedOutputPath,
+} from '../export-request.js'
 import { onDocumentAction } from './path-route.js'
-
-/**
- * An empty body is a valid export request — every option has a default — so
- * only a body that is PRESENT and unreadable refuses.
- */
-function parseExportSvgBody(rawText: string): { body: ExportSvgRequest } | { error: ApiErrorBody } {
-  if (rawText.length === 0) return { body: {} }
-  let json: unknown
-  try {
-    json = JSON.parse(rawText)
-  } catch {
-    return { error: { error: 'invalid_request', message: 'malformed JSON' } }
-  }
-  const parsed = exportSvgRequestSchema.safeParse(json)
-  if (!parsed.success) {
-    return { error: invalidRequestBody(parsed.error) }
-  }
-  return { body: parsed.data }
-}
-
-/**
- * `undefined` means "the caller named no path", which is not a refusal — the
- * handler then writes to `defaultSvgExportPath`. A path that IS named is
- * validated against the workspace's own exports directory, and anything
- * `validateOutputPath` refuses becomes this route's error shape.
- */
-async function resolveSvgOutputPath(
-  body: ExportSvgRequest,
-  workspaceId: string,
-  exportsDir: string,
-): Promise<
-  { outputPath: string | undefined } | { error: ApiErrorBody; status: ContentfulStatusCode }
-> {
-  if (typeof body.outputPath !== 'string' || body.outputPath.length === 0) {
-    return { outputPath: undefined }
-  }
-  try {
-    await validateOutputPath(body.outputPath, body.overwrite === true, exportsDir)
-  } catch (err) {
-    if (err instanceof OutputPathError) {
-      const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
-      return { error: errBody, status }
-    }
-    throw err
-  }
-  return { outputPath: body.outputPath }
-}
 
 // POST /api/w/:workspaceId/document/<path>/export-svg
 //
@@ -99,26 +50,18 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
     'post',
     'export-svg',
     async (c, workspaceId, path) => {
-      // The same guard the PNG route carries, and for the same reason: the
-      // headless path answers a missing document with an EMPTY one, so a
-      // typoed path would otherwise return 200 and a valid-looking SVG of
-      // nothing. Its absence here was the asymmetry, not a decision.
-      if (!(await documentExists(workspaceId, path))) {
-        const errBody: ApiErrorBody = {
-          error: 'not_found',
-          message: `Canvas not found: ${workspaceId}/${path}`,
-        }
-        return c.json(errBody, 404)
-      }
-
-      const parsedBody = parseExportSvgBody(await c.req.text())
+      const parsedBody = parseOptionalJsonBody(await c.req.text(), exportSvgRequestSchema)
       if ('error' in parsedBody) return c.json(parsedBody.error, 400)
-      const body = parsedBody.body
+      const body: ExportSvgRequest = parsedBody.body
 
       const exportsDir = options.scope.layout.exportsDir(workspaceId)
-      const resolved = await resolveSvgOutputPath(body, workspaceId, exportsDir)
+      const resolved = await resolveRequestedOutputPath(body, workspaceId, exportsDir)
       if ('error' in resolved) return c.json(resolved.error, resolved.status)
       const outputPath = resolved.outputPath
+
+      if (!(await documentExists(workspaceId, path))) {
+        return c.json(documentMissingBody(workspaceId, path), 404)
+      }
 
       let svg: string
       let undrawable: readonly string[]
@@ -141,7 +84,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         return c.json(errBody, 500)
       }
 
-      const filePath = outputPath ?? defaultSvgExportPath(exportsDir, path)
+      const filePath = outputPath ?? defaultExportPath(exportsDir, path, 'svg')
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, svg, 'utf-8')
       // Typed rather than a bare literal so the contract, not this handler,
@@ -158,15 +101,4 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
   )
 
   return app
-}
-
-function defaultSvgExportPath(exportsDir: string, path: string): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  // The millisecond timestamp alone is not unique: two exports issued fast
-  // enough to land in the same millisecond would collide and the second
-  // write would silently clobber the first. The random suffix guarantees
-  // uniqueness regardless of call timing, matching the PNG and JSON export
-  // routes' default-path convention.
-  const fileName = `${path}-${timestamp}-${nanoid(6)}.svg`
-  return join(exportsDir, fileName)
 }

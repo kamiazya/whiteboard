@@ -276,7 +276,6 @@ export const KNOWN_EQUIVALENT = {
   'src/svg/hoist.ts': {
     'ConditionalExpression: !isVNode(child) -> false': 1,
     'ConditionalExpression: attrs === undefined -> false': 1,
-    'ConditionalExpression: child !== null -> true': 1,
     'ConditionalExpression: children === undefined -> false': 1,
     'ConditionalExpression: elements.length === 0 -> false': 1,
     'ConditionalExpression: hoisted.size === 0 -> false': 1,
@@ -284,7 +283,6 @@ export const KNOWN_EQUIVALENT = {
     'ConditionalExpression: node.attrs === undefined -> false': 1,
     'ConditionalExpression: node.attrs === undefined || names.size === 0 -> false': 1,
     'ConditionalExpression: node.defs === undefined -> false': 1,
-    "ConditionalExpression: typeof child === 'object' && child !== null && 'tag' in child -> true": 1,
     "ConditionalExpression: typeof child === 'string' -> false": 1,
     'LogicalOperator: node.attrs === undefined || names.size === 0 -> node.attrs === undefined && names.size === 0': 1,
     'MethodExpression: children.filter(isVNode) -> children': 1,

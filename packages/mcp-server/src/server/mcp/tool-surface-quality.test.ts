@@ -407,7 +407,7 @@ describe('what the tool table costs to read', () => {
         // `embed` and `facets`, and the `ExtensionFacets` registration pays
         // for the four sites the retired composite left inline.
         // +58, wire too: a node's `embed` and a comment draft publish `additionalProperties: false` (C10, one level down).
-        visibleBytes: 15150,
+        visibleBytes: 14784,
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
@@ -421,14 +421,19 @@ describe('what the tool table costs to read', () => {
         // here through the echo this tool's output carries.
         // +221 wire: its answer is the board it produced, and the snapshot now
         // carries facets, tags and bends (see wb_canvas_snapshot). Output only.
-        wireBytes: 34063,
+        wireBytes: 33697,
         descriptionWords: 169,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
         // defines. All four were undescribed, so the whole of the parameter
         // drop is a drop in UNEXPLAINED parameters.
-        parameters: 217,
-        undescribed: 150,
+        // Then -366 visible / -366 wire / -12 parameters / -12 undescribed when
+        // `embed` left the published node input: three undescribed fields
+        // (`documentId`, `versionRef`, and the object) at each of the four
+        // arms, for a field nothing draws — an agent writing it got a
+        // backlink and a plain box. The stored field is untouched.
+        parameters: 205,
+        undescribed: 138,
         strays: 'refused',
         names: [],
       },
@@ -461,15 +466,22 @@ describe('what the tool table costs to read', () => {
         // markdown note (C5: an errand step with no tool behind it), and the
         // one widening that costs no input byte, where a `thread.list` op on
         // `wb_thread_edit` would have put a read arm inside a write tool.
-        visibleBytes: 1116,
+        // +92 visible, +14,591 wire: each result carries the `proposals` made to
+        // the document, each change with its status. The same C5 gap as the
+        // threads above — an agent could propose and never learn whether it was
+        // adopted or dismissed, re-proposed duplicates and could not see what
+        // was still open. The wire is the stored proposal schema's change
+        // union in the OUTPUT, which the model never reads; the model-visible
+        // cost is the one description sentence.
+        visibleBytes: 1208,
         // +63: the `ExtensionFacets` registration is a NET COST here, and
         // saying so is the point of an exact pin. A `$defs` entry plus a
         // `$ref` is dearer than one inlined copy, so a tool holding the
         // record once pays for the dedup the repeat-heavy tools collect. The
         // table-wide figure is what the registration is judged on (-1,408
         // wire, -16 visible); this row is where it is paid.
-        wireBytes: 5357,
-        descriptionWords: 86,
+        wireBytes: 19948,
+        descriptionWords: 102,
         parameters: 4,
         undescribed: 3,
         strays: 'refused',
@@ -722,7 +734,7 @@ describe('what the tool table costs to read', () => {
       },
       wb_workspace_edit: {
         // +60 on both: `markdown` now says a string with no `---` block is
-        // the BODY, typed `note` (#112). The bytes buy knowing WHICH type.
+        // the BODY, typed `note`. The bytes buy knowing WHICH type.
         // +412 on both, +3 parameters (2 undescribed: the arm's `op` and
         // `documentId`, which every arm carries) and one description word:
         // the `document.move` arm. What it buys is an errand the table
@@ -919,8 +931,8 @@ describe('what the tool table costs to read', () => {
       // repeats. The visible column moves by 63 LESS than the input change
       // alone, because the same merge brought ADR-0040's tag clauses with
       // it; the wire column is where the fold shows.
-      // Then +128 visible / 0 parameters for `stencil: null` (#93) and +60
-      // for `document.create`'s bare body (#112), each priced at its own row.
+      // Then +128 visible / 0 parameters for `stencil: null` and +60
+      // for `document.create`'s bare body, each priced at its own row.
       //
       // The merge carried BOTH, so this total is re-measured rather than
       // added up: 39,460 was this branch alone and 39,536 was main alone.
@@ -935,7 +947,9 @@ describe('what the tool table costs to read', () => {
       // wb_document_get and wb_thread_edit), the snapshot saying what it
       // carries, and a rename for a spatial document (see those rows): three
       // errands that had no tool behind a step, none of them costing a call.
-      visibleBytes: 39547,
+      // Then -366 for `embed` leaving wb_canvas_edit's input and +92 for
+      // `proposals` on wb_document_get (see those rows).
+      visibleBytes: 39273,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -957,9 +971,12 @@ describe('what the tool table costs to read', () => {
       // Then +58 wire, the same bytes as visible.
       // +5,668: the thread shape twice (output only) and the snapshot's
       // facets, tags and bends wherever a board is answered.
-      wireBytes: 115345,
-      parameters: 344,
-      undescribed: 219,
+      // Then -366 for `embed` and +14,591 for the stored proposal schema in
+      // wb_document_get's output (see those rows).
+      wireBytes: 129570,
+      // -12 and -12 for `embed` (three undescribed fields at four arms).
+      parameters: 332,
+      undescribed: 207,
     })
   })
 

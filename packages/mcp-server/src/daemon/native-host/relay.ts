@@ -4,7 +4,12 @@
  * daemon's owner-only socket (decision 2), attaching the daemon's credential
  * itself — the page never holds one.
  */
-import { type IncomingHttpHeaders, type IncomingMessage, request } from 'node:http'
+import {
+  type ClientRequest,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  request,
+} from 'node:http'
 import type { Readable, Writable } from 'node:stream'
 import {
   BRIDGE_CHUNK_BYTES,
@@ -142,16 +147,29 @@ async function relayRequest(message: Request, context: RelayContext): Promise<vo
     authorization: `Bearer ${daemon.token}`,
     host: 'localhost',
   }
-  const req = request(
-    {
-      socketPath: daemon.socketPath,
-      method: message.method,
-      path: message.path,
-      headers,
-      signal: context.signal,
-    },
-    (res) => relayResponse(id, res, context),
-  )
+  let req: ClientRequest
+  try {
+    req = request(
+      {
+        socketPath: daemon.socketPath,
+        method: message.method,
+        path: message.path,
+        headers,
+        signal: context.signal,
+      },
+      (res) => relayResponse(id, res, context),
+    )
+  } catch (err) {
+    // `request` throws, rather than emitting, on a header it cannot send.
+    context.settled()
+    context.send({
+      type: 'error',
+      id,
+      reason: 'daemon-unreachable',
+      message: err instanceof Error ? err.message : 'the request could not be sent',
+    })
+    return
+  }
   req.on('error', (err) => {
     // An abort ends the request on purpose, and the page asked for it.
     if (!context.settled()) return

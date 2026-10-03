@@ -22,6 +22,7 @@ import {
   assertNotTrackedSettingsPath,
   resolveMainCheckoutRoot,
   removeStaleEntriesFromConfig,
+  stdioProxyRootOf,
 } from './wire-worktree-mcp-lib.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -281,4 +282,21 @@ test('a missing or malformed config is not a collision', () => {
       false,
     )
   }
+})
+
+test('stdioProxyRootOf: names the checkout a stdio-proxy registration was written for, and nothing else', () => {
+  assert.equal(stdioProxyRootOf(IDENTICAL), resolve('/repo/wt-a'))
+  assert.equal(stdioProxyRootOf({ type: 'stdio', command: 'npx', args: ['@kamiazya/whiteboard-mcp@latest'] }), null)
+  assert.equal(stdioProxyRootOf({ type: 'http', url: 'http://127.0.0.1:1/mcp' }), null)
+  assert.equal(stdioProxyRootOf({ type: 'stdio', command: 'node', args: ['/repo/other.mjs'] }), null)
+  assert.equal(stdioProxyRootOf(undefined), null)
+})
+
+test('planStaleSweep + removeStaleEntriesFromConfig: an entry stored under another project key is removed from that key', () => {
+  const config = { projects: { '/repo': { mcpServers: { whiteboard: { type: 'stdio' }, keep: { type: 'http' } } } } }
+  const actions = planStaleSweep([{ name: 'whiteboard', path: '/repo/.claude/worktrees/gone', projectKey: '/repo' }], ['/repo'])
+  assert.deepEqual(actions, [{ action: 'remove', name: 'whiteboard', path: '/repo/.claude/worktrees/gone', projectKey: '/repo' }])
+  const result = removeStaleEntriesFromConfig(config, actions)
+  assert.equal(result.projects['/repo'].mcpServers.whiteboard, undefined)
+  assert.deepEqual(result.projects['/repo'].mcpServers.keep, { type: 'http' })
 })

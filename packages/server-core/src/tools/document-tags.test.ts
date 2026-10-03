@@ -141,6 +141,33 @@ describe('the workspace tag projection', () => {
     // No document at `tags`: nothing declared, and the field says so rather
     // than being absent, so a client never has to tell "none" from "old".
     expect(out.library).toEqual({})
+    expect(out.stencils).toEqual({})
+  })
+
+  it('answers the stencil library the workspace declares, by bare name, for a client to compose', async () => {
+    const deps = await seeded()
+    const store = deps.documentStore as FakeDocumentStore
+    await seedDoc(store, LIBRARY_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, {
+        'visual.stencils/v0': {
+          stencils: { lakehouse: { displayName: 'Lakehouse', color: '3' } },
+        },
+      } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: LIBRARY_ID,
+      path: 'stencils',
+      kind: 'markdown',
+    })
+    const out = await computeDocumentTags(deps, { workspaceId: WORKSPACE_ID })
+    // The library reader fills the asset's defaults, the way the registry
+    // would, so a client composes exactly what the tools resolve.
+    expect(out.stencils).toEqual({
+      lakehouse: { displayName: 'Lakehouse', color: '3', facets: {} },
+    })
+    expect(documentTagsOutputSchema.parse(out).stencils).toEqual(out.stencils)
   })
 
   it('answers the tag library the workspace declares beside the vocabulary in use', async () => {

@@ -149,3 +149,62 @@ describe('SseStreamHub after a stream ends', () => {
     expect(daemon.subscribes().length).toBe(subscribesBefore)
   })
 })
+
+describe('stream connect refusals', () => {
+  /** Answers each stream request with a status code, `open` or a hang past the script. */
+  function statusDaemon(script: readonly (number | 'open')[]) {
+    let streamRequests = 0
+    let opened = 0
+    const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      if (!String(input).includes('/api/sync/stream')) return new Response('{}', { status: 200 })
+      const step = script[streamRequests]
+      streamRequests += 1
+      if (step === 'open') {
+        opened += 1
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              c.enqueue(
+                new TextEncoder().encode(
+                  `event: ready\ndata: ${JSON.stringify({ streamId: 's' })}\n\n`,
+                ),
+              )
+            },
+          }),
+          { status: 200 },
+        )
+      }
+      if (typeof step === 'number') return new Response('', { status: step })
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('', 'AbortError')))
+      })
+    }
+    return {
+      fetch: fetch as typeof globalThis.fetch,
+      requests: () => streamRequests,
+      opened: () => opened,
+    }
+  }
+
+  it('retries a 503 on the stream connect rather than reading it as a credential refusal', async () => {
+    const d = statusDaemon([503, 'open'])
+    const hub = new SseStreamHub({ fetch: d.fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
+    await vi.waitFor(() => expect(d.opened()).toBe(1))
+    hub.close()
+  })
+
+  it('stops the retry loop on a 401 from the stream connect', async () => {
+    const d = statusDaemon([401, 'open', 'open'])
+    const hub = new SseStreamHub({ fetch: d.fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    const refused = vi.fn()
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: refused })
+    // The hub marks itself refused before it announces, so by the time the
+    // callback arrives the loop can no longer connect again: the count holds
+    // without waiting on time.
+    await vi.waitFor(() => expect(refused).toHaveBeenCalledTimes(1))
+    expect(d.requests()).toBe(1)
+    expect(d.opened()).toBe(0)
+    hub.close()
+  })
+})

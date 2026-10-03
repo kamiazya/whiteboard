@@ -44,9 +44,7 @@ const PAYLOAD_TOO_LARGE_SCAN_DIRS = ['packages/mcp-server/src', 'packages/server
 
 const files: string[] = []
 walkSourceFiles(join(REPO_ROOT, ROUTES_DIR), files)
-const production = files.filter(
-  (path) => !isTestPath(path) && !/(^|[\\/])_test-/.test(path.split(sep).pop() ?? ''),
-)
+const production = files.filter((path) => !isTestPath(path))
 
 function rel(path: string): string {
   return relative(REPO_ROOT, path).split(sep).join('/')

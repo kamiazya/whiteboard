@@ -42,6 +42,9 @@ function arg(name, fallback) {
 const QUIET = process.argv.includes('--quiet')
 const WORKSPACE = arg('workspace', 'default')
 /** `wb_document_get` refuses more than this per call. */
+// One tool call's answer budget. The SessionStart hook's own timeout (settings.json) is the outer
+// bound; this one makes a wedged daemon end the check with a reason instead of the hook's kill.
+const REQUEST_TIMEOUT_MS = 5000
 const DOCUMENTS_PER_READ = 20
 
 function repoRoot() {
@@ -104,15 +107,19 @@ async function main() {
    * the machine's day. Bounded hard: three attempts over a second, and only
    * for a daemon with no record yet or one that refused the connection — a
    * daemon that is genuinely absent must not tax every session start.
+   *
+   * A daemon that accepts and never answers is not retried either: the request
+   * is bounded, and a wedged daemon must cost one bound, not three, because
+   * this runs under a hook timeout.
    */
   async function post(body) {
     for (let attempt = 0; ; attempt++) {
       try {
         const record = readDaemonRecord(dataDir)
         if (record === null) throw new Error('the dev daemon is not running (no daemon.json)')
-        return await requestDaemon(record, { method: 'POST', path: '/mcp', ...body })
+        return await requestDaemon(record, { method: 'POST', path: '/mcp', timeoutMs: REQUEST_TIMEOUT_MS, ...body })
       } catch (error) {
-        if (attempt >= 2) throw error
+        if (attempt >= 2 || /^no answer within/.test(error.message)) throw error
         await new Promise((done) => setTimeout(done, 500))
       }
     }

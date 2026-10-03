@@ -183,7 +183,7 @@ interface Walked {
   readonly path: string
 }
 
-function walk(doc: LoroDoc): Walked[] {
+function walk(doc: LoroDoc, onUnreadable?: (node: LoroTreeNode) => void): Walked[] {
   const out: Walked[] = []
   const visit = (node: LoroTreeNode, prefix: string): void => {
     const read = readMeta(node)
@@ -192,7 +192,10 @@ function walk(doc: LoroDoc): Walked[] {
     // it would take every other document down with it. Its CHILDREN are
     // skipped with it — their paths are undefined without their ancestor's
     // segment, and inventing one would place them somewhere nobody chose.
-    if (read === null) return
+    if (read === null) {
+      onUnreadable?.(node)
+      return
+    }
     const segment = read.type === 'document' ? read.meta.segment : read.segment
     const path = prefix === '' ? segment : `${prefix}/${segment}`
     out.push({ node, read, path })
@@ -200,6 +203,17 @@ function walk(doc: LoroDoc): Walked[] {
   }
   for (const root of tree(doc).roots()) visit(root, '')
   return out
+}
+
+/**
+ * Tree ids of the nodes every listing skips with their subtrees, since a
+ * skipped document is indistinguishable from an absent one to a caller that
+ * deletes on the strength of the listing.
+ */
+export function unreadableWorkspaceNodes(doc: LoroDoc): string[] {
+  const ids: string[] = []
+  walk(doc, (node) => ids.push(node.id))
+  return ids
 }
 
 function nodeById(doc: LoroDoc, documentId: string): LoroTreeNode | null {
@@ -457,15 +471,15 @@ export function moveWorkspaceDocument(
   doc.commit()
 }
 
-/** Sets — or, with no `name`, clears — a document's display name. */
+/** Sets a document's display name; no `name`, or a blank one, clears it. */
 export function setWorkspaceDocumentName(
   doc: LoroDoc,
   input: { documentId: string; name?: string },
 ): void {
   const node = nodeById(doc, input.documentId)
   if (node === null) throw new Error(`No document "${input.documentId}" to rename`)
-  if (input.name === undefined) node.data.delete('name')
-  else node.data.set('name', input.name)
+  if (!input.name?.trim()) node.data.delete('name')
+  else node.data.set('name', workspaceNodeMetaSchema.shape.name.parse(input.name))
   doc.commit()
 }
 

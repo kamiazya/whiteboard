@@ -1,8 +1,7 @@
-// Matcher semantics for the shortcut catalog (shortcuts.ts). Slice 0a of
-// the editor-completeness plan: specs can now claim a Cmd/Ctrl ("mod") or
-// Alt modifier explicitly — the capability every clipboard-family binding
-// needs. No product binding uses it yet in this slice, so the cases run
-// against synthetic specs via the exported matcher.
+// Matcher semantics for the shortcut catalog (shortcuts.ts): specs can claim
+// a Cmd/Ctrl ("mod") or Alt modifier explicitly — the capability every
+// clipboard-family binding needs. No product binding relies on it alone, so
+// the cases run against synthetic specs via the exported matcher.
 import { describe, expect, it } from 'vitest'
 import { EDITOR_SHORTCUTS, findShortcutIn, type ShortcutSpec } from './shortcuts.js'
 

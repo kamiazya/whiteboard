@@ -67,6 +67,15 @@ async function takeBookmark(name = 'a point worth keeping') {
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
+/** A valid answer to the page's other reads, so a mock only has to say what it is about. */
+function otherReadBody(url: string): Response {
+  if (url.endsWith('/document-tags')) {
+    return jsonResponse({ documents: [], contents: [], library: {}, inUse: [] })
+  }
+  if (url.endsWith('/names')) return jsonResponse({ documents: {}, pinned: [] })
+  return jsonResponse({})
+}
+
 // Split from DaemonDocumentPage.test.tsx by topic (version save + history
 // panel + markdown history reachability); the mock harness is per-file.
 describe('DaemonDocumentPage versions', () => {
@@ -132,7 +141,7 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
-          return Promise.resolve(jsonResponse({}))
+          return Promise.resolve(otherReadBody(url))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -189,7 +198,7 @@ describe('DaemonDocumentPage versions', () => {
             // Malformed 200: missing the `version` envelope the schema requires.
             return Promise.resolve(jsonResponse({ id: 'v-manual' }))
           }
-          return Promise.resolve(jsonResponse({}))
+          return Promise.resolve(otherReadBody(url))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -215,6 +224,7 @@ describe('DaemonDocumentPage versions', () => {
 
       vi.unstubAllGlobals()
       await expectLoggedFailure('save version from the History panel failed DaemonContractError')
+      await expectLoggedFailure('/versions failed its contract at version')
     })
 
     it('shows an inline error when the save request fails', async () => {
@@ -234,7 +244,7 @@ describe('DaemonDocumentPage versions', () => {
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(new Response('nope', { status: 500 }))
           }
-          return Promise.resolve(jsonResponse({}))
+          return Promise.resolve(otherReadBody(url))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -304,7 +314,7 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
-          return Promise.resolve(jsonResponse({}))
+          return Promise.resolve(otherReadBody(url))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -349,7 +359,7 @@ describe('DaemonDocumentPage versions', () => {
           if (url.includes('/versions')) {
             return Promise.resolve(jsonResponse({ versions: [] }))
           }
-          return Promise.resolve(jsonResponse({}))
+          return Promise.resolve(otherReadBody(url))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -411,7 +421,7 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
-          return Promise.resolve(jsonResponse({}))
+          return Promise.resolve(otherReadBody(url))
         },
       )
       vi.stubGlobal('fetch', fetchMock)
@@ -502,7 +512,7 @@ describe('DaemonDocumentPage versions', () => {
         if (url.includes('/versions')) {
           return jsonResponse({ versions: [] })
         }
-        return jsonResponse({})
+        return otherReadBody(url)
       })
       vi.stubGlobal('fetch', fetchMock)
 

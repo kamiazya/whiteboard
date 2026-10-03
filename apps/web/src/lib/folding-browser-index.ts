@@ -43,7 +43,11 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { announceDocumentMoved, announceDocumentRemoved } from './workspace-broadcast.js'
+import {
+  announceDocumentMoved,
+  announceDocumentRemoved,
+  announceDocumentRestored,
+} from './workspace-broadcast.js'
 
 const log = getAppLogger('folding-browser-index')
 
@@ -239,7 +243,9 @@ export class FoldingBrowserIndex implements DocumentIndex {
     await this.ensureFolded()
     // A restore adds a document back just as a create does.
     await this.admitOneMore(input.workspaceId)
-    return this.inner.restoreDocument(input)
+    const restored = await this.inner.restoreDocument(input)
+    if (restored !== null) announceDocumentRestored(input.workspaceId, restored.path)
+    return restored
   }
 
   async deleteDocument(input: DeleteDocumentInput): Promise<void> {

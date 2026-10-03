@@ -471,7 +471,7 @@ describe('no rule in the table is shadowed by an earlier one', () => {
   })
 })
 
-// S8 slice 2: every rule is CLASSIFIED — gated (a workspace membership
+// Every rule is CLASSIFIED — gated (a workspace membership
 // gate applies) or origin-trusted (it does not) — and the two lists
 // partition the whole table with no overlap and no omission. A new rule
 // added to API_ROUTE_RULES without a `workspace` extractor AND without being

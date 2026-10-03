@@ -149,10 +149,6 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
     'not modelled: a request body, fuzzed from its schema by server/app.routes.fuzz.property.test.ts',
   'server/routes/document/versions.ts':
     'not modelled: a request body, fuzzed from its schema by server/app.routes.fuzz.property.test.ts',
-  'server/routes/document/export-svg.ts':
-    'not modelled: a request body, fuzzed from its schema by server/app.routes.fuzz.property.test.ts',
-  'server/routes/export.ts':
-    'not modelled: a request body, fuzzed from its schema by server/app.routes.fuzz.property.test.ts',
   'server/_test-route-fuzz-lane.ts':
     'not modelled: a response body the route fuzz lanes read back against its client contract — a reply, not a stored shape',
 }

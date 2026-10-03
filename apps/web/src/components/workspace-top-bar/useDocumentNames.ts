@@ -7,6 +7,12 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useState } from 'react'
 import type { z } from 'zod'
+import { parseDaemonResponse } from '../../lib/daemon-contract-error.js'
+
+/** Both the read and the rename answer with the workspace's names; a skew in either is reported with its route. */
+async function readNames(route: string, res: Response): Promise<WorkspaceNames> {
+  return parseDaemonResponse(route, workspaceNamesSchema, await res.json())
+}
 
 const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }
 
@@ -40,7 +46,7 @@ export function useDocumentNames({
     ;(async () => {
       try {
         const res = await daemonFetch(workspaceNamesApiUrl(workspaceId))
-        if (res.ok && active) setNames(workspaceNamesSchema.parse(await res.json()))
+        if (res.ok && active) setNames(await readNames(workspaceNamesApiUrl(workspaceId), res))
       } catch {
         /* best-effort */
       }
@@ -67,7 +73,7 @@ export function useDocumentNames({
           body: JSON.stringify({ name } satisfies z.infer<typeof setNameRequestSchema>),
         })
         if (res.ok) {
-          setNames(workspaceNamesSchema.parse(await res.json()))
+          setNames(await readNames(documentNameApiUrl(workspaceId, targetPath), res))
           return true
         }
         return false

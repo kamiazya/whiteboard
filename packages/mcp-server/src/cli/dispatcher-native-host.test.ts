@@ -13,6 +13,17 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { main } from './dispatcher.js'
 
+// `os.homedir()` reads the process's real environment, which a worker thread
+// does not share with its `process.env`: under a threads pool (the mutation
+// lane's) a stubbed HOME never reaches it and the install finds the machine's
+// own browsers. The home dir is therefore replaced at the module, not the env.
+const home = vi.hoisted(() => ({ override: undefined as string | undefined }))
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  const homedir = () => home.override ?? actual.homedir()
+  return { ...actual, homedir, default: { ...actual, homedir } }
+})
+
 // The dispatcher imports this lazily; resolving it here puts the module
 // graph's load in collection, not in the first test's timeout.
 
@@ -21,6 +32,7 @@ let stdout: string
 let stderr: string
 
 beforeEach(() => {
+  home.override = undefined
   scratch = mkdtempSync(join(tmpdir(), 'wb-dispatcher-native-host-'))
   stdout = ''
   stderr = ''
@@ -35,7 +47,6 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.restoreAllMocks()
-  vi.unstubAllEnvs()
   rmSync(scratch, { recursive: true, force: true })
 })
 
@@ -87,9 +98,8 @@ describe('whiteboard native-host install', () => {
   it.skipIf(process.platform === 'win32')(
     'answers ok:false with exit 1 when no browser is installed and none was named',
     async () => {
-      const home = join(scratch, 'home')
-      mkdirSync(home)
-      vi.stubEnv('HOME', home)
+      home.override = join(scratch, 'home')
+      mkdirSync(home.override)
       const code = await main([
         'native-host',
         'install',

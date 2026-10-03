@@ -15,8 +15,8 @@ import type { FacetDefinition, FacetRegistry } from './registry.js'
  * The closed set of places facet UI can appear. Adding a point is a core
  * increment, exactly like adding a widget kind — a plugin can neither mint
  * a point nor place itself outside its container. A point exists only once
- * its vessel does: `documentProperties` (the DocumentProperties disclosure)
- * joins together with the surface that consumes it.
+ * its vessel does: a `documentProperties` point (named in ADR-0013 as a surface
+ * not yet built) joins together with the surface that consumes it.
  *
  * Every point is a STATE surface, and that is the rule rather than a
  * coincidence. An action menu's entries run once and close it; a facet is

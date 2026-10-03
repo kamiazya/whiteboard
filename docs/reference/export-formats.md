@@ -87,8 +87,10 @@ extension key, `x-whiteboard`, allowed at three sites:
   preferences for things JSON Canvas already models, so a consumer that
   drops it still renders every edge, just with its own routing.
 - **A node** — the canvas-embed extension (`kind: "embed"` plus a canvas
-  reference), the one piece of content JSON Canvas 1.0 cannot express,
-  node-target facets in the same `facets` bucket, and the node's `tags`.
+  reference). It records a reference only: the document keeps it and the
+  reference graph counts it as a backlink, but nothing draws the embedded
+  document and agents cannot author one through MCP. The node also carries node-target
+  facets in the same `facets` bucket, and its `tags`.
 - **An edge** — edge-target facets (`facets`), the edge's `tags` (a tag on an
   edge classifies the relation: the link between two services is healthy or
   failing as much as the services are) and the bends the line is drawn

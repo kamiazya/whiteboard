@@ -533,8 +533,8 @@ export function SearchColumn({
         </p>
         <SearchResults
           {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
-          // A `#tag` query is a FILTER over what is loaded (#975's
-          // contract), not a content search — it never leaves the
+          // A `#tag` query is a FILTER over what is loaded (the
+          // search contract), not a content search — it never leaves the
           // client. Everything else asks the source.
           results={searchResultRows({
             activeTag,

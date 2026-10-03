@@ -12,15 +12,31 @@
 // readable through the check-runs API. The one hand-classified window
 // (2026-08-28..09-04, sixteen failures) is pinned as the lib's fixture.
 //
+// It also lists, in one block, failures that are no test's and that no later
+// success has retired: a `release` publish job, and the scheduled `Mutation`
+// and `audit` runs — each judged against what retires it, in the lib.
+//
 // Annotations of a completed run never change, so they are cached per run
 // id under the git common dir's flake-watch/ (shared by every worktree of the
 // clone) — a session start re-fetches only runs no checkout has seen.
 
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { clusterFailures, commitsLandedAfter, failedLegFrom, flakeCacheDir, formatReport, runPassedAfter } from './flake-watch-lib.mjs'
+import { promisify } from 'node:util'
+import {
+  clusterFailures,
+  commitsLandedAfter,
+  failedLegFrom,
+  flakeCacheDir,
+  formatReport,
+  formatUnhealedReport,
+  inspectPublishJobs,
+  runPassedAfter,
+  unhealedPublishJobs,
+  unhealedWorkflowRuns,
+} from './flake-watch-lib.mjs'
 
 const QUIET = process.argv.includes('--quiet')
 const daysArg = process.argv.indexOf('--days')
@@ -52,20 +68,39 @@ function gh(args) {
 // and disposable, which is why this is a suffix rather than a migration.
 const CACHE_SHAPE = 'v3-annotations'
 
-function cached(runId, fetch) {
-  const file = join(CACHE_DIR, `${runId}.${CACHE_SHAPE}.json`)
+function readCached(file) {
   try {
-    return JSON.parse(readFileSync(file, 'utf-8'))
+    return { value: JSON.parse(readFileSync(file, 'utf-8')) }
   } catch {
-    const value = fetch()
-    mkdirSync(CACHE_DIR, { recursive: true })
-    // Sessions in different worktrees now share the directory, so a reader
-    // must never see a half-written file: write beside it and rename.
-    const staging = `${file}.${process.pid}.tmp`
-    writeFileSync(staging, JSON.stringify(value))
-    renameSync(staging, file)
-    return value
+    return null
   }
+}
+
+function writeCached(file, value) {
+  mkdirSync(CACHE_DIR, { recursive: true })
+  // Sessions in different worktrees now share the directory, so a reader
+  // must never see a half-written file: write beside it and rename.
+  const staging = `${file}.${process.pid}.tmp`
+  writeFileSync(staging, JSON.stringify(value))
+  renameSync(staging, file)
+}
+
+function cached(runId, fetch, shape = CACHE_SHAPE) {
+  const file = join(CACHE_DIR, `${runId}.${shape}.json`)
+  const hit = readCached(file)
+  if (hit !== null) return hit.value
+  const value = fetch()
+  writeCached(file, value)
+  return value
+}
+
+async function cachedAsync(runId, fetch, shape) {
+  const file = join(CACHE_DIR, `${runId}.${shape}.json`)
+  const hit = readCached(file)
+  if (hit !== null) return hit.value
+  const value = await fetch()
+  writeCached(file, value)
+  return value
 }
 
 /**
@@ -132,6 +167,84 @@ function mainPassedAfter() {
   }
 }
 
+// Workflows whose failure is no test's: a scheduled lane nobody opens, and the release. Each is
+// judged by whether a later success retired it (see the lib), so the listing must reach back past
+// the last success — the weekly lane is green or red once in seven days.
+const SCHEDULED_WORKFLOWS = ['mutation.yml', 'audit.yml']
+const SCHEDULED_LOOKBACK_DAYS = 60
+const RUNS_PER_PAGE = 100
+const MAX_RUN_PAGES = 10
+
+const execFileAsync = promisify(execFile)
+
+async function ghAsync(args) {
+  const { stdout } = await execFileAsync('gh', args, { encoding: 'utf-8', timeout: 30_000 })
+  return JSON.parse(stdout)
+}
+
+// Paged by hand: `gh api --paginate` follows the response's own Link header, which names the
+// repository by numeric id, and a proxy that only allows `repos/{owner}/{repo}/…` refuses page 2.
+// Every call here is a network round trip inside a SessionStart hook, so pages after the first
+// go out together once the first one has said how many there are.
+async function listRuns(workflowFile, sinceIso) {
+  const page = (number) =>
+    ghAsync([
+      'api',
+      `repos/{owner}/{repo}/actions/workflows/${workflowFile}/runs?branch=main&per_page=${RUNS_PER_PAGE}&page=${number}&created=>=${sinceIso.slice(0, 10)}`,
+      '--jq',
+      '{total: .total_count, runs: [.workflow_runs[] | {runId: (.id | tostring), createdAt: .created_at, conclusion, event, title: .display_title}]}',
+    ])
+  const first = await page(1)
+  const pages = Math.min(Math.ceil(first.total / RUNS_PER_PAGE), MAX_RUN_PAGES)
+  const rest = await Promise.all(Array.from({ length: Math.max(pages - 1, 0) }, (_, index) => page(index + 2)))
+  return [first, ...rest].flatMap((batch) => batch.runs)
+}
+
+/**
+ * Non-vitest failures on main that no later success has retired. Its own failure never costs the
+ * test report above, and a workflow it cannot read is skipped rather than guessed at.
+ */
+async function unhealedFailures(since) {
+  const scheduledSince = new Date(Date.now() - SCHEDULED_LOOKBACK_DAYS * 86_400_000).toISOString()
+  const failedWorkflows = []
+  const workflows = []
+  let publishJobs = []
+
+  const scheduled = SCHEDULED_WORKFLOWS.map(async (file) => {
+    try {
+      const found = unhealedWorkflowRuns(await listRuns(file, scheduledSince))
+      if (found !== null) workflows.push({ workflow: file.replace(/\.yml$/, ''), ...found })
+    } catch {
+      failedWorkflows.push(file)
+    }
+  })
+  const release = (async () => {
+    try {
+      const releaseRuns = await listRuns('release.yml', since)
+      const found = unhealedWorkflowRuns(releaseRuns)
+      if (found !== null) workflows.push({ workflow: 'release', ...found })
+      // The jobs of a completed run change only when somebody re-runs it, which also changes its
+      // conclusion, so the conclusion is part of the cache key.
+      const withJobs = await Promise.all(
+        releaseRuns.filter(inspectPublishJobs).map(async (run) => ({
+          ...run,
+          jobs: await cachedAsync(
+            run.runId,
+            () => ghAsync(['api', `repos/{owner}/{repo}/actions/runs/${run.runId}/jobs`, '--jq', '[.jobs[] | {name, conclusion}]']),
+            `v1-jobs-${run.conclusion}`,
+          ),
+        })),
+      )
+      publishJobs = unhealedPublishJobs(withJobs)
+    } catch {
+      failedWorkflows.push('release.yml')
+    }
+  })()
+  await Promise.all([...scheduled, release])
+  workflows.sort((a, b) => a.workflow.localeCompare(b.workflow))
+  return { report: formatUnhealedReport({ publishJobs, workflows }), failedWorkflows }
+}
+
 function main() {
   const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString()
   const runs = gh([
@@ -180,10 +293,26 @@ function main() {
   }
 }
 
+async function reportUnhealed() {
+  const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString()
+  const { report, failedWorkflows } = await unhealedFailures(since)
+  if (report !== '') process.stdout.write(`${report}\n`)
+  if (failedWorkflows.length > 0 && !QUIET) {
+    process.stderr.write(`[flake-watch] could not read: ${failedWorkflows.join(', ')}\n`)
+  }
+}
+
+// The two halves fail independently: a window the test half cannot read says nothing about the
+// workflows, and the reverse.
 try {
   main()
 } catch (error) {
   // The daemon being down never blocked stale-issues; gh being absent,
   // unauthenticated, or offline must not block this either.
+  if (!QUIET) process.stderr.write(`[flake-watch] skipped: ${error.message}\n`)
+}
+try {
+  await reportUnhealed()
+} catch (error) {
   if (!QUIET) process.stderr.write(`[flake-watch] skipped: ${error.message}\n`)
 }

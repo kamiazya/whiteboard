@@ -9,7 +9,7 @@
 // package's own dependency list, which pnpm-lock.yaml alone does not tie to
 // a specific package). Both are hashed, never re-derived by walking
 // node_modules — that would make the fingerprint itself as slow as the SBOM
-// generation this sidecar exists to avoid re-running on every pre-push.
+// generation this sidecar exists to avoid re-running on every test run.
 
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'

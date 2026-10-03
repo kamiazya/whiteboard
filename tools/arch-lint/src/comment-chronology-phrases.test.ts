@@ -16,8 +16,15 @@ import { trackedFiles } from './tracked-files.js'
 // document-sync session, a daemon session, `this session's doc` — and a scan
 // for the bare words read fifty legitimate comments as violations. What stays
 // is the shape that only ever named a working session: the dev-workflow's own
-// vocabulary (`audit-triage`, a dogfood report, a PR), and "this session" as
-// the occasion of a decision or a bug report.
+// vocabulary (`audit-triage`, a dogfood report, a PR, a review bot), and "this
+// session" as the occasion of a decision or a bug report.
+//
+// The same holds for the markers of WHEN a comment was written: an issue or PR
+// number, "this increment", "the next slice", "until 2026-09-19", and a slice
+// label such as `S4b` — which two unrelated pieces of work each used for their
+// own. `slice` alone stays free (a slice of an array, of the changed files), as
+// does `#130`, React's own minified-error number. Name the module or the
+// mechanism instead; `git blame` names the change.
 
 const PHRASES: ReadonlyArray<{ readonly pattern: RegExp; readonly name: string }> = [
   { pattern: /\baudit-triage\b/i, name: 'audit-triage' },
@@ -25,6 +32,16 @@ const PHRASES: ReadonlyArray<{ readonly pattern: RegExp; readonly name: string }
   { pattern: /\bthis PR\b/, name: 'this PR' },
   { pattern: /\bdecision,? this session\b/i, name: 'decision, this session' },
   { pattern: /\bthis session['’]s bug report\b/i, name: "this session's bug report" },
+  { pattern: /\bCodeRabbit\b/, name: 'CodeRabbit' },
+  { pattern: /\bFound by dogfood/i, name: 'Found by dogfood' },
+  { pattern: /(?<![&\w#])#(?!130\b)\d{3,4}\b/, name: 'issue or PR number' },
+  {
+    pattern: /\b(?:this|the next) (?:increment|slice)\b|\bincrement after this\b/i,
+    name: 'this increment / the next slice',
+  },
+  { pattern: /\b(?:until|since) 20\d\d-\d\d-\d\d\b/, name: 'until/since a date' },
+  { pattern: /\b(?:this|same) session measured\b/i, name: 'this session measured' },
+  { pattern: /\bS(?:[3-9]|10)[ab]?\b/, name: 'slice label' },
 ]
 
 /**
@@ -66,7 +83,37 @@ describe('a source comment names the rule, not the working session that produced
     expect(phrasesIn(" * the list is the shape of this session's bug report,")).toEqual([
       "this session's bug report",
     ])
+    expect(phrasesIn('  // Found by CodeRabbit on #1119.')).toEqual([
+      'CodeRabbit',
+      'issue or PR number',
+    ])
+    expect(phrasesIn(' * closed by #1767 at the one call site')).toEqual(['issue or PR number'])
+    expect(phrasesIn('  // this increment set out to make it possible')).toEqual([
+      'this increment / the next slice',
+    ])
+    expect(phrasesIn('  // Pinned so the next slice has to notice it')).toEqual([
+      'this increment / the next slice',
+    ])
+    expect(phrasesIn('  // Found by dogfooding: the bubble appeared')).toEqual(['Found by dogfood'])
+    expect(phrasesIn('  // No Edit row since 2026-09-08: it opened')).toEqual([
+      'until/since a date',
+    ])
+    expect(phrasesIn('  // the same session measured a free event loop')).toEqual([
+      'this session measured',
+    ])
+    expect(phrasesIn('  // the replica-key holder (dual-plane collapse S4b)')).toEqual([
+      'slice label',
+    ])
     // Not a comment, and "session" as the app's own noun.
+    expect(phrasesIn('  // React throws #130 with no name in it')).toEqual([])
+    expect(
+      phrasesIn("  // Sonar's S2871 asks for the opposite; a hex colour is #fff or #123456"),
+    ).toEqual([])
+    expect(
+      phrasesIn(
+        '  // a slice of the changed files; slice(0, 2); S1 and S2 are the editor invariants',
+      ),
+    ).toEqual([])
     expect(phrasesIn("const label = 'The dogfood report'")).toEqual([])
     expect(phrasesIn('  // flushes the debounced edit into this session’s own doc')).toEqual([])
     expect(phrasesIn('  // whichever keeper this session runs')).toEqual([])
@@ -104,5 +151,37 @@ describe('a source comment names the rule, not the working session that produced
   it('holds no ledger entry for a comment that no longer says it', () => {
     const live = new Set(found.map(({ key }) => key))
     expect([...PENDING_REWRITE].filter((key) => !live.has(key))).toEqual([])
+  })
+})
+
+// A size ledger's ceiling is the reading; the comment above an entry says why
+// the file or function is that size. A `968 -> 1053` raise history beside it
+// disagreed with the number beneath in 26 places, because each raise appended
+// a line and the ceiling was edited without it.
+const SIZE_LEDGERS: readonly string[] = [
+  'tools/arch-lint/src/file-size-budget.test.ts',
+  'tools/arch-lint/src/function-size-budget.test.ts',
+]
+
+const LEDGER_ARROW = /\d[\d,]* (?:->|→) \d/
+
+describe('a size ledger comment says why a file is its size, not how it got there', () => {
+  it('recognises a raise arrow and passes a bare range', () => {
+    expect(LEDGER_ARROW.test('  // Raised 968 -> 1053 for the replica-key route')).toBe(true)
+    expect(LEDGER_ARROW.test('  // 3,143 → 3,176: the summary case')).toBe(true)
+    expect(LEDGER_ARROW.test('  // the v19 -> v20 upgrade block')).toBe(false)
+    expect(LEDGER_ARROW.test('  // ADR-0040 decisions 3-6')).toBe(false)
+  })
+
+  it('finds no arrow in either ledger', () => {
+    const hits = SIZE_LEDGERS.flatMap((file) => {
+      const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
+      // A guard that reads nothing reports clean.
+      expect(lines.length).toBeGreaterThan(300)
+      return lines.flatMap((line, index) =>
+        isComment(line) && LEDGER_ARROW.test(line) ? [`${file}:${index + 1}: ${line.trim()}`] : [],
+      )
+    })
+    expect(hits).toEqual([])
   })
 })

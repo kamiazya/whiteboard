@@ -131,7 +131,7 @@ describe('ci.yml — biome lint gate', () => {
  * "Re-run failed jobs", which re-runs `failure` only. The cancelled leg is
  * then carried into every later attempt with its original `started_at`,
  * `ci-gate` reads its real conclusion and refuses, and the PR cannot go green
- * however many times anyone presses the button. Measured on PR #1448: four
+ * however many times anyone presses the button. Measured: four
  * attempts, `test-unit (1)` carrying `started_at=10:47:20Z` through all of
  * them, never re-run once.
  *

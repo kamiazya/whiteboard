@@ -6,7 +6,7 @@ import { useEffect, useMemo } from 'react'
 import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
 
 /**
- * Tells `openDocumentStore` (S4b) which daemon this tab is connected to, so a
+ * Tells `openDocumentStore` which daemon this tab is connected to, so a
  * daemon-kept workspace's replica routes to a real session-key source instead
  * of the withheld answer an unconnected ref gets.
  *

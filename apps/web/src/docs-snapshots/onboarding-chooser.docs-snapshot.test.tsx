@@ -16,7 +16,7 @@ afterEach(cleanup)
 describe('docs snapshot: onboarding chooser', () => {
   it('captures the empty-workspace chooser', async () => {
     const store = new LocalStoreDouble()
-    // Named so the page's h1 (visible since #1129) reads as a workspace a
+    // Named so the page's h1 reads as a workspace a
     // person named, not the raw ULID the seeded double falls back to.
     await store.index.renameWorkspace({
       workspaceId: getBrowserWorkspaceId(),

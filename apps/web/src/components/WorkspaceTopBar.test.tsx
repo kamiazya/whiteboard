@@ -141,7 +141,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
     titleSlot?: ComponentProps<typeof WorkspaceTopBar>['titleSlot']
   }) {
     const daemonFetch = vi.fn(async (url: string | URL | Request) => {
-      if (String(url).includes('/names')) return mkNamesOk()
+      if (String(url).includes('/name')) return mkNamesOk()
       return jsonResponse({})
     })
 

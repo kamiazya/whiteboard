@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { withNodeText } from './node-content.js'
 import type { SpatialProposedChange } from './proposal.js'
 import { applyCanvasChange, canvasChangeConflicts } from './proposal-apply.js'
-import type { SpatialCanvas } from './spatial.js'
+import type { CanvasEdge, CanvasLine, SpatialCanvas } from './spatial.js'
 
 const NODE_A = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
 const NODE_B = textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' })
@@ -191,6 +191,140 @@ describe('canvasChangeConflicts', () => {
     expect(canvasChangeConflicts(remove, BOARD)).toBe(false)
     expect(
       canvasChangeConflicts(remove, { ...BOARD, nodes: [withNodeText(NODE_A, 'edited'), NODE_B] }),
+    ).toBe(true)
+  })
+})
+
+describe('ink lines and edges in a proposal', () => {
+  const pointAt = (x: number) => ({ kind: 'point' as const, point: { x, y: 0 } })
+  const inkLine = (id: string, over: Partial<CanvasLine> = {}): CanvasLine => ({
+    id,
+    from: pointAt(0),
+    to: pointAt(10),
+    ...over,
+  })
+  const link = (id: string, over: Partial<CanvasEdge> = {}): CanvasEdge => ({
+    id,
+    from: { node: 'a' },
+    to: { node: 'b' },
+    ...over,
+  })
+  const linesOf = (canvas: SpatialCanvas) => canvas.lines ?? []
+
+  it('patches the named line only', () => {
+    const c: SpatialCanvas = { ...BOARD, lines: [inkLine('l1'), inkLine('l2')] }
+    const out = applyCanvasChange(c, {
+      id: 'line:l1',
+      status: 'open',
+      op: 'line.patch',
+      lineId: 'l1',
+      patch: { color: '1' },
+      assumed: {},
+    })
+    expect(linesOf(out).find((l) => l.id === 'l1')?.color).toBe('1')
+    expect(linesOf(out).find((l) => l.id === 'l2')?.color).toBeUndefined()
+    expect(linesOf(out)).toHaveLength(2)
+  })
+
+  it('leaves the canvas as it was when the patched line is gone', () => {
+    const c: SpatialCanvas = { ...BOARD, lines: [inkLine('l1')] }
+    expect(
+      applyCanvasChange(c, {
+        id: 'line:zz',
+        status: 'open',
+        op: 'line.patch',
+        lineId: 'zz',
+        patch: { color: '1' },
+        assumed: {},
+      }),
+    ).toEqual(c)
+  })
+
+  it('removes a line and leaves `lines` absent when the last one goes', () => {
+    const remove = (lineId: string, assumed: CanvasLine): SpatialProposedChange => ({
+      id: `line:${lineId}`,
+      status: 'open',
+      op: 'line.remove',
+      lineId,
+      assumed,
+    })
+    const two: SpatialCanvas = { ...BOARD, lines: [inkLine('l1'), inkLine('l2')] }
+    expect(linesOf(applyCanvasChange(two, remove('l1', inkLine('l1'))))).toHaveLength(1)
+    const last = applyCanvasChange(
+      { ...BOARD, lines: [inkLine('l1')] },
+      remove('l1', inkLine('l1')),
+    )
+    expect('lines' in last).toBe(false)
+  })
+
+  it('adds an edge only when its id is free, and removes an edge by id', () => {
+    const add = (id: string): SpatialProposedChange => ({
+      id: `edge:${id}`,
+      status: 'open',
+      op: 'edge.add',
+      edge: link(id),
+    })
+    expect(applyCanvasChange(BOARD, add('e')).edges).toHaveLength(1)
+    expect(applyCanvasChange(BOARD, add('e2')).edges.map((e) => e.id)).toEqual(['e', 'e2'])
+    const removed = applyCanvasChange(BOARD, {
+      id: 'edge:e',
+      status: 'open',
+      op: 'edge.remove',
+      edgeId: 'e',
+      assumed: link('e'),
+    })
+    expect(removed.edges).toEqual([])
+  })
+
+  it('flags an addition whose id is taken, for edges and lines alike', () => {
+    const c: SpatialCanvas = { ...BOARD, edges: [link('e1')], lines: [inkLine('l1')] }
+    const add = (op: 'edge.add' | 'line.add', id: string): SpatialProposedChange =>
+      op === 'edge.add'
+        ? { id: `x:${id}`, status: 'open', op, edge: link(id) }
+        : { id: `x:${id}`, status: 'open', op, line: inkLine(id) }
+    expect(canvasChangeConflicts(add('edge.add', 'e1'), c)).toBe(true)
+    expect(canvasChangeConflicts(add('edge.add', 'e2'), c)).toBe(false)
+    expect(canvasChangeConflicts(add('line.add', 'l1'), c)).toBe(true)
+    expect(canvasChangeConflicts(add('line.add', 'l2'), c)).toBe(false)
+  })
+
+  it('flags a removal whose element changed or is gone, for edges and lines alike', () => {
+    const c: SpatialCanvas = { ...BOARD, edges: [link('e1')], lines: [inkLine('l1')] }
+    const removeEdge = (edgeId: string, assumed: CanvasEdge): SpatialProposedChange => ({
+      id: `edge:${edgeId}`,
+      status: 'open',
+      op: 'edge.remove',
+      edgeId,
+      assumed,
+    })
+    const removeLine = (lineId: string, assumed: CanvasLine): SpatialProposedChange => ({
+      id: `line:${lineId}`,
+      status: 'open',
+      op: 'line.remove',
+      lineId,
+      assumed,
+    })
+    expect(canvasChangeConflicts(removeEdge('e1', link('e1')), c)).toBe(false)
+    expect(canvasChangeConflicts(removeEdge('e1', link('e1', { label: 'changed' })), c)).toBe(true)
+    expect(canvasChangeConflicts(removeEdge('gone', link('gone')), c)).toBe(true)
+    expect(canvasChangeConflicts(removeLine('l1', inkLine('l1')), c)).toBe(false)
+    expect(canvasChangeConflicts(removeLine('l1', inkLine('l1', { color: '3' })), c)).toBe(true)
+    expect(canvasChangeConflicts(removeLine('gone', inkLine('gone')), c)).toBe(true)
+  })
+
+  it('flags a patch of a line that is gone', () => {
+    expect(
+      canvasChangeConflicts(
+        {
+          id: 'line:gone',
+          status: 'open',
+          op: 'line.patch',
+          lineId: 'gone',
+          patch: {},
+          assumed: {},
+        },
+        { ...BOARD, lines: [inkLine('l1')] },
+      ),
     ).toBe(true)
   })
 })

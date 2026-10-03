@@ -29,7 +29,7 @@ import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
-import { isTestPath, walkSourceFiles } from './source-scan.js'
+import { classifyPath, walkSourceFiles } from './source-scan.js'
 
 /**
  * An import or re-export specifier whose path has a `test-utils` segment, or
@@ -63,11 +63,17 @@ const TEST_FRAMEWORK_ALLOWLIST: Readonly<Record<string, string>> = {
 const COMPOSITION_ROOT_SRC = ['packages/mcp-server/src', 'apps/web/src']
 
 function isProductionFile(path: string): boolean {
-  const rel = relativeToRepo(path)
+  // Harnesses, doc snapshots and the support files NOT named as test-only importers (a `testing/`
+  // entry, a `-test-utils` file) count as production: they sit in shipped directories, so each
+  // test-framework reach is ledgered rather than assumed.
+  const category = classifyPath(path)
+  const unnamedSupport =
+    category === 'test-support' && /(?:[\\/]testing[\\/]|-test-utils\.[a-z]+$)/.test(path)
   return (
-    !isTestPath(path) &&
-    !/\.bench\.tsx?$/.test(rel) &&
-    !/(?:^|\/)_test-[^/]*$/.test(rel) &&
+    (category === 'shipped' ||
+      category === 'harness' ||
+      category === 'docs-snapshot' ||
+      unnamedSupport) &&
     !isExcludedPath(path)
   )
 }

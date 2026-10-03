@@ -3,7 +3,12 @@ import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
 import { factsCacheFor } from '../references/content-source.js'
 import type { ServerDeps } from '../server-deps.js'
-import type { DocumentTagsInput, DocumentTagsOutput } from './document-tags.schemas.js'
+import {
+  type DocumentTagsInput,
+  type DocumentTagsOutput,
+  documentTagsOutputSchema,
+} from './document-tags.schemas.js'
+import { workspaceStencilLibrary } from './stencil-library.js'
 import { workspaceTagLibrary } from './tag-library.js'
 
 // The row shape and the counting are `@kamiazya/whiteboard-model`'s
@@ -64,7 +69,12 @@ export async function computeDocumentTags(
   }
   const bearers = entries.flatMap((entry) => content.get(entry.documentId)?.bearers ?? [])
   const library = await workspaceTagLibrary(deps, input.workspaceId, 'refuse', entries)
-  return { documents, contents, inUse: tagsInUse(bearers), library }
+  // Parsed to the published shape: the library is the registry's INPUT type,
+  // and the answer carries what the registry would resolve (asset defaults filled).
+  const stencils = documentTagsOutputSchema.shape.stencils.parse(
+    await workspaceStencilLibrary(deps, input.workspaceId, 'refuse', entries),
+  )
+  return { documents, contents, inUse: tagsInUse(bearers), library, stencils }
 }
 
 /** The same listing from the store, over a listing the caller already holds. */

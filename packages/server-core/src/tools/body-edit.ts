@@ -11,6 +11,7 @@ import {
   bodyChangeConflicts,
   bodyReplaceChangeSchema,
   documentIdSchema,
+  mintProposalId,
   type Proposal,
   proposalSchema,
   type ResolvedPassage,
@@ -200,14 +201,6 @@ function assertAssumptionsHold(placed: readonly PlacedChange[], body: string): v
       change.id,
       `the body now reads ${JSON.stringify(body.slice(at.start, at.end))} there, not ${JSON.stringify(change.assumed)}`,
     )
-  }
-}
-
-/** The first `p<n>` no proposal on this document already holds. */
-function mintProposalId(taken: ReadonlySet<string>): string {
-  for (let i = 1; ; i++) {
-    const candidate = `p${i}`
-    if (!taken.has(candidate)) return candidate
   }
 }
 

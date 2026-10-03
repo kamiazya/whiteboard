@@ -6,7 +6,7 @@
 // load-bearing choice rather than a detail. Measured on this machine, an OPFS
 // read costs 1.5-2.7ms; a render already runs off the main thread, so reading
 // the cache ON the main thread would move 2ms per row back onto the very
-// thread #1275 and #1293 spent their effort clearing.
+// thread the worker pool exists to keep clear.
 import { beforeEach, expect, it } from 'vitest'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from './layout-worker-pool.js'
 import type { MarkdownRenderResponse } from './layout-worker-protocol.js'

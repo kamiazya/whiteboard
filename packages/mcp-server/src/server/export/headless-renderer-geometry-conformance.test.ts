@@ -3,7 +3,7 @@
 // canvas-render's own default geometry. Uses `buildSpatialScene` (the
 // exported seam in headless-renderer.ts) with an injected fake measurer, so
 // this stays a fast unit test with no real opentype.js font load — the
-// mutation-check target for this slice.
+// mutation-check target for the geometry seam.
 
 import type { Scene } from '@kamiazya/whiteboard-canvas-render'
 import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'

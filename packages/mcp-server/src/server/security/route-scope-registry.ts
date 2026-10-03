@@ -59,7 +59,7 @@ interface RouteScopeRule {
   readonly claims: (path: string, method: string) => boolean
   readonly decide: (isWrite: boolean) => RouteScopeDecision
   /**
-   * S8: which WORKSPACE this route reaches, for the membership gate
+   * Which WORKSPACE this route reaches, for the membership gate
    * (`workspace-access.ts`). Absent means the route is not gated on
    * membership at all: runtime/debug/etc; the local daemon's `workspace
    * replica-key` routes, which serve its one person; and `workspace
@@ -327,7 +327,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
 /** The rules, for the walk that proves none of them is shadowed. */
 export const API_ROUTE_RULE_NAMES: readonly string[] = API_ROUTE_RULES.map((rule) => rule.name)
 
-/** The names of the rules declaring a `workspace` extractor — the S8
+/** The names of the rules declaring a `workspace` extractor — the
  *  membership-gate partition's other half (`route-scope-registry.test.ts`
  *  asserts this union with the origin-trusted list covers every rule name). */
 export const GATED_RULE_NAMES: readonly string[] = API_ROUTE_RULES.filter(

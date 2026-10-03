@@ -161,7 +161,10 @@ export interface ServerDeps {
   knownWorkspaceHandles?: () => Promise<readonly string[]>
   /**
    * The facet registry validating registered-facet writes (ADR-0013
-   * decision 6): the deployment's plugin set, composed once per root.
+   * decision 6): the bundled plugin set, composed once per root. The set is
+   * fixed at build time because rendering, export and the web editor read the
+   * bundled plugin directly; swapping it here alone would split writes from
+   * drawings (ADR-0013's 2026-10-03 note).
    * Required, as every seam here is (ADR-0018): while it was optional each
    * tool fell back to the bundled registry on its own, so a root that
    * forgot to compose it served the bundled plugins and nothing said so.

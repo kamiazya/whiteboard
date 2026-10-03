@@ -25,7 +25,7 @@ import { REPO_ROOT } from './scan-roots.js'
  * buys is that everything NOT on it stays clean, without anyone having to
  * remember to enrol a directory after clearing it.
  *
- * The second direction is the one with teeth, and until 2026-09-23 it was
+ * The second direction is the one with teeth, and it was once
  * PROSE: this comment claimed it while no test measured a file's complexity,
  * so fixing a file and forgetting its exemption left the count unchanged and
  * every check green.
@@ -33,7 +33,7 @@ import { REPO_ROOT } from './scan-roots.js'
  * A CEILING rather than the exact count it replaced (user decision,
  * 2026-09-23) for a cost paid in merges rather than in code: several sessions
  * pay this list down at once, an exact count is the one line they all edit,
- * and #1828 hit that conflict three times, each costing a full CI run, with
+ * and one paydown hit that conflict three times, each costing a full CI run, with
  * nothing about the change itself in dispute. What a ceiling gives up is that
  * an addition can hide under slack a paydown left. What is left in its place
  * is not nothing: adding a path is visible in `biome.json`, and the

@@ -93,8 +93,8 @@ function draftSize(
  * The published draft carries `type` plus one content field; the model carries
  * a resource. That crossing happens here, at the tool's boundary — see
  * `draftContent` for why the boundary exists at all — and the published names
- * are destructured off so none rides through as an unknown key. `embed` and
- * `facets` ARE the model's own fields on the input, so they travel in `rest`.
+ * are destructured off so none rides through as an unknown key. `facets` IS
+ * the model's own field on the input, so it travels in `rest`.
  */
 function nodeFromDraft(
   draft: NodeDraft,
@@ -380,9 +380,8 @@ const CANVAS_EDIT_HANDLERS: {
       height,
     )
 
-    // `embed` and `facets` are the model's own fields on the input
-    // now, so they ride through `rest` rather than being unpacked
-    // from a published extension key — see WRITE_EXTENSION.
+    // `facets` is the model's own field on the input, so it rides
+    // through `rest` — see WRITE_EXTENSION.
     const parsed = spatialNodeSchema.safeParse(nodeFromDraft(draft, id, at, width, height))
     if (!parsed.success) fail(index, op.op, ctx.s.issues(parsed.error))
     if (draft.height !== undefined && ctx.s.measure !== undefined) {

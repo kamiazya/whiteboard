@@ -223,7 +223,7 @@ function useReplicaRecord({
         if (cancelled) return
         if (error instanceof ReplicaKeyWithheldError) {
           // Read the holder's cached reason rather than believing 'unreachable'
-          // by default — the whole point of S5 is that a daemon-refused key
+          // by default — the whole point of the removed state is that a daemon-refused key
           // reads as removed, not as an ordinary disconnection.
           const status = replicaKeyStatus(daemonBaseUrl, workspaceId)
           const reason =
@@ -561,8 +561,7 @@ export function ReplicaReadPage({
     }
   }, [daemonBaseUrl, workspaceId, unlocking])
 
-  // forget-then-ask (ADR-0042's own reconnect contract, S4a): the S5 spec's
-  // failure mode is a stale cached `withheld:'unreachable'` outliving a
+  // forget-then-ask (ADR-0042's own reconnect contract): the failure mode is a stale cached `withheld:'unreachable'` outliving a
   // Reconnect click, and `forget` is what clears it before the new ask.
   const handleReconnect = useCallback(async () => {
     if (reconnecting) return

@@ -6,6 +6,7 @@
  * exists rather than being a matter of taste.
  */
 import { documentIdSchema, tagInUseSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { visualStencilsFacetSchema } from '@kamiazya/whiteboard-plugin-visual/stencil-library'
 import { tagLibrarySchema } from '@kamiazya/whiteboard-plugin-visual/tag-library'
 import { z } from 'zod'
 
@@ -44,6 +45,14 @@ export const documentTagsOutputSchema = z
      * listing that finds the library is the one already taken here.
      */
     library: tagLibrarySchema,
+    /**
+     * What the workspace's stencil library (the document at `stencils`,
+     * ADR-0034 decision 4) declares, keyed by bare name — `{}` when there
+     * is none. Defaulted on parse so a browser reading an older daemon's
+     * answer, which has no such field, still gets its tags. Beside `library` because the editor reads both vocabularies
+     * from the one answer and the listing that finds them is already taken.
+     */
+    stencils: visualStencilsFacetSchema.shape.stencils.default({}),
   })
   .strict()
 export type DocumentTagsOutput = z.infer<typeof documentTagsOutputSchema>

@@ -58,7 +58,7 @@ export interface DaemonDocumentController {
    */
   deleteDocument: () => Promise<void>
   createError: string | null
-  /** A membership refusal the resolve could not get past (ADR-0041/0042 S8),
+  /** A membership refusal the resolve could not get past (ADR-0041/0042),
    *  naming the workspace — known once listWorkspaces has resolved, even
    *  before `workspaceId` above is admitted. `null` once admitted. */
   refusal: MembershipRefusalState | null

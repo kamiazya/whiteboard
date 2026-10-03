@@ -585,6 +585,7 @@ function DocumentPageBody({
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}
                   theme={resolvedTheme}
+                  {...(model.facetRegistry && { facetRegistry: model.facetRegistry })}
                   {...(model.tags === undefined
                     ? {}
                     : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}

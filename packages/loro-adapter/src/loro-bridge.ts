@@ -6,8 +6,6 @@ import {
   type CanvasLine,
   canvasEdgeSchema,
   canvasLineSchema,
-  type ExtensionFacets,
-  extensionFacetsSchema,
   type SpatialCanvas,
   type SpatialNode,
   spatialNodeSchema,
@@ -38,24 +36,17 @@ import {
   THREADS_KEY,
   TRUST_KEY,
 } from './containers.js'
+import {
+  CANVAS_FACETS_FIELD,
+  countUnreadableCanvasFacets,
+  readCanvasFacets,
+  sameValue,
+  writeCanvasFacetsField,
+} from './document-envelope-reconcile.js'
 import { LEGACY_EXTENSION_FIELD, liftLegacyExtension, liftStoredNode } from './legacy-lifts.js'
 
-/** The canvas's own facets, one key of the canvas map so its LWW is per-key. */
-const FACETS_FIELD = 'facets'
 /** The board's own tags (ADR-0040): one value under its own key, like the facets. */
 const TAGS_FIELD = 'tags'
-/** The canvas's facets, from this version's key or the one before it. */
-function readCanvasFacets(doc: DocumentContainers): ExtensionFacets | undefined {
-  const canvasMap = doc.getMap(CANVAS_KEY)
-  const current = extensionFacetsSchema.safeParse(canvasMap.get(FACETS_FIELD))
-  if (current.success) return current.data
-  const legacy = canvasMap.get(LEGACY_EXTENSION_FIELD)
-  if (legacy === null || typeof legacy !== 'object') return undefined
-  // Parsed, not trusted: the stored value came from another version or peer,
-  // and an unreadable payload costs the preference, never the canvas.
-  const lifted = extensionFacetsSchema.safeParse((legacy as Record<string, unknown>).facets)
-  return lifted.success ? lifted.data : undefined
-}
 /** The board's tags, read verbatim; a malformed value costs the tags alone. */
 function readCanvasTags(doc: DocumentContainers): string[] | undefined {
   const parsed = storedTagsSchema.safeParse(doc.getMap(CANVAS_KEY).get(TAGS_FIELD))
@@ -148,7 +139,7 @@ function lineToFields(line: CanvasLine): Fields {
   return fields
 }
 
-function commentToFields(comment: CanvasComment): Fields {
+function assertWritableComment(comment: CanvasComment): void {
   // Same loud refusal as nodeToFields: readSpatialCanvas round-trips every
   // comment through the Zod schema and silently drops failures, so a NaN
   // anchor written here would delete the comment for every reader.
@@ -170,12 +161,6 @@ function commentToFields(comment: CanvasComment): Fields {
       `canvas comment "${comment.id}" names both a node and an edge; a comment is about one of them`,
     )
   }
-  const fields: Fields = { id: comment.id, x: comment.x, y: comment.y, text: comment.text }
-  if (comment.author !== undefined) fields.author = comment.author
-  if (comment.createdAt !== undefined) fields.createdAt = comment.createdAt
-  if (comment.targetNodeId !== undefined) fields.targetNodeId = comment.targetNodeId
-  if (comment.resolved !== undefined) fields.resolved = comment.resolved
-  return fields
 }
 
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
@@ -193,7 +178,7 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
   // COMMENTS_KEY for why they must not ride the whole-value LWW write.
   const canvasMap = doc.getMap(CANVAS_KEY)
   const { comments } = canvas
-  writeOptionalField(canvasMap, FACETS_FIELD, canvas.facets)
+  writeOptionalField(canvasMap, CANVAS_FACETS_FIELD, canvas.facets)
   writeOptionalField(canvasMap, TAGS_FIELD, canvas.tags)
   // A write converges the record — but only when there is something to
   // converge. An unconditional delete is one oplog op per save forever, on
@@ -347,7 +332,7 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
 }
 
 // Shared with writeCanvasComment/deleteCanvasComment below, so field
-// projection (including commentToFields' loud non-finite-anchor refusal)
+// projection (including assertWritableComment's loud non-finite-anchor refusal)
 // cannot drift between the single-commit and withSpatialBatch paths.
 /** Whether `canvasCommentFromThread` carries this anchor without loss: a point, a node, an edge. */
 function flatCanCarry(anchor: AnnotationAnchor): boolean {
@@ -355,10 +340,9 @@ function flatCanCarry(anchor: AnnotationAnchor): boolean {
 }
 
 function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
-  // `commentToFields` is still what refuses a non-finite anchor, loudly and
-  // before anything is stored — a thread whose anchor fails the schema would
-  // be dropped by every reader instead.
-  commentToFields(comment)
+  // Refuses a non-finite anchor loudly and before anything is stored — a
+  // thread whose anchor fails the schema would be dropped by every reader.
+  assertWritableComment(comment)
   migrateCanvasCommentsToThreads(doc)
   const incoming = threadFromCanvasComment(comment)
   const held = readCommentThreads(doc).find((thread) => thread.id === comment.id)
@@ -452,10 +436,6 @@ export function deleteSpatialEdge(doc: DocumentContainers, edgeId: string): void
   if (deleteEdgeInto(doc, edgeId)) doc.commit()
 }
 
-/** Equal as stored: the same reference, or the same JSON. */
-const sameValue = (a: unknown, b: unknown): boolean =>
-  a === b || JSON.stringify(a) === JSON.stringify(b)
-
 /**
  * Make an id-keyed collection in the doc equal `next`, given it currently
  * equals `prev`: write what is new or changed, delete what is gone. An
@@ -536,7 +516,7 @@ export function reconcileSpatialCanvasInto(
   const tagsMoved = !sameValue(prev.tags, next.tags)
   if (!facetsMoved && !tagsMoved) return wrote
   const canvasMap = doc.getMap(CANVAS_KEY)
-  if (facetsMoved) setOrDelete(canvasMap, FACETS_FIELD, next.facets)
+  if (facetsMoved) writeCanvasFacetsField(doc, next.facets)
   if (tagsMoved) setOrDelete(canvasMap, TAGS_FIELD, next.tags)
   return true
 }
@@ -710,9 +690,10 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
   const { kept: nodes } = readNodes
   const { kept: edges } = readEdges
   const { kept: lines } = readLines
-  const skipped = readNodes.skipped + readEdges.skipped + readLines.skipped
 
   const facets = readCanvasFacets(doc)
+  const skipped =
+    readNodes.skipped + readEdges.skipped + readLines.skipped + countUnreadableCanvasFacets(doc)
   const tags = readCanvasTags(doc)
 
   // The annotation layer is document-level and format-agnostic, so reading it

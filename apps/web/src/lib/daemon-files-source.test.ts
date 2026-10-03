@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
+import { createFakeFilesDaemon } from '../test-utils/fake-files-daemon.js'
+import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { createDaemonFilesSource } from './daemon-files-source.js'
 
@@ -416,6 +418,24 @@ describe('createDaemonFilesSource tags in use', () => {
   })
 })
 
+describe('createDaemonFilesSource stencil library', () => {
+  it('answers the stencils the tags route carries, in the same round trip as the tag library', async () => {
+    const stencils = { lakehouse: { displayName: 'Lakehouse', color: '3' } }
+    const fetchImpl = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/document-tags'))
+        return Promise.resolve(
+          jsonResponse({ documents: [], contents: [], inUse: [], library: {}, stencils }),
+        )
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    const source = createDaemonFilesSource(fetchImpl, 'http://daemon.test', 'ws-1')
+    await expect(source.readStencilLibrary?.()).resolves.toEqual({
+      lakehouse: { ...stencils.lakehouse, facets: {} },
+    })
+  })
+})
+
 describe('createDaemonFilesSource tag reads', () => {
   /** Counts `/document-tags` and answers everything else plausibly. */
   function countingTagFetch(tagStatus = 200) {
@@ -494,6 +514,11 @@ describe('createDaemonFilesSource tag reads', () => {
 })
 
 describe('createDaemonFilesSource list and trash reads', () => {
+  const writeAnswer = (url: string) =>
+    url.endsWith('/restore')
+      ? jsonResponse({ restored: { documentId: 'id-gone', path: 'old/plan' } })
+      : jsonResponse({ workspaceId: 'ws', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'fresh' })
+
   /** Counts each route this source reads, and answers them all plausibly. */
   function countingFetch() {
     const counts = { documents: 0, names: 0, tags: 0, trash: 0, writes: 0 }
@@ -502,7 +527,7 @@ describe('createDaemonFilesSource list and trash reads', () => {
       const method = init?.method ?? 'GET'
       if (method !== 'GET') {
         counts.writes += 1
-        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+        return Promise.resolve(writeAnswer(url))
       }
       if (url.endsWith('/document-tags')) {
         counts.tags += 1
@@ -596,3 +621,11 @@ describe('createDaemonFilesSource list and trash reads', () => {
     expect(counts).toMatchObject({ documents: 2, trash: 2 })
   })
 })
+
+describeWorkspaceFilesSourceConformance('createDaemonFilesSource', async (fixture) =>
+  createDaemonFilesSource(
+    createFakeFilesDaemon({ rows: fixture.documents ?? [], trashed: fixture.trashed ?? [] }),
+    BASE,
+    'ws',
+  ),
+)

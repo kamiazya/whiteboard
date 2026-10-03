@@ -190,7 +190,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/model/src/mdast/index.ts#mdastTableRowSchema',
   'packages/model/src/trust.ts#isHumanActor',
   'packages/model/src/uint8-array.ts#isUint8ArrayAnyRealm',
-  'packages/plugin-visual/src/apply-stencil.ts#VISUAL_STENCIL_KEY',
   'packages/plugin-visual/src/data.ts#VisualShapeFacet',
   'packages/plugin-visual/src/data.ts#visualPlugin',
   'packages/plugin-visual/src/emoji/shortcode.ts#emojiForShortcode',
@@ -251,6 +250,18 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
+    'the one await a test has over a flush an unmount released, so clearing the database cannot race the checkpoint being taken; production never deletes storage under a page it just left',
+  'packages/daemon-client/src/api-contracts/document.ts#restoreVersionResponseSchema':
+    'the contract the restore route answers with, which RestoreVersionResponse derives from; the route fuzz rules hold the real response to it',
+  'packages/mcp-server/src/server/routes/document.ts#DocumentRouterOptions':
+    'the parameter type of createDocumentRouter, which the route tests’ option builder spells to fill in the seams a test supplies',
+  'packages/server-core/src/api-errors.ts#apiErrorBodySchema':
+    'the strict refusal-body contract ApiErrorBody derives from, re-exported through the barrel; the route fuzz holds every refusal to it',
+  'packages/facet-engine/src/registry.ts#FacetPlugin':
+    'the contract a plugin package implements (ADR-0013), the type a second bundled plugin would import; workspace-stencils.test.ts holds a hand-written one to it',
+  'packages/mcp-server/src/cli/native-host.ts#keepHostAliveOnUnhandledRejection':
+    'the guard runHost arms in the same file, exported so native-host.test.ts can prove a rejection is logged and the process survives',
   'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_TTL_MS':
     'half of the refresh-to-TTL ratio that keeps a stalled loop from lapsing a live backup’s marker, held by backup-in-progress.defaults.test.ts',
   'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_REFRESH_MS':
@@ -340,7 +351,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 157
+const DEBT_CEILING = 156
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 26
@@ -578,6 +589,8 @@ describe('what counts as an export only a test uses, on fixture files', () => {
       'a/startup.smoke-impl.ts',
       'a/docs-snapshots/_helpers.ts',
       'a/node-editor-test-utils.ts',
+      'a/routes/_test-helpers.ts',
+      'a/x.bench.ts',
     ]) {
       expect(isTestFile(path), path).toBe(true)
     }

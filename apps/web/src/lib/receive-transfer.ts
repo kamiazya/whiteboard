@@ -131,7 +131,6 @@ export function imagesTheRecordReferences(
 ): string[] {
   const refs = new Set<string>()
   for (const entry of readWorkspaceDocuments(record)) {
-    if (entry.kind !== 'spatial') continue
     for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
       refs.add(fileId)
     }

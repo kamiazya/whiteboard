@@ -43,14 +43,16 @@ Recommended reading path:
   - `writes`
   - `persists`
   - `broadcasts`
-- Push long explanations into box `subText`
+- Keep a box's `text` to a name and a role; push long explanations into a note beside it
 
 ## Color
 
-- `primary`: entrypoint / client
-- `success`: service / compute
-- `info`: metadata / side info
-- `neutral`: external / structure
+Pick one color per role and hold it steady (the tool has no named color keys; see [`../style-reference.md`](../style-reference.md#colors)):
+
+- entrypoint / client
+- service / compute
+- metadata / side info
+- external / structure
 
 ## Role Consistency
 

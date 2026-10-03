@@ -5,9 +5,9 @@
  * the input is never mutated.
  *
  * This is a process-internal type (it never crosses a process boundary in
- * this slice), so per zod-schema-discipline it deliberately has no Zod
- * schema. If a later slice serializes commands to the sync layer, that is
- * the point to add one.
+ * the editor), so per zod-schema-discipline it deliberately has no Zod
+ * schema. If commands are ever serialized to the sync layer, that is the
+ * point to add one.
  *
  * `applyCommand` is total: a command whose target id is missing, or whose
  * kind does not apply to the target node's type, returns the INPUT canvas

@@ -27,18 +27,20 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/stale-issues.mjs\" --quiet",
-            "_comment": "Reports open issues whose declared OKF `sources` moved since their `generated.at`. Read-only and fail-open, so it never delays or blocks a session start; silent when it has nothing to say, and when it cannot ask (the daemon is not up) it writes one `[stale-issues] skipped: <reason>` line to stderr rather than nothing. Ordering against the ensure hook above is not guaranteed, which is why the script retries a refused connection briefly."
+            "_comment": "Reports open issues whose declared OKF `sources` moved since their `generated.at`. Read-only and fail-open, and bounded: each daemon request gives up after 5s and the hook timeout below is the outer limit, so a wedged daemon cannot hold a session start; silent when it has nothing to say, and when it cannot ask (the daemon is not up) it writes one `[stale-issues] skipped: <reason>` line to stderr rather than nothing. Ordering against the ensure hook above is not guaranteed, which is why the script retries a refused connection briefly.",
+            "timeout": 15
           },
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/flake-watch.mjs\" --quiet",
-            "_comment": "The watcher for integrator-flow.md\u2019s second-occurrence rule: reports tests that failed main CI in >= 2 distinct runs in 14 days, from the annotations vitest already emits. Read-only, cached per run id under the git common dir's flake-watch/ (shared by every worktree, so only a clone's first start pays the cold fetch: measured 45 s cold, 7 s warm), fail-open and silent without gh or network. The timeout sits above the cold figure; a run killed mid-fetch loses nothing, since each run id is cached as it is read.",
-            "timeout": 60
+            "_comment": "The watcher for integrator-flow.md\u2019s second-occurrence rule: reports tests that failed main CI in >= 2 distinct runs in 14 days, from the annotations vitest already emits. Read-only, cached per run id under the git common dir's flake-watch/ (shared by every worktree, so only a clone's first start pays the cold fetch: measured 45 s cold, 7 s warm for the test half), fail-open and silent without gh or network. It also lists failures that are no test's and that no later success retired: a release publish job, and the scheduled Mutation and audit runs (about 8 s more at load 55, listings in parallel). The timeout sits above both cold figures together; a run killed mid-fetch loses nothing, since each run id is cached as it is read.",
+            "timeout": 90
           },
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/audit-nudge.mjs\" --quiet",
-            "_comment": "Reports when the standing codebase-health audit (audit-triage) is overdue, from the git-tracked .claude/audit-log.jsonl that record-audit.mjs appends to. Read-only, fail-open, silent while fresh — the cadence dev-flow.md asks for in prose, discovered at session start instead of remembered."
+            "_comment": "Reports when the standing codebase-health audit (audit-triage) is overdue, from the git-tracked .claude/audit-log.jsonl that record-audit.mjs appends to. Read-only, fail-open, silent while fresh — the cadence dev-flow.md asks for in prose, discovered at session start instead of remembered.",
+            "timeout": 15
           }
         ]
       }

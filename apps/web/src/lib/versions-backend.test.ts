@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { DaemonContractError } from './daemon-contract-error.js'
 import { createDaemonVersionsBackend } from './versions-backend.js'
 
@@ -18,6 +19,7 @@ describe('the daemon versions backend, answered with a body its contract refuses
     expect(failure).toBeInstanceOf(DaemonContractError)
     expect((failure as DaemonContractError).route).toContain('/versions')
     expect((failure as DaemonContractError).issues[0]?.path.slice(0, 2)).toEqual(['versions', 0])
+    await expectLoggedFailure('/versions failed its contract at versions.0.id')
   })
 
   it('throws a DaemonContractError from loadPast, naming the first issue path', async () => {
@@ -27,6 +29,7 @@ describe('the daemon versions backend, answered with a body its contract refuses
 
     expect(failure).toBeInstanceOf(DaemonContractError)
     expect((failure as DaemonContractError).issues[0]?.path).toEqual(['canvas'])
+    await expectLoggedFailure('failed its contract at canvas')
   })
 
   it('throws a DaemonContractError from save, which the old wording never matched', async () => {
@@ -36,5 +39,6 @@ describe('the daemon versions backend, answered with a body its contract refuses
 
     expect(failure).toBeInstanceOf(DaemonContractError)
     expect((failure as DaemonContractError).issues[0]?.path).toEqual(['version'])
+    await expectLoggedFailure('/versions failed its contract at version')
   })
 })

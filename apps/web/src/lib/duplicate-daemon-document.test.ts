@@ -3,7 +3,7 @@
  * order is the contract: the CREATE is the only place the copy's kind is set
  * (the snapshot write is a plain re-save that never touches a stored kind),
  * so a create that omits it files a markdown note as a canvas. That was a
- * real defect, closed by #1767 at the one call site that existed; this suite
+ * real defect, closed at the one call site that existed; this suite
  * is what stops the second call site re-opening it.
  */
 import { describe, expect, it } from 'vitest'

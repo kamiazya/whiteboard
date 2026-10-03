@@ -49,7 +49,7 @@ Choose the **narrowest** layer that can prove the behavior:
 | `canvas-viewer-node` / `canvas-viewer-jsdom` | `vitest.node.config.ts` / `vitest.jsdom.config.ts` (`packages/canvas-viewer`) | `packages/canvas-viewer` parsing, hooks, and components when browser layout and pointer behavior are **not** the core risk |
 | apps/web jsdom | `apps/web/vitest.config.ts` | React components and hooks when real layout, focus, pointer, or browser APIs are **not** the core risk |
 | `web-browser` | `apps/web/vitest.browser.config.ts` | `apps/web` tests that need real browser APIs unavailable in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`, popovers/dialogs/focus/scroll/restore flows, and other platform APIs. File suffix: `.browser.test.tsx` |
-| E2E | `tests/e2e/` | Real routes, server composition, websocket timing, daemon process lifecycle, persistence order, packaging, or multi-step product journeys |
+| E2E | `tests/e2e/` | Real routes, server composition, sync-stream (SSE) timing, daemon process lifecycle, persistence order, packaging, or multi-step product journeys |
 
 The UI lives solely in `apps/web` since the MCP-UI retirement (ADR 0001); `packages/mcp-server` is backend-only and has no jsdom/browser layer of its own.
 
@@ -98,6 +98,8 @@ pnpm mutation:contracts
 ```
 
 This runs Stryker with `packages/mcp-server/stryker.config.mjs`, which uses a dedicated Vitest config (`vitest.stryker.config.ts`) to keep the dry run stable. **Do not use `vitest.stryker.config.ts` for normal test runs or CI** — use `vitest.node.config.ts` instead.
+
+That config includes only the tests that can reach a mutated module — every test that imports one, directly or through the modules between — rather than the whole `mcp-node` suite. The set is computed from the source's import graph (`packages/mcp-server/scripts/mutation/covering-tests.mjs`) each time the config loads, so a test that starts importing a mutated module joins the lane without a list to edit. Stryker abandons the lane when its initial run outlasts `dryRunTimeoutMinutes` (set in the Stryker config, with the duration it was sized from) or when any test in that run fails, so a test that reads the machine it runs on cannot be in it.
 
 ### Purpose and scope
 
@@ -199,7 +201,7 @@ Use E2E when the behavior depends on real app composition rather than an isolate
 
 **Prefer E2E for:**
 
-- Real routes, server middleware, websocket timing, daemon startup/shutdown, and persistence order
+- Real routes, server middleware, sync-stream (SSE) timing, daemon startup/shutdown, and persistence order
 - Browser-to-daemon migration journeys
 - Packaged CLI, tarball, binary, and install-layout behavior
 - MCP protocol smoke flows that must validate the real server entrypoint

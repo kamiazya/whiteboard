@@ -25,7 +25,7 @@ export function TopBarFrame({ testId, width, height, scene }: TopBarFrameProps) 
       <WorkspaceTopBar
         workspaceId="ws_main"
         path="design/architecture"
-        // WorkspaceTopBar itself renders no title (retired in #1004); the
+        // WorkspaceTopBar itself renders no title; the
         // host page supplies it. Mirrors the minimal wiring
         // WorkspaceTopBar.test.tsx uses, since this fixture has no rename UI
         // to demonstrate.

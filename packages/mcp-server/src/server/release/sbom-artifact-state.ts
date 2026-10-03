@@ -5,7 +5,7 @@
 //
 // Pure and I/O-free by design: callers do all file reads and pass the raw
 // results in, so this module is trivially total and trivially fast — the
-// staleness check must never become a meaningful tax on the pre-push gate.
+// staleness check must never become a meaningful tax on the test run that evaluates it.
 
 import { sbomFingerprintSidecarSchema } from './sbom-fingerprint-schema.js'
 

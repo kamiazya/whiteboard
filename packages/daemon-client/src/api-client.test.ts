@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { propagation } from '@opentelemetry/api'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { apiFetch, runtimeConfigSchema } from './api-client.js'
 
 describe('runtimeConfigSchema', () => {
@@ -64,7 +65,7 @@ describe('apiFetch auth header', () => {
   it('attaches no Authorization, whatever the window carries', async () => {
     let capturedHeaders: Headers | undefined
     ;(globalThis as { window?: unknown }).window = {
-      location: { origin: 'http://localhost' },
+      location: { origin: 'https://localhost' },
       __WHITEBOARD_DAEMON_TOKEN__: 'injected-token',
     }
     const originalFetch = globalThis.fetch
@@ -73,10 +74,100 @@ describe('apiFetch auth header', () => {
       return Promise.resolve(new Response('ok'))
     }) as typeof fetch
     try {
-      await apiFetch('http://localhost/api/workspaces')
+      await apiFetch('https://localhost/api/workspaces')
       expect(capturedHeaders?.has('Authorization')).toBe(false)
     } finally {
       globalThis.fetch = originalFetch
     }
+  })
+})
+
+describe('apiFetch trace context', () => {
+  const realFetch = globalThis.fetch
+  const TRACEPARENT = '00-aaaa-bbbb-01'
+
+  // A propagator that stamps a header, standing in for a registered SDK.
+  beforeAll(() => {
+    propagation.setGlobalPropagator({
+      inject(_ctx, carrier, setter) {
+        setter.set(carrier, 'traceparent', TRACEPARENT)
+      },
+      extract: (ctx) => ctx,
+      fields: () => ['traceparent'],
+    })
+  })
+  afterAll(() => propagation.disable())
+  afterEach(() => {
+    globalThis.fetch = realFetch
+    delete (globalThis as { window?: unknown }).window
+  })
+
+  function capture(withWindow = true): Headers[] {
+    if (withWindow) {
+      ;(globalThis as { window?: unknown }).window = { location: { origin: 'https://localhost' } }
+    }
+    const seen: Headers[] = []
+    globalThis.fetch = ((input: Request | string | URL, init?: RequestInit) => {
+      seen.push(
+        new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined)),
+      )
+      return Promise.resolve(new Response('ok'))
+    }) as typeof fetch
+    return seen
+  }
+
+  it('stamps an absolute same-origin /api/ request', async () => {
+    const seen = capture()
+    await apiFetch('https://localhost/api/workspaces')
+    expect(seen[0]?.get('traceparent')).toBe(TRACEPARENT)
+  })
+
+  it('stamps a relative /api/ path', async () => {
+    const seen = capture()
+    await apiFetch('/api/workspaces')
+    expect(seen[0]?.get('traceparent')).toBe(TRACEPARENT)
+  })
+
+  it('never stamps a cross-origin request', async () => {
+    const seen = capture()
+    await apiFetch('https://third-party.example/api/x')
+    expect(seen[0]?.has('traceparent')).toBe(false)
+  })
+
+  it('never stamps a same-origin request outside /api/', async () => {
+    const seen = capture()
+    await apiFetch('https://localhost/assets/app.js')
+    expect(seen[0]?.has('traceparent')).toBe(false)
+  })
+
+  it('classifies a URL object and a Request by the same origin and path rule', async () => {
+    const seen = capture()
+    await apiFetch(new URL('https://localhost/api/a'))
+    await apiFetch(new Request('https://localhost/api/b'))
+    await apiFetch(new Request('https://third-party.example/api/c'))
+    expect(seen[0]?.get('traceparent')).toBe(TRACEPARENT)
+    expect(seen[1]?.get('traceparent')).toBe(TRACEPARENT)
+    expect(seen[2]?.has('traceparent')).toBe(false)
+  })
+
+  it("keeps a Request input's own headers when init carries none", async () => {
+    const seen = capture()
+    await apiFetch(new Request('https://localhost/api/b', { headers: { 'x-keep': '1' } }))
+    expect(seen[0]?.get('x-keep')).toBe('1')
+  })
+
+  it('lets init.headers replace the Request input headers', async () => {
+    const seen = capture()
+    await apiFetch(new Request('https://localhost/api/b', { headers: { 'x-keep': '1' } }), {
+      headers: { 'x-other': '2' },
+    })
+    expect(seen[0]?.get('x-other')).toBe('2')
+    expect(seen[0]?.has('x-keep')).toBe(false)
+  })
+
+  it('resolves a bare path against localhost when there is no window', async () => {
+    const seen = capture(false)
+    await apiFetch('/api/x')
+    expect(seen[0]?.get('traceparent')).toBe(TRACEPARENT)
   })
 })

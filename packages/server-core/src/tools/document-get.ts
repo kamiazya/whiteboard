@@ -1,9 +1,10 @@
 import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
-import { readAnnotations, readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { readAnnotations, readDocumentKind, readProposals } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
   documentIdSchema,
   documentKindSchema,
+  proposalSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -54,6 +55,10 @@ const readDocumentSchema = z
     // about a document. Absent when there is none, so an uncommented
     // document costs no bytes.
     threads: z.array(commentThreadSchema).optional(),
+    // Changes proposed to the document, each with its status, so an agent
+    // can learn whether what it proposed was adopted or dismissed. Absent
+    // when there are none.
+    proposals: z.array(proposalSchema).optional(),
   })
   .strict()
 
@@ -103,7 +108,7 @@ export function createDocumentGetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_get' as const,
     description:
-      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), when it has any. A document that cannot be read is reported in `failed` rather than failing the whole call.',
+      'Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), and the `proposals` made to it with the status of each change (open, adopted or dismissed), when it has any. A document that cannot be read is reported in `failed` rather than failing the whole call.',
     inputSchema: documentGetInputSchema,
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
@@ -145,7 +150,11 @@ async function readOne(
     throw new DocumentKindUnknownError(documentId)
   }
   const threads = readAnnotations(doc)
-  const annotated = threads.length === 0 ? {} : { threads }
+  const proposals = readProposals(doc)
+  const annotated = {
+    ...(threads.length === 0 ? {} : { threads }),
+    ...(proposals.length === 0 ? {} : { proposals }),
+  }
   if (kind === 'markdown') {
     const { markdown, frontmatter } = await exportOkf(deps, {
       workspaceId: input.workspaceId,

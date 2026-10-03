@@ -411,8 +411,38 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
     })
   })
 
-  describeSetDocumentName(withIndex)
+  describeDocumentNaming(withIndex)
   describeListWorkspaces(makeIndex, withIndex)
+}
+
+function describeDocumentNaming(withIndex: WithIndex): void {
+  describeSetDocumentName(withIndex)
+  describeBlankDocumentName(withIndex)
+}
+
+function describeBlankDocumentName(withIndex: WithIndex): void {
+  describe('setDocumentName with a blank name', () => {
+    it('never loses a document, or its subtree, to a blank name', async () => {
+      await withIndex(async (index) => {
+        const { documentId } = await index.createDocument({
+          workspaceId: WS,
+          path: 'a',
+          kind: 'spatial',
+          name: 'Named',
+        })
+        await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'spatial' })
+
+        // Either clearing or refusing is a contract-conforming answer; losing
+        // the document is not.
+        await index.setDocumentName({ workspaceId: WS, documentId, name: '' }).catch(() => {})
+
+        const paths = (await index.listDocuments({ workspaceId: WS })).map((e) => e.path)
+        expect(paths).toEqual(expect.arrayContaining(['a', 'a/b']))
+        const entry = await index.resolveDocumentById({ workspaceId: WS, documentId })
+        expect(entry?.name === undefined || entry.name === 'Named').toBe(true)
+      })
+    })
+  })
 }
 
 function describeSetDocumentName(withIndex: WithIndex): void {

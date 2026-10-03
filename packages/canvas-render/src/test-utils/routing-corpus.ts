@@ -1,4 +1,5 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { styleRandomFromSeed } from '../layout/seed.js'
 import { node } from './spatial-node.js'
 
 /**
@@ -79,25 +80,15 @@ export const ROUTING_CORPUS: readonly RoutingCase[] = [
  * A fixed synthetic corpus for the aggregate count. Deliberately NOT a
  * fast-check property: the routing defects are widespread enough that the
  * honest assertion today is a pinned total, and a total is only meaningful
- * if the layouts behind it never change. `mulberry32` makes the whole corpus
+ * if the layouts behind it never change. `styleRandomFromSeed` (mulberry32) makes the whole corpus
  * a pure function of its index.
  *
  * Boxes are large relative to the coordinate range on purpose — the defects
  * only appear when nodes crowd each other, so a generator that spread them
  * out would report a clean score while drawing the same broken pictures.
  */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
 export function syntheticLayouts(count: number): readonly RoutingCase[] {
-  const random = mulberry32(0x5eed)
+  const random = styleRandomFromSeed(0x5eed)
   const int = (max: number) => Math.floor(random() * max)
   const cases: RoutingCase[] = []
   for (let i = 0; cases.length < count; i++) {
@@ -148,7 +139,7 @@ export function clusteredLayout(options: {
 }): RoutingCase {
   const { clusters, nodesPerCluster, edgesPerCluster } = options
   const crossClusterRatio = options.crossClusterRatio ?? 0.15
-  const random = mulberry32(options.seed ?? 0xc105)
+  const random = styleRandomFromSeed(options.seed ?? 0xc105)
   const int = (max: number) => Math.floor(random() * max)
 
   // Cluster regions on a square grid, spaced far enough apart that a local

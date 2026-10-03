@@ -1,3 +1,4 @@
+import { setProposedChangeStatus, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -5,9 +6,11 @@ import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import { createBodyEditTool } from './body-edit.js'
+import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool } from './document-get.js'
-import { saveDocumentSnapshot } from './document-io.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { createThreadEditTool } from './thread-edit.js'
 
 /**
@@ -323,5 +326,87 @@ describe('wb_document_get carries the annotation layer', () => {
     ).documents
 
     expect(result).not.toHaveProperty('threads')
+  })
+})
+
+describe('wb_document_get carries the proposal layer', () => {
+  async function decide(
+    deps: ServerDeps,
+    documentId: string,
+    proposalId: string,
+    changeId: string,
+  ) {
+    const doc = await loadOrCreateDocument(deps, 'ws', documentId)
+    setProposedChangeStatus(doc, proposalId, changeId, 'adopted')
+    await saveDocumentSnapshot(deps, 'ws', documentId, doc)
+  }
+
+  async function read(deps: ServerDeps, documentId: string) {
+    const { documents } = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [documentId],
+    })
+    return documents[0]
+  }
+
+  it('a spatial document returns its default-written proposal with the change status a person decided', async () => {
+    const deps = makeDeps()
+    const documentId = await createDoc(deps, 'spatial')
+    const written = await createCanvasEditTool(deps).execute({
+      workspaceId: 'ws',
+      documentId,
+      ops: [
+        {
+          op: 'node.add',
+          node: { type: 'text', id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' },
+        },
+      ],
+    })
+    const proposalId = written.proposed?.id ?? 'missing'
+
+    expect((await read(deps, documentId))?.proposals?.[0]).toMatchObject({
+      id: proposalId,
+      changes: [{ status: 'open' }],
+    })
+
+    const changeId = written.proposed?.changes[0]?.id ?? 'missing'
+    await decide(deps, documentId, proposalId, changeId)
+
+    expect((await read(deps, documentId))?.proposals?.[0]?.changes[0]).toMatchObject({
+      id: changeId,
+      status: 'adopted',
+    })
+  })
+
+  it('a markdown document returns its proposed passage change', async () => {
+    const deps = makeDeps()
+    const documentId = await createDoc(deps, 'markdown')
+    const doc = await loadOrCreateDocument(deps, 'ws', documentId)
+    writeMarkdownBody(doc, 'Ship on Thursday.\n')
+    await saveDocumentSnapshot(deps, 'ws', documentId, doc)
+    await createBodyEditTool(deps).execute({
+      workspaceId: 'ws',
+      documentId,
+      ops: [
+        {
+          id: 'c1',
+          op: 'body.replace',
+          anchor: { kind: 'text', quote: { exact: 'Thursday' }, start: 8, end: 16 },
+          text: 'Monday',
+          assumed: 'Thursday',
+        },
+      ],
+    })
+
+    const result = await read(deps, documentId)
+
+    expect(result?.proposals).toHaveLength(1)
+  })
+
+  it('a document nobody proposed to carries no proposals key at all', async () => {
+    const deps = makeDeps()
+    const documentId = await createDoc(deps, 'spatial')
+
+    expect(await read(deps, documentId)).not.toHaveProperty('proposals')
   })
 })

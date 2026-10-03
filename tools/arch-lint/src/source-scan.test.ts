@@ -16,7 +16,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
+import {
+  classifyPath,
+  isShippedPath,
+  isTestPath,
+  type PathCategory,
+  stripCommentsAndStrings,
+  walkSourceFiles,
+} from './source-scan.js'
 
 describe('stripCommentsAndStrings — a regex literal is not a string', () => {
   // The exact shape that regressed, for both scan families: a seam
@@ -138,5 +145,50 @@ describe('walkSourceFiles', () => {
       'pkg/tmp/probe/src/shared/redact.ts',
     ])
     expect(walked(root)).toEqual(['src/a.ts'])
+  })
+})
+
+describe('classifyPath — what a path is to the build', () => {
+  const CASES: ReadonlyArray<readonly [PathCategory, readonly string[]]> = [
+    ['test', ['a/src/x.test.ts', 'a/src/x.spec.tsx', 'a/src/x.browser.test.tsx']],
+    [
+      'test-support',
+      [
+        'a/test-utils/y.ts',
+        'a/src/testing/y.ts',
+        'a/__tests__/y.ts',
+        'a/fixtures/y.ts',
+        'a/src/node-editor-test-utils.ts',
+        'a/src/server/_test-helpers.ts',
+        'a/src/server/_test-route-fuzz.ts',
+      ],
+    ],
+    [
+      'harness',
+      ['a/startup.smoke-impl.ts', 'a/x.distribution-impl.ts', 'a/x.stress.ts', 'a/e2e/y.ts'],
+    ],
+    ['bench', ['a/src/layout.bench.ts', 'a/src/layout.bench.tsx']],
+    ['docs-snapshot', ['apps/web/src/docs-snapshots/_helpers.ts', 'docs-snapshots/a.tsx']],
+    [
+      'shipped',
+      ['a/src/lib.ts', 'a/src/testimonial.ts', 'a/src/contest.ts', 'a/src/test-case-runner.ts'],
+    ],
+  ]
+
+  it.each(
+    CASES.flatMap(([category, paths]) => paths.map((path) => [category, path] as const)),
+  )('puts %s: %s', (category, path) => {
+    expect(classifyPath(path)).toBe(category)
+  })
+
+  it('classifies a Windows separator the same as a posix one', () => {
+    expect(classifyPath('a\\test-utils\\y.ts')).toBe('test-support')
+  })
+
+  it('keeps isTestPath to tests and their support, and isShippedPath to everything else', () => {
+    expect(isTestPath('a/x.bench.ts')).toBe(false)
+    expect(isShippedPath('a/x.bench.ts')).toBe(false)
+    expect(isTestPath('a/_test-x.ts')).toBe(true)
+    expect(isShippedPath('a/src/lib.ts')).toBe(true)
   })
 })

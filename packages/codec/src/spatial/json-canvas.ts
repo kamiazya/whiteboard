@@ -5,6 +5,7 @@ import {
   documentIdSchema,
   edgeSideSchema,
   extensionFacetsSchema,
+  findDuplicateId,
   integerSchema,
   nodeIdSchema,
   nonnegativeIntegerSchema,
@@ -265,12 +266,3 @@ export const jsonCanvasDocumentSchema = z
   })
 
 export type JsonCanvasDocument = z.infer<typeof jsonCanvasDocumentSchema>
-
-function findDuplicateId(ids: string[]): string | undefined {
-  const seen = new Set<string>()
-  for (const id of ids) {
-    if (seen.has(id)) return id
-    seen.add(id)
-  }
-  return undefined
-}

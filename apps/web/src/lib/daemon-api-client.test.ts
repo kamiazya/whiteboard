@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   createDaemonFetch,
   createDocument,
@@ -132,6 +133,7 @@ describe('listWorkspaces', () => {
     expect((failure as DaemonContractError).message).toBe(DAEMON_CONTRACT_COPY)
     expect((failure as DaemonContractError).route).toContain('/workspaces')
     expect((failure as DaemonContractError).issues[0]?.path.slice(0, 2)).toEqual(['workspaces', 0])
+    await expectLoggedFailure('/api/workspaces failed its contract at workspaces.0.workspaceId')
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
@@ -185,6 +187,7 @@ describe('listDocuments', () => {
     const failure = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1').catch((err: unknown) => err)
     expect(failure).toBeInstanceOf(DaemonContractError)
     expect((failure as DaemonContractError).issues[0]?.path).toEqual(['documents', 0, 'id'])
+    await expectLoggedFailure('/api/workspaces/w1/documents failed its contract at documents.0.id')
   })
 
   it('preserves a recorded kind', async () => {
@@ -202,6 +205,7 @@ describe('listDocuments', () => {
     await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toBeInstanceOf(
       DaemonContractError,
     )
+    await expectLoggedFailure('/api/workspaces/w1/documents failed its contract at documents.0')
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
@@ -238,6 +242,7 @@ describe('createDocument', () => {
     await expect(
       createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'spatial'),
     ).rejects.toBeInstanceOf(DaemonContractError)
+    await expectLoggedFailure('/api/v1/workspaces/w1/documents failed its contract')
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
@@ -416,6 +421,7 @@ describe('createWorkspace', () => {
     await expect(createWorkspace(fetchFn, DAEMON_BASE_URL, 'X')).rejects.toBeInstanceOf(
       DaemonContractError,
     )
+    await expectLoggedFailure('/api/workspaces failed its contract')
   })
 
   it('surfaces the daemon reason for a refused segment', async () => {

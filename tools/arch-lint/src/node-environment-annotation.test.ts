@@ -5,7 +5,7 @@
 //
 // A claim about a body is exactly what a merge can invalidate without a
 // conflict. Measured: `use-keyboard-avoidance.test.ts` was annotated when it
-// was DOM-free; main later gave it `document.createElement` in #1384; the two
+// was DOM-free; main later gave it `document.createElement`; the two
 // sides touched different lines, git merged them cleanly, and CI failed with
 // three `ReferenceError: document is not defined`. Neither side was wrong on
 // its own — only their combination, which is the one thing no reviewer of

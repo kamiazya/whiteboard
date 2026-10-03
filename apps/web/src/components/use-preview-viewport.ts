@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { trySetPointerCapture } from '../lib/pointer-capture.js'
 import {
   IDENTITY_VIEWPORT,
   type Point,
@@ -59,20 +60,6 @@ function distanceOf(points: readonly Point[]): number {
   const [a, b] = points
   if (a === undefined || b === undefined) return 0
   return Math.hypot(a.x - b.x, a.y - b.y)
-}
-
-/**
- * Pointer capture is best-effort here for the same reason it is in the
- * editor: a browser rejects it for a pointerId the platform has no active
- * record of, which programmatic dispatch produces. Losing it only ends the
- * drag early.
- */
-function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
-  try {
-    root.setPointerCapture(pointerId)
-  } catch {
-    // best-effort — see doc comment above
-  }
 }
 
 export interface PreviewViewportControls {

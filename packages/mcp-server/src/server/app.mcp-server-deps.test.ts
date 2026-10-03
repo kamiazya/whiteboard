@@ -1,14 +1,11 @@
-// The plugin set is a COMPOSITION-TIME choice (ADR-0013 decision 3), and a
-// root hands it to `createApp` as `serverDeps`. `/api/v1` honoured that from
-// the start; `/mcp` built its own ServerDeps per request from the bundled
-// set, so `facetPlugins` reached every REST route and no tool — the
-// built-but-unwired class `di/facet-registry-wiring.test.ts` describes, one
-// transport over. This pins that the deps a root composed are the deps a
+// A root hands its ServerDeps to `createApp`; `/api/v1` and both `/mcp`
+// serving eras must read the registry from them rather than rebuilding the
+// bundled one per request. This pins that the deps a root composed are the deps a
 // tool answers with, over the real endpoint rather than a hand-called tool.
 
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { definePlugin } from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import { visualPlugin } from '@kamiazya/whiteboard-plugin-visual'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -53,9 +50,10 @@ describe('/mcp serves the ServerDeps the root composed', () => {
     ['a legacy-era client', undefined],
     ['a modern-pinned client', { versionNegotiation: { mode: { pin: '2026-07-28' } } }],
   ] as const)('lists a stencil only the root registered, for %s', async (_era, clientOptions) => {
-    const serverDeps = resolveServerDeps(createContainer(storeMemoryModule), {
-      plugins: [visualPlugin, pack],
-    })
+    const serverDeps = {
+      ...resolveServerDeps(createContainer(storeMemoryModule)),
+      facetRegistry: createFacetRegistry([visualPlugin, pack]),
+    }
     const app = createApp({
       authMode: 'local-daemon',
       token: 'secret',

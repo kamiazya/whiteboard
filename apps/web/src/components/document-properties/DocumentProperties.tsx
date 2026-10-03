@@ -182,11 +182,12 @@ export function DocumentProperties({
  * as the accessible name, so a voice-control user saying what they can see
  * would match nothing (WCAG 2.5.3). The `<label htmlFor>` is the name.
  *
- * Every handler emits a WHOLE `StoredCoreFacets`, never a patch, because
- * `writeCoreFacets` replaces the stored bucket outright and deletes any field
- * the caller omitted. `facetsRaw` — root-level frontmatter keys this app does
- * not model — therefore has to survive every edit untouched, or one tag edit
- * silently drops data the document arrived with.
+ * Every handler emits a WHOLE `StoredCoreFacets`, never a patch: the editor
+ * saves it through `reconcileCoreFacets`, which diffs against what was read,
+ * so a field the handler omitted reads as deleted. `facetsRaw` — root-level
+ * frontmatter keys this app does not model — therefore has to survive every
+ * edit untouched, or one tag edit silently drops data the document arrived
+ * with.
  *
  * `view` is deliberately absent: its documented job is picking between Views
  * when several EXTENSION facets apply to one document, and extension facets

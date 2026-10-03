@@ -922,8 +922,9 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     await waitFor(() => {
       expect(screen.queryByText(/Assistant/)).toBeNull()
     })
-    expect(mockLog.error).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/versions failed its contract at versions.0.id'),
+    // The mismatch is reported where it is built; this surface only reacts to it.
+    expect(mockLog.error).not.toHaveBeenCalledWith(
+      expect.stringContaining('failed its contract'),
       expect.anything(),
     )
   })

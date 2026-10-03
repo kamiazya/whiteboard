@@ -1,7 +1,10 @@
-import { lstat, mkdir, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { isMissingFileError } from '../errno.js'
-import { canonicalizeWithMissingTail, isWithinAllowedRoots } from '../path-containment.js'
+import {
+  canonicalizeWithMissingTail,
+  isWithinAllowedRoots,
+  lstatOrNull,
+} from '../path-containment.js'
 import { type SupportBundle, SupportBundleError } from './support-bundle.js'
 
 // Filesystem writer for the v0 support bundle. Lives apart from
@@ -28,15 +31,6 @@ export interface WriteSupportBundleOptions {
   // root; runtime callers (a future support-bundle CLI) pass the
   // user-supplied parent dir. Symlinks are not followed.
   allowedRoots: string[]
-}
-
-async function lstatOrNull(path: string) {
-  try {
-    return await lstat(path)
-  } catch (err) {
-    if (isMissingFileError(err)) return null
-    throw err
-  }
 }
 
 // Stable order. The manifest must be written last so a reader that

@@ -31,6 +31,12 @@ describe('what counts as host reach', () => {
     ['node:fs', "import { readFile } from 'fs/promises'\nexport const x = readFile\n"],
     ['node:os', "import { userInfo } from 'node:os'\nexport const x = userInfo\n"],
     ['node:child_process', "import { spawn } from 'node:child_process'\nexport const x = spawn\n"],
+    ['storage-driver', "import { Kysely } from 'kysely'\nexport const x = Kysely\n"],
+    [
+      'storage-driver',
+      "import { createClient } from '@libsql/client'\nexport const x = createClient\n",
+    ],
+    ['storage-driver', "import Database from 'libsql'\nexport const x = Database\n"],
     ['process.env', 'export const x = process.env.WHITEBOARD_SECRET_THING\n'],
     ['process.env', "export const x = process.env['HOME']\n"],
     ['node:fs', "export const load = () => import('node:fs/promises')\n"],
@@ -43,6 +49,7 @@ describe('what counts as host reach', () => {
       kindsOf(
         [
           "import type { Stats } from 'node:fs'",
+          "import type { Kysely } from 'kysely'",
           "import { join } from 'node:path'",
           'export const x = join',
         ].join('\n'),
@@ -69,16 +76,21 @@ describe('the finder reads the adapter population, on a fixture tree', () => {
     join(fixture, 'mcp', 'tool.ts'),
     "import { userInfo } from 'node:os'\nexport const t = userInfo\n",
   )
+  writeFileSync(
+    join(fixture, 'routes', 'zz-d3.ts'),
+    "import { Kysely } from 'kysely'\nimport { createClient } from '@libsql/client'\nexport const d3 = [Kysely, createClient]\n",
+  )
   writeFileSync(join(fixture, 'routes', 'zz.test.ts'), "import 'node:fs'\n")
   writeFileSync(join(fixture, 'routes', '_test-helper.ts'), "import 'node:fs'\n")
   // A mechanic is MEANT to touch the disk: only the adapter trees are judged.
   writeFileSync(join(fixture, 'store', 'disk.ts'), "import 'node:fs'\n")
 
-  it('names a planted write and a planted environment read, and nothing else', () => {
+  it('names a planted write, environment read and database driver, and nothing else', () => {
     expect(findAdapterHostReach(fixture)).toEqual([
       'mcp/tool.ts -> node:os',
       'routes/zz-d1.ts -> node:fs',
       'routes/zz-d2.ts -> process.env',
+      'routes/zz-d3.ts -> storage-driver',
     ])
   })
 })

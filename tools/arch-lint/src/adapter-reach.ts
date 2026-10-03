@@ -11,6 +11,7 @@
  * derives from it, and the layer-order test reads it, so there is nothing for
  * the two to disagree about.
  */
+import type { HostReachKind } from './adapter-host-reach-check.js'
 
 /** `server/<dir>/**` that hold mechanics. */
 export const MECHANIC_DIRS: ReadonlySet<string> = new Set([
@@ -179,7 +180,7 @@ export const serverModulePath = (relativeToSrc: string): string =>
  * until it is listed.
  */
 export interface HostReach {
-  readonly kinds: readonly ('node:fs' | 'node:os' | 'node:child_process' | 'process.env')[]
+  readonly kinds: readonly HostReachKind[]
   readonly reason: string
 }
 
