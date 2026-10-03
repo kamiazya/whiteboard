@@ -128,6 +128,26 @@ function armCheckpoint(
  * that owns its doc supplies the seam instead. Reading `backend` alone here is
  * what left a note arming no checkpoint ever.
  */
+/**
+ * Every flush still in flight. A flush outlives the page that fired it (an
+ * unmount cannot await), so a test that tears a page down and then deletes
+ * the database would otherwise race the checkpoint it just released — the
+ * save then finds no record and warns, in whichever test happens to be
+ * running. `settleAutoCheckpoints` is the one thing a test may await before
+ * clearing storage; production never needs it, since nothing there deletes
+ * the database under a page it has just left.
+ */
+const inFlight = new Set<Promise<void>>()
+
+function trackFlush(flush: Promise<void>): void {
+  const settled = flush.catch(() => {}).finally(() => inFlight.delete(settled))
+  inFlight.add(settled)
+}
+
+export async function settleAutoCheckpoints(): Promise<void> {
+  while (inFlight.size > 0) await Promise.all([...inFlight])
+}
+
 export function useAutoCheckpoint(
   recordSource: VersionsRecordSeam | null,
   versionStore: Pick<BrowserVersionStore, 'save' | 'isUnchangedSinceLastVersion'>,
@@ -153,7 +173,7 @@ export function useAutoCheckpoint(
   // so the pause it was waiting for is taken now — the way a tab closing
   // takes it — rather than dropped. `flush` also clears the timers it fires,
   // so nothing is left armed on a page that is gone.
-  useEffect(() => () => void checkpoints.flush(), [checkpoints])
+  useEffect(() => () => trackFlush(checkpoints.flush()), [checkpoints])
 
   const live = useLivePath(checkpoints, documentPath, listen)
 
@@ -173,7 +193,7 @@ export function useAutoCheckpoint(
       // than making it wrong.
       flush: () => {
         signal()
-        void checkpoints.flush()
+        trackFlush(checkpoints.flush())
       },
     }
   }, [recordSource, checkpoints, live])

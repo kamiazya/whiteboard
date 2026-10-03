@@ -288,7 +288,9 @@ describe('commitToDoc', () => {
         ],
       })
 
-      expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1)
+      // An unmapped member is the designed path to the reconcile, not a
+      // warning; the move still lands through it.
+      expect(appLoggerSpies.warn).not.toHaveBeenCalled()
       expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 'a')).toMatchObject({ x: 5, y: 5 })
     })
 

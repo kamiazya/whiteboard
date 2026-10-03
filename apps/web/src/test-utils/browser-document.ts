@@ -19,6 +19,7 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
+import { settleAutoCheckpoints } from '../pages/use-auto-checkpoint.js'
 
 const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
 
@@ -63,6 +64,9 @@ const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
  * accident because it would delete `undefined`.
  */
 export async function clearWhiteboardDb(): Promise<void> {
+  // A page torn down a moment ago may still be taking its pending checkpoint;
+  // deleting the database under it makes that save warn in the NEXT test.
+  await settleAutoCheckpoints()
   return deleteAndKeepDeleted(whiteboardDbName())
 }
 
