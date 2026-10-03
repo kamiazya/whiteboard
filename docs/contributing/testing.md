@@ -70,7 +70,7 @@ Use PBT when the behavior is better described as an invariant over many inputs t
 - Process-boundary contracts: MCP tool schemas, HTTP response schemas, persisted JSON parsers
 - Security boundaries: auth routing, Origin/CORS policy, path confinement, token redaction
 - Migration and compatibility logic: old/new versions, malformed payloads, unknown fields
-- State machines: browser document controller, daemon lifecycle, branch/head/version state
+- State machines: browser document controller, daemon lifecycle, head/version state
 - Concurrency and race risks: save/export/import ordering, late failures, retry/reload behavior
 
 **File naming:**

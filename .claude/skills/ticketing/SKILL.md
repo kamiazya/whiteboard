@@ -191,7 +191,8 @@ sources have changed or been deleted since the document's own `generated.at`.
 A bare string (`- apps/web/src/main.tsx`) is read the same way as an OKF
 `- resource:` entry — half this backlog is written that way, and the two name
 the same path. It reads the MAIN checkout's daemon whatever worktree it runs
-in, because that is the one every session's MCP client reaches.
+in, because that is the one every session's MCP client reaches
+(`wire-worktree-mcp` registers only the main checkout's proxy: the CLI keeps one slot per repository).
 No new storage: `sources` rides the preserved-root-keys bucket, `generated.at`
 is stamped by the write, and git already knows what moved. It also runs on
 SessionStart, quietly, so a stale issue announces itself rather than waiting to
