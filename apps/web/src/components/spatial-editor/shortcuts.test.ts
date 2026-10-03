@@ -93,6 +93,22 @@ describe('findShortcutIn modifier semantics', () => {
     ).toBeUndefined()
   })
 
+  it.each([
+    'input',
+    'textarea',
+  ])('never fires from <%s>, and still fires from a plain element', (tag) => {
+    const spec: ShortcutSpec = {
+      id: 'reorder-forward',
+      keys: ['x'],
+      display: 'X',
+      description: 'test spec',
+    }
+    const typed = event({ code: 'KeyX', key: 'x', target: document.createElement(tag) })
+    expect(findShortcutIn([spec], typed, 'select')).toBeUndefined()
+    const plain = event({ code: 'KeyX', key: 'x', target: document.createElement('div') })
+    expect(findShortcutIn([spec], plain, 'select')).toBe(spec)
+  })
+
   it('tool scoping applies to mod specs like any other', () => {
     const scoped: ShortcutSpec = { ...MOD_SPEC, tools: ['select'] }
     expect(findShortcutIn([scoped], event({ ...KEY_C, metaKey: true }), 'hand')).toBeUndefined()

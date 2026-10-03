@@ -95,3 +95,36 @@ describe('the ledger helpers refuse a reason citing a test that is not there', (
     ).not.toThrow()
   })
 })
+
+describe('assertLedger holds the two runtime directions', () => {
+  it('direction 3: a covered entry the run never produced fails', () => {
+    const ledger: Record<'a', SurfaceCoverage> = { a: 'covered' }
+    expect(() => assertLedger('member', ledger, { a: 0 })).toThrow(/never produced/)
+  })
+
+  it('direction 3 control: a covered entry the run produced passes', () => {
+    const ledger: Record<'a', SurfaceCoverage> = { a: 'covered' }
+    expect(() => assertLedger('member', ledger, { a: 2 })).not.toThrow()
+  })
+
+  it('direction 4: a not-modelled entry the run did produce fails as stale', () => {
+    const ledger: Record<'a', SurfaceCoverage> = { a: 'not modelled: a reason' }
+    expect(() => assertLedger('member', ledger, { a: 3 })).toThrow(/stale/)
+  })
+})
+
+describe('assertScannedLedger holds both scan directions', () => {
+  const messages = { unclassified: 'UNCLASSIFIED', stale: 'STALE' }
+
+  it('an unclassified scanned name fails with the call site’s message', () => {
+    expect(() => assertScannedLedger(['x', 'y'], { x: 'covered' }, messages)).toThrow(
+      /UNCLASSIFIED/,
+    )
+  })
+
+  it('a stale entry the scan no longer finds fails with the call site’s message', () => {
+    expect(() => assertScannedLedger(['x'], { x: 'covered', gone: 'covered' }, messages)).toThrow(
+      /STALE/,
+    )
+  })
+})
