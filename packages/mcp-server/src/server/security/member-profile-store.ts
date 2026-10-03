@@ -23,10 +23,10 @@
  * `workspaceMembersOnly` is the one row a removal NEVER touches (user
  * decision 2026-09-21): once a workspace has had a member, `membersOnly`
  * stays true even after the last one is removed, so a workspace never falls
- * back to origin trust by emptying. Nothing clears it. Both composition roots
- * also close a workspace that never had a member (`membersOnlyByDefault`), so
- * what the marker still decides there is whether a workspace's creator is
- * added as its first member (`mcp-caller.ts`). See the 0030 migration for why
+ * back to origin trust by emptying. Nothing clears it. Every workspace is
+ * members-only regardless (ADR-0046 d10), so the gate no longer consults the
+ * marker; what it still decides is whether a workspace's creator is added as
+ * its first member (`mcp-caller.ts`). See the 0030 migration for why
  * it is its own table rather than a column on `workspaces`.
  *
  * FAIL-CLOSED HERE MEANS SCOPE OF CONSULTATION, NOT A PERMISSIVE DEFAULT: a
