@@ -29,6 +29,7 @@ import { describe, expect } from 'vitest'
 import { DocumentVectorCache } from '../search/document-vector-cache.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { seedEmbedNode } from '../test-utils/seed-embed-node.js'
 import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -458,22 +459,7 @@ describe('reference semantics under command sequences', () => {
             if (cmd.node.k === 'embed') {
               const targetId = slots[cmd.node.slot]
               if (targetId === null || targetId === undefined) break
-              await editTool.execute({
-                workspaceId: WS,
-                documentId: doc.id,
-                mode: 'apply',
-                ops: [
-                  {
-                    op: 'node.add',
-                    node: {
-                      id: nodeId,
-                      type: 'file',
-                      file: 'embed-placeholder',
-                      embed: { documentId: targetId },
-                    },
-                  },
-                ],
-              })
+              await seedEmbedNode(deps, WS, doc.id, { id: nodeId, targetDocumentId: targetId })
               doc.embedIds.push(targetId)
             } else if (cmd.node.k === 'file') {
               await editTool.execute({

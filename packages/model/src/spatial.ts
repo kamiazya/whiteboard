@@ -36,7 +36,7 @@ const facetsFieldSchema = extensionFacetsSchema.optional().catch(undefined)
  * The document a node shows inline — the one piece of content JSON Canvas 1.0
  * cannot express, and the reason its extension key exists at all.
  */
-export const nodeEmbedSchema = z
+const nodeEmbedSchema = z
   .object({
     documentId: documentIdSchema,
     versionRef: z.string().min(1).optional(),

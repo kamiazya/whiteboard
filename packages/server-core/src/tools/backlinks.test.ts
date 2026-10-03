@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { seedEmbedNode } from '../test-utils/seed-embed-node.js'
 import { backlinksOutputSchema } from './backlinks.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
@@ -99,21 +100,17 @@ describe('GET /backlinks', () => {
       documentId: canvas.documentId,
       mode: 'apply',
       ops: [
-        {
-          op: 'node.add',
-          node: {
-            id: 'n-embed',
-            type: 'file',
-            file: 'embed-placeholder',
-            embed: { documentId: target.documentId },
-          },
-        },
         { op: 'node.add', node: { id: 'n-file', type: 'file', file: 'target' } },
         {
           op: 'node.add',
           node: { id: 'n-text', type: 'text', text: `詳細は [[${target.documentId}]]` },
         },
       ],
+    })
+
+    await seedEmbedNode(deps, WS, canvas.documentId, {
+      id: 'n-embed',
+      targetDocumentId: target.documentId,
     })
 
     const out = await backlinksOf(deps, target.documentId)

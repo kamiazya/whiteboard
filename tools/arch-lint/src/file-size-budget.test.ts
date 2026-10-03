@@ -391,8 +391,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // nothing), the `document.move` arm's row and why its follow report costs wire
   // bytes and no visible ones, `wb_canvas_edit`'s row and the two totals, and the
   // rows for the readable annotation layer, the snapshot's dressing and the
-  // in-place rename.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 994,
+  // in-place rename, the node input losing `embed`, and `proposals` on wb_document_get.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1011,
   // The not-JSON refusal's assertion carries the reason it is strict: a mutation
   // showed the loose form (`typeof title === 'string'`) stays green with the
   // refusal DELETED, so without the note the next reader loosens it again. Every
@@ -483,7 +483,7 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // lives in `smoke/lib`).
   // The canvas_view theme-font steps, with the widget's refresh-keeps-the-theme
   // step, live in `smoke/lib/canvas-view-theme.mjs`.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2698,
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2702,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

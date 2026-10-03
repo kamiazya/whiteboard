@@ -14,7 +14,6 @@ import {
   extensionFacetsSchema,
   linePatchFieldsSchema,
   type NodeResource,
-  nodeEmbedSchema,
   nodeIdSchema,
   nodePatchFieldsSchema,
   nodePositionSchema,
@@ -35,15 +34,20 @@ import { canvasSnapshotSchema } from './canvas-snapshot.js'
 const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
 const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
 /**
- * The model's two extension fields are omitted from the derived shape and
+ * The stored extension fields are omitted from the derived shape: `facets` is
  * reached through `WRITE_EXTENSION` below instead.
  *
  * Deriving from the stored schema means a field added to a node arrives here
- * for free — which is the point, and wrong for exactly these two: the tool
- * already publishes a way to write them, and a second one is two spellings of
- * one thing on a table a model reads every turn. Measured when ADR-0037 moved
- * them onto the node: 14 new parameters across the four node types, every one
- * of them undescribed.
+ * for free — which is the point, and wrong for these: a second spelling of
+ * one thing is dead weight on a table a model reads every turn. Measured when
+ * ADR-0037 moved them onto the node: 14 new parameters across the four node
+ * types, every one of them undescribed.
+ *
+ * `embed` is held back because nothing draws it and nothing checks its
+ * `versionRef`: it records a reference (a backlink) and renders as a plain
+ * box, so an agent writing it would expect an inline document it never gets.
+ * The stored field still round-trips through the codec and the reference
+ * graph for documents that carry one.
  *
  * `tags` is held back for a different reason: whether an inline tag field on
  * a canvas op is worth its bytes is a question
@@ -54,33 +58,23 @@ const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
  */
 const STORED_EXTENSION_FIELDS = { embed: true, facets: true, tags: true } as const
 /**
- * The model's own two fields, reached directly.
+ * The model's own `facets` field, reached directly.
  *
- * The tool used to publish them as `x-whiteboard: { kind: "embed",
- * documentId, versionRef, facets }` — JSON Canvas 1.0's extension key, flat
- * rather than the stored union, with a `.refine` spelling out that an embed
- * names the document it embeds. That key made sense while the model WAS the
- * format. ADR-0037 ended that: a node carries `embed` and `facets`
- * independently now, and a published input naming a foreign format's
- * extension key, when the model has none anywhere, tells a model reading
- * `tools/list` something untrue about the thing it is writing.
+ * The tool used to publish it as `x-whiteboard: { kind: "facets", ... }` —
+ * JSON Canvas 1.0's extension key. That key made sense while the model WAS
+ * the format. ADR-0037 ended that: a published input naming a foreign
+ * format's extension key, when the model has none anywhere, tells a model
+ * reading `tools/list` something untrue about the thing it is writing.
  *
- * The hand-written refusal becomes STRUCTURAL in the move: `nodeEmbedSchema`
- * requires `documentId`, so "an embed with no document" is refused by the
- * type rather than by a `.refine` that had to say it. That is the whole of
- * what the old schema's first reason bought, now bought by the model.
- *
- * `facets` is still named here rather than derived, and that is the second
- * reason, which does NOT dissolve: the stored field is
+ * `facets` is named here rather than derived because the stored field is
  * `extensionFacetsSchema.optional().catch(undefined)`, and the `.catch` is
  * read-side tolerance — an unrecognised bucket must not stop a canvas being
  * readable. On the WRITE side the same `.catch` would silently drop a
  * malformed facets bucket a caller just sent, where this refuses it by name.
- * So the stored pair stays omitted from the derived shape and is re-added
+ * So the stored field stays omitted from the derived shape and is re-added
  * here with the tolerance stripped.
  */
 const WRITE_EXTENSION = {
-  embed: nodeEmbedSchema.optional(),
   facets: extensionFacetsSchema.optional(),
 } as const
 

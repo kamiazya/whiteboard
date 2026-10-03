@@ -23,8 +23,6 @@ import type {
   CanvasEdge,
   canvasColorSchema,
   canvasEdgeSchema,
-  NodeEmbed,
-  nodeEmbedSchema,
   SpatialCanvas,
   SpatialNode,
   spatialCanvasSchema,
@@ -47,6 +45,5 @@ it('type-source invariant: exported types equal z.infer of their schema', () => 
   expectTypeOf<SpatialNode>().toEqualTypeOf<z.infer<typeof spatialNodeSchema>>()
   expectTypeOf<CanvasEdge>().toEqualTypeOf<z.infer<typeof canvasEdgeSchema>>()
   expectTypeOf<SpatialCanvas>().toEqualTypeOf<z.infer<typeof spatialCanvasSchema>>()
-  expectTypeOf<NodeEmbed>().toEqualTypeOf<z.infer<typeof nodeEmbedSchema>>()
   expectTypeOf<MarkdownDocument>().toEqualTypeOf<z.infer<typeof markdownDocumentSchema>>()
 })

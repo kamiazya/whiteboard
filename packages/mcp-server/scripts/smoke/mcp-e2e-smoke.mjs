@@ -487,7 +487,11 @@ async function anEditWithNoModeIsProposedAndTheBatchActorIsStamped(ctx) {
   if (!bodyAfterPropose.content.includes('Written at the smoke.')) {
     throw new Error(`proposing changed the body: ${bodyAfterPropose.content}`)
   }
-  console.log('[e2e] wb_body_edit(no mode) → passage proposed, body untouched')
+  const readBack = bodyAfterPropose.proposals?.find((p) => p.id === proposedPassage.proposed.id)
+  if (readBack?.changes[0]?.status !== 'open') {
+    throw new Error(`wb_document_get did not return the proposal: ${JSON.stringify(readBack)}`)
+  }
+  console.log('[e2e] wb_body_edit(no mode) → passage proposed, body untouched, read back')
 
   // The union's other side: a spatial document takes no markdown, and the
   // refusal must reach the client rather than the content being dropped.
