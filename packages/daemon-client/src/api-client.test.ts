@@ -65,7 +65,7 @@ describe('apiFetch auth header', () => {
   it('attaches no Authorization, whatever the window carries', async () => {
     let capturedHeaders: Headers | undefined
     ;(globalThis as { window?: unknown }).window = {
-      location: { origin: 'http://localhost' },
+      location: { origin: 'https://localhost' },
       __WHITEBOARD_DAEMON_TOKEN__: 'injected-token',
     }
     const originalFetch = globalThis.fetch
@@ -74,7 +74,7 @@ describe('apiFetch auth header', () => {
       return Promise.resolve(new Response('ok'))
     }) as typeof fetch
     try {
-      await apiFetch('http://localhost/api/workspaces')
+      await apiFetch('https://localhost/api/workspaces')
       expect(capturedHeaders?.has('Authorization')).toBe(false)
     } finally {
       globalThis.fetch = originalFetch
@@ -104,7 +104,7 @@ describe('apiFetch trace context', () => {
 
   function capture(withWindow = true): Headers[] {
     if (withWindow) {
-      ;(globalThis as { window?: unknown }).window = { location: { origin: 'http://localhost' } }
+      ;(globalThis as { window?: unknown }).window = { location: { origin: 'https://localhost' } }
     }
     const seen: Headers[] = []
     globalThis.fetch = ((input: Request | string | URL, init?: RequestInit) => {
@@ -118,7 +118,7 @@ describe('apiFetch trace context', () => {
 
   it('stamps an absolute same-origin /api/ request', async () => {
     const seen = capture()
-    await apiFetch('http://localhost/api/workspaces')
+    await apiFetch('https://localhost/api/workspaces')
     expect(seen[0]?.get('traceparent')).toBe(TRACEPARENT)
   })
 
@@ -136,14 +136,14 @@ describe('apiFetch trace context', () => {
 
   it('never stamps a same-origin request outside /api/', async () => {
     const seen = capture()
-    await apiFetch('http://localhost/assets/app.js')
+    await apiFetch('https://localhost/assets/app.js')
     expect(seen[0]?.has('traceparent')).toBe(false)
   })
 
   it('classifies a URL object and a Request by the same origin and path rule', async () => {
     const seen = capture()
-    await apiFetch(new URL('http://localhost/api/a'))
-    await apiFetch(new Request('http://localhost/api/b'))
+    await apiFetch(new URL('https://localhost/api/a'))
+    await apiFetch(new Request('https://localhost/api/b'))
     await apiFetch(new Request('https://third-party.example/api/c'))
     expect(seen[0]?.get('traceparent')).toBe(TRACEPARENT)
     expect(seen[1]?.get('traceparent')).toBe(TRACEPARENT)
@@ -152,13 +152,13 @@ describe('apiFetch trace context', () => {
 
   it("keeps a Request input's own headers when init carries none", async () => {
     const seen = capture()
-    await apiFetch(new Request('http://localhost/api/b', { headers: { 'x-keep': '1' } }))
+    await apiFetch(new Request('https://localhost/api/b', { headers: { 'x-keep': '1' } }))
     expect(seen[0]?.get('x-keep')).toBe('1')
   })
 
   it('lets init.headers replace the Request input headers', async () => {
     const seen = capture()
-    await apiFetch(new Request('http://localhost/api/b', { headers: { 'x-keep': '1' } }), {
+    await apiFetch(new Request('https://localhost/api/b', { headers: { 'x-keep': '1' } }), {
       headers: { 'x-other': '2' },
     })
     expect(seen[0]?.get('x-other')).toBe('2')
