@@ -67,7 +67,6 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'log-levels.ts': 'shared',
   'document-io.ts': 'shared',
   'api-errors.ts': 'shared',
-  'document-counts.ts': 'shared',
   'theme-font.ts': 'shared',
   'viewport-request.ts': 'shared',
   // Read by `createServer` alone, and each reaches into `tools/` for what it
