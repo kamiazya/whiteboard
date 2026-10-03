@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 import {
   buildDesiredConfig,
   buildClaudeMcpAddArgs,
+  buildReRegisterCommand,
   classifyExistingConfig,
   planStaleSweep,
   verifyPostWrite,
@@ -299,4 +300,11 @@ test('planStaleSweep + removeStaleEntriesFromConfig: an entry stored under anoth
   const result = removeStaleEntriesFromConfig(config, actions)
   assert.equal(result.projects['/repo'].mcpServers.whiteboard, undefined)
   assert.deepEqual(result.projects['/repo'].mcpServers.keep, { type: 'http' })
+})
+
+test('buildReRegisterCommand is the CONTRIBUTING first-clone registration, with the proxy path quoted', () => {
+  assert.equal(
+    buildReRegisterCommand('/my repo'),
+    'claude mcp add --scope local --transport stdio whiteboard -- node "/my repo/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"',
+  )
 })

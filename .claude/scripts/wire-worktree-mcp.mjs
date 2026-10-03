@@ -34,6 +34,7 @@ import {
   assertNotTrackedSettingsPath,
   buildClaudeMcpAddArgs,
   buildDesiredConfig,
+  buildReRegisterCommand,
   classifyExistingConfig,
   planStaleSweep,
   removeStaleEntriesFromConfig,
@@ -247,8 +248,14 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
     return
   }
 
+  // The slot is the repository's, shared by the main checkout and every worktree session, and
+  // ticket documents are written through it: it must name the one checkout that outlives every
+  // worktree, not a disposable one whose data dir `git worktree remove` deletes.
+  const registration = buildDesiredConfig({ repoRoot: mainRoot })
+  const registrationTarget = [registration.command, ...registration.args].join(' ')
+
   assertNotTrackedSettingsPath(CLAUDE_CONFIG_PATH)
-  const addArgs = buildClaudeMcpAddArgs(desired)
+  const addArgs = buildClaudeMcpAddArgs(registration)
   const result = spawn('claude', addArgs, { cwd: repoRoot })
   if (result.status !== 0) {
     log(
@@ -262,9 +269,12 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
   // CLI that keys by the directory it ran in.
   const effective =
     readExistingEntry(effectiveConfig, mainRoot, desired.name) ?? readExistingEntry(effectiveConfig, repoRoot, desired.name)
-  const verified = verifyPostWrite(effective, desired)
+  const verified = verifyPostWrite(effective, registration)
   if (verified.outcome === 'wired') {
-    log(`[wire-worktree-mcp] wired "${desired.name}" -> \`${target}\``)
+    log(
+      `[wire-worktree-mcp] wired "${desired.name}" -> \`${registrationTarget}\` (the main checkout's proxy: ` +
+        'the CLI keeps one slot per repository, and the main checkout is the one that outlives its worktrees)',
+    )
   } else {
     log(
       `[wire-worktree-mcp] wrote "${desired.name}" but the post-write state does not match what we ` +
@@ -313,6 +323,13 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
   writeConfig(nextConfig)
   for (const action of actions) {
     log(`[wire-worktree-mcp] sweep: removed stale "${action.name}" registration for ${action.path}`)
+  }
+  // With the main slot empty Claude Code falls back to .mcp.json's published package, so MCP
+  // calls stop reaching this checkout's code without any error saying so.
+  if (actions.some((action) => action.projectKey !== undefined)) {
+    log(
+      `[wire-worktree-mcp] sweep: the main checkout has no \`whiteboard\` registration now, so Claude Code falls back to the published npm package. Register this checkout again (CONTRIBUTING.md first-clone step 3):\n  ${buildReRegisterCommand(mainKey)}`,
+    )
   }
 }
 

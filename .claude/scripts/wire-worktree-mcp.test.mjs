@@ -6,7 +6,7 @@
 //
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -296,25 +296,35 @@ function stdioEntry(root) {
   return { type: 'stdio', command: 'node', args: [`${root}/${PROXY_SUFFIX}`], env: {} }
 }
 
-test('main: `claude mcp add` from a linked worktree lands under the main checkout key, and the post-write check reads that key', async () => {
+test('main: with the main checkout\'s slot empty, `claude mcp add` registers the MAIN checkout\'s proxy — never a worktree\'s', async () => {
   const mainRoot = '/repo'
   const worktree = '/repo/.claude/worktrees/wt-a'
   let readCalls = 0
+  let addArgs
   const logs = []
   await main({
     argv: [worktree],
     isMainCheckoutOverride: false,
     claudeCliAvailableOverride: true,
     mainCheckoutRootOverride: mainRoot,
-    spawn: () => fakeSpawnOk(),
+    spawn: (cmd, args) => {
+      if (args?.includes('add')) addArgs = args
+      return fakeSpawnOk()
+    },
     readConfig: () => {
       readCalls += 1
-      return readCalls === 1 ? { projects: {} } : { projects: { [mainRoot]: { mcpServers: { whiteboard: stdioEntry(worktree) } } } }
+      if (readCalls === 1) return { projects: {} }
+      const [command, ...args] = addArgs.slice(addArgs.indexOf('--') + 1)
+      return { projects: { [mainRoot]: { mcpServers: { whiteboard: { type: 'stdio', command, args, env: {} } } } } }
     },
     writeConfig: () => {},
     log: (msg) => logs.push(msg),
   })
 
+  assert.ok(addArgs, `expected a \`claude mcp add\`, got: ${JSON.stringify(logs)}`)
+  const registered = addArgs.slice(addArgs.indexOf('--') + 1)
+  assert.deepEqual(registered, ['node', `${mainRoot}/${PROXY_SUFFIX}`])
+  assert.ok(!registered.some((part) => part.includes('/.claude/worktrees/')), JSON.stringify(registered))
   assert.ok(logs.some((line) => /^\[wire-worktree-mcp\] wired "whiteboard" -> /.test(line)), JSON.stringify(logs))
   assert.ok(!logs.some((line) => /does not match/.test(line)), JSON.stringify(logs))
 })
@@ -380,4 +390,41 @@ test('main --sweep: leaves a main checkout entry that is not this script\'s stdi
     log: () => {},
   })
   assert.equal(writes, 0)
+})
+
+test('main --sweep: dropping the main checkout key\'s entry prints the command that registers the main checkout again', async () => {
+  const mainRoot = resolve('/repo')
+  const gone = resolve('/repo/.claude/worktrees/gone')
+  const logs = []
+  await main({
+    argv: ['--sweep'],
+    mainCheckoutRootOverride: mainRoot,
+    liveWorktreePathsOverride: [mainRoot],
+    spawn: () => fakeSpawnOk(),
+    readConfig: () => ({ projects: { [mainRoot]: { mcpServers: { whiteboard: stdioEntry(gone) } } } }),
+    writeConfig: () => {},
+    log: (msg) => logs.push(msg),
+  })
+
+  const note = logs.find((line) => /no `whiteboard` registration/.test(line))
+  assert.ok(note, JSON.stringify(logs))
+  assert.ok(note.includes(`claude mcp add --scope local --transport stdio whiteboard -- node "${join(mainRoot, PROXY_SUFFIX)}"`), note)
+})
+
+test('main --sweep: a worktree-keyed removal leaves the main slot alone, so it prints no re-register command', async () => {
+  const mainRoot = resolve('/repo')
+  const stalePath = resolve('/repo/.claude/worktrees/gone')
+  const logs = []
+  await main({
+    argv: ['--sweep'],
+    mainCheckoutRootOverride: mainRoot,
+    liveWorktreePathsOverride: [mainRoot],
+    spawn: () => fakeSpawnOk(),
+    readConfig: () => ({ projects: { [stalePath]: { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } } }),
+    writeConfig: () => {},
+    log: (msg) => logs.push(msg),
+  })
+
+  assert.ok(logs.some((line) => /removed stale/.test(line)), JSON.stringify(logs))
+  assert.ok(!logs.some((line) => /claude mcp add/.test(line)), JSON.stringify(logs))
 })

@@ -35,6 +35,20 @@ export function buildDesiredConfig({ repoRoot, isMainCheckout = false, name = 'w
 }
 
 /**
+ * The shell command that registers a checkout's stdio proxy under the tracked entry's name —
+ * what CONTRIBUTING.md's first-clone step spells out, derived from the same builders the wiring
+ * uses so the two cannot drift. The path is double-quoted because a checkout path may hold spaces.
+ *
+ * @param {string} checkoutRoot
+ */
+export function buildReRegisterCommand(checkoutRoot) {
+  const addArgs = buildClaudeMcpAddArgs(buildDesiredConfig({ repoRoot: checkoutRoot }))
+  const split = addArgs.indexOf('--') + 1
+  const serverLine = addArgs.slice(split).map((part, i) => (i === 0 ? part : JSON.stringify(part)))
+  return `claude ${[...addArgs.slice(0, split), ...serverLine].join(' ')}`
+}
+
+/**
  * The checkout a stdio-proxy registration was written for, or null when the entry is not one of
  * this script's registrations (an `npx` entry, an http entry, a proxy path of another layout).
  * Only those are ever candidates for the sweep: anything else under the main checkout's key was
