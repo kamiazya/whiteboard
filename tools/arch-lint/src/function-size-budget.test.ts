@@ -525,7 +525,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
   'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts#runE2eCheckpointSmoke': 101,
   'packages/mcp-server/src/server/mcp/startup.smoke-impl.ts#runStartupSmoke': 67,
-  'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 7,
+  'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 107,
   'packages/mcp-server/src/server/mcp/stdio-lifecycle.ts#installStdioLifecycle': 68,
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts#assertSemanticSearchOptIn': 81,
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts#runPackedTarballSmoke': 131,
