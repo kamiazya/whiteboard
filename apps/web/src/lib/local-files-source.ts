@@ -6,20 +6,14 @@ import {
   rewriteReferenceTargets,
 } from '@kamiazya/whiteboard-codec'
 import {
-  readCoreFacets,
+  type DocumentContent,
   readDocumentContent,
   readFacets,
   readMarkdownBody,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  type DocumentKind,
-  type ExtensionFacets,
-  type SpatialCanvas,
-  type TagBearerKind,
-  tagsInUse,
-} from '@kamiazya/whiteboard-model'
+import { type DocumentKind, type ExtensionFacets, tagsInUse } from '@kamiazya/whiteboard-model'
 import {
   readStencilLibrary,
   readTagLibrary,
@@ -27,6 +21,7 @@ import {
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import { splitBearerTags, tagBearersOf } from '@kamiazya/whiteboard-reference-graph'
 import {
   fullTextSearch,
   type SearchableDocument,
@@ -49,13 +44,12 @@ import {
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
 
-/**
- * One document read from the store, discriminated by kind — a board carries
- * its parsed canvas because every caller that wants a board wants that.
- */
-type LoadedDocument =
-  | { documentId: string; kind: 'markdown'; doc: LoroDoc }
-  | { documentId: string; kind: 'spatial'; doc: LoroDoc; canvas: SpatialCanvas }
+/** One document read from the store, with its content already read as the half its kind names. */
+interface LoadedDocument {
+  documentId: string
+  doc: LoroDoc
+  content: DocumentContent
+}
 
 /**
  * Rewrite one document's references in place, answering whether anything
@@ -69,50 +63,17 @@ function rewriteReferencesIn(
   read: LoadedDocument,
   plan: ReturnType<typeof planReferenceRewrite>,
 ): boolean {
-  if (read.kind === 'spatial') {
-    const result = rewriteCanvasReferences(read.canvas, plan)
+  const { content } = read
+  if (content.kind === 'spatial') {
+    const result = rewriteCanvasReferences(content.canvas, plan)
     if (!result.changed) return false
     for (const node of result.changedNodes) writeSpatialNode(read.doc, node)
     return true
   }
-  const body = readMarkdownBody(read.doc)
-  const next = rewriteReferenceTargets(body, plan)
-  if (next === body) return false
+  const next = rewriteReferenceTargets(content.body, plan)
+  if (next === content.body) return false
   writeMarkdownBody(read.doc, next)
   return true
-}
-
-/** What a document contributes to the workspace's tag vocabulary. */
-function tagBearersOf(read: LoadedDocument): { what: TagBearerKind; tags: readonly string[] }[] {
-  if (read.kind === 'markdown') {
-    return [{ what: 'document', tags: readCoreFacets(read.doc)?.tags ?? [] }]
-  }
-  const { canvas } = read
-  return [
-    { what: 'board' as const, tags: canvas.tags ?? [] },
-    ...canvas.nodes.map((node) => ({ what: 'node' as const, tags: node.tags ?? [] })),
-    ...canvas.edges.map((edge) => ({ what: 'edge' as const, tags: edge.tags ?? [] })),
-  ]
-}
-
-/**
- * The tags a LISTING shows for one document: the document's own, and — for a
- * board — what its boxes and edges carry, deduplicated beside them.
- *
- * A board's own tags are the document's (ADR-0040 decision 2); the carried
- * set is what makes the `#tag` filter find the board (decision 3), and is the
- * browser spelling of the daemon's `/document-tags` `contents`.
- */
-function listedTagsOf(read: LoadedDocument): {
-  own: readonly string[]
-  carried: readonly string[]
-} {
-  if (read.kind === 'markdown') return { own: readCoreFacets(read.doc)?.tags ?? [], carried: [] }
-  const { canvas } = read
-  const carried = new Set<string>()
-  for (const node of canvas.nodes) for (const tag of node.tags ?? []) carried.add(tag)
-  for (const edge of canvas.edges) for (const tag of edge.tags ?? []) carried.add(tag)
-  return { own: canvas.tags ?? [], carried: [...carried] }
 }
 
 /** A library document's value, or what `read` answers for none: absent, unreadable or malformed. */
@@ -244,7 +205,7 @@ export function createLocalFilesSource(
       } catch {
         continue
       }
-      let content: ReturnType<typeof readDocumentContent>
+      let content: DocumentContent
       try {
         content = readDocumentContent(doc, entry.kind)
       } catch {
@@ -252,9 +213,7 @@ export function createLocalFilesSource(
         // document: it carries nothing anyone here can read.
         continue
       }
-      yield content.kind === 'markdown'
-        ? { documentId: entry.documentId, kind: 'markdown', doc }
-        : { documentId: entry.documentId, kind: 'spatial', doc, canvas: content.canvas }
+      yield { documentId: entry.documentId, doc, content }
     }
   }
 
@@ -294,8 +253,10 @@ export function createLocalFilesSource(
       readLibrary(index, loadCurrentDoc, STENCIL_LIBRARY_PATH, readStencilLibrary),
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
-      const bearers: { what: TagBearerKind; tags: readonly string[] }[] = []
-      for await (const read of readableDocuments(entries)) bearers.push(...tagBearersOf(read))
+      const bearers: ReturnType<typeof tagBearersOf> = []
+      for await (const read of readableDocuments(entries)) {
+        bearers.push(...tagBearersOf(read.doc, read.content))
+      }
       return tagsInUse(bearers)
     },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
@@ -321,7 +282,7 @@ export function createLocalFilesSource(
       const tagsById = new Map<string, readonly string[]>()
       const carriedById = new Map<string, readonly string[]>()
       for await (const read of readableDocuments(entries)) {
-        const { own, carried } = listedTagsOf(read)
+        const { own, carried } = splitBearerTags(tagBearersOf(read.doc, read.content))
         if (own.length > 0) tagsById.set(read.documentId, own)
         if (carried.length > 0) carriedById.set(read.documentId, carried)
       }

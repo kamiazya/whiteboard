@@ -9,6 +9,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { Loro } from 'loro-crdt'
@@ -455,6 +456,34 @@ describe('createLocalFilesSource over a row that names no kind', () => {
   })
 })
 
+function boardOf(document: {
+  tags?: readonly string[]
+  nodeTags?: readonly (readonly string[])[]
+  edgeTags?: readonly (readonly string[])[]
+}): SpatialCanvas {
+  const nodes = (document.nodeTags ?? []).map((tags, i) =>
+    textNode({
+      id: `n${i}`,
+      x: i * 200,
+      y: 0,
+      width: 100,
+      height: 50,
+      text: `n${i}`,
+      tags: [...tags],
+    }),
+  )
+  return {
+    ...(document.tags === undefined ? {} : { tags: [...document.tags] }),
+    nodes,
+    edges: (document.edgeTags ?? []).map((tags, i) => ({
+      id: `e${i}`,
+      from: { node: 'n0' },
+      to: { node: 'n1' },
+      tags: [...tags],
+    })),
+  }
+}
+
 describe('createLocalFilesSource conformance', () => {
   beforeEach(clearWhiteboardDb)
 
@@ -471,8 +500,11 @@ describe('createLocalFilesSource conformance', () => {
       })
       const doc = new Loro()
       if (document.body !== undefined) writeMarkdownBody(doc, document.body)
-      if (document.tags !== undefined)
+      if (document.kind === 'spatial') {
+        writeSpatialCanvas(doc, boardOf(document))
+      } else if (document.tags !== undefined) {
         writeCoreFacets(doc, { type: 'note', tags: [...document.tags] })
+      }
       if (document.facets !== undefined) writeFacets(doc, document.facets as never)
       await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
     }

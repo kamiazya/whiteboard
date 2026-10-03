@@ -16,6 +16,7 @@ import {
   STENCIL_LIBRARY_PATH,
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-plugin-visual'
+import { splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import { jsonResponse } from './json-response.js'
 
 export interface FakeFilesDaemonRow {
@@ -24,6 +25,8 @@ export interface FakeFilesDaemonRow {
   readonly name?: string
   readonly body?: string
   readonly tags?: readonly string[]
+  readonly nodeTags?: readonly (readonly string[])[]
+  readonly edgeTags?: readonly (readonly string[])[]
   readonly facets?: Record<string, unknown>
 }
 
@@ -50,18 +53,29 @@ function nextId(state: State): string {
   return `0${String(state.counter).padStart(25, '0')}`
 }
 
+/** What a row carries, as the daemon's projection names the bearers. */
+function bearersOf(row: Row): { what: TagBearerKind; tags: readonly string[] }[] {
+  return [
+    { what: row.kind === 'markdown' ? 'document' : 'board', tags: row.tags ?? [] },
+    ...(row.nodeTags ?? []).map((tags) => ({ what: 'node' as const, tags })),
+    ...(row.edgeTags ?? []).map((tags) => ({ what: 'edge' as const, tags })),
+  ]
+}
+
 function tagsAnswer(state: State) {
   const facetsAt = (path: string) => state.rows.find((row) => row.path === path)?.facets as never
-  const bearers = state.rows.map((row) => ({
-    what: (row.kind === 'markdown' ? 'document' : 'board') as TagBearerKind,
-    tags: row.tags ?? [],
+  const split = state.rows.map((row) => ({
+    id: row.id,
+    ...splitBearerTags(bearersOf(row).filter((bearer) => bearer.tags.length > 0)),
   }))
   return {
-    documents: state.rows
-      .filter((row) => (row.tags ?? []).length > 0)
-      .map((row) => ({ documentId: row.id, tags: [...(row.tags ?? [])] })),
-    contents: [],
-    inUse: tagsInUse(bearers),
+    documents: split
+      .filter(({ own }) => own.length > 0)
+      .map(({ id, own }) => ({ documentId: id, tags: own })),
+    contents: split
+      .filter(({ carried }) => carried.length > 0)
+      .map(({ id, carried }) => ({ documentId: id, tags: carried })),
+    inUse: tagsInUse(state.rows.flatMap(bearersOf)),
     library: readTagLibrary(facetsAt(TAG_LIBRARY_PATH)),
     stencils: readStencilLibrary(facetsAt(STENCIL_LIBRARY_PATH)),
   }

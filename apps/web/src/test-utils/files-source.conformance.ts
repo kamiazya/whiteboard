@@ -17,7 +17,12 @@ interface FilesSourceFixtureDocument {
   readonly kind: DocumentKind
   readonly name?: string
   readonly body?: string
+  /** A note's frontmatter tags, or a board's own. */
   readonly tags?: readonly string[]
+  /** A board's boxes, one entry each, carrying these tags. */
+  readonly nodeTags?: readonly (readonly string[])[]
+  /** A board's edges, one entry each, between its first two boxes — so a board naming edges names two boxes. */
+  readonly edgeTags?: readonly (readonly string[])[]
   /** Extension facets stored beside the body; a library is the document at `TAG_LIBRARY_PATH` / `STENCIL_LIBRARY_PATH`. */
   readonly facets?: Record<string, unknown>
 }
@@ -34,6 +39,14 @@ const TAG_LIBRARY = {
   // Declared out of name order on purpose: both keepers answer by name.
   zone: { values: { b: { color: '2' }, a: {} } },
   health: { exclusive: true, values: { ok: { color: '4' } } },
+}
+
+const BOARD_WITH_TAGS: FilesSourceFixtureDocument = {
+  path: 'board',
+  kind: 'spatial',
+  tags: ['team:core', 'q3'],
+  nodeTags: [['health:ok'], ['health:ok']],
+  edgeTags: [['link:slow']],
 }
 
 const libraryFixture = (
@@ -93,6 +106,29 @@ function tagReadContract(factory: FilesSourceFactory): void {
     expect(source.listTagsInUse).toBeDefined()
     await expect(source.listTagsInUse?.()).resolves.toEqual([
       { tag: 'q3', documents: 1, boards: 0, nodes: 0, edges: 0 },
+    ])
+  })
+
+  it('lists what a board carries beside its own tags, each tag once, and nothing carried on a note', async () => {
+    const source = await factory({
+      documents: [BOARD_WITH_TAGS, { path: 'note', kind: 'markdown', tags: ['q3'] }],
+    })
+    const entries = await source.listDocuments()
+    const board = entries.find((entry) => entry.path === 'board')
+    expect(board?.tags).toEqual(['team:core', 'q3'])
+    expect(board?.carriedTags).toEqual(['health:ok', 'link:slow'])
+    expect(entries.find((entry) => entry.path === 'note')?.carriedTags ?? []).toEqual([])
+  })
+
+  it('counts every bearer — a note, a board, its boxes and its edges — in the vocabulary in use', async () => {
+    const source = await factory({
+      documents: [BOARD_WITH_TAGS, { path: 'note', kind: 'markdown', tags: ['q3'] }],
+    })
+    await expect(source.listTagsInUse?.()).resolves.toEqual([
+      { tag: 'health:ok', key: 'health', value: 'ok', documents: 0, boards: 0, nodes: 2, edges: 0 },
+      { tag: 'link:slow', key: 'link', value: 'slow', documents: 0, boards: 0, nodes: 0, edges: 1 },
+      { tag: 'q3', documents: 1, boards: 1, nodes: 0, edges: 0 },
+      { tag: 'team:core', key: 'team', value: 'core', documents: 0, boards: 1, nodes: 0, edges: 0 },
     ])
   })
 

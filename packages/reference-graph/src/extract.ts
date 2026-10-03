@@ -1,5 +1,9 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
-import { readCoreFacets, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  type DocumentContent,
+  readCoreFacets,
+  readDocumentContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasEdge,
   SpatialCanvas,
@@ -109,16 +113,45 @@ export function extractContentFacts(
       // The prose itself, for mention detection against other documents'
       // names — and the same strings search ranks, by construction.
       texts: searchableTexts(content),
-      bearers: markdownBearers(readCoreFacets(doc)?.tags),
+      bearers: tagBearersOf(doc, content),
     }
   }
   return {
     refs: spatialReferences(content.canvas),
     texts: searchableTexts(content),
-    bearers: spatialBearers(content.canvas),
+    bearers: tagBearersOf(doc, content),
   }
 }
 
-function markdownBearers(tags: readonly string[] | undefined): TagBearer[] {
+/**
+ * Everything a document contains that carries tags, from content already
+ * read — the one definition of "what bears a tag", so the daemon's projection
+ * and the browser keeper's cannot count different things.
+ */
+export function tagBearersOf(doc: LoroDoc, content: DocumentContent): TagBearer[] {
+  if (content.kind === 'spatial') return spatialBearers(content.canvas)
+  const tags = readCoreFacets(doc)?.tags
   return tags === undefined || tags.length === 0 ? [] : [{ what: 'document', text: '', tags }]
+}
+
+/**
+ * A document's OWN tags and the ones its contents carry, which are two
+ * different answers about the same document.
+ *
+ * Own is the document's frontmatter or its board's envelope — one bearer,
+ * because a document has one of those. Carried is the union over its nodes and
+ * edges, deduplicated, because a tag on three boxes is one tag the document
+ * contains. Any other bearer kind belongs to neither.
+ */
+export function splitBearerTags(bearers: readonly { what: string; tags: readonly string[] }[]): {
+  own: string[]
+  carried: string[]
+} {
+  const own = bearers.find((bearer) => bearer.what === 'document' || bearer.what === 'board')?.tags
+  const carried = new Set<string>()
+  for (const bearer of bearers) {
+    if (bearer.what !== 'node' && bearer.what !== 'edge') continue
+    for (const tag of bearer.tags) carried.add(tag)
+  }
+  return { own: own === undefined ? [] : [...own], carried: [...carried] }
 }
