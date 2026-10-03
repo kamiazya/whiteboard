@@ -147,9 +147,12 @@ informative once the failure had been reproduced first.
 `node .claude/scripts/mutate.mjs <file> <old> <new> -- <command...>` is the
 block above with its premise enforced: it **exits 3 naming the file and the
 needle when the substitution matched nothing**, prints the occurrence count
-when it did, and restores from memory in a `finally` — which also covers an
-UNTRACKED file, where `git checkout --` restores nothing at all. The exit code
-is the command's, so an expected-RED run is read by the caller.
+when it did, and restores from memory when the command ends or on SIGINT,
+SIGTERM or SIGHUP (exit 128+signo) — which also covers an UNTRACKED file,
+where `git checkout --` restores nothing at all. It prints `backup at <path>`
+before the command runs, because SIGKILL cannot be caught: after one, the file
+is still mutated and that path is the way back. The exit code is the
+command's, so an expected-RED run is read by the caller.
 
 It exists because the count assertion above is easy to leave out and the
 result is indistinguishable from success. Measured on one session's four
