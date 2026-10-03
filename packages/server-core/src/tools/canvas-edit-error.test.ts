@@ -50,3 +50,26 @@ describe('wb_canvas_edit whole-canvas refusal', () => {
     expect(refusal).not.toMatch(SOURCE_LEAK)
   })
 })
+
+describe('wb_canvas_edit geometry report', () => {
+  test.each([
+    'apply',
+    'propose',
+  ] as const)('is ordered by code unit, not by the host locale, in %s mode', async (mode) => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [], edges: [] })
+
+    const result = await createCanvasEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode,
+      ops: ['b', 'B', 'a', 'Z'].map((id) => ({
+        op: 'node.add' as const,
+        node: { id, type: 'text' as const, text: id },
+      })),
+    })
+
+    // A locale collation would answer a, b, B, Z.
+    expect(result.geometry.map((entry) => entry.id)).toEqual(['B', 'Z', 'a', 'b'])
+  })
+})

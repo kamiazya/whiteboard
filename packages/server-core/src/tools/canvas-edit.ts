@@ -5,7 +5,11 @@ import {
   setNodeLock,
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { type SpatialCanvas, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import {
+  compareCodeUnit,
+  type SpatialCanvas,
+  spatialCanvasSchema,
+} from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
@@ -195,7 +199,7 @@ async function commitAsProposal({
       lines: [...s.touchedLines].sort(),
       comments: [...s.touchedComments].sort(),
     },
-    geometry: [...s.geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    geometry: [...s.geometry.values()].sort((a, b) => compareCodeUnit(a.id, b.id)),
     snapshot: projectCanvasSnapshot(input.documentId, canvas, s.nodeLocks, s.edgeLocks),
     proposed: proposal,
   }
@@ -421,7 +425,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
     documentId: input.documentId,
     applied: input.ops.length,
     touched,
-    geometry: [...s.geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    geometry: [...s.geometry.values()].sort((a, b) => compareCodeUnit(a.id, b.id)),
     snapshot: projectCanvasSnapshot(input.documentId, parsed.data, s.nodeLocks, s.edgeLocks),
   }
 }
