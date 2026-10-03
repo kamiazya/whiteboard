@@ -3,7 +3,11 @@ import { join } from 'node:path'
 import { apiErrorReason, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import {
+  resolveTestServerDeps,
+  testDocumentRouterOptions,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-strict-refusals-test-')
 
@@ -60,11 +64,12 @@ describe('a strict request refuses with the key it did not recognise', () => {
   })
 
   it.each(routes)('%s', async (_name, method, path, valid) => {
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
 
     const res = await app.request(path, {
       method,

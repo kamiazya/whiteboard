@@ -16,7 +16,11 @@ import {
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import {
+  resolveTestServerDeps,
+  testDocumentRouterOptions,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-follow-rename-test-')
 
@@ -66,7 +70,7 @@ describe('rename routes follow references', () => {
   it('PUT :path/path repoints references written as the old path', async () => {
     await seedMarkdown('session1', 'design/login', 'the target')
     await seedMarkdown('session1', 'notes/daily', 'see [[design/login]] and [[unrelated]]')
-    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps })
+    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
     const res = await app.request('/api/workspaces/session1/documents/design%2Flogin/path', {
       method: 'PUT',
@@ -83,7 +87,7 @@ describe('rename routes follow references', () => {
     await seedMarkdown('session3', 'folder', 'the parent')
     await seedMarkdown('session3', 'folder/child', 'the child')
     await seedMarkdown('session3', 'notes/daily', 'see [[folder/child]]')
-    const app = createDocumentRouter({ scope: testStoreScope(), serverDeps })
+    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
     const res = await app.request('/api/workspaces/session3/documents/folder/path', {
       method: 'PUT',

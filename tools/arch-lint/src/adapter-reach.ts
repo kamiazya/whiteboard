@@ -69,6 +69,10 @@ export const TOP_LEVEL_MECHANICS: readonly string[] = [
  * row or a file is kept, so importing one is translation and not a weld to
  * storage.
  *
+ * Every entry is imported by at least one adapter, held by
+ * `adapter-mechanic-check.test.ts`: a permission nobody uses is named again in
+ * the change that first needs it.
+ *
  * The default is the other way round: everything in the mechanics layer, and
  * `daemon/`, that is not named here is a mechanic an adapter reaching it must
  * ledger. A directory pattern would entitle whatever is placed in the directory
@@ -115,16 +119,16 @@ export const ADAPTER_ENTITLED_MECHANICS: readonly {
       'the sign-in operation and its policy: completing a sign-in runs its own transaction over deps the root builds (`createCompleteSignInDeps`), so the route translates the callback and holds no row',
   },
   {
-    modules: ['tenant/id', 'tenant/data-layout-seam'],
+    modules: ['tenant/data-layout-seam'],
     reason:
-      'the tenant id and the layout SEAM are values an adapter is handed; the layout that places files by them (`tenant/data-layout`) is the mechanic',
+      'the layout SEAM is a value an adapter is handed; the layout that places files by it (`tenant/data-layout`) is the mechanic',
   },
   {
     modules: ['observability/tracing'],
     reason: 'the span around a request an adapter handles: how it reports, not what it stores',
   },
   {
-    modules: ['log', 'server-core-logs', 'validators'],
+    modules: ['log', 'validators'],
     reason:
       'the logger and the input-shape policy every adapter uses; neither reads or writes a keeper',
   },

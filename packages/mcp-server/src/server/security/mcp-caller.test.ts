@@ -150,7 +150,7 @@ describe('gatedByMembership', () => {
   it('refuses a call that names no workspace, and runs nothing', async () => {
     await members.ensureProfile({ binding: ada, displayName: 'Ada' })
     await expect(asAda(() => tools().execute({}))).rejects.toThrow(/workspace_required/)
-    await expect(asAda(() => tools().execute({ workspaceId: 42 }))).rejects.toThrow(
+    await expect(asAda(() => tools().execute({ workspaceId: 42 } as never))).rejects.toThrow(
       /workspace_required/,
     )
     expect(executed).toEqual([])

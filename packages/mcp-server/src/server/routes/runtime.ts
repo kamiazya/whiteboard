@@ -9,8 +9,6 @@ import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
-import { readLatestCompactedAt } from '../store/document-store.js'
-import type { StoreScope } from '../store/store-scope.js'
 
 export interface RuntimeRouterOptions {
   instanceId: string
@@ -26,16 +24,17 @@ export interface RuntimeRouterOptions {
    */
   credentialResolver: CredentialResolver
   /**
-   * The directory this router serves: the compaction stamp is read from this
-   * scope's workspace records, and `storageReport` must walk the same
-   * directory.
-   */
-  scope: StoreScope
-  /**
-   * The storage usage report for `scope`'s data directory. Handed in because
-   * producing it walks the disk, which is a mechanic and not this adapter's.
+   * The storage usage report for the data directory this router serves.
+   * Handed in because producing it walks the disk, which is a mechanic and
+   * not this adapter's.
    */
   storageReport: () => Promise<StorageReportPayload>
+  /**
+   * The freshest auto-Optimize timestamp across the same directory's
+   * workspaces, or null when none has run. Handed in because it opens every
+   * workspace record, which is the keeper's work and not this adapter's.
+   */
+  readLastAutoCompactedAt: () => Promise<number | null>
 }
 
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
@@ -99,7 +98,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   app.get('/api/runtime/storage', async (c) => {
     options.touch()
     const report = await options.storageReport()
-    const lastAutoCompactedAt = await readLatestCompactedAt(options.scope)
+    const lastAutoCompactedAt = await options.readLastAutoCompactedAt()
     return c.json({ ...report, lastAutoCompactedAt })
   })
 

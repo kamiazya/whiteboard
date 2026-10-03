@@ -9,7 +9,7 @@ import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspace-doc-seam-')
 
@@ -57,11 +57,12 @@ describe('workspace-document routes and the deps they were handed', () => {
       },
     }
 
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps: deps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps: deps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
     const res = await app.request(`/api/w/${WS}/workspace-document/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },

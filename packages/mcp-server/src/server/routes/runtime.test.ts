@@ -15,12 +15,11 @@ import {
   createCredentialResolver,
 } from '../security/credential-resolver.js'
 import { mintMacaroon } from '../security/macaroon.js'
-import { testStoreScope } from './_test-helpers.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
-// data directory. Stub `../config.js` (DATA_DIR) and the compaction read behind
-// /api/runtime/storage; the report itself is the dependency the router is
-// handed, so a buggy route can not stat the user's blobs/.
+// data directory. Stub `../config.js` (DATA_DIR); the storage report and the
+// compaction stamp are dependencies the router is handed, so a buggy route can
+// not stat the user's blobs/ or open its database.
 const mockStorageReport = vi.fn(async () => ({
   totalBytes: 0,
   fileCount: 0,
@@ -40,13 +39,6 @@ vi.mock('../config.js', () => ({
   WHITEBOARD_ROOT: '/__test__',
   REPO_ROOT: '/__test__',
 }))
-vi.mock('../store/document-store.js', () => ({
-  readLatestCompactedAt: () => mockReadLatestCompactedAt(),
-}))
-
-// Not the directory the mocked config names, so a route that read the process
-// data dir instead of the layout it was handed answers with the wrong one.
-const LAYOUT_DIR = '/__test__/runtime-layout-handed-to-the-router'
 
 const { createRuntimeRouter } = await import('./runtime.js')
 const { createDaemonIdentity } = await import('../security/daemon-identity.js')
@@ -89,8 +81,8 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
     credentialResolver: createCredentialResolver({ daemonToken: 'secret', ...credentials }),
     instanceId: 'test-instance-id',
     identity: testIdentity,
-    scope: testStoreScope(LAYOUT_DIR),
     storageReport: mockStorageReport,
+    readLastAutoCompactedAt: mockReadLatestCompactedAt,
     touch,
     getStatus: () => STATUS,
   })

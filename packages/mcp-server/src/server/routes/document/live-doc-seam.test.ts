@@ -13,7 +13,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-live-doc-seam-')
 
@@ -59,11 +59,12 @@ describe('live-doc routes and the deps they were handed', () => {
       },
     }
 
-    const app = createDocumentRouter({
-      scope: testStoreScope(),
-      serverDeps: deps,
-      autoVersionQuietMs: 60_000,
-    })
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps: deps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
     const res = await app.request('/api/w/seam-ws/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
