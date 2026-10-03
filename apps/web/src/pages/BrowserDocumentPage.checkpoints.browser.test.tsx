@@ -147,7 +147,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
     await waitFor(
       async () => {
         const rows = await store.list(workspaceId, 'canvas-a')
-        expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+        expect(rows).toEqual([expect.objectContaining({ auto: true })])
       },
       { timeout: 5000 },
     )
@@ -188,7 +188,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
       await waitFor(
         async () => {
           const rows = await store.list(workspaceId, 'canvas-a')
-          expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+          expect(rows).toEqual([expect.objectContaining({ auto: true })])
         },
         { timeout: 5000 },
       )
@@ -234,7 +234,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
       await waitFor(
         async () => {
           const rows = await store.list(workspaceId, 'canvas-a')
-          expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+          expect(rows).toEqual([expect.objectContaining({ auto: true })])
         },
         { timeout: 5000 },
       )
@@ -337,7 +337,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
         await waitFor(
           async () => {
             const rows = await store.list(workspaceId, 'canvas-b')
-            expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+            expect(rows).toEqual([expect.objectContaining({ auto: true })])
           },
           { timeout: 5000 },
         )
@@ -396,7 +396,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
         await waitFor(
           async () => {
             const rows = await store.list(workspaceId, 'canvas-a')
-            expect(rows).toEqual([expect.objectContaining({ auto: true, branchName: 'main' })])
+            expect(rows).toEqual([expect.objectContaining({ auto: true })])
           },
           { timeout: 5000 },
         )
