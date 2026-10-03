@@ -235,9 +235,10 @@ function stripUncached(source: string, fileName?: string): string {
   visit(file)
   edits.push(...commentsBetween(source, carved))
 
+  edits.sort((a, b) => a.start - b.start)
   let out = ''
   let cursor = 0
-  for (const edit of edits.sort((a, b) => a.start - b.start)) {
+  for (const edit of edits) {
     out += source.slice(cursor, edit.start) + edit.text
     cursor = edit.end
   }
