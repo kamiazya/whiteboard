@@ -113,7 +113,7 @@ describe('references export/import round-trip properties', () => {
       const exported = resolveReferencesForExport(root, (id) => (id === documentId ? path : null))
 
       const node = firstParagraphChild(exported)
-      expect(node).toEqual({ type: 'text', value: expect.stringContaining(documentId) })
+      expect(node).toMatchObject({ url: path })
     },
   )
 
@@ -129,14 +129,13 @@ describe('references export/import round-trip properties', () => {
       const exportedA = resolveReferencesForExport(wikiLinkRoot(documentIdA, undefined), resolver)
       const exportedB = resolveReferencesForExport(wikiLinkRoot(documentIdB, undefined), resolver)
 
-      expect(firstParagraphChild(exportedA)).toEqual({
-        type: 'text',
-        value: `[${collidingPath}](${collidingPath})`,
-      })
-      expect(firstParagraphChild(exportedB)).toEqual({
-        type: 'text',
-        value: `[${collidingPath}](${collidingPath})`,
-      })
+      const exportedLink = {
+        type: 'link',
+        url: collidingPath,
+        children: [{ type: 'text', value: collidingPath }],
+      }
+      expect(firstParagraphChild(exportedA)).toEqual(exportedLink)
+      expect(firstParagraphChild(exportedB)).toEqual(exportedLink)
     },
   )
 
@@ -154,13 +153,11 @@ describe('references export/import round-trip properties', () => {
       for (const [documentId, resolvable] of entries) {
         const exported = resolveReferencesForExport(wikiLinkRoot(documentId, undefined), resolver)
         const value = firstParagraphChild(exported)
-        expect(value.type).toBe('text')
-        if (value.type !== 'text') continue
 
         if (resolvable) {
-          expect(value.value).toContain(`/notes/${documentId}.md`)
+          expect(value).toMatchObject({ type: 'link', url: `/notes/${documentId}.md` })
         } else {
-          expect(value.value).toBe(`[[${documentId}]]`)
+          expect(value).toEqual({ type: 'text', value: `[[${documentId}]]` })
           const reimported = resolveReferences(
             resolveReferencesForExport(wikiLinkRoot(documentId, undefined), resolver),
           )

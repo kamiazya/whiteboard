@@ -31,10 +31,10 @@ function hasNoExcludedDescendant(node: any): boolean {
   if (node.type === 'inlineMath' && typeof node.value === 'string' && node.value.trim() === '') {
     return false
   }
-  // wikiLink/embed intentionally stringify to plain bracket-literal text
-  // here (see to-remark.ts) — resolving them back into typed nodes is
-  // the references/ modules' job (a separate pass over already-parsed content, with
-  // its own round-trip coverage), not this pipeline's.
+  // wikiLink/embed are written as their bracket syntax (see to-remark.ts)
+  // and read back as plain text, since resolving text into typed nodes is
+  // the references/ modules' job; `reference-writer.property.test.ts` holds
+  // that composed trip.
   if (node.type === 'wikiLink' || node.type === 'embed') return false
   // A hard line `break` only round-trips when followed by more content on
   // the next line; one at the tail of an inline run (nothing after it

@@ -280,9 +280,9 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/codec/src/markdown/normalize.ts#normalizeMdast':
     'the equivalence the markdown round-trip contract is stated modulo, read by the codec and editor round-trip properties and named in package-codec.md',
   'packages/codec/src/markdown/pipeline.ts#stringifyMarkdownBody':
-    'the inverse half of parseMarkdownBody that the markdown round-trip properties hold the codec to, documented as the pipeline scope in package-codec.md',
+    'the writer half of the markdown pipeline: held to parseMarkdownBody by the round-trip properties, and to the reference syntax the reader recognises by reference-writer.property.test.ts, ready for the bundle export that has no caller yet',
   'packages/codec/src/references/resolve-for-export.ts#resolveReferencesForExport':
-    'the export seam ADR-0017 decision 2 holds ready for the bundle export, waiting only on an injected resolver',
+    'the export seam ADR-0017 decision 2 holds ready for the bundle export: it emits link and image nodes that stringifyMarkdownBody writes as links, waiting only on an injected resolver',
   'packages/codec/src/spatial/codecs.ts#foreignRoundTrip':
     'the foreign-reader trip of the codec registry that codecs.property.test.ts checks every projection ledger against',
   'packages/codec/src/spatial/json-schema.ts#xWhiteboardJsonSchema':
