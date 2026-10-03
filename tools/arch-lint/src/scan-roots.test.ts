@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  EXCLUDED_DIR_SEGMENTS,
   isExcludedPath,
   REPO_ROOT,
   SCAN_ROOTS,
@@ -38,7 +39,9 @@ describe('scan roots', () => {
   })
 
   it('excludes history, vendored and worktree directories by their path inside the repo', () => {
-    expect(isExcludedPath(join(REPO_ROOT, 'packages/x/src/migrations/0001.ts'))).toBe(true)
+    expect(
+      isExcludedPath(join(REPO_ROOT, 'packages/mcp-server/src/server/store/db/migrations/0001.ts')),
+    ).toBe(true)
     expect(isExcludedPath(join(REPO_ROOT, 'packages/canvas-render/src/vendor/budoux/ja.ts'))).toBe(
       true,
     )
@@ -46,12 +49,29 @@ describe('scan roots', () => {
     expect(isExcludedPath(join(REPO_ROOT, 'packages/x/src/a.ts'))).toBe(false)
   })
 
+  it('does not exclude a directory that only shares the name of an excluded one', () => {
+    expect(isExcludedPath(join(REPO_ROOT, 'packages/x/src/migrations/0001.ts'))).toBe(false)
+    expect(isExcludedPath(join(REPO_ROOT, 'packages/x/src/vendor/budoux/ja.ts'))).toBe(false)
+  })
+
+  // Guarded from both sides: an entry for a directory that was moved or
+  // deleted excuses nothing, and reads exactly like an exclusion in force.
+  it('lists no directory that does not exist', () => {
+    const missing = EXCLUDED_DIR_SEGMENTS.filter(
+      (segment) => segment !== `/${WORKTREES_PATH}/` && !existsSync(join(REPO_ROOT, segment)),
+    )
+    expect(missing).toEqual([])
+    expect(EXCLUDED_DIR_SEGMENTS.length).toBeGreaterThan(2)
+  })
+
   it('does not read where the checkout lives as part of the path it judges', () => {
     // A checkout may itself sit under `.claude/worktrees/`; matching the
     // absolute path would then exclude every file in it.
     const root = `/home/dev/repo/${WORKTREES_PATH}/feature`
     expect(isExcludedPath(`${root}/packages/x/src/a.ts`, root)).toBe(false)
-    expect(isExcludedPath(`${root}/packages/x/src/migrations/0001.ts`, root)).toBe(true)
+    expect(
+      isExcludedPath(`${root}/packages/mcp-server/src/server/store/db/migrations/0001.ts`, root),
+    ).toBe(true)
   })
 })
 

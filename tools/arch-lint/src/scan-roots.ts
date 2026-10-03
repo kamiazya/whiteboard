@@ -69,8 +69,8 @@ export const SCRIPT_SCAN_ROOTS: readonly string[] = [
 ]
 
 /**
- * Directories excluded WHOLE, with the reason a scan there would be noise
- * rather than debt.
+ * Directories excluded WHOLE, each as its path from the repo root, with the
+ * reason a scan there would be noise rather than debt.
  *
  * `migrations/` is history — a migration's own text does not change once
  * written (see .claude/rules/vocabulary.md). `vendor/budoux/` is a vendored
@@ -78,10 +78,15 @@ export const SCRIPT_SCAN_ROOTS: readonly string[] = [
  * `budoux` package — see its own README for why it is vendored rather than
  * depended on); its size is not this repo's code to shrink. A worktree is
  * another branch's checkout (`WORKTREES_PATH`).
+ *
+ * Full paths, not names: a directory that merely shares the name `migrations`
+ * is somebody's code, and was silently dropped from every scan that asks.
+ * Each entry but the worktrees (per-machine, gitignored) must name a directory
+ * that exists, so an entry cannot outlive the directory it excuses.
  */
-const EXCLUDED_DIR_SEGMENTS: readonly string[] = [
-  '/migrations/',
-  '/vendor/budoux/',
+export const EXCLUDED_DIR_SEGMENTS: readonly string[] = [
+  '/packages/mcp-server/src/server/store/db/migrations/',
+  '/packages/canvas-render/src/vendor/budoux/',
   `/${WORKTREES_PATH}/`,
 ]
 
@@ -104,7 +109,7 @@ export function relativeToRepo(absolutePath: string, root: string = REPO_ROOT): 
  */
 export function isExcludedPath(absolutePath: string, root: string = REPO_ROOT): boolean {
   const relative = `/${relativeToRepo(absolutePath, root)}`
-  return EXCLUDED_DIR_SEGMENTS.some((segment) => relative.includes(segment))
+  return EXCLUDED_DIR_SEGMENTS.some((segment) => relative.startsWith(segment))
 }
 
 export interface WalkOptions {

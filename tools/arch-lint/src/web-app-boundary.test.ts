@@ -563,6 +563,16 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     ).toEqual([])
   })
 
+  // Guarded from both sides: an entry for a workflow that was renamed or
+  // deleted allows nothing, and would quietly pre-approve the next file
+  // given that name.
+  it('allowlists only workflows that exist', () => {
+    const missing = [...CF_SECRET_WORKFLOW_ALLOWLIST].filter(
+      (name) => !existsSync(resolve(REPO_ROOT, '.github/workflows', name)),
+    )
+    expect(missing).toEqual([])
+  })
+
   it('release.yml deploy-web job uses Cloudflare secrets for apps/web deploy', () => {
     // No silent skip: unlike wrangler.toml (guarded by its own existence test above),
     // release.yml has no dedicated existence assertion — a missing file must fail here.
