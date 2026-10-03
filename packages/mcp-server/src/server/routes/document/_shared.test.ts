@@ -18,9 +18,9 @@ describe('the not-found translations over the port error', () => {
   })
 
   it('answers the caller-supplied title for an absent document', () => {
-    expect(notFoundAs('Canvas "notes/a" not found')(absent)).toEqual({
+    expect(notFoundAs('Document "notes/a" not found')(absent)).toEqual({
       status: 404,
-      body: { title: 'Canvas "notes/a" not found' },
+      body: { title: 'Document "notes/a" not found' },
     })
   })
 

@@ -1250,7 +1250,7 @@ describe('DaemonIndexPage', () => {
         const path = JSON.parse(String(init?.body ?? '{}')).path as string
         created.push(path)
         if (serverPaths.includes(path)) {
-          return Promise.resolve(jsonResponse({ title: `Canvas "${path}" already exists` }, 409))
+          return Promise.resolve(jsonResponse({ title: `Document "${path}" already exists` }, 409))
         }
         serverPaths = [...serverPaths, path]
         return Promise.resolve(

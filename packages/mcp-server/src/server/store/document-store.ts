@@ -268,7 +268,7 @@ export async function saveDocument(
     const existingDocumentId = existingEntry?.documentId ?? null
     if (existingDocumentId !== null && options.overwrite !== true) {
       throw new ConflictError(
-        `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
+        `Document "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
     // A ULID, not a nanoid: the document index creates documents in this
@@ -670,7 +670,7 @@ async function moveThroughIndex(
     await index.moveDocument({ workspaceId, from: oldPath, to: newPath })
   } catch (err) {
     if (err instanceof DocumentPathTakenError) {
-      throw new ConflictError(`Canvas "${workspaceId}/${err.path}" already exists`)
+      throw new ConflictError(`Document "${workspaceId}/${err.path}" already exists`)
     }
     throw err
   }

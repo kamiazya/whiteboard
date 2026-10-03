@@ -344,7 +344,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         const deps = options.serverDeps
         const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
         if (entry === null) {
-          return c.json({ title: `Canvas "${path}" not found` }, 404)
+          return c.json({ title: `Document "${path}" not found` }, 404)
         }
         await wbDocumentDelete(deps, { workspaceId, documentId: entry.documentId })
         const response: DeleteDocumentResponse = { ok: true }
@@ -354,7 +354,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         // retired SQL index answered null; this surface's spelling of both
         // is the same 404.
         const owned = firstOwned(err, [
-          workspaceNotFoundAs(`Canvas "${path}" not found`),
+          workspaceNotFoundAs(`Document "${path}" not found`),
           hasDescendants,
           corruptStored,
         ])
@@ -395,7 +395,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         const deps = options.serverDeps
         const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
         if (entry === null) {
-          return c.json({ title: `Canvas "${path}" not found` }, 404)
+          return c.json({ title: `Document "${path}" not found` }, 404)
         }
         const moved = await wbDocumentMove(deps, {
           workspaceId,
@@ -415,7 +415,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         // path, so the path the caller asked for is often free and naming it
         // sends them to retry the one thing that was never the problem.
         const owned = firstOwned(err, [
-          notFoundAs(`Canvas "${path}" not found`),
+          notFoundAs(`Document "${path}" not found`),
           moveIntoSelf,
           pathTakenAs(),
           corruptStored,
