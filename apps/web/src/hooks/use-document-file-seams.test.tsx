@@ -499,7 +499,7 @@ describe('useDocumentFileSeams empty documents', () => {
 describe('toFacetCard heading when the document has no stored title', () => {
   it('falls back to the reference, not to the type', () => {
     // The name moved to the workspace, so a document written through
-    // wb_document_set no longer stores a `title` facet. Falling back to
+    // `wb_workspace_edit` no longer stores a `title` facet. Falling back to
     // `type` made every such card read "note" or "issue" — the same word on
     // every card, identifying nothing. The reference is the path, which is
     // the fallback this model uses everywhere a name is absent.

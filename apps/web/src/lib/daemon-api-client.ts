@@ -179,8 +179,8 @@ export function listDocuments(
 }
 
 /**
- * `/api/v1`, not the legacy arm. Same operation the `wb_document_create` MCP
- * tool runs, through the same schema, so the daemon answers one create rather
+ * `/api/v1`, not the legacy arm. Same operation `wb_workspace_edit`'s
+ * `document.create` runs, through the same schema, so the daemon answers one create rather
  * than two that drift — and the answer carries the id the server minted and
  * the workspace it filed under, where the legacy body said only `path`.
  *

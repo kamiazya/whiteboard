@@ -66,8 +66,8 @@ export interface DocumentPageModel {
   }
   /**
    * The documents linking here, for the inspector's Connections panel and
-   * its opener. Absent for a keeper that answers no backlinks (the browser);
-   * `backlinks: null` while the daemon's answer is in flight.
+   * its opener. Absent only for a keeper that supplies none (both keepers
+   * supply it today); `backlinks: null` while the keeper's answer is in flight.
    */
   readonly connections?: Omit<ConnectionsPanelProps, 'backlinks'> & {
     readonly backlinks: ConnectionsPanelProps['backlinks'] | null

@@ -93,7 +93,7 @@ function markdownSnapshot(): Uint8Array {
 /**
  * The shape before the writers were unified: the body stored as the
  * `okf-body` TEXT NODE of a canvas, the `body` container empty. Still on
- * disk wherever an older `wb_document_set` wrote a note.
+ * disk wherever an older MCP document write left a note.
  */
 function preUnificationSnapshot(): Uint8Array {
   const doc = new LoroDoc()

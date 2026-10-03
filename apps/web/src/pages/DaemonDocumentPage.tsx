@@ -280,7 +280,7 @@ function useDaemonDocument(
   // hook that owns it, not to a second list here.
 
   // A markdown document's body lives in the doc's `body` text container —
-  // the one place it is stored, and the shape `wb_document_set` writes. The
+  // the one place it is stored, and the shape `wb_workspace_edit`'s `document.set` writes. The
   // read comes from the sync session (which republishes it on hydration,
   // remote import and undo alike) and the write travels the session's
   // ordinary command path, so a body edit gets the same debounce, undo step
