@@ -407,11 +407,13 @@ jobs:
         run: pnpm exec vitest run --project=mcp-node packages/mcp-server/src/server/release/sbom-policy.test.ts
 
   # Parallel to `verify`, own timeout budget: `test:e2e:distribution` already
-  # exercises smoke:distribution:packaged pre-build, but that combined
+  # exercises the same packaged node smokes pre-build, but that combined
   # release-candidate chain only runs on the release tag (see
   # publish-gate-runner.test.ts / release-gate-matrix.json). This job runs the
-  # exact `publish`-tier smoke:distribution:packaged gate on every PR so it
-  # cannot go stale between release tags without a PR-side failure.
+  # exact `publish`-tier smoke:distribution:packaged:node gate on every PR so it
+  # cannot go stale between release tags without a PR-side failure. It names
+  # the node half only: smoke:distribution:packaged adds the two CLI smokes,
+  # which spend API quota wherever the CLI is installed.
   packaged-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -427,7 +429,7 @@ jobs:
         run: pnpm build
 
       - name: Packaged distribution smoke
-        run: pnpm smoke:distribution:packaged
+        run: pnpm smoke:distribution:packaged:node
 
   # Prod vite build of packages/canvas-viewer's self-contained widget HTML,
   # verified against a real browser (not just the static grep): zero

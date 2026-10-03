@@ -182,9 +182,10 @@ describe('package.json script drift', () => {
   })
 })
 
-// smoke:tarball and smoke:packaged are invoked inside test:e2e:distribution;
-// they do not need to appear directly in check:release-candidate.
-const COVERED_VIA_DISTRIBUTION = new Set(['smoke:tarball', 'smoke:packaged'])
+// These gates are invoked inside test:e2e:distribution; they do not need to
+// appear directly in check:release-candidate, where a second copy would run
+// the same smoke twice.
+const COVERED_VIA_DISTRIBUTION = new Set(['smoke:tarball', 'smoke:packaged', 'smoke:codex-config'])
 
 describe('tier aggregate completeness drift', () => {
   it('COVERED_VIA_DISTRIBUTION gates actually appear in test:e2e:distribution:only as command segments', () => {
@@ -292,7 +293,7 @@ describe('test:e2e:distribution step-count drift', () => {
     // a step naming a script that had been deleted stayed in it and the guard
     // stayed green. `pnpm smoke:template` sat there until someone ran the
     // chain — and it only runs on a release tag, since CI's packaged-smoke job
-    // exercises `smoke:distribution:packaged` instead. Nothing else would have
+    // exercises `smoke:distribution:packaged:node` instead. Nothing else would have
     // reported it before the release it broke.
     //
     // Scoped to this chain, beside the count it completes.

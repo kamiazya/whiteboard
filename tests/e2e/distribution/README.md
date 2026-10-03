@@ -76,6 +76,10 @@ by the `.mjs` ledger in `file-size-budget.test.ts` beside the TypeScript ones.
 CLI to be installed and authenticated. They are never part of `pnpm test` or
 `pnpm test:distribution`.
 
+`pnpm smoke:distribution:packaged:node` runs only the seven packaged node scripts, with no CLI
+smoke, so it is the quota-free way to reproduce CI's `packaged-smoke` job after a build.
+`pnpm smoke:distribution:packaged` is the two CLI smokes followed by that script.
+
 ## Smoke script naming
 
 Each `.mjs` script in this directory targets a specific packaged deployment scenario:
@@ -86,7 +90,7 @@ Each `.mjs` script in this directory targets a specific packaged deployment scen
 ## Release gate matrix
 
 The gates in `release-gate-matrix.json` reference commands from the root `package.json`.
-Two gates — `smoke:tarball` and `smoke:packaged` — are covered transitively through
+Three gates — `smoke:tarball`, `smoke:packaged` and `smoke:codex-config` — are covered transitively through
 `test:e2e:distribution` rather than appearing directly in `check:release-candidate`.
 
 A gate's `requiredFor` tiers name the aggregate **script** that must invoke it, not

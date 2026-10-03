@@ -137,8 +137,8 @@
       }
     },
     {
-      "id": "smoke:distribution:packaged",
-      "command": "pnpm smoke:distribution:packaged",
+      "id": "smoke:distribution:packaged:node",
+      "command": "pnpm smoke:distribution:packaged:node",
       "category": "distribution",
       "requiredFor": ["publish"],
       "requiresDocker": false,
