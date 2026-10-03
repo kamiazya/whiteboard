@@ -8,7 +8,7 @@
 #
 # Flow:
 #   1. Push Conventional Commits such as feat:, fix:, or chore: to main
-#   2. release-please opens a PR like "chore(main): release <pkg> X.Y.Z" for each package
+#   2. release-please opens one grouped PR titled "chore: release main" (linked-versions)
 #   3. A maintainer reviews and merges it
 #   4. After merge, `publish-mcp` runs when the target package reports release_created=true
 #

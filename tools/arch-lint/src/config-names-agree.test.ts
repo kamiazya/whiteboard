@@ -218,3 +218,30 @@ describe('dependabot.yml groups', () => {
     expect(matchesPattern('@excalidraw/*', '@types/excalidraw')).toBe(false)
   })
 })
+
+// `linked-versions` merges the plugin and mcp-server components into one
+// release PR, and release-please titles a grouped PR `chore: release main`:
+// neither a component nor a version appears in it. A doc that promises a
+// component-and-version title describes a PR that is never opened.
+describe('the release PR title', () => {
+  const RETIRED_FORM = /chore\(main\): release/
+  const DESCRIBERS = [
+    'CONTRIBUTING.md',
+    'docs/contributing/releasing.md',
+    '.github/workflows/release.yml',
+    'tools/check-pr-title.mjs',
+  ] as const
+
+  it('is grouped by the linked-versions plugin the docs rely on', () => {
+    const config = JSON.parse(read('release-please-config.json')) as {
+      plugins?: { type: string }[]
+    }
+    expect(config.plugins?.some((plugin) => plugin.type === 'linked-versions')).toBe(true)
+  })
+
+  it.each(DESCRIBERS)('%s names the grouped title, not a per-component one', (path) => {
+    const text = read(path)
+    expect(text).toContain('chore: release main')
+    expect(text).not.toMatch(RETIRED_FORM)
+  })
+})

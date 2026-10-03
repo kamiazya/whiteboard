@@ -57,7 +57,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 - `feat!:` or `BREAKING CHANGE:` footer — major bump
 - `chore:` / `docs:` / `refactor:` / `test:` — no version bump (still in CHANGELOG)
 
-Releases are automated by [release-please](https://github.com/googleapis/release-please) — merge the auto-generated `chore(main): release X.Y.Z` PR to publish.
+Releases are automated by [release-please](https://github.com/googleapis/release-please) — merge the auto-generated `chore: release main` PR to publish.
 
 Keep published MCP wrapper configs on `@latest` unless you also update release-please sync rules. If you pin `@kamiazya/whiteboard-mcp@x.y.z` inside `.mcp.json` or plugin manifests, add the pinned fields to `release-please-config.json` `extra-files` at the same time.
 When upgrading `@modelcontextprotocol/sdk`, re-check the supported MCP protocol matrix in `docs/contributing/mcp-debugging.md` and the initialize negotiation tests.
@@ -102,7 +102,7 @@ CI runs the full matrix on every push, so a local full run repeats its work; `pn
 Releases are automated with [release-please](https://github.com/googleapis/release-please). Manual `npm publish` should not normally be needed.
 
 1. Push to `main` using Conventional Commits.
-2. The `release` GitHub Actions workflow opens or updates a `chore(main): release X.Y.Z` PR that bumps `package.json` and updates the changelog.
+2. The `release` GitHub Actions workflow opens or updates a `chore: release main` PR that bumps `package.json` and updates the changelog.
 3. A maintainer reviews and merges that PR.
 4. The workflow runs again from the merge with `release_created=true`. `publish-mcp` performs:
    - `pnpm install --frozen-lockfile`
@@ -130,7 +130,7 @@ npm pack --dry-run             # verify the tarball includes dist/, skills/, pac
 
 ### PR title rule
 
-The PR title becomes the squash-merge commit message that release-please reads. Use a Conventional Commit title (`fix:`, `feat(scope):`, `chore:`, …). CI rejects tool prefixes such as `[codex] ...`. Release-please PRs follow the same rule (`chore(main): release X.Y.Z`, `chore(main): release mcp-server X.Y.Z`) — the `v` prefix only applies to the resulting tag (`include-v-in-tag: true`), not the commit / PR title.
+The PR title becomes the squash-merge commit message that release-please reads. Use a Conventional Commit title (`fix:`, `feat(scope):`, `chore:`, …). CI rejects tool prefixes such as `[codex] ...`. The release PR follows the same rule: its title is `chore: release main` (the `linked-versions` plugin groups the components into one PR, so no component or version appears in it); the `v` prefix only applies to the resulting tag (`include-v-in-tag: true`).
 
 ## AI dev-flow tooling (`.claude/`)
 
