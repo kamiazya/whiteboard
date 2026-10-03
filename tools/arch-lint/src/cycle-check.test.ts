@@ -42,6 +42,21 @@ describe('findImportCycles', () => {
     expect(findImportCycles(graph)).toEqual([['a.ts']])
   })
 
+  it('lists the groups in sorted order though the traversal closes the later one first', () => {
+    // Tarjan completes {c, d} before {a, b}, since a's component closes only
+    // after its whole subtree has been walked.
+    const graph = new Map([
+      ['a.ts', ['b.ts', 'c.ts']],
+      ['b.ts', ['a.ts']],
+      ['c.ts', ['d.ts']],
+      ['d.ts', ['c.ts']],
+    ])
+    expect(findImportCycles(graph)).toEqual([
+      ['a.ts', 'b.ts'],
+      ['c.ts', 'd.ts'],
+    ])
+  })
+
   it('is deterministic under input file-order permutation (metamorphic)', () => {
     const forward = new Map([
       ['a.ts', ['b.ts']],

@@ -122,3 +122,60 @@ describe('what the scan sees', () => {
     ).toEqual([])
   })
 })
+
+const foundIn = (body: string) => findReadFailuresAsAbsence('f.ts', body)
+const tryReadFile = (catchBody: string) =>
+  `function load() { try { return readFileSync(p, 'utf8') } catch { ${catchBody} } }`
+
+describe('findReadFailuresAsAbsence — which answers read as "nothing here"', () => {
+  it.each([
+    ['null', 'return null', 'null'],
+    ['false', 'return false', 'false'],
+    ['undefined', 'return undefined', 'undefined'],
+    ['void 0', 'return void 0', 'undefined'],
+    ['an empty array', 'return []', '[]'],
+    ['an empty object', 'return {}', '{}'],
+    ['a missing-ish kind', "return { kind: 'missing' }", "{ kind: 'missing' }"],
+    ['a parenthesised null', 'return (null)', 'null'],
+    ['nothing at all', '', 'nothing'],
+  ])('flags a handler answering %s', (_name, catchBody, answer) => {
+    const sites = foundIn(tryReadFile(catchBody))
+    expect(sites.map((s) => s.answer)).toEqual([answer])
+  })
+
+  it.each([
+    ['a status that merely spells missing', "return { status: 'missing' }"],
+    ['a kind that is not an absence', "return { kind: 'corrupt' }"],
+    ['a populated object', 'return { a: 1 }'],
+    ['a populated array', 'return [1]'],
+    ['a rethrow', 'throw new Error("x")'],
+    ['a value', 'return fallback'],
+  ])('does not flag a handler answering %s', (_name, catchBody) => {
+    expect(foundIn(tryReadFile(catchBody))).toEqual([])
+  })
+
+  it('exempts a handler that asks about ENOENT, in a try/catch and in a promise catch', () => {
+    expect(foundIn(tryReadFile("if (e.code !== 'ENOENT') throw e; return null"))).toEqual([])
+    expect(
+      foundIn(
+        "const a = readFile(p).catch((e) => { if (e.code !== 'ENOENT') throw e; return null })",
+      ),
+    ).toEqual([])
+    expect(foundIn('const a = readFile(p).catch(() => null)').map((s) => s.answer)).toEqual([
+      'null',
+    ])
+  })
+
+  it('names the enclosing function, whether declared, a const arrow or a const function expression', () => {
+    const arrow =
+      'const readIt = async () => { try { return readFileSync(p) } catch { return null } }'
+    const expr =
+      'const readThat = function () { try { return readFileSync(p) } catch { return null } }'
+    const nested =
+      'const outer = () => { items.map((i) => { try { return readFileSync(i) } catch { return null } }) }'
+    expect(foundIn(arrow).map((s) => s.key)).toEqual(['f.ts#readIt'])
+    expect(foundIn(expr).map((s) => s.key)).toEqual(['f.ts#readThat'])
+    expect(foundIn(nested).map((s) => s.key)).toEqual(['f.ts#outer'])
+    expect(foundIn(tryReadFile('return null')).map((s) => s.key)).toEqual(['f.ts#load'])
+  })
+})

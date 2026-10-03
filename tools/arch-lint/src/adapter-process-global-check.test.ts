@@ -324,9 +324,18 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
         'export function sweep(id: string, options: { scope?: StoreScope } = {}) {',
         '  const scope = options.scope ?? globalStoreScope',
         '}',
+        // Two more, called only in their explicit form, from a route of their own, so
+        // that a call collapsed into another call's entry cannot hide it.
+        'export function lookup(id: string, scope: StoreScope = globalStoreScope) {}',
+        'export function purge(id: string, options: { scope?: StoreScope } = {}) {',
+        '  const scope = options.scope ?? globalStoreScope',
+        '}',
         // Not defaulting: takes a scope it must be given, or takes none.
         'export function required(id: string, scope: StoreScope) {}',
         'export function unrelated(id: string) {}',
+        // Exported, but not a function, or a function that defaults nothing.
+        'export const LIMIT = 5',
+        'export const plain = (id: string) => id',
         // Not exported, so no other file can call it.
         'function hidden(scope: StoreScope = globalStoreScope) {}',
       ].join('\n'),
@@ -353,9 +362,26 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
       ].join('\n'),
     )
     writeFileSync(
+      join(fixture, 'server', 'routes', 'explicit.ts'),
+      [
+        "import { lookup, purge } from '../store/things.js'",
+        'export const e = () => [lookup("x", undefined), purge("x", {})]',
+      ].join('\n'),
+    )
+    // A reference inside a class that a heritage clause holds is code that
+    // runs; a type position is only what a TYPE NODE contains.
+    writeFileSync(
+      join(fixture, 'server', 'routes', 'heritage.ts'),
+      [
+        "import { getThing } from '../store/things.js'",
+        'declare function mix(base: unknown): new () => object',
+        'export class Mixed extends mix(class { run() { return getThing } }) {}',
+      ].join('\n'),
+    )
+    writeFileSync(
       join(fixture, 'server', 'routes', 'passes.ts'),
       [
-        "import { getThing, listThings, ThingStore, sweep, required, unrelated } from '../store/things.js'",
+        "import { getThing, listThings, ThingStore, sweep, required, unrelated, lookup, purge, LIMIT, plain } from '../store/things.js'",
         'export async function a(id: string, scope: StoreScope, options: object) {',
         '  await getThing(id, scope)',
         '  await listThings(scope)',
@@ -365,6 +391,10 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
         '  sweep(id, { ...options })',
         '  sweep(id, options)',
         '  getThing(...[id, scope])',
+        '  lookup(id, scope)',
+        '  purge(id, { scope })',
+        '  plain(id)',
+        '  console.log(LIMIT)',
         '  return new ThingStore(scope)',
         '}',
         // A type query names the function without running it.
@@ -424,6 +454,8 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
         ['listThings', { kind: 'parameter', index: 0 }],
         ['ThingStore', { kind: 'parameter', index: 0 }],
         ['sweep', { kind: 'options', index: 1 }],
+        ['lookup', { kind: 'parameter', index: 1 }],
+        ['purge', { kind: 'options', index: 1 }],
       ])
     })
 
@@ -432,6 +464,9 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
         'app.ts -> ThingStore',
         'export/headless.ts -> getThing',
         'routes/builds.ts -> storeScope',
+        'routes/explicit.ts -> lookup',
+        'routes/explicit.ts -> purge',
+        'routes/heritage.ts -> getThing (by reference)',
         'routes/omits.ts -> ThingStore',
         'routes/omits.ts -> getThing',
         'routes/omits.ts -> listThings',
