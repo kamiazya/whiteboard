@@ -25,8 +25,21 @@ export function runAsMcpCaller<T>(caller: McpCaller, fn: () => Promise<T>): Prom
 }
 
 interface WorkspaceScopedTool {
+  readonly name: string
   execute(input: never): Promise<unknown>
 }
+
+/**
+ * The tools a call may make without naming a workspace. The gate selects on
+ * the `workspaceId` field, so every other tool that names none is refused
+ * rather than run ungated: a tool added with its workspace under another
+ * name fails closed instead of skipping the gate.
+ *
+ * `wb_facet_list` omits it deliberately: with none it answers only the
+ * deployment's facet registry, which belongs to no workspace. Naming one
+ * still goes through the gate.
+ */
+export const WORKSPACE_OPTIONAL_TOOLS: ReadonlySet<string> = new Set(['wb_facet_list'])
 
 interface WorkspaceScopedInput {
   readonly workspaceId?: unknown
@@ -39,8 +52,9 @@ function refused(denial: MembershipDenial): Error {
 }
 
 /**
- * Wraps a record of tools so a call naming a workspace runs only for one of
- * its members — the same record-level seam as server-core's handle
+ * Wraps a record of tools so a call runs only for a member of the workspace it
+ * names, and a call naming none is refused unless the tool is in
+ * `WORKSPACE_OPTIONAL_TOOLS` — the same record-level seam as server-core's handle
  * resolution, and for its reason: a per-tool step is one the next tool would
  * not have. The tool objects are spread, so their schemas keep identity.
  *
@@ -59,9 +73,15 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
       ...tool,
       execute: (input: never) => {
         const caller = callers.getStore()
+        if (caller === undefined) return tool.execute(input)
         const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
-        if (caller === undefined || typeof handle !== 'string') return tool.execute(input)
-        return gatedCall(caller, index, handle, tool, input)
+        if (typeof handle === 'string') return gatedCall(caller, index, handle, tool, input)
+        if (handle === undefined && WORKSPACE_OPTIONAL_TOOLS.has(tool.name)) {
+          return tool.execute(input)
+        }
+        return Promise.reject(
+          new Error(`workspace_required: ${tool.name} must name the workspace it acts on`),
+        )
       },
     }
   }
