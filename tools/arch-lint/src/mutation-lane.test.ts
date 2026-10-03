@@ -41,28 +41,49 @@ describe('stryker configs', () => {
 })
 
 const MCP_SERVER = resolve(REPO_ROOT, 'packages/mcp-server')
-const MCP_CONFIG_SOURCE = readFileSync(resolve(MCP_SERVER, 'stryker.config.mjs'), 'utf-8')
+
+const CONFIG_SOURCES = STRYKER_PACKAGES.map((pkg) => ({
+  pkg,
+  source: readFileSync(resolve(REPO_ROOT, pkg, 'stryker.config.mjs'), 'utf-8'),
+}))
 
 // The least reach the lane's selection may have: a test that imports a mutated
 // module, or a module that does. Raising the selection's own depth only adds
 // tests; lowering it below this drops the consumers' tests.
 const FLOOR_DEPTH = 2
 
-describe('the contracts lane initial run', () => {
-  // Stryker abandons the lane when its initial run outlasts this bound, and its
+describe('every stryker lane initial run', () => {
+  // The lanes are the packages that carry a config, so a third one cannot be
+  // added without being sized.
+  it('covers every package that carries a stryker config', () => {
+    const carriers = readdirSync(resolve(REPO_ROOT, 'packages'), { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          readdirSync(resolve(REPO_ROOT, 'packages', entry.name)).includes('stryker.config.mjs'),
+      )
+      .map((entry) => `packages/${entry.name}`)
+    expect(carriers.sort()).toEqual([...STRYKER_PACKAGES].sort())
+  })
+
+  // Stryker abandons a lane when its initial run outlasts this bound, and its
   // default is 5 minutes: the run reads as a config error, not as slow. The
   // number records what it was sized from, like the workflow's timeouts below:
   // `measured: <date> <minutes> min`, the newest duration observed, with 1.5x
   // headroom over it.
-  it('names the timeout and the duration it was sized from', () => {
-    const minutes = /\n\s*dryRunTimeoutMinutes:\s*(\d+)\s*,/.exec(MCP_CONFIG_SOURCE)?.[1]
+  it.each(CONFIG_SOURCES)('$pkg names the timeout and the duration it was sized from', ({
+    source,
+  }) => {
+    const minutes = /\n\s*dryRunTimeoutMinutes:\s*(\d+)\s*,/.exec(source)?.[1]
     expect(minutes, 'a dryRunTimeoutMinutes key in stryker.config.mjs').toBeDefined()
-    const comment = /((?:\n\s*\/\/[^\n]*)+)\n\s*dryRunTimeoutMinutes:/.exec(MCP_CONFIG_SOURCE)?.[1]
+    const comment = /((?:\n\s*\/\/[^\n]*)+)\n\s*dryRunTimeoutMinutes:/.exec(source)?.[1]
     const measured = /measured: (\d{4}-\d{2}-\d{2}) (\d+) min\b/.exec(comment ?? '')
     expect(measured, 'a `measured: <date> <N> min` comment above it').not.toBeNull()
     expect(Number(minutes)).toBeGreaterThanOrEqual(Math.ceil(Number(measured?.[2]) * 1.5))
   })
+})
 
+describe('the contracts lane selection', () => {
   // The lane's include is derived from the source's import graph by a regex
   // over specifiers, cut at a depth. This resolves the same graph with the compiler, which
   // shares no code with it, so a specifier form the regex misses shows up as a

@@ -68,6 +68,11 @@ export default {
   // the score instead of reporting a gap. Raised so a timeout means what it
   // should: the mutant made the code loop.
   timeoutMS: 20_000,
+  // Stryker's default is 5 minutes, and the initial run executes the whole
+  // project serially with coverage on, so a loaded box or a slow runner reads
+  // as a config error rather than as slow.
+  // measured: 2026-10-03 4 min on 4 cores at load 14-16 (4.2 CPU-minutes)
+  dryRunTimeoutMinutes: 15,
   tempDirName: 'tmp/stryker-sandbox',
   // Stryker rewrites a tsconfig's project references when it copies the
   // project into its sandbox, and that step imports `typescript` from
