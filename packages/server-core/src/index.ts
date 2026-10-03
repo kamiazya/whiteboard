@@ -14,6 +14,7 @@ export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-docum
 export { promoteWorkspace } from './operations/promote-workspace.js'
 export type { RestoreProgress } from './operations/restore-version.js'
 export { restoreVersion } from './operations/restore-version.js'
+export { unknownStyleRefusal } from './render/unknown-style.js'
 export type { Embedder } from './search/embedder.js'
 export type { Judgments } from './search/eval.js'
 export {

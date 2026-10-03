@@ -2,6 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
+import { unknownStyleRefusal } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { exportRequestSchema } from '../../shared/api-contracts/export.js'
@@ -125,6 +126,15 @@ describe.each([
     })
     expect(parsed).toMatchObject({
       error: { message: expect.stringContaining('visual.sketch, visual.neon') },
+    })
+  })
+
+  it('refuses with the same text wb_scene_render does', () => {
+    const style = 'visual.nope'
+    const refusal = unknownStyleRefusal(style)
+    expect(refusal).toBeDefined()
+    expect(parseExportBody(JSON.stringify({ style }), requestSchema)).toEqual({
+      error: { error: 'invalid_request', message: refusal },
     })
   })
 

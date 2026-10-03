@@ -1,7 +1,10 @@
 import { join } from 'node:path'
-import { resolveThemeTable, type SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
-import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
-import { type ApiErrorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type ApiErrorBody,
+  invalidRequestBody,
+  unknownStyleRefusal,
+} from '@kamiazya/whiteboard-server-core'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
@@ -82,21 +85,15 @@ export function defaultExportPath(exportsDir: string, path: string, extension: s
   return join(exportsDir, `${path}-${timestamp}-${nanoid(6)}.${extension}`)
 }
 
-// The ids the headless renderer can draw: it passes no contributions to the
-// layout, so the table it resolves is this one.
-const DRAWABLE_THEME_IDS: readonly string[] = Object.keys(
-  resolveThemeTable([visualRenderContribution]),
-)
-
 /**
  * `parseOptionalJsonBody`, and a `style` that names a theme nothing registered
  * is refused as part of the same body check.
  *
  * Such an id draws the clean look, so an export answered 200 for a typo and a
- * caller could not tell it had not got the theme it asked for. Same refusal,
- * same text, as `wb_scene_render` (server-core's `unknownStyleRefusal`). It is
- * a request-body check, so it answers before the output path and the document
- * lookup, in the order `export-request.ts` fixes.
+ * caller could not tell it had not got the theme it asked for. The text is
+ * `wb_scene_render`'s, because both call server-core's `unknownStyleRefusal`.
+ * It is a request-body check, so it answers before the output path and the
+ * document lookup, in the order `export-request.ts` fixes.
  */
 export function parseExportBody<S extends z.ZodType<{ style?: SpatialRenderStyle }>>(
   rawText: string,
@@ -104,13 +101,7 @@ export function parseExportBody<S extends z.ZodType<{ style?: SpatialRenderStyle
 ): { body: z.infer<S> } | { error: ApiErrorBody } {
   const parsed = parseOptionalJsonBody(rawText, schema)
   if ('error' in parsed) return parsed
-  const { style } = parsed.body
-  if (style === undefined || style === 'clean' || style === 'document') return parsed
-  if (DRAWABLE_THEME_IDS.includes(style)) return parsed
-  return {
-    error: {
-      error: 'invalid_request',
-      message: `no theme "${style}" is registered — registered: ${DRAWABLE_THEME_IDS.join(', ')}; or pass style "clean" or "document"`,
-    },
-  }
+  const refusal = unknownStyleRefusal(parsed.body.style)
+  if (refusal === undefined) return parsed
+  return { error: { error: 'invalid_request', message: refusal } }
 }
