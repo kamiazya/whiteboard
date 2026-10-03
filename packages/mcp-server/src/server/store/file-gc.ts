@@ -2,14 +2,27 @@ import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { collectImageRefIds } from '@kamiazya/whiteboard-loro-adapter'
-import type { LoroDoc } from 'loro-crdt'
+import {
+  collectImageRefIds,
+  importWorkspaceSubtree,
+  projectWorkspaceDocument,
+  readTrashEntries,
+  unreadableWorkspaceNodes,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
 import { getLogger } from '../log.js'
+import { blobsRoot } from '../tenant/data-layout.js'
 import { validateWorkspaceId } from '../validators.js'
 import { backupIsInProgress } from './backup-in-progress.js'
-import { catchUpWorkspaceDoc, listDocuments, loadDocument } from './document-store.js'
+import {
+  catchUpWorkspaceDoc,
+  listDocuments,
+  loadDocument,
+  openWorkspaceDocIfStored,
+} from './document-store.js'
+import { FsBlobStore } from './fs/fs-blob-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { parseFileGcGraceMs } from './storage-env.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -91,7 +104,10 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
 // inspect. Not a persisted or wire type, so no Zod schema — kept as a
 // discriminated union purely to make the fail-closed reason legible in logs
 // and error messages.
-type SkippedScanTarget = { kind: 'version'; path: string; versionId: string; cause: unknown }
+type SkippedScanTarget =
+  | { kind: 'version'; path: string; versionId: string; cause: unknown }
+  | { kind: 'unreadable-node'; treeId: string }
+  | { kind: 'trash'; documentId: string; cause: unknown }
 
 // Walk every canvas in the workspace (live state plus past versions) and
 // collect referenced fileIds.
@@ -157,6 +173,7 @@ async function collectReferencedFileIds(
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
+  await collectFromRecord(workspaceId, scope, referenced, skipped)
   const documents = await listDocuments(workspaceId, scope)
   for (const { path } of documents) {
     // One per scan unit: document, version. See above.
@@ -193,6 +210,71 @@ async function collectReferencedFileIds(
     throw new IncompleteFileGcScanError(workspaceId, skipped)
   }
   return referenced
+}
+
+/**
+ * What the workspace record keeps beyond the live listing: nodes the listing
+ * cannot read, and the trash.
+ *
+ * A node this build cannot read is absent from the listing, and so are its
+ * documents' images — a purge would read that absence as "nothing uses them".
+ * Fail closed like an unreadable version: a build that cannot read a node
+ * cannot say what the node keeps.
+ */
+async function collectFromRecord(
+  workspaceId: string,
+  scope: StoreScope,
+  sink: Set<string>,
+  skipped: SkippedScanTarget[],
+): Promise<void> {
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
+  if (workspaceDoc === null) return
+  for (const treeId of unreadableWorkspaceNodes(workspaceDoc)) {
+    log.warning({ workspaceId, treeId }, 'unreadable workspace node')
+    skipped.push({ kind: 'unreadable-node', treeId })
+  }
+  await collectFromTrash(workspaceId, workspaceDoc, scope, sink, skipped)
+}
+
+/**
+ * What a deleted document still points at. Delete evacuates a document into
+ * the trash, which keeps no retention, and a restore brings it back under the
+ * same id: a file only a trashed document names is not dangling.
+ *
+ * A trash row whose bytes are gone is stepped over — restore answers "nothing
+ * restorable" for it, so there is nothing for its images to be kept for. Bytes
+ * that exist but cannot be read are fail-closed like an unreadable version.
+ */
+async function collectFromTrash(
+  workspaceId: string,
+  workspaceDoc: LoroDoc,
+  scope: StoreScope,
+  sink: Set<string>,
+  skipped: SkippedScanTarget[],
+): Promise<void> {
+  const entries = readTrashEntries(workspaceDoc)
+  if (entries.length === 0) return
+  const blobs = new FsBlobStore(blobsRoot(scope.dataDir, scope.layout.tenantId), scope.dataDir)
+  for (const entry of entries) {
+    await yieldToLoop()
+    try {
+      const stored = await blobs.get({ ref: entry.blob })
+      if (stored === null) {
+        log.warning({ workspaceId, documentId: entry.documentId }, 'trash entry has no bytes')
+        continue
+      }
+      const scratch = new LoroDoc()
+      if (importWorkspaceSubtree(scratch, stored.bytes) === null) {
+        throw new Error('trash bytes hold no document')
+      }
+      const content = projectWorkspaceDocument(scratch, entry.documentId)
+      if (content === null) throw new Error('trash bytes hold a different document')
+      collectFromDoc(content, sink)
+    } catch (err) {
+      log.warning({ workspaceId, documentId: entry.documentId, err }, 'skipped trash entry')
+      skipped.push({ kind: 'trash', documentId: entry.documentId, cause: err })
+    }
+  }
 }
 
 /**

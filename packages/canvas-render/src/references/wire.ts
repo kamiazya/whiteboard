@@ -1,10 +1,9 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { nodeFile } from '@kamiazya/whiteboard-model'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import type { ResolvedReference } from './resolved.js'
 import { type ReferenceSeams, referenceSeams } from './seams.js'
-import { referenceTargets } from './targets.js'
+import { imageTargets, referenceTargets } from './targets.js'
 
 /**
  * What a surface adds beside a reference's loaded content — a label, an
@@ -88,8 +87,8 @@ export function referenceSeamsFromWire(wire: ReferenceWire): ReferenceSeams {
 
 /**
  * The rows of a wire that laying out these seeds can read: what they name,
- * transitively through what loaded (`referenceTargets`), the images their
- * file nodes show, and the ids those rows resolve to.
+ * transitively through what loaded (`referenceTargets`), the pictures they
+ * draw (`imageTargets`), and the ids those rows resolve to.
  *
  * A keeper's wire can hold more than one canvas reads — the editor grows it
  * for a body being DRAFTED beside the canvas, so the overlay's preview
@@ -103,15 +102,11 @@ export function referenceWireFor(
   wire: ReferenceWire,
   seeds: { readonly canvases?: readonly SpatialCanvas[]; readonly bodies?: readonly string[] },
 ): ReferenceWire {
-  const keys = new Set(referenceTargets({ ...seeds, loaded: new Map(wire.entries) }))
-  // `referenceTargets` names documents; an image file node is not one, and
-  // its href still rides the wire as an extra the layout draws.
-  for (const canvas of seeds.canvases ?? []) {
-    for (const node of canvas.nodes) {
-      const file = nodeFile(node)
-      if (file !== undefined) keys.add(file)
-    }
-  }
+  const loaded = new Map(wire.entries)
+  const keys = new Set(referenceTargets({ ...seeds, loaded }))
+  // `referenceTargets` names documents; a picture is not one, and its href
+  // still rides the wire as an extra the layout draws.
+  for (const ref of imageTargets({ ...seeds, loaded })) keys.add(ref)
   const aliases = wire.aliases.filter(([key]) => keys.has(key))
   const ids = new Set(aliases.map(([, id]) => id))
   for (const [key, entry] of wire.entries) {

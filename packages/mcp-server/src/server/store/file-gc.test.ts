@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { newImageRef } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { workspaceFilesDir } from '../tenant/data-layout.js'
@@ -492,6 +493,105 @@ describe('purgeDanglingFiles', () => {
     ).sort()
     expect(remaining).toEqual(['only-by-null-version.png', 'really-dangling-3.png'])
   })
+})
+
+describe('purgeDanglingFiles: what a live document draws or can bring back', () => {
+  async function remainingFiles(workspaceId: string): Promise<string[]> {
+    return (await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId))).sort()
+  }
+
+  it('keeps an image a frame draws as its background', async () => {
+    await saveDocument(
+      'ws_bg',
+      'page',
+      makeSpatialDoc({
+        nodes: [
+          groupNode({
+            id: 'frame1',
+            x: 0,
+            y: 0,
+            width: 300,
+            height: 200,
+            label: 'F',
+            background: newImageRef('bg-1'),
+            backgroundStyle: 'cover',
+          }),
+        ],
+        edges: [],
+      }),
+    )
+    await seedFile('ws_bg', 'bg-1', '.png', 700)
+
+    const result = await purgeDanglingFiles('ws_bg')
+
+    expect(result.purgedCount).toBe(0)
+    expect(await remainingFiles('ws_bg')).toEqual(['bg-1.png'])
+  })
+
+  it('keeps an image only a markdown document body embeds', async () => {
+    const doc = new LoroDoc()
+    doc.getText('body').insert(0, 'a ![p](asset:md-1) b')
+    doc.commit()
+    await saveDocument('ws_md', 'note', doc, { kind: 'markdown' })
+    await seedFile('ws_md', 'md-1', '.png', 300)
+
+    const result = await purgeDanglingFiles('ws_md')
+
+    expect(result.purgedCount).toBe(0)
+    expect(await remainingFiles('ws_md')).toEqual(['md-1.png'])
+  })
+
+  it('keeps an image only a trashed document references, so a restore finds it', async () => {
+    const { deleteDocument } = await import('./document-store.js')
+    await saveDocument('ws_trash', 'page', makeSpatialDocWithImage('asset-t'))
+    await seedFile('ws_trash', 'asset-t', '.png', 500)
+    await deleteDocument('ws_trash', 'page')
+    expect(await listDocuments('ws_trash')).toEqual([])
+
+    const result = await purgeDanglingFiles('ws_trash')
+
+    expect(result.purgedCount).toBe(0)
+    expect(await remainingFiles('ws_trash')).toEqual(['asset-t.png'])
+  })
+
+  const unreadable: Record<string, (doc: LoroDoc) => void> = {
+    'a folder carrying a key this build does not know': (doc) => {
+      for (const node of doc.getTree('tree').getNodes()) {
+        if ((node.data.toJSON() as { segment?: string }).segment === 'folder') {
+          node.data.set('icon', 'folder-open')
+        }
+      }
+    },
+    'a document of a kind this build lacks': (doc) => {
+      for (const node of doc.getTree('tree').getNodes()) {
+        if ((node.data.toJSON() as { segment?: string }).segment === 'page') {
+          node.data.set('kind', 'future-kind')
+        }
+      }
+    },
+  }
+  for (const [name, tamper] of Object.entries(unreadable)) {
+    it(`refuses to purge when ${name} hides a subtree`, async () => {
+      const documentId = '01HZZZZZZZZZZZZZZZZZZZZZZZ'
+      const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(handle.db))
+      const workspaceDoc = (await docs.open('ws_unreadable')) ?? new LoroDoc()
+      createWorkspaceDocumentAtPath(workspaceDoc, {
+        path: 'folder/page',
+        documentId,
+        kind: 'spatial',
+      })
+      writeWorkspaceDocumentContent(workspaceDoc, documentId, makeSpatialDocWithImage('asset-x'))
+      tamper(workspaceDoc)
+      workspaceDoc.commit()
+      await docs.save('ws_unreadable', workspaceDoc)
+      await seedFile('ws_unreadable', 'asset-x', '.png', 500)
+
+      await expect(purgeDanglingFiles('ws_unreadable')).rejects.toBeInstanceOf(
+        IncompleteFileGcScanError,
+      )
+      expect(await remainingFiles('ws_unreadable')).toEqual(['asset-x.png'])
+    })
+  }
 })
 
 /**

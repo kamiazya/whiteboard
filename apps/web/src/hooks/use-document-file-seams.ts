@@ -178,10 +178,9 @@ export function useDocumentFileSeams({
     }
   }, [bodies, canvas, embedContent, graph, stampOf])
 
-  // Every picture this render draws, from the one definition — a canvas's
-  // image file nodes AND what a body writes inline, the board's text nodes
-  // and the drafted bodies included. A file-node scan was all this had, so a
-  // text node's `![](asset:…)` was drawn by the layout and loaded by nobody.
+  // Every picture this render draws, from the one definition
+  // (`storedImageRefs`): a canvas's image file nodes, frame backgrounds, and
+  // what a body or a text node writes inline, the drafted bodies included.
   const imageUrls = useImageUrls(
     useMemo(
       () => imageTargets({ canvases: [canvas], bodies, loaded: graph }),

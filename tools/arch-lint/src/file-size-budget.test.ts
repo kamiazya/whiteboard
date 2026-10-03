@@ -174,9 +174,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The workspace tree over a Loro doc: node lookup, the stored-plane skip
   // (a `plane:` key a branch-era record still carries is kept out of the
   // projection and the content save) and the fold that carries a nested
-  // container instead of flattening it. The content-sync rule the tree write,
+  // container instead of flattening it, and the unreadable-node report the file
+  // GC fails closed on. The content-sync rule the tree write,
   // the standalone restore and the projection all apply is `content-sync.ts`.
-  'packages/loro-adapter/src/workspace-tree.ts': 945,
+  'packages/loro-adapter/src/workspace-tree.ts': 959,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush

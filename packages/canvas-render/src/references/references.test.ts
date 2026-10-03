@@ -1,5 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { overlayReferences, referenceSeams } from './seams.js'
@@ -28,6 +28,25 @@ function graphOf(entries: Record<string, LoadedReference | null>): ReferenceGrap
  * answered for one.
  */
 describe('imageTargets', () => {
+  it('names a frame background, since the layout draws it', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        groupNode({
+          id: 'g',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 200,
+          label: 'F',
+          background: 'asset:frame-bg',
+        }),
+        groupNode({ id: 'plain', x: 0, y: 0, width: 10, height: 10, background: 'boards/x' }),
+      ],
+      edges: [],
+    }
+    expect(imageTargets({ canvases: [canvas] })).toEqual(['asset:frame-bg'])
+  })
+
   it("names a canvas's image file nodes and a body's inline images alike", () => {
     const canvas: SpatialCanvas = {
       nodes: [
@@ -364,6 +383,48 @@ describe('referenceWireFor', () => {
     // A wire the canvas cannot read more of is the same wire, byte for byte.
     expect(JSON.stringify(referenceWireFor(own, { canvases: [canvas] }))).toBe(JSON.stringify(own))
     expect(structuredClone(own)).toEqual(own)
+  })
+
+  it('keeps the picture extras a frame background and an inline image ask for', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        groupNode({
+          id: 'g',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 200,
+          label: 'F',
+          background: 'asset:bg',
+        }),
+        fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'asset:file' }),
+        textNode({
+          id: 't',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 100,
+          text: 'hi ![x](asset:inline)',
+        }),
+      ],
+      edges: [],
+    }
+    const wire = referenceWire(graphOf({}), {
+      extras: new Map([
+        ['asset:bg', { image: { href: 'blob:bg' } }],
+        ['asset:file', { image: { href: 'blob:file' } }],
+        ['asset:inline', { image: { href: 'blob:inline' } }],
+        ['asset:body', { image: { href: 'blob:body' } }],
+        ['asset:unused', { image: { href: 'blob:unused' } }],
+      ]),
+    })
+    const own = referenceWireFor(wire, { canvases: [canvas], bodies: ['![b](asset:body)'] })
+    expect(own.extras.map(([key]) => key).sort()).toEqual([
+      'asset:bg',
+      'asset:body',
+      'asset:file',
+      'asset:inline',
+    ])
   })
 
   it('keeps a row the canvas names even when nothing loaded for it, and an alias a body wrote', () => {

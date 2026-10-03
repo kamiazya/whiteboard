@@ -1,5 +1,11 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
-import { isImageRef, nodeFile, nodeText, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  isImageRef,
+  nodeFile,
+  nodeText,
+  type SpatialCanvas,
+  storedImageRefs,
+} from '@kamiazya/whiteboard-model'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 
 /**
@@ -74,74 +80,15 @@ export function referenceTargets(seeds: {
 }
 
 /**
- * A markdown inline image whose URL is a stored asset, as written.
- *
- * A SCANNER rather than a parse, for the reason `referenceTargets` uses one:
- * this runs over every body the walk reaches, and parsing all of them to
- * decide what to prefetch would charge a render the markdown parser twice.
- * What makes that safe here is the direction of its error — the LAYOUT reads
- * mdast, so a URL this finds inside a code fence costs one store read that
- * answers nothing and paints nothing, while one it missed would be a picture
- * that silently does not draw. Cheap in the wrong direction only.
- *
- * `asset:` (model's one convention) is the filter because it is what a keeper
- * can actually answer. An absolute URL already draws without resolution, and
- * a bare relative path is a different question — relative to what — that this
- * does not decide by asking on its behalf.
- *
- * A hand scan rather than a REGEX, and this is the second time that answer is
- * right in this package for the same reason (`mdast-blocks.ts` reaches for
- * `trimEnd` over an anchored `\s+$`). `/!\[[^\]]*\]\(/` re-attempts its inner
- * scan at every `![`, so a body of nothing but `![` is quadratic — measured
- * 6ms at 2000 repetitions, 150ms at 10000, 2338ms at 40000 — and a document
- * body is untrusted input. CodeQL calls this `js/polynomial-redos`, high, and
- * caught this exact line. The pass below advances a single cursor that never
- * moves backwards, so every character is examined a bounded number of times.
- */
-function addInlineImages(body: string, add: (url: string) => void): void {
-  if (!body.includes('](')) return
-  for (let at = 0; at < body.length; ) {
-    const bang = body.indexOf('![', at)
-    if (bang === -1) return
-    // The FIRST `](` after it. An alt text containing its own `]` therefore
-    // reads as a malformed image and is skipped, which costs a load nobody
-    // makes rather than a picture nobody sees.
-    const close = body.indexOf('](', bang + 2)
-    if (close === -1) return
-    const destination = destinationAt(body, close + 2)
-    if (destination === undefined) return
-    if (isImageRef(destination.url)) add(destination.url)
-    at = destination.end
-  }
-}
-
-/** The link destination starting at `open`, and the index just past it. */
-function destinationAt(body: string, open: number): { url: string; end: number } | undefined {
-  if (body[open] === '<') {
-    // `![a](<asset:two words>)`. The parser strips the brackets, so a scan
-    // that kept them asked for a target nothing holds — and they are the
-    // only destination syntax in which a SPACE is legal, so the plain stop
-    // set below would cut one in half.
-    const shut = body.indexOf('>', open + 1)
-    if (shut === -1) return undefined
-    return { url: body.slice(open + 1, shut), end: shut + 1 }
-  }
-  let end = open
-  while (end < body.length && !')\t\n\r '.includes(body[end] as string)) end += 1
-  return { url: body.slice(open, end), end }
-}
-
-/**
  * What stored PICTURES a render has to load, as `referenceTargets` answers
  * for documents — and deliberately not the same function, because the two
  * sets are disjoint by construction: an asset is not a document, so that walk
  * subtracts exactly what this one keeps.
  *
- * It exists because a body's inline image was reachable by no other route.
- * A canvas's image file nodes were collected at the call site; the inline
- * `![](asset:…)` in a note, or in a text node on the board, was collected
- * nowhere, so the seam the layout asks had nothing to answer with. Both
- * come from here now, so a surface cannot wire one and forget the other.
+ * What counts as a stored picture is model's `storedImageRefs` — image file
+ * nodes, frame backgrounds and inline `![](asset:…)` in a text node or a body —
+ * so a surface cannot wire one and forget another, and the daemon's file GC
+ * keeps exactly what this loads.
  *
  * Follows the same walk, caps and budget as `referenceTargets` — an
  * embedded note is drawn, so its pictures are drawn too.
@@ -159,23 +106,18 @@ export function imageTargets(seeds: {
   const add = (url: string) => {
     if (images.size < REFERENCE_BUDGET) images.add(url)
   }
-  const addCanvas = (canvas: SpatialCanvas) => {
-    for (const node of canvas.nodes) {
-      const file = nodeFile(node)
-      const text = nodeText(node)
-      if (file !== undefined && isImageRef(file)) add(file)
-      else if (text !== undefined) addInlineImages(text, add)
-    }
+  const addAll = (refs: readonly string[]) => {
+    for (const ref of refs) add(ref)
   }
-  for (const body of seeds.bodies ?? []) addInlineImages(body, add)
-  for (const canvas of seeds.canvases ?? []) addCanvas(canvas)
+  for (const body of seeds.bodies ?? []) addAll(storedImageRefs({ body }))
+  for (const canvas of seeds.canvases ?? []) addAll(storedImageRefs({ canvas }))
   // The documents this render draws, from the same definition, so what an
   // embedded note holds is reached without a second walk of its own.
   for (const target of referenceTargets(seeds)) {
     const entry = seeds.loaded?.get(target)
     if (entry === undefined || entry === null) continue
-    if (entry.body !== undefined) addInlineImages(entry.body, add)
-    else if (entry.canvas !== undefined) addCanvas(entry.canvas)
+    if (entry.body !== undefined) addAll(storedImageRefs({ body: entry.body }))
+    else if (entry.canvas !== undefined) addAll(storedImageRefs({ canvas: entry.canvas }))
   }
   return [...images]
 }

@@ -84,6 +84,7 @@ export {
   setWorkspacePinned,
   type TrashEntry,
   trashEntrySchema,
+  unreadableWorkspaceNodes,
   updateWorkspaceDocumentMeta,
   WORKSPACE_META_KEY,
   WORKSPACE_TRASH_KEY,

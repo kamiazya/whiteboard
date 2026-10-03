@@ -2,6 +2,7 @@
 // a custom HEX color can only round-trip, not be SET here, and a group's
 // background image had no setting UI at all. Real pointer input throughout.
 
+import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
@@ -128,4 +129,32 @@ it('a group gains Set background image, style options, and Remove background', a
   await vi.waitFor(() =>
     expect(latest.canvas.nodes.find((n) => n.id === 'g1')).not.toHaveProperty('background'),
   )
+})
+
+it('a frame background resolved by the host is drawn behind the frame', async () => {
+  const href = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='
+  const framed: SpatialCanvas = {
+    nodes: [
+      groupNode({
+        id: 'g1',
+        x: 400,
+        y: 300,
+        width: 300,
+        height: 200,
+        label: 'frame',
+        background: 'asset:bg-1',
+      }),
+    ],
+    edges: [],
+  }
+  const { Host } = makeEditorHost({
+    initial: framed,
+    editorProps: {
+      references: referenceWire(new Map(), {
+        extras: new Map([['asset:bg-1', { image: { href } }]]),
+      }),
+    },
+  })
+  const { container } = render(<Host />)
+  await vi.waitFor(() => expect(container.querySelector(`image[href="${href}"]`)).not.toBeNull())
 })
