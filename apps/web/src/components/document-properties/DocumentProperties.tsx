@@ -267,7 +267,7 @@ export function DocumentFacetsEditor({
           id={`${suggestionsId}-description`}
           value={facets.description ?? ''}
           onChange={(event) => onChange?.(withOptional('description', event.target.value))}
-          placeholder="One sentence, for previews and listings"
+          placeholder="One sentence, for previews, embedded cards and search"
           className="text-foreground border-border placeholder:text-muted-foreground min-w-0 flex-1 rounded border bg-transparent px-2 py-1 text-sm outline-none"
         />
       </div>
@@ -283,7 +283,7 @@ export function DocumentFacetsEditor({
           id={`${suggestionsId}-resource`}
           value={facets.resource ?? ''}
           onChange={(event) => onChange?.(withOptional('resource', event.target.value))}
-          placeholder="URL or path of the thing this document is about"
+          placeholder="URL or path of the thing this document is about, kept in its export"
           className="text-foreground border-border placeholder:text-muted-foreground min-w-0 flex-1 rounded border bg-transparent px-2 py-1 text-sm outline-none"
         />
       </div>
