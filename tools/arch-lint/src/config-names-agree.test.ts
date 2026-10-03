@@ -1,3 +1,8 @@
+// Two kinds of name a reader or a bot is handed are read against what defines
+// them rather than compared against a second hand-written list: the docker
+// names the docs tell a person to type, and the dependency groups
+// `.github/dependabot.yml` asks the bot to open.
+//
 // The docker names a self-hoster or a maintainer is told to type are DERIVED
 // from what the compose file and the release workflow define, rather than
 // compared against a second hand-written list.
@@ -15,7 +20,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
 import { codeText } from './markdown-code.js'
-import { REPO_ROOT } from './scan-roots.js'
+import { REPO_ROOT, workspaceDirs } from './scan-roots.js'
 
 function read(relPath: string): string {
   return readFileSync(resolve(REPO_ROOT, relPath), 'utf-8')
@@ -146,5 +151,70 @@ describe('the docker names the docs tell a reader to type', () => {
     expect(registryReferences('cosign verify ghcr.io/o/nowhere:t')).toEqual([
       { repo: 'ghcr.io/o/nowhere', tag: 't' },
     ])
+  })
+})
+
+interface DependabotConfig {
+  updates: {
+    'package-ecosystem': string
+    groups?: Record<string, { patterns?: string[] }>
+  }[]
+}
+
+const DEPENDENCY_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+] as const
+
+/** Every dependency name any workspace manifest, the root's included, declares. */
+function declaredDependencyNames(): Set<string> {
+  const names = new Set<string>()
+  for (const dir of ['.', ...workspaceDirs()]) {
+    const manifest = JSON.parse(read(`${dir}/package.json`)) as Record<
+      string,
+      Record<string, string> | undefined
+    >
+    for (const field of DEPENDENCY_FIELDS) {
+      for (const name of Object.keys(manifest[field] ?? {})) names.add(name)
+    }
+  }
+  return names
+}
+
+/** Dependabot's `*` matches any run of characters, including `/`. */
+export function matchesPattern(pattern: string, name: string): boolean {
+  const body = pattern
+    .split('*')
+    .map((part) => part.replaceAll(/[.+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*')
+  return new RegExp(`^${body}$`).test(name)
+}
+
+describe('dependabot.yml groups', () => {
+  const config = parseYaml(read('.github/dependabot.yml')) as DependabotConfig
+  const names = declaredDependencyNames()
+  const groups = config.updates
+    .filter((update) => update['package-ecosystem'] === 'npm')
+    .flatMap((update) => Object.entries(update.groups ?? {}))
+    .flatMap(([group, { patterns = [] }]) => patterns.map((pattern) => ({ group, pattern })))
+
+  it('reach the manifests: the scan finds groups and declared dependencies', () => {
+    expect(groups.length).toBeGreaterThan(4)
+    expect(names.size).toBeGreaterThan(100)
+  })
+
+  // A group whose dependency was retired keeps reading as live config while
+  // grouping nothing, and nothing else ever says so.
+  it.each(groups)('$group pattern "$pattern" matches a declared dependency', ({ pattern }) => {
+    expect([...names].some((name) => matchesPattern(pattern, name))).toBe(true)
+  })
+
+  it('a pattern is a glob over the whole name', () => {
+    expect(matchesPattern('@types/*', '@types/node')).toBe(true)
+    expect(matchesPattern('vite', 'vitest')).toBe(false)
+    expect(matchesPattern('vite-*', 'vite-plugin-pwa')).toBe(true)
+    expect(matchesPattern('@excalidraw/*', '@types/excalidraw')).toBe(false)
   })
 })
