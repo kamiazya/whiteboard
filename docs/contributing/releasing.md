@@ -51,7 +51,9 @@ credentials are requested.
 ### How a release flows
 
 1. Merge a Conventional Commit (`feat:`, `fix:`, etc.) to `main`.
-2. release-please opens a Release PR (`chore(main): release mcp-server vX.Y.Z`).
+2. release-please opens a Release PR titled `chore: release main`. The `linked-versions`
+   plugin groups the plugin and `mcp-server` components into one PR, so the title names
+   neither a component nor a version.
 3. A maintainer reviews and merges the Release PR.
 4. `release.yml` detects `mcp_release_created == true` and runs both publish jobs.
 5. `force_publish_tag` input: can re-publish a specific tag (e.g. after a transient
@@ -68,7 +70,7 @@ unpacked (`smoke:tarball`, `smoke:packaged`, the packaged-daemon/server-mode nod
 (`pnpm typecheck` + `pnpm test:mcp-node`) so an obviously broken tag never publishes.
 
 It deliberately does **not** re-run the full browser/jsdom test matrix
-(`pnpm test` = mcp-node + apps/web jsdom + web-browser). That correctness is
+(`pnpm test` = every vitest project, listed in `CONTRIBUTING.md`). That correctness is
 already proven by **verify CI (`ci.yml`) at the identical tag SHA**: a release tag always
 points at a commit that was pushed to `main`, and `ci.yml`'s `verify` job (gated on
 `test-unit`, `test-jsdom`, `test-browser`) already ran against that exact commit before a
@@ -96,12 +98,16 @@ Steps (in order):
    prevents shell injection).
 2. Checkout the release tag.
 3. Install dependencies (Node 24 pinned; npm 11.x meets Trusted Publishing requirement).
-4. `pnpm publish-gate`: runs the publish tier (typecheck, mcp-node floor, build,
+4. `pnpm audit --prod --audit-level=high`: a high or critical advisory in a production
+   dependency stops the publish.
+5. `pnpm publish-gate`: runs the publish tier (typecheck, mcp-node floor, build,
    artifact checks, SBOM generation, tarball/packaged smokes) — see "Publish gate
    scope" above.
-5. Upload SBOM as GitHub Actions artifact `npm-sbom-<tag>` (retained 90 days,
+6. `verify-pack-contents`: the packed tarball carries the README and LICENSE and no test
+   artifacts or internal `_artifacts`.
+7. Upload SBOM as GitHub Actions artifact `npm-sbom-<run_id>` (retained 90 days,
    `if-no-files-found: error`).
-6. `npm publish --access public --provenance` (OIDC Trusted Publishing, no NPM_TOKEN).
+8. `npm publish --access public --provenance` (OIDC Trusted Publishing, no NPM_TOKEN).
 
 Permissions: `contents: read`, `id-token: write` (job-scoped, not workflow-root).
 Environment: `production-npm`.
@@ -218,10 +224,39 @@ environment, not to any stored private key.
 
 Verification:
 ```bash
-cosign verify ghcr.io/<org>/whiteboard-server:<tag> \
+cosign verify ghcr.io/kamiazya/whiteboard:<tag> \
   --certificate-identity-regexp "github.com/kamiazya/whiteboard" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 ```
+
+---
+
+## Docker Release Candidate Verification
+
+Run the Docker-specific gates before tagging a release that includes a new
+image. These run in addition to — not instead of — the CI gates:
+
+```sh
+# Full Docker release verification (CI gates + Docker gates).
+pnpm check:release-candidate:docker
+
+# Or run the Docker-specific gates individually after check:release-candidate:
+pnpm smoke:docker              # Docker image boots, serves MCP, auth smoke
+pnpm smoke:docker-backup-restore  # backup → restore round-trip via volume mounts
+```
+
+The non-Docker release gates (unit tests, typecheck, distribution smokes,
+etc.) are bundled in `pnpm check:release-candidate`. The Docker aggregate
+runs CI gates first, then the two Docker-specific smokes:
+
+```sh
+pnpm check:release-candidate           # CI-equivalent gates (no Docker)
+pnpm check:release-candidate:local     # above + mutation:contracts
+pnpm check:release-candidate:docker    # CI gates + Docker gates (full docker release)
+```
+
+The machine-readable gate manifest lives at
+`tests/e2e/distribution/release-gate-matrix.json`.
 
 ---
 

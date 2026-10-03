@@ -557,7 +557,7 @@ unhealthy even while it continues to serve already-cached requests. Run doctor
 separately when you need a full diagnostic:
 
 ```sh
-docker exec <container> node dist/cli/index.js server doctor --json
+docker exec whiteboard-server node dist/cli/index.js server doctor --json
 ```
 
 The command reads all configuration from the environment variables already
@@ -570,12 +570,12 @@ Run them via `docker exec` so they share the same data directory:
 
 ```sh
 # Check if the server process is running and its record is fresh.
-docker exec <container> node dist/cli/index.js server status --json
+docker exec whiteboard-server node dist/cli/index.js server status --json
 
 # Gracefully stop the server process inside the container (sends SIGTERM,
 # waits, escalates to SIGKILL if needed).
-# Prefer `docker stop <container>` for normal container lifecycle.
-docker exec <container> node dist/cli/index.js server stop --json
+# Prefer `docker stop whiteboard-server` for normal container lifecycle.
+docker exec whiteboard-server node dist/cli/index.js server stop --json
 ```
 
 `docker stop` sends SIGTERM to the container's PID 1 (the server process) and
@@ -767,11 +767,11 @@ against:
 | `server restore` | `restore` | 1 |
 | `server support-bundle` | `support-bundle` | 1 |
 
-**Backup** — run host-side after stopping the container:
+**Backup** — run host-side, pointing `--data-dir` at the directory the data
+volume is mounted from. The server can keep running: a backup taken while it
+serves is a consistent one, as described above.
 
 ```sh
-docker stop whiteboard-server
-
 whiteboard server backup --json \
   --data-dir=/data/source \
   --output-dir=/data/backups/2025-01-01
@@ -794,13 +794,19 @@ Success: stdout contains `{"schemaVersion":1,"ok":true,"operation":"restore"}`,
 exit 0. The stale `server-mode.json` is removed from the restored tree
 automatically; a fresh record is written when the new container starts.
 
-Then start a new container pointing at the restored directory:
+Then stop the running container, which holds the old data and the port, and
+start a new one pointing at the restored directory. The image is the one the
+Quick start built; substitute a published one (`ghcr.io/kamiazya/whiteboard`)
+if you pull rather than build.
 
 ```sh
+docker stop whiteboard-server
+
 docker run --rm -d \
+  -p 127.0.0.1:3099:3099 \
   -v /data/restored:/data \
   --env-file .env \
-  whiteboard-server:latest
+  whiteboard-server:local
 ```
 
 ## Collecting a support bundle
@@ -831,7 +837,7 @@ after stopping it:
 
 ```sh
 # Collect a bundle into /data/bundles/2025-01-01 (output dir must not exist or be empty).
-docker exec <container> node dist/cli/index.js server support-bundle \
+docker exec whiteboard-server node dist/cli/index.js server support-bundle \
   --json \
   --output-dir=/data/bundles/2025-01-01
 
@@ -850,33 +856,6 @@ The command can be run while the server is running (it does not stop the
 server). It uses the current environment for server config, so JWKS
 reachability and auth config checks in `doctor.json` reflect the live
 deployment state.
-
-## Release candidate verification
-
-Run the Docker-specific gates before tagging a release that includes a new
-image. These run in addition to — not instead of — the CI gates:
-
-```sh
-# Full Docker release verification (CI gates + Docker gates).
-pnpm check:release-candidate:docker
-
-# Or run the Docker-specific gates individually after check:release-candidate:
-pnpm smoke:docker              # Docker image boots, serves MCP, auth smoke
-pnpm smoke:docker-backup-restore  # backup → restore round-trip via volume mounts
-```
-
-The non-Docker release gates (unit tests, typecheck, distribution smokes,
-etc.) are bundled in `pnpm check:release-candidate`. The Docker aggregate
-runs CI gates first, then the two Docker-specific smokes:
-
-```sh
-pnpm check:release-candidate           # CI-equivalent gates (no Docker)
-pnpm check:release-candidate:local     # above + mutation:contracts
-pnpm check:release-candidate:docker    # CI gates + Docker gates (full docker release)
-```
-
-The machine-readable gate manifest lives at
-`tests/e2e/distribution/release-gate-matrix.json`.
 
 ## Security notes
 
