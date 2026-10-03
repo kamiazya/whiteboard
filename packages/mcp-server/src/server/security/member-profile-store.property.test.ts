@@ -11,7 +11,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect } from 'vitest'
+import { afterAll, beforeAll, describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import {
@@ -33,30 +33,41 @@ let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let store: MemberProfileStore
 
-beforeEach(async () => {
+// One migrated database for the file: the migrations are the cost of a run,
+// the rows are not.
+beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-member-profiles-prop-'))
   handle = await createIsolatedDb({ dataDir: root })
   store = createMemberProfileStore(handle.db)
 })
-afterEach(async () => {
+afterAll(async () => {
   await handle.dispose()
   await rm(root, { recursive: true, force: true })
 })
 
+// Every table the store writes, children first so no row outlives its parent.
+async function clearRows(): Promise<void> {
+  const { rawDb } = handle
+  await rawDb.deleteFrom('workspaceMemberships').execute()
+  await rawDb.deleteFrom('workspaceMembersOnly').execute()
+  await rawDb.deleteFrom('memberProfiles').execute()
+  await rawDb.deleteFrom('accountBindings').execute()
+  await rawDb.deleteFrom('accounts').execute()
+}
+
 describe('membership seam', () => {
-  // A real SQLite (migrations + a transaction per op) is created per run, so
-  // the library default of 200 runs takes ~7s here — measured over the
-  // mcp-node per-file budget. 60 keeps the file comfortably under it while
-  // still covering the add/revoke interleavings that matter.
+  // Each run is a real SQLite transaction per op over rows cleared at its
+  // start, against one database migrated once for the file. Migrating per run
+  // cost about 87 ms of every run: 60 runs took 5.2 s at load 21 and passed
+  // the 3 s per-test budget at load 48 only by timing out (3.3 s), against
+  // 0.9-1.1 s at the same load with one migration. 200 runs would still fit,
+  // but 60 covers the add/revoke interleavings that matter.
   fcTest.prop([fc.array(opArb, { maxLength: 30 })], withDefaults({ numRuns: 60 }))(
     'isWorkspaceMember and listMembers agree with whichever op ran last per (workspace, profile) pair',
     async (ops) => {
-      // Fresh state per run: dispose the previous handle and mint a new one,
-      // since fast-check reuses this function body across generated cases.
-      await handle.dispose()
-      root = await mkdtemp(join(tmpdir(), 'wb-member-profiles-prop-'))
-      handle = await createIsolatedDb({ dataDir: root })
-      store = createMemberProfileStore(handle.db)
+      // Fresh state per run: fast-check reuses this function body across
+      // generated cases over the one database.
+      await clearRows()
 
       const profileIds = new Map<string, string>()
       for (const key of PROFILE_KEYS) {
