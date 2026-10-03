@@ -94,11 +94,9 @@ is **currently empty**.
 
 `type-cycle-check.ts` is the same graph with `import type` edges kept, because a
 type-only edge never fails at load and so the value scan above is blind to a
-loop closed by one. It is not harmless: measured 2026-10-01 over the same file
-set, it found **12** strongly connected components the value scan called clean
-(canvas-render's 15-file knot among them, which contradicted that package's
-decision 14 — the seams' producer imported the layout back for two types),
-all since broken, so `KNOWN_TYPE_CYCLES` is **currently empty**. It is the
+loop closed by one. It is not harmless: its first run found twelve components the value
+scan called clean, all since broken, so `KNOWN_TYPE_CYCLES` is **currently
+empty**. It is the
 ledger, pinned from both sides like the others: a
 component not listed fails naming its members, and a listed one that stopped
 being a component fails as stale. Each entry carries a REASON, since unlike a
@@ -410,16 +408,9 @@ whole value is that it shrinks.
 
 **`ADAPTER_SCAN_EXEMPT_FILES`** carries by FILE what the wiring exemption —
 a directory list (`di/`, `app.ts`, `http-server.ts`) — misses: a composition
-root living inside an adapter tree. It is EMPTY today: no composition root
-sits inside an adapter tree. The stdio root is `server/stdio-root.ts`, and
-`mcp/server.ts` is a library that takes the deps it is handed. It is separate from
+root living inside an adapter tree. It is EMPTY today. It is separate from
 `ADAPTERS_REACHING_MECHANICS` on purpose: an exemption is a CLASSIFICATION,
 not debt, and a composition root's edges will never shrink.
-
-The other file that reached `store/db` from under `mcp/` was moved instead of
-exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
-`http-server.ts` called it, so it is now `server/current-workspace.ts` — which
-also retires a name that said `session` about a workspace.
 
 ## `mcp-server-layer-order.test.ts`: the layers inside the Node root
 
@@ -700,6 +691,19 @@ that date a comment to the work that produced it (`audit-triage`, `dogfood
 report`, `this PR`, "decision, this session", "this session's bug report");
 bare `this session` is NOT banned because the app's own noun hits about 50
 legitimate comments. Its ledger is empty and shrink-only.
+
+## `classifyPath` and `countNamedUses`: what every guard answers once
+
+"Is this file shipped or a test" is `classifyPath` in `source-scan.ts`
+(`shipped | test | test-support | harness | bench | docs-snapshot`); a guard
+states which categories it treats as shipped, and one that differs says why
+in a line. Eleven local `isTestFile`/`isShipped` copies disagreed on 28 files
+and hid three test-only exports. A one-place guard matches USES of a name
+through `countNamedUses` (`named-use-scan.ts`), never a regex on its text, so
+an alias or a bracket access cannot walk past it. A permission list
+(`MECHANICS_NOT_SCANNED`, `MECHANIC_DIRS`, a vocabulary `exempt` array) is
+guarded from both sides. Host reach counts a storage driver (`kysely`,
+`libsql`, `@libsql/*`).
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 
