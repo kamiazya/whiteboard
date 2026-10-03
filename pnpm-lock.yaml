@@ -70,8 +70,8 @@ catalogs:
       specifier: ^2.8.4
       version: 2.9.0
     zod:
-      specifier: ^4.4.2
-      version: 4.6.5
+      specifier: 4.4.3
+      version: 4.4.3
 
 overrides:
   lodash-es@<4.18.0: ^4.18.0
@@ -302,7 +302,7 @@ importers:
         version: 1.4.0
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       '@fast-check/vitest':
         specifier: ^0.4.1
@@ -405,7 +405,7 @@ importers:
         version: 3.3.0
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       '@fast-check/vitest':
         specifier: ^0.4.1
@@ -442,7 +442,7 @@ importers:
         version: link:../model
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
-        version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(zod@4.6.5)
+        version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(zod@4.4.3)
       react:
         specifier: 'catalog:'
         version: 19.2.5
@@ -451,7 +451,7 @@ importers:
         version: 19.2.5(react@19.2.5)
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       '@testing-library/react':
         specifier: ^16.0.0
@@ -506,7 +506,7 @@ importers:
         version: 2.9.0
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -531,7 +531,7 @@ importers:
         version: 14.0.5
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       loro-crdt:
         specifier: 'catalog:'
@@ -550,7 +550,7 @@ importers:
     dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       '@fast-check/vitest':
         specifier: ^0.4.1
@@ -600,7 +600,7 @@ importers:
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(happy-dom@20.9.0)(jsdom@30.0.1(canvas@3.2.3))(msw@2.15.0(@types/node@24.13.1)(typescript@7.0.2))(vite@8.2.2(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
 
   packages/history:
     dependencies:
@@ -628,7 +628,7 @@ importers:
         version: 1.13.6
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -656,7 +656,7 @@ importers:
         version: 2.0.0
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
-        version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(zod@4.6.5)
+        version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(zod@4.4.3)
       '@modelcontextprotocol/server':
         specifier: ^2.0.0
         version: 2.0.0
@@ -725,7 +725,7 @@ importers:
         version: 2.9.0
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       '@kamiazya/whiteboard-canvas-render':
         specifier: workspace:*
@@ -813,7 +813,7 @@ importers:
     dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       '@fast-check/vitest':
         specifier: ^0.4.1
@@ -847,7 +847,7 @@ importers:
         version: 19.2.5
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       '@testing-library/react':
         specifier: ^16.0.0
@@ -878,7 +878,7 @@ importers:
         version: link:../model
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -909,7 +909,7 @@ importers:
         version: 1.13.6
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -987,7 +987,7 @@ importers:
         version: 1.13.6
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -8511,6 +8511,9 @@ packages:
     peerDependencies:
       zod: ^3.25.28 || ^4
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
   zod@4.6.5:
     resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
@@ -10229,16 +10232,16 @@ snapshots:
     dependencies:
       zod: 4.6.5
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(zod@4.6.5)':
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(zod@4.4.3)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
       '@standard-schema/spec': 1.1.0
-      zod: 4.6.5
+      zod: 4.4.3
     optionalDependencies:
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.6.5)':
+  '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
     dependencies:
       '@hono/node-server': 2.0.12(hono@4.13.5)
       ajv: 8.20.0
@@ -10255,8 +10258,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 4.6.5
-      zod-to-json-schema: 3.25.2(zod@4.6.5)
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -16465,9 +16468,11 @@ snapshots:
       '@yuku-parser/binding-win32-arm64': 0.9.3
       '@yuku-parser/binding-win32-x64': 0.9.3
 
-  zod-to-json-schema@3.25.2(zod@4.6.5):
+  zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
-      zod: 4.6.5
+      zod: 4.4.3
+
+  zod@4.4.3: {}
 
   zod@4.6.5: {}
 

@@ -19,8 +19,13 @@ catalog:
   # a divergence nothing would report.
   "highlight.js": "^11.12.0"
   lowlight: "^3.3.0"
-  # cross-process contract cores — one version everywhere
-  zod: "^4.4.2"
+  # cross-process contract cores — one version everywhere. zod is EXACT, not a
+  # caret: its JSON Schema emitter's bytes are an ADR-0031 scoreboard and the
+  # model's `arbitraryForSchema` reads its internals, so a zod bump is a
+  # deliberate change (Dependabot proposes it, the scoreboard and the generator
+  # move with it) rather than something `pnpm dedupe` does in passing — which is
+  # how 4.4.3 became 4.6.5 once, failing both.
+  zod: "4.4.3"
   loro-crdt: "1.13.6"
   # shared build/test tooling
   # TypeScript 7 is the Go compiler: same type checking, ~4x faster. It ships
