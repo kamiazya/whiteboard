@@ -202,8 +202,8 @@ type SnapshotNodeBase = {
 
 /** Only what is there: an empty bucket or an empty tag list says nothing. */
 function dressing(element: {
-  readonly facets?: ExtensionFacets | undefined
-  readonly tags?: readonly string[] | undefined
+  readonly facets?: ExtensionFacets
+  readonly tags?: readonly string[]
 }) {
   const hasFacets = element.facets !== undefined && Object.keys(element.facets).length > 0
   const hasTags = element.tags !== undefined && element.tags.length > 0

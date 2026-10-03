@@ -176,9 +176,9 @@ describe('buildFragmentInsertCommand', () => {
 
   it('returns undefined for an empty-node fragment', () => {
     const canvas: SpatialCanvas = { nodes: [], edges: [] }
-    expect(buildFragmentInsertCommand(canvas, { nodes: [], edges: [] }, sequentialIds())).toBe(
-      undefined,
-    )
+    expect(
+      buildFragmentInsertCommand(canvas, { nodes: [], edges: [] }, sequentialIds()),
+    ).toBeUndefined()
   })
 
   it('without an anchor, offsets every node +16/+16 (the duplicate cascade)', () => {

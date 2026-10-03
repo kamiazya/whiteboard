@@ -90,19 +90,21 @@ export async function anAutomaticCheckpointFollowsAMoveOrDelete(server) {
       ],
     })
     const [moved, control, deleted] = created.results.map((result) => result.documentId)
-    for (const documentId of [moved, control, deleted]) {
-      await session.call('wb_canvas_edit', {
-        workspaceId,
-        documentId,
-        mode: 'apply',
-        ops: [
-          {
-            op: 'node.add',
-            node: { id: 'n1', type: 'text', x: 0, y: 0, width: 120, height: 40, text: 'hi' },
-          },
-        ],
-      })
-    }
+    await Promise.all(
+      [moved, control, deleted].map((documentId) =>
+        session.call('wb_canvas_edit', {
+          workspaceId,
+          documentId,
+          mode: 'apply',
+          ops: [
+            {
+              op: 'node.add',
+              node: { id: 'n1', type: 'text', x: 0, y: 0, width: 120, height: 40, text: 'hi' },
+            },
+          ],
+        }),
+      ),
+    )
     await session.call('wb_workspace_edit', {
       workspaceId,
       ops: [
@@ -116,11 +118,16 @@ export async function anAutomaticCheckpointFollowsAMoveOrDelete(server) {
     }
 
     session = await startSession(server, dataDir)
-    for (const [label, documentId] of [
-      ['the moved document', moved],
-      ['the untouched control', control],
-    ]) {
-      const listed = await session.call('wb_version_list', { workspaceId, documentId })
+    const histories = await Promise.all(
+      [
+        ['the moved document', moved],
+        ['the untouched control', control],
+      ].map(async ([label, documentId]) => ({
+        label,
+        listed: await session.call('wb_version_list', { workspaceId, documentId }),
+      })),
+    )
+    for (const { label, listed } of histories) {
       if (!Array.isArray(listed.versions) || listed.versions.length === 0) {
         throw new Error(`${label} has no automatic history row: ${JSON.stringify(listed)}`)
       }

@@ -64,7 +64,7 @@ describe('the membership gate over the registered tools', () => {
       profileForBinding: async () => null,
     } as unknown as MemberProfileStore
     const entries = Object.values(gated)
-    expect(entries.length).toBe(ALL_REGISTERED_TOOLS.length)
+    expect(entries).toHaveLength(ALL_REGISTERED_TOOLS.length)
     for (const tool of entries) {
       await expect(
         runAsMcpCaller({ grant, members }, () =>
