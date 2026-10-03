@@ -46,18 +46,13 @@ export const KNOWN_TYPE_CYCLES: readonly {
 }[] = []
 
 /**
- * Cross-PACKAGE dependency cycles found and not yet dissolved — the
- * manifest-level companion to {@link KNOWN_IMPORT_CYCLES}, over
- * `dependencies` AND `devDependencies` (package-cycle-check.ts). Same
- * both-sides contract: a cycle not listed here fails the build, and an
- * entry whose cycle no longer exists fails it too.
- *
- * A listed cycle is not thereby safe at the SOURCE level: the manifest edge
- * only says the loop could be closed, and whatever keeps the closing import
- * type-only needs its own guard, named in the reason.
- */
-/**
- * Package loops this repo accepts, with the reason each is not a defect.
+ * Package loops this repo accepts, with the reason each is not a defect — the
+ * manifest-level companion to {@link KNOWN_IMPORT_CYCLES}, over `dependencies`
+ * AND `devDependencies` (package-cycle-check.ts), with the same both-sides
+ * contract: a cycle not listed here fails the build, and an entry whose cycle
+ * no longer exists fails it too. A listed cycle is not thereby safe at the
+ * SOURCE level: whatever keeps a closing import type-only needs its own guard,
+ * named in the reason.
  *
  * EMPTY, and that is the news: the one entry here was
  * canvas-render <-> plugin-visual, a loop closed only by every import back
