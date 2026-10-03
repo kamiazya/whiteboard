@@ -115,6 +115,15 @@ function placeAll(
       )
     }
     seen.add(op.id)
+    // `nodeId` is the anchor's way of naming a text node, which a markdown
+    // document has none of; resolving against the body would apply the edit to
+    // a passage the caller placed somewhere else.
+    if (op.anchor.nodeId !== undefined) {
+      throw new PassageNotApplicableError(
+        op.id,
+        `a markdown document has no node "${op.anchor.nodeId}"; omit nodeId to quote its body`,
+      )
+    }
     const resolved = resolveTextAnchor(body, op.anchor)
     if (resolved.kind !== 'placed') {
       throw new PassageNotApplicableError(op.id, 'its passage is no longer in the body')

@@ -329,6 +329,34 @@ describe('wb_body_edit', () => {
     ).rejects.toThrow(DocumentKindMismatchError)
   })
 
+  test.each([
+    'apply',
+    'propose',
+  ] as const)('refuses an anchor naming a node on a markdown document in %s mode, by name', async (mode) => {
+    const store = new FakeDocumentStore()
+    const body = 'The plan is to ship on Thursday.\n'
+    await seedMarkdown(store, body)
+
+    await expect(
+      createBodyEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode,
+        ops: [
+          {
+            id: 'c1',
+            op: 'body.replace',
+            anchor: { ...passage(body, 'Thursday'), nodeId: 'n1' },
+            text: 'Friday',
+            assumed: 'Thursday',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/c1.*no node "n1".*omit nodeId/)
+    expect(await storedBody(store)).toBe(body)
+    expect(await storedProposals(store)).toEqual([])
+  })
+
   test('refuses a document the workspace does not hold', async () => {
     const store = new FakeDocumentStore()
     await expect(
