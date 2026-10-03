@@ -240,6 +240,22 @@ describe('wb_document_get reads a document in its own format', () => {
     expect(result.failed[0]?.reason).toMatch(/wb_canvas_edit/)
   })
 
+  it('an id the workspace never held is reported as not found, not as a document that lost its kind', async () => {
+    const deps = makeDeps()
+    await createDoc(deps, 'markdown')
+    const ghost = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [ghost],
+    })
+
+    expect(result.documents).toEqual([])
+    expect(result.failed).toHaveLength(1)
+    expect(result.failed[0]?.reason).toContain(`Document not found: ${ghost}`)
+    expect(result.failed[0]?.reason).not.toContain('records no kind')
+  })
+
   it('a kindless doc whose index row resolves to null (wrong workspace) is still refused', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')

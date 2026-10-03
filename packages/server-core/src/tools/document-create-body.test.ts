@@ -24,7 +24,9 @@ describe('creating a markdown document with its body', () => {
       markdown: MARKDOWN,
     })
     const { documents } = await createDocumentGetTool(deps).execute({
-      workspaceId: WS,
+      // The canonical id the create minted: a tool reached through
+      // `createServer` is handed the resolved id, never the segment.
+      workspaceId: created.workspaceId,
       documentIds: [created.documentId],
     })
     expect(documents[0]?.content).toContain('The body, written at creation time.')

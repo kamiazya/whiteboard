@@ -319,7 +319,10 @@ export function createServer(deps: ServerDeps) {
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),
   }
-  return { app, tools: withResolvedWorkspaceHandles(tools, deps.documentIndex) }
+  return {
+    app,
+    tools: withResolvedWorkspaceHandles(tools, deps.documentIndex, deps.knownWorkspaceHandles),
+  }
 }
 
 function mapDocumentError(c: Context, err: unknown) {

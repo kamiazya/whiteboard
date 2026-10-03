@@ -47,6 +47,19 @@ describe('an unknown workspaceId over stdio on an empty data directory', () => {
         ops: [{ op: 'document.create', path: 'a', kind: 'spatial' }],
       }),
     ).rejects.toThrow(/Workspaces here: "default"/)
+    // A render never asks about the workspace itself, and a read is not told
+    // to add anything: every tool refuses a handle that names nothing alike.
+    for (const [name, args] of [
+      ['wb_scene_render', { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }],
+      ['wb_document_get', { documentIds: ['01ARZ3NDEKTSV4RRFFQ69G5FAV'] }],
+    ] as const) {
+      const refusal = await agent.call(name, { workspaceId: 'main', ...args }).then(
+        () => '',
+        (error: Error) => error.message,
+      )
+      expect(refusal).toMatch(/Workspaces here: "default"/)
+      expect(refusal).not.toContain('Create it before adding')
+    }
   }, 60_000)
 
   // The daemon is the other root that composes the tools' deps, and the one a

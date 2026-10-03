@@ -88,8 +88,8 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
     const json = (await res.json()) as { title?: string }
     // Same shape as DELETE's 404 — the client parses problem-details for
     // both routes — deliberately not thumbnails/restore's { error, message }.
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
+    // A document of either kind lives at this path, so the title names none.
+    expect(json.title).toBe('Document "never-created" not found')
     expect(json).not.toHaveProperty('error')
   })
 
