@@ -554,6 +554,13 @@ jobs:
       - name: Web app preview-origin behavioral smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
 
+      # The service worker's update lifecycle through the BUILT dist/ in real
+      # Chromium: install, control, a waiting update accepted through the toast,
+      # and the error screen's recovery. The unit tests stand in mocks for the
+      # worker, which cannot notice a build whose worker behaves differently.
+      - name: Web app PWA update-lifecycle behavioral smoke
+        run: pnpm --filter @kamiazya/whiteboard-web smoke:pwa-lifecycle
+
       # ADR-0044's cross-origin transfer crossed for real: the browser app at
       # one origin sends its workspace to a server-mode keeper at another,
       # built above, whose person signed in through an OIDC provider. The
