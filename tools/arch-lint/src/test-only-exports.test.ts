@@ -190,7 +190,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/model/src/mdast/index.ts#mdastTableRowSchema',
   'packages/model/src/trust.ts#isHumanActor',
   'packages/model/src/uint8-array.ts#isUint8ArrayAnyRealm',
-  'packages/plugin-visual/src/apply-stencil.ts#VISUAL_STENCIL_KEY',
   'packages/plugin-visual/src/data.ts#VisualShapeFacet',
   'packages/plugin-visual/src/data.ts#visualPlugin',
   'packages/plugin-visual/src/emoji/shortcode.ts#emojiForShortcode',
@@ -340,7 +339,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 157
+const DEBT_CEILING = 156
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 26

@@ -44,7 +44,7 @@ describe('where a write reaches', () => {
 
   it('a facet write on a node follows the same rule', () => {
     const subject = { kind: 'node' as const, node: canvas.nodes[0]! }
-    expect(facetWriteCommands(subject, 'a', new Set(['b']), 'k', 1)).toEqual([
+    expect(facetWriteCommands(canvas, subject, 'a', new Set(['b']), 'k', 1)).toEqual([
       { kind: 'set-node-facet', id: 'a', key: 'k', payload: 1 },
       { kind: 'set-node-facet', id: 'b', key: 'k', payload: 1 },
     ])
@@ -52,7 +52,7 @@ describe('where a write reaches', () => {
 
   it('a facet write on an edge reaches that one edge', () => {
     const subject = { kind: 'edge' as const, edge: canvas.edges[0]! }
-    expect(facetWriteCommands(subject, 'a', new Set(['b']), 'k', 1)).toEqual([
+    expect(facetWriteCommands(canvas, subject, 'a', new Set(['b']), 'k', 1)).toEqual([
       { kind: 'set-edge-facet', id: 'e1', key: 'k', payload: 1 },
     ])
   })

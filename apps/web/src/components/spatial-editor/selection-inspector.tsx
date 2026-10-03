@@ -1,6 +1,8 @@
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { isStencilWrite, stencilWriteCommands } from '../../lib/spatial/stencil-write.js'
 import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import { FacetFormPanel, type FacetSubject } from './facet-widgets/FacetFormPanel.js'
 import { collectFieldSuggestions } from './facet-widgets/field-suggestions.js'
@@ -38,18 +40,32 @@ export function writeReachesIds(
   return members.has(target.id) ? [...members] : [target.id]
 }
 
-/** One facet written from the panel. An edge selection is one edge; a node write fans out. */
+/**
+ * One facet written from the panel. An edge selection is one edge; a node
+ * write fans out. A stencil is the one write that is more than its record —
+ * it carries the appearance it names — so it is expanded from each node as
+ * the eager chain holds it (`current`), never from the node the panel showed.
+ */
 export function facetWriteCommands(
+  current: SpatialCanvas,
   subject: FacetSubject,
   selectedId: string | null,
   extraIds: ReadonlySet<string>,
   key: string,
   payload: unknown,
+  registry: FacetRegistry = bundledFacetRegistry,
 ): EditorCommand[] {
   if (subject.kind === 'edge') {
     return [{ kind: 'set-edge-facet', id: subject.edge.id, key, payload }]
   }
-  return writeReachesIds(subject.node, selectedId, extraIds).map((id) => ({
+  const ids = writeReachesIds(subject.node, selectedId, extraIds)
+  if (isStencilWrite(key)) {
+    return ids.flatMap((id) => {
+      const node = current.nodes.find((entry) => entry.id === id)
+      return node === undefined ? [] : stencilWriteCommands(node, payload, registry)
+    })
+  }
+  return ids.map((id) => ({
     kind: 'set-node-facet' as const,
     id,
     key,
@@ -128,7 +144,9 @@ export function SelectionInspector(props: SelectionInspectorProps) {
         onCommands(tagWriteCommands(props.currentCanvas(), subject, selectedId, extraIds, after))
       }
       onWrite={(key, payload) =>
-        onCommands(facetWriteCommands(subject, selectedId, extraIds, key, payload))
+        onCommands(
+          facetWriteCommands(props.currentCanvas(), subject, selectedId, extraIds, key, payload),
+        )
       }
     />
   )
