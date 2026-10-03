@@ -261,6 +261,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the strict refusal-body contract ApiErrorBody derives from, re-exported through the barrel; the route fuzz holds every refusal to it',
   'packages/facet-engine/src/registry.ts#FacetPlugin':
     'the contract a plugin package implements (ADR-0013), the type a second bundled plugin would import; workspace-stencils.test.ts holds a hand-written one to it',
+  'packages/mcp-server/src/server/server-mode-people.ts#createServerModePeople':
+    'the one definition of server mode’s people, which openServerModePeople in the same file wraps for the root and the packaged smoke; _test-server-mode-harness.ts builds the same stores over an isolated database',
   'packages/mcp-server/src/cli/native-host.ts#keepHostAliveOnUnhandledRejection':
     'the guard runHost arms in the same file, exported so native-host.test.ts can prove a rejection is logged and the process survives',
   'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_TTL_MS':

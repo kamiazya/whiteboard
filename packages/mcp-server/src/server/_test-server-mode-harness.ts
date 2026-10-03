@@ -8,24 +8,12 @@ import { oidcProviders, resolvedForTest } from './security/_test-helpers.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
 import { createCompleteSignInDeps } from './security/complete-sign-in.js'
-import { createInvitationStore } from './security/invitation-store.js'
-import {
-  createMemberProfileStore,
-  type MemberProfileStore,
-} from './security/member-profile-store.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import type { RelyingParty } from './security/oidc-relying-party.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import { signInConfigSchema } from './security/sign-in-config.js'
-import {
-  createSignInSessionStore,
-  type SignInSessionStore,
-} from './security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
-import { createUserDeactivation } from './security/user-deactivation.js'
-import { createUserDeletion } from './security/user-deletion.js'
-import { createWorkspaceRoles } from './security/workspace-roles.js'
-import { accountRetirementFor } from './store/db/account-retirement.js'
+import { createServerModePeople } from './server-mode-people.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
 /** The OIDC provider server-mode tests sign in through. */
@@ -53,26 +41,8 @@ type TenantDb = Awaited<ReturnType<typeof createIsolatedDb>>['db']
 
 /** The people stores and the `people` option server mode's `createApp` takes, over one database. */
 export function serverModePeople(db: TenantDb, dataDir: string) {
-  const members: MemberProfileStore = createMemberProfileStore(db)
-  const sessions: SignInSessionStore = createSignInSessionStore(db)
-  const people = {
-    members,
-    sessions,
-    roles: createWorkspaceRoles(db),
-    invitations: createInvitationStore(db),
-    administration: {
-      check: createAdministratorCheck({
-        admins: createTenantAdministratorStore(db),
-        members: createMemberProfileStore(db),
-        configured: [],
-      }),
-      appointments: createTenantAdministratorStore(db),
-      deactivation: createUserDeactivation(db),
-      deletion: createUserDeletion(db, accountRetirementFor(dataDir)),
-    },
-    origin: PUBLIC_URL,
-  }
-  return { members, sessions, people }
+  const { people, signIn } = createServerModePeople(db, { dataDir, publicBaseUrl: PUBLIC_URL })
+  return { members: signIn.members, sessions: signIn.sessions, people }
 }
 
 /**

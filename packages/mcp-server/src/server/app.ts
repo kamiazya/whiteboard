@@ -270,15 +270,17 @@ export function createApp(options: AppOptions) {
   // Both HTTP roots build their app here, so this is where server-core's
   // fail-open records are given somewhere to go; see `routeServerCoreLogs`.
   routeServerCoreLogs()
-  const membership = membershipWiring(options)
   if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
     throw new Error('local-daemon mode must not receive authStrategy')
   }
 
   const app = new Hono()
 
+  // The config is judged before any other option is read, so a caller with
+  // an invalid server-mode config is refused for that and nothing else.
   const { instanceId, identity, credentialResolver, mcpAuth, serverModeGetStatus } =
     appWiring(options)
+  const membership = membershipWiring(options)
 
   // Tracing middleware first so the request span wraps every other
   // middleware (auth, headers, route handler). When OTel is disabled the

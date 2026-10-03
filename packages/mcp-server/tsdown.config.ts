@@ -24,6 +24,9 @@ export default defineConfig({
     // its own, and none reads the process's data directory), and this is the
     // one place every self-hosting root gets both from.
     'di/boot-self-host-deps': 'src/di/boot-self-host-deps.ts',
+    // `people` is required of a server-mode `createApp`, and the packaged
+    // smoke builds it the way the root does, from this one factory.
+    'server/server-mode-people': 'src/server/server-mode-people.ts',
     'shared/data-dir-secure': 'src/shared/data-dir-secure.ts',
     'shared/package-version': 'src/shared/package-version.ts',
     'server/export/headless-renderer': 'src/server/export/headless-renderer.ts',

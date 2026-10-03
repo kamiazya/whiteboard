@@ -62,14 +62,18 @@ const tempDirs = createTempDirs()
 const dataDir = tempDirs.make('whiteboard-server-mode-smoke-')
 process.env.WHITEBOARD_DATA_DIR = dataDir
 
-const [{ createApp }, { planServerModeAuth }, { bootSelfHostDeps }] = await Promise.all([
-  import(`${DIST_SERVER}/app.js`),
-  import(`${DIST_SERVER}/security/server-mode-auth-plan.js`),
-  import(`${DIST_SERVER}/../di/boot-self-host-deps.js`),
-])
+const [{ createApp }, { planServerModeAuth }, { bootSelfHostDeps }, { openServerModePeople }] =
+  await Promise.all([
+    import(`${DIST_SERVER}/app.js`),
+    import(`${DIST_SERVER}/security/server-mode-auth-plan.js`),
+    import(`${DIST_SERVER}/../di/boot-self-host-deps.js`),
+    import(`${DIST_SERVER}/server-mode-people.js`),
+  ])
 // Booted once, the way a root boots: the deps and the data layout the routes
-// serve come from the same call, over the same directory.
+// serve come from the same call, over the same directory — and the people
+// (members, sessions, roles) from the same factory the root builds them with.
 const { serverDeps, dataLayout } = await bootSelfHostDeps(dataDir)
+const { people } = await openServerModePeople({ dataDir, publicBaseUrl: PUBLIC_URL })
 
 // Fake deterministic auth strategy — no real OAuth/JWKS involved.
 // Returns 401 when Authorization header is absent, 403 when the required
@@ -127,11 +131,23 @@ function makeApp(scopes, overrides = {}) {
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: ALLOWED_ORIGINS,
     authStrategy: makeScopeStrategy(scopes),
+    people,
     touch: () => {},
     getStatus: makeInternalStatus,
     shutdown: () => Promise.resolve(),
     ...overrides,
   })
+}
+
+// The scope gate is what scenarios 5a/5b judge. Past it, server mode still
+// gates MEMBERSHIP: `smoke-sub` is nobody's member, so a workspace route may
+// answer 403 `not_a_member` — that is the gate after the one under test, so
+// only an auth refusal (401, or 403 `auth.forbidden`) fails these.
+async function scopeGateRefused(res) {
+  if (res.status === 401) return true
+  if (res.status !== 403) return false
+  const body = await res.clone().text()
+  return body.includes('auth.forbidden')
 }
 
 async function req(app, method, path, opts = {}) {
@@ -153,6 +169,7 @@ try {
         publicBaseUrl: 'http://example.com', // non-HTTPS
         allowedOrigins: ['https://example.com'],
         authStrategy: makeScopeStrategy([]),
+        people,
         touch: () => {},
         getStatus: makeInternalStatus,
         shutdown: () => Promise.resolve(),
@@ -178,6 +195,7 @@ try {
         publicBaseUrl: 'https://example.com',
         allowedOrigins: ['*'], // wildcard
         authStrategy: makeScopeStrategy([]),
+        people,
         touch: () => {},
         getStatus: makeInternalStatus,
         shutdown: () => Promise.resolve(),
@@ -228,6 +246,7 @@ try {
       publicBaseUrl: 'https://norm-check.example.com',
       allowedOrigins: ['https://norm-check.example.com:443'],
       authStrategy: makeScopeStrategy([]),
+      people,
       touch: () => {},
       getStatus: makeInternalStatus,
       shutdown: () => Promise.resolve(),
@@ -300,7 +319,7 @@ try {
 
     const appRead = makeApp(['workspace:read'])
     const resPass = await req(appRead, 'GET', '/api/workspaces', { bearer: SMOKE_TOKEN })
-    if (resPass.status === 401 || resPass.status === 403) {
+    if (await scopeGateRefused(resPass)) {
       fail('5a: workspace:read must pass auth gate', { status: resPass.status })
     }
   }
@@ -326,7 +345,7 @@ try {
     const resPass = await req(appWrite, 'POST', '/api/w/w1/document/s1/export', {
       bearer: SMOKE_TOKEN,
     })
-    if (resPass.status === 401 || resPass.status === 403) {
+    if (await scopeGateRefused(resPass)) {
       fail('5b: canvas:write must pass auth gate on export', { status: resPass.status })
     }
   }
