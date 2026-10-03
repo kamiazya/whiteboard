@@ -347,7 +347,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2768 -> 2855 for the three cases pinning that undo: the document
   // agreeing with the screen after an undo and after a redo, and a taken-back
   // write settling as saved rather than reading as pending forever.
-  'apps/web/src/lib/document-sync-session.test.ts': 2850,
+  'apps/web/src/lib/document-sync-session.test.ts': 2662,
   // One example per rule of every command arm, ink included: a table of ink
   // verbs where every row is one example is what stops the next one being
   // added without one. It grows one row per verb the parity matrix reports,
