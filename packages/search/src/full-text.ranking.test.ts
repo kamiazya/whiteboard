@@ -90,6 +90,52 @@ describe('fullTextSearch excerpts', () => {
     expect(hit?.contexts[0]).not.toContain('beta')
   })
 
+  it('quotes the text holding the whole query ahead of earlier texts that hold part of it', () => {
+    const [hit] = fullTextSearch(
+      [DOC('a', ['alpha one', 'alpha again', 'beta two', 'alpha two exact', 'alpha last'])],
+      'alpha two exact',
+    )
+    expect(hit?.contexts).toHaveLength(3)
+    expect(hit?.contexts[0]).toBe('alpha two exact')
+  })
+
+  it('quotes the text matching more of the query ahead of one matching less, in document order within a tie', () => {
+    const [hit] = fullTextSearch(
+      [DOC('a', ['alpha', 'beta', 'gamma beta alpha', 'alpha beta gamma', 'delta'])],
+      'gamma beta alpha delta',
+    )
+    expect(hit?.contexts).toEqual(['gamma beta alpha', 'alpha beta gamma', 'alpha'])
+  })
+
+  it('counts a word the query repeats once', () => {
+    const [hit] = fullTextSearch([DOC('a', ['alpha', 'beta gamma'])], 'alpha alpha beta gamma')
+    expect(hit?.contexts).toEqual(['beta gamma', 'alpha'])
+  })
+
+  // The planted text is the only one holding the query verbatim in some runs
+  // and one of several in others; either way a document that holds it
+  // verbatim must quote it, wherever it sits among the texts.
+  fcTest.prop(
+    [
+      fc.array(
+        fc
+          .array(fc.constantFrom('alpha', 'two', 'exact', 'beta', 'one'), {
+            minLength: 1,
+            maxLength: 3,
+          })
+          .map((words) => words.join(' ')),
+        { minLength: 0, maxLength: 8 },
+      ),
+      fc.nat(8),
+    ],
+    withDefaults({ numRuns: 100 }),
+  )('quotes a text holding the query verbatim whenever the document has one', (others, slot) => {
+    const needle = 'alpha two exact'
+    const texts = [...others.slice(0, slot), needle, ...others.slice(slot)]
+    const [hit] = fullTextSearch([DOC('a', texts)], needle)
+    expect(hit?.contexts).toContain(needle)
+  })
+
   it('indexes derived text but never quotes it', () => {
     const [hit] = fullTextSearch([DOC('a', ['\u{1F680} launch'])], 'rocket', {
       alsoIndex: (t) => (t.includes('\u{1F680}') ? 'rocket' : ''),

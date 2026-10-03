@@ -158,39 +158,51 @@ export function fullTextSearch(
     .slice(0, limit)
 }
 
+interface Match {
+  readonly index: number
+  readonly length: number
+  /** The query's distinct tokens this text holds; a verbatim hit outranks any count of them. */
+  readonly score: number
+}
+
 /**
  * Where the query matches `lower`: the raw needle if it occurs verbatim,
  * otherwise the earliest matching token.
  */
-function firstMatch(
-  lower: string,
-  needle: string,
-  tokens: readonly string[],
-): { index: number; length: number } | undefined {
+function firstMatch(lower: string, needle: string, tokens: readonly string[]): Match | undefined {
   const verbatim = needle === '' ? -1 : lower.indexOf(needle)
-  if (verbatim !== -1) return { index: verbatim, length: needle.length }
+  if (verbatim !== -1) {
+    return { index: verbatim, length: needle.length, score: tokens.length + 1 }
+  }
   let best: { index: number; length: number } | undefined
+  let matched = 0
   for (const token of tokens) {
     const at = lower.indexOf(token)
-    if (at !== -1 && (best === undefined || at < best.index))
-      best = { index: at, length: token.length }
+    if (at === -1) continue
+    matched++
+    if (best === undefined || at < best.index) best = { index: at, length: token.length }
   }
-  return best
+  return best === undefined ? undefined : { ...best, score: matched }
 }
 
 /**
- * Excerpts, keyed on the RAW query string when it occurs verbatim (the
- * common case, and the most readable snippet); a query that only matches
- * token-wise falls back to the first matching token's position.
+ * Excerpts, the three texts that match the query best: one holding it
+ * VERBATIM first (the most readable snippet), then by how many of its tokens
+ * a text holds, ties in document order. Document order alone quoted the
+ * first three texts that mentioned any one word, so the text that held the
+ * whole query could sit fourth and never be shown.
+ *
+ * A query that only matches token-wise centres on the first matching token.
  */
 function contextsFor(doc: SearchableDocument, query: string): string[] {
   const needle = query.trim().toLowerCase()
-  const tokens = tokenize(query)
-  const contexts: string[] = []
-  for (const text of doc.texts) {
-    const match = firstMatch(text.toLowerCase(), needle, tokens)
-    if (match !== undefined) contexts.push(snippetAround(text, match.index, match.length))
-    if (contexts.length >= 3) break
-  }
-  return contexts
+  const tokens = [...new Set(tokenize(query))]
+  return doc.texts
+    .flatMap((text, order) => {
+      const match = firstMatch(text.toLowerCase(), needle, tokens)
+      return match === undefined ? [] : [{ text, match, order }]
+    })
+    .sort((a, b) => b.match.score - a.match.score || a.order - b.order)
+    .slice(0, 3)
+    .map(({ text, match }) => snippetAround(text, match.index, match.length))
 }
