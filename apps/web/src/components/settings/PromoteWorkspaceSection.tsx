@@ -158,12 +158,11 @@ async function cacheAndMaybeDemote({
   // Register the replica NOW: findReplicaForHandle and the shell notice read
   // the registry, and an entry that only appears on some later visit leaves
   // the fresh cache invisible offline.
-  const { withReplicaEntry } = await import('../../lib/replicas.js')
+  const { pulledReplicaFields, withReplicaEntry } = await import('../../lib/replicas.js')
   settingsStore.update((current) =>
     withReplicaEntry(current, workspaceId, {
       daemonBaseUrl,
-      syncedAt: cache.syncedAt,
-      syncedFrontier: cache.syncedFrontier,
+      ...pulledReplicaFields(cache),
       ...(target?.segment === undefined ? {} : { segment: target.segment }),
       ...(target?.displayName === undefined ? {} : { displayName: target.displayName }),
     }),

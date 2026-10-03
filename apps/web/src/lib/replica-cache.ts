@@ -22,8 +22,14 @@ import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { markReplica } from './replica-store.js'
-import { ReplicaKeyWithheldError } from './sealed-document-store.js'
+import { getAppLogger } from './app-logger.js'
+import { markReplica, openDocumentStore, replicaKeyStatus } from './replica-store.js'
+import { stopReplicaReadableOffline } from './replica-unlock.js'
+import { forgetReplicaEntry } from './replicas.js'
+import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from './sealed-document-store.js'
+import { createUserSettingsStore } from './user-settings-store.js'
+
+const log = getAppLogger('replica-cache')
 
 export interface CacheDaemonWorkspaceOptions {
   fetch: typeof globalThis.fetch
@@ -46,6 +52,12 @@ export type CacheDaemonWorkspaceResult =
        * deriving it from the merge would mark local edits as sent.
        */
       syncedFrontier: string
+      /**
+       * The key generation the stored bytes were just sealed under, when the
+       * daemon named one. The caller records it with the registry entry —
+       * the next read compares it with the key then held.
+       */
+      keyId?: string
     }
   /**
    * The pull reached the daemon, but this build's session key for the
@@ -55,6 +67,38 @@ export type CacheDaemonWorkspaceResult =
    */
   | { kind: 'withheld' }
   | { kind: 'failed'; reason: string }
+
+/**
+ * The stored copy to merge the pull into — or a fresh one when the stored
+ * copy was sealed under a key generation the daemon has since replaced.
+ *
+ * That copy cannot be opened by any key this tab can obtain, so merging into
+ * it is impossible and keeping it is pointless: it is dropped and the pull
+ * stands alone. Offline edits that were not yet sent go with it; they were
+ * unreadable already, and the alternative was a pull that fails for good while
+ * the copy goes on reading as damaged. Claim first, bytes second, as every
+ * delete of a copy does, and the wrapped key goes too — it opens a key
+ * generation that no longer matches anything on this device.
+ */
+async function openForMerge(
+  workspaceDocs: WorkspaceDocs,
+  workspaceId: string,
+  daemonBaseUrl: string,
+): Promise<LoroDoc> {
+  try {
+    return (await workspaceDocs.open(workspaceId)) ?? new LoroDoc()
+  } catch (err) {
+    if (!(err instanceof ReplicaKeyRotatedError)) throw err
+    log.warn('replica sealed under a replaced key was dropped to pull it again', {
+      daemonBaseUrl,
+      workspaceId,
+    })
+    createUserSettingsStore().update((current) => forgetReplicaEntry(current, workspaceId))
+    stopReplicaReadableOffline(daemonBaseUrl, workspaceId)
+    await openDocumentStore().deleteDoc({ docRef: { kind: 'workspace-tree', workspaceId } })
+    return new LoroDoc()
+  }
+}
 
 export async function cacheDaemonWorkspace(
   options: CacheDaemonWorkspaceOptions,
@@ -74,11 +118,13 @@ export async function cacheDaemonWorkspace(
     const bytes = new Uint8Array(await res.arrayBuffer())
     const daemonOnly = new LoroDoc()
     daemonOnly.import(bytes)
-    const doc = (await workspaceDocs.open(workspaceId)) ?? new LoroDoc()
+    const doc = await openForMerge(workspaceDocs, workspaceId, daemonBaseUrl)
     doc.import(bytes)
     await workspaceDocs.save(workspaceId, doc)
+    const held = replicaKeyStatus(daemonBaseUrl, workspaceId)
     return {
       kind: 'ok',
+      ...(held?.kind === 'held' && held.keyId !== undefined ? { keyId: held.keyId } : {}),
       syncedAt: new Date().toISOString(),
       documentCount: readWorkspaceDocuments(doc).length,
       syncedFrontier: bytesToBase64(daemonOnly.oplogVersion().encode()),

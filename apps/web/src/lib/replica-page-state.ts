@@ -1,5 +1,6 @@
 /**
- * The replica read page's five degradation states (ADR-0042 decisions 3-6).
+ * The replica read page's six degradation states (ADR-0042 decisions 3-6, and
+ * the 2026-09-21 key-rotation addendum for the sixth).
  * A pure function so the whole (key x remembered) input space can
  * be enumerated and pinned by an exhaustive test — see
  * `replica-page-state.test.ts`.
@@ -15,7 +16,12 @@
 import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 
 /** What the session-key holder knows about this workspace's key, at the moment the page asks. */
-export type ReplicaKeyInput = 'readable' | 'missing' | { withheld: WithheldReason }
+export type ReplicaKeyInput =
+  | 'readable'
+  | 'missing'
+  /** The stored copy was sealed under a key generation the daemon has since replaced. */
+  | 'rotated'
+  | { withheld: WithheldReason }
 
 export const REPLICA_PAGE_STATES = [
   'needs-connection',
@@ -23,6 +29,7 @@ export const REPLICA_PAGE_STATES = [
   'locked',
   'unlockable',
   'removed',
+  'rotated',
 ] as const
 export type ReplicaPageState = (typeof REPLICA_PAGE_STATES)[number]
 
@@ -58,6 +65,11 @@ export function replicaPageState({
   // gesture, and asking someone to prove themselves for something already
   // open is the prompt this whole design exists to avoid.
   if (key === 'readable') return 'readable'
+  // Neither the passkey nor the daemon's return fixes this copy: the wrapped
+  // key a passkey opens is of the replaced generation too, and 'locked'
+  // would promise the copy comes back once the daemon is reachable — what
+  // brings it back is downloading it again.
+  if (key === 'rotated') return 'rotated'
   // Nothing asked yet. With a blob on disk that is the cold start itself,
   // so the offer is an unlock rather than "connect the daemon" — the
   // daemon may well be unreachable, and a remembered replica does not

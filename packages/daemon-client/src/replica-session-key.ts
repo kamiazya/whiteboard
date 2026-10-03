@@ -32,6 +32,8 @@ export type SessionKeyResult =
       workspaceKeySalt: Uint8Array<ArrayBuffer>
       tier: ReplicaTier
       leaseExpiresAt?: number
+      /** Which key generation this is — absent from a daemon that predates rotation. */
+      keyId?: string
     }
   | { kind: 'withheld'; reason: MembershipRefusalCode | 'unreachable' | 'lapsed' }
 
@@ -40,7 +42,7 @@ export type WithheldReason = Extract<SessionKeyResult, { kind: 'withheld' }>['re
 
 /** `sessionKeyStatus`'s answer — the holder's cached state without the key bytes, for a caller that only needs to know WHY, not to read. */
 export type SessionKeyStatus =
-  | { kind: 'held'; tier: ReplicaTier; leaseExpiresAt?: number }
+  | { kind: 'held'; tier: ReplicaTier; leaseExpiresAt?: number; keyId?: string }
   | { kind: 'withheld'; reason: WithheldReason }
 
 // Module-singleton: one shared entry and one shared in-flight request per
@@ -110,6 +112,7 @@ function heldFrom(response: ReplicaKeyResponse): Extract<SessionKeyResult, { kin
     tier: response.tier,
     leaseExpiresAt:
       response.leaseExpiresAt === undefined ? undefined : Date.parse(response.leaseExpiresAt),
+    ...(response.keyId === undefined ? {} : { keyId: response.keyId }),
   }
 }
 
@@ -283,6 +286,7 @@ export function sessionKeyStatus(
     kind: 'held',
     tier: cached.tier,
     ...(cached.leaseExpiresAt === undefined ? {} : { leaseExpiresAt: cached.leaseExpiresAt }),
+    ...(cached.keyId === undefined ? {} : { keyId: cached.keyId }),
   }
 }
 

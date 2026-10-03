@@ -305,19 +305,48 @@ decision 2 holds for the act plane applies here.** Rotation is not
 
 **The response carries a `keyId`** (`sha256("wb-workspace-key-id-v1" ‖ key ‖
 salt)`, truncated and base64url-encoded — never stored, so it cannot drift
-from the bytes it names), both from the rotate route and now optionally from
-the plain key route. This is the contract the browser-side half of this
-feature — recording the `keyId` a cached replica was sealed under, dropping
-and re-pulling on a mismatch, and a page state for "the copy on this device
-can no longer be opened" distinct from `locked` (which promises the copy
-comes back once the daemon is reachable — after a rotation, reaching the
-daemon is not what brings it back) — is handed to as a filed follow-up. That
-lane owns `replica-session-key.ts`, `replica-store.ts`,
-`replica-page-state.ts` and `replica-state-copy.ts`; this addendum ships the
-`keyId` those files need to tell rotation apart from corruption, since
-without it a post-rotation AEAD failure reads as `StoredDocumentUnreadableError('malformed')`
-— "this document is damaged" — which is exactly the surprise a rotated key
-must not produce.
+from the bytes it names), both from the rotate route and from the plain key
+route. It is what lets the browser tell a rotation from corruption, and the
+browser half of this feature is built on it:
+
+- **The registry records it.** Each replica registry entry
+  (`storage.replicas[workspaceId]`) carries an optional `keyId`: the key
+  generation the stored bytes were sealed under. It is written by the same
+  writer that records the sync, from what the session-key holder held when the
+  pull sealed the copy. Optional, so an entry from before rotation existed
+  parses unchanged and reads as "cannot tell".
+- **A read compares, and a mismatch is not damage.** When the holder's key
+  names a generation different from the recorded one, the sealed store refuses
+  the read — and a write, since sealing a new chunk under the new key beside
+  chunks under the old one would leave a record no single key opens — with
+  `ReplicaKeyRotatedError`, never `StoredDocumentUnreadableError('malformed')`.
+  Without both ids (a daemon or an entry that predates rotation) nothing
+  differs and the copy is read as before.
+- **The next pull replaces the copy.** Measured before this was built: the
+  background refresh did NOT overwrite the stale blocks. It merges the pulled
+  snapshot into the stored record, so it had to open the stored record first,
+  failed on it, and reported a generic failure on every later visit — for good,
+  with the 15-minute freshness window no help since a failed pull writes no
+  registry entry. Now `cacheDaemonWorkspace` catches the rotated refusal, drops
+  the stored copy, its registry claim and its wrapped key (which opens the
+  superseded generation too), and stores the pull alone under the key now held.
+  The refresh then records the new `keyId`.
+- **The page says so.** `replica-page-state.ts` has a sixth state, `rotated`,
+  distinct from `locked`: `locked` promises the copy comes back once the daemon
+  is reachable, and after a rotation reaching the daemon is not what brings it
+  back — downloading the copy again is. Its copy says the copy is not damaged
+  and has to be downloaded again. A remembered passkey does not turn it into an
+  unlock offer, because the key that passkey opens is of the replaced
+  generation too.
+
+What this does **not** recover: edits made offline on a copy and not yet sent
+when the key was replaced are dropped with the copy. They were sealed under a
+key this device no longer holds, so they were unreadable already; the
+alternative was a pull that fails indefinitely. A tab that still holds the old
+key in memory keeps reading and writing under it, so its registry entry and
+its copy agree and nothing is dropped until a tab that holds the new key meets
+that copy. Making the copy readable offline has to be turned on again after a
+rotation, since the wrapped key is dropped with the copy it opened.
 
 **The epoch item goes back on the backlog with "no purpose found."** Nothing
 in this system bumps a document's epoch today, and rotation — the feature

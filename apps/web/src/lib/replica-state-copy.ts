@@ -3,7 +3,7 @@ import type { ReplicaPageState } from './replica-page-state.js'
 import { REPLICA_TIER_COPY } from './replica-tier-copy.js'
 
 /**
- * Plain-language copy for the replica read page's five states (ADR-0042
+ * Plain-language copy for the replica read page's six states (ADR-0042
  * decisions 3-6), declared once so a sixth state is a type error rather
  * than a place a second spelling can fork — no "tier"/"replica"/"epoch"/
  * "key" jargon, the same rule `replica-tier-copy.ts` writes under.
@@ -43,6 +43,15 @@ export const REPLICA_STATE_COPY = {
     // rather than read off a technical error.
     body: 'You were removed from this workspace; changes made since then were not sent.',
     action: undefined,
+  },
+  rotated: {
+    // Says "not damaged" because the alternative reading is the one the app
+    // gave before this state existed, and it sends a person to look for a
+    // fault that is not there. The cause is the daemon's doing, so the body
+    // names what it did and the one remedy, without "key" or "protection"
+    // vocabulary a person never chose.
+    body: 'The daemon changed how this workspace is protected after this copy was saved, so the copy on this device can no longer be opened. It is not damaged: it has to be downloaded again from the daemon.',
+    action: 'Reconnect',
   },
 } satisfies Record<ReplicaPageState, { body: string; action?: string }>
 

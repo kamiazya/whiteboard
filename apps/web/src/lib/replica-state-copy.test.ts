@@ -9,7 +9,7 @@ import { REPLICA_TIER_COPY } from './replica-tier-copy.js'
 const JARGON = /\b(tier|replica|epoch|key)\b/i
 
 describe('REPLICA_STATE_COPY', () => {
-  it('declares exactly the five page states, no more and no fewer', () => {
+  it('declares exactly the six page states, no more and no fewer', () => {
     expect(Object.keys(REPLICA_STATE_COPY).sort()).toEqual([...REPLICA_PAGE_STATES].sort())
   })
 
@@ -25,6 +25,12 @@ describe('REPLICA_STATE_COPY', () => {
 
   it('removed offers no action', () => {
     expect(REPLICA_STATE_COPY.removed.action).toBeUndefined()
+  })
+
+  it('rotated says the copy is not damaged and names the one thing that fixes it', () => {
+    expect(REPLICA_STATE_COPY.rotated.body).toMatch(/not damaged/i)
+    expect(REPLICA_STATE_COPY.rotated.body).toMatch(/downloaded again/i)
+    expect(REPLICA_STATE_COPY.rotated.action).toBe('Reconnect')
   })
 
   it('locked and needs-connection each name an action', () => {

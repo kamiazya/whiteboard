@@ -17,6 +17,8 @@ import {
   findReplicaForHandle,
   forgetReplicaEntry,
   listReplicas,
+  pulledReplicaFields,
+  sealedUnderSupersededKey,
   withReplicaEntry,
 } from './replicas.js'
 import {
@@ -216,5 +218,44 @@ describe('a replica entry written in two steps', () => {
     expect(findReplicaForHandle(pulled, 'team')?.workspaceId).toBe('ws-1')
     expect(findReplicaForHandle(pulled, 'nobody')).toBeNull()
     expect(findReplicaForHandle(defaultUserSettings(), 'ws-1')).toBeNull()
+  })
+})
+
+describe('the key generation a copy is sealed under', () => {
+  it('is superseded only when both the copy and the held key name a generation and they differ', () => {
+    expect(sealedUnderSupersededKey('A', 'B')).toBe(true)
+    expect(sealedUnderSupersededKey('A', 'A')).toBe(false)
+    // Either side silent means "cannot tell", which must read as not superseded.
+    expect(sealedUnderSupersededKey(undefined, 'B')).toBe(false)
+    expect(sealedUnderSupersededKey('A', undefined)).toBe(false)
+    expect(sealedUnderSupersededKey(undefined, undefined)).toBe(false)
+  })
+
+  it('rides the registry entry, survives a later writer that does not know it, and is replaced by a newer one', () => {
+    const base = defaultUserSettings()
+    const first = withReplicaEntry(base, 'ws-1', {
+      daemonBaseUrl: 'http://d',
+      ...pulledReplicaFields({ syncedAt: '2026-01-01T00:00:00Z', syncedFrontier: 'f', keyId: 'A' }),
+    })
+    expect(findReplicaForHandle(first, 'ws-1')?.keyId).toBe('A')
+
+    const pushed = withReplicaEntry(first, 'ws-1', {
+      daemonBaseUrl: 'http://d',
+      syncedAt: '2026-01-02T00:00:00Z',
+    })
+    expect(findReplicaForHandle(pushed, 'ws-1')?.keyId).toBe('A')
+
+    const rotated = withReplicaEntry(pushed, 'ws-1', {
+      daemonBaseUrl: 'http://d',
+      ...pulledReplicaFields({ syncedAt: '2026-01-03T00:00:00Z', syncedFrontier: 'g', keyId: 'B' }),
+    })
+    expect(findReplicaForHandle(rotated, 'ws-1')?.keyId).toBe('B')
+  })
+
+  it('a pull that names no generation claims none', () => {
+    expect(pulledReplicaFields({ syncedAt: 't', syncedFrontier: 'f' })).toEqual({
+      syncedAt: 't',
+      syncedFrontier: 'f',
+    })
   })
 })

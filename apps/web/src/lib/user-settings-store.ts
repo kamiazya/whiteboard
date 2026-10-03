@@ -89,6 +89,15 @@ const storageSettingsSchema = z
              * sending a full snapshot once.
              */
             syncedFrontier: z.string().optional(),
+            /**
+             * Which key generation (`replicaKeyResponseSchema`'s `keyId`) the
+             * stored bytes are sealed under. A key the daemon has since
+             * replaced opens none of them, and this is how a read tells that
+             * from damage. Absent on entries from before rotation existed and
+             * on a daemon that predates it — read as "cannot tell", which
+             * leaves the old behaviour.
+             */
+            keyId: z.string().optional(),
           })
           .strict(),
       )

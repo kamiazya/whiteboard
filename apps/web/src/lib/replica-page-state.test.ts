@@ -1,5 +1,5 @@
 /**
- * The replica read page's five degradation states (ADR-0042 decisions 3-6),
+ * The replica read page's six degradation states (ADR-0042 decisions 3-6),
  * as a pure function of what the session-key holder knows about this workspace's key
  * and whether this device remembered a wrapped one — never of the tier or of
  * whether a registry entry exists, both of which the caller has already
@@ -7,7 +7,7 @@
  * header).
  *
  * Exhaustive over the full (key x remembered) input space rather than a
- * sample: the space is small and finite (11 x 2 = 22), and it is exactly what
+ * sample: the space is small and finite (12 x 2 = 24), and it is exactly what
  * a dropped arm — or a sixth state nobody wired a case for — would change the
  * count of.
  */
@@ -47,6 +47,7 @@ const LOCKED_REASONS = [
 
 function expectedState(key: ReplicaKeyInput, remembered: boolean): ReplicaPageState {
   if (key === 'readable') return 'readable'
+  if (key === 'rotated') return 'rotated'
   if (key === 'missing') return remembered ? 'unlockable' : 'needs-connection'
   const reason = key.withheld
   if ((REMOVED_REASONS as readonly string[]).includes(reason)) return 'removed'
@@ -55,7 +56,12 @@ function expectedState(key: ReplicaKeyInput, remembered: boolean): ReplicaPageSt
 
 function allKeyInputs(): ReplicaKeyInput[] {
   const withheldReasons: WithheldReason[] = [...REFUSAL_REASONS, ...NON_REFUSAL_WITHHELD_REASONS]
-  return ['readable', 'missing', ...withheldReasons.map((reason) => ({ withheld: reason }))]
+  return [
+    'readable',
+    'missing',
+    'rotated',
+    ...withheldReasons.map((reason) => ({ withheld: reason })),
+  ]
 }
 
 describe('replicaPageState', () => {
@@ -63,16 +69,17 @@ describe('replicaPageState', () => {
 
   it('the fixture reaches every membership refusal reason and both non-refusal withheld reasons', () => {
     expect(REFUSAL_REASONS.length).toBe(7)
-    expect(keys.length).toBe(11)
+    expect(keys.length).toBe(12)
   })
 
-  it('is exhaustive: every (key x remembered) input maps to exactly one of the five states, 22 total', () => {
+  it('is exhaustive: every (key x remembered) input maps to exactly one of the six states, 24 total', () => {
     const tally: Record<ReplicaPageState, number> = {
       'needs-connection': 0,
       readable: 0,
       locked: 0,
       unlockable: 0,
       removed: 0,
+      rotated: 0,
     }
     let total = 0
     for (const key of keys) {
@@ -84,13 +91,14 @@ describe('replicaPageState', () => {
         total += 1
       }
     }
-    expect(total).toBe(22)
+    expect(total).toBe(24)
     expect(tally).toEqual({
       'needs-connection': 1,
       readable: 2,
       locked: 4,
       unlockable: 5,
       removed: 10,
+      rotated: 2,
     })
   })
 
@@ -102,6 +110,14 @@ describe('replicaPageState', () => {
     for (const reason of REMOVED_REASONS) {
       expect(replicaPageState({ key: { withheld: reason }, remembered: true })).toBe('removed')
     }
+  })
+
+  it('a copy sealed under a replaced key is rotated whether or not a passkey was remembered', () => {
+    // The remembered blob opens the OLD generation, so offering to unlock it
+    // would lead straight back here; and the copy is not damaged, so it must
+    // not read as locked, which promises the copy comes back with the daemon.
+    expect(replicaPageState({ key: 'rotated', remembered: false })).toBe('rotated')
+    expect(replicaPageState({ key: 'rotated', remembered: true })).toBe('rotated')
   })
 
   it('a key already readable is never an unlock offer', () => {

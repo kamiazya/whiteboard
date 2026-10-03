@@ -32,6 +32,8 @@ import { REPLICA_SAVE_FAILED_COPY, REPLICA_STATE_COPY } from '../lib/replica-sta
 import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
 import { REPLICA_TIER_COPY } from '../lib/replica-tier-copy.js'
 import { rememberReplicaKey } from '../lib/replica-unlock.js'
+import { withReplicaEntry } from '../lib/replicas.js'
+import { createUserSettingsStore, STORAGE_KEY } from '../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
@@ -61,6 +63,25 @@ function offlineKeyFetch(): typeof fetch {
         workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
         workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
         tier: 'offline',
+      })
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }) as typeof fetch
+}
+
+const SEALED_UNDER_KEY_ID = bytesToBase64Url(new Uint8Array(16).fill(1))
+const CURRENT_KEY_ID = bytesToBase64Url(new Uint8Array(16).fill(2))
+
+/** A daemon that has rotated: a different key, and the id that names it. */
+function rotatedKeyFetch(): typeof fetch {
+  return (async (input: Request | string | URL) => {
+    const url = input instanceof Request ? input.url : String(input)
+    if (url.endsWith('/replica-key')) {
+      return jsonResponse({
+        workspaceKey: bytesToBase64Url(WORKSPACE_KEY.map((byte) => byte ^ 0xff)),
+        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
+        tier: 'offline',
+        keyId: CURRENT_KEY_ID,
       })
     }
     throw new Error(`unexpected fetch ${url}`)
@@ -156,6 +177,7 @@ afterEach(() => {
   forgetAllForTests()
   localStorage.removeItem(SEALED_KEYS)
   localStorage.removeItem(OFFLINE_PASSKEYS)
+  localStorage.removeItem(STORAGE_KEY)
   cleanup()
 })
 
@@ -407,6 +429,33 @@ describe('ReplicaReadPage', () => {
 })
 
 describe('ReplicaReadPage states', () => {
+  it('rotated: a copy sealed under a replaced key says it must be downloaded again, not that it is damaged', async () => {
+    await seedReplica()
+    createUserSettingsStore().update((current) =>
+      withReplicaEntry(current, DAEMON_WS, {
+        daemonBaseUrl: DAEMON,
+        syncedAt: SYNCED,
+        keyId: SEALED_UNDER_KEY_ID,
+      }),
+    )
+    forgetAllForTests()
+    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: rotatedKeyFetch() })
+
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        syncedAt={SYNCED}
+        daemonBaseUrl={DAEMON}
+        onReconnect={noopReconnect}
+      />,
+    )
+
+    const rotated = await screen.findByTestId('replica-state-rotated')
+    expect(rotated.textContent).toContain(REPLICA_STATE_COPY.rotated.body)
+    expect(screen.queryByTestId('replica-state-needs-connection')).toBeNull()
+    expect(screen.queryByTestId('replica-state-readable')).toBeNull()
+  })
+
   it('locked (cold start): Reconnect transitions to readable without a remount', async () => {
     await seedReplica()
     // Cold start: nobody has asked the session-key holder for this workspace's key yet in

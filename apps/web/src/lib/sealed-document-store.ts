@@ -61,7 +61,9 @@ import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-p
  * branching between a sealed and a bare `DocumentStore`.
  */
 export interface ReplicaKeyProvider {
-  keyFor(documentId: string): Promise<{ key: CryptoKey; epoch: number } | 'withheld' | 'plaintext'>
+  keyFor(
+    documentId: string,
+  ): Promise<{ key: CryptoKey; epoch: number } | 'withheld' | 'rotated' | 'plaintext'>
 }
 
 /**
@@ -75,6 +77,20 @@ export class ReplicaKeyWithheldError extends Error {
   constructor(readonly documentId: string) {
     super(`replica key for document ${documentId} is withheld`)
     this.name = 'ReplicaKeyWithheldError'
+  }
+}
+
+/**
+ * The bytes on disk were sealed under a key generation the daemon has since
+ * replaced, so no key this build can obtain opens them. Not damage and not a
+ * reconnect question: the copy has to be downloaded again. Kept distinct from
+ * `StoredDocumentUnreadableError`, which tells a reader the data is broken —
+ * the one thing a rotated key must never be mistaken for.
+ */
+export class ReplicaKeyRotatedError extends Error {
+  constructor(readonly documentId: string) {
+    super(`replica of document ${documentId} is sealed under a replaced key`)
+    this.name = 'ReplicaKeyRotatedError'
   }
 }
 
@@ -177,6 +193,7 @@ export class SealedDocumentStore implements DocumentStore {
   async #resolveKey(documentId: string): Promise<ResolvedKey> {
     const resolved = await this.keys.keyFor(documentId)
     if (resolved === 'withheld') throw new ReplicaKeyWithheldError(documentId)
+    if (resolved === 'rotated') throw new ReplicaKeyRotatedError(documentId)
     return resolved
   }
 
