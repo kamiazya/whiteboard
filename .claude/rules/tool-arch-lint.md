@@ -55,9 +55,10 @@ no guard that said so.
 (`BOUNDARY_SCANNED_ROOTS`, which `BOUNDARY_SCAN_PACKAGES` adds to the shared
 layer): it runs only in a page and a service worker, so a `node:*` import in
 its relay is a defect as much as in `model`, and a planted one passed every
-guard while the root was unread. It is exempt from `dom-global` (a page script
-touching `window` is its job) and not from anything else; its direction and
-dependency list stay with the composition-root checks.
+guard while the root was unread. Only its page script, `content.ts`, is exempt
+from `dom-global` (touching `window` is its job; the background service worker
+has no DOM) and nothing else is; its direction and dependency list stay with
+the composition-root checks.
 
 The boundary scan reads `.ts` and `.tsx` for EVERY kind. It used to read
 `.tsx` for the two import kinds only, on the premise that a component may touch
@@ -125,8 +126,9 @@ import of the renderer of ANY kind.
 ## An exemption is per FILE when only one file needs it
 
 `exemptBoundaryViolationKinds` exempts a kind for a whole package, which is
-right for `dom-global` in a package that is DOM code throughout (`canvas-viewer`,
-`apps/extension`) and wrong for a use that lives in one file. `canvas-viewer` carried `node-ambient-global` package-wide
+right for `dom-global` in a package that is DOM code throughout (`canvas-viewer`)
+and wrong for a use that lives in one file (`apps/extension`'s is `content.ts`'s
+alone). `canvas-viewer` carried `node-ambient-global` package-wide
 for a single `Buffer` in `widget/build-fonts-module.ts`, while the rule said
 one file: `process.env.X` or `__dirname` in `mount.ts` or `widget-entry.ts` —
 which ship into the browser and the widget iframe — passed (measured, both).
