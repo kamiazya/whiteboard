@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DAEMON_DEFAULT_SEGMENT } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { generateDocumentId, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWorkspaceIdCacheForTests, ensureWorkspaceId } from './current-workspace.js'
@@ -127,9 +128,9 @@ describe('ensureWorkspaceId', () => {
         .execute()
     }
 
-    it('is the segment of the workspace a fresh data dir bootstraps', async () => {
+    it('is the segment the daemon client names, on the workspace a fresh data dir bootstraps', async () => {
       const id = await ensureWorkspaceId(dataDir)
-      expect(await segments()).toEqual({ [id]: 'default' })
+      expect(await segments()).toEqual({ [id]: DAEMON_DEFAULT_SEGMENT })
     })
 
     it('is given to the current workspace of an install that bootstrapped it without one', async () => {
