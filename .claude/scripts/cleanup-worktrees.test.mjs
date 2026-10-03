@@ -6,7 +6,7 @@
 // repo) and points the script at it via CLEANUP_WORKTREES_REPO_ROOT.
 
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -200,4 +200,111 @@ test('a real run sweeps the MCP registration a removed worktree left under the m
   const output = execFileSync('node', [scriptPath], { cwd: repoDir, encoding: 'utf-8', env })
   assert.match(output, /sweep: removed stale "whiteboard" registration/)
   assert.equal(JSON.parse(readFileSync(claudeJson, 'utf-8')).projects[mainRoot].mcpServers.whiteboard, undefined)
+})
+
+// A real run also sweeps ~/.claude.json, so point HOME at the scratch dir.
+function realEnv(repoDir) {
+  const home = join(dirname(repoDir), 'home')
+  mkdirSync(home, { recursive: true })
+  return { ...process.env, HOME: home, USERPROFILE: home, CLEANUP_WORKTREES_REPO_ROOT: repoDir }
+}
+
+function runReal(repoDir, extraArgs = [], cwd = repoDir) {
+  return execFileSync('node', [scriptPath, ...extraArgs], { cwd, encoding: 'utf-8', env: realEnv(repoDir) })
+}
+
+function squashMergedLane(name, { publish = true } = {}) {
+  const scratch = makeScratch()
+  const { seedDir, repoDir } = setupRepos(scratch)
+  const laneDir = join(repoDir, '.claude', 'worktrees', name)
+  git(repoDir, ['worktree', 'add', '--quiet', '-b', name, laneDir, 'origin/main'])
+  git(laneDir, ['config', 'user.email', 't@example.com'])
+  git(laneDir, ['config', 'user.name', 'Test'])
+  git(laneDir, ['commit', '--allow-empty', '--quiet', '-m', 'lane work'])
+  if (publish) git(repoDir, ['push', '--quiet', '-u', 'origin', name])
+  git(seedDir, ['commit', '--allow-empty', '--quiet', '-m', 'squash-merged lane work'])
+  git(seedDir, ['push', '--quiet', 'origin', 'main'])
+  if (publish) git(seedDir, ['push', '--quiet', 'origin', '--delete', name])
+  return { repoDir, laneDir, seedDir }
+}
+
+test('a merged lane with uncommitted changes is kept', () => {
+  const { repoDir, laneDir } = squashMergedLane('lane-dirty')
+  writeFileSync(join(laneDir, 'wip.txt'), 'unsaved work')
+  const out = runCleanup(repoDir)
+  assert.match(out, /keep lane-dirty: uncommitted changes present/)
+  assert.doesNotMatch(out, /would remove lane-dirty/)
+})
+
+test('a never-published lane with committed work is kept', () => {
+  const { repoDir } = squashMergedLane('lane-local', { publish: false })
+  const out = runCleanup(repoDir)
+  assert.match(out, /keep lane-local: branch 'lane-local' not merged/)
+  assert.doesNotMatch(out, /would remove lane-local/)
+})
+
+test('a lane whose upstream is another remote is kept when absent under origin/', () => {
+  const { repoDir, laneDir } = squashMergedLane('lane-fork', { publish: false })
+  git(repoDir, ['config', 'branch.lane-fork.merge', 'refs/heads/lane-fork'])
+  git(repoDir, ['config', 'branch.lane-fork.remote', 'fork'])
+  const out = runCleanup(repoDir)
+  assert.match(out, /keep lane-fork/)
+})
+
+test('a lane whose upstream names another branch (autoSetupMerge main) is kept', () => {
+  const { repoDir } = squashMergedLane('lane-tracks-main', { publish: false })
+  git(repoDir, ['config', 'branch.lane-tracks-main.merge', 'refs/heads/main'])
+  git(repoDir, ['config', 'branch.lane-tracks-main.remote', 'origin'])
+  const out = runCleanup(repoDir)
+  assert.match(out, /keep lane-tracks-main/)
+})
+
+test('a published lane whose remote branch still exists is kept', () => {
+  const scratch = makeScratch()
+  const { seedDir, repoDir } = setupRepos(scratch)
+  const laneDir = join(repoDir, '.claude', 'worktrees', 'lane-live')
+  git(repoDir, ['worktree', 'add', '--quiet', '-b', 'lane-live', laneDir, 'origin/main'])
+  git(laneDir, ['config', 'user.email', 't@example.com'])
+  git(laneDir, ['config', 'user.name', 'Test'])
+  git(laneDir, ['commit', '--allow-empty', '--quiet', '-m', 'lane work'])
+  git(repoDir, ['push', '--quiet', '-u', 'origin', 'lane-live'])
+  git(seedDir, ['commit', '--allow-empty', '--quiet', '-m', 'main moves'])
+  git(seedDir, ['push', '--quiet', 'origin', 'main'])
+  const out = runCleanup(repoDir)
+  assert.match(out, /keep lane-live: branch 'lane-live' not merged and remote still exists/)
+})
+
+test('without --dry-run the merged lane directory and branch are really removed', () => {
+  const { repoDir, laneDir } = squashMergedLane('lane-gone')
+  const out = runReal(repoDir)
+  assert.match(out, /removed lane-gone/)
+  assert.equal(existsSync(laneDir), false)
+  assert.equal(git(repoDir, ['branch', '--list', 'lane-gone']), '')
+})
+
+test('without --dry-run a dirty merged lane survives', () => {
+  const { repoDir, laneDir } = squashMergedLane('lane-dirty2')
+  writeFileSync(join(laneDir, 'wip.txt'), 'unsaved work')
+  runReal(repoDir)
+  assert.equal(existsSync(join(laneDir, 'wip.txt')), true)
+})
+
+test('without --dry-run the standing-in worktree is not deleted', () => {
+  const { repoDir, laneDir } = squashMergedLane('lane-here2')
+  runReal(repoDir, [], laneDir)
+  assert.equal(existsSync(laneDir), true)
+})
+
+test('--dry-run removes nothing', () => {
+  const { repoDir, laneDir } = squashMergedLane('lane-dry')
+  runCleanup(repoDir)
+  assert.equal(existsSync(laneDir), true)
+})
+
+test('a real run launched from a subdirectory of a merged lane leaves that lane in place', () => {
+  const { repoDir, laneDir } = squashMergedLane('lane-sub')
+  const sub = join(laneDir, 'nested')
+  mkdirSync(sub)
+  runReal(repoDir, [], sub)
+  assert.equal(existsSync(sub), true)
 })
