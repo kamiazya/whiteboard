@@ -6,6 +6,9 @@
 //
 //   node .claude/scripts/cleanup-worktrees.mjs [--dry-run] [--store-prune] [--include-fresh]
 //
+// --dry-run still runs `git fetch origin --prune`, which only moves remote-tracking refs (the
+// merged-status signal) and touches no worktree; it removes, prunes and sweeps nothing.
+//
 // It also drops the `whiteboard` MCP registration (~/.claude.json) of a worktree that no longer
 // exists, which `wire-worktree-mcp.mjs --sweep` finds.
 //
@@ -55,7 +58,8 @@ const worktreesDir = join(repoRoot, '.claude', 'worktrees')
 const { flags } = parseScriptArgs({
   argv: process.argv.slice(2),
   flags: ['--dry-run', '--store-prune', '--include-fresh'],
-  usage: 'usage: cleanup-worktrees.mjs [--dry-run] [--store-prune] [--include-fresh]',
+  usage:
+    'usage: cleanup-worktrees.mjs [--dry-run] [--store-prune] [--include-fresh]\n  --dry-run still fetches origin (remote-tracking refs only); it removes and prunes nothing',
 })
 const dryRun = flags.has('--dry-run')
 const storePrune = flags.has('--store-prune')
@@ -207,7 +211,9 @@ for (const entry of entries) {
   removed++
 }
 
-git(['worktree', 'prune'])
+// Pruning deletes the admin entry of any worktree whose directory is missing, including one on a
+// path that is merely unmounted, so a dry run leaves it for the real run.
+if (!dryRun) git(['worktree', 'prune'])
 
 // `claude mcp add --scope local` keys a worktree's registration by the main checkout, so removing
 // the worktree leaves it behind pointing at a proxy script that no longer exists.

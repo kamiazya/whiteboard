@@ -15,6 +15,7 @@
 import { spawn } from 'node:child_process'
 import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
+import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { readDaemonRecord, requestDaemon } from './dev-daemon-socket-lib.mjs'
 import {
   acquireSpawnLock,
@@ -34,6 +35,14 @@ import {
   resolveHookProjectRoot,
 } from './with-dev-data-dir-lib.mjs'
 
+// Parsed before any state is read: an unrecognised flag must never fall through to starting a daemon.
+const { flags } = parseScriptArgs({
+  argv: process.argv.slice(2),
+  flags: ['--quiet'],
+  usage:
+    "usage: ensure-http-dev-daemon.mjs [--quiet]  (starts this checkout's dev daemon unless one answers)",
+})
+
 const REPO_ROOT = resolveHookProjectRoot(process.env, process.cwd())
 const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
 // Upper bound on how long we'll wait for `pnpm mcp:http:dev` to answer.
@@ -52,7 +61,7 @@ const PING_TIMEOUT_MS = 3_000
 const DEV_BEARER_TOKEN = resolveDevBearerToken(process.env)
 const LOG_DIR = join(REPO_ROOT, 'tmp', 'logs')
 const LOG_PATH = join(LOG_DIR, 'mcp-http-dev.log')
-const QUIET = process.argv.includes('--quiet')
+const QUIET = flags.has('--quiet')
 
 function info(message) {
   if (!QUIET) console.log(message)

@@ -302,6 +302,24 @@ test('--dry-run removes nothing', () => {
   assert.equal(existsSync(laneDir), true)
 })
 
+// `git worktree prune` deletes the admin entry of a worktree whose directory is gone — which, for
+// one on an unmounted or moved path, is not debris. A dry run reports; it does not delete.
+test('--dry-run leaves the admin entry of a worktree whose directory is gone', () => {
+  const scratch = makeScratch()
+  const { repoDir } = setupRepos(scratch)
+  const elsewhere = join(scratch, 'elsewhere')
+  git(repoDir, ['worktree', 'add', '--quiet', '-b', 'lane-gone-dir', elsewhere, 'origin/main'])
+  rmSync(elsewhere, { recursive: true, force: true })
+  const adminEntry = join(repoDir, '.git', 'worktrees', 'elsewhere')
+  assert.equal(existsSync(adminEntry), true)
+
+  runCleanup(repoDir)
+  assert.equal(existsSync(adminEntry), true, '--dry-run pruned a worktree admin entry')
+
+  runReal(repoDir)
+  assert.equal(existsSync(adminEntry), false, 'a real run prunes it')
+})
+
 test('a real run launched from a subdirectory of a merged lane leaves that lane in place', () => {
   const { repoDir, laneDir } = squashMergedLane('lane-sub')
   const sub = join(laneDir, 'nested')

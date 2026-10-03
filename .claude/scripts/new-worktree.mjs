@@ -13,6 +13,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { cpSync as nodeCpSync, existsSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseScriptArgs } from './script-flags.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -102,11 +103,20 @@ function isRunAsScript() {
   }
 }
 
+const USAGE = 'usage: node .claude/scripts/new-worktree.mjs <name> [baseRef]  (baseRef default: freshly fetched origin/main)'
+
 function main() {
-  const [, , nameArg, baseArg] = process.argv
+  // Both positionals stay positional, but an option-shaped one is refused: it would otherwise
+  // become the branch name or, worse, a base ref handed to git.
+  const { positionals } = parseScriptArgs({
+    argv: process.argv.slice(2),
+    maxPositionals: 2,
+    usage: USAGE,
+  })
+  const [nameArg, baseArg] = positionals
   if (!nameArg) {
-    console.error('usage: node .claude/scripts/new-worktree.mjs <name> [baseRef]  (baseRef default: freshly fetched origin/main)')
-    process.exit(1)
+    console.error(USAGE)
+    process.exit(2)
   }
   const name = nameArg.replace(/[^A-Za-z0-9._-]/g, '-')
   // Default to a freshly fetched origin/main, not HEAD: HEAD depends on which
