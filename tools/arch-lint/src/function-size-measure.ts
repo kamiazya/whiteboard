@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { classifyPath } from './source-scan.js'
 
 export interface MeasuredFunction {
   /** `<repo-relative path>#<qualified name>` — unique, and stable under a move of lines. */
@@ -60,7 +61,7 @@ function nameOf(node: ts.Node): string | undefined {
  * qualifying takes the colliding keys to zero.
  */
 export function measureSource(text: string, relativePath: string): MeasuredFunction[] {
-  const isTest = /\.(test|spec)\.tsx?$/.test(relativePath)
+  const isTest = classifyPath(relativePath) === 'test'
   const source = ts.createSourceFile(
     relativePath,
     text,

@@ -15,6 +15,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
+import { isTestPath } from './source-scan.js'
 
 /**
  * Every directory whose source this rule governs: both composition roots,
@@ -92,7 +93,7 @@ const WEB_ROOT_TS_FILES: readonly string[] = readdirSync(join(REPO_ROOT, 'apps/w
 
 /** Test and test-support source: a test may spell what it asserts about. */
 function isTestSource(path: string): boolean {
-  return /\.test\.[a-z]+$|(^|\/)test-utils\/|(^|\/)_test-|__screenshots__/.test(path)
+  return isTestPath(path) || /__screenshots__/.test(path)
 }
 
 /**

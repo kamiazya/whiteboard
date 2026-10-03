@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { walk } from './scan-roots.js'
+import { isTestPath } from './source-scan.js'
 
 /**
  * Which files are ADR-0018's adapters, answered once.
@@ -19,7 +20,7 @@ import { walk } from './scan-roots.js'
 const ADAPTER_DIRS = ['routes', 'mcp'] as const
 
 export function isAdapterSource(file: string): boolean {
-  return file.endsWith('.ts') && !file.endsWith('.test.ts') && !/(^|[\\/])_test-/.test(file)
+  return file.endsWith('.ts') && !isTestPath(file)
 }
 
 /**

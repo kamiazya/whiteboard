@@ -25,7 +25,10 @@ const NAME_OF: Readonly<Record<string, string>> = Object.fromEntries(
 )
 
 const productionFiles = (dir: string): string[] =>
-  listTsFiles(join(REPO_ROOT, dir, 'src'), ['.ts', '.tsx']).filter((file) => !isTestPath(file))
+  listTsFiles(join(REPO_ROOT, dir, 'src'), ['.ts', '.tsx']).filter(
+    // A `testing/` directory is a published subpath entry, so it answers to the map like shipped code.
+    (file) => !isTestPath(file) || /[\\/]testing[\\/]/.test(file),
+  )
 
 describe('source imports of workspace packages follow the map, not just the manifest', () => {
   const violationsIn = (name: string, source: string): string[] =>

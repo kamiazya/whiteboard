@@ -10,6 +10,7 @@ import {
   walk,
 } from './scan-roots.js'
 import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
+import { classifyPath } from './source-scan.js'
 
 // docs/contributing/review-checklist.md says "Files stay under 800 lines",
 // and until this guard existed nothing enforced it — 17 files already over
@@ -57,8 +58,9 @@ function isScannedSourceFile(absolutePath: string): boolean {
   return !isExcludedPath(absolutePath)
 }
 
+/** `test` only: support files, benches and harnesses are shipped-ledger material here, since size is a property of any source file. */
 function isTestFile(absolutePath: string): boolean {
-  return /\.test\.tsx?$/.test(absolutePath)
+  return classifyPath(absolutePath) === 'test'
 }
 
 function isScannedTestFile(absolutePath: string): boolean {

@@ -48,6 +48,7 @@ import { describe, expect, it } from 'vitest'
 import { collectRelativeImportEdges } from './cycle-check.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { collectModuleSpecifiers } from './scanner.js'
+import { isShippedPath } from './source-scan.js'
 import { resolveRelativeSource } from './value-import-closure.js'
 
 const WEB_SRC = join(REPO_ROOT, 'apps/web/src')
@@ -82,14 +83,8 @@ const ROOT_MODULES: Record<string, Layer> = {
   '_type-probe.ts': 'app',
 }
 
-/** Test support and doc snapshots: setup for tests, not part of the app's graph. */
-const EXEMPT_DIRS = ['test-utils/', 'test-config/', 'docs-snapshots/']
-
-const isTest = (key: string): boolean => key.includes('.test.')
-
-function isOutsideTheGraph(key: string): boolean {
-  return isTest(key) || EXEMPT_DIRS.some((d) => key.startsWith(d))
-}
+/** Tests, their support and doc snapshots are setup for tests, not part of the app's graph. */
+const isOutsideTheGraph = (key: string): boolean => !isShippedPath(key)
 
 function layerOf(key: string): Layer | undefined {
   if (isOutsideTheGraph(key)) return undefined

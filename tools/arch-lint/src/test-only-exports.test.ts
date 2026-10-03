@@ -250,6 +250,12 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/daemon-client/src/api-contracts/document.ts#restoreVersionResponseSchema':
+    'the contract the restore route answers with, which RestoreVersionResponse derives from; the route fuzz rules hold the real response to it',
+  'packages/mcp-server/src/server/routes/document.ts#DocumentRouterOptions':
+    'the parameter type of createDocumentRouter, which the route tests’ option builder spells to fill in the seams a test supplies',
+  'packages/server-core/src/api-errors.ts#apiErrorBodySchema':
+    'the strict refusal-body contract ApiErrorBody derives from, re-exported through the barrel; the route fuzz holds every refusal to it',
   'packages/facet-engine/src/registry.ts#FacetPlugin':
     'the contract a plugin package implements (ADR-0013), the type a second bundled plugin would import; workspace-stencils.test.ts holds a hand-written one to it',
   'packages/mcp-server/src/cli/native-host.ts#keepHostAliveOnUnhandledRejection':
@@ -581,6 +587,8 @@ describe('what counts as an export only a test uses, on fixture files', () => {
       'a/startup.smoke-impl.ts',
       'a/docs-snapshots/_helpers.ts',
       'a/node-editor-test-utils.ts',
+      'a/routes/_test-helpers.ts',
+      'a/x.bench.ts',
     ]) {
       expect(isTestFile(path), path).toBe(true)
     }

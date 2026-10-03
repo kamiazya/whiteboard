@@ -54,7 +54,7 @@ import {
 import { ADAPTER_HELPER_FILES } from './architecture-map.js'
 import { collectRelativeImportEdges } from './cycle-check.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
-import { isTestPath } from './source-scan.js'
+import { isShippedPath } from './source-scan.js'
 import { resolveRelativeSource } from './value-import-closure.js'
 
 const SRC = join(REPO_ROOT, 'packages/mcp-server/src')
@@ -134,7 +134,7 @@ function upwardEdges(files: readonly SourceFile[]): string[] {
   return [...new Set(edges)].sort()
 }
 
-const isShipped = (path: string): boolean => !isTestPath(path) && !/(^|\/)_test-/.test(path)
+const isShipped = isShippedPath
 
 const FILES: readonly SourceFile[] = walk(SRC, {
   include: (full) => /\.tsx?$/.test(full),

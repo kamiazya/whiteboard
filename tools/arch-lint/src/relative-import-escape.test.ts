@@ -27,7 +27,7 @@ import { join, posix } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { collectRelativeImportEdges } from './cycle-check.js'
 import { REPO_ROOT, relativeToRepo, walk, workspaceDirs } from './scan-roots.js'
-import { isTestPath } from './source-scan.js'
+import { isShippedPath } from './source-scan.js'
 import { resolveRelativeSource, sourceCandidates } from './value-import-closure.js'
 
 /**
@@ -121,9 +121,8 @@ const EDGES: readonly RelativeEdge[] = FILES.flatMap(({ path, workspace }) =>
 const insideWorkspace = ({ workspace, target }: RelativeEdge): boolean =>
   target === workspace || target.startsWith(`${workspace}/`)
 
-/** A file only a test imports or a bench runs — it does not ship. */
-const isShipped = (path: string): boolean =>
-  !isTestPath(path) && !/(^|\/)_test-/.test(path) && !/\.bench\.tsx?$/.test(path)
+/** Test, support, bench and harness files do not ship, so a deliberate reach out of the workspace there is not a defect. */
+const isShipped = isShippedPath
 
 const edgeKey = (edge: RelativeEdge): string => `${edge.from} -> ${edge.target}`
 

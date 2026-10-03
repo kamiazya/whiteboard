@@ -23,11 +23,11 @@
  * a ceiling that only falls.
  */
 import { readFileSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
-import { isTestPath, walkSourceFiles } from './source-scan.js'
+import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
 const ACTIONS_FILE = 'packages/daemon-client/src/api-contracts/document-url.ts'
 
@@ -96,12 +96,7 @@ function callsWithAction(source: string): Set<string> {
 }
 
 function isProduction(absolute: string): boolean {
-  const segments = absolute.split(sep)
-  return (
-    !isTestPath(absolute) &&
-    !(segments.at(-1) ?? '').startsWith('_test-') &&
-    relativeToRepo(absolute) !== ACTIONS_FILE
-  )
+  return isShippedPath(absolute) && relativeToRepo(absolute) !== ACTIONS_FILE
 }
 
 function calledActions(): { readonly called: Set<string>; readonly files: number } {

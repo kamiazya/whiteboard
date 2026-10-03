@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
-import { isTestPath, walkSourceFiles } from './source-scan.js'
+import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
 const SNAPSHOT_DIR = 'apps/web/src/docs-snapshots'
 
@@ -24,12 +24,9 @@ function ariaLabelSelectorLiterals(source: string): string[] {
 
 /** Shipped code a label can come from: not a test, a test helper, a bench or the snapshot generators themselves. */
 function isLabelProducer(path: string): boolean {
-  const rel = relativeToRepo(path)
   return (
-    !isTestPath(path) &&
-    !rel.startsWith(`${SNAPSHOT_DIR}/`) &&
-    !/\.bench\.tsx?$/.test(rel) &&
-    !/(?:^|\/)_test-[^/]*$/.test(rel) &&
+    isShippedPath(path) &&
+    !relativeToRepo(path).startsWith(`${SNAPSHOT_DIR}/`) &&
     !isExcludedPath(path)
   )
 }

@@ -274,7 +274,7 @@ function closureContext(): BlockerContext {
   const src = join(REPO_ROOT, 'packages/mcp-server/src')
   const files = new Map<string, string>()
   for (const full of walk(src, {
-    include: (path) => path.endsWith('.ts') && !isTestPath(path) && !/(^|[\\/])_test-/.test(path),
+    include: (path) => path.endsWith('.ts') && !isTestPath(path),
     skip: (_full, name) => name === 'node_modules' || name === 'dist',
   })) {
     files.set(relativeToRepo(full), readFileSync(full, 'utf8'))

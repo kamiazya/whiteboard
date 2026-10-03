@@ -20,7 +20,7 @@ import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, relativeToRepo } from './scan-roots.js'
-import { isTestPath, walkSourceFiles } from './source-scan.js'
+import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
 /**
  * Each retired noun with a sentence it exists to catch. The example is the
@@ -89,13 +89,8 @@ function retiredWordsIn(fileName: string, source: string): string[] {
 
 /** Shipped source only: a test's titles and fixtures may name the retired word to prove it is gone. */
 function isShipped(path: string): boolean {
-  const rel = relativeToRepo(path)
-  return (
-    !isTestPath(path) &&
-    !/\.(?:contract|bench)\.tsx?$/.test(rel) &&
-    !/(?:^|\/)_test-[^/]*$/.test(rel) &&
-    !rel.startsWith('apps/web/src/docs-snapshots/')
-  )
+  // `.contract.` suites are shared test suites that are not test-named, hence the extra clause.
+  return isShippedPath(path) && !/\.contract\.tsx?$/.test(path)
 }
 
 describe('retired nouns stay out of user-facing strings', () => {
