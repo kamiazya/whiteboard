@@ -27,7 +27,8 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/stale-issues.mjs\" --quiet",
-            "_comment": "Reports open issues whose declared OKF `sources` moved since their `generated.at`. Read-only and fail-open, so it never delays or blocks a session start; silent when it has nothing to say, and when it cannot ask (the daemon is not up) it writes one `[stale-issues] skipped: <reason>` line to stderr rather than nothing. Ordering against the ensure hook above is not guaranteed, which is why the script retries a refused connection briefly."
+            "_comment": "Reports open issues whose declared OKF `sources` moved since their `generated.at`. Read-only and fail-open, and bounded: each daemon request gives up after 5s and the hook timeout below is the outer limit, so a wedged daemon cannot hold a session start; silent when it has nothing to say, and when it cannot ask (the daemon is not up) it writes one `[stale-issues] skipped: <reason>` line to stderr rather than nothing. Ordering against the ensure hook above is not guaranteed, which is why the script retries a refused connection briefly.",
+            "timeout": 15
           },
           {
             "type": "command",
@@ -38,7 +39,8 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/scripts/audit-nudge.mjs\" --quiet",
-            "_comment": "Reports when the standing codebase-health audit (audit-triage) is overdue, from the git-tracked .claude/audit-log.jsonl that record-audit.mjs appends to. Read-only, fail-open, silent while fresh — the cadence dev-flow.md asks for in prose, discovered at session start instead of remembered."
+            "_comment": "Reports when the standing codebase-health audit (audit-triage) is overdue, from the git-tracked .claude/audit-log.jsonl that record-audit.mjs appends to. Read-only, fail-open, silent while fresh — the cadence dev-flow.md asks for in prose, discovered at session start instead of remembered.",
+            "timeout": 15
           }
         ]
       }
