@@ -621,7 +621,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,
   'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 73,
   'packages/ports/src/test-utils/blob-store-conformance.ts#describeBlobStoreConformance': 127,
-  'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 720,
+  // A conformance suite is a table of cases, so each describe's size is its
+  // case count. The four describes extracted from the main function keep the
+  // nesting the test names report (`resolveWorkspace` and `renameWorkspace`
+  // stay under `listWorkspaces`).
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 362,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeListWorkspaces': 117,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeRenameWorkspace': 96,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeResolveWorkspace': 57,
+  'packages/ports/src/test-utils/document-index-conformance.ts#describeSetDocumentName': 60,
   'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 639,
   // +4: the two v1 POST routes refuse a body that names the URL's own
   // workspace or document before parsing — two lines each, the refusal
