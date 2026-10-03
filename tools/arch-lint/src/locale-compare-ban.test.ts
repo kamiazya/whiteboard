@@ -50,7 +50,9 @@ function usesIn(path: string): number {
 }
 
 const files = shippedPackageSource()
-const used = new Map(files.map((path) => [path, usesIn(path)]).filter(([, count]) => count !== 0))
+const used = new Map(
+  files.map((path): [string, number] => [path, usesIn(path)]).filter(([, count]) => count !== 0),
+)
 
 describe('localeCompare is banned in shipped package source', () => {
   it('scans a tree worth scanning', () => {
