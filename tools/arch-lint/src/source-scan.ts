@@ -199,7 +199,24 @@ function commentsBetween(text: string, carved: readonly Edit[]): Edit[] {
   return found
 }
 
+/**
+ * A parse per file is what the parser-based strip costs, and a guard with
+ * several `it`s walks the same tree once per `it`; the memo pays the parse
+ * once per worker. Keyed by name and text, so an edit between calls is a
+ * miss rather than a stale answer.
+ */
+const stripped = new Map<string, string>()
+
 export function stripCommentsAndStrings(source: string, fileName?: string): string {
+  const key = `${fileName ?? ''}\u0000${source}`
+  const hit = stripped.get(key)
+  if (hit !== undefined) return hit
+  const result = stripUncached(source, fileName)
+  stripped.set(key, result)
+  return result
+}
+
+function stripUncached(source: string, fileName?: string): string {
   const file = parseSource(source, fileName)
   const edits: Edit[] = []
   // Text a scanner cannot be trusted with, and which is not rewritten: JSX
