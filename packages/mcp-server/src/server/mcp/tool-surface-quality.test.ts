@@ -727,16 +727,13 @@ describe('what the tool table costs to read', () => {
         // -29 on both and -1 parameter for `animate`, which the browser never read.
         // +183 on both and -1 undescribed for `mode`: without its description a
         // model sending scroll and zoom got `fit`, which ignores them, and was
-        // told delivered:true.
-        // +162 on both and -1 undescribed: `zoom` is bounded by the editor's
-        // range and described (1 is actual size, not a percentage — the
-        // request `zoom: 100` was being honoured raw), unknown `elementIds`
-        // are refused, and `delivered` says a browser was TOLD, not that it
-        // confirmed.
+        // told delivered:true. +162 and -1 undescribed: `zoom` bounded by the
+        // editor's range and described (1 is actual size, not a percentage),
+        // and `delivered` says a browser was TOLD, not that it confirmed.
         visibleBytes: 1216,
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        // Then +258, the +162 above plus `zoom`'s min/max on the wire.
+        // Then +258: the +162 above plus `zoom`'s min/max.
         wireBytes: 1734,
         descriptionWords: 62,
         parameters: 7,
@@ -974,9 +971,6 @@ describe('what the tool table costs to read', () => {
       // Then +128 wire for `stencil: null` and +60 for the bare body, the
       // same bytes as visible; this branch's input convergence and resource
       // fold take the wire column down by an order more than either adds.
-      // Read beside the visible column: wire moves by the same +60 while
-      // parameters and undescribed do not move at all, because a bare-body
-      // arm reuses a parameter this table already counted.
       // Then -1,442 for wb_pairing_link_create's retirement.
       // Then +143 for stating `destructiveHint` on the six writes that left it
       // to the default (five `false` at +24, wb_version_restore `true` at +23):
@@ -990,8 +984,7 @@ describe('what the tool table costs to read', () => {
       // facet tools' titles. Then +258 on wb_viewport_set (see that row).
       wireBytes: 130029,
       // -12 and -12 for `embed` (three undescribed fields at four arms).
-      // Then -1 and -2 on wb_viewport_set (`animate` left, `mode` described),
-      // then -1 there again (`zoom` described).
+      // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       parameters: 331,
       undescribed: 204,
     })
