@@ -267,21 +267,22 @@ describe('error paths do not silently produce corrupt output', () => {
     ).rejects.toThrow(SnapshotNotFoundError)
   })
 
-  test('a non-yaml-safe facet value (YAML .nan) imports but rejects on export, never silently exported', async () => {
+  test('a non-yaml-safe facet value (YAML .nan) is refused on import, never stored to fail a later export', async () => {
     const { documentSet, deps } = await setupTools()
 
     // parseOkf's frontmatter schema only validates facet KEYS, not values
-    // (extensionFacetsSchema stores values as z.unknown()) — the yaml-safe
-    // check runs on serialize, so a YAML-native `.nan` scalar (parsed to the
-    // JS NaN, which has no round-trippable YAML representation) imports
-    // successfully but must fail the composed export rather than silently
-    // emitting corrupt YAML.
+    // (extensionFacetsSchema stores values as z.unknown()), so a YAML-native
+    // `.nan` scalar parses to the JS NaN, which has no round-trippable YAML
+    // representation. The write is where it is refused, naming where it sat.
     const markdown = '---\ntype: note\nfacets:\n  example.bad/v1:\n    value: .nan\n---\nBody.'
-    await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown })
 
     await expect(
+      documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown }),
+    ).rejects.toThrow(/example\.bad\/v1\.value.*yaml-safe/)
+    // Nothing was stored, so there is nothing for a later export to choke on.
+    await expect(
       exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
-    ).rejects.toThrow(/yaml-safe/)
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 
   /**
