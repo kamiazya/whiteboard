@@ -76,14 +76,12 @@ describe('createCanvasClientNotifier', () => {
       documentId: DOCUMENT_ID,
       mode: 'fit',
       elementIds: ['a'],
-      animate: true,
     })
 
     expect(delivered).toBe(true)
     expect(sendViewportRequest).toHaveBeenCalledWith(WORKSPACE_ID, PATH, expect.any(String), {
       mode: 'fit',
       elementIds: ['a'],
-      animate: true,
     })
   })
 

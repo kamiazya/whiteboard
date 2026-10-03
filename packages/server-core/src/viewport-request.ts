@@ -28,7 +28,6 @@ export const viewportRequestParamsSchema = z
      * is rarely what an agent pointing at something wants.
      */
     elementIds: z.array(nodeIdSchema).optional(),
-    animate: z.boolean().optional(),
     scrollX: z.number().finite().optional(),
     scrollY: z.number().finite().optional(),
     zoom: z.number().finite().optional(),

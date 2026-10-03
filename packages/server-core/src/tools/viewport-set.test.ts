@@ -55,7 +55,6 @@ describe('wb_viewport_set tool', () => {
       documentId: DOCUMENT_ID,
       mode: 'move',
       elementIds: ['a'],
-      animate: false,
       zoom: 1.5,
     })
 
@@ -69,7 +68,6 @@ describe('wb_viewport_set tool', () => {
       documentId: DOCUMENT_ID,
       mode: 'move',
       elementIds: ['a'],
-      animate: false,
       zoom: 1.5,
     })
   })
