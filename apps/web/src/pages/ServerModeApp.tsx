@@ -3,8 +3,8 @@
  * the keeper, so signing in is a navigation to its `/auth` routes and the
  * session is the host-only cookie the browser then holds.
  *
- * Sign in, accept an invitation, see the workspaces you are a member of, and
- * open one in the editor (`ServerModeWorkspace`), or sign out.
+ * Sign in, accept an invitation, see the workspaces you are a member of, make
+ * one, and open one in the editor (`ServerModeWorkspace`), or sign out.
  */
 import {
   authProvidersUrl,
@@ -18,11 +18,13 @@ import {
   signInRefusalSchema,
   signInSessionResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
-import { type ReactNode, useEffect, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { NewWorkspaceControl } from '../components/server-mode/NewWorkspaceControl.js'
 import { ServerModeShell, SignOutControl } from '../components/server-mode/ServerModeShell.js'
 import { buttonVariants } from '../components/ui/button.js'
-import { workspacePath } from '../lib/app-routes.js'
+import { useShellWorkspaces } from '../hooks/use-shell-workspaces.js'
+import { type WorkspaceRoute, workspacePath, workspaceRoutePath } from '../lib/app-routes.js'
 import { parseDaemonResponse } from '../lib/daemon-contract-error.js'
 import { listMemberWorkspaces, type MemberWorkspace } from '../lib/member-workspaces.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
@@ -163,7 +165,25 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
   )
 }
 
+// The daemon shell's own workspace seam, pointed at this keeper's origin: the
+// session cookie authenticates, so there is no token, and a create is the one
+// call the switcher menu makes. Only the keeper's half is used here; the
+// browser's is built beside it and never touched.
+function useKeeperWorkspaces() {
+  const navigate = useNavigate()
+  const daemonShellTarget = useMemo(
+    () => ({ baseUrl: window.location.origin, token: undefined }),
+    [],
+  )
+  const setDaemonRoute = useCallback(
+    (route: WorkspaceRoute) => navigate(workspaceRoutePath(route)),
+    [navigate],
+  )
+  return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute }).daemonWorkspaces
+}
+
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
+  const keeperWorkspaces = useKeeperWorkspaces()
   const [signed, setSigned] = useState<Signed | null | 'loading'>('loading')
   useEffect(() => {
     let live = true
@@ -195,6 +215,7 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
       </header>
       <h1 className="text-xl font-semibold">Your workspaces</h1>
       <WorkspaceList workspaces={signed.workspaces} />
+      {keeperWorkspaces !== undefined && <NewWorkspaceControl workspaces={keeperWorkspaces} />}
     </Page>
   )
 }

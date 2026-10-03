@@ -10,7 +10,10 @@ tokens with server JWT authentication.
 > **The browser UI signs people in and opens their workspaces.** The image
 > carries the web app and serves it from the server's own address. People sign
 > in there, see the workspaces they are members of, and open one to read and
-> edit its documents; the browser keeps no copy of them. MCP clients use
+> edit its documents; the browser keeps no copy of them. A signed-in person
+> makes a new workspace with **New workspace** on the workspaces page, which is
+> where a fresh server's first person starts, and becomes its first member and
+> owner. MCP clients use
 > `/mcp`, and the HTTP API is under `/api`. A server run without the web build
 > (from source, say) answers the root URL with a placeholder page instead.
 >

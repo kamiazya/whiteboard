@@ -19,6 +19,7 @@
  */
 
 import {
+  createWorkspaceRequestSchema,
   deleteDocumentResponseSchema,
   listDocumentsResponseSchema,
   listTrashResponseSchema,
@@ -26,6 +27,7 @@ import {
   renameDocumentPathResponseSchema,
   updateDocumentResponseSchema,
   workspaceNamesSchema,
+  workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   createDocumentV1ResponseSchema,
@@ -84,6 +86,11 @@ export interface FakeDaemonRoutes {
     string,
     { workspace?: string; documents: Record<string, string>; pinned: string[] } | 'fail'
   >
+  /**
+   * Return a Response to override the default 201 `{ workspaceId, displayName }`.
+   * The request body is checked against the contract before this is consulted.
+   */
+  onCreateWorkspace?: (displayName: string) => Overriding
   /** Return a Response to override the default 201. */
   onCreateDocument?: (workspaceId: string, path: string, kind?: string) => Overriding
   /** Return a Response (or a pending promise of one) to override the default 200 {ok:true}. */
@@ -157,6 +164,20 @@ function listWorkspaces(routes: FakeDaemonRoutes): Promise<Response> {
   // flight — the window in which a deleted workspace is still selected.
   if (routes.delayWorkspaces) return routes.delayWorkspaces.then(respond)
   return Promise.resolve(respond())
+}
+
+function createWorkspace(routes: FakeDaemonRoutes, init?: RequestInit): Promise<Response> {
+  const body = createWorkspaceRequestSchema.safeParse(
+    JSON.parse(String(init?.body ?? 'null')) as unknown,
+  )
+  if (!body.success) return Promise.resolve(jsonResponse({ title: 'displayName is required' }, 400))
+  const { displayName } = body.data
+  return (
+    overrideOf(routes.onCreateWorkspace?.(displayName)) ??
+    Promise.resolve(
+      jsonResponse(workspaceSummarySchema.parse({ workspaceId: 'ws-created', displayName }), 201),
+    )
+  )
 }
 
 function listDocuments(routes: FakeDaemonRoutes, workspaceId: string): Promise<Response> {
@@ -242,6 +263,11 @@ export function otherReadBody(url: string): Response {
 /** The table, in match order: a more specific suffix before the bare document. */
 const ROUTES: readonly Route[] = [
   { pattern: WORKSPACES, method: 'GET', handle: (routes) => listWorkspaces(routes) },
+  {
+    pattern: WORKSPACES,
+    method: 'POST',
+    handle: (routes, _match, init) => createWorkspace(routes, init),
+  },
   { pattern: DOCUMENTS, method: 'GET', handle: (routes, m) => listDocuments(routes, seg(m, 1)) },
   {
     pattern: DOCUMENTS,
