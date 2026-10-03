@@ -111,13 +111,15 @@ describe('evacuating and re-importing a subtree', () => {
     expect(readWorkspaceNodes(target)).toEqual([])
   })
 
-  it('answers null for a snapshot whose root is a folder rather than a document', () => {
+  it('answers null for a snapshot whose root is a folder, copying nothing into the workspace', () => {
     const source = new LoroDoc()
     const folder = source.getTree(WORKSPACE_TREE_KEY).createNode()
     folder.data.set('segment', 'folder')
     source.commit()
+    const target = workspace()
 
-    expect(importWorkspaceSubtree(workspace(), source.export({ mode: 'snapshot' }))).toBeNull()
+    expect(importWorkspaceSubtree(target, source.export({ mode: 'snapshot' }), 'under')).toBeNull()
+    expect(readWorkspaceNodes(target)).toEqual([])
   })
 })
 

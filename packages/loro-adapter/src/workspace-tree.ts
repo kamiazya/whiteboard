@@ -767,6 +767,8 @@ export function importWorkspaceSubtree(
   const roots = source.getTree(WORKSPACE_TREE_KEY).roots()
   const first = roots[0]
   if (first === undefined) return null
+  const meta = readMeta(first)
+  if (meta === null || meta.type !== 'document') return null
   const parent = parentPath === undefined ? undefined : ensureFolderPath(doc, parentPath.split('/'))
   const copy = (from: LoroTreeNode, into: TreeID | undefined): LoroTreeNode => {
     const node = into === undefined ? tree(doc).createNode() : tree(doc).createNode(into)
@@ -774,10 +776,8 @@ export function importWorkspaceSubtree(
     for (const child of from.children() ?? []) copy(child, node.id)
     return node
   }
-  const restored = copy(first, parent)
+  copy(first, parent)
   doc.commit()
-  const meta = readMeta(restored)
-  if (meta === null || meta.type !== 'document') return null
   return resolveWorkspaceDocumentById(doc, meta.meta.documentId)
 }
 
