@@ -5,7 +5,7 @@ description: Audit a whiteboard workspace's documents to find likely-stale or du
 
 # auditing-workspaces
 
-List a workspace's documents, then use `wb_canvas_snapshot` on the spatial ones (its `nodeCount`, and `layout: true` for how tidy it is) to judge which look empty
+List a workspace's documents (or find them by what they say with `wb_document_search`), then use `wb_canvas_snapshot` on the spatial ones (its `nodeCount`, and `layout: true` for how tidy it is) to judge which look empty
 or abandoned. There is no server-side audit endpoint — this skill is a recipe for composing the
 regular document tools toward that end, nothing more.
 
@@ -35,6 +35,22 @@ Returns `{ documents: [{ documentId, path, name?, kind?, updatedAt?, shadowed? }
 `workspaceId` is an error here, not an empty list, so a typo reads as a failure rather than "nothing
 found."
 
+### Step 1b: Search Instead Of Listing, When You Know What You Are Looking For
+
+A duplicate or a stale copy is often easier to find by content than by path:
+
+```js
+wb_document_search({ workspaceId, query: "checkout flow" })                 // what documents say
+wb_document_search({ workspaceId, tags: ["status:draft"], kind: "spatial" }) // a tag, a kind, or both, with no query
+```
+
+`query` is full-text over markdown bodies and canvas text (nodes, group labels, edge labels), plus
+names and paths, and Japanese works without a dictionary. `tags` and `kind` filter and stand alone,
+so "every document carrying this tag" is one call. Each result is `{ documentId, path, name, kind,
+score, contexts }`, ranked; scores compare within one response only, and `limit` (default 10, at
+most 50) is how many come back, so a long result is a reason to narrow, not proof it is complete.
+Two results whose `contexts` read alike are near-duplicate candidates for Step 3.
+
 ### Step 2: Classify, Then Sample Each Document
 
 Step 1's `kind` is the cheap classification, and it is `optional` for a real reason: a document
@@ -48,6 +64,7 @@ wb_document_get({ workspaceId, documentIds: [a, b, c] })
 // -> { documents: [...], failed: [...] }
 // markdown -> { documentId, kind: "markdown", content: "...", frontmatter: {...} }  (the body, directly)
 // spatial  -> { documentId, kind: "spatial", content: "..." }                        (full JSON Canvas payload)
+// either kind also carries `threads` when anyone commented: each thread whole, with its status
 // no recorded kind -> an entry in `failed` with the reason — it does not take the batch with it
 ```
 

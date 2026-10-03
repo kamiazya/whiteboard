@@ -31,7 +31,9 @@ Minor deviations are not worth the cognitive cost.
 | column x | `col * 220 + 40` | col=0 -> 40, col=1 -> 260, col=2 -> 480 |
 | row y | `row * 140 + 40` | row=0 -> 40, row=1 -> 180, row=2 -> 320 |
 
-**Box sizes** (there is no auto-sizing, so pick generously)
+**Box sizes** (omit `height` and a text box is made tall enough for its text at the width you
+give; a height you name that is too short is refused with the height it needs. These are the sizes
+to name when the layout itself carries meaning)
 
 | Shape | width x height |
 | --- | --- |
@@ -106,10 +108,11 @@ wb_canvas_edit({
 
 ## Boundary / Zone Labels
 
-A `group` node (label + optional background) is the only built-in boundary shape. It has no
-membership tracking — nothing "belongs to" a group automatically, so drawing a boundary means
-sizing the group node to visually enclose the nodes you intend it to cover, and keeping them there
-when you move things later.
+A `group` node (label + optional background) is the only built-in boundary shape. It keeps no
+member list: what it holds is whatever lies fully inside its bounds. Add a node with `within:
+"<group id>"` to place it inside (the group grows to fit), add a group with no position and then
+`region.set` naming the boxes to have it placed around them, and move a group's contents with
+`node.patch` using `within` — moving the group node alone leaves them behind.
 
 - do not put a large boundary/zone label inside a regular `text` node meant for content
 - place the boundary's own label as a short `group.label`, not repeated inside a child node

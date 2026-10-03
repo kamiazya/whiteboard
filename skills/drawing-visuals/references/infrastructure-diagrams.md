@@ -10,9 +10,11 @@ In infrastructure diagrams, lock down not just component names but **which bound
 - Brand adaptation: adapt surrounding elements rather than forcing a component's own look
 - Common failures: bad legend placement, hidden queues, overbearing boundaries
 
-**No icon library.** This tool surface has no icon or template catalog — every component is a
-labeled `text` or `group` node. Represent provider/product identity through labels, legends, and
-consistent color, not through inserted artwork.
+**No artwork.** Every component is a labeled `text` or `group` node; nothing inserts a provider's
+logo. Role is carried by a stencil (`visual.gateway`, `visual.service`, `visual.queue`,
+`visual.datastore`, `visual.external`, `visual.actor` — `wb_facet_list` lists them, and
+[`../SKILL.md`](../SKILL.md) "Shapes, Stencils And Tags" shows how to name one), and
+provider/product identity through labels, legends, and consistent color.
 
 If you need nested cloud/network zones or physical vs logical path techniques, also open [`./cloud-and-network-zones.md`](./cloud-and-network-zones.md).
 If trust boundaries / auth / audit are the main subject, also open [`./trust-boundary-and-security.md`](./trust-boundary-and-security.md).
