@@ -11,9 +11,13 @@ const canvas: SpatialCanvas = {
   edges: [],
 }
 const LEGACY_ID = 'legacy-row-id'
+const PRE_KIND_ID = 'pre-kind-row-id'
+const NOTE_ID = 'note-row-id'
 const entries: ListedDocument[] = [
   { id: BOARD_ID, path: 'boards/roadmap', kind: 'spatial' },
   { id: LEGACY_ID, path: 'boards/legacy', kind: 'spatial' },
+  { id: PRE_KIND_ID, path: 'boards/pre-kind' },
+  { id: NOTE_ID, path: 'notes/plan', kind: 'markdown' },
 ]
 
 describe('loadedReferenceOf', () => {
@@ -34,6 +38,19 @@ describe('loadedReferenceOf', () => {
   it('answers a body for a markdown or unlisted document, carrying the entry id when it has one', () => {
     expect(loadedReferenceOf({ body: '# note' }, entries, 'notes/x', null)).toEqual({
       body: '# note',
+    })
+  })
+
+  it('reads a listed row that names no kind as a canvas, the kind every pre-kind document was', () => {
+    expect(
+      loadedReferenceOf({ canvas, body: 'stored form' }, entries, 'boards/pre-kind', PRE_KIND_ID),
+    ).toEqual({ documentId: PRE_KIND_ID, canvas })
+  })
+
+  it('answers the body of a listed markdown row even when the stored form also parses as a canvas', () => {
+    expect(loadedReferenceOf({ canvas, body: '# plan' }, entries, 'notes/plan', NOTE_ID)).toEqual({
+      documentId: NOTE_ID,
+      body: '# plan',
     })
   })
 })

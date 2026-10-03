@@ -7,9 +7,9 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import {
   readCoreFacets,
+  readDocumentContent,
   readFacets,
   readMarkdownBody,
-  readSpatialCanvas,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -225,34 +225,36 @@ export function createLocalFilesSource(
    * Every document's content, read and its KIND resolved, skipping what this
    * build cannot read.
    *
-   * Four methods here each wrote this walk out — list, load, skip the kinds
-   * that carry no content, branch on markdown vs spatial — and the branch is
-   * the one place the two stop being interchangeable. Skipping rather than
-   * failing is the rule everywhere it appears, and for one reason: a rename
-   * that repairs nine references of ten beats one that repairs none, and a
-   * panel that lists a tagless row beats one that does not open.
+   * Four methods here each wrote this walk out — list, load, branch on
+   * markdown vs spatial — and the branch is the one place the two stop being
+   * interchangeable, so `readDocumentContent` makes it: the document's own
+   * recorded kind, the index row's after it, and a canvas for a document that
+   * names neither. Skipping rather than failing is the rule everywhere it
+   * appears, and for one reason: a rename that repairs nine references of ten
+   * beats one that repairs none, and a panel that lists a tagless row beats
+   * one that does not open.
    */
   async function* readableDocuments(
-    entries: readonly { documentId: string; path: string; kind?: string }[],
+    entries: readonly { documentId: string; path: string; kind?: DocumentKind }[],
   ): AsyncGenerator<LoadedDocument> {
     for (const entry of entries) {
-      if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
       let doc: LoroDoc
       try {
         doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
       } catch {
         continue
       }
-      if (entry.kind === 'markdown') {
-        yield { documentId: entry.documentId, kind: 'markdown', doc }
-        continue
-      }
+      let content: ReturnType<typeof readDocumentContent>
       try {
-        yield { documentId: entry.documentId, kind: 'spatial', doc, canvas: readSpatialCanvas(doc) }
+        content = readDocumentContent(doc, entry.kind)
       } catch {
         // A canvas this build cannot parse is the same miss as an unreadable
         // document: it carries nothing anyone here can read.
+        continue
       }
+      yield content.kind === 'markdown'
+        ? { documentId: entry.documentId, kind: 'markdown', doc }
+        : { documentId: entry.documentId, kind: 'spatial', doc, canvas: content.canvas }
     }
   }
 
@@ -275,10 +277,7 @@ export function createLocalFilesSource(
     if (cached !== undefined && cached.stamp === stamp) return cached.texts
     try {
       const doc = await loadCurrentDoc(entry)
-      const texts =
-        entry.kind === 'spatial'
-          ? searchableTexts({ kind: 'spatial', canvas: readSpatialCanvas(doc) })
-          : searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
+      const texts = searchableTexts(readDocumentContent(doc, entry.kind))
       corpus.set(entry.documentId, { stamp, texts })
       return texts
     } catch {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../tools/document-io.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import { factsCacheFor } from './content-source.js'
 
@@ -66,13 +67,20 @@ describe('ContentFactsCache', () => {
   it('a kind flip without a content change re-extracts (the kind is part of the stamp)', async () => {
     const deps = makeDeps()
     const { a } = await seedTwo(deps)
+    // A document that records its own kind is read as that kind whatever its
+    // row says, so only one that records none can have its facts depend on the
+    // row — the pre-kind documents.
+    const stored = await loadOrCreateDocument(deps, WS, a.documentId as never)
+    stored.getMap('document').delete('kind')
+    stored.commit()
+    await saveDocumentSnapshot(deps, WS, a.documentId as never, stored)
     const cache = factsCacheFor(deps)
     const entries = await deps.documentIndex.listDocuments({ workspaceId: WS })
     const first = await cache.factsFor(WS, entries)
     expect(first.get(a.documentId)?.texts[0]).toContain('alpha body')
 
     // No listing-only kind mutation exists today; hand a re-kinded entry to
-    // pin the latent trap: extraction branches on entry.kind, so cached
+    // pin the latent trap: extraction falls back to entry.kind, so cached
     // facts are only valid FOR the kind they were extracted under.
     const flipped = entries.map((entry) =>
       entry.documentId === a.documentId ? { ...entry, kind: 'spatial' as const } : entry,

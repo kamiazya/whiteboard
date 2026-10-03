@@ -1,10 +1,5 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
-import {
-  readCoreFacets,
-  readDocumentKind,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { readCoreFacets, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasEdge,
   SpatialCanvas,
@@ -107,21 +102,20 @@ export function extractContentFacts(
   entry: Pick<DocumentEntry, 'kind'>,
   doc: LoroDoc,
 ): ContentFacts {
-  const kind = entry.kind ?? readDocumentKind(doc)
-  const markdown = kind === 'markdown'
-  const canvas = markdown ? undefined : readSpatialCanvas(doc)
+  const content = readDocumentContent(doc, entry.kind)
+  if (content.kind === 'markdown') {
+    return {
+      refs: textReferences(content.body),
+      // The prose itself, for mention detection against other documents'
+      // names — and the same strings search ranks, by construction.
+      texts: searchableTexts(content),
+      bearers: markdownBearers(readCoreFacets(doc)?.tags),
+    }
+  }
   return {
-    refs: markdown
-      ? textReferences(readMarkdownBody(doc))
-      : spatialReferences(canvas as SpatialCanvas),
-    // The prose itself, for mention detection against other documents'
-    // names — and the same strings search ranks, by construction.
-    texts: markdown
-      ? searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
-      : searchableTexts({ kind: 'spatial', canvas: canvas as SpatialCanvas }),
-    bearers: markdown
-      ? markdownBearers(readCoreFacets(doc)?.tags)
-      : spatialBearers(canvas as SpatialCanvas),
+    refs: spatialReferences(content.canvas),
+    texts: searchableTexts(content),
+    bearers: spatialBearers(content.canvas),
   }
 }
 

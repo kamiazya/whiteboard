@@ -15,8 +15,6 @@
  * it keeps a new loader from being the sixth way.
  *
  * Reading both halves is sometimes right, and the ledger says which and why.
- * The entries marked DEBT are switches with their own default, left in place
- * rather than converted; each one is a candidate to leave this list.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -35,12 +33,6 @@ const READS_BOTH: Readonly<Record<string, string>> = {
     'a write path: it reads the canvas to refuse overwriting a diagram and the body to compare, not to present either',
   'apps/web/src/lib/document-sync-session.ts':
     'the editing session reads the half its own kind has open; it does not choose a kind for a document it did not open',
-  'packages/server-core/src/references/follow-rename.ts':
-    'DEBT: rewrites by `readDocumentKind(doc) === "spatial"`, so a kind-less document is rewritten as prose',
-  'packages/reference-graph/src/extract.ts':
-    'DEBT: `entry.kind ?? readDocumentKind(doc)` with the index row first, so the two orders disagree on a conflict',
-  'apps/web/src/lib/local-files-source.ts':
-    'DEBT: skips a kind-less entry in one walk and reads it as markdown in another',
 }
 
 const files: string[] = []
@@ -96,6 +88,6 @@ describe('a document is read by kind in one place', () => {
       return hit === undefined || !readsBoth(readFileSync(hit.path, 'utf8'), hit.path)
     })
     expect(stale, 'delete the entry; the file no longer reads both halves').toEqual([])
-    expect(Object.keys(READS_BOTH)).toHaveLength(6)
+    expect(Object.keys(READS_BOTH)).toHaveLength(3)
   })
 })

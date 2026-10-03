@@ -406,6 +406,55 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
   })
 })
 
+describe('createLocalFilesSource over a row that names no kind', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('reads it as a canvas — its carried tags are listed and its text is searched', async () => {
+    // The row of a document written before kinds existed. Whatever the content
+    // holds, `readDocumentContent` says what such a document is, and every walk
+    // in the source has to agree with it rather than each choosing its own.
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'pre-kind',
+      kind: 'spatial',
+    })
+    const doc = new Loro()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({
+          id: 'a',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          text: 'first',
+          tags: ['health:ok'],
+        }),
+        // A markdown read of this document takes only the first text node.
+        textNode({ id: 'b', x: 200, y: 0, width: 100, height: 50, text: 'findable' }),
+      ],
+      edges: [],
+    })
+    await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
+    const kindless = Object.create(index, {
+      listDocuments: {
+        value: async (input: Parameters<typeof index.listDocuments>[0]) =>
+          (await index.listDocuments(input)).map(({ kind: _kind, ...row }) => row),
+      },
+    }) as FoldingBrowserIndex
+    const source = createLocalFilesSource({ index: kindless })
+
+    const [listed] = await source.listDocuments()
+    expect(listed?.kind).toBeUndefined()
+    expect(listed?.carriedTags).toEqual(['health:ok'])
+    expect((await source.searchDocuments('findable')).map((hit) => hit.document.path)).toEqual([
+      'pre-kind',
+    ])
+  })
+})
+
 describe('createLocalFilesSource conformance', () => {
   beforeEach(clearWhiteboardDb)
 

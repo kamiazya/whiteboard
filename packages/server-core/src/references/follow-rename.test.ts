@@ -113,6 +113,51 @@ describe('followReferencesAfterRename', () => {
     expect(movedFile !== undefined && nodeFile(movedFile)).toBe('archive/login')
   })
 
+  it('rewrites a canvas that records no kind as a canvas, the kind its index row names', async () => {
+    const deps = makeTestDeps()
+    const { create } = await seed(deps)
+    const target = await create('design/login', 'Login flow')
+    const board = await wbDocumentCreate(deps, { workspaceId: WS, path: 'board', kind: 'spatial' })
+    await createCanvasEditTool(deps).execute({
+      workspaceId: WS,
+      documentId: board.documentId,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 't1', x: 0, y: 0, width: 100, type: 'text', text: 'see [[design/login]]' },
+        },
+      ],
+    })
+    // A document written before kinds existed records none; only its index
+    // row says what it is.
+    {
+      const doc = await loadOrCreateDocument(deps, WS, board.documentId as never)
+      doc.getMap('document').delete('kind')
+      doc.commit()
+      await saveDocumentSnapshot(deps, WS, board.documentId as never, doc)
+    }
+
+    const before = await entriesBefore(deps)
+    await deps.documentIndex.moveDocument({
+      workspaceId: WS,
+      from: 'design/login',
+      to: 'archive/login',
+    })
+    const result = await followReferencesAfterRename(deps, {
+      workspaceId: WS,
+      entriesBefore: before,
+      moves: [{ movedId: target.documentId, from: 'design/login', to: 'archive/login' }],
+    })
+
+    expect(result.updatedDocumentIds).toEqual([board.documentId])
+    const canvas = readSpatialCanvas(
+      await loadOrCreateDocument(deps, WS, board.documentId as never),
+    )
+    const node = canvas.nodes.find((n) => n.id === 't1')
+    expect(node !== undefined && nodeText(node)).toBe('see [[archive/login]]')
+  })
+
   it('a subtree move follows references to a descendant', async () => {
     const deps = makeTestDeps()
     const { create, write, bodyOf } = await seed(deps)
