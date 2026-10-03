@@ -21,6 +21,7 @@ export {
   writeFacets,
   writeTrustFacets,
 } from './document-envelope.js'
+export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
 export { collectImageRefIds } from './image-refs.js'
 export {
   CONTENT_CONTAINER_KEYS,

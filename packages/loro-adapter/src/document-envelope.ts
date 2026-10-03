@@ -5,7 +5,6 @@ import {
   type DocumentKind,
   documentKindSchema,
   type ExtensionFacets,
-  extensionFacetsSchema,
   type StoredCoreFacets,
   storedCoreFacetsSchema,
   type TrustFacets,
@@ -20,12 +19,18 @@ import {
   type Fields,
   TRUST_KEY,
 } from './containers.js'
+import { isReadableFacetKey } from './document-envelope-reconcile.js'
 
 /**
  * Replace a whole bucket map: write every incoming key and delete the keys
  * the caller omitted, so a rewrite never merges with stale prior state.
  * Entries stay per-key rather than one opaque object value, so two peers
  * writing different keys converge on both surviving after a CRDT merge.
+ *
+ * It deletes every stored key the caller did not name, including one this
+ * build's reader cannot see. That is right only for a caller that states the
+ * whole document (`wb_workspace_edit`'s `document.set`); an edit that started
+ * from a read applies itself with the reconcile forms beside this file.
  */
 function replaceBucket(doc: DocumentContainers, mapKey: string, entries: Fields): void {
   const map = doc.getMap(mapKey)
@@ -60,9 +65,7 @@ export function readFacets(doc: DocumentContainers): ExtensionFacets {
   const facetsMap = doc.getMap(FACETS_KEY)
   const result: ExtensionFacets = {}
   for (const key of facetsMap.keys()) {
-    const value = facetsMap.get(key)
-    const parsed = extensionFacetsSchema.safeParse({ [key]: value })
-    if (parsed.success) result[key] = parsed.data[key]
+    if (isReadableFacetKey(key)) result[key] = facetsMap.get(key)
   }
   return result
 }

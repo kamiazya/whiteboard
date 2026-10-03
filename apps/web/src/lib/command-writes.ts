@@ -7,6 +7,8 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   markThreadPassages,
+  readCoreFacets,
+  reconcileCoreFacets,
   reconcileSpatialCanvas,
   type SpatialBatchWriter,
   setCommentThreadStatus,
@@ -14,7 +16,6 @@ import {
   withSpatialBatch,
   writeCanvasComment,
   writeCommentThread,
-  writeCoreFacets,
   writeMarkdownBody,
   writeSpatialEdge,
   writeSpatialNode,
@@ -216,9 +217,9 @@ function writeCommandTarget(
       writeMarkdownBody(doc, command.text)
       return true
     case 'set-facets':
-      // Same must-handle reasoning as set-body: the `core` map is outside
-      // the canvas the fallback would rewrite.
-      writeCoreFacets(doc, command.facets)
+      // Same must-handle reasoning as set-body (`core` is outside the canvas
+      // the fallback rewrites); a core field this build cannot read survives.
+      reconcileCoreFacets(doc, readCoreFacets(doc), command.facets)
       return true
     case 'delete-node':
       // Always "handled": deleteSpatialNode is a documented no-op for an

@@ -1,5 +1,7 @@
 import {
+  readCoreFacets,
   readSpatialCanvas,
+  writeCoreFacets,
   writeProposal,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -158,6 +160,81 @@ describe('commitToDoc over a canvas the editor could see', () => {
     commitToDoc(doc, doc, prev, prev, command)
 
     expect(doc.oplogVersion().compare(before)).toBe(0)
+    await expectLoggedFailure('editor command target missing')
+  })
+})
+
+describe('commitToDoc over envelope entries this build cannot read', () => {
+  it('keeps a core field it does not know when the properties panel rewrites the facets', () => {
+    const doc = new LoroDoc()
+    writeCoreFacets(doc, { type: 'note', tags: ['one'] })
+    doc.getMap('core').set('futureCoreField', { nested: 1 })
+    doc.commit()
+    expect(readCoreFacets(doc)).toEqual({ type: 'note', tags: ['one'] })
+    const empty: SpatialCanvas = { nodes: [], edges: [] }
+
+    commitToDoc(doc, doc, empty, empty, {
+      kind: 'set-facets',
+      facets: { type: 'note', tags: ['one', 'two'] },
+    })
+
+    expect(readCoreFacets(doc)).toEqual({ type: 'note', tags: ['one', 'two'] })
+    expect(doc.getMap('core').get('futureCoreField')).toEqual({ nested: 1 })
+  })
+
+  it('still removes a core field the panel dropped', () => {
+    const doc = new LoroDoc()
+    writeCoreFacets(doc, { type: 'note', view: 'board', tags: ['one'] })
+    const empty: SpatialCanvas = { nodes: [], edges: [] }
+
+    commitToDoc(doc, doc, empty, empty, { kind: 'set-facets', facets: { type: 'note' } })
+
+    expect(doc.getMap('core').toJSON()).toEqual({ type: 'note' })
+  })
+
+  it('keeps a canvas facet beside an out-of-grammar key when another canvas facet is set', async () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, { nodes: [A], edges: [] })
+    doc.getMap('canvas').set('facets', {
+      'visual.theme/v0': { theme: 'visual.neon' },
+      'Bad Key': { from: 'the future' },
+    })
+    doc.commit()
+    const prev = readSpatialCanvas(doc)
+    const command: EditorCommand = {
+      kind: 'set-canvas-facet',
+      key: 'visual.edges/v0',
+      payload: { routing: 'orthogonal' },
+    }
+
+    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+
+    expect(doc.getMap('canvas').get('facets')).toEqual({
+      'visual.theme/v0': { theme: 'visual.neon' },
+      'visual.edges/v0': { routing: 'orthogonal' },
+      'Bad Key': { from: 'the future' },
+    })
+    await expectLoggedFailure('editor command target missing')
+  })
+
+  it('removes the canvas facet the editor cleared and keeps the one it could not read', async () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, { nodes: [A], edges: [] })
+    doc.getMap('canvas').set('facets', {
+      'visual.theme/v0': { theme: 'visual.neon' },
+      'Bad Key': { from: 'the future' },
+    })
+    doc.commit()
+    const prev = readSpatialCanvas(doc)
+    const command: EditorCommand = {
+      kind: 'set-canvas-facet',
+      key: 'visual.theme/v0',
+      payload: undefined,
+    }
+
+    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+
+    expect(doc.getMap('canvas').get('facets')).toEqual({ 'Bad Key': { from: 'the future' } })
     await expectLoggedFailure('editor command target missing')
   })
 })
