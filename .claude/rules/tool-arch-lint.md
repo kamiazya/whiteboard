@@ -346,7 +346,8 @@ and `daemon/`, is a mechanic an adapter must ledger. A module in `security/` or
 `tenant/` is not entitled by its directory — `user-deletion` and
 `storage-report` are neither `*-store` nor `data-layout`, and the old directory
 patterns waved both through (`createApp` now hands the runtime route its
-storage report, so that edge is gone). Add an entitlement by name.
+storage report, so that edge is gone). Add an entitlement by name; the list
+is both-sided, so an entitled module no adapter imports fails too.
 
 **What counts as a mechanic is wider than `store/`**: a `security/*-store` (the
 people, session, key and invitation rows), anything under the daemon's own
@@ -532,7 +533,8 @@ reports a call in that population or in the two HTTP roots that omits the
 scope, an `undefined` passed for it, a bare reference to such a function, and
 any naming of `globalStoreScope` or `storeScope(`. It matches by imported
 NAME, so a local function of the same name is not read as one, and it does
-not follow a function handed on by reference to code elsewhere. Its ledger is
+not follow a function handed on by reference to code elsewhere; a property
+KEY spelled like one reads as such a reference, a known false positive. Its ledger is
 both-sided with a pinned size: `app.ts -> storeScope` (the one derivation)
 and `workspace-handle.ts -> workspaceRegistry`; `stdioBackgroundWork` takes
 the scope the stdio root booted. `store-scope` is in
