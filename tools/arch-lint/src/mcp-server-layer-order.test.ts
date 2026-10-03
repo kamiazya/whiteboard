@@ -39,7 +39,7 @@
  * Test support is out: `*.test.ts`, `_test-*` and `test-utils/` build an app
  * the way a root does and import freely.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -245,6 +245,14 @@ describe('mcp-server layer order', () => {
       'a module belongs to no layer — a new top-level `server/*.ts` is named in TOP_LEVEL, and a ' +
         'new directory under `server/` in MECHANIC_DIRS (or it is an adapter)',
     ).toEqual([])
+  })
+
+  it('names only mechanic directories that exist and hold source', () => {
+    const held = new Set(FILES.map(({ path }) => path.split('/')[1]))
+    const stale = [...MECHANIC_DIRS].filter(
+      (dir) => !existsSync(join(SRC, 'server', dir)) || !held.has(dir),
+    )
+    expect(stale, 'MECHANIC_DIRS names a directory that is gone or holds no source').toEqual([])
   })
 
   it('names only top-level files that still exist', () => {

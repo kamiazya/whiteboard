@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, posix, relative } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -377,6 +377,28 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
       'an entry in ADAPTER_SCAN_EXEMPT_FILES suppresses nothing — the file was ' +
         'moved, renamed, or no longer reaches a mechanic. Delete it.',
     ).toEqual([...ADAPTER_SCAN_EXEMPT_FILES])
+  })
+
+  // Guarded from both sides: an entry is a latent "adapters may import this"
+  // permission, so one naming a module that is gone, or that no adapter
+  // reaches, grants nothing today and would grant it silently to a new file.
+  it('every unscanned mechanic is a real store module some adapter imports', () => {
+    const unfiltered = findAdapterMechanicEdges(
+      SERVER_DIR,
+      [],
+      ADAPTER_SCAN_EXEMPT_FILES,
+      ADAPTER_HELPER_FILES,
+    )
+    const stale = MECHANICS_NOT_SCANNED.filter(
+      (module) =>
+        !existsSync(join(SERVER_DIR, 'store', `${module}.ts`)) ||
+        !unfiltered.some((edge) => edge.endsWith(` -> ${module}`)),
+    )
+
+    expect(
+      stale,
+      'an entry in MECHANICS_NOT_SCANNED names no store module, or none an adapter imports. Delete it.',
+    ).toEqual([])
   })
 
   it('excludes the error taxonomy, which an adapter is entitled to read', () => {

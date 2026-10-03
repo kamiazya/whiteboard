@@ -169,7 +169,6 @@ const BANNED = [
       // defaults on any parse failure: renaming it in place would discard an
       // existing reader's whole settings payload. It moves with a migration.
       'apps/web/src/lib/user-settings-store.ts',
-      'apps/web/src/lib/user-settings-store.test.ts',
       // Generates `docs/assets/browser-local-list.png`, which ADR-0008 names
       // in its own prose. Renaming the asset would make a decision record
       // false about a file that no longer exists, and rewriting the ADR to
@@ -366,18 +365,27 @@ describe('retired vocabulary', () => {
 
   // An exemption outlives the file's reason to be one unless something checks
   // it: a lane sweeps its comments, the entry stays, and the guard is quietly
-  // wider than anyone meant. Each must still hold the word it excuses.
-  for (const [label, pattern, table] of [
-    ['WebSocket / WS', /\bWebSocket\b|\bWS\b/, WEBSOCKET_WORDING],
-    ['browser-local', /browser[-_]?local/i, BROWSER_LOCAL_IN_PACKAGES],
-  ] as const) {
-    it(`holds no ${label} exemption for a file that no longer says it`, () => {
-      const stale = Object.keys(table).filter(
-        (path) => !linesOf(join(REPO_ROOT, path)).some((line) => pattern.test(line)),
+  // wider than anyone meant. Each must still hold the word it excuses — per
+  // word for the `exempt` arrays, and for SOME word for `EXEMPT_FILES`.
+  for (const entry of BANNED) {
+    const exempt: readonly string[] = 'exempt' in entry ? entry.exempt : []
+    it(`holds no "${entry.word}" exemption for a file that no longer says it`, () => {
+      const stale = exempt.filter(
+        (path) => !linesOf(join(REPO_ROOT, path)).some((line) => entry.pattern.test(line)),
       )
       expect(stale).toEqual([])
     })
   }
+
+  it('holds no whole-file exemption for a file that says none of the retired words', () => {
+    const stale = Object.keys(EXEMPT_FILES).filter(
+      (path) =>
+        !linesOf(join(REPO_ROOT, path)).some((line) =>
+          BANNED.some(({ pattern }) => pattern.test(line)),
+        ),
+    )
+    expect(stale).toEqual([])
+  })
 
   // A word whose entry names files it must reach: the scan covering them is
   // the subject-present half of a guard that otherwise passes on zero hits.
