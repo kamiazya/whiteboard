@@ -1,4 +1,4 @@
-import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
+import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
@@ -26,7 +26,7 @@ async function summarizeDocument(
   const doc = cached ?? (await loadDocument(workspaceId, path, scope))
   return {
     path,
-    nodeCount: countAliveNodes(doc),
+    nodeCount: countSpatialNodes(doc),
     cached: cached !== undefined,
   }
 }

@@ -1,16 +1,12 @@
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { countAliveNodes } from './document-counts.js'
+import { writeSpatialCanvas } from './loro-bridge.js'
+import { countSpatialNodes } from './spatial-node-count.js'
 
-// Built through the real `writeSpatialCanvas` bridge rather than by poking at
-// LoroDoc internals, so the fixture cannot drift from what a save actually
-// persists. mcp-server's `test-utils/spatial-doc.ts` says the same and is
-// shared by nine of its own tests; this needs only the one line of it, and
-// hauling that file across a package boundary to avoid two lines would be
-// the larger change.
+// Built through the real `writeSpatialCanvas` bridge so the fixture cannot drift
+// from what a save actually persists.
 function makeSpatialDoc(canvas: SpatialCanvas): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, canvas)
@@ -25,7 +21,7 @@ function legacyElement(doc: LoroDoc, id: string): void {
   doc.commit()
 }
 
-describe('countAliveNodes', () => {
+describe('countSpatialNodes', () => {
   it('counts nodes-model nodes and excludes edges', () => {
     const doc = makeSpatialDoc({
       nodes: [
@@ -40,24 +36,24 @@ describe('countAliveNodes', () => {
         },
       ],
     })
-    expect(countAliveNodes(doc)).toBe(2)
+    expect(countSpatialNodes(doc)).toBe(2)
   })
 
   it('returns 0 for a fully empty doc', () => {
     const doc = makeSpatialDoc({ nodes: [], edges: [] })
-    expect(countAliveNodes(doc)).toBe(0)
+    expect(countSpatialNodes(doc)).toBe(0)
   })
 
   it('counts nothing for a doc that holds only the retired elements list', () => {
     const doc = new LoroDoc()
     legacyElement(doc, 'el-1')
     legacyElement(doc, 'el-2')
-    expect(countAliveNodes(doc)).toBe(0)
+    expect(countSpatialNodes(doc)).toBe(0)
   })
 
   it('leaves no elements container behind on a doc that never had one', () => {
     const doc = makeSpatialDoc({ nodes: [], edges: [] })
-    countAliveNodes(doc)
+    countSpatialNodes(doc)
     expect(Object.keys(doc.getShallowValue())).not.toContain('elements')
   })
 
@@ -68,6 +64,19 @@ describe('countAliveNodes', () => {
     })
     legacyElement(doc, 'stale-1')
     legacyElement(doc, 'stale-2')
-    expect(countAliveNodes(doc)).toBe(1)
+    expect(countSpatialNodes(doc)).toBe(1)
+  })
+
+  it('counts 0 rather than throwing when the canvas cannot be read', () => {
+    const unreadable = {
+      getMap: () => {
+        throw new Error('not a canvas')
+      },
+      getText: () => {
+        throw new Error('not a canvas')
+      },
+      commit: () => {},
+    }
+    expect(countSpatialNodes(unreadable)).toBe(0)
   })
 })

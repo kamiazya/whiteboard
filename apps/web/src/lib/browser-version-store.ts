@@ -6,8 +6,8 @@ import {
 import { autoVersionsOverCap } from '@kamiazya/whiteboard-history'
 import {
   contentDigestOfDocument,
+  countSpatialNodes,
   projectWorkspaceDocument,
-  readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -120,7 +120,7 @@ export class BrowserVersionStore {
       path,
       ...(input.label === undefined || input.label === '' ? {} : { label: input.label }),
       createdAt: Date.now(),
-      elementCount: countNodes(projection),
+      elementCount: countSpatialNodes(projection),
       ...(input.operator === undefined ? {} : { operator: input.operator }),
       ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
       // Written only when true / named, so a manual save on the default
@@ -302,15 +302,6 @@ export class BrowserVersionStore {
       const parsed = versionRowSchema.safeParse(raw)
       return parsed.success ? parsed.data : null
     })
-  }
-}
-
-function countNodes(doc: LoroDoc): number {
-  try {
-    return readSpatialCanvas(doc).nodes.length
-  } catch {
-    // A markdown document has no canvas to count; the advisory count is 0.
-    return 0
   }
 }
 

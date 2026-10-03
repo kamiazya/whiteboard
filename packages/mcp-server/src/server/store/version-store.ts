@@ -6,11 +6,11 @@ import {
   sandwichedAutoVersionIds,
 } from '@kamiazya/whiteboard-history'
 import {
+  countSpatialNodes,
   projectWorkspaceDocument,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentNotFoundError } from '@kamiazya/whiteboard-ports'
-import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { Insertable } from 'kysely'
 import { sql } from 'kysely'
@@ -299,15 +299,7 @@ export class FileVersionStore implements VersionStore {
       const id = nanoid(12)
       validateVersionId(id)
 
-      // Fail-soft: a doc whose spatial read throws still saves, with an
-      // advisory 0 rather than blocking the save entirely.
-      const elementCount = (() => {
-        try {
-          return countAliveNodes(doc)
-        } catch {
-          return 0
-        }
-      })()
+      const elementCount = countSpatialNodes(doc)
 
       const createdAt = Date.now()
       const operator = opts.operator
