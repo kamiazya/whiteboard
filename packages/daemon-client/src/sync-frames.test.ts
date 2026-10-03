@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { parseServerTextMessage } from './sync-frame-text.js'
 import { versionCreatedMessageSchema } from './sync-frames.js'
 
 const VALID_VERSION_CREATED = {
@@ -52,5 +53,22 @@ describe('versionCreatedMessageSchema', () => {
       version: versionWithout,
     })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('parseServerTextMessage', () => {
+  it('refuses valid JSON of the wrong shape with a warning carrying the schema message', () => {
+    const warn = vi.fn()
+    expect(parseServerTextMessage('{"type":"nonsense"}', warn)).toBeNull()
+    expect(warn).toHaveBeenCalledTimes(1)
+    const [, reason] = warn.mock.calls[0] as [string, string]
+    expect(reason.length).toBeGreaterThan(0)
+    expect(reason).not.toBe('schema mismatch')
+  })
+
+  it('refuses malformed JSON with a warning', () => {
+    const warn = vi.fn()
+    expect(parseServerTextMessage('{', warn)).toBeNull()
+    expect(warn).toHaveBeenCalledWith(expect.any(String), 'malformed JSON', '{')
   })
 })
