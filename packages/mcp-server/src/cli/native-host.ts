@@ -17,12 +17,31 @@ import {
   nativeHostManifestDirs,
 } from '../daemon/native-host/install.js'
 import { runNativeHost } from '../daemon/native-host/relay.js'
+import { getLogger } from '../server/log.js'
 import { type FlagTable, scanFlags } from './flag-table.js'
 import {
   nativeHostInstallOutputSchema,
   OPERATOR_JSON_SCHEMA_VERSION,
   operatorJsonLine,
 } from './operator-json.js'
+
+const log = getLogger('native-host')
+
+/**
+ * The host answers a browser that cannot restart it mid-request, and a
+ * rejection nothing awaited would end the process and every request in flight.
+ * Logged on stderr, never stdout: stdout is the protocol channel.
+ */
+export function keepHostAliveOnUnhandledRejection(): () => void {
+  const onRejection = (reason: unknown) => {
+    log.error(
+      { err: reason instanceof Error ? reason : new Error(String(reason)) },
+      'unhandled rejection in the native host',
+    )
+  }
+  process.on('unhandledRejection', onRejection)
+  return () => process.off('unhandledRejection', onRejection)
+}
 
 const INSTALL_FLAGS: FlagTable<'dataDir' | 'manifestDir' | 'firefoxManifestDir'> = {
   booleans: ['--json'],
@@ -51,14 +70,19 @@ async function runHost(): Promise<number> {
   // handle); the manifest already restricts who may start the host, so
   // neither is read.
   const dataDir = resolveDefaultDataDir(process.env)
-  await runNativeHost({
-    input: process.stdin,
-    output: process.stdout,
-    resolveDaemon: async () => {
-      const record = await loadDaemonRecord(dataDir).catch(() => null)
-      return record?.socketPath ? { socketPath: record.socketPath, token: record.token } : null
-    },
-  })
+  const release = keepHostAliveOnUnhandledRejection()
+  try {
+    await runNativeHost({
+      input: process.stdin,
+      output: process.stdout,
+      resolveDaemon: async () => {
+        const record = await loadDaemonRecord(dataDir).catch(() => null)
+        return record?.socketPath ? { socketPath: record.socketPath, token: record.token } : null
+      },
+    })
+  } finally {
+    release()
+  }
   return 0
 }
 

@@ -48,6 +48,32 @@ describe('pageToHostSchema', () => {
     expect(pageToHostSchema.safeParse(request(path)).success).toBe(false)
   })
 
+  // RFC 9110 section 5.5: a field value is visible Latin-1 plus space and tab;
+  // anything else is a header node refuses to send.
+  it.each([
+    ['a newline', 'text/plain\nx: y'],
+    ['a carriage return', 'a\rb'],
+    ['a NUL', 'a\u0000b'],
+    ['DEL', 'a\u007fb'],
+    ['a non-Latin-1 character', 'caf\u00e9\u4e2d'],
+  ])('refuses a header value with %s', (_name, value) => {
+    const frame = { ...request('/api/x'), headers: { accept: value } }
+    expect(pageToHostSchema.safeParse(frame).success).toBe(false)
+  })
+
+  it('accepts ordinary header values, including Latin-1 text and tabs', () => {
+    const headers = {
+      accept: 'text/plain;q=0.9, */*',
+      'if-match': '"caf\u00e9"',
+      tracestate: 'a\tb',
+    }
+    expect(pageToHostSchema.safeParse({ ...request('/api/x'), headers }).success).toBe(true)
+  })
+
+  it.each(['BAD METHOD', 'TRACE', 'CONNECT', 'get', ''])('refuses the method %j', (method) => {
+    expect(pageToHostSchema.safeParse({ ...request('/api/x'), method }).success).toBe(false)
+  })
+
   // Most generated tails are acceptable, so the property is not judging an
   // empty set; afterAll proves it.
   let accepted = 0
@@ -77,6 +103,15 @@ describe('hostToPageSchema', () => {
     ]) {
       expect(hostToPageSchema.parse(message)).toEqual(message)
     }
+  })
+  it.each([99, 600, 200.5, Number.NaN])('refuses a head with status %s', (status) => {
+    const head = { type: 'head', id: 'r1', status, headers: {} }
+    expect(hostToPageSchema.safeParse(head).success).toBe(false)
+  })
+
+  it.each([100, 599])('accepts a head with status %s', (status) => {
+    const head = { type: 'head', id: 'r1', status, headers: {} }
+    expect(hostToPageSchema.safeParse(head).success).toBe(true)
   })
 })
 
