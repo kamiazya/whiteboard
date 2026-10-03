@@ -18,7 +18,7 @@ import { LoroMap, LoroMovableList } from 'loro-crdt'
  *
  * Why a helper rather than the method: **`ensureMergeable*` throws on a key
  * that already holds a non-mergeable value** — the container every document
- * written before this change already has, and any scalar left at the key by
+ * written before mergeable containers already has, and any scalar left at the key by
  * corrupt data. So the mergeable branch is taken only for an ABSENT key, and
  * an occupied one keeps the exact behaviour it had. That makes this safe to
  * apply to stored documents without a migration: an old container is adopted

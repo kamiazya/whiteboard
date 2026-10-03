@@ -962,8 +962,8 @@ export const TASKS = [
     // that a neutral example did not (ADR-0031's twenty-fourth reading), and
     // a prompt is the same hazard with more leverage.
     //
-    // Readings taken before this change are not comparable with readings
-    // after it. Rounds 15-20d were all taken under the old prompt.
+    // Rounds 15-20d were taken under an earlier prompt, so their readings
+    // are not comparable with this one's.
     name: 'tell two things apart at once: what it is, and whether it is healthy',
     boards: ['boards/fleet'],
     prompt:

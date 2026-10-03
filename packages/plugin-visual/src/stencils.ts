@@ -17,14 +17,13 @@
  * distinction as `excess`, so a vocabulary grows when a drawing needs a word
  * it does not have.
  *
- * **No default SIZE, deliberately, in this first increment.** ADR-0034
- * defines a stencil as an appearance plus a default size; the size half is
- * omitted here because it would move `density`, `envelopePx` and the gap
- * columns at the same time as the facet columns, and the first reading of
- * this change is supposed to say whether opening the appearance channel
- * helps. A confounded first reading is worth less than a narrow one. Size
- * lands additively when a stencil needs one (ADR-0013: an optional field
- * needs no version bump).
+ * **No default SIZE, deliberately.** ADR-0034 defines a stencil as an
+ * appearance plus a default size; the size half is omitted because it would
+ * move `density`, `envelopePx` and the gap columns at the same time as the
+ * facet columns, and the scoreboard is meant to say whether the appearance
+ * channel alone helps. A confounded reading is worth less than a narrow one.
+ * Size lands additively when a stencil needs one (ADR-0013: an optional
+ * field needs no version bump).
  *
  * **No emoji badges in the bundled set**, though `visual.symbol` allows
  * them. The PNG export path rasterises through resvg against the vendored

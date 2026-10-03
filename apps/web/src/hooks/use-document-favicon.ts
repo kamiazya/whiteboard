@@ -1,8 +1,7 @@
 /**
  * The tab-identity favicon wiring, shared by the browser and daemon
- * document pages (previously duplicated statement-for-statement — the third
- * page-unification extraction after `useVersionSaveFlow` and
- * `useCommentsRail`). What stays keeper-specific arrives as VALUES: the
+ * document pages, so the two cannot drift. What stays keeper-specific
+ * arrives as VALUES: the
  * status (`browserFaviconStatus` / `daemonFaviconStatus`), the document
  * identity, the revision trigger, and the outline reader.
  */

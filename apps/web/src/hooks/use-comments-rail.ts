@@ -1,9 +1,8 @@
 /**
  * The comments/annotation rail's screen state and write handlers, shared by
- * the browser and daemon document pages (previously duplicated between them
- * near-verbatim — the second extraction after `useVersionSaveFlow`, on the
- * same rationale: state a hook owns cannot drift between the pages, and a
- * reset a hook owns cannot be forgotten by the next page).
+ * the browser and daemon document pages. State a hook owns cannot drift
+ * between the pages, and a reset a hook owns cannot be forgotten by one of
+ * them.
  *
  * What stays keeper-specific is only the WRITE DOOR: the daemon page routes
  * both writes through `onChange` (one undo step, rides the annotation
