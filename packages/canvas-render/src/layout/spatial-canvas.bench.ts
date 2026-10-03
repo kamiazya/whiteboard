@@ -31,7 +31,7 @@
 
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
+import { bundledFacetRegistry, visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import { test } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
@@ -48,7 +48,22 @@ const OPTIONS: SpatialLayoutOptions = {
 // Cycled rather than random: a bench whose input changes between runs is
 // measuring two things at once.
 const SHAPES = visualShapeFacetSchema.shape.kind.options
-const ALIGNS = ['top', 'middle'] as const
+const ALIGNS = ['start', 'center'] as const
+
+// The layout reads a facet through `resolveFacetPayload`, which answers
+// `dropped` for a payload its schema rejects — so a malformed payload here
+// would not fail, it would silently turn the styled row into the plain one.
+// Writing through the same validator the editor and the tools use makes a
+// schema change fail this bench at setup instead.
+function validFacets(facets: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(facets).map(([key, payload]) => {
+      const result = bundledFacetRegistry.validateFacetWrite(key, payload)
+      if (!result.ok) throw new Error(`bench facet rejected: ${result.message}`)
+      return [key, result.value]
+    }),
+  )
+}
 
 function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
   const nodes: SpatialNode[] = Array.from({ length: nodeCount }, (_, i) => {
@@ -66,12 +81,12 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
     if (!styled) return node
     return {
       ...node,
-      facets: {
+      facets: validFacets({
         'visual.shape/v0': { kind: SHAPES[i % SHAPES.length] },
         'visual.symbol/v0':
           i % 2 === 0 ? { kind: 'icon', name: 'star' } : { kind: 'emoji', char: '⭐' },
-        'visual.text/v0': { placement: ALIGNS[i % ALIGNS.length] },
-      },
+        'visual.text/v0': { align: ALIGNS[i % ALIGNS.length] },
+      }),
     }
   })
   // Two edges only: present so the edge pass is not skipped outright, few
