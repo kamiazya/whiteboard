@@ -313,7 +313,7 @@ export class IdbDocumentIndex implements DocumentIndex {
         documentId: row.documentId,
         path: row.path,
         ...(row.kind === undefined ? {} : { kind: row.kind }),
-        ...(name === undefined ? {} : { name }),
+        ...(name?.trim() ? { name } : {}),
       }
       await request(store.put(next))
     })
