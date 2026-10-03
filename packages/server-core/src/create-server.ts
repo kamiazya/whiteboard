@@ -161,9 +161,9 @@ type RouteContext = Context<{ Variables: { workspaceId: string } }>
  * ADD, the id the caller never typed). A create is the one request that may
  * name a workspace it is about to make.
  */
-function resolvesWorkspace(deps: ServerDeps): MiddlewareHandler<{
-  Variables: { workspaceId: string }
-}> {
+function resolvesWorkspace(
+  deps: ServerDeps,
+): MiddlewareHandler<{ Variables: { workspaceId: string } }, '/api/v1/workspaces/:workspaceId/*'> {
   return async (c, next) => {
     const handle = c.req.param('workspaceId')
     const workspaceId = await resolveWorkspaceId(deps.documentIndex, handle)
