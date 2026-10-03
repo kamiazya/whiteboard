@@ -1,5 +1,6 @@
 import { createUniqueNameResolver, scanReferences } from '@kamiazya/whiteboard-codec'
 import {
+  compareCodeUnit,
   documentIdSchema,
   documentKindSchema,
   documentPathSchema,
@@ -120,7 +121,7 @@ export class ReferenceAggregate {
     // feed, but events are not obliged to be index-consistent) fall back to
     // the id so the order stays total.
     backlinks.sort(
-      (a, b) => compareDocumentPaths(a.path, b.path) || a.documentId.localeCompare(b.documentId),
+      (a, b) => compareDocumentPaths(a.path, b.path) || compareCodeUnit(a.documentId, b.documentId),
     )
     return backlinks
   }
@@ -191,7 +192,7 @@ function mentionsOfIn(
     })
   }
   return mentions.sort(
-    (a, b) => compareDocumentPaths(a.path, b.path) || a.documentId.localeCompare(b.documentId),
+    (a, b) => compareDocumentPaths(a.path, b.path) || compareCodeUnit(a.documentId, b.documentId),
   )
 }
 

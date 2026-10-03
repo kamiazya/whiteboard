@@ -1,6 +1,6 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
-import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
+import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
 import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
@@ -145,7 +145,7 @@ export function createDocumentSearchTool(
       // with nothing ranked and the opening of its text for context — the
       // shape a semantic-only hit already has, so a reader needs no third.
       if (parsed.query === undefined) {
-        const admitted = [...searchable].sort((a, b) => a.path.localeCompare(b.path))
+        const admitted = [...searchable].sort((a, b) => compareDocumentPaths(a.path, b.path))
         return {
           results: admitted
             .slice(0, parsed.limit)

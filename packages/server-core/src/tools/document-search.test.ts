@@ -1,3 +1,4 @@
+import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -142,6 +143,37 @@ describe('wb_document_search', () => {
     // frontmatter, not body — which is why the filter stands alone.
     const byWord = await tool.execute({ workspaceId: WS, query: 'process' })
     expect(byWord.results).toEqual([])
+  })
+
+  // `localeCompare` reads the host's ICU data and folds case and punctuation,
+  // so a filter-only answer and its limit cut would depend on the machine and
+  // disagree with `listDocuments`, which orders by `compareDocumentPaths`.
+  it('orders a filter-only answer, and cuts it at the limit, the way listDocuments orders paths', async () => {
+    const deps = makeDeps()
+    const { create, writeBody } = await seed(deps)
+    const paths = [
+      'design/x',
+      'design-system/a',
+      'design',
+      'Design/y',
+      'a/b',
+      'a-b',
+      'notes/Z',
+      'notes/a',
+    ]
+    for (const path of paths) {
+      const doc = await create(path, 'markdown')
+      await writeBody(doc.documentId, 'type: note\ntags:\n  - all', 'body')
+    }
+    const listed = (await deps.documentIndex.listDocuments({ workspaceId: WS })).map((d) => d.path)
+
+    const tool = createDocumentSearchTool(deps)
+    const all = await tool.execute({ workspaceId: WS, tags: ['all'] })
+    expect(all.results.map((r) => r.path)).toEqual(listed)
+    expect(listed).toEqual([...paths].sort(compareDocumentPaths))
+
+    const cut = await tool.execute({ workspaceId: WS, tags: ['all'], limit: 3 })
+    expect(cut.results.map((r) => r.path)).toEqual(listed.slice(0, 3))
   })
 
   // ADR-0040 decision 3: a spatial document matches a tag filter when its
