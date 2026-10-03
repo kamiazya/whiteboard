@@ -486,3 +486,57 @@ test('a passed-after check that throws leaves the report as it was', () => {
   }
   assert.equal(formatReport(clusters, 14, inspect, throwing), formatReport(clusters, 14, inspect))
 })
+
+// The Actions API stamps runs in UTC (`...Z`) while `git log --format=%cI`
+// keeps the committer's own offset, and ISO strings in different offsets do
+// not order as text: "17:06Z" is later than "22:57+09:00" (13:57Z) as an
+// instant but sorts before it. Every comparison across the two sources has to
+// be on the instant.
+import { commitsLandedAfter, instantIsAfter, runPassedAfter } from './flake-watch-lib.mjs'
+
+test('instantIsAfter orders instants, not strings, across offsets', () => {
+  assert.equal(instantIsAfter('2026-10-02T17:06:09Z', '2026-10-02T22:57:30+09:00'), true)
+  assert.equal(instantIsAfter('2026-10-02T22:57:30+09:00', '2026-10-02T17:06:09Z'), false)
+  assert.equal(instantIsAfter('2026-10-02T22:57:30+09:00', '2026-10-02T13:57:30Z'), false)
+})
+
+test('instantIsAfter is false when either side is not a date', () => {
+  assert.equal(instantIsAfter('not a date', '2026-10-02T13:57:30Z'), false)
+  assert.equal(instantIsAfter('2026-10-02T13:57:30Z', ''), false)
+})
+
+test('a run created 11319 s after a +09:00 commit counts as created after it', () => {
+  const passed = [{ createdAt: '2026-10-02T17:06:09Z' }]
+  assert.equal(runPassedAfter(passed, '2026-10-02T22:57:30+09:00'), true)
+  // And a run before the commit's instant does not, whatever the text says.
+  assert.equal(runPassedAfter([{ createdAt: '2026-10-02T13:00:00Z' }], '2026-10-02T22:57:30+09:00'), false)
+})
+
+test('a +09:00 commit made hours before the failure is not counted as landing after it', () => {
+  // 2026-10-02T10:00+09:00 is 01:00Z, before the 03:00Z failure, yet its text
+  // sorts after "2026-10-02T03:00:00Z".
+  const log = ['2026-10-02T10:00:00+09:00\tfix: earlier', '2026-10-02T14:00:00+09:00\tfix: later'].join('\n')
+  assert.deepEqual(commitsLandedAfter(log, '2026-10-02T03:00:00Z'), [
+    ['2026-10-02T14:00:00+09:00', 'fix: later'],
+  ])
+})
+
+test('commitsLandedAfter ignores blank lines and keeps a subject containing a tab', () => {
+  const log = '\n2026-10-03T00:00:00Z\tfix: a\tb\n\n'
+  assert.deepEqual(commitsLandedAfter(log, '2026-10-02T00:00:00Z'), [['2026-10-03T00:00:00Z', 'fix: a\tb']])
+})
+
+import { flakeCacheDir } from './flake-watch-lib.mjs'
+
+test('flakeCacheDir lives in the git common dir so every worktree of a clone shares it', () => {
+  assert.equal(
+    flakeCacheDir({ gitCommonDir: '/repo/.git', root: '/repo/.claude/worktrees/a' }),
+    '/repo/.git/flake-watch',
+  )
+  assert.equal(flakeCacheDir({ gitCommonDir: '/repo/.git/', root: '/x' }), '/repo/.git/flake-watch')
+})
+
+test('flakeCacheDir falls back to the checkout tmp when git cannot say where the common dir is', () => {
+  assert.equal(flakeCacheDir({ gitCommonDir: undefined, root: '/repo' }), '/repo/tmp/flake-watch')
+  assert.equal(flakeCacheDir({ gitCommonDir: '', root: '/repo' }), '/repo/tmp/flake-watch')
+})
