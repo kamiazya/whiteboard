@@ -25,8 +25,21 @@ const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts']
 
 // Module specifiers only: `from '..'`, a side-effect or dynamic `import`, and
 // the calls that load a module by path (`vi.mock`, `importActual`, `require`).
-const SPECIFIER =
-  /(?:\bfrom\s*|\bimport\s*\(?\s*|\b(?:mock|doMock|importActual|require)\s*\(\s*)['"](\.{1,2}\/[^'"]+|\.{1,2})['"]/g
+// Two steps rather than one pattern, so neither has to backtrack: every
+// quoted relative path is a candidate, and a short look at what precedes it
+// decides whether it is loaded as a module.
+const RELATIVE_LITERAL = /['"](\.{1,2}\/[^'"\n]+|\.{1,2})['"]/g
+const MODULE_LEAD = /\b(?:from|import|mock|doMock|importActual|require)(?:\s*\()?\s*$/
+
+/** The relative specifiers a source loads as modules, in order of appearance. */
+function moduleSpecifiers(source) {
+  const found = []
+  for (const match of source.matchAll(RELATIVE_LITERAL)) {
+    const lead = source.slice(Math.max(0, match.index - 40), match.index)
+    if (MODULE_LEAD.test(lead)) found.push(match[1])
+  }
+  return found
+}
 
 function sourceFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -48,7 +61,7 @@ function isFile(path) {
 function resolveSpecifier(fromFile, specifier, files) {
   const base = resolve(dirname(fromFile), specifier)
   // `./x.js` names `./x.ts`: the build emits the extension the source never has.
-  const stem = base.replace(/\.(?:m|c)?jsx?$/, '')
+  const stem = base.replace(/\.[mc]?jsx?$/, '')
   const candidates = [
     base,
     ...SOURCE_EXTENSIONS.map((ext) => `${stem}${ext}`),
@@ -61,7 +74,7 @@ function resolveSpecifier(fromFile, specifier, files) {
 function importersOf(files) {
   const importers = new Map()
   for (const file of files) {
-    for (const [, specifier] of readFileSync(file, 'utf-8').matchAll(SPECIFIER)) {
+    for (const specifier of moduleSpecifiers(readFileSync(file, 'utf-8'))) {
       const target = resolveSpecifier(file, specifier, files)
       if (target !== undefined) importers.set(target, [...(importers.get(target) ?? []), file])
     }

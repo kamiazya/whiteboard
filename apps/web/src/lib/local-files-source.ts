@@ -27,7 +27,7 @@ import {
   type SearchableDocument,
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
-import type { Loro } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
@@ -49,8 +49,8 @@ import { loadDocumentContent } from './workspace-content.js'
  * its parsed canvas because every caller that wants a board wants that.
  */
 type LoadedDocument =
-  | { documentId: string; kind: 'markdown'; doc: Loro }
-  | { documentId: string; kind: 'spatial'; doc: Loro; canvas: SpatialCanvas }
+  | { documentId: string; kind: 'markdown'; doc: LoroDoc }
+  | { documentId: string; kind: 'spatial'; doc: LoroDoc; canvas: SpatialCanvas }
 
 /**
  * Rewrite one document's references in place, answering whether anything
@@ -113,7 +113,7 @@ function listedTagsOf(read: LoadedDocument): {
 /** A library document's value, or what `read` answers for none: absent, unreadable or malformed. */
 async function readLibrary<T>(
   index: DocumentIndex,
-  load: (entry: WorkspaceDocumentEntry) => Promise<Loro>,
+  load: (entry: WorkspaceDocumentEntry) => Promise<LoroDoc>,
   path: string,
   read: (facets: ExtensionFacets | undefined) => T,
 ): Promise<T> {
@@ -210,7 +210,7 @@ export function createLocalFilesSource(
     }
   }
 
-  async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
+  async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<LoroDoc> {
     const doc = await loadDocumentContent(entry.documentId, { loro })
     if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
     return doc
@@ -232,7 +232,7 @@ export function createLocalFilesSource(
   ): AsyncGenerator<LoadedDocument> {
     for (const entry of entries) {
       if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
-      let doc: Loro
+      let doc: LoroDoc
       try {
         doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
       } catch {

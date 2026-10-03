@@ -69,7 +69,7 @@ export function classifyPath(path: string): PathCategory {
   if (
     /(^|\/)(test-utils|testing|__tests__|fixtures|test-config)\//.test(p) ||
     /-test-utils\.[a-z]+$/.test(base) ||
-    /^_test-/.test(base)
+    base.startsWith('_test-')
   ) {
     return 'test-support'
   }

@@ -145,7 +145,8 @@ function trackFlush(flush: Promise<void>): void {
 }
 
 export async function settleAutoCheckpoints(): Promise<void> {
-  while (inFlight.size > 0) await Promise.all([...inFlight])
+  // Sequential on purpose: a flush that lands while we wait may add another.
+  while (inFlight.size > 0) await Promise.all(inFlight)
 }
 
 export function useAutoCheckpoint(

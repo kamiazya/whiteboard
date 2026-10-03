@@ -140,11 +140,11 @@ it('a stencil picked in the panel draws its silhouette, not only the record', ()
   })
   // The hexagon the shape row drew is the one the stencil expands to, so it
   // is still drawn once — and the second stencil swaps it rather than adding.
-  expect(container.querySelectorAll('svg g[data-wb-key] polygon').length).toBe(before)
+  expect(container.querySelectorAll('svg g[data-wb-key] polygon')).toHaveLength(before)
 
   fireEvent.click(panel.querySelector('input[aria-label="Datastore"]') as HTMLInputElement)
   expect(latest.canvas.nodes[0]?.facets?.['visual.shape/v0']).toEqual({ kind: 'cylinder' })
-  expect(container.querySelectorAll('svg g[data-wb-key] polygon').length).toBe(before - 1)
+  expect(container.querySelectorAll('svg g[data-wb-key] polygon')).toHaveLength(before - 1)
 })
 
 // ADR-0034 decision 4: a workspace's own library extends the vocabulary, so the

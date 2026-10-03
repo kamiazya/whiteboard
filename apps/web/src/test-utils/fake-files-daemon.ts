@@ -177,15 +177,15 @@ export function createFakeFilesDaemon(seed: {
   state.rows = seed.rows.map((row) => ({ ...row, id: nextId(state) }))
   state.trash = seed.trashed.map((row) => ({ ...row, id: nextId(state), deletedAt: 1_700_000 }))
 
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(typeof input === 'string' ? input : input.toString())
+  return ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : input)
     const path = decodeURIComponent(url.pathname)
     const method = init?.method ?? 'GET'
-    const body: Body = init?.body === undefined ? {} : JSON.parse(String(init.body))
+    const body: Body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
     for (const route of ROUTES) {
-      const match = route.method === method ? path.match(route.pattern) : null
-      if (match !== null) return route.handle(state, match, body)
+      const match = route.method === method ? route.pattern.exec(path) : null
+      if (match !== null) return Promise.resolve(route.handle(state, match, body))
     }
-    return jsonResponse({ message: `unexpected ${method} ${path}` }, 500)
+    return Promise.resolve(jsonResponse({ message: `unexpected ${method} ${path}` }, 500))
   }) as typeof globalThis.fetch
 }
