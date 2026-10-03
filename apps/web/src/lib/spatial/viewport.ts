@@ -80,7 +80,7 @@ export interface BBoxLike {
 /**
  * Viewport whose top-left shows the union of the given boxes, at identity
  * zoom (no container size is known here, so this fits POSITION only, not
- * scale). Total: an empty list, or a list whose boxes are all non-finite,
+ * scale — framing into a measured container is `frameViewport`). Total: an empty list, or a list whose boxes are all non-finite,
  * degrades to `IDENTITY_VIEWPORT` rather than producing NaN/Infinity.
  */
 export function fitViewportToBoxes(boxes: readonly BBoxLike[]): Viewport {
@@ -250,10 +250,10 @@ export function panToShowTarget(
  * How far in from the viewport's corner a revealed proposal lands.
  *
  * `fitViewportToBoxes` pins the union's top-left to the origin rather than
- * centring it, which is right for `fitToContent` (the union is the board) and
- * leaves a single small box flush against the editor's edge — with the
- * proposal card, which opens at that box's own screen position, half outside
- * it. Found by looking at a figure, not by a test that passed.
+ * centring it, which would leave a single small box flush against the
+ * editor's edge — with the proposal card, which opens at that box's own
+ * screen position, half outside it. Found by looking at a figure, not by a
+ * test that passed.
  */
 const PROPOSAL_REVEAL_INSET_PX = 80
 
