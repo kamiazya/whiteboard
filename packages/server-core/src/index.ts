@@ -7,7 +7,7 @@ export {
   issueText,
 } from './api-errors.js'
 export { createServer } from './create-server.js'
-export { countAliveNodes, countLegacyTombstones } from './document-counts.js'
+export { countAliveNodes } from './document-counts.js'
 export { getLogger, setLogSink } from './log.js'
 export { applyDocumentUpdate } from './operations/apply-document-update.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
@@ -64,10 +64,6 @@ export {
 export { createDocumentSearchTool } from './tools/document-search.js'
 export { createDocumentSetTool } from './tools/document-set.js'
 export { createFacetListTool } from './tools/facet-list.js'
-// Where a workspace keeps its stencil library (ADR-0034 decision 4). A
-// CONVENTION, so it is exported rather than spelled again by anything that
-// has to put a library there or find one.
-export { STENCIL_LIBRARY_PATH } from './tools/stencil-library.js'
 export { carriesATag, TAG_LIBRARY_PATH } from './tools/tag-library.js'
 export { createVersionListTool } from './tools/version-list.js'
 export {

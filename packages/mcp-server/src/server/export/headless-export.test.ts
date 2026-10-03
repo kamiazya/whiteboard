@@ -41,9 +41,7 @@ vi.mock('./headless-renderer.js', () => ({
   renderSpatialCanvasToSvg: renderSvgSpy,
 }))
 
-const { exportCanvasHeadless, exportCanvasHeadlessSvg, _hasLegacyElementsForTests } = await import(
-  './headless-export.js'
-)
+const { exportCanvasHeadless, exportCanvasHeadlessSvg } = await import('./headless-export.js')
 const { saveDocument, documentExists } = await import('../store/document-store.js')
 const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 
@@ -87,7 +85,7 @@ describe('exportCanvasHeadless', () => {
     expect(options).toEqual({ padding: 20, scale: 2, theme: 'dark' })
   })
 
-  it('logs a warning and returns a valid empty export for a doc with legacy Excalidraw elements but no spatial nodes', async () => {
+  it('exports an empty canvas, without a warning, for a doc holding only the retired elements list', async () => {
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
     const rect = list.insertContainer(0, new LoroMap())
@@ -108,49 +106,10 @@ describe('exportCanvasHeadless', () => {
       expect(renderSpy).toHaveBeenCalledTimes(1)
       const [canvas] = renderSpy.mock.calls[0]!
       expect(canvas.nodes).toEqual([])
-
-      const warnings = capture.records.filter(
-        (r) =>
-          r.level === 'warning' &&
-          r.msg.includes('legacy Excalidraw elements') &&
-          r.data?.workspaceId === 'ws_legacy' &&
-          r.data?.path === 'design',
-      )
-      expect(warnings).toHaveLength(1)
+      expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])
     } finally {
       capture.restore()
     }
-  })
-
-  it('does not create a legacy elements container as a side effect of probing a normal doc', async () => {
-    // Exercised directly against a bare LoroDoc (not via loadDocument), so
-    // this is isolated from document-store's own, separate legacy-list
-    // migration probe on the load path.
-    const doc = new LoroDoc()
-    const nodes = doc.getMap('nodes')
-    nodes.set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' }))
-    doc.commit()
-
-    expect(_hasLegacyElementsForTests(doc)).toBe(false)
-    // getMovableList('elements') would create the container as a side
-    // effect of the mere call — getShallowValue() reflects only containers
-    // that actually exist, so this is the non-mutating way to assert the
-    // probe left no trace.
-    expect(Object.keys(doc.getShallowValue())).not.toContain('elements')
-  })
-
-  it('detects legacy elements without mutating a doc that already has them', async () => {
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    const rect = list.insertContainer(0, new LoroMap())
-    rect.set('id', 'legacy-1')
-    doc.commit()
-    const snapshotBefore = doc.export({ mode: 'snapshot' })
-
-    expect(_hasLegacyElementsForTests(doc)).toBe(true)
-
-    const snapshotAfter = doc.export({ mode: 'snapshot' })
-    expect(Buffer.from(snapshotAfter).equals(Buffer.from(snapshotBefore))).toBe(true)
   })
 })
 

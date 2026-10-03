@@ -171,7 +171,7 @@ export interface SpatialLayoutOptions {
   readonly fontAvailable?: (family: string) => boolean
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
-   * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
+   * The mdast CONTENT seams, forwarded verbatim to every `typesetMdastBlocks`
    * call this module makes — a spatial `text` node's body, and a file node's
    * referenced markdown body.
    *
@@ -181,7 +181,7 @@ export interface SpatialLayoutOptions {
    * the same way. Leaving them unforwarded is what made one engine give two
    * answers depending on which surface called it.
    *
-   * Absent seams keep `layoutMdastBlocks`'s own documented fallbacks (the
+   * Absent seams keep `typesetMdastBlocks`'s own documented fallbacks (the
    * escaped-source math placeholder, a plain code block, an
    * `embedPlaceholder`), so an export or viewer that wires none renders
    * exactly as before.

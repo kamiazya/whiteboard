@@ -91,7 +91,7 @@ function daemonStub(
         seen.add(entry.path)
         return {
           path: entry.path,
-          id: entry.documentId,
+          documentId: entry.documentId,
           kind: entry.kind,
           updatedAt: new Date().toISOString(),
           ...(shadowed ? { shadowed: true as const } : {}),

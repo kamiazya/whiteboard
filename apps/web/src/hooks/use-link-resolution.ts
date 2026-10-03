@@ -75,7 +75,7 @@ export function useLinkResolution({
     // nodes key on the id (ADR-0008) and a legacy ref carries the path.
     // Image refs live in the file store rather than the documents list, so
     // they are never "missing" here.
-    const known = new Set(documents.flatMap((entry) => [entry.id, entry.path]))
+    const known = new Set(documents.flatMap((entry) => [entry.documentId, entry.path]))
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [documents])
 

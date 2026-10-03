@@ -2,6 +2,7 @@ import { nodeFile, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent } from '@kamiazya/whiteboard-model/mdast'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import type { ResolvedReference } from '../references/resolved.js'
+import { referenceFor } from '../references/seams.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
 import {
   chromeShape,
@@ -12,7 +13,6 @@ import {
   labelRuns,
   placeAboveNode,
   placeInNode,
-  referenceFor,
 } from './node-box.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import { fitSceneIntoBox } from './scale-scene.js'
@@ -116,7 +116,7 @@ function composeFileMarkdown(
   if (root === undefined) return undefined
 
   // The LAYOUT is guarded too, not just the resolver call. This seam is the
-  // first to feed caller-supplied mdast straight into `layoutMdastBlocks`:
+  // first to feed caller-supplied mdast straight into `typesetMdastBlocks`:
   // `composeTextNode` parses its own via `parseBody` (and catches), and
   // `composeFileFacets` builds its blocks internally, so both were total by
   // construction. `layoutBlock`'s switch has no default case and dereferences
@@ -149,7 +149,7 @@ function composeFileMarkdown(
 /**
  * The facet-card rendering of a file node: a bare heading line (the card's
  * `title`) followed by one paragraph per row (`label: value`), laid out
- * through `layoutMdastBlocks` — the same producer `composeTextNode` uses —
+ * through `typesetMdastBlocks` — the same producer `composeTextNode` uses —
  * rather than a second text-layout producer (package-canvas-render.md's
  * "one producer per geometry" rule). Deliberately only `heading`/
  * `paragraph` blocks: `list`/`table` are the only two block renderers that
@@ -233,7 +233,7 @@ export function composeFileNode(
 ): readonly SceneNode[] {
   // Resolved ONCE and threaded through every rank. `?? ''` is unreachable —
   // a `file` IS "has a location" — and would resolve to nothing, not throw.
-  const resolved = referenceFor(nodeFile(node) ?? '', options)
+  const resolved = referenceFor(nodeFile(node) ?? '', options.resolveReference)
   for (const represent of FILE_REPRESENTATIONS) {
     const drawn = represent(node, resolved, options)
     if (drawn !== undefined) return drawn

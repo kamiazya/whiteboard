@@ -11,8 +11,12 @@
 import {
   readAnnotations,
   writeDocumentKind,
+  writeMarkdownBody,
+  writeSpatialCanvas,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { AnnotationAnchor, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import {
@@ -31,8 +35,36 @@ function makeDeps(store: FakeDocumentStore): ServerDeps {
   return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
 }
 
+const NOTE_BODY = 'why migration? a note about it'
+
 async function seedMarkdown(store: FakeDocumentStore): Promise<void> {
-  await seedDoc(store, DOCUMENT_ID, (doc) => writeDocumentKind(doc, 'markdown'))
+  await seedDoc(store, DOCUMENT_ID, (doc) => {
+    writeDocumentKind(doc, 'markdown')
+    writeMarkdownBody(doc, NOTE_BODY)
+  })
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+  store.documentIndex.seed({
+    workspaceId: WORKSPACE_ID,
+    documentId: DOCUMENT_ID,
+    path: 'doc',
+    kind: 'markdown',
+  })
+}
+
+const BOARD: SpatialCanvas = {
+  nodes: [
+    textNode({ id: 'a', x: 0, y: 0, width: 200, height: 60, text: 'Alpha beta' }),
+    textNode({ id: 'b', x: 300, y: 0, width: 200, height: 60, text: 'Gamma' }),
+    fileNode({ id: 'f', x: 600, y: 0, width: 200, height: 60, file: 'some/note' }),
+  ],
+  edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+}
+
+async function seedBoard(store: FakeDocumentStore): Promise<void> {
+  await seedDoc(store, DOCUMENT_ID, (doc) => {
+    writeDocumentKind(doc, 'spatial')
+    writeSpatialCanvas(doc, BOARD)
+  })
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
 }
 
@@ -279,5 +311,98 @@ describe('wb_thread_edit within ONE batch', () => {
       ['second remark', 'agent:author'],
     ])
     expect(thread?.messages.every((m) => typeof m.createdAt === 'string')).toBe(true)
+  })
+})
+
+type Anchor = AnnotationAnchor
+
+describe('wb_thread_edit refuses an anchor that names nothing on the document', () => {
+  async function open(store: FakeDocumentStore, anchor: Anchor) {
+    return createThreadEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'thread.add', anchor, body: 'about this' }],
+    })
+  }
+
+  test.each<[string, Anchor, RegExp]>([
+    ['a node', { kind: 'spatial', nodeId: 'nope', x: 0, y: 0 }, /node "nope"/],
+    ['an edge', { kind: 'spatial', edgeId: 'nope', x: 0, y: 0 }, /edge "nope"/],
+    [
+      'one of a node set',
+      { kind: 'spatial', nodeIds: ['a', 'nope'], x: 0, y: 0, width: 10, height: 10 },
+      /node "nope"/,
+    ],
+    [
+      'a text node for a passage',
+      { kind: 'text', nodeId: 'nope', quote: { exact: 'Alpha' }, start: 0, end: 5 },
+      /node "nope"/,
+    ],
+    [
+      'a passage in a node that carries no text',
+      { kind: 'text', nodeId: 'f', quote: { exact: 'some' }, start: 0, end: 4 },
+      /node "f" is not a text node/,
+    ],
+    [
+      'a passage absent from its node',
+      { kind: 'text', nodeId: 'a', quote: { exact: 'zzz' }, start: 0, end: 3 },
+      /"zzz"/,
+    ],
+    [
+      'a passage with no node, on a document that has no body',
+      { kind: 'text', quote: { exact: 'Alpha' }, start: 0, end: 5 },
+      /body/,
+    ],
+  ])('on a canvas, %s', async (_name, anchor, detail) => {
+    const store = new FakeDocumentStore()
+    await seedBoard(store)
+
+    await expect(open(store, anchor)).rejects.toThrow(detail)
+
+    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(readAnnotations(doc)).toEqual([])
+  })
+
+  test.each<[string, Anchor, RegExp]>([
+    ['a spatial anchor, since a note has no canvas', { kind: 'spatial', x: 1, y: 2 }, /canvas/],
+    [
+      'a passage absent from the body',
+      { kind: 'text', quote: { exact: 'zzz' }, start: 0, end: 3 },
+      /"zzz"/,
+    ],
+    [
+      'a passage naming a node, since a note has none',
+      { kind: 'text', nodeId: 'a', quote: { exact: 'why' }, start: 0, end: 3 },
+      /node/,
+    ],
+  ])('on a note, %s', async (_name, anchor, detail) => {
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store)
+
+    await expect(open(store, anchor)).rejects.toThrow(detail)
+
+    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(readAnnotations(doc)).toEqual([])
+  })
+
+  test('still opens a thread on every anchor that does name something', async () => {
+    const store = new FakeDocumentStore()
+    await seedBoard(store)
+    const anchors: Anchor[] = [
+      { kind: 'spatial', x: 5000, y: 5000 },
+      { kind: 'spatial', nodeId: 'a', x: 0, y: 0 },
+      { kind: 'spatial', edgeId: 'e1', x: 0, y: 0 },
+      { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 500, height: 60 },
+      { kind: 'text', nodeId: 'a', quote: { exact: 'beta' }, start: 6, end: 10 },
+      { kind: 'document' },
+    ]
+
+    const result = await createThreadEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: anchors.map((anchor) => ({ op: 'thread.add' as const, anchor, body: 'ok' })),
+    })
+
+    expect(result.threads).toHaveLength(anchors.length)
   })
 })

@@ -11,10 +11,10 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 function lineOpeners(children: unknown[], maxWidth: number): string[] {
-  const scene = layoutMdastBlocks(
+  const scene = typesetMdastBlocks(
     { type: 'root', children: [{ type: 'paragraph', children }] } as MdastRoot,
     { measure: createCorpusMeasure().measure, maxWidth, fontFamily: 'Roboto' },
   )

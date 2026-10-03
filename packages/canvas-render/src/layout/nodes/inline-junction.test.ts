@@ -1,6 +1,6 @@
 /**
  * Direct unit tests for the junction, which `inline-boundary-break.test.ts`
- * reaches only through `layoutMdastBlocks`.
+ * reaches only through `typesetMdastBlocks`.
  *
  * The reason is Stryker's, not a reader's: the lane picks a mutant's tests by
  * relatedness, and on this module's first report 16 of 20 survivors came back

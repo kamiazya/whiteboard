@@ -1,5 +1,5 @@
 export type { BacklinkEntry } from './backlink-entry.js'
 export { ContentFactsCache, type DocumentContentSource } from './content-facts-cache.js'
-export type { ContentFacts } from './extract.js'
+export { type ContentFacts, splitBearerTags, tagBearersOf } from './extract.js'
 export { linkifyMentionsIn } from './linkify.js'
 export { backlinksIn } from './reference-aggregate.js'

@@ -8,6 +8,7 @@
  * path — the way `describeDocumentIndexConformance` does for the index port.
  */
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
 
@@ -16,8 +17,13 @@ interface FilesSourceFixtureDocument {
   readonly kind: DocumentKind
   readonly name?: string
   readonly body?: string
+  /** A note's frontmatter tags, or a board's own. */
   readonly tags?: readonly string[]
-  /** Extension facets stored beside the body; a library is the document at `tags` / `stencils`. */
+  /** A board's boxes, one entry each, carrying these tags. */
+  readonly nodeTags?: readonly (readonly string[])[]
+  /** A board's edges, one entry each, between its first two boxes — so a board naming edges names two boxes. */
+  readonly edgeTags?: readonly (readonly string[])[]
+  /** Extension facets stored beside the body; a library is the document at `TAG_LIBRARY_PATH` / `STENCIL_LIBRARY_PATH`. */
   readonly facets?: Record<string, unknown>
 }
 
@@ -35,8 +41,16 @@ const TAG_LIBRARY = {
   health: { exclusive: true, values: { ok: { color: '4' } } },
 }
 
+const BOARD_WITH_TAGS: FilesSourceFixtureDocument = {
+  path: 'board',
+  kind: 'spatial',
+  tags: ['team:core', 'q3'],
+  nodeTags: [['health:ok'], ['health:ok']],
+  edgeTags: [['link:slow']],
+}
+
 const libraryFixture = (
-  path: 'tags' | 'stencils',
+  path: typeof TAG_LIBRARY_PATH | typeof STENCIL_LIBRARY_PATH,
   facets: Record<string, unknown>,
 ): FilesSourceFixture => ({ documents: [{ path, kind: 'markdown', facets }] })
 
@@ -113,6 +127,31 @@ function tagReadContract(factory: FilesSourceFactory): void {
   })
 }
 
+function boardTagContract(factory: FilesSourceFactory): void {
+  it('lists what a board carries beside its own tags, each tag once, and nothing carried on a note', async () => {
+    const source = await factory({
+      documents: [BOARD_WITH_TAGS, { path: 'note', kind: 'markdown', tags: ['q3'] }],
+    })
+    const entries = await source.listDocuments()
+    const board = entries.find((entry) => entry.path === 'board')
+    expect(board?.tags).toEqual(['team:core', 'q3'])
+    expect(board?.carriedTags).toEqual(['health:ok', 'link:slow'])
+    expect(entries.find((entry) => entry.path === 'note')?.carriedTags ?? []).toEqual([])
+  })
+
+  it('counts every bearer — a note, a board, its boxes and its edges — in the vocabulary in use', async () => {
+    const source = await factory({
+      documents: [BOARD_WITH_TAGS, { path: 'note', kind: 'markdown', tags: ['q3'] }],
+    })
+    await expect(source.listTagsInUse?.()).resolves.toEqual([
+      { tag: 'health:ok', key: 'health', value: 'ok', documents: 0, boards: 0, nodes: 2, edges: 0 },
+      { tag: 'link:slow', key: 'link', value: 'slow', documents: 0, boards: 0, nodes: 0, edges: 1 },
+      { tag: 'q3', documents: 1, boards: 1, nodes: 0, edges: 0 },
+      { tag: 'team:core', key: 'team', value: 'core', documents: 0, boards: 1, nodes: 0, edges: 0 },
+    ])
+  })
+}
+
 function writeContract(factory: FilesSourceFactory): void {
   it('creates a document that lists with its kind and name', async () => {
     const source = await factory({})
@@ -160,15 +199,15 @@ function writeContract(factory: FilesSourceFactory): void {
 
 function tagLibraryContract(factory: FilesSourceFactory): void {
   describe('tag library', () => {
-    it('is empty when no document sits at `tags`', async () => {
+    it('is empty when no document sits at the tag library path', async () => {
       const source = await factory({})
       expect(source.readTagLibrary).toBeDefined()
       await expect(source.readTagLibrary?.()).resolves.toEqual({})
     })
 
-    it('is what the document at `tags` declares, read by name', async () => {
+    it('is what the document at the tag library path declares, read by name', async () => {
       const source = await factory(
-        libraryFixture('tags', { 'visual.tags/v0': { keys: TAG_LIBRARY } }),
+        libraryFixture(TAG_LIBRARY_PATH, { 'visual.tags/v0': { keys: TAG_LIBRARY } }),
       )
       const library = await source.readTagLibrary?.()
       expect(library).toEqual(TAG_LIBRARY)
@@ -176,13 +215,17 @@ function tagLibraryContract(factory: FilesSourceFactory): void {
       expect(Object.keys(library?.zone?.values ?? {})).toEqual(['a', 'b'])
     })
 
-    it('is empty when the document at `tags` holds a payload the schema refuses', async () => {
-      const source = await factory(libraryFixture('tags', { 'visual.tags/v0': { keys: 5 } }))
+    it('is empty when the document at the tag library path holds a payload the schema refuses', async () => {
+      const source = await factory(
+        libraryFixture(TAG_LIBRARY_PATH, { 'visual.tags/v0': { keys: 5 } }),
+      )
       await expect(source.readTagLibrary?.()).resolves.toEqual({})
     })
 
-    it('is empty when the document at `tags` carries no library facet', async () => {
-      const source = await factory(libraryFixture('tags', { 'visual.mark/v0': { icon: 'star' } }))
+    it('is empty when the document at the tag library path carries no library facet', async () => {
+      const source = await factory(
+        libraryFixture(TAG_LIBRARY_PATH, { 'visual.mark/v0': { icon: 'star' } }),
+      )
       await expect(source.readTagLibrary?.()).resolves.toEqual({})
     })
   })
@@ -192,31 +235,31 @@ function stencilLibraryContract(factory: FilesSourceFactory): void {
   describe('stencil library', () => {
     const STENCILS = { lakehouse: { displayName: 'Lakehouse', color: '3' } }
 
-    it('is empty when no document sits at `stencils`', async () => {
+    it('is empty when no document sits at the stencil library path', async () => {
       const source = await factory({})
       expect(source.readStencilLibrary).toBeDefined()
       await expect(source.readStencilLibrary?.()).resolves.toEqual({})
     })
 
-    it('is what the document at `stencils` declares, each stencil with its facets defaulted', async () => {
+    it('is what the document at the stencil library path declares, each stencil with its facets defaulted', async () => {
       const source = await factory(
-        libraryFixture('stencils', { 'visual.stencils/v0': { stencils: STENCILS } }),
+        libraryFixture(STENCIL_LIBRARY_PATH, { 'visual.stencils/v0': { stencils: STENCILS } }),
       )
       await expect(source.readStencilLibrary?.()).resolves.toEqual({
         lakehouse: { ...STENCILS.lakehouse, facets: {} },
       })
     })
 
-    it('is empty when the document at `stencils` holds a payload the schema refuses', async () => {
+    it('is empty when the document at the stencil library path holds a payload the schema refuses', async () => {
       const source = await factory(
-        libraryFixture('stencils', { 'visual.stencils/v0': { stencils: 5 } }),
+        libraryFixture(STENCIL_LIBRARY_PATH, { 'visual.stencils/v0': { stencils: 5 } }),
       )
       await expect(source.readStencilLibrary?.()).resolves.toEqual({})
     })
 
     it('does not read a tag library as a stencil library', async () => {
       const source = await factory(
-        libraryFixture('tags', { 'visual.tags/v0': { keys: TAG_LIBRARY } }),
+        libraryFixture(TAG_LIBRARY_PATH, { 'visual.tags/v0': { keys: TAG_LIBRARY } }),
       )
       await expect(source.readStencilLibrary?.()).resolves.toEqual({})
     })
@@ -258,6 +301,7 @@ export function describeWorkspaceFilesSourceConformance(
   describe(`${name} satisfies WorkspaceFilesSource`, () => {
     listingContract(factory)
     tagReadContract(factory)
+    boardTagContract(factory)
     writeContract(factory)
     tagLibraryContract(factory)
     stencilLibraryContract(factory)

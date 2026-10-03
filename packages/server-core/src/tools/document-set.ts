@@ -1,4 +1,4 @@
-import { parseOkf } from '@kamiazya/whiteboard-codec'
+import { type OkfMarkdownDocument, parseOkf, serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   readDocumentKind,
   readMarkdownBody,
@@ -116,6 +116,32 @@ export class OkfParseError extends Error {
 }
 
 /**
+ * Parses OKF for a WRITE: the document it returns is one the read side can
+ * write back out.
+ *
+ * A value YAML has no representation for (`.nan`, `.inf`) parses, is stored,
+ * and then fails every read of the document — so the write is the place to
+ * say so, with the key named, while the caller still holds the content.
+ * `serializeOkf` is the one definition of what can be written out, so this
+ * asks it rather than restating its rule.
+ */
+export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
+  const parsed = parseOkf(markdown)
+  if (!parsed.ok) {
+    throw new OkfParseError(parsed.error.stage, parsed.error.message, parsed.error.issues)
+  }
+  try {
+    serializeOkf(parsed.value)
+  } catch (error) {
+    throw new OkfParseError(
+      'frontmatter-yaml-safe',
+      error instanceof Error ? error.message : String(error),
+    )
+  }
+  return parsed.value
+}
+
+/**
  * Whether a `generated` the caller sent is foreign provenance to preserve,
  * rather than this server's own stamp echoed back by an edit.
  *
@@ -224,12 +250,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
 
-      const parsed = parseOkf(input.markdown)
-      if (!parsed.ok) {
-        throw new OkfParseError(parsed.error.stage, parsed.error.message, parsed.error.issues)
-      }
-
-      const { frontmatter, body } = parsed.value
+      const { frontmatter, body } = parseWritableOkf(input.markdown)
 
       // What the workspace DECLARES about its tags reaches this writer too
       // (ADR-0040 decision 5) — taken before the document is opened, so a

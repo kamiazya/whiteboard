@@ -7,7 +7,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
 | `packages/scene` | the scene VOCABULARY and the renderer/plugin contract — what a laid-out document is, and the shape a plugin contributes. Types only; it exists for its position, below both sides | model, facet-engine |
-| `packages/canvas-render` | layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) — the scene vocabulary it produces is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, css-line-break, lowlight |
+| `packages/canvas-render` | layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) — the scene vocabulary it produces is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, css-line-break, lowlight, highlight.js |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |

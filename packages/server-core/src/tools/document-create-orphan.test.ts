@@ -6,6 +6,28 @@ import { wbDocumentCreate } from './document-crud.js'
 const WS = 'orphan'
 
 describe('a create that cannot finish leaves nothing behind', () => {
+  it.each([
+    ['.nan', 'NaN'],
+    ['.inf', 'Infinity'],
+  ])('refuses frontmatter holding %s by naming the key, and leaves the path free', async (yaml, shown) => {
+    // Accepted on write, such a value fails every batch read that names the
+    // document; the check that refuses it on the way out has to run on the way
+    // in, before a document exists to hold the path.
+    const deps = makeTestDeps({ documentStore: new InMemoryDocumentStore() })
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
+
+    await expect(
+      wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'weird',
+        kind: 'markdown',
+        markdown: `---\ntype: note\nweird: ${yaml}\n---\nbody`,
+      }),
+    ).rejects.toThrow(new RegExp(`weird: ${shown}.*yaml-safe`))
+
+    expect(await deps.documentIndex.listDocuments({ workspaceId: WS })).toEqual([])
+  })
+
   it('does not squat the path with an empty document when the body is malformed', async () => {
     // The body is written by delegating to `wb_document_set`, which runs
     // AFTER the document exists — so without a preflight the parse failure

@@ -48,9 +48,9 @@ import { jsonResponse } from './json-response.js'
 interface FakeDaemonDocumentRow {
   path: string
   updatedAt?: string
-  id?: string
+  documentId?: string
   kind?: string
-  displayName?: string
+  name?: string
 }
 
 type Rows = FakeDaemonDocumentRow[]
@@ -68,12 +68,12 @@ const overrideOf = (value: Overriding): Promise<Response> | undefined =>
     : undefined
 
 /**
- * The list contract requires id and kind on every row (the daemon always
+ * The list contract requires documentId and kind on every row (the daemon always
  * serves both); fixtures may omit them for brevity and get daemon-shaped
  * defaults filled in here.
  */
 export function withSummaryDefaults(rows: Rows) {
-  return rows.map((row) => ({ id: `id-${row.path}`, kind: 'spatial', ...row }))
+  return rows.map((row) => ({ documentId: `id-${row.path}`, kind: 'spatial', ...row }))
 }
 
 export interface FakeDaemonRoutes {

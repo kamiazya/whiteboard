@@ -202,7 +202,7 @@ function useDaemonDocument(
   canvasesRef.current = controller.documents
 
   const resolveRefPath = useCallback(
-    (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.path,
+    (ref: string) => canvasesRef.current.find((entry) => entry.documentId === ref)?.path,
     [],
   )
 
@@ -228,7 +228,7 @@ function useDaemonDocument(
   // Undefined until the list names a row for this path — a refresh in flight
   // leaves it so, which both the picker's exclusion and the backlinks fetch
   // read as "not yet".
-  const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.id
+  const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.documentId
 
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
@@ -248,7 +248,7 @@ function useDaemonDocument(
       new Map(
         controller.documents.flatMap((entry) => [
           [entry.path, entry.updatedAt ?? ''] as const,
-          ...(entry.id ? [[entry.id, entry.updatedAt ?? ''] as const] : []),
+          ...(entry.documentId ? [[entry.documentId, entry.updatedAt ?? ''] as const] : []),
         ]),
       ),
     [controller.documents],

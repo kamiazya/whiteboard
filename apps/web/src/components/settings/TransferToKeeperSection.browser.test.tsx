@@ -54,7 +54,7 @@ function keeperStub(target: LoroDoc): typeof globalThis.fetch {
       return Response.json({
         documents: readWorkspaceDocuments(target).map((entry) => ({
           path: entry.path,
-          id: entry.documentId,
+          documentId: entry.documentId,
           kind: entry.kind,
           updatedAt: new Date().toISOString(),
         })),

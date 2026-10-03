@@ -14,7 +14,7 @@
 //   4. viewport_set rejects immediately with no_client when no browser is connected
 //   5. export_canvas(format:png/svg/json) succeeds via headless rendering with no browser connected
 //
-// For 4 and 5 there is no browser WS client, so success behavior is not
+// For 4 and 5 there is no browser sync client, so success behavior is not
 // observed. Instead, the smoke proves that both route wiring and MCP wrapping
 // are correct because the no_client error is returned immediately.
 //

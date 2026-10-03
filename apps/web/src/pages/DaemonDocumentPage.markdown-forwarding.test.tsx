@@ -114,7 +114,9 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
   beforeEach(() => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+      documents: [
+        { path: 'agent-note', documentId: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' },
+      ],
     })
   })
   afterEach(() => {

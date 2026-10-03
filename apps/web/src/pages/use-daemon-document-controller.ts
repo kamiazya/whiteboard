@@ -235,9 +235,9 @@ export function useDaemonDocumentController(
       workspaceId,
       sourcePath: path,
       kind: source?.kind ?? 'spatial',
-      displayName: source?.displayName ?? path,
+      displayName: source?.name ?? path,
       existingPaths: documents.map((entry) => entry.path),
-      existingNames: documents.map((entry) => entry.displayName ?? entry.path),
+      existingNames: documents.map((entry) => entry.name ?? entry.path),
     })
     // Same two steps `createDocument` ends with, and the same order: the list
     // is refreshed BEFORE the path moves, so the page never points at a

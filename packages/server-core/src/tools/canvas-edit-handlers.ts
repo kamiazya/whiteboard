@@ -672,8 +672,13 @@ const CANVAS_EDIT_HANDLERS: {
   tidy: (ctx, op, index) => {
     // Locks bind tidy exactly as they bind the editor: a locked node
     // is a fixed obstacle it routes around, never one it moves.
+    // An id that is not on the canvas is refused by name like every other
+    // op's target: a typo'd scope would otherwise tidy nothing and still
+    // answer as applied.
     const scope =
-      op.within !== undefined ? ctx.s.nodeTargets(index, op.op, { within: op.within }) : op.scope
+      op.within !== undefined
+        ? ctx.s.nodeTargets(index, op.op, { within: op.within })
+        : op.scope?.flatMap((id) => ctx.s.nodeTargets(index, op.op, { id }))
     const moved = tidyNodes(tidyBoxes(ctx.s.nodes), {
       scope: scope === undefined ? undefined : new Set(scope),
       locked: (id) => ctx.s.nodeLocks.has(id),

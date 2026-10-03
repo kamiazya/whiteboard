@@ -26,6 +26,7 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
+import { referenceFor } from '../references/seams.js'
 import { composeFileNode } from './compose-file-node.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
 import {
@@ -38,9 +39,8 @@ import {
   labelRuns,
   mdastOptionsFor,
   placeInNode,
-  referenceFor,
 } from './node-box.js'
-import { type FittedBlocks, firstLineOfBlocks, layoutMdastBlocks } from './nodes/mdast-blocks.js'
+import { type FittedBlocks, firstLineOfBlocks, typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import { collectTextRuns, composePassageHighlights, type NodePassage } from './passage-highlight.js'
 
 export { mdastOptionsFor, nodeContentBounds, sketchInkFor } from './node-box.js'
@@ -109,7 +109,7 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
     body = cached
   } else {
     try {
-      const laid = layoutMdastBlocks(
+      const laid = typesetMdastBlocks(
         resolveReferences(options.parseBody(text), options.resolveAlias),
         mdastOptionsFor(maxWidth, options),
       )
@@ -164,7 +164,7 @@ function composeGroupBackground(
 ): SceneNode | undefined {
   const background = frameBackground(node)
   if (background === undefined) return undefined
-  const image = referenceFor(background, options)?.image
+  const image = referenceFor(background, options.resolveReference)?.image
   if (image === undefined) return undefined
   if (!(node.width > 0) || !(node.height > 0)) return undefined
   const backgroundStyle = frameBackgroundStyle(node)

@@ -1,10 +1,11 @@
 /**
  * One storage row, and the cleanup control it may carry.
  *
- * Three of the four action slots were the same button with different verbs,
- * and the fourth differed only in its icon and in having a fallback line
- * when no transient status is showing. They are one component here, picked
- * from a table the card owns.
+ * Every control is the same button with a different verb, differing only in
+ * its icon and in having a fallback line when no transient status is showing.
+ * They are one component here, picked from a table the card owns; a row that
+ * has two things done to the bytes it holds (the database is optimized and has
+ * its auto-versions pruned) lists both.
  */
 import type { StorageCategory } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { LucideIcon } from 'lucide-react'
@@ -40,18 +41,18 @@ export interface CategoryDescriptor {
  */
 function RowActions({
   categoryKey,
-  action,
+  actions,
 }: {
   categoryKey: string
-  action: RowAction | undefined
+  actions: readonly RowAction[]
 }) {
   return (
     <div
-      className="shrink-0 min-w-[2.25rem] flex flex-col items-end gap-0.5"
+      className="shrink-0 min-w-[2.25rem] flex flex-col items-end gap-1.5"
       data-storage-actions={categoryKey}
     >
-      {action !== undefined && (
-        <>
+      {actions.map((action) => (
+        <div key={action.ariaLabel} className="flex flex-col items-end gap-0.5">
           <Button
             variant="outline"
             size="sm"
@@ -66,8 +67,8 @@ function RowActions({
           {action.status !== null && (
             <span className="text-[10px] text-muted-foreground">{action.status}</span>
           )}
-        </>
-      )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -75,11 +76,11 @@ function RowActions({
 export function StorageCategoryRow({
   descriptor,
   bucket,
-  action,
+  actions,
 }: {
   descriptor: CategoryDescriptor
   bucket: { bytes: number; files: number }
-  action: RowAction | undefined
+  actions: readonly RowAction[]
 }) {
   const { key, label, description } = descriptor
   return (
@@ -92,7 +93,7 @@ export function StorageCategoryRow({
         <div>{formatBytes(bucket.bytes)}</div>
         <div className="text-[10px] text-muted-foreground">{bucket.files} files</div>
       </div>
-      <RowActions categoryKey={key} action={action} />
+      <RowActions categoryKey={key} actions={actions} />
     </li>
   )
 }

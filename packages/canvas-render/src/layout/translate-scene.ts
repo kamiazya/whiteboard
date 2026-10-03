@@ -1,4 +1,4 @@
-// Pure scene -> scene translation. `layoutMdastBlocks` always lays out a
+// Pure scene -> scene translation. `typesetMdastBlocks` always lays out a
 // block tree relative to its own origin (its top-level nodes start at y = 0,
 // `x` = 0 or a list-depth offset) — placing that output at a spatial node's
 // absolute position requires shifting the whole tree by the node's (x, y).

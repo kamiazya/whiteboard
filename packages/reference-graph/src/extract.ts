@@ -1,9 +1,8 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import {
+  type DocumentContent,
   readCoreFacets,
-  readDocumentKind,
-  readMarkdownBody,
-  readSpatialCanvas,
+  readDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasEdge,
@@ -107,24 +106,52 @@ export function extractContentFacts(
   entry: Pick<DocumentEntry, 'kind'>,
   doc: LoroDoc,
 ): ContentFacts {
-  const kind = entry.kind ?? readDocumentKind(doc)
-  const markdown = kind === 'markdown'
-  const canvas = markdown ? undefined : readSpatialCanvas(doc)
+  const content = readDocumentContent(doc, entry.kind)
+  if (content.kind === 'markdown') {
+    return {
+      refs: textReferences(content.body),
+      // The prose itself, for mention detection against other documents'
+      // names — and the same strings search ranks, by construction.
+      texts: searchableTexts(content),
+      bearers: tagBearersOf(doc, content),
+    }
+  }
   return {
-    refs: markdown
-      ? textReferences(readMarkdownBody(doc))
-      : spatialReferences(canvas as SpatialCanvas),
-    // The prose itself, for mention detection against other documents'
-    // names — and the same strings search ranks, by construction.
-    texts: markdown
-      ? searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
-      : searchableTexts({ kind: 'spatial', canvas: canvas as SpatialCanvas }),
-    bearers: markdown
-      ? markdownBearers(readCoreFacets(doc)?.tags)
-      : spatialBearers(canvas as SpatialCanvas),
+    refs: spatialReferences(content.canvas),
+    texts: searchableTexts(content),
+    bearers: tagBearersOf(doc, content),
   }
 }
 
-function markdownBearers(tags: readonly string[] | undefined): TagBearer[] {
+/**
+ * Everything a document contains that carries tags, from content already
+ * read — the one definition of "what bears a tag", so the daemon's projection
+ * and the browser keeper's cannot count different things.
+ */
+export function tagBearersOf(doc: LoroDoc, content: DocumentContent): TagBearer[] {
+  if (content.kind === 'spatial') return spatialBearers(content.canvas)
+  const tags = readCoreFacets(doc)?.tags
   return tags === undefined || tags.length === 0 ? [] : [{ what: 'document', text: '', tags }]
+}
+
+/**
+ * A document's OWN tags and the ones its contents carry, which are two
+ * different answers about the same document.
+ *
+ * Own is the document's frontmatter or its board's envelope — one bearer,
+ * because a document has one of those. Carried is the union over its nodes and
+ * edges, deduplicated, because a tag on three boxes is one tag the document
+ * contains. Any other bearer kind belongs to neither.
+ */
+export function splitBearerTags(bearers: readonly { what: string; tags: readonly string[] }[]): {
+  own: string[]
+  carried: string[]
+} {
+  const own = bearers.find((bearer) => bearer.what === 'document' || bearer.what === 'board')?.tags
+  const carried = new Set<string>()
+  for (const bearer of bearers) {
+    if (bearer.what !== 'node' && bearer.what !== 'edge') continue
+    for (const tag of bearer.tags) carried.add(tag)
+  }
+  return { own: own === undefined ? [] : [...own], carried: [...carried] }
 }

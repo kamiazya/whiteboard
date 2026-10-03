@@ -388,7 +388,12 @@ describe('DaemonIndexPage tree view', () => {
     installFetchMock(undefined, {
       documentsByWorkspace: {
         default: [
-          { id: 'id-seed', path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' },
+          {
+            documentId: 'id-seed',
+            path: 'seed',
+            updatedAt: '2026-08-01T00:00:00Z',
+            kind: 'markdown',
+          },
         ],
       },
       onCreateDocument: () => {
@@ -420,7 +425,12 @@ describe('DaemonIndexPage tree view', () => {
     installFetchMock(undefined, {
       documentsByWorkspace: {
         default: [
-          { id: 'id-seed', path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' },
+          {
+            documentId: 'id-seed',
+            path: 'seed',
+            updatedAt: '2026-08-01T00:00:00Z',
+            kind: 'markdown',
+          },
         ],
       },
       onCreateDocument: (_workspaceId, _path, kind) => {

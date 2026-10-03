@@ -29,13 +29,11 @@ import {
   rewriteReferenceTargets,
 } from '@kamiazya/whiteboard-codec'
 import {
-  readDocumentKind,
-  readMarkdownBody,
-  readSpatialCanvas,
+  readDocumentContent,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentId } from '@kamiazya/whiteboard-model'
+import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
 import type { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
@@ -96,7 +94,7 @@ export async function followReferencesAfterRename(
         input.workspaceId,
         entry.documentId as DocumentId,
       )
-      if (!rewriteDocument(doc, plan)) continue
+      if (!rewriteDocument(doc, plan, entry.kind)) continue
       await saveDocumentSnapshot(deps, input.workspaceId, entry.documentId as DocumentId, doc)
       updated.push(entry.documentId)
     } catch {
@@ -109,10 +107,19 @@ export async function followReferencesAfterRename(
 /**
  * Rewrites one document's reference targets in place, by its kind, and says
  * whether anything changed — so the caller saves only what moved.
+ *
+ * The kind is `readDocumentContent`'s to decide, so a document that records
+ * none is rewritten as the canvas the rest of the system reads it as: a
+ * markdown write over one would replace its nodes with a body.
  */
-function rewriteDocument(doc: LoroDoc, plan: ReadonlyMap<string, string>): boolean {
-  if (readDocumentKind(doc) === 'spatial') {
-    const result = rewriteCanvasReferences(readSpatialCanvas(doc), plan)
+function rewriteDocument(
+  doc: LoroDoc,
+  plan: ReadonlyMap<string, string>,
+  entryKind: DocumentKind | undefined,
+): boolean {
+  const content = readDocumentContent(doc, entryKind)
+  if (content.kind === 'spatial') {
+    const result = rewriteCanvasReferences(content.canvas, plan)
     if (!result.changed) return false
     // Targeted writes, never a whole-canvas resync: readSpatialCanvas drops
     // records the current schema cannot parse, and writing the whole canvas
@@ -120,7 +127,7 @@ function rewriteDocument(doc: LoroDoc, plan: ReadonlyMap<string, string>): boole
     for (const node of result.changedNodes) writeSpatialNode(doc, node)
     return true
   }
-  const body = readMarkdownBody(doc)
+  const { body } = content
   const next = rewriteReferenceTargets(body, plan)
   // Totality rather than a reachable case: the scan and the rewrite share
   // `scanReferences`, so a body holding a ref the plan names is a body the

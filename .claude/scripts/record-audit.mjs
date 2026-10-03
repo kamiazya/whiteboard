@@ -4,11 +4,19 @@
 import { appendFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseScriptArgs } from './script-flags.mjs'
 
-const kind = process.argv[2]
-if (!kind || !/^[a-z0-9-]+$/.test(kind)) {
-  process.stderr.write('usage: record-audit.mjs <kind>   (e.g. audit-triage, dogfood-triage)\n')
-  process.exit(1)
+// audit-nudge.mjs reads this log by kind, so a kind nothing reads is a row that
+// misleads rather than records.
+const KINDS = ['audit-triage', 'dogfood-triage']
+const usage = `usage: record-audit.mjs <kind>   (kind: ${KINDS.join(' | ')})`
+
+const {
+  positionals: [kind],
+} = parseScriptArgs({ argv: process.argv.slice(2), usage, maxPositionals: 1 })
+if (!KINDS.includes(kind)) {
+  process.stderr.write(`${kind === undefined ? 'missing kind' : `unknown kind ${kind}`}\n${usage}\n`)
+  process.exit(2)
 }
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 appendFileSync(join(ROOT, '.claude/audit-log.jsonl'), `${JSON.stringify({ kind, at: new Date().toISOString() })}\n`)

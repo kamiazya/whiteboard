@@ -126,6 +126,23 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     }
   })
 
+  // The theme drew clean and the answer was 200, so a typo was
+  // indistinguishable from the theme asked for.
+  it('refuses a style naming no registered theme with the registered ids, and writes nothing', async () => {
+    const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: 'visual.sktech' }),
+    })
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('invalid_request')
+    expect(body.message).toContain('visual.sktech')
+    expect(body.message).toContain('visual.sketch, visual.neon')
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
+  })
+
   it('answers 404 for a path that does not exist, rather than an empty SVG', async () => {
     mockDocumentExists.mockResolvedValue(false)
 

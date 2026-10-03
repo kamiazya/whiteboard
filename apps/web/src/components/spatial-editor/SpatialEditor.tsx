@@ -106,7 +106,6 @@ import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
 import {
   canvasToScreen,
   clientPointToRootLocal,
-  fitViewportToBoxes,
   type Point,
   panBy,
   proposalAt,
@@ -712,8 +711,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => ({
         setViewport,
         fitToContent(nodeIds) {
-          const scoped = nodeIds === undefined ? boxes : boxes.filter((b) => nodeIds.includes(b.id))
-          setViewport(fitViewportToBoxes(scoped.map((b) => b.box)))
+          frameContent(nodeIds === undefined ? undefined : new Set(nodeIds))
         },
         openProposal(proposalId) {
           const at = viewportRevealingProposal(proposalChromeBoxes, proposalId)

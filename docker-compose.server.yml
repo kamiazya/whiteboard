@@ -28,6 +28,10 @@ services:
       args:
         NODE_VERSION: ${NODE_VERSION:?Set NODE_VERSION, e.g. NODE_VERSION="$(cat .node-version)"}
     image: whiteboard-server:local
+    # Named so the backup, restore and `docker exec` commands in
+    # docs/how-to/self-host-with-docker.md can address it; a Compose-generated
+    # name depends on the project directory.
+    container_name: whiteboard-server
     restart: unless-stopped
     # Bind to loopback only. The reverse proxy (nginx, Caddy, Traefik, …)
     # handles TLS termination and forwards to 127.0.0.1:3099.

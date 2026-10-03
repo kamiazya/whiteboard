@@ -391,8 +391,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // nothing), the `document.move` arm's row and why its follow report costs wire
   // bytes and no visible ones, `wb_canvas_edit`'s row and the two totals, and the
   // rows for the readable annotation layer, the snapshot's dressing and the
-  // in-place rename, the node input losing `embed`, and `proposals` on wb_document_get.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1011,
+  // in-place rename, the node input losing `embed`, `proposals` on wb_document_get,
+  // wb_viewport_set losing `animate` and describing `mode`, and the facet titles.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1021,
   // The not-JSON refusal's assertion carries the reason it is strict: a mutation
   // showed the loose form (`typeof title === 'string'`) stays green with the
   // refusal DELETED, so without the note the next reader loosens it again. Every

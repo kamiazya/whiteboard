@@ -90,6 +90,7 @@ const TOP_LEVEL: Readonly<Record<string, Layer>> = {
   'server/app.ts': 'composition',
   'server/http-server.ts': 'composition',
   'server/server-mode-http.ts': 'composition',
+  'server/server-mode-people.ts': 'composition',
   'server/server-mode-web-app.ts': 'composition',
   // Process entries.
   'server/index.ts': 'entry',

@@ -99,7 +99,7 @@ it('the whole document surface works with no documents table at all, across a re
     ['boards/main', 'spatial'],
     ['notes/readme', 'markdown'],
   ])
-  expect(listing.find((d) => d.path === 'boards/main')?.displayName).toBe('Main Board')
+  expect(listing.find((d) => d.path === 'boards/main')?.name).toBe('Main Board')
 
   const loaded = await loadDocument(WS, 'boards/main')
   const canvas = readSpatialCanvas(loaded)

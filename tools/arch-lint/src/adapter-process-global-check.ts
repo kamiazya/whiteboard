@@ -1,19 +1,22 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { isAdapterSource } from './adapter-files.js'
+import { countNamedUses } from './named-use-scan.js'
 import { walk } from './scan-roots.js'
 import { findScopeDefaultedCalls } from './scope-default-calls.js'
-import { stripCommentsAndStrings } from './source-scan.js'
 
 /**
  * Process globals an adapter must be handed rather than read: the data
  * directory, and the one tenant a self-hosted keeper has. Named as the edge
- * spells them.
+ * spells them, and found by name in the syntax tree: through an aliased import
+ * or inside a template substitution a text pattern on the call never sees it.
  */
-const PROCESS_GLOBALS: readonly { readonly name: string; readonly pattern: RegExp }[] = [
-  { name: 'getDataDir', pattern: /\bgetDataDir\s*\(/ },
-  { name: 'SELF_HOST_TENANT_ID', pattern: /\bSELF_HOST_TENANT_ID\b/ },
-]
+const PROCESS_GLOBALS: readonly string[] = ['getDataDir', 'SELF_HOST_TENANT_ID']
+
+/** The names of `names` that `source` uses, as the ledger spells them. */
+function usedNames(file: string, source: string, names: readonly string[]): string[] {
+  return names.filter((name) => countNamedUses(file, source, [name]) > 0)
+}
 
 /**
  * The trees whose code is ADAPTING or WIRING a keeper rather than being one:
@@ -60,10 +63,9 @@ export function adapterFiles(serverDir: string, extra: readonly string[] = []): 
 export function findAdapterGlobalReads(serverDir: string): string[] {
   const reads = new Set<string>()
   for (const file of adapterFiles(serverDir)) {
-    const code = stripCommentsAndStrings(readFileSync(file, 'utf8'))
     const from = relative(serverDir, file).split('\\').join('/')
-    for (const { name, pattern } of PROCESS_GLOBALS) {
-      if (pattern.test(code)) reads.add(`${from} -> ${name}`)
+    for (const name of usedNames(file, readFileSync(file, 'utf8'), PROCESS_GLOBALS)) {
+      reads.add(`${from} -> ${name}`)
     }
   }
   return [...reads].sort()
@@ -87,10 +89,7 @@ export function findAdapterScopeDefaults(srcDir: string): string[] {
  * the DEFAULT a store takes when nothing hands it one, and a composition that
  * names it has stopped saying which directory it serves.
  */
-const COMPOSITION_GLOBALS: readonly { readonly name: string; readonly pattern: RegExp }[] = [
-  ...PROCESS_GLOBALS,
-  { name: 'globalStoreScope', pattern: /\bglobalStoreScope\b/ },
-]
+const COMPOSITION_GLOBALS: readonly string[] = [...PROCESS_GLOBALS, 'globalStoreScope']
 
 function isComposedSource(file: string): boolean {
   return isAdapterSource(file) && !/(^|[\\/])migrations[\\/]/.test(file)
@@ -114,10 +113,9 @@ export function findCompositionGlobalReads(srcDir: string): string[] {
   ]
   for (const { dir, globals, label } of trees) {
     for (const file of walk(dir, { include: isComposedSource })) {
-      const code = stripCommentsAndStrings(readFileSync(file, 'utf8'))
       const from = `${label}/${relative(dir, file).split('\\').join('/')}`
-      for (const { name, pattern } of globals) {
-        if (pattern.test(code)) reads.add(`${from} -> ${name}`)
+      for (const name of usedNames(file, readFileSync(file, 'utf8'), globals)) {
+        reads.add(`${from} -> ${name}`)
       }
     }
   }

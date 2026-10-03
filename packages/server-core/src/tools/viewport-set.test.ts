@@ -55,7 +55,6 @@ describe('wb_viewport_set tool', () => {
       documentId: DOCUMENT_ID,
       mode: 'move',
       elementIds: ['a'],
-      animate: false,
       zoom: 1.5,
     })
 
@@ -69,7 +68,6 @@ describe('wb_viewport_set tool', () => {
       documentId: DOCUMENT_ID,
       mode: 'move',
       elementIds: ['a'],
-      animate: false,
       zoom: 1.5,
     })
   })
@@ -116,5 +114,25 @@ describe('wb_viewport_set tool', () => {
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
     ).rejects.toMatchObject({ name: 'WorkspaceDocumentNotFoundError' })
+  })
+
+  test('refuses a markdown document by name rather than answering delivered:false', async () => {
+    // delivered:false means "no browser is open", so a caller told that about a
+    // document with no viewport would wait for a browser that cannot help.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      path: 'note',
+      kind: 'markdown',
+    })
+    const tool = createViewportSetTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
+    ).rejects.toThrow(`Document ${DOCUMENT_ID} is a markdown document`)
   })
 })

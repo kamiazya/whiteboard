@@ -267,11 +267,9 @@ checked?" still has two answers depending on the rule.
 ## Repo-policy guards live here, not under the package they were written beside
 
 Guards over files that belong to no package — workflows, the Dockerfile, root
-manifests, docs, the always-on rule corpus, `apps/web`'s source — used to sit
-in `packages/mcp-server/src/server/` (and its `release/`), because that is
-where the first one was written. They ran only when `mcp-node` did, so a change
-to anything else never ran them, and they were absent from the pre-push hook.
-This project is what pre-push and CI's `test-shared` run on every change;
+manifests, docs, the always-on rule corpus, `apps/web`'s source — belong in
+this project, which pre-push and CI's `test-shared` run on every change; a
+guard filed under `mcp-server` ran only when `mcp-node` did.
 `file-size-budget.test.ts` records the same argument for the size ledgers.
 
 **The rule for where one goes**: it reads repo-root files or other packages'
@@ -316,17 +314,13 @@ no exemption: the stdio root, which does compose its own deps, is
 and `server/mcp/server.ts`, the McpServer factory, takes the deps it is handed.
 
 It reads import specifiers from the AST (`collectRelativeImportEdges`) and
-judges them by where they RESOLVE, not by how they are spelled. It was the last
-text-regex scan of the adapter trees: `from '../../di/'` missed a side-effect
-`import '../../di/x.js'`, a double-quoted or template `import()` and a
-`require`, and read a commented-out import as a violation — each planted and
-measured before the rewrite.
+judges them by where they RESOLVE, not by how they are spelled: a text regex
+missed a side-effect import, a template `import()` and a `require`, and read a
+commented-out import as a violation.
 
-**What an adapter file IS is `adapter-files.ts`, once.** The mechanic check, the
-process-global check, the route-portability ledger and this check each carried
-a copy of `ADAPTER_DIRS` and the predicate, and the copies had diverged (this one
-skipped `_test-helpers.ts` only, the rest every `_test-*`). A directory added to
-one was a blind spot in the other three.
+**What an adapter file IS is `adapter-files.ts`, once.** Four checks each
+carried a copy of `ADAPTER_DIRS` and the predicate, and the copies had
+diverged; a directory added to one was a blind spot in the other three.
 
 ## `adapter-mechanic-check.ts` and its lists
 
@@ -362,11 +356,9 @@ translation an adapter is entitled to, and is not matched. A `_test-*` helper
 under an adapter tree is scaffolding, not an adapter, and is skipped.
 
 **A mechanic under `store/` is named by its FULL path, at whatever depth**, so
-the database layer reads as `db/<module>`. It used to be invisible: the matcher
-read a single path segment, so every `store/db/**` import from an adapter
-passed silently. That was a blind spot rather than a decision, and it read as
-coverage until someone measured it — four such edges existed when the regex was
-widened, all under `mcp/`. The depth is unbounded on purpose: `store/db/` is
+the database layer reads as `db/<module>`. A matcher reading one segment let
+every `store/db/**` import pass silently (four edges, all under `mcp/`, when it
+was widened). The depth is unbounded on purpose: `store/db/` is
 how deep the tree happens to go today, not a property of it, and a matcher
 enumerating the depths it has seen is the same blind spot one directory
 further down.
@@ -394,12 +386,9 @@ allowlist line, which is the ordinary way a list grows. Measured: a genuine
 assertions, and the list went 37 -> 36 -> 35 -> 36 -> 40 in a week while the
 rule and the test's own comment both said it could only shrink. Adding an edge
 now fails until someone raises the ceiling deliberately, and paying one off
-fails until someone lowers it. ADR-0018 is **Accepted** (2026-08-31) and
-carried the burn-down order, and that scheduled burn-down is **COMPLETE**
-(2026-09-02): `restore.ts`, `live-doc.ts`, `workspace-document.ts` and
-the since-deleted websocket route were all translation-only over the `LiveDocuments` /
-`WorkspaceDocuments` seams. The edges left belong to the unscheduled
-adapters; paying one off still lowers the ceiling the same way.
+fails until someone lowers it. ADR-0018's scheduled burn-down is complete;
+the edges left belong to the unscheduled adapters, and paying one off lowers
+the ceiling the same way.
 
 `corrupt-stored-data` is excluded and says why: an error taxonomy an adapter
 reads to pick a status code is translation, which is an adapter's job, and
@@ -488,8 +477,9 @@ up as an unlisted portable route.
 A sibling of the mechanic check over the adapter trees and the wiring beside
 them (`server/routes/**`, `mcp/**`, `export/**`, `search/**`, plus `app.ts`,
 `shared-background-work.ts` and `workspace-handle.ts`; tests and `_test-*`
-scaffolding skipped): it bans `getDataDir(`
-and `SELF_HOST_TENANT_ID`. The first is a process global and the second the one
+scaffolding skipped): it bans `getDataDir` and `SELF_HOST_TENANT_ID`, matched
+as USES through `countNamedUses` (about 500 reads found by name, none by
+regex), so an alias or a bracket access cannot walk past it. The first is a process global and the second the one
 tenant a self-hosted keeper has, so a route reading either decides inside
 itself which directory and which tenant it serves. `createApp` takes a
 `dataLayout` (`tenant/data-layout-seam.ts`, built by `bootSelfHostDeps` for all
@@ -504,9 +494,8 @@ joins directory names — which the mechanic scan would count.
 that crashes leaves a sandbox copy of the source under `packages/*/tmp`, which
 failed two one-place guards until the walk stopped reading it; the size
 ledgers' `EXCLUDED_DIR_SEGMENTS` is a different list, over `src` only).
-Comments and string bodies are stripped before matching (`source-scan.ts`'s
-`stripCommentsAndStrings`), so prose naming `getDataDir()` is not a read. The
-ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
+Comments and string bodies are stripped before matching, so prose naming
+`getDataDir()` is not a read. The ledger lives in the test, as `adapter-di-import-check.test.ts`'s does: guarded
 from both sides, size pinned, every entry carrying its reason. Its ledger is
 empty: the stdio root's `getDataDir()` read lives in `server/stdio-root.ts`, a
 composition root outside the scanned trees, and the export measurer and
@@ -537,12 +526,10 @@ not reaching for a mechanic.
 
 No non-test, non-bench, non-`_test-*`, non-`test-utils/` file under
 `packages/*/src`, `apps/*/src` or `tools/*/src` imports a specifier with a
-`test-utils` segment or a basename ending `-test-utils` (a helper named that
-way shipped under `spatial-editor/` and imported Testing Library while nothing
-read it as test code): those barrels re-export vitest-importing suites, and the
-built daemon bundle once carried `class InMemoryDocumentStore` because the
-production container defaulted to the in-memory module. Two allowlist entries,
-each with a reason, guarded from both sides.
+`test-utils` segment or a basename ending `-test-utils`: those barrels
+re-export vitest-importing suites, and a built daemon bundle has carried an
+in-memory store that way. Two allowlist entries, each with a reason, guarded
+from both sides.
 
 The same test also rejects a production import of a `_test-*` basename (a
 type-only edge is erased and allowed) and runs the `test-framework-import`
@@ -572,8 +559,8 @@ fails the count test rather than silently reporting everything as registered.
 
 ## `brand-signature.test.ts`
 
-BRAND.md says "Every brand surface renders this exact path" and, until this
-scan, nothing checked it. The mark is copied into thirteen places across both
+BRAND.md says "Every brand surface renders this exact path" and nothing
+checked it. The mark is copied into thirteen places across both
 composition roots, two packages and `docs/` — a React component, five
 standalone SVGs, two PNG generators, the widget's inline splash, a plugin's
 registered geometry, and one prose comment quoting it — and none was pinned
@@ -703,13 +690,27 @@ through `countNamedUses` (`named-use-scan.ts`), never a regex on its text, so
 an alias or a bracket access cannot walk past it. A permission list
 (`MECHANICS_NOT_SCANNED`, `MECHANIC_DIRS`, a vocabulary `exempt` array) is
 guarded from both sides. Host reach counts a storage driver (`kysely`,
-`libsql`, `@libsql/*`).
+`libsql`, `@libsql/*`) and `node:process`: `process.env` reached through any
+binding of `process`, a destructured `{ env }`, a string key,
+`globalThis.process` or `env` imported from `node:process`. A nested
+destructure or a parameter default is not seen.
+
+`stripCommentsAndStrings` (`source-scan.ts`) is read off the TypeScript
+parser, not a regex or a bare scanner: a scanner has no grammar, so one
+interpolated template flipped every later backtick and a quote inside a regex
+literal opened a string. It takes the `fileName` to pick the grammar (`.tsx`
+reads `<T>x` as JSX) and is memoised per (file, source), because the parse
+costs about 45 s over the tree under load against 1.9 s for the regex, and
+every one-place guard calls it. `source-scan.test.ts` holds it on planted
+cases, never on an oracle built from the code it judges.
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 
 `scan-roots.ts` owns `REPO_ROOT`, `workspaceDirs()` (every `packages/*`, `apps/*`
 and `tools/*` directory with a manifest — three guards kept their own copy), the
-size ledgers' `SCAN_ROOTS`, their `EXCLUDED_DIR_SEGMENTS` and the one
+size ledgers' `SCAN_ROOTS`, their `EXCLUDED_DIR_SEGMENTS` (full repo-relative
+paths matched from the start, each of which must exist, so a moved directory
+fails rather than silently un-excluding itself) and the one
 `walk(dir, { include, skip })`; a scan
 passes its FILTER and gets the traversal. Two of its choices are measured, not
 tidy: `skip` is judged before the entry is stat'ed, so it reaches FILES (a

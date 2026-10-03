@@ -4,7 +4,7 @@ import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 /**
  * A node's label never wraps — one line is what makes a label a label — so
@@ -62,13 +62,13 @@ describe('label truncation', () => {
     // Inline code is never SPLIT — an interior space in a code span is not a
     // word boundary — which is why wrapping alone could not keep it in the
     // box. Cutting it is the remaining half.
-    const scene = layoutMdastBlocks(
+    const scene = typesetMdastBlocks(
       {
         type: 'root',
         children: [
           {
             type: 'paragraph',
-            children: [{ type: 'inlineCode', value: 'layoutMdastBlocks(root, options, andMore)' }],
+            children: [{ type: 'inlineCode', value: 'typesetMdastBlocks(root, options, andMore)' }],
           },
         ],
       },

@@ -46,7 +46,7 @@ function declarations(): { readonly files: number; readonly found: readonly stri
     .filter((file) => !isTestPath(file))
   const found: string[] = []
   for (const file of files) {
-    const code = stripCommentsAndStrings(readFileSync(file, 'utf8'))
+    const code = stripCommentsAndStrings(readFileSync(file, 'utf8'), file)
     for (const match of code.matchAll(FOUR_SIDES)) {
       const named = SIDES.filter((side) => match[0].includes(`'${side}'`))
       if (named.length === SIDES.length) {

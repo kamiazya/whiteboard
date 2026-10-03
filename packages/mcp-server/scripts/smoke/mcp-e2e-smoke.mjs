@@ -1818,11 +1818,11 @@ async function theAnnotationLayerThroughWidgetShapes(ctx) {
   // with no canvas. Run against a MARKDOWN document deliberately — reaching it
   // on the spatial canvas would prove nothing the ops above do not, and the
   // gap it closes is precisely the one wb_canvas_edit cannot cross.
-  const noteForThreads = await createDocument({
+  const { documentId: noteId } = await createDocument({
     path: 'smoke/threaded-note',
     kind: 'markdown',
+    markdown: 'threaded note',
   })
-  const noteId = noteForThreads.documentId
   const opened = await callTool('wb_thread_edit', {
     workspaceId: WORKSPACE_ID,
     documentId: noteId,

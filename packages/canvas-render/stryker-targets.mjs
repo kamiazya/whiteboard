@@ -55,7 +55,7 @@ export const MUTATED = [
   'src/tidy.ts',
   // Split out of `tidy.ts` and covered for that reason: `buildUnits` is
   // where that file's mutation residue moved once its scoreboard existed,
-  // and `membershipOf` is what the idempotence fix reads. Leaving it out
+  // and `mostlyInside` is what the idempotence fix reads. Leaving it out
   // would have SHRUNK what the lane sees while the report kept looking the
   // same, which is the failure this list's pinned counts exist to stop.
   'src/tidy-units.ts',
@@ -82,7 +82,7 @@ export const MUTATED = [
   // Its first report is why `inline-junction.test.ts` exists: 16 of 20
   // survivors came back `judged by 0 tests` and the rest by one, because
   // nothing NAMED the module — the boundary suite reaches it through
-  // `layoutMdastBlocks`, and the wrapping scoreboard that would price it is
+  // `typesetMdastBlocks`, and the wrapping scoreboard that would price it is
   // excluded from the lane for run time. Seven of those survivors were then
   // applied by hand against the direct tests and every one went red, 1 to 9
   // tests each. One — `headCharacter`'s whitespace branch — had killed

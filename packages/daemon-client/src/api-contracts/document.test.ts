@@ -354,7 +354,7 @@ describe('listWorkspacesResponseSchema', () => {
 describe('documentSummarySchema', () => {
   const valid: DocumentSummary = {
     path: 'canvas-1',
-    id: 'doc-nanoid-1',
+    documentId: 'doc-nanoid-1',
     updatedAt: '2024-01-01T00:00:00.000Z',
     kind: 'spatial',
   }
@@ -378,9 +378,11 @@ describe('documentSummarySchema', () => {
   // Absent is still not the same as arbitrary: a value that IS present must
   // be a string, which is the half worth keeping.
   it('leaves updatedAt ABSENT rather than requiring one the port cannot promise', () => {
-    expect(documentSummarySchema.safeParse({ path: 'canvas-1', id: 'x' }).success).toBe(true)
+    expect(documentSummarySchema.safeParse({ path: 'canvas-1', documentId: 'x' }).success).toBe(
+      true,
+    )
     expect(
-      documentSummarySchema.safeParse({ path: 'canvas-1', id: 'x', updatedAt: 7 }).success,
+      documentSummarySchema.safeParse({ path: 'canvas-1', documentId: 'x', updatedAt: 7 }).success,
     ).toBe(false)
   })
 
@@ -394,9 +396,22 @@ describe('documentSummarySchema', () => {
   // sync — required. `kind` follows the port's optional promise (the list
   // route is an adapter over wbDocumentList), though in practice a
   // workspace-tree entry always carries one.
-  it('rejects a summary without an id', () => {
-    const { id: _id, ...withoutId } = valid
+  it('rejects a summary without a documentId', () => {
+    const { documentId: _id, ...withoutId } = valid
     expect(documentSummarySchema.safeParse(withoutId).success).toBe(false)
+  })
+
+  // The port, /api/v1 and wb_document_list all say documentId and name; a
+  // summary spelling them id and displayName is the surface that disagreed.
+  it('refuses the id and displayName spelling the other document surfaces never used', () => {
+    expect(
+      documentSummarySchema.safeParse({ path: 'a', id: 'x', displayName: 'Weekly review' }).success,
+    ).toBe(false)
+  })
+
+  it('carries the name the user chose under name', () => {
+    const parsed = documentSummarySchema.parse({ ...valid, name: 'Weekly review' })
+    expect(parsed.name).toBe('Weekly review')
   })
 
   it('accepts a summary without a kind — the port leaves it optional', () => {
@@ -416,7 +431,7 @@ describe('listDocumentsResponseSchema', () => {
     documents: [
       {
         path: 'canvas-1',
-        id: 'doc-nanoid-1',
+        documentId: 'doc-nanoid-1',
         updatedAt: '2024-01-01T00:00:00.000Z',
         kind: 'spatial',
       },

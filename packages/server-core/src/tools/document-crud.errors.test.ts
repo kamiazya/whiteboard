@@ -1,9 +1,11 @@
 import { WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import {
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundForCallerError,
 } from './document-crud.errors.js'
+import { wbDocumentCreate, wbDocumentResolve } from './document-crud.js'
 
 describe('WorkspaceDocumentNotFoundError', () => {
   it('carries workspaceId and documentId', () => {
@@ -14,6 +16,17 @@ describe('WorkspaceDocumentNotFoundError', () => {
     expect(err.documentId).toBe('canvas-abc')
     expect(err.message).toContain('canvas-abc')
     expect(err.message).toContain('ws-1')
+  })
+
+  // The error is thrown for either kind of document, so its wording cannot
+  // name one: a missing markdown note read "Canvas not found" through MCP.
+  it('refuses a missing markdown document as a document, not as a canvas', async () => {
+    const deps = makeTestDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await wbDocumentCreate(deps, { workspaceId: 'ws-1', path: 'note', kind: 'markdown' })
+    await expect(
+      wbDocumentResolve(deps, { workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
+    ).rejects.toThrow('Document not found: 01ARZ3NDEKTSV4RRFFQ69G5FAV in workspace ws-1')
   })
 })
 

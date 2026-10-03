@@ -1,29 +1,36 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+import { exportRequestSchema } from '../../shared/api-contracts/export.js'
+import { exportSvgRequestSchema } from '../../shared/api-contracts/export-svg.js'
 import {
   defaultExportPath,
   documentMissingBody,
-  parseOptionalJsonBody,
+  parseExportBody,
   resolveRequestedOutputPath,
 } from './export-request.js'
 
-const schema = z.object({ scale: z.number().min(1).optional() }).strict()
+const schema = z
+  .object({ scale: z.number().min(1).optional(), style: spatialRenderStyleSchema.optional() })
+  .strict()
 
-describe('parseOptionalJsonBody', () => {
+// The body read is reached only through `parseExportBody`, so the cases that
+// are about the JSON and the schema go through it with a style-free body.
+describe('parseExportBody: the optional JSON body', () => {
   it('reads an empty body as the schema defaults, since every export option has one', () => {
-    expect(parseOptionalJsonBody('', schema)).toEqual({ body: {} })
+    expect(parseExportBody('', schema)).toEqual({ body: {} })
   })
 
   it('refuses a body that is present and not JSON before the schema sees it', () => {
-    const result = parseOptionalJsonBody('{not json', schema)
+    const result = parseExportBody('{not json', schema)
     expect(result).toEqual({ error: { error: 'invalid_request', message: 'malformed JSON' } })
   })
 
   it('refuses a body the schema rejects, naming the stray key', () => {
-    expect(parseOptionalJsonBody('{"zzz":1}', schema)).toEqual({
+    expect(parseExportBody('{"zzz":1}', schema)).toEqual({
       error: expect.objectContaining({
         error: 'invalid_request',
         message: expect.stringContaining('zzz'),
@@ -32,7 +39,7 @@ describe('parseOptionalJsonBody', () => {
   })
 
   it('answers the parsed body when it fits', () => {
-    expect(parseOptionalJsonBody('{"scale":2}', schema)).toEqual({ body: { scale: 2 } })
+    expect(parseExportBody('{"scale":2}', schema)).toEqual({ body: { scale: 2 } })
   })
 })
 
@@ -88,5 +95,42 @@ describe('the shared bodies', () => {
     const b = defaultExportPath('/exports', 'board', 'png')
     expect(a).toMatch(/^\/exports\/board-.*\.png$/)
     expect(a).not.toBe(b)
+  })
+})
+
+describe.each([
+  ['png', exportRequestSchema],
+  ['svg', exportSvgRequestSchema],
+] as const)('parseExportBody (%s)', (_format, requestSchema) => {
+  it.each([
+    'clean',
+    'document',
+    'visual.sketch',
+    'visual.neon',
+  ])('lets style %s through', (style) => {
+    expect(parseExportBody(JSON.stringify({ style }), requestSchema)).toEqual({ body: { style } })
+  })
+
+  it('lets an empty body through', () => {
+    expect(parseExportBody('', requestSchema)).toEqual({ body: {} })
+  })
+
+  it('refuses a style naming no registered theme, with every registered id', () => {
+    const parsed = parseExportBody(JSON.stringify({ style: 'visual.nope' }), requestSchema)
+    expect(parsed).toMatchObject({
+      error: {
+        error: 'invalid_request',
+        message: expect.stringContaining('"visual.nope"'),
+      },
+    })
+    expect(parsed).toMatchObject({
+      error: { message: expect.stringContaining('visual.sketch, visual.neon') },
+    })
+  })
+
+  it('keeps the body check first: malformed JSON is still malformed JSON', () => {
+    expect(parseExportBody('{nope', requestSchema)).toEqual({
+      error: { error: 'invalid_request', message: 'malformed JSON' },
+    })
   })
 })

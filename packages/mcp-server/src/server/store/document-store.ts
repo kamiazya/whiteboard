@@ -268,7 +268,7 @@ export async function saveDocument(
     const existingDocumentId = existingEntry?.documentId ?? null
     if (existingDocumentId !== null && options.overwrite !== true) {
       throw new ConflictError(
-        `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
+        `Document "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
     // A ULID, not a nanoid: the document index creates documents in this
@@ -670,7 +670,7 @@ async function moveThroughIndex(
     await index.moveDocument({ workspaceId, from: oldPath, to: newPath })
   } catch (err) {
     if (err instanceof DocumentPathTakenError) {
-      throw new ConflictError(`Canvas "${workspaceId}/${err.path}" already exists`)
+      throw new ConflictError(`Document "${workspaceId}/${err.path}" already exists`)
     }
     throw err
   }
@@ -707,17 +707,17 @@ export async function listDocuments(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<
-  Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind' | 'contentDigest'>[]
+  Pick<DocumentSummary, 'path' | 'documentId' | 'name' | 'updatedAt' | 'kind' | 'contentDigest'>[]
 > {
   validateWorkspaceId(workspaceId)
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
   if (workspaceDoc === null) return []
   return readWorkspaceDocuments(workspaceDoc).map((entry) => ({
     path: entry.path,
-    id: entry.documentId,
+    documentId: entry.documentId,
     // Absent rather than null when unset: a document nobody renamed has no
     // name of its own to report.
-    ...(entry.name === undefined ? {} : { displayName: entry.name }),
+    ...(entry.name === undefined ? {} : { name: entry.name }),
     // Every tree write stamps updatedAt and the fold carries the row
     // value; a record written before that stamp existed simply has none,
     // and the epoch is the honest "unknown" for our own pre-release data.

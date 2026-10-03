@@ -138,6 +138,27 @@ describe('wb_document_set tool', () => {
     ).rejects.toThrow()
   })
 
+  test('refuses frontmatter a read could not write back out, naming the key, and keeps what was stored', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    const tool = createDocumentSetTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      markdown: '---\ntype: note\n---\nKept.',
+    })
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        markdown: '---\ntype: note\nweird: .nan\n---\nLost.',
+      }),
+    ).rejects.toThrow(/weird: NaN.*yaml-safe/)
+
+    expect(readMarkdownBody(await loadDoc(store, DOCUMENT_ID))).toBe('Kept.')
+  })
+
   test('rejects when canvas is not in workspace', async () => {
     const store = new FakeDocumentStore()
     const tool = createDocumentSetTool(makeDeps(store))

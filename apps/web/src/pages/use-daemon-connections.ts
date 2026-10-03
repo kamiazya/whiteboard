@@ -15,7 +15,7 @@ export interface UseDaemonConnectionsOptions {
   readonly workspaceId: string | null
   /**
    * Undefined while the list holds no row for the current path — a refresh in
-   * flight, or a document just created. NOT an id-less row: `id` is required
+   * flight, or a document just created. NOT an id-less row: `documentId` is required
    * by `documentSummarySchema`, so a summary without one does not parse and
    * never reaches here. The chip stays disabled rather than querying with a
    * path the route would reject.

@@ -1,12 +1,9 @@
 import type { MiddlewareHandler } from 'hono'
-import { getLogger } from '../log.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
 import { rememberGrant } from '../security/membership-gate.js'
 import { type RouteScopeDecision, resolveApiRouteScope } from '../security/route-scope-registry.js'
-
-const _log = getLogger('daemon-auth')
 
 // Local-daemon mode requires the shared bearer token on every /api/* request,
 // read or write. `/api/runtime/ping` is the sole exception — it is the

@@ -77,9 +77,10 @@ describe('versions API', () => {
   it('saves an auto-version immediately when autoVersionQuietMs=0', async () => {
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
-    const list = clientDoc.getMovableList('elements')
-    const m = list.insertContainer(0, new LoroMap())
-    m.set('id', 'e1')
+    writeSpatialCanvas(clientDoc, {
+      nodes: [textNode({ id: 'e1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
+      edges: [],
+    })
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
 

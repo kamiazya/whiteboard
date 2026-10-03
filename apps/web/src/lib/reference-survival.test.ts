@@ -33,8 +33,8 @@ import { linkEntries } from './link-entries.js'
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 const at = '2026-05-01T12:00:00.000Z'
-const listed = (path: string, displayName: string): DocumentSummary[] => [
-  { id: ID, path, displayName, updatedAt: at, kind: 'markdown' },
+const listed = (path: string, name: string): DocumentSummary[] => [
+  { documentId: ID, path, name, updatedAt: at, kind: 'markdown' },
 ]
 
 /** How many references in `body` resolve against the documents in `docs`. */

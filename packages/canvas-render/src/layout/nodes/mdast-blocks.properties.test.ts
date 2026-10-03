@@ -1,5 +1,5 @@
 /**
- * Properties for `layoutMdastBlocks`.
+ * Properties for `typesetMdastBlocks`.
  *
  * This is the churn hotspot of the package: every markdown-layout fix so
  * far has landed in `layoutPhrasing` or the font constants feeding it —
@@ -37,7 +37,7 @@ import type { Scene, SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
 const FONT_FAMILY = 'Roboto'
@@ -146,7 +146,7 @@ const truncatingRootArb = fc.array(proseArb, { minLength: 1, maxLength: 3 }).map
 )
 
 function layout(root: MdastRoot): Scene {
-  return layoutMdastBlocks(root, { measure, maxWidth: MAX_WIDTH, fontFamily: FONT_FAMILY })
+  return typesetMdastBlocks(root, { measure, maxWidth: MAX_WIDTH, fontFamily: FONT_FAMILY })
 }
 
 /**
@@ -222,7 +222,7 @@ function atomicValues(node: MdastRoot | MdastFlowContent | MdastPhrasingContent)
   return children ? children.flatMap((child) => atomicValues(child)) : []
 }
 
-describe('layoutMdastBlocks properties', () => {
+describe('typesetMdastBlocks properties', () => {
   fcTest.prop([anyRootArb], withDefaults())('never throws, whatever the document', (root) => {
     expect(() => layout(root)).not.toThrow()
   })
@@ -415,7 +415,7 @@ describe('layoutMdastBlocks properties', () => {
               ({ type: 'paragraph', children: [{ type: 'embed', documentId: child }] }) as const,
           ),
         )
-      const scene = layoutMdastBlocks(docOf(rootId), {
+      const scene = typesetMdastBlocks(docOf(rootId), {
         measure,
         maxWidth: MAX_WIDTH,
         fontFamily: FONT_FAMILY,

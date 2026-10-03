@@ -123,7 +123,10 @@ describe('route refusals are written in one place', () => {
       .filter((path) => path !== PAYLOAD_TOO_LARGE_HOME)
       .filter((path) =>
         PAYLOAD_TOO_LARGE.test(
-          stripCommentsAndStrings(readFileSync(join(REPO_ROOT, path), 'utf8')),
+          stripCommentsAndStrings(
+            readFileSync(join(REPO_ROOT, path), 'utf8'),
+            join(REPO_ROOT, path),
+          ),
         ),
       )
     expect(
@@ -135,7 +138,10 @@ describe('route refusals are written in one place', () => {
   it('the helper still names the code it is the home of', () => {
     expect(
       PAYLOAD_TOO_LARGE.test(
-        stripCommentsAndStrings(readFileSync(join(REPO_ROOT, PAYLOAD_TOO_LARGE_HOME), 'utf8')),
+        stripCommentsAndStrings(
+          readFileSync(join(REPO_ROOT, PAYLOAD_TOO_LARGE_HOME), 'utf8'),
+          join(REPO_ROOT, PAYLOAD_TOO_LARGE_HOME),
+        ),
       ),
     ).toBe(true)
   })

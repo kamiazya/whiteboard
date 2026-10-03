@@ -44,7 +44,6 @@ import { serverModePeopleKeeper } from './security/people-keepers.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   createServerModeApiAuthMiddleware,
-  createServerModeAsyncAuthMiddleware,
   createServerModeMcpAuthMiddleware,
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
@@ -86,7 +85,7 @@ function membershipWiring(options: AppOptions): {
   admit: WorkspaceAdmit | undefined
   firstMember: FirstMember | undefined
 } {
-  const members = options.authMode === 'server-mode' ? options.people?.members : undefined
+  const members = options.authMode === 'server-mode' ? options.people.members : undefined
   return members === undefined
     ? { admit: undefined, firstMember: undefined }
     : {
@@ -157,12 +156,7 @@ function mountMcpMiddleware(
     if (plan.ok && plan.kind === 'server-mode') {
       app.use('/mcp', createServerModeOriginMiddleware(plan.allowedOrigins))
     }
-    app.use(
-      '/mcp',
-      options.people === undefined
-        ? createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call'])
-        : createServerModeMcpAuthMiddleware(options.authStrategy, options.people),
-    )
+    app.use('/mcp', createServerModeMcpAuthMiddleware(options.authStrategy, options.people))
   } else {
     app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
   }
@@ -186,7 +180,7 @@ function mountMcpMiddleware(
 // The people store a composition keeps, where it keeps one: what lets a
 // stream remember whose it is, so losing access ends it (ADR-0049).
 function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) {
-  const members = options.authMode === 'server-mode' ? options.people?.members : undefined
+  const members = options.authMode === 'server-mode' ? options.people.members : undefined
   return {
     workspaceDocuments: options.serverDeps.workspaceDocuments,
     ...(admit === undefined ? {} : { admit }),
@@ -196,7 +190,7 @@ function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) 
 
 /** The routers only server mode mounts: a workspace's people as its owners manage them (ADR-0049). */
 function mountServerModeRouters(app: Hono, options: AppOptions): void {
-  if (options.authMode !== 'server-mode' || options.people === undefined) return
+  if (options.authMode !== 'server-mode') return
   const { members, roles, invitations, origin, administration } = options.people
   const keeper = serverModePeopleKeeper({ members, invitations, origin })
   const people = createWorkspacePeopleAdministration({ members, roles })
@@ -276,15 +270,17 @@ export function createApp(options: AppOptions) {
   // Both HTTP roots build their app here, so this is where server-core's
   // fail-open records are given somewhere to go; see `routeServerCoreLogs`.
   routeServerCoreLogs()
-  const membership = membershipWiring(options)
   if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
     throw new Error('local-daemon mode must not receive authStrategy')
   }
 
   const app = new Hono()
 
+  // The config is judged before any other option is read, so a caller with
+  // an invalid server-mode config is refused for that and nothing else.
   const { instanceId, identity, credentialResolver, mcpAuth, serverModeGetStatus } =
     appWiring(options)
+  const membership = membershipWiring(options)
 
   // Tracing middleware first so the request span wraps every other
   // middleware (auth, headers, route handler). When OTel is disabled the

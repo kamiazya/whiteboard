@@ -171,7 +171,7 @@ export async function daemonApiClientMock(
  * rather than setting each answer per case.
  */
 export function daemonWithOneDocument(
-  row: Pick<DocumentSummary, 'path' | 'id' | 'kind'>,
+  row: Pick<DocumentSummary, 'path' | 'documentId' | 'kind'>,
 ): Pick<DaemonApiClientModule, 'listWorkspaces' | 'listDocuments' | 'getDocumentBacklinks'> {
   return {
     listWorkspaces: async () => ({ workspaces: [{ workspaceId: 'w1' }] }),

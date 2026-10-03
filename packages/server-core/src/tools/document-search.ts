@@ -212,22 +212,21 @@ export function createDocumentSearchTool(
        * rank pairs inside the top 20, only 210 distinct scores exist and
        * 190 are shared.
        *
-       * Broken on evidence rather than on identity. The document whose
+       * Broken on evidence rather than on identity: the document whose
        * keywords matched better wins, because those are the words the user
-       * actually typed; between two documents keywords never matched, the
-       * closer meaning wins. Ranks within a list are unique, so this is a
-       * total order with no appeal to a document id — which mattered, since
-       * an id is `encodeTime(Date.now()) + encodeRandom()` and ordering by
-       * it answered "which was written first", with chance deciding inside
-       * a millisecond.
+       * actually typed. Ranks within a list are unique, so a tie in the fused
+       * score with equal lexical ranks means two documents the keywords never
+       * matched, whose score is their semantic rank alone and so cannot tie —
+       * no further tier is needed. That keeps it a total order with no appeal
+       * to a document id, which mattered, since an id is
+       * `encodeTime(Date.now()) + encodeRandom()` and ordering by it answered
+       * "which was written first", with chance deciding inside a millisecond.
        */
       const FAR = Number.MAX_SAFE_INTEGER
       const ordered = [...fused.entries()]
         .sort(
           (a, b) =>
-            b[1] - a[1] ||
-            (lexicalRanks.get(a[0]) ?? FAR) - (lexicalRanks.get(b[0]) ?? FAR) ||
-            (semanticRanks.get(a[0]) ?? FAR) - (semanticRanks.get(b[0]) ?? FAR),
+            b[1] - a[1] || (lexicalRanks.get(a[0]) ?? FAR) - (lexicalRanks.get(b[0]) ?? FAR),
         )
         .map(([documentId]) => documentId)
       return {

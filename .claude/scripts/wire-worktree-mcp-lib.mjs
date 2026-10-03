@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Pure planning logic for auto-wiring a worktree's Claude Code session to
-// its own dev daemon, through that worktree's stdio proxy. Kept free of any
+// the dev daemon, through a checkout's stdio proxy. Kept free of any
 // `claude` CLI invocation or filesystem/network I/O so the classify/plan
 // decisions are unit-testable without ever touching the real, developer-
 // global ~/.claude.json.
@@ -9,10 +9,10 @@ import { dirname, join, resolve, sep } from 'node:path'
 const PROXY_SEGMENTS = ['packages', 'mcp-server', 'scripts', 'dev', 'mcp-http-stdio-proxy.mjs']
 
 /**
- * Derives the desired registration for a worktree: that worktree's own
- * stdio proxy, which reaches the daemon over the socket named in the
- * worktree's own data dir and sends the bearer token itself — so nothing in
- * the registration names a port or carries a secret.
+ * Derives the desired registration for a checkout: that checkout's own
+ * stdio proxy, which reaches the daemon over the socket named in its own
+ * data dir and sends the bearer token itself — so nothing in the
+ * registration names a port or carries a secret.
  *
  * Registers under the tracked entry's own name ("whiteboard") by default,
  * not a distinct one: a `--scope local` registration cleanly shadows the
@@ -32,6 +32,20 @@ export function buildDesiredConfig({ repoRoot, isMainCheckout = false, name = 'w
     command: 'node',
     args: [join(repoRoot, ...PROXY_SEGMENTS)],
   }
+}
+
+/**
+ * The shell command that registers a checkout's stdio proxy under the tracked entry's name —
+ * what CONTRIBUTING.md's first-clone step spells out, derived from the same builders the wiring
+ * uses so the two cannot drift. The path is double-quoted because a checkout path may hold spaces.
+ *
+ * @param {string} checkoutRoot
+ */
+export function buildReRegisterCommand(checkoutRoot) {
+  const addArgs = buildClaudeMcpAddArgs(buildDesiredConfig({ repoRoot: checkoutRoot }))
+  const split = addArgs.indexOf('--') + 1
+  const serverLine = addArgs.slice(split).map((part, i) => (i === 0 ? part : JSON.stringify(part)))
+  return `claude ${[...addArgs.slice(0, split), ...serverLine].join(' ')}`
 }
 
 /**

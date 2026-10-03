@@ -69,7 +69,7 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'agent-note', id: DOCUMENT_ID, updatedAt: '2026-01-01', kind: 'markdown' },
+        { path: 'agent-note', documentId: DOCUMENT_ID, updatedAt: '2026-01-01', kind: 'markdown' },
       ],
     })
   })

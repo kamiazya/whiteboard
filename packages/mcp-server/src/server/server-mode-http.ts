@@ -16,8 +16,7 @@ import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { isDataDirWritable } from './data-dir-writable.js'
 import { startHttpRootTracing } from './observability/root-tracing.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
-import { createAdministratorCheck } from './security/administrator-check.js'
-import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
+import type { CompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AuthenticatorBinding } from './security/member-profile-store.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import {
@@ -28,18 +27,13 @@ import {
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import type { OidcProvider } from './security/sign-in-config.js'
-import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
-import { createUserDeactivation } from './security/user-deactivation.js'
-import { createUserDeletion } from './security/user-deletion.js'
-import { createWorkspaceRoles } from './security/workspace-roles.js'
+import { openServerModePeople } from './server-mode-people.js'
 import { serverModeUiStatus } from './server-mode-web-app.js'
 import {
   createRootShutdown,
   createSharedWorkers,
   sharedBackgroundWork,
 } from './shared-background-work.js'
-import { accountRetirementFor } from './store/db/account-retirement.js'
-import { getDb } from './store/db/index.js'
 import type { TenantDatabase } from './store/db/tenant-database.js'
 import type { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import type { createWorkspaceTail } from './store/workspace-tail.js'
@@ -64,11 +58,6 @@ export interface StartServerModeHttpOptions {
    *  as the bindings a request resolves to. */
   configuredAdministrators?: readonly AuthenticatorBinding[]
 }
-
-// How long a sign-in lasts before the person signs in again. Admission is
-// re-checked at that sign-in (ADR-0046 decision 5); membership is checked on
-// every request regardless, so this bounds only how stale a REFUSAL can be.
-const SIGN_IN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 export interface ServerModeRunning {
   port: number
@@ -199,26 +188,15 @@ async function peopleOptions(
   { signInProviders, configuredAdministrators, publicBaseUrl }: StartServerModeHttpOptions,
   dataDir: string,
 ): Promise<{ people: ServerModePeople; signIn?: SignInRoutesDeps }> {
-  const db = await getDb(dataDir)
-  const deps = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS)
-  const appointments = createTenantAdministratorStore(db)
-  const people: ServerModePeople = {
-    members: deps.members,
-    sessions: deps.sessions,
-    roles: createWorkspaceRoles(db),
-    invitations: deps.invitations,
-    administration: {
-      check: createAdministratorCheck({
-        admins: appointments,
-        members: deps.members,
-        configured: configuredAdministrators ?? [],
-      }),
-      appointments,
-      deactivation: createUserDeactivation(db),
-      deletion: createUserDeletion(db, accountRetirementFor(dataDir)),
-    },
-    origin: new URL(publicBaseUrl).origin,
-  }
+  const {
+    db,
+    people,
+    signIn: deps,
+  } = await openServerModePeople({
+    dataDir,
+    publicBaseUrl,
+    configuredAdministrators,
+  })
   if (signInProviders === undefined || signInProviders.length === 0) return { people }
   return {
     // A bearer from a declared provider's issuer may become a user by that

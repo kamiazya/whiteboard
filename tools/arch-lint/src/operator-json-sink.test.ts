@@ -64,7 +64,9 @@ describe('operator --json output goes through a schema', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
     expect(files.length).toBeGreaterThan(30)
     const sinkCalls = files.flatMap((path) =>
-      [...stripCommentsAndStrings(readFileSync(path, 'utf8')).matchAll(SINK_CALL)].map(() => 1),
+      [...stripCommentsAndStrings(readFileSync(path, 'utf8'), path).matchAll(SINK_CALL)].map(
+        () => 1,
+      ),
     )
     expect(sinkCalls.length).toBeGreaterThan(15)
   })

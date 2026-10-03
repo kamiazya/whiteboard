@@ -1,5 +1,5 @@
 // What the operator commands that write a keeper's people (`grant-member`,
-// `add-user`) share: where they write their answer, and the database they
+// `grant-admin`, `add-user`, `deactivate-user`) share: where they write their answer, and the database they
 // open. stdout is always the outcome as one JSON line; stderr is the words.
 import { resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'

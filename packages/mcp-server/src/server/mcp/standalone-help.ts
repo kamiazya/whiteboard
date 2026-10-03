@@ -64,14 +64,18 @@ export function buildDrawDiagramPrompt(goal: string, diagramType?: string): stri
     ? `Target diagram type: ${diagramType}.`
     : 'Choose the most useful diagram type before drawing.'
 
-  // Names no tool either, and for the same reason: the model reading this can
-  // already see the tool list.
+  // Unlike the instructions above, this names the two tools it routes through:
+  // a person asked for a drawing, and `wb_canvas_edit`'s default mode stores a
+  // batch as a proposal nobody sees, so the one parameter that makes the drawing
+  // appear has to be said here. mcp-guidance-tool-names.test.ts holds every
+  // name to the registered set.
   return [
     `Create a whiteboard diagram for this goal: ${goal}`,
     typeLine,
     'Create or select a spatial document first, then lay out the main entities or',
-    'steps in as few batched edits as the tools allow.',
-    'Read the document back after each major change, and render or export only once',
-    'the structure is stable.',
+    'steps in one batched wb_canvas_edit with mode: "apply" — a default-mode write',
+    'is stored as a proposal that does not change the board. Its result already',
+    'shows the resulting board, so there is no need to read it again; render it with',
+    'wb_scene_render once the structure is stable.',
   ].join('\n')
 }

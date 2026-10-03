@@ -1,7 +1,7 @@
 /**
- * Model-based: any interleaving of issuing, opening, redeeming, revoking and
+ * Model-based: any interleaving of issuing, opening, redeeming and
  * the clock moving must agree with a plain in-memory model of what an
- * invitation link IS — usable only while unexpired, unrevoked and unredeemed,
+ * invitation link IS — usable only while unexpired and unredeemed,
  * and redeemable exactly once. The model states that definition; it is not a
  * copy of the store's query.
  *
@@ -23,7 +23,6 @@ type Op =
   | { readonly kind: 'issue' }
   | { readonly kind: 'open'; readonly pick: number }
   | { readonly kind: 'redeem'; readonly pick: number }
-  | { readonly kind: 'revoke'; readonly pick: number }
   | { readonly kind: 'advance'; readonly ms: number }
   | { readonly kind: 'openAtExpiry'; readonly pick: number }
 
@@ -36,7 +35,6 @@ const opArb: fc.Arbitrary<Op> = fc.oneof(
   { weight: 2, arbitrary: fc.constant({ kind: 'issue' as const }) },
   { weight: 3, arbitrary: fc.record({ kind: fc.constant('open' as const), pick: pickArb }) },
   { weight: 4, arbitrary: fc.record({ kind: fc.constant('redeem' as const), pick: pickArb }) },
-  { weight: 1, arbitrary: fc.record({ kind: fc.constant('revoke' as const), pick: pickArb }) },
   {
     weight: 1,
     arbitrary: fc.record({
@@ -57,11 +55,9 @@ interface Modelled {
   readonly token: string
   readonly expiresAt: number
   redeemed: boolean
-  revoked: boolean
 }
 
 function expected(inv: Modelled, now: number): 'usable' | 'expired' | 'redeemed' | 'unknown' {
-  if (inv.revoked) return 'unknown'
   if (inv.redeemed) return 'redeemed'
   return now >= inv.expiresAt ? 'expired' : 'usable'
 }
@@ -105,7 +101,6 @@ describe('invitation links — against a model', () => {
             token,
             expiresAt: now + TTL,
             redeemed: false,
-            revoked: false,
           })
           continue
         }
@@ -119,16 +114,13 @@ describe('invitation links — against a model', () => {
           // Counted only where the boundary DECIDES the answer: a link read
           // at its expiry that is neither redeemed nor revoked.
           if (now === inv.expiresAt && state === 'expired') reached.expiredAtBoundary++
-        } else if (op.kind === 'redeem') {
+        } else {
           const ok = await store.redeem(inv.id, 'p-x', now)
           expect(ok).toBe(state === 'usable')
           if (ok) {
             inv.redeemed = true
             reached.redeemedOnce++
           } else if (state === 'redeemed') reached.refusedTwice++
-        } else {
-          expect(await store.revoke(inv.id)).toBe(!inv.revoked)
-          inv.revoked = true
         }
       }
     },

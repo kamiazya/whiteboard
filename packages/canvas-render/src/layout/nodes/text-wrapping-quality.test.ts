@@ -5,7 +5,7 @@ import {
   TEXT_WRAPPING_CORPUS,
 } from '../../test-utils/text-wrapping-corpus.js'
 import { sumMetrics, wrappingMetrics } from '../../test-utils/text-wrapping-metrics.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 /**
  * The text-wrapping SCOREBOARD — the instrument, not a regression test.
@@ -32,7 +32,7 @@ function scoreLine(name: string, maxWidth: number): string {
   const entry = TEXT_WRAPPING_CORPUS.find((candidate) => candidate.name === name)
   if (entry === undefined) throw new Error(`no corpus case named ${name}`)
   const counting = createCorpusMeasure()
-  const scene = layoutMdastBlocks(entry.root, {
+  const scene = typesetMdastBlocks(entry.root, {
     measure: counting.measure,
     maxWidth,
     fontFamily: 'Roboto',
@@ -57,7 +57,7 @@ describe('text wrapping scoreboard', () => {
       TEXT_WRAPPING_CORPUS.flatMap((entry) =>
         CORPUS_WIDTHS_PX.map((width) => {
           const counting = createCorpusMeasure()
-          const scene = layoutMdastBlocks(entry.root, {
+          const scene = typesetMdastBlocks(entry.root, {
             measure: counting.measure,
             maxWidth: width,
             fontFamily: 'Roboto',

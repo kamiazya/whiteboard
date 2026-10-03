@@ -398,7 +398,9 @@ stayed green — two affordances aiming at the same pixel.
   and a `description`. Keys and values are checked against
   `TAG_IDENTIFIER_PATTERN`, so a key the library declares is one a tag can
   spell. It is the same shape as `visual.stencils/v0` — a record of records
-  in a document facet at a well-known path — and it deliberately has NO
+  in a document facet at a well-known path, and that path (`TAG_LIBRARY_PATH`,
+  `STENCIL_LIBRARY_PATH`) is declared here beside its reader, imported by both
+  keepers rather than spelled by each — and it deliberately has NO
   registry reader: `readTagLibrary(facets)` answers a `TagLibrary` value
   (keys and values sorted, a malformed facet reading as `{}`), and
   `declaredColourOf(library, tag)` is the one lookup the layout needs. A

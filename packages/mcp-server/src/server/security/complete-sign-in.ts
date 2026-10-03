@@ -83,32 +83,18 @@ type CompleteSignInResult =
   | { readonly ok: false; readonly reason: SignInRefusal }
 
 type ArrivedWith =
-  | { readonly kind: 'link' | 'email'; readonly id: string; readonly workspaceId: string | null }
+  | { readonly kind: 'link'; readonly id: string; readonly workspaceId: string | null }
   | { readonly kind: 'none' }
   | { readonly kind: 'unusable' }
 
 async function arrivedWith(
   deps: CompleteSignInDeps,
-  { provider, claims, invitationToken, now }: CompleteSignInInput,
+  { invitationToken, now }: CompleteSignInInput,
 ): Promise<ArrivedWith> {
-  if (invitationToken !== undefined) {
-    const opened = await deps.invitations.openLink(invitationToken, now)
-    if (!opened.ok) return { kind: 'unusable' }
-    return { kind: 'link', id: opened.invitation.id, workspaceId: opened.invitation.workspaceId }
-  }
-  // Looked up only where the operator opted in, and only for an address the
-  // provider verified; `admit` checks the verification again, on purpose.
-  if (
-    provider.admission.honourEmailInvitations &&
-    claims.email_verified === true &&
-    typeof claims.email === 'string'
-  ) {
-    const invitation = await deps.invitations.openForEmail(claims.email, now)
-    if (invitation !== null) {
-      return { kind: 'email', id: invitation.id, workspaceId: invitation.workspaceId }
-    }
-  }
-  return { kind: 'none' }
+  if (invitationToken === undefined) return { kind: 'none' }
+  const opened = await deps.invitations.openLink(invitationToken, now)
+  if (!opened.ok) return { kind: 'unusable' }
+  return { kind: 'link', id: opened.invitation.id, workspaceId: opened.invitation.workspaceId }
 }
 
 // An existing user has no use for an invitation to the tenant, which stays

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "The daemon's browser-safe client half: the /api contracts the web app parses (Zod, single source of truth), the fetch/WS/SSE document backends, the api-client wrapper, and the shared backend contract test suites. Runs unchanged in the browser; no node:*, no server internals.",
+  "description": "The daemon's browser-safe client half: the /api contracts the web app parses (Zod, single source of truth), the SSE document backend, the api-client wrapper, and the shared backend contract test suites. Runs unchanged in the browser; no node:*, no server internals.",
   "type": "module",
   "exports": {
     "./api-client": {

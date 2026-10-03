@@ -15,8 +15,6 @@
  * it keeps a new loader from being the sixth way.
  *
  * Reading both halves is sometimes right, and the ledger says which and why.
- * The entries marked DEBT are switches with their own default, left in place
- * rather than converted; each one is a candidate to leave this list.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -35,12 +33,6 @@ const READS_BOTH: Readonly<Record<string, string>> = {
     'a write path: it reads the canvas to refuse overwriting a diagram and the body to compare, not to present either',
   'apps/web/src/lib/document-sync-session.ts':
     'the editing session reads the half its own kind has open; it does not choose a kind for a document it did not open',
-  'packages/server-core/src/references/follow-rename.ts':
-    'DEBT: rewrites by `readDocumentKind(doc) === "spatial"`, so a kind-less document is rewritten as prose',
-  'packages/reference-graph/src/extract.ts':
-    'DEBT: `entry.kind ?? readDocumentKind(doc)` with the index row first, so the two orders disagree on a conflict',
-  'apps/web/src/lib/local-files-source.ts':
-    'DEBT: skips a kind-less entry in one walk and reads it as markdown in another',
 }
 
 const files: string[] = []
@@ -50,8 +42,8 @@ const production = files
   .map((path) => ({ path, rel: relative(REPO_ROOT, path).split(sep).join('/') }))
   .filter(({ rel }) => !rel.startsWith(OWNER))
 
-function readsBoth(source: string): boolean {
-  const code = stripCommentsAndStrings(source)
+function readsBoth(source: string, fileName?: string): boolean {
+  const code = stripCommentsAndStrings(source, fileName)
   return READS_CANVAS.test(code) && READS_BODY.test(code)
 }
 
@@ -80,21 +72,22 @@ describe('a document is read by kind in one place', () => {
 
   it('has no file outside the ledger that reads both halves', () => {
     const readers = production
-      .filter(({ path }) => readsBoth(readFileSync(path, 'utf8')))
+      .filter(({ path }) => readsBoth(readFileSync(path, 'utf8'), path))
       .map(({ rel }) => rel)
     const unledgered = readers.filter((rel) => !(rel in READS_BOTH))
     expect(
       unledgered,
       'choose the half with `readDocumentContent(doc, entryKind)` from loro-adapter, so a kind-less document reads the same way everywhere; if reading both is the point, ledger the file with the reason',
     ).toEqual([])
-  })
+    // Parses every production file, which a loaded machine stretches past the default.
+  }, 180_000)
 
   it('keeps no ledger entry for a file that stopped reading both', () => {
     const stale = Object.keys(READS_BOTH).filter((rel) => {
       const hit = production.find((file) => file.rel === rel)
-      return hit === undefined || !readsBoth(readFileSync(hit.path, 'utf8'))
+      return hit === undefined || !readsBoth(readFileSync(hit.path, 'utf8'), hit.path)
     })
     expect(stale, 'delete the entry; the file no longer reads both halves').toEqual([])
-    expect(Object.keys(READS_BOTH)).toHaveLength(6)
+    expect(Object.keys(READS_BOTH)).toHaveLength(3)
   })
 })

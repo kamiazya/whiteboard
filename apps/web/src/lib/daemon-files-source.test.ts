@@ -93,12 +93,17 @@ describe('createDaemonFilesSource shadowed mapping', () => {
             documents: [
               {
                 path: 'contested',
-                id: 'id-a',
+                documentId: 'id-a',
                 updatedAt: '2026-08-01T00:00:00Z',
                 kind: 'spatial',
                 shadowed: true,
               },
-              { path: 'plain', id: 'id-b', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
+              {
+                path: 'plain',
+                documentId: 'id-b',
+                updatedAt: '2026-08-02T00:00:00Z',
+                kind: 'spatial',
+              },
             ],
           }),
       }),
@@ -119,9 +124,24 @@ describe('createDaemonFilesSource pinned mapping', () => {
         documents: () =>
           jsonResponse({
             documents: [
-              { path: 'alpha', id: 'id-alpha', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
-              { path: 'beta', id: 'id-beta', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
-              { path: 'gamma', id: 'id-gamma', updatedAt: '2026-08-03T00:00:00Z', kind: 'spatial' },
+              {
+                path: 'alpha',
+                documentId: 'id-alpha',
+                updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
+              },
+              {
+                path: 'beta',
+                documentId: 'id-beta',
+                updatedAt: '2026-08-02T00:00:00Z',
+                kind: 'spatial',
+              },
+              {
+                path: 'gamma',
+                documentId: 'id-gamma',
+                updatedAt: '2026-08-03T00:00:00Z',
+                kind: 'spatial',
+              },
             ],
           }),
         names: () => jsonResponse({ documents: {}, pinned: ['gamma', 'beta'] }),
@@ -144,7 +164,12 @@ describe('createDaemonFilesSource pinned mapping', () => {
         documents: () =>
           jsonResponse({
             documents: [
-              { path: 'alpha', id: 'id-alpha', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+              {
+                path: 'alpha',
+                documentId: 'id-alpha',
+                updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
+              },
             ],
           }),
         names: () => jsonResponse({ message: 'boom' }, 500),
@@ -185,13 +210,13 @@ describe('createDaemonFilesSource tags', () => {
             documents: [
               {
                 path: 'tagged',
-                id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+                documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
                 updatedAt: '2026-08-01T00:00:00Z',
                 kind: 'spatial',
               },
               {
                 path: 'plain',
-                id: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+                documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
                 updatedAt: '2026-08-01T00:00:00Z',
                 kind: 'spatial',
               },
@@ -218,7 +243,7 @@ describe('createDaemonFilesSource tags', () => {
             documents: [
               {
                 path: 'tagged',
-                id: 'id-tagged',
+                documentId: 'id-tagged',
                 updatedAt: '2026-08-01T00:00:00Z',
                 kind: 'spatial',
               },
@@ -370,7 +395,7 @@ describe('createDaemonFilesSource carried tags', () => {
             documents: [
               {
                 path: 'board',
-                id: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+                documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
                 updatedAt: '2026-08-01T00:00:00Z',
                 kind: 'spatial',
               },
@@ -554,7 +579,7 @@ describe('createDaemonFilesSource list and trash reads', () => {
             documents: [
               {
                 path: 'notes',
-                id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+                documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
                 updatedAt: '2026-08-01T00:00:00Z',
                 kind: 'markdown',
               },

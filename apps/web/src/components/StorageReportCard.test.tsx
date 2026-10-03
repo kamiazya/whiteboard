@@ -24,6 +24,11 @@ const PAYLOAD = {
   },
 }
 
+// Optimize and the version cleanup share the database row, so a row's button
+// is picked by what it says it does, never by its position.
+const OPTIMIZE_BUTTON = 'button[aria-label="Optimize all documents"]'
+const CLEANUP_VERSIONS_BUTTON = 'button[aria-label="Cleanup sandwiched auto-versions"]'
+
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-05-01T00:00:00Z'))
@@ -111,13 +116,51 @@ describe('StorageReportCard', () => {
     })
     const dbRow = container.querySelector('[data-storage-row="db"]')
     expect(dbRow).not.toBeNull()
-    expect(dbRow!.textContent).toContain('Metadata DB')
+    expect(dbRow!.textContent).toContain('Documents, history and index')
     expect(dbRow!.textContent).toMatch(/1\.0\s*KiB|1024/)
     // Reserved per-row action slot is the OOUI hook for future Optimize.
     expect(container.querySelector('[data-storage-actions="db"]')).not.toBeNull()
   })
 
-  it('exposes Optimize all on the Canvas snapshots row and aggregates across workspaces', async () => {
+  it('describes each row by what the daemon keeps there', async () => {
+    const { container } = render(<StorageReportCard />)
+    const text = (key: string) =>
+      container.querySelector(`[data-storage-row="${key}"]`)?.textContent ?? ''
+
+    // `blobs` is only ever written by deleting a document; documents, deltas
+    // and versions are in the database, and uploaded images are under files.
+    expect(text('blobs')).toContain('Deleted documents')
+    expect(text('blobs')).toContain('Recoverable from trash')
+    expect(text('blobs')).not.toMatch(/snapshot|image/i)
+    expect(text('db')).toContain('Documents, history and index (SQLite)')
+    expect(text('exports')).toContain('PNG / SVG files you exported')
+    expect(text('exports')).not.toContain('JSON')
+  })
+
+  it('offers no Optimize on the deleted-documents row, whose bytes optimize-all never changes', async () => {
+    const { container } = render(<StorageReportCard />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')
+    expect(blobsActions).not.toBeNull()
+    expect(blobsActions!.querySelector('button')).toBeNull()
+    expect(
+      container.querySelector('[data-storage-actions="db"]')?.querySelector(OPTIMIZE_BUTTON),
+    ).not.toBeNull()
+  })
+
+  it('keeps the version cleanup beside Optimize on the database row', async () => {
+    const { container } = render(<StorageReportCard />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    expect(dbActions.querySelector(OPTIMIZE_BUTTON)).not.toBeNull()
+    expect(dbActions.querySelector(CLEANUP_VERSIONS_BUTTON)).not.toBeNull()
+  })
+
+  it('exposes Optimize all on the database row and aggregates across workspaces', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url =
@@ -151,14 +194,15 @@ describe('StorageReportCard', () => {
 
     const { container } = render(<StorageReportCard />)
     await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+      expect(container.querySelector('[data-storage-row="db"]')).not.toBeNull()
     })
 
-    // The Optimize action lives on the Canvas snapshots row — the object
-    // it acts on. Locate it via the reserved actions slot.
-    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')
-    expect(blobsActions).not.toBeNull()
-    const button = blobsActions!.querySelector('button')
+    // The Optimize action lives on the database row — optimize-all compacts
+    // the records there, so that is the row whose bytes it changes. Locate it
+    // via the reserved actions slot.
+    const dbActions = container.querySelector('[data-storage-actions="db"]')
+    expect(dbActions).not.toBeNull()
+    const button = dbActions!.querySelector(OPTIMIZE_BUTTON)
     expect(button).not.toBeNull()
     fireEvent.click(button!)
 
@@ -180,7 +224,7 @@ describe('StorageReportCard', () => {
 
     // Status string lands on the row after the action settles.
     await waitFor(() => {
-      expect(blobsActions!.textContent ?? '').toMatch(/saved|optimal|optimi/i)
+      expect(dbActions!.textContent ?? '').toMatch(/saved|optimal|optimi/i)
     })
   })
 
@@ -305,17 +349,17 @@ describe('StorageReportCard', () => {
 
       const { container, unmount } = render(<StorageReportCard />)
       await waitFor(() => {
-        expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+        expect(container.querySelector('[data-storage-row="db"]')).not.toBeNull()
       })
 
-      const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
-      const button = blobsActions.querySelector('button')!
+      const dbActions = container.querySelector('[data-storage-actions="db"]')!
+      const button = dbActions.querySelector(OPTIMIZE_BUTTON)!
       fireEvent.click(button)
 
       // Wait for optimizeAll to settle — its finally block has now called
       // scheduleStatusClear(), arming a pending STATUS_CLEAR_MS setTimeout.
       await waitFor(() => {
-        expect(blobsActions.textContent ?? '').toMatch(/optimal|saved/i)
+        expect(dbActions.textContent ?? '').toMatch(/optimal|saved/i)
       })
 
       // Unmount while that setTimeout is still pending. This mirrors the
@@ -374,11 +418,11 @@ describe('StorageReportCard', () => {
 
     const { container, unmount } = render(<StorageReportCard />)
     await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+      expect(container.querySelector('[data-storage-row="db"]')).not.toBeNull()
     })
 
-    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
-    fireEvent.click(blobsActions.querySelector('button')!)
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
 
     // Wait for optimizeAll's finally block to arm the STATUS_CLEAR_MS timer
     // via scheduleStatusClear, then capture the exact id it returned — not
@@ -401,7 +445,7 @@ describe('StorageReportCard', () => {
     clearTimeoutSpy.mockRestore()
   })
 
-  it('exposes Cleanup on the Metadata DB row and aggregates sandwiched-auto-version prunes across workspaces', async () => {
+  it('exposes Cleanup on the database row and aggregates sandwiched-auto-version prunes across workspaces', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url =
@@ -427,7 +471,7 @@ describe('StorageReportCard', () => {
     })
 
     const dbActions = container.querySelector('[data-storage-actions="db"]')!
-    fireEvent.click(dbActions.querySelector('button')!)
+    fireEvent.click(dbActions.querySelector(CLEANUP_VERSIONS_BUTTON)!)
 
     await waitFor(() => {
       expect(dbActions.textContent ?? '').toMatch(/Removed\s+3\s+auto-version/i)
@@ -451,14 +495,14 @@ describe('StorageReportCard', () => {
     vi.useRealTimers()
     const { container } = render(<StorageReportCard />)
     await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+      expect(container.querySelector('[data-storage-row="db"]')).not.toBeNull()
     })
 
-    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
-    fireEvent.click(blobsActions.querySelector('button')!)
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
 
     await waitFor(() => {
-      expect(blobsActions.textContent ?? '').toMatch(/Optimize failed/i)
+      expect(dbActions.textContent ?? '').toMatch(/Optimize failed/i)
     })
   })
 
@@ -480,13 +524,13 @@ describe('StorageReportCard', () => {
     vi.useRealTimers()
     const { container } = render(<StorageReportCard />)
     await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+      expect(container.querySelector('[data-storage-row="db"]')).not.toBeNull()
     })
-    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
-    fireEvent.click(blobsActions.querySelector('button')!)
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
 
     await waitFor(() => {
-      expect(blobsActions.textContent ?? '').toMatch(/Optimize failed/i)
+      expect(dbActions.textContent ?? '').toMatch(/Optimize failed/i)
     })
     await expectLoggedFailure('/documents/optimize-all failed its contract')
   })
@@ -546,14 +590,14 @@ describe('StorageReportCard', () => {
     vi.useRealTimers()
     const { container } = render(<StorageReportCard />)
     await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+      expect(container.querySelector('[data-storage-row="db"]')).not.toBeNull()
     })
 
-    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
-    fireEvent.click(blobsActions.querySelector('button')!)
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
 
     await waitFor(() => {
-      expect(blobsActions.textContent ?? '').toMatch(/Saved.*1 workspace failed/i)
+      expect(dbActions.textContent ?? '').toMatch(/Saved.*1 workspace failed/i)
     })
   })
 

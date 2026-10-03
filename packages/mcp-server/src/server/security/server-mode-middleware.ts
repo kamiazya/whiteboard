@@ -222,7 +222,7 @@ export function createServerModeApiAuthMiddleware(
 }
 
 /**
- * Server mode's `/mcp` with people wired: the bearer decides, as before, and
+ * Server mode's `/mcp`: the bearer decides, and
  * the tool calls it carries run as that caller, so `gatedByMembership` can
  * refuse a workspace the caller is not in. MCP clients carry bearers; a
  * browser session is not an MCP credential.
@@ -235,22 +235,6 @@ export function createServerModeMcpAuthMiddleware(
     const resolved = await bearerGrant(c, authStrategy, ['mcp:call'], people)
     if ('refusal' in resolved) return buildServerModeAuthFailResponse(resolved.refusal)
     await runAsMcpCaller({ grant: resolved.grant, members: people.members }, next)
-  }
-}
-
-export function createServerModeAsyncAuthMiddleware(
-  authStrategy: AsyncAuthStrategy,
-  requiredScopes: readonly AuthScope[],
-): MiddlewareHandler {
-  return async (c, next) => {
-    const decision = await authStrategy.authorize({
-      method: c.req.method,
-      path: c.req.path,
-      authorizationHeader: c.req.header('authorization'),
-      requiredScopes,
-    })
-    if (decision.ok) return next()
-    return buildServerModeAuthFailResponse(decision)
   }
 }
 

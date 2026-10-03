@@ -9,13 +9,13 @@ describe('linkEntries', () => {
   // form (a move follows it), and the name labels the link at render time.
   it('never resolves a display name', () => {
     const entries = linkEntries([
-      { path: 'untitled-2', id: ID, displayName: '週次レビュー', kind: 'markdown' },
+      { path: 'untitled-2', documentId: ID, name: '週次レビュー', kind: 'markdown' },
     ])
     expect(entries).toEqual([{ id: ID, name: 'untitled-2' }])
   })
 
   it('offers only the path for a document nobody renamed', () => {
-    const entries = linkEntries([{ path: 'untitled', id: ID, kind: 'spatial' }])
+    const entries = linkEntries([{ path: 'untitled', documentId: ID, kind: 'spatial' }])
     expect(entries).toEqual([{ id: ID, name: 'untitled' }])
   })
 
@@ -23,8 +23,8 @@ describe('linkEntries', () => {
   // path cannot shadow it: the path stays the alias's only owner.
   it('a display name colliding with a path leaves the path resolvable', () => {
     const entries = linkEntries([
-      { path: 'untitled-2', id: ID, kind: 'spatial' },
-      { path: 'notes', id: OTHER, displayName: 'untitled-2', kind: 'spatial' },
+      { path: 'untitled-2', documentId: ID, kind: 'spatial' },
+      { path: 'notes', documentId: OTHER, name: 'untitled-2', kind: 'spatial' },
     ])
     expect(entries.filter((e) => e.name === 'untitled-2')).toEqual([{ id: ID, name: 'untitled-2' }])
   })
@@ -33,8 +33,8 @@ describe('linkEntries', () => {
 describe('linkTitles', () => {
   it('labels by display name, falling back to the path, unknown ids to nothing', () => {
     const titleOf = linkTitles([
-      { path: 'untitled-2', id: ID, displayName: '週次レビュー', kind: 'markdown' },
-      { path: 'notes', id: OTHER, kind: 'spatial' },
+      { path: 'untitled-2', documentId: ID, name: '週次レビュー', kind: 'markdown' },
+      { path: 'notes', documentId: OTHER, kind: 'spatial' },
     ])
     expect(titleOf(ID)).toBe('週次レビュー')
     expect(titleOf(OTHER)).toBe('notes')
@@ -48,8 +48,8 @@ describe('linkTargets', () => {
   it('lists each document once, under its display name when it has one', () => {
     expect(
       linkTargets([
-        { path: 'untitled-2', id: ID, displayName: '週次レビュー', kind: 'markdown' },
-        { path: 'notes', id: OTHER, kind: 'spatial' },
+        { path: 'untitled-2', documentId: ID, name: '週次レビュー', kind: 'markdown' },
+        { path: 'notes', documentId: OTHER, kind: 'spatial' },
       ]),
     ).toEqual([
       { id: ID, path: 'untitled-2', name: '週次レビュー', kind: 'markdown' },
@@ -59,8 +59,8 @@ describe('linkTargets', () => {
 
   it('leaves the open document out of its own link targets', () => {
     const documents = [
-      { path: 'self', id: 'id-self', displayName: 'Self', kind: 'spatial' as const },
-      { path: 'other', id: 'id-other', displayName: 'Other', kind: 'spatial' as const },
+      { path: 'self', documentId: 'id-self', name: 'Self', kind: 'spatial' as const },
+      { path: 'other', documentId: 'id-other', name: 'Other', kind: 'spatial' as const },
     ]
     const targets = linkTargets(documents, { excludeDocumentId: 'id-self' })
     expect(targets.map((t) => t.id)).toEqual(['id-other'])
@@ -87,14 +87,13 @@ describe('fileRefOptions', () => {
 })
 
 describe('a browser-kept row through the same table', () => {
-  // The browser page projects {documentId, name} onto the same shape the
-  // daemon page uses, so one module owns resolution for both keepers. A
-  // browser row's `name` is required, so the fallback arm never fires — the
-  // projection hands it over as the displayName and the label is identical
-  // to what the page used to build inline.
+  // A browser row is already `{documentId, name}`, the shape the daemon page
+  // lists, so one module owns resolution for both keepers without a
+  // projection. A browser row's `name` is required, so the fallback arm never
+  // fires.
   const projected = [
-    { id: ID, path: 'plan/roadmap', displayName: 'Roadmap', kind: 'markdown' as const },
-    { id: OTHER, path: 'untitled-3', displayName: 'untitled-3', kind: 'spatial' as const },
+    { documentId: ID, path: 'plan/roadmap', name: 'Roadmap', kind: 'markdown' as const },
+    { documentId: OTHER, path: 'untitled-3', name: 'untitled-3', kind: 'spatial' as const },
   ]
 
   it('resolves by path, labels by name, excludes the open document', () => {

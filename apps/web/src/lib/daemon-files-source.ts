@@ -100,15 +100,15 @@ async function readListing(
     // the board a chip counted from boxes is about (ADR-0040 decision 3).
     const carriedById = new Map((tagRes?.contents ?? []).map((doc) => [doc.documentId, doc.tags]))
     return res.documents.map((entry) => ({
-      documentId: entry.id,
+      documentId: entry.documentId,
       path: entry.path,
       kind: entry.kind,
-      ...optional('name', entry.displayName),
+      ...optional('name', entry.name),
       ...optional('updatedAt', entry.updatedAt),
       ...optional('contentDigest', entry.contentDigest),
       ...optional('shadowed', entry.shadowed),
-      ...optional('tags', tagsById.get(entry.id)),
-      ...optional('carriedTags', carriedById.get(entry.id)),
+      ...optional('tags', tagsById.get(entry.documentId)),
+      ...optional('carriedTags', carriedById.get(entry.documentId)),
       ...optional('pinOrder', pinIndex.get(entry.path)),
     }))
   } catch (err) {

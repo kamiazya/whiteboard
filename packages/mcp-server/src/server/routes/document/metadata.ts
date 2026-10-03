@@ -11,7 +11,7 @@ import {
 } from '../../store/names-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import { parseWorkspaceHandle } from '../../workspace-handle.js'
-import { handleCorruptStoredData, handleDocumentNotFound, invalidBodyRefusal } from './_shared.js'
+import { firstOwned, invalidBodyRefusal, STORED_DOCUMENT_ANSWERS } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 // User-facing workspace / canvas names.
@@ -37,10 +37,8 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
       const names = await loadWorkspaceNames(workspaceId, scope)
       return c.json(names)
     } catch (err) {
-      const missing = handleDocumentNotFound(err)
-      if (missing) return c.json(missing.body, missing.status)
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
@@ -57,10 +55,8 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
       const updated = await setWorkspaceName(workspaceId, parsed.data.name, scope)
       return c.json(updated)
     } catch (err) {
-      const missing = handleDocumentNotFound(err)
-      if (missing) return c.json(missing.body, missing.status)
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
@@ -74,10 +70,8 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
       const updated = await setDocumentDisplayName(workspaceId, path, parsed.data.name, scope)
       return c.json(updated)
     } catch (err) {
-      const missing = handleDocumentNotFound(err)
-      if (missing) return c.json(missing.body, missing.status)
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
@@ -92,10 +86,8 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
       const updated = await setDocumentPinned(workspaceId, path, parsed.data.pinned, scope)
       return c.json(updated)
     } catch (err) {
-      const missing = handleDocumentNotFound(err)
-      if (missing) return c.json(missing.body, missing.status)
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })

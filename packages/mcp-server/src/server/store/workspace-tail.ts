@@ -49,8 +49,8 @@ export interface WorkspaceTailOptions {
    *  brought up to date — not a fresh copy nobody holds. */
   liveDoc: (workspaceId: string) => Promise<LoroDoc>
   /** Where a caught-up update goes. Wired to the same funnel a local write
-   *  uses, so a remote update reaches websockets and SSE by one path rather
-   *  than two. */
+   *  uses, so a remote update reaches every connected client by one path
+   *  rather than one per transport. */
   emit: (workspaceId: string, update: Uint8Array) => void
   intervalMs: number
 }

@@ -42,81 +42,36 @@ const BUDGETS = [
   },
 ]
 
-// Regression stop at today's measured critical-path size (~97.7 KB), after
-// React.lazy on both canvas pages kept the editor's ~400 KB out of the
-// initial paint and vendor-loro-crdt lost its own manualChunks bucket: that
-// bucket had been accidentally co-locating vite's shared dynamic-import
-// helper with loro's WASM bindings, forcing the entry to eagerly load ~23 KB
-// it never uses on the critical path. ~10% headroom over the measured
-// number, not the aspirational floor.
+// Regression stop on the critical path (entry + every modulepreloaded chunk),
+// set ~10% above the measured size rather than at the aspirational floor: a
+// budget with no headroom is a tripwire on whoever commits next, not a
+// regression stop, so a raise restores that headroom instead of adding one byte.
+// The entry is not thin by choice — react-router, the workspace-address parser
+// and the identity resolver have to be in it, because boot decides which page
+// to lazy-load and which workspace it means before first paint.
 //
-// Raised from 108 KB when history routing landed: react-router has to be in
-// the entry (it decides which page to lazy-load), so its ~16 KB is a real,
-// unavoidable critical-path cost of addressable URLs. Measured 114.0 KB.
-//
-// Raised again from 126 KB when an address started naming its WORKSPACE.
-// Boot resolves which workspace the address means before first paint — that
-// is what guarantees no consumer reads the accessor unresolved — so the route
-// parser and the identity resolver are entry code for the same reason
-// react-router is. Measured 126.0 KB.
-//
-// Two numbers are worth writing down rather than just the new one, because
-// the second is not this change's doing and outlives it:
-//
-//   main   125.7 KB   the branch this was raised from
-//   here   126.0 KB   +335 bytes, against 316 bytes of remaining headroom
-//
-// The budget was already spent. `main` sat at 99.75% of 126 KB, so ANY change
-// adding twenty bytes to the critical path failed this gate — it had stopped
-// being a regression stop and become a tripwire on the next commit, whoever
-// wrote it. The ~10% headroom this file's own rule asks for was gone, and
-// restoring it is the fix; unblocking one PR is the occasion, not the reason.
-//
-// What that headroom does NOT settle is whether 126 KB of critical path is
-// the right size. It has grown 108 -> 114 -> 126 in three raises, each
-// individually justified, which is how a budget stops meaning anything. That
-// is a product call about first paint, and this gate is the wrong place to
-// make it quietly.
-//
-// `measure-critical-path.mjs` is what turns that question from an argument
-// into a number. Measured on one container, 10 runs at CPU x4 / 10 Mbps:
-// LCP 512 ms with a 2% spread, and appending 17.9 KB gzipped to the entry
-// moved it to 600 ms with the spread unchanged. So a metric gate is possible,
-// and two things follow that are worth knowing HERE, where the next person
-// reaches for the budget:
-//
-// - A gate on LCP would be COARSER than this one, not finer: respecting a 2%
-//   band, it detects roughly a 2.5 KB gzipped regression and would have
-//   missed the +335 bytes that occasioned the last raise. Replacing bytes
-//   with LCP trades resolution away.
-// - The two answer different questions, and the drift above is what happens
-//   when one number carries both. Bytes answer "did this change grow the
-//   critical path" — fine, deterministic, and a raise is then just a recorded
-//   fact. LCP answers "is first paint still good" — coarse, absolute, and the
-//   only one of the two that can go red for a change that reorders work
-//   without adding any.
-//
-// Choosing the LCP threshold is the product call this comment already says
-// does not belong in a gate file, so it is not made here either.
-//
-// Raised 138 -> 152 for the same reason as the last raise, and the comment
-// above is why the raise is not +1: at 138 the budget was spent again
-// (measured 137.9 KB locally, 138.1 KB on CI — the gate went red on 0.1 KB),
-// and a budget with no headroom is a tripwire on whoever commits next rather
-// than a regression stop. 152 restores the ~10% this file asks for.
-//
-// What spent it: `manualChunks` now gives lucide-react a chunk of its own.
-// That was not a size decision and was not optional — left unassigned, the
-// icons merged into a chunk carrying loro's WASM top-level await, where
-// rolldown emits them as `let Copy, …` assigned inside the TLA body, so the
-// exports read `undefined` forever. Rendering the document kebab then called
-// createElement(undefined) and React #130 took the whole page to the error
-// screen. Reproduced against a local production build; invisible to every
+// `manualChunks` gives lucide-react a chunk of its own, and that is
+// not a size decision: left unassigned, the icons merge into a chunk carrying
+// loro's WASM top-level await, where rolldown emits them as `let Copy, …`
+// assigned inside the TLA body, so the exports read `undefined` forever.
+// Rendering the document kebab then calls createElement(undefined) and React
+// #130 takes the whole page to the error screen. Invisible to every
 // source-level test and to an unminified build alike.
 //
-// Still not settled here, exactly as above: whether ~138 KB of critical path
-// is the right size. That is the product call about first paint, and it has
-// now been deferred four raises running.
+// Whether this much critical path is the right size is a product call about
+// first paint, and this gate is the wrong place to make it. `measure-critical-path.mjs`
+// turns that question into a number. Measured on one container, 10 runs at
+// CPU x4 / 10 Mbps: LCP 512 ms with a 2% spread, and appending 17.9 KB gzipped
+// to the entry moved it to 600 ms with the spread unchanged. Two things follow
+// for anyone reaching for the budget:
+//
+// - A gate on LCP would be COARSER than this one, not finer: respecting a 2%
+//   band, it detects roughly a 2.5 KB gzipped regression and would miss a
+//   few hundred bytes. Replacing bytes with LCP trades resolution away.
+// - The two answer different questions. Bytes answer "did this change grow
+//   the critical path" — fine, deterministic. LCP answers "is first paint
+//   still good" — coarse, absolute, and the only one of the two that can go
+//   red for a change that reorders work without adding any.
 const CRITICAL_PATH_BUDGET_KB = 152
 
 // Attribute-order-, quote-style-, and case-insensitive: extract each tag

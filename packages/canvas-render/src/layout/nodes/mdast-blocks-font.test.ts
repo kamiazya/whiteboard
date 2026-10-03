@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../../measure.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
 
@@ -106,10 +106,10 @@ function recordingMeasure() {
   return { measure: spy, seen }
 }
 
-describe('layoutMdastBlocks — declared font family matches the measured one', () => {
+describe('typesetMdastBlocks — declared font family matches the measured one', () => {
   it('declares, on every run at every depth, a family that run was measured in', () => {
     const { measure: spy, seen } = recordingMeasure()
-    const scene = layoutMdastBlocks(root, {
+    const scene = typesetMdastBlocks(root, {
       measure: spy,
       maxWidth: 600,
       fontFamily: 'GuardFamily',
@@ -127,7 +127,7 @@ describe('layoutMdastBlocks — declared font family matches the measured one', 
   })
 
   it("uses exactly two families: the caller's for prose, the mono one for code", () => {
-    const scene = layoutMdastBlocks(root, {
+    const scene = typesetMdastBlocks(root, {
       measure,
       maxWidth: 600,
       fontFamily: 'OneFamily',
@@ -161,7 +161,7 @@ describe('measured-vs-declared font SIZE on markdown runs', () => {
       ],
     }
     const runs = collectRuns(
-      layoutMdastBlocks(root, { measure, maxWidth: 400, fontFamily: 'Roboto' }),
+      typesetMdastBlocks(root, { measure, maxWidth: 400, fontFamily: 'Roboto' }),
     )
     const heading = runs.find((run) => run.text === 'Title')
     const body = runs.find((run) => run.text === 'body')
@@ -200,7 +200,7 @@ describe('measured-vs-declared font SIZE on markdown runs', () => {
       ],
     }
     const runs = collectRuns(
-      layoutMdastBlocks(root, { measure, maxWidth: 400, fontFamily: 'Roboto' }),
+      typesetMdastBlocks(root, { measure, maxWidth: 400, fontFamily: 'Roboto' }),
     )
     const texts = runs.map((run) => run.text)
     expect(texts).toContain('\u2022')
@@ -235,7 +235,7 @@ describe('emphasis flags reach the measurer — bold is wider, so it must be mea
       seen.push({ text, weight: font.weight, style: font.style })
       return measure(text, font)
     }
-    layoutMdastBlocks(root({ strong: true }), {
+    typesetMdastBlocks(root({ strong: true }), {
       measure: spy,
       maxWidth: 600,
       fontFamily: 'Test',
@@ -244,7 +244,7 @@ describe('emphasis flags reach the measurer — bold is wider, so it must be mea
     expect(seen.find((s) => s.text === 'plain')?.weight).toBe(400)
 
     seen.length = 0
-    layoutMdastBlocks(root({ emphasis: true }), {
+    typesetMdastBlocks(root({ emphasis: true }), {
       measure: spy,
       maxWidth: 600,
       fontFamily: 'Test',
@@ -262,7 +262,7 @@ describe('emphasis flags reach the measurer — bold is wider, so it must be mea
     // **a *i* b** — the ' b' chunk starts with a boundary space and is
     // walked under { strong: true }; its space ADVANCE must be bold-width,
     // or the gap next to a styled run comes out regular-sized.
-    layoutMdastBlocks(
+    typesetMdastBlocks(
       {
         type: 'root',
         children: [

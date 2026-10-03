@@ -2,7 +2,8 @@ import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { viewportRequestParamsSchema } from '../viewport-request.js'
-import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { DocumentKindMismatchError } from './errors.js'
 
 // The routing keys first, then the shared params by their one declaration —
 // written as a shape spread rather than `.extend`, so the keys a model reads
@@ -50,7 +51,20 @@ export function createViewportSetTool(deps: ServerDeps) {
     inputSchema: viewportSetInputSchema,
     outputSchema: viewportSetOutputSchema,
     async execute(input: ViewportSetInput): Promise<ViewportSetOutput> {
-      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+      const entry = await resolveDocumentInWorkspace(
+        deps.documentIndex,
+        input.workspaceId,
+        input.documentId,
+      )
+      // Only a document KNOWN to be markdown is refused, as its siblings do:
+      // one that records no kind predates them and may be a canvas.
+      if (entry.kind === 'markdown') {
+        throw new DocumentKindMismatchError(
+          input.documentId,
+          entry.kind,
+          'wb_viewport_set moves the view of a spatial canvas, and a markdown document has none.',
+        )
+      }
 
       const notifier = deps.clientNotifier
       if (notifier === undefined) return { documentId: input.documentId, delivered: false }

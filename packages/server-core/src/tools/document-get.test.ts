@@ -1,4 +1,8 @@
-import { setProposedChangeStatus, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  setProposedChangeStatus,
+  writeCoreFacets,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -238,6 +242,47 @@ describe('wb_document_get reads a document in its own format', () => {
     // The reason has to be the one the single-document path gives, or a
     // caller reading it learns less from the batch than from N calls.
     expect(result.failed[0]?.reason).toMatch(/wb_canvas_edit/)
+  })
+
+  it('a document whose frontmatter cannot be written out is reported in failed, with the good one beside it', async () => {
+    // A value YAML cannot carry (`.nan`) can reach the store through a write
+    // that predates the check at write time; one such document must not turn
+    // every batch that names it into a call-level error.
+    const deps = makeDeps()
+    const good = await createDoc(deps, 'markdown')
+    const { documentId: bad } = await wbDocumentCreate(deps, {
+      workspaceId: 'ws',
+      path: 'unwritable',
+      kind: 'markdown',
+    })
+    const doc = await loadOrCreateDocument(deps, 'ws', bad)
+    writeCoreFacets(doc, { type: 'note', facetsRaw: { weird: Number.NaN } })
+    await saveDocumentSnapshot(deps, 'ws', bad, doc)
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [bad, good],
+    })
+
+    expect(result.documents.map((entry) => entry.documentId)).toEqual([good])
+    expect(result.failed.map((entry) => entry.documentId)).toEqual([bad])
+    expect(result.failed[0]?.reason).toContain('weird')
+  })
+
+  it('an id the workspace never held is reported as not found, not as a document that lost its kind', async () => {
+    const deps = makeDeps()
+    await createDoc(deps, 'markdown')
+    const ghost = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+    const result = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [ghost],
+    })
+
+    expect(result.documents).toEqual([])
+    expect(result.failed).toHaveLength(1)
+    expect(result.failed[0]?.reason).toContain(`Document not found: ${ghost}`)
+    expect(result.failed[0]?.reason).not.toContain('records no kind')
   })
 
   it('a kindless doc whose index row resolves to null (wrong workspace) is still refused', async () => {

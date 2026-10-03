@@ -11,6 +11,7 @@ import {
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import {
   bundledPlugins,
+  STENCIL_LIBRARY_PATH,
   VISUAL_STENCILS_KEY,
   VISUAL_TAGS_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
@@ -23,7 +24,6 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createFacetListTool, facetListOutputSchema } from './facet-list.js'
-import { STENCIL_LIBRARY_PATH } from './stencil-library.js'
 import { TAG_LIBRARY_PATH } from './tag-library.js'
 
 const planning = definePlugin({

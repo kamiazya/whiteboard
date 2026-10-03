@@ -16,7 +16,12 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearStaleSocket, daemonSocketPath, prepareSocketDirectory } from './daemon-socket.js'
+import {
+  clearStaleSocket,
+  daemonSocketPath,
+  listenOnSocket,
+  prepareSocketDirectory,
+} from './daemon-socket.js'
 
 let scratch: string
 beforeEach(() => {
@@ -104,5 +109,32 @@ describe('clearStaleSocket', () => {
     } finally {
       await new Promise<void>((resolve) => live.close(() => resolve()))
     }
+  })
+})
+
+describe('listenOnSocket', () => {
+  const ok = () => new Response('ok')
+
+  it('serves on a path that fits and unlinks it on close', async () => {
+    const path = join(scratch, 'whiteboard', 'fits.sock')
+    const listener = await listenOnSocket(ok, path)
+    expect(existsSync(path)).toBe(true)
+    await listener.close()
+    expect(existsSync(path)).toBe(false)
+  })
+
+  // The kernel would otherwise truncate the name at bind and the daemon would
+  // fail later on a path that exists nowhere, with an error about chmod.
+  it('refuses, before making anything, a path longer than a unix socket can name', async () => {
+    const dir = join(scratch, 'x'.repeat(200))
+    const path = join(dir, 'whiteboard', 'long.sock')
+    const refusal = await listenOnSocket(ok, path).then(
+      () => null,
+      (err: unknown) => (err instanceof Error ? err.message : String(err)),
+    )
+    expect(refusal).toMatch(/bytes/)
+    expect(refusal).toMatch(/XDG_RUNTIME_DIR/)
+    expect(refusal).toMatch(/TMPDIR/)
+    expect(existsSync(dir)).toBe(false)
   })
 })

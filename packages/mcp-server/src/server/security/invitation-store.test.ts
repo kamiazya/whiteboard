@@ -1,7 +1,6 @@
 /**
  * ADR-0046 decision 6: an invitation reaches a person as a one-time,
- * expiring link (the default), or as an address a provider must assert
- * verified. It creates a USER for an account and nothing else.
+ * expiring link. It creates a USER for an account and nothing else.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -81,51 +80,9 @@ describe('invitation links', () => {
     expect(await store.openLink('not-a-token', T0)).toEqual({ ok: false, reason: 'unknown' })
   })
 
-  it('refuses a revoked link', async () => {
-    const { token, invitation } = await store.createLink({
-      invitedBy: 'p-ada',
-      now: T0,
-      ttlMs: HOUR,
-    })
-    expect(await store.revoke(invitation.id)).toBe(true)
-    expect(await store.openLink(token, T0 + 1)).toEqual({ ok: false, reason: 'unknown' })
-  })
-
   it('is invisible to another tenant — a link from one tenant opens nothing in another', async () => {
     const { token } = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
     const other = createInvitationStore(tenantDatabase(handle.rawDb, 'tenant-two'))
     expect(await other.openLink(token, T0 + 1)).toEqual({ ok: false, reason: 'unknown' })
-  })
-})
-
-describe('email invitations', () => {
-  it('finds an open invitation by address, case-insensitively', async () => {
-    await store.createForEmail({
-      email: 'Ada@Corp.Example',
-      invitedBy: 'p-bob',
-      now: T0,
-      ttlMs: HOUR,
-    })
-    const found = await store.openForEmail('ada@corp.example', T0 + 1)
-    expect(found?.email).toBe('ada@corp.example')
-    expect(await store.openForEmail('eve@corp.example', T0 + 1)).toBeNull()
-  })
-
-  it('does not find an expired or redeemed one', async () => {
-    const invitation = await store.createForEmail({
-      email: 'ada@corp.example',
-      invitedBy: 'p-bob',
-      now: T0,
-      ttlMs: HOUR,
-    })
-    expect(await store.openForEmail('ada@corp.example', T0 + HOUR)).toBeNull()
-    expect(await store.redeem(invitation.id, 'p-ada', T0 + 1)).toBe(true)
-    expect(await store.openForEmail('ada@corp.example', T0 + 2)).toBeNull()
-  })
-
-  it('refuses an address that is not one', async () => {
-    await expect(
-      store.createForEmail({ email: 'not an address', invitedBy: 'p-bob', now: T0, ttlMs: HOUR }),
-    ).rejects.toThrow()
   })
 })

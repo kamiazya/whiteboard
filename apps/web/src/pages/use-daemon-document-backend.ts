@@ -104,7 +104,7 @@ export function useDaemonDocumentBackend({
   // while the path is absent from the list (a stale URL).
   const workspaceSyncDocumentId = useMemo(() => {
     const entry = documents.find((d) => d.path === path)
-    return entry?.id
+    return entry?.documentId
   }, [documents, path])
 
   // Backend identity is keyed on (workspaceId, path, daemonFetch, sync

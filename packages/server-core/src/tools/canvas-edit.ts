@@ -247,7 +247,6 @@ async function announceEdit(
           documentId: input.documentId,
           mode: 'fit',
           elementIds: touched.nodes,
-          animate: true,
         })
       } catch {
         // best effort

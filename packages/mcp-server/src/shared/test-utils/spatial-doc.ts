@@ -7,9 +7,8 @@
  * a fixture never drifts from what saveDocument actually persists.
  *
  * The legacy 'elements' movable-list shape (see file-gc.test.ts's
- * makeDocWithImage) is retired but still guarded additively by file-gc's
- * collector — keep seeding it directly where a test's whole point is that
- * legacy shape.
+ * makeDocWithImage) is retired and read by nothing — seed it directly only
+ * where a test's whole point is that nothing reads it.
  */
 
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'

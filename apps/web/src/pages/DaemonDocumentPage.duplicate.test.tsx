@@ -56,10 +56,10 @@ const mockSetDisplayName = vi.mocked(daemonApiClient.setDocumentDisplayName)
 
 const SOURCE = {
   path: 'agent-note',
-  id: DOCUMENT_ID,
+  documentId: DOCUMENT_ID,
   updatedAt: '2026-01-01',
   kind: 'markdown' as const,
-  displayName: 'Agent note',
+  name: 'Agent note',
 }
 
 describe('duplicating a daemon-kept document from its own page', () => {
@@ -111,10 +111,10 @@ describe('duplicating a daemon-kept document from its own page', () => {
         SOURCE,
         {
           path: 'agent-note-copy',
-          id: COPY_ID,
+          documentId: COPY_ID,
           updatedAt: '2026-01-02',
           kind: 'markdown',
-          displayName: 'Agent note (copy)',
+          name: 'Agent note (copy)',
         },
       ],
     })

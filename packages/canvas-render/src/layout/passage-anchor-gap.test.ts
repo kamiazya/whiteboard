@@ -18,13 +18,13 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { layoutMdastBlocks } from './nodes/mdast-blocks.js'
+import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import { passageBoxes } from './passage-highlight.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 600, fontFamily: 'sans-serif' }
 
 const runsOf = (children: object[]) =>
-  layoutMdastBlocks(
+  typesetMdastBlocks(
     { type: 'root', children: [{ type: 'paragraph', children }] } as MdastRoot,
     options,
   ).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))

@@ -96,7 +96,9 @@ describe('DaemonDocumentPage comments rail', () => {
     )
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'board', documentId: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
   })
 

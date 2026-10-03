@@ -1,7 +1,7 @@
 /**
  * A fenced block's TEXT has to travel with the panel behind it.
  *
- * `layoutMdastBlocks` lays a body out at its own origin and the composer
+ * `typesetMdastBlocks` lays a body out at its own origin and the composer
  * moves it to the node's position, so every container in the scene graph
  * has to hand its children to that move. `codeBlock` did not: the panel
  * arrived at the node and its runs stayed where the body was typeset, which

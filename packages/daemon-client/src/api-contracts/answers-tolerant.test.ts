@@ -324,7 +324,7 @@ describe('api-contracts: the enums that degrade, degrade', () => {
     const entry = { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'a', kind: 'a-newer-kind' }
     expect(
       listDocumentsResponseSchema.parse({
-        documents: [{ path: 'a', id: 'x', kind: 'a-newer-kind' }],
+        documents: [{ path: 'a', documentId: 'x', kind: 'a-newer-kind' }],
       }).documents[0]?.kind,
     ).toBeUndefined()
     expect(

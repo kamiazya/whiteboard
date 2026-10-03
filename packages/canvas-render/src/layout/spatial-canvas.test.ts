@@ -56,7 +56,7 @@ function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayo
 }
 
 // A tiny fake mdast parser: '#'-prefixed text becomes a heading, everything
-// else becomes a single paragraph — enough to exercise layoutMdastBlocks
+// else becomes a single paragraph — enough to exercise typesetMdastBlocks
 // without depending on codec (a cross-package dependency this
 // package must not take). `__THROW__` simulates a construct outside the
 // caller's accepted subset.

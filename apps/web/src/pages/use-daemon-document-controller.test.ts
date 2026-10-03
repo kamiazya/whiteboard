@@ -32,7 +32,9 @@ describe('useDaemonDocumentController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -48,8 +50,8 @@ describe('useDaemonDocumentController', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'first', id: 'id-first', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'first', documentId: 'id-first', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'second', documentId: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
 
@@ -84,7 +86,7 @@ describe('useDaemonDocumentController', () => {
     })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'explicit', id: 'id-explicit', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'explicit', documentId: 'id-explicit', updatedAt: '2026-01-01', kind: 'spatial' },
       ],
     })
 
@@ -112,7 +114,9 @@ describe('useDaemonDocumentController', () => {
       workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
     })
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>
@@ -128,8 +132,8 @@ describe('useDaemonDocumentController', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'a', id: 'id-a', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'b', id: 'id-b', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'a', documentId: 'id-a', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'b', documentId: 'id-b', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
 
@@ -154,7 +158,7 @@ describe('useDaemonDocumentController', () => {
     })
     mockListDocuments.mockResolvedValueOnce({
       documents: [
-        { path: 'brand-new', id: 'id-brand-new', updatedAt: '2026-01-03', kind: 'spatial' },
+        { path: 'brand-new', documentId: 'id-brand-new', updatedAt: '2026-01-03', kind: 'spatial' },
       ],
     })
 
@@ -210,7 +214,7 @@ describe('useDaemonDocumentController', () => {
 
     mockListDocuments.mockResolvedValueOnce({
       documents: [
-        { path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'untitled', documentId: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' },
       ],
     })
 
@@ -221,7 +225,7 @@ describe('useDaemonDocumentController', () => {
     expect(result.current.createError).toBe('path already exists')
     // The refreshed list now shows the path another client already took.
     expect(result.current.documents).toEqual([
-      { path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' },
+      { path: 'untitled', documentId: 'id-untitled', updatedAt: '2026-01-01', kind: 'spatial' },
     ])
   })
 
@@ -312,7 +316,9 @@ describe('useDaemonDocumentController', () => {
   it('retry() re-resolves after a refusal, loading the workspace once it is admitted', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockRejectedValueOnce(refusal('not_a_member')).mockResolvedValueOnce({
-      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
 
     const { result } = renderHook(() =>

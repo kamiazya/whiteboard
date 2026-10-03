@@ -228,6 +228,25 @@ describe('applying a stencil', () => {
     expect((applyStencil(box({ color: '3' }), 'extra2.quiet', registry) as Node).color).toBe('3')
   })
 
+  it('keeps the facets a box carried that did not come from a stencil, on a first dressing', () => {
+    const owner = { 'acme.owner/v0': { team: 'core' } }
+    const applied = applyStencil(
+      box({ facets: owner } as Partial<Node>),
+      'visual.datastore',
+    ) as Node
+    expect(applied.facets?.['acme.owner/v0']).toEqual({ team: 'core' })
+    expect(applied.facets?.[VISUAL_SHAPE_KEY]).toEqual({ kind: 'cylinder' })
+  })
+
+  it('keeps those facets on a re-dressing while the previous stencil’s own facets go', () => {
+    const owner = { 'acme.owner/v0': { team: 'core' } }
+    const once = applyStencil(box({ facets: owner } as Partial<Node>), 'visual.datastore') as Node
+    const twice = applyStencil(once, 'visual.queue') as Node
+    expect(twice.facets?.['acme.owner/v0']).toEqual({ team: 'core' })
+    expect(twice.facets?.[VISUAL_SHAPE_KEY]).not.toEqual({ kind: 'cylinder' })
+    expect(twice.facets?.[VISUAL_STENCIL_KEY]).toEqual({ stencil: 'visual.queue' })
+  })
+
   it('refuses to write a stencil the registry would refuse, so the record cannot go stale at birth', () => {
     expect(
       bundledFacetRegistry.validateFacetWrite(VISUAL_STENCIL_KEY, { stencil: 'visual.nope' }).ok,

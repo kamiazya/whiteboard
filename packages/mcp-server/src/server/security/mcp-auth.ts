@@ -57,7 +57,7 @@ function admitsMcp(grant: ResolvedGrant): boolean {
  *
  * **Full authority passes; a narrow credential passes iff it carries
  * `mcp:call`** — the same scope server-mode already enforces on this route
- * (`app.ts` mounts `createServerModeAsyncAuthMiddleware(..., ['mcp:call'])`),
+ * (`createServerModeMcpAuthMiddleware` asks the bearer for it),
  * so the two modes agree rather than each having their own rule.
  *
  * A verified credential that this surface will not admit gets **403 without a

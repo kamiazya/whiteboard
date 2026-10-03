@@ -7,7 +7,10 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
+import {
+  WorkspaceDocumentNotFoundError,
+  WorkspaceNotFoundForCallerError,
+} from './document-crud.errors.js'
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
 import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetTool } from './document-set.js'
@@ -366,6 +369,22 @@ function applyOp(ctx: WorkspaceEditContext, op: WorkspaceEditOp): Promise<OpOutc
   return handle(ctx, op)
 }
 
+/**
+ * Refused before the first op rather than inside it: nothing was applied, so a
+ * refusal that says "0 op(s) before it were applied" is noise around the one
+ * thing the caller has to fix. The advice depends on the batch — only a create
+ * can be told to pass `createWorkspace`.
+ */
+async function refuseUnknownWorkspace(deps: ServerDeps, input: WorkspaceEditInput): Promise<void> {
+  if (input.createWorkspace === true) return
+  if ((await deps.documentIndex.resolveWorkspace(input.workspaceId)) !== null) return
+  throw new WorkspaceNotFoundForCallerError(
+    input.workspaceId,
+    input.ops.some((op) => op.op === 'document.create') ? 'create' : 'read',
+    (await deps.knownWorkspaceHandles?.()) ?? [],
+  )
+}
+
 export function createWorkspaceEditTool(deps: ServerDeps) {
   return {
     name: 'wb_workspace_edit' as const,
@@ -375,6 +394,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
     outputSchema: workspaceEditOutputSchema,
     execute: async (rawInput: WorkspaceEditInput): Promise<WorkspaceEditOutput> => {
       const input = workspaceEditInputSchema.parse(rawInput)
+      await refuseUnknownWorkspace(deps, input)
       const set = createDocumentSetTool(deps)
       const results: ResultRow[] = []
       // The batch addresses ONE workspace, and a bootstrapping first op is

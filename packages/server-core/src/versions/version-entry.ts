@@ -124,7 +124,7 @@ export const versionEntrySchema = z.object({
    * out is a descendant of both the state you were on and the one you went
    * back to — a merge. The shape of that is already derivable from the
    * stored frontiers, and the shape is not the part a reader is missing:
-   * `cmpFrontiers` can say two points diverged and rejoined, and can never
+   * Loro's `cmpFrontiers` can say two points diverged and rejoined, and can never
    * say WHY. This is the merge commit's message.
    */
   restoredFrom: z.string().optional(),

@@ -66,7 +66,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // degrades to, and both are pinned by named tests that were
     // mutation-checked by hand (swapping in the document theme fails them
     // with `expected 30 to be 24`). The rest is delegation to
-    // `layoutMdastBlocks`, which the lane already mutates.
+    // `typesetMdastBlocks`, which the lane already mutates.
     //
     // 58 since `layout/nodes/task-checkbox.ts`, and outside the lane for the
     // same shape of reason: it is geometry with no branch worth mutating
@@ -284,9 +284,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // 100 since `finite-box.ts` became the one definition of a box with
     // finite sides, which three SVG leaves and two layout leaves each spelled
     // for themselves. A predicate the painting suites pin at every call.
+    //
+    // 101 since `layout/edges/route-ends.ts`: the record types the router's
+    // two path builders take, so their ten positional parameters cannot be
+    // handed over in the wrong order. Types only, nothing to mutate.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 20,
-      production: 100,
+      production: 101,
     })
   })
 

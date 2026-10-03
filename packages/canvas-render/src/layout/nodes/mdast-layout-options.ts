@@ -1,5 +1,5 @@
 // The vocabulary every markdown layout module shares: what a caller hands
-// `layoutMdastBlocks`, what a renderer answers, the cursor a block advances,
+// `typesetMdastBlocks`, what a renderer answers, the cursor a block advances,
 // and the theme arithmetic each block reads. Below the block modules by
 // position, so the code block, the table and the dispatcher reach for it
 // and never for each other.

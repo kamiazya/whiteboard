@@ -109,13 +109,28 @@ describe('an adapter does not read the process data dir or the self-host tenant'
     // A root chooses the directory once; that is what a root is for.
     writeFileSync(join(fixture, 'http-server.ts'), 'export const r = getDataDir()\n')
 
+    // The spellings a text pattern on `getDataDir(` walks past.
+    writeFileSync(
+      join(fixture, 'routes', 'aliased.ts'),
+      ["import { getDataDir as dd } from '../config.js'", 'export const where = () => dd()'].join(
+        '\n',
+      ),
+    )
+    writeFileSync(
+      join(fixture, 'routes', 'templated.ts'),
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the fixture is source text
+      'export const path = () => `${getDataDir()}/x`\n',
+    )
+
     it('names each read by file and global, and skips prose, tests, helpers and roots', () => {
       expect(findAdapterGlobalReads(fixture)).toEqual([
         'app.ts -> SELF_HOST_TENANT_ID',
         'export/fonts.ts -> getDataDir',
         'mcp/tool.ts -> getDataDir',
+        'routes/aliased.ts -> getDataDir',
         'routes/reads.ts -> SELF_HOST_TENANT_ID',
         'routes/reads.ts -> getDataDir',
+        'routes/templated.ts -> getDataDir',
         'search/model.ts -> getDataDir',
         'shared-background-work.ts -> getDataDir',
       ])

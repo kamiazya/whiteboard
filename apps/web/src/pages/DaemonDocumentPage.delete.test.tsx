@@ -59,19 +59,19 @@ const mockDeleteDocument = vi.mocked(daemonApiClient.deleteDocument)
 
 const SOURCE = {
   path: 'agent-note',
-  id: DOCUMENT_ID,
+  documentId: DOCUMENT_ID,
   updatedAt: '2026-01-01',
   kind: 'markdown' as const,
-  displayName: 'Agent note',
+  name: 'Agent note',
 }
 
 /** What the page has to land on once the document it is showing is gone. */
 const SIBLING = {
   path: 'other-note',
-  id: COPY_ID,
+  documentId: COPY_ID,
   updatedAt: '2026-01-02',
   kind: 'markdown' as const,
-  displayName: 'Other note',
+  name: 'Other note',
 }
 
 describe('deleting a daemon-kept document from its own page', () => {
@@ -194,7 +194,7 @@ describe('deleting a daemon-kept document from its own page', () => {
     // delete the document that ARRIVED — which is what the browser keeper
     // measured before its own reset was written.
     mockListDocuments.mockResolvedValue({
-      documents: [SOURCE, SIBLING, { ...SIBLING, path: 'agent-note-copy', id: COPY_ID }],
+      documents: [SOURCE, SIBLING, { ...SIBLING, path: 'agent-note-copy', documentId: COPY_ID }],
     })
     await act(async () => {
       releaseCopy?.()

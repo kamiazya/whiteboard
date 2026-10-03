@@ -2,7 +2,7 @@ import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { ParagraphBlockNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 /**
  * Line breaking for text with no spaces in it — Japanese, Chinese, a URL, an
@@ -16,7 +16,7 @@ const MAX_WIDTH = 200
 
 function layout(root: MdastRoot, maxWidth = MAX_WIDTH) {
   const counting = createCorpusMeasure()
-  return layoutMdastBlocks(root, {
+  return typesetMdastBlocks(root, {
     measure: counting.measure,
     maxWidth,
     fontFamily: 'Roboto',
@@ -154,7 +154,7 @@ describe('line breaking without spaces', () => {
       children: [
         {
           type: 'paragraph',
-          children: [{ type: 'inlineCode', value: 'layoutMdastBlocks(root, options, andMore)' }],
+          children: [{ type: 'inlineCode', value: 'typesetMdastBlocks(root, options, andMore)' }],
         },
       ],
     })

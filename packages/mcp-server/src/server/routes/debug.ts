@@ -1,4 +1,4 @@
-import { countAliveNodes, countLegacyTombstones } from '@kamiazya/whiteboard-server-core'
+import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
@@ -8,9 +8,7 @@ import type { StoreScope } from '../store/store-scope.js'
 
 type DocumentInfo = {
   path: string
-  totalElements: number
-  visibleElements: number
-  tombstones: number
+  nodeCount: number
   cached: boolean
 }
 
@@ -26,13 +24,9 @@ async function summarizeCanvas(
 ): Promise<DocumentInfo> {
   const cached = peekDoc(workspaceId, path, scope)
   const doc = cached ?? (await loadDocument(workspaceId, path, scope))
-  const visibleElements = countAliveNodes(doc)
-  const tombstones = countLegacyTombstones(doc)
   return {
     path,
-    totalElements: visibleElements + tombstones,
-    visibleElements,
-    tombstones,
+    nodeCount: countAliveNodes(doc),
     cached: cached !== undefined,
   }
 }

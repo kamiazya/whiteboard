@@ -166,10 +166,10 @@ function endpointOf(url: string, method: string): Endpoint {
  * which workspace answered, not about the tree.
  */
 const SEEDED_DOCUMENT = {
-  id: 'doc-1',
+  documentId: 'doc-1',
   path: 'font-check',
   kind: 'spatial',
-  displayName: 'Font check',
+  name: 'Font check',
   updatedAt: '2026-09-10T00:00:00.000Z',
 }
 

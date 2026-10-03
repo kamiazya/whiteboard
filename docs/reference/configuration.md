@@ -183,10 +183,10 @@ A data directory holds, at its top level, what belongs to the keeper rather than
 - `fonts/` — fonts installed through the app
 - `models/` — the semantic-search model weights, once `whiteboard search fetch-model` has downloaded them
 
-Uploaded images and each workspace's stored files sit under the tenant that owns them — on a local daemon there is one:
+A workspace's uploaded images sit under the tenant that owns them — on a local daemon there is one. The documents themselves, their versions and the index are rows in `whiteboard.db`, not files:
 
-- `tenants/<tenantId>/blobs/<first 2 hex of the digest>/<rest>` — images, addressed by content digest
-- `tenants/<tenantId>/workspaces/<workspaceId>/files/<fileId>` — a workspace's stored files
+- `tenants/<tenantId>/workspaces/<workspaceId>/files/<fileId>` — a workspace's uploaded images
+- `tenants/<tenantId>/blobs/<first 2 hex of the digest>/<rest>` — the content of each document deleted from a workspace, kept so the trash can restore it
 
 Files a person asked to have written out (an exported PNG or SVG) land in `<workspaceId>/exports/` at the top of the data directory, not under the tenant. No MCP tool writes files into the tree: `wb_scene_render` and `wb_document_get` answer in the tool result.
 

@@ -40,6 +40,7 @@ import {
 import type { EdgeAnchorPair } from './edge-sides.js'
 import { deriveDefaultSides, ORTHOGONAL_STUB_PX, selfEdgeLoopControlPoints } from './edge-sides.js'
 import { routeOnGrid } from './grid-route.js'
+import type { RouteEnds, RouteObstacles } from './route-ends.js'
 
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
@@ -198,16 +199,13 @@ function slideAlongSide(
  * turn, instead of a diagonal into the stub.
  */
 function routeStraightWithApproach(
-  start: Point,
-  end: Point,
-  fromSide: EdgeSide,
-  toSide: EdgeSide,
-  fromRect: Rect,
-  toRect: Rect,
-  fromDepth: number,
-  toDepth: number,
-  inflated: readonly Rect[],
-  raw: readonly Rect[],
+  {
+    start,
+    end,
+    from: { side: fromSide, rect: fromRect, depth: fromDepth },
+    to: { side: toSide, rect: toRect, depth: toDepth },
+  }: RouteEnds,
+  { inflated, raw }: RouteObstacles,
 ): Point[] {
   const fromSideways = approachesSideways(start, end, fromSide)
   const toSideways = approachesSideways(end, start, toSide)
@@ -399,16 +397,13 @@ function deepenedCorridor(
 }
 
 function routeOrthogonal(
-  startAnchor: Point,
-  end: Point,
-  fromSide: EdgeSide,
-  toSide: EdgeSide,
-  fromRect: Rect,
-  toRect: Rect,
-  fromDepth: number,
-  toDepth: number,
-  inflated: readonly Rect[],
-  raw: readonly Rect[],
+  {
+    start: startAnchor,
+    end,
+    from: { side: fromSide, rect: fromRect, depth: fromDepth },
+    to: { side: toSide, rect: toRect, depth: toDepth },
+  }: RouteEnds,
+  { inflated, raw }: RouteObstacles,
 ): Point[] {
   let start = startAnchor
   // Boxes that touch exactly can put both anchors on the same point — two
@@ -747,6 +742,17 @@ export function routeEdge(
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
   const { obstacles, rawObstacles } = routeObstacles(nodes, edge, start, end, others)
+  const ends: RouteEnds = {
+    start,
+    end,
+    from: {
+      side: fromSide,
+      rect: fromRect,
+      depth: anchors?.fromLaneDepth ?? ORTHOGONAL_STUB_PX,
+    },
+    to: { side: toSide, rect: toRect, depth: anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX },
+  }
+  const obstacleSet: RouteObstacles = { inflated: obstacles, raw: rawObstacles }
 
   return {
     kind: 'edge',
@@ -758,30 +764,8 @@ export function routeEdge(
     // the drawing differs.
     path:
       style === 'straight'
-        ? routeStraightWithApproach(
-            start,
-            end,
-            fromSide,
-            toSide,
-            fromRect,
-            toRect,
-            anchors?.fromLaneDepth ?? ORTHOGONAL_STUB_PX,
-            anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX,
-            obstacles,
-            rawObstacles,
-          )
-        : routeOrthogonal(
-            start,
-            end,
-            fromSide,
-            toSide,
-            fromRect,
-            toRect,
-            anchors?.fromLaneDepth ?? ORTHOGONAL_STUB_PX,
-            anchors?.toLaneDepth ?? ORTHOGONAL_STUB_PX,
-            obstacles,
-            rawObstacles,
-          ),
+        ? routeStraightWithApproach(ends, obstacleSet)
+        : routeOrthogonal(ends, obstacleSet),
     ...(style === 'curved' ? { rounded: true as const } : {}),
     fromSide,
     toSide,

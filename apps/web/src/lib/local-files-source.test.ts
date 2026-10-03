@@ -9,7 +9,9 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -362,7 +364,7 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     ])
   })
 
-  it('reads the tag library the document at `tags` declares, and answers none without one', async () => {
+  it('reads the tag library the document at the tag library path declares, and answers none without one', async () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const store = new LoroStore()
@@ -370,7 +372,7 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     await expect(before.readTagLibrary?.()).resolves.toEqual({})
     const library = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
-      path: 'tags',
+      path: TAG_LIBRARY_PATH,
       kind: 'markdown',
     })
     const doc = new Loro()
@@ -384,14 +386,14 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     })
   })
 
-  it('reads the stencil library the document at `stencils` declares, and answers none without one', async () => {
+  it('reads the stencil library the document at the stencil library path declares, and answers none without one', async () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const store = new LoroStore()
     await expect(createLocalFilesSource().readStencilLibrary?.()).resolves.toEqual({})
     const library = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
-      path: 'stencils',
+      path: STENCIL_LIBRARY_PATH,
       kind: 'markdown',
     })
     const doc = new Loro()
@@ -403,7 +405,225 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
       lakehouse: { displayName: 'Lakehouse', color: '3', facets: {} },
     })
   })
+
+  it('reads a library document whose stored bytes cannot be decoded as no library, not as a failure', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const store = new LoroStore()
+    for (const path of [TAG_LIBRARY_PATH, STENCIL_LIBRARY_PATH]) {
+      const entry = await index.createDocument({
+        workspaceId: getBrowserWorkspaceId(),
+        path,
+        kind: 'markdown',
+      })
+      await store.save(entry.documentId, new Uint8Array([1, 2, 3, 4]))
+    }
+    const source = createLocalFilesSource()
+    await expect(source.readTagLibrary?.()).resolves.toEqual({})
+    await expect(source.readStencilLibrary?.()).resolves.toEqual({})
+    await expectLoggedFailure('startup fold left documents behind')
+  })
 })
+
+describe('createLocalFilesSource tag cache', () => {
+  beforeEach(clearWhiteboardDb)
+
+  /** Two tagged notes in the legacy row plane, whose content reads go through a counting store. */
+  async function twoTaggedNotes() {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const real = new LoroStore()
+    const loads: string[] = []
+    const loro = {
+      save: (id: string, snapshot: Uint8Array) => real.save(id, snapshot),
+      createEmptySnapshot: () => real.createEmptySnapshot(),
+      load: (id: string) => {
+        loads.push(id)
+        return real.load(id)
+      },
+    }
+    const ids: Record<string, string> = {}
+    for (const path of ['one', 'two']) {
+      const entry = await index.createDocument({
+        workspaceId: getBrowserWorkspaceId(),
+        path,
+        kind: 'markdown',
+      })
+      ids[path] = entry.documentId
+    }
+    const write = async (path: string, tags: string[]) => {
+      const doc = new Loro()
+      writeCoreFacets(doc, { type: 'note', tags })
+      await real.save(ids[path] as string, doc.export({ mode: 'snapshot' }))
+    }
+    await write('one', ['q3'])
+    await write('two', ['q4'])
+    const stamps = new Map([
+      [ids.one as string, 'stamp-1'],
+      [ids.two as string, 'stamp-1'],
+    ])
+    const source = createLocalFilesSource({ index, loro, clock: async () => new Map(stamps) })
+    return { source, loads, ids, stamps, write }
+  }
+
+  it('loads each document once, then none while their stamps stand still', async () => {
+    const { source, loads } = await twoTaggedNotes()
+    const first = await source.listDocuments()
+    expect(first.map((entry) => entry.tags)).toEqual([['q3'], ['q4']])
+    // The subject is present: the first listing really did read both.
+    expect(loads).toHaveLength(2)
+
+    loads.length = 0
+    const second = await source.listDocuments()
+    expect(second.map((entry) => entry.tags)).toEqual([['q3'], ['q4']])
+    await source.listTagsInUse?.()
+    expect(loads).toEqual([])
+  })
+
+  it('reads again only the document whose stamp moved', async () => {
+    const { source, loads, ids, stamps, write } = await twoTaggedNotes()
+    await source.listDocuments()
+
+    await write('two', ['q4', 'urgent'])
+    stamps.set(ids.two as string, 'stamp-2')
+    loads.length = 0
+    const entries = await source.listDocuments()
+
+    expect(loads).toEqual([ids.two])
+    expect(entries.find((entry) => entry.path === 'two')?.tags).toEqual(['q4', 'urgent'])
+    expect(entries.find((entry) => entry.path === 'one')?.tags).toEqual(['q3'])
+  })
+
+  it('never holds a document that has no stamp, since nothing says when it changed', async () => {
+    const { source, loads, ids, stamps } = await twoTaggedNotes()
+    stamps.delete(ids.one as string)
+    await source.listDocuments()
+    loads.length = 0
+    await source.listDocuments()
+    expect(loads).toEqual([ids.one])
+  })
+
+  it('reads a document again when its row names a different kind, though its stamp stands', async () => {
+    // A document that records no kind is whatever its row says, so what it
+    // bears depends on the row as well as on the content.
+    const base = new IdbDocumentIndex()
+    await ensureLocalWorkspace(base)
+    const entry = await base.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'shape-shifter',
+      kind: 'spatial',
+    })
+    const store = new LoroStore()
+    const doc = new Loro()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'a', tags: ['health:ok'] }),
+      ],
+      edges: [],
+    })
+    await store.save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    const rowKind: { value: DocumentKind } = { value: 'spatial' }
+    const index = Object.create(base, {
+      listDocuments: {
+        value: async (input: Parameters<typeof base.listDocuments>[0]) =>
+          (await base.listDocuments(input)).map((row) => ({ ...row, kind: rowKind.value })),
+      },
+    }) as IdbDocumentIndex
+    const source = createLocalFilesSource({
+      index,
+      clock: async () => new Map([[entry.documentId, 'stamp-1']]),
+    })
+
+    expect((await source.listDocuments())[0]?.carriedTags).toEqual(['health:ok'])
+    rowKind.value = 'markdown'
+    expect((await source.listDocuments())[0]?.carriedTags).toBeUndefined()
+  })
+
+  it('counts the vocabulary in use from what the listing already read', async () => {
+    const { source, loads } = await twoTaggedNotes()
+    await source.listDocuments()
+    loads.length = 0
+    expect((await source.listTagsInUse?.())?.map((row) => row.tag)).toEqual(['q3', 'q4'])
+    expect(loads).toEqual([])
+  })
+})
+
+describe('createLocalFilesSource over a row that names no kind', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('reads it as a canvas — its carried tags are listed and its text is searched', async () => {
+    // The row of a document written before kinds existed. Whatever the content
+    // holds, `readDocumentContent` says what such a document is, and every walk
+    // in the source has to agree with it rather than each choosing its own.
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'pre-kind',
+      kind: 'spatial',
+    })
+    const doc = new Loro()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({
+          id: 'a',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          text: 'first',
+          tags: ['health:ok'],
+        }),
+        // A markdown read of this document takes only the first text node.
+        textNode({ id: 'b', x: 200, y: 0, width: 100, height: 50, text: 'findable' }),
+      ],
+      edges: [],
+    })
+    await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
+    const kindless = Object.create(index, {
+      listDocuments: {
+        value: async (input: Parameters<typeof index.listDocuments>[0]) =>
+          (await index.listDocuments(input)).map(({ kind: _kind, ...row }) => row),
+      },
+    }) as FoldingBrowserIndex
+    const source = createLocalFilesSource({ index: kindless })
+
+    const [listed] = await source.listDocuments()
+    expect(listed?.kind).toBeUndefined()
+    expect(listed?.carriedTags).toEqual(['health:ok'])
+    expect((await source.searchDocuments('findable')).map((hit) => hit.document.path)).toEqual([
+      'pre-kind',
+    ])
+  })
+})
+
+function boardOf(document: {
+  tags?: readonly string[]
+  nodeTags?: readonly (readonly string[])[]
+  edgeTags?: readonly (readonly string[])[]
+}): SpatialCanvas {
+  const nodes = (document.nodeTags ?? []).map((tags, i) =>
+    textNode({
+      id: `n${i}`,
+      x: i * 200,
+      y: 0,
+      width: 100,
+      height: 50,
+      text: `n${i}`,
+      tags: [...tags],
+    }),
+  )
+  return {
+    ...(document.tags === undefined ? {} : { tags: [...document.tags] }),
+    nodes,
+    edges: (document.edgeTags ?? []).map((tags, i) => ({
+      id: `e${i}`,
+      from: { node: 'n0' },
+      to: { node: 'n1' },
+      tags: [...tags],
+    })),
+  }
+}
 
 describe('createLocalFilesSource conformance', () => {
   beforeEach(clearWhiteboardDb)
@@ -421,8 +641,11 @@ describe('createLocalFilesSource conformance', () => {
       })
       const doc = new Loro()
       if (document.body !== undefined) writeMarkdownBody(doc, document.body)
-      if (document.tags !== undefined)
+      if (document.kind === 'spatial') {
+        writeSpatialCanvas(doc, boardOf(document))
+      } else if (document.tags !== undefined) {
         writeCoreFacets(doc, { type: 'note', tags: [...document.tags] })
+      }
       if (document.facets !== undefined) writeFacets(doc, document.facets as never)
       await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
     }

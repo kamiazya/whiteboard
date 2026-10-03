@@ -374,34 +374,37 @@ describe('parseServerModeEnvConfig — type / enum validation', () => {
     expect(result.code).toBe('server_mode_env.jwt_clock_skew_invalid')
   })
 
-  it('JWKS URI with credentials → jwks_uri_credentials_forbidden', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_JWKS_URI: 'https://user:pass@auth.example.com/.well-known/jwks.json',
-    })
+  it.each([
+    [
+      'a username and a password',
+      'https://user:pass@auth.example.com/.well-known/jwks.json',
+      'jwks_uri_credentials_forbidden',
+    ],
+    [
+      'a username only',
+      'https://user@auth.example.com/.well-known/jwks.json',
+      'jwks_uri_credentials_forbidden',
+    ],
+    [
+      'a password only',
+      'https://:secret@auth.example.com/.well-known/jwks.json',
+      'jwks_uri_credentials_forbidden',
+    ],
+    [
+      'a query',
+      'https://auth.example.com/.well-known/jwks.json?token=secret',
+      'jwks_uri_query_forbidden',
+    ],
+    [
+      'a fragment',
+      'https://auth.example.com/.well-known/jwks.json#section',
+      'jwks_uri_fragment_forbidden',
+    ],
+  ])('JWKS URI with %s → %s', (_label, uri, code) => {
+    const result = parseServerModeEnvConfig({ ...VALID_ENV, WHITEBOARD_SERVER_JWKS_URI: uri })
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.code).toBe('server_mode_env.jwks_uri_credentials_forbidden')
-  })
-
-  it('JWKS URI with query → jwks_uri_query_forbidden', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_JWKS_URI: 'https://auth.example.com/.well-known/jwks.json?token=secret',
-    })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.code).toBe('server_mode_env.jwks_uri_query_forbidden')
-  })
-
-  it('JWKS URI with fragment → jwks_uri_fragment_forbidden', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_JWKS_URI: 'https://auth.example.com/.well-known/jwks.json#section',
-    })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.code).toBe('server_mode_env.jwks_uri_fragment_forbidden')
+    expect(result.code).toBe(`server_mode_env.${code}`)
   })
 
   it('trustedProxy="yes" → trusted_proxy_invalid', () => {

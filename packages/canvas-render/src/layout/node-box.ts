@@ -29,10 +29,9 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import type { ResolvedReference } from '../references/resolved.js'
-import { referenceFor as resolveOneReference } from '../references/seams.js'
 import { markdownTheme } from '../theme/theme-asset.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
-import { type FittedBlocks, fitBlocksToHeight, layoutMdastBlocks } from './nodes/mdast-blocks.js'
+import { type FittedBlocks, fitBlocksToHeight, typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import type {
   EmbeddedCanvasBox,
   EmbeddedCanvasMiniature,
@@ -154,7 +153,7 @@ export function sketchInkFor(
 
 /**
  * A label run in CONTENT-ORIGIN-RELATIVE coordinates, matching what
- * `layoutMdastBlocks` produces. Placement is always the caller's job, via
+ * `typesetMdastBlocks` produces. Placement is always the caller's job, via
  * `placeInNode`. An absolute-coordinate variant here would be applied
  * twice wherever its output also flows through the translation step.
  */
@@ -268,18 +267,6 @@ export function placeAboveNode(node: SpatialNode, content: Scene): readonly Scen
   )
 }
 
-/**
- * The caller's resolution for one reference. The guard itself lives in
- * `references/` — a body's inline image resolves through the same one, and
- * a second copy would be a second answer to "what does a throwing seam do".
- */
-export function referenceFor(
-  ref: string,
-  options: ResolvedLayoutOptions,
-): ResolvedReference | undefined {
-  return resolveOneReference(ref, options.resolveReference)
-}
-
 /** The readable label of a non-text node, or `undefined` when it has none. */
 export function labelOf(
   node: SpatialNode,
@@ -311,7 +298,7 @@ export function labelOf(
  * geometry is the drift class package-canvas-render.md's "one producer per
  * geometry" rule exists to prevent.
  *
- * Truncation is at whole-block granularity: `layoutMdastBlocks` lays top-
+ * Truncation is at whole-block granularity: `typesetMdastBlocks` lays top-
  * level blocks out with strictly increasing bottoms, so the blocks whose
  * bottom fits are exactly a contiguous top prefix.
  *
@@ -365,7 +352,7 @@ export function fitBodyInNode(
   // box" reported the label's height for a small box and the body's for a
   // large one.
   if (options.fitToBox && contentBox(node, options) === undefined) return undefined
-  const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node, options), options))
+  const body = typesetMdastBlocks(root, mdastOptionsFor(contentWidth(node, options), options))
   return fitSceneInNode(body, node, options)
 }
 

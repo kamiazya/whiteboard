@@ -2,7 +2,7 @@ import type { TextQuoteSelector } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { layoutMdastBlocks } from './nodes/mdast-blocks.js'
+import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import { passageBoxes } from './passage-highlight.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 2000, fontFamily: 'sans-serif' }
@@ -12,7 +12,7 @@ const options = { measure: createFakeMeasure(), maxWidth: 2000, fontFamily: 'san
  * passage's character offset times the fake measure's advance per character.
  */
 function runOf(text: string) {
-  const runs = layoutMdastBlocks(
+  const runs = typesetMdastBlocks(
     {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],

@@ -10,8 +10,9 @@ import {
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
-import { IDP, PUBLIC_URL, serverModeSignIn } from './_test-server-mode-harness.js'
+import { IDP, PUBLIC_URL, serverModePeople, serverModeSignIn } from './_test-server-mode-harness.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
+import { DENY_ALL_STRATEGY } from './security/_test-helpers.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
 import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers.js'
 
@@ -231,11 +232,12 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
       allowedOrigins: [PUBLIC_URL],
       serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
-      authStrategy: () => ({ ok: false as const, status: 401 as const, error: 'denied' }),
+      authStrategy: DENY_ALL_STRATEGY,
+      people: serverModePeople(db.db, tmp.dir).people,
       touch: () => {},
       getStatus: () => ({}) as never,
       signIn: serverModeSignIn(db.db, createRelyingParty({ fetch: idp.fetch })),
-    } as never)
+    })
   })
   afterAll(async () => {
     await db.dispose()

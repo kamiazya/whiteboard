@@ -585,9 +585,10 @@ describe('overwrite restore reconciles instead of replacing', () => {
 
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
-    const sourceList = sourceDoc.getMovableList('elements')
-    const sm0 = sourceList.insertContainer(0, new LoroMap())
-    sm0.set('id', 'keep-me')
+    writeSpatialCanvas(sourceDoc, {
+      nodes: [textNode({ id: 'keep-me', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
+      edges: [],
+    })
     sourceDoc.commit()
     await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
@@ -612,9 +613,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     expect(restoreRes.status).toBe(200)
     const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
     expect(restoreBody.documentId).toBe('session1/canvas-new')
-    // The restored doc has one alive legacy element ("keep-me"); the
-    // fixed countAliveNodes reports the real count instead of the
-    // retired countElements(_doc) stub's always-0.
+    // The restored doc has one node ("keep-me").
     expect(restoreBody.elementCount).toBe(1)
   })
 

@@ -130,12 +130,12 @@ describe('acceptTransferredRecord on a landed merge', () => {
           documents: [
             {
               path: 'notes/roadmap',
-              id: DOCUMENT_ID,
+              documentId: DOCUMENT_ID,
               kind: 'markdown',
               updatedAt: 't',
               shadowed: true,
             },
-            { path: 'notes/other', id: 'other', kind: 'markdown', updatedAt: 't' },
+            { path: 'notes/other', documentId: 'other', kind: 'markdown', updatedAt: 't' },
           ],
         }),
     })

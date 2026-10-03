@@ -13,22 +13,21 @@
  *
  * `workspaceMemberships` is a plain DB row, deliberately OUTSIDE the
  * CRDT-synced workspace record (ADR-0019), so a sync merge cannot resurrect a
- * row this store deleted. Revocation (`revokeL1Membership`) is a plain
- * DELETE — no tombstone — because reversing one costs nothing (ADR-0042
- * decision 3).
+ * row that was deleted. This store only adds and reads them: removing a
+ * member is `workspace-roles.ts`'s `remove` (ADR-0049 decision 1, which also
+ * refuses to remove a workspace's last owner), a plain DELETE with no
+ * tombstone because reversing one costs nothing (ADR-0042 decision 3). An
+ * operator whose workspace has lost every owner recovers it with
+ * `whiteboard server grant-member`, which goes through `addMember`.
  *
- * `workspaceMembersOnly` is the one row a revoke NEVER touches (user
+ * `workspaceMembersOnly` is the one row a removal NEVER touches (user
  * decision 2026-09-21): once a workspace has had a member, `membersOnly`
- * stays true even after the last one is removed, so `workspaceAccess` does
- * not fall back to origin trust. See the 0030 migration for why it is its
- * own table rather than a column on `workspaces`.
- *
- * `reopenToOriginTrust` is its ONLY exit, and it is deliberately not
- * reachable from a revoke: a gate that reopened whenever the last member
- * left would be no gate at all. It is barred to the daemon token alone
- * (`route-scope-registry.ts`'s `daemon-token-only`), so the party who can
- * reopen a workspace is whoever owns the data directory — never an origin
- * that has been taken over, and never a paired browser.
+ * stays true even after the last one is removed, so a workspace never falls
+ * back to origin trust by emptying. Nothing clears it. Both composition roots
+ * also close a workspace that never had a member (`membersOnlyByDefault`), so
+ * what the marker still decides there is whether a workspace's creator is
+ * added as its first member (`mcp-caller.ts`). See the 0030 migration for why
+ * it is its own table rather than a column on `workspaces`.
  *
  * FAIL-CLOSED HERE MEANS SCOPE OF CONSULTATION, NOT A PERMISSIVE DEFAULT: a
  * caller never consults `isWorkspaceMember` for an `anonymous` or
@@ -112,44 +111,19 @@ export interface MemberProfileStore {
    *  administrator picks from. */
   listUsers(): Promise<{ id: string; displayName: string; deactivated: boolean }[]>
   addMember(workspaceId: string, profileId: string): Promise<void>
-  revokeL1Membership(
-    workspaceId: string,
-    profileId: string,
-  ): Promise<{ removed: boolean; credentials: { origin: string; credentialId: string }[] }>
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
   /** This user's role in the workspace, or null when they are not a member. */
   membershipRole(workspaceId: string, profileId: string): Promise<MembershipRole | null>
-  /** True once this workspace has ever had a member — never reverts on revoke. */
+  /** True once this workspace has ever had a member — never reverts on removal. */
   membersOnly(workspaceId: string): Promise<boolean>
-  /**
-   * Returns a workspace to ORIGIN TRUST by clearing the `membersOnly`
-   * marker, and answers whether there was one to clear.
-   *
-   * The one operation that undoes what a revoke deliberately leaves
-   * standing (user decision 2026-09-21, ADR-0042 decision 3's escape). It
-   * exists because the gate has no other exit: an operator who removed the
-   * last membership — possibly their own — is otherwise locked out of their
-   * own workspace with no route back but editing the database by hand.
-   *
-   * It does NOT touch `workspaceMemberships`. Reopening widens who may
-   * read; it does not remove the people who already could, and folding
-   * those together would make one call two decisions with the second one
-   * silent.
-   *
-   * A workspace re-closes on its next `addMember`, since the ordinary
-   * membership path re-inserts the marker — so this is a one-shot rather
-   * than a mode a workspace sits in. Nothing records that it happened,
-   * which is the honest limit: there is no audit log here to write to.
-   */
-  reopenToOriginTrust(workspaceId: string): Promise<boolean>
 }
 
 // Inserts the membership row and, on a workspace's FIRST membership ever,
 // its `workspaceMembersOnly` marker — in one transaction so the two can
 // never disagree about whether a workspace has had a member.
 // A workspace's first member is its owner (ADR-0049 decision 1). "First" is
-// read from the memberships themselves, not the members-only marker: reopening
-// clears the marker and keeps the members.
+// read from the memberships themselves, not the members-only marker, which
+// stays set after every member has gone.
 async function insertMembership(db: TenantScoped, workspaceId: string, profileId: string) {
   const now = Date.now()
   await inTenantTransaction(db, async (trx) => {
@@ -171,17 +145,6 @@ async function insertMembership(db: TenantScoped, workspaceId: string, profileId
       .onConflict((oc) => oc.column('workspaceId').doNothing())
       .execute()
   })
-}
-
-// Deletes the membership row only — `workspaceMembersOnly` is never cleared
-// here (see the file header).
-async function deleteMembership(db: TenantScoped, workspaceId: string, profileId: string) {
-  return db
-    .deleteFrom('workspaceMemberships')
-    .where('workspaceId', '=', workspaceId)
-    .where('profileId', '=', profileId)
-    .returning('profileId')
-    .execute()
 }
 
 // `accountBindings` is keeper-wide, so this reads every passkey the account
@@ -352,25 +315,10 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
       await insertMembership(db, workspaceId, profileId)
     },
 
-    async revokeL1Membership(workspaceId, profileId) {
-      const credentials = (await loadProfileWhere(db, 'id', profileId))?.credentials ?? []
-      const deleted = await deleteMembership(db, workspaceId, profileId)
-      return { removed: deleted.length > 0, credentials }
-    },
-
     isWorkspaceMember: async (workspaceId, profileId) =>
       (await roleIn(db, workspaceId, profileId)) === null ? 'not-a-member' : 'member',
 
     membershipRole: (workspaceId, profileId) => roleIn(db, workspaceId, profileId),
-
-    async reopenToOriginTrust(workspaceId) {
-      const deleted = await db
-        .deleteFrom('workspaceMembersOnly')
-        .where('workspaceId', '=', workspaceId)
-        .returning('workspaceId')
-        .execute()
-      return deleted.length > 0
-    },
 
     async membersOnly(workspaceId) {
       const row = await db

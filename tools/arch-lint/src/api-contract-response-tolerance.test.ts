@@ -69,7 +69,7 @@ function declarations(): Declaration[] {
   const found: Declaration[] = []
   for (const path of walkSourceFiles(CONTRACTS_DIR).filter((p) => !isTestPath(p))) {
     if (/\.test-helper\.ts$/.test(path)) continue
-    const code = stripCommentsAndStrings(readFileSync(path, 'utf-8'))
+    const code = stripCommentsAndStrings(readFileSync(path, 'utf-8'), path)
     const starts = [...code.matchAll(/^(?:export )?const (\w+)\b/gm)]
     starts.forEach((match, i) => {
       const end = starts[i + 1]?.index ?? code.length

@@ -20,6 +20,7 @@ import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scen
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
+import { unknownStyleRefusal } from '../render/unknown-style.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 import { carriesATag, workspaceTagLibrary } from './tag-library.js'
@@ -149,6 +150,8 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
+      const refusal = unknownStyleRefusal(input.style)
+      if (refusal !== undefined) throw new Error(refusal)
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       const measurer = await resolveTextMeasurer(deps)
       const { measure } = measurer

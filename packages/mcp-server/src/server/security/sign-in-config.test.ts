@@ -15,12 +15,20 @@ const google = {
 }
 
 describe('signInConfigSchema', () => {
-  it('defaults every provider to invitation-only, email invitations off', () => {
+  it('defaults every provider to invitation-only', () => {
     const config = signInConfigSchema.parse({ providers: [google] })
-    expect(config.providers[0]?.admission).toEqual({
-      createAccounts: false,
-      honourEmailInvitations: false,
+    expect(config.providers[0]?.admission).toEqual({ createAccounts: false })
+  })
+
+  // Nothing creates an invitation addressed to an email, so a config that
+  // still switches the option on must fail at startup naming it rather than
+  // read as a setting that takes effect.
+  it('refuses the retired honourEmailInvitations option, naming it', () => {
+    const result = signInConfigSchema.safeParse({
+      providers: [{ ...google, admission: { honourEmailInvitations: true } }],
     })
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result.error?.issues)).toContain('honourEmailInvitations')
   })
 
   it('accepts several named providers, each with its own rules', () => {
@@ -123,6 +131,17 @@ describe('providerAuthenticator', () => {
 })
 
 // ADR-0046 decision 2: a reverse proxy that has already signed the person in.
+describe('a provider that declares half a client', () => {
+  it.for([
+    ['a client id without its secret', { ...google, clientSecret: undefined }, 'clientSecret'],
+    ['a secret without its client id', { ...google, clientId: undefined }, 'clientId'],
+  ] as const)('names the missing field for %s', ([, provider, missing]) => {
+    const result = signInConfigSchema.safeParse({ providers: [provider] })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.map((i) => i.path.join('.'))).toContain(`providers.0.${missing}`)
+  })
+})
+
 describe('a trusted-header provider', () => {
   const proxy = {
     id: 'corp-proxy',
@@ -170,6 +189,14 @@ describe('a trusted-header provider', () => {
       '::/0',
     ]) {
       expect(parse({ ...proxy, trustedAddresses: [bad] }).success, bad).toBe(false)
+    }
+  })
+
+  // The widest range accepted is /1 and the narrowest a host route: the
+  // bounds themselves are admitted, one step outside either is not.
+  it('accepts /1 and the full-width prefix of each address family', () => {
+    for (const ok of ['10.0.0.0/1', '10.0.0.1/32', '::/1', '::1/128']) {
+      expect(parse({ ...proxy, trustedAddresses: [ok] }).success, ok).toBe(true)
     }
   })
 

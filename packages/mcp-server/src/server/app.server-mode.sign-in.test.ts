@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
+import { isolatedServerModePeople } from './_test-server-mode-harness.js'
 import type { ServerModeAppOptions } from './app.js'
 import { testDataLayout } from './routes/_test-helpers.js'
 import { DENY_ALL_STRATEGY, oidcProviders, resolvedForTest } from './security/_test-helpers.js'
@@ -29,10 +30,15 @@ vi.mock('./config.js', () => ({
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
 
+let people: ServerModeAppOptions['people']
+let disposePeople: () => Promise<void>
+
 beforeAll(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-server-mode-sign-in-'))
+  ;({ people, dispose: disposePeople } = await isolatedServerModePeople(tempDir))
 })
 afterAll(async () => {
+  await disposePeople()
   await rm(tempDir, { recursive: true, force: true })
 })
 
@@ -47,6 +53,7 @@ function makeServerModeOptions(overrides?: Partial<ServerModeAppOptions>): Serve
     serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
     dataLayout: testDataLayout(),
     authStrategy: DENY_ALL_STRATEGY,
+    people,
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')

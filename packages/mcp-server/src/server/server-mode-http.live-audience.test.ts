@@ -85,7 +85,7 @@ describe('server mode — the live audience an agent reaches', () => {
       const created = await call('wb_workspace_edit', {
         workspaceId: 'plans',
         createWorkspace: true,
-        ops: [{ op: 'document.create', path: 'notes', kind: 'markdown', markdown: 'hello' }],
+        ops: [{ op: 'document.create', path: 'board', kind: 'spatial' }],
       })
       expect(created.isError, textOf(created)).toBeFalsy()
       const { workspaceId, results } = created.structuredContent as {
@@ -99,7 +99,7 @@ describe('server mode — the live audience an agent reaches', () => {
       const decoder = new TextDecoder()
       const opened = decoder.decode((await reader.read()).value)
       const { streamId } = JSON.parse(opened.split('data:')[1] ?? '{}') as { streamId: string }
-      const doc = `${workspaceId}/notes`
+      const doc = `${workspaceId}/board`
       const post = (path: string, body: unknown) =>
         toServer(`${baseUrl}/api/sync/${path}`, {
           method: 'POST',

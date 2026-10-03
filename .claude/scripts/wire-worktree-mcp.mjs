@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Auto-wires a git worktree's Claude Code session to its own dev daemon,
-// through the worktree's own stdio proxy (mcp-http-stdio-proxy.mjs, which
-// reaches the daemon over the socket in the worktree's own data dir), so
-// opening a worktree in Claude Code never has to fall back to the tracked
-// .mcp.json's `npx @kamiazya/whiteboard-mcp@latest` stdio entry or the main
-// checkout's daemon.
+// Wires a git worktree's Claude Code session to the dev daemon's stdio proxy
+// (mcp-http-stdio-proxy.mjs, which reaches the daemon over the socket in its own data dir), so
+// opening a worktree in Claude Code does not have to fall back to the tracked .mcp.json's
+// `npx @kamiazya/whiteboard-mcp@latest` stdio entry.
 //
-// Mechanism: `claude mcp add --scope local` under the SAME name as the
-// tracked entry ("whiteboard") writes to ~/.claude.json, keyed by this
-// worktree's absolute path — that local-scope entry cleanly shadows the
-// repo-tracked .mcp.json project-scope entry of the same name for every
-// purpose that matters, with no name collision or guesswork for an agent
-// (verified against the real CLI).
+// Mechanism: `claude mcp add --scope local` under the SAME name as the tracked entry
+// ("whiteboard") writes to ~/.claude.json, and the CLI keys that write by the MAIN checkout —
+// there is one slot per repository, shared by every worktree session. The entry cleanly shadows
+// the repo-tracked .mcp.json project-scope entry of the same name for every purpose that
+// matters, with no name collision or guesswork for an agent (verified against the real CLI).
+// Because the slot is the repository's, an empty one is filled with the MAIN checkout's proxy
+// (ticket documents are written through it, and a worktree's data dir does not outlive the
+// worktree), and a filled one is left alone.
 //
 //   node .claude/scripts/wire-worktree-mcp.mjs [worktreePath]   (default: cwd)
 //   node .claude/scripts/wire-worktree-mcp.mjs --sweep          (remove entries for deleted worktrees)
@@ -29,11 +29,13 @@ import { chmodSync, existsSync, lstatSync, readFileSync, realpathSync, renameSyn
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseScriptArgs } from './script-flags.mjs'
 import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/checkout-kind-lib.mjs'
 import {
   assertNotTrackedSettingsPath,
   buildClaudeMcpAddArgs,
   buildDesiredConfig,
+  buildReRegisterCommand,
   classifyExistingConfig,
   planStaleSweep,
   removeStaleEntriesFromConfig,
@@ -247,8 +249,14 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
     return
   }
 
+  // The slot is the repository's, shared by the main checkout and every worktree session, and
+  // ticket documents are written through it: it must name the one checkout that outlives every
+  // worktree, not a disposable one whose data dir `git worktree remove` deletes.
+  const registration = buildDesiredConfig({ repoRoot: mainRoot })
+  const registrationTarget = [registration.command, ...registration.args].join(' ')
+
   assertNotTrackedSettingsPath(CLAUDE_CONFIG_PATH)
-  const addArgs = buildClaudeMcpAddArgs(desired)
+  const addArgs = buildClaudeMcpAddArgs(registration)
   const result = spawn('claude', addArgs, { cwd: repoRoot })
   if (result.status !== 0) {
     log(
@@ -262,9 +270,12 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
   // CLI that keys by the directory it ran in.
   const effective =
     readExistingEntry(effectiveConfig, mainRoot, desired.name) ?? readExistingEntry(effectiveConfig, repoRoot, desired.name)
-  const verified = verifyPostWrite(effective, desired)
+  const verified = verifyPostWrite(effective, registration)
   if (verified.outcome === 'wired') {
-    log(`[wire-worktree-mcp] wired "${desired.name}" -> \`${target}\``)
+    log(
+      `[wire-worktree-mcp] wired "${desired.name}" -> \`${registrationTarget}\` (the main checkout's proxy: ` +
+        'the CLI keeps one slot per repository, and the main checkout is the one that outlives its worktrees)',
+    )
   } else {
     log(
       `[wire-worktree-mcp] wrote "${desired.name}" but the post-write state does not match what we ` +
@@ -314,14 +325,23 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
   for (const action of actions) {
     log(`[wire-worktree-mcp] sweep: removed stale "${action.name}" registration for ${action.path}`)
   }
+  // With the main slot empty Claude Code falls back to .mcp.json's published package, so MCP
+  // calls stop reaching this checkout's code without any error saying so.
+  if (actions.some((action) => action.projectKey !== undefined)) {
+    log(
+      `[wire-worktree-mcp] sweep: the main checkout has no \`whiteboard\` registration now, so Claude Code falls back to the published npm package. Register this checkout again (CONTRIBUTING.md first-clone step 3):\n  ${buildReRegisterCommand(mainKey)}`,
+    )
+  }
 }
+
+const USAGE = 'usage: wire-worktree-mcp.mjs [worktreePath]   |   wire-worktree-mcp.mjs --sweep'
 
 /**
  * @param {{
  *   argv?: string[],
  *   spawn?: typeof defaultSpawn, readConfig?: typeof defaultReadConfig, writeConfig?: typeof defaultWriteConfig,
  *   log?: (msg: string) => void, isMainCheckoutOverride?: boolean, claudeCliAvailableOverride?: boolean,
- *   mainCheckoutRootOverride?: string, liveWorktreePathsOverride?: string[],
+ *   mainCheckoutRootOverride?: string, liveWorktreePathsOverride?: string[], exit?: (code: number) => never,
  * }} [deps]
  */
 export async function main({
@@ -334,8 +354,16 @@ export async function main({
   claudeCliAvailableOverride,
   mainCheckoutRootOverride,
   liveWorktreePathsOverride,
+  exit = (code) => process.exit(code),
 } = {}) {
-  if (argv.includes('--sweep')) {
+  const { flags, positionals } = parseScriptArgs({
+    argv,
+    flags: ['--sweep'],
+    maxPositionals: 1,
+    usage: USAGE,
+    io: { exit },
+  })
+  if (flags.has('--sweep')) {
     const cwd = process.cwd()
     const mainCheckoutRoot = mainCheckoutRootOverride ?? defaultMainCheckoutRoot(cwd)
     const liveWorktreePaths = liveWorktreePathsOverride ?? defaultLiveWorktreePaths(mainCheckoutRoot)
@@ -343,7 +371,7 @@ export async function main({
     return
   }
 
-  const target = argv.find((a) => !a.startsWith('--')) ?? process.cwd()
+  const target = positionals[0] ?? process.cwd()
   wireWorktree({
     worktreeRoot: target,
     spawn,

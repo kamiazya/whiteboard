@@ -17,12 +17,12 @@ import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { passageBoxes } from '../passage-highlight.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 600, fontFamily: 'sans-serif' }
 
 const runsOf = (root: MdastRoot) =>
-  layoutMdastBlocks(root, options).nodes.flatMap((node) =>
+  typesetMdastBlocks(root, options).nodes.flatMap((node) =>
     'runs' in node ? [...(node.runs ?? [])] : [],
   )
 
@@ -119,7 +119,7 @@ describe('a comment can still be anchored across an inline image', () => {
  */
 describe('an inline image asks the caller where its picture is', () => {
   const withSeam = (url: string, href: string | undefined) =>
-    layoutMdastBlocks(paragraph([{ type: 'image', url, alt: 'a diagram' }]), {
+    typesetMdastBlocks(paragraph([{ type: 'image', url, alt: 'a diagram' }]), {
       ...options,
       references: {
         resolveAlias: () => null,
@@ -153,7 +153,7 @@ describe('an inline image asks the caller where its picture is', () => {
 
   /** A seam that throws is a seam, not a crash — the never-throw rule. */
   it('keeps the written URL when the seam throws', () => {
-    const runs = layoutMdastBlocks(paragraph([{ type: 'image', url: 'x.png', alt: 'a' }]), {
+    const runs = typesetMdastBlocks(paragraph([{ type: 'image', url: 'x.png', alt: 'a' }]), {
       ...options,
       references: {
         resolveAlias: () => null,

@@ -1,6 +1,6 @@
 import { type TagInUse, tagsInUse } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
-import type { ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
+import { type ContentFactsCache, splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import { factsCacheFor } from '../references/content-source.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
@@ -31,28 +31,6 @@ export {
  * Served from the stamp-validated ContentFactsCache: only documents whose
  * frontier moved are reloaded (ADR-0014's incremental mode, cache form).
  */
-/**
- * A document's OWN tags and the ones its contents carry, which are two
- * different answers about the same document.
- *
- * Own is the document's frontmatter or its board's envelope — one bearer,
- * because a document has one of those. Carried is the union over its nodes and
- * edges, deduplicated, because a tag on three boxes is one tag the document
- * contains. Any other bearer kind belongs to neither.
- */
-function splitBearerTags(bearers: readonly { what: string; tags: readonly string[] }[]): {
-  own: string[]
-  carried: string[]
-} {
-  const own = bearers.find((bearer) => bearer.what === 'document' || bearer.what === 'board')?.tags
-  const carried = new Set<string>()
-  for (const bearer of bearers) {
-    if (bearer.what !== 'node' && bearer.what !== 'edge') continue
-    for (const tag of bearer.tags) carried.add(tag)
-  }
-  return { own: own === undefined ? [] : [...own], carried: [...carried] }
-}
-
 export async function computeDocumentTags(
   deps: ServerDeps,
   input: DocumentTagsInput,

@@ -13,6 +13,12 @@
  * under one spelling while writing under another.
  */
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import {
+  inTheCallersWords,
+  type KnownWorkspaceHandles,
+  ownsWorkspaceRefusal,
+  unknownWorkspaceRefusal,
+} from './tools/caller-refusals.js'
 
 /**
  * The canonical id for `handle`, or `handle` unchanged when nothing answers
@@ -30,6 +36,7 @@ export async function resolveWorkspaceId(index: DocumentIndex, handle: string): 
 
 /** The shape every tool in `createServer`'s record shares. */
 interface WorkspaceScopedTool {
+  inputSchema?: unknown
   execute(input: never): Promise<unknown>
 }
 
@@ -48,16 +55,31 @@ interface WorkspaceScopedTool {
 export function withResolvedWorkspaceHandles<T extends Record<string, WorkspaceScopedTool>>(
   tools: T,
   index: DocumentIndex,
+  knownWorkspaceHandles?: KnownWorkspaceHandles,
 ): T {
   const wrapped: Record<string, WorkspaceScopedTool> = {}
   for (const [key, tool] of Object.entries(tools)) {
     wrapped[key] = {
       ...tool,
       async execute(input: never) {
-        const scoped = input as { workspaceId?: unknown }
+        const scoped = input as { workspaceId?: unknown; documentId?: unknown }
         if (typeof scoped?.workspaceId !== 'string') return tool.execute(input)
-        const workspaceId = await resolveWorkspaceId(index, scoped.workspaceId)
-        return tool.execute({ ...scoped, workspaceId } as never)
+        const handle = scoped.workspaceId
+        const resolved = await index.resolveWorkspace(handle)
+        if (resolved === null && !ownsWorkspaceRefusal(tool)) {
+          throw await unknownWorkspaceRefusal(handle, knownWorkspaceHandles)
+        }
+        const workspaceId = resolved?.workspaceId ?? handle
+        try {
+          return await tool.execute({ ...scoped, workspaceId } as never)
+        } catch (err) {
+          throw await inTheCallersWords(err, {
+            index,
+            handle,
+            workspaceId,
+            documentId: scoped.documentId,
+          })
+        }
       },
     }
   }

@@ -66,7 +66,7 @@ const daemonFixture: DocumentPageFixture = {
     // page refreshes afterwards says what the daemon would.
     let listed = documents.map((doc) => ({
       path: doc.path,
-      id: doc.id,
+      documentId: doc.id,
       updatedAt: '2026-01-01',
       kind: doc.kind,
     }))

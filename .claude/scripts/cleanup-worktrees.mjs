@@ -16,6 +16,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseScriptArgs } from './script-flags.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -51,9 +52,14 @@ const repoRoot = process.env.CLEANUP_WORKTREES_REPO_ROOT
   ? resolve(process.env.CLEANUP_WORKTREES_REPO_ROOT)
   : findMainCheckout()
 const worktreesDir = join(repoRoot, '.claude', 'worktrees')
-const dryRun = process.argv.includes('--dry-run')
-const storePrune = process.argv.includes('--store-prune')
-const includeFresh = process.argv.includes('--include-fresh')
+const { flags } = parseScriptArgs({
+  argv: process.argv.slice(2),
+  flags: ['--dry-run', '--store-prune', '--include-fresh'],
+  usage: 'usage: cleanup-worktrees.mjs [--dry-run] [--store-prune] [--include-fresh]',
+})
+const dryRun = flags.has('--dry-run')
+const storePrune = flags.has('--store-prune')
+const includeFresh = flags.has('--include-fresh')
 // Resolved once: a worktree containing this path is never a removal candidate.
 const cwd = resolve(process.cwd())
 

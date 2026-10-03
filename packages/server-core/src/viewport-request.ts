@@ -21,14 +21,17 @@ import { z } from 'zod'
  */
 export const viewportRequestParamsSchema = z
   .object({
-    /** `fit` frames the given elements (or the whole board); `move` pans without rescaling. */
-    mode: z.enum(['fit', 'move']).optional(),
+    mode: z
+      .enum(['fit', 'move'])
+      .optional()
+      .describe(
+        'fit frames elementIds (none: the whole board); move goes to scrollX, scrollY at zoom. Omitted: move if you give scrollX, scrollY or zoom without elementIds, else fit.',
+      ),
     /**
      * What to frame. Omitted with `mode: 'fit'` means the WHOLE board, which
      * is rarely what an agent pointing at something wants.
      */
     elementIds: z.array(nodeIdSchema).optional(),
-    animate: z.boolean().optional(),
     scrollX: z.number().finite().optional(),
     scrollY: z.number().finite().optional(),
     zoom: z.number().finite().optional(),

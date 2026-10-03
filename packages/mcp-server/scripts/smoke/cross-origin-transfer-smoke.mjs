@@ -418,7 +418,7 @@ try {
 
   const after = await documentsAtB()
   check(
-    after?.documents?.some((d) => d.displayName === NOTE_TITLE) === true,
+    after?.documents?.some((d) => d.name === NOTE_TITLE) === true,
     "B's own API lists the transferred note",
     JSON.stringify(after),
   )

@@ -12,6 +12,7 @@
  * rows afterwards: identical end state is exactly what the two divergent
  * implementations produced right up until one of them grew a step.
  */
+import { listDocumentsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../_test-helpers.js'
@@ -142,6 +143,26 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     // one — the field is optional on the port for the browser's sake, not
     // because the daemon may omit it.
     expect(typeof body.documents[0]?.updatedAt).toBe('string')
+  })
+
+  it('answers the document as documentId and name, the spelling every other document surface uses', async () => {
+    const { deps } = await depsRecordingList()
+    await deps.documentIndex.createDocument({
+      workspaceId: 'ws-1',
+      path: 'a',
+      kind: 'markdown',
+      name: 'Weekly review',
+    })
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    const body = (await res.json()) as { documents: Record<string, unknown>[] }
+    const parsed = listDocumentsResponseSchema.parse(body)
+    expect(parsed.documents[0]?.name).toBe('Weekly review')
+    expect(typeof parsed.documents[0]?.documentId).toBe('string')
+    expect(Object.keys(body.documents[0] ?? {})).not.toContain('id')
+    expect(Object.keys(body.documents[0] ?? {})).not.toContain('displayName')
   })
 
   it('carries a shadowed marker into the response — the collision badge is dead without it', async () => {

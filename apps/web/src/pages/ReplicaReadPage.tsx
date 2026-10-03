@@ -249,9 +249,9 @@ function useReplicaSeams(state: LoadState, selected: WorkspaceDocumentEntry | un
     (): readonly LinkableDocument[] =>
       state.kind === 'ready'
         ? state.entries.map((entry) => ({
-            id: entry.documentId,
+            documentId: entry.documentId,
             path: entry.path,
-            ...(entry.name === undefined ? {} : { displayName: entry.name }),
+            ...(entry.name === undefined ? {} : { name: entry.name }),
             ...(entry.kind === undefined ? {} : { kind: entry.kind }),
           }))
         : [],

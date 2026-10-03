@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { LinkableDocument } from '../lib/link-entries.js'
 import { useLinkResolution } from './use-link-resolution.js'
 
-const A: LinkableDocument = { id: 'doc-a', path: 'notes/alpha', displayName: 'Alpha' }
-const B: LinkableDocument = { id: 'doc-b', path: 'notes/beta' }
+const A: LinkableDocument = { documentId: 'doc-a', path: 'notes/alpha', name: 'Alpha' }
+const B: LinkableDocument = { documentId: 'doc-b', path: 'notes/beta' }
 
 describe('useLinkResolution', () => {
   it('labels a link by its display name, falling back to the path', () => {
@@ -45,7 +45,7 @@ describe('useLinkResolution', () => {
     // document's row is overlaid with its live snapshot, so the picker never
     // offers a stale name for the document being edited. A hook that ignored
     // the override would reintroduce exactly that.
-    const overlaid: LinkableDocument = { ...A, displayName: 'Alpha, renamed but unsaved' }
+    const overlaid: LinkableDocument = { ...A, name: 'Alpha, renamed but unsaved' }
     const { result } = renderHook(() =>
       useLinkResolution({ documents: [A, B], pickerDocuments: [overlaid, B] }),
     )

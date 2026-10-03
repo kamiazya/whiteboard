@@ -116,11 +116,14 @@ class FakeLive implements LiveDocuments {
     this.record('kind')
     return this.docs.get(this.key(workspaceId, path))?.kind ?? null
   }
-  async list(workspaceId: string): Promise<readonly { id?: string; path: string }[]> {
+  async list(workspaceId: string): Promise<readonly { documentId?: string; path: string }[]> {
     this.record('list')
     return [...this.docs.entries()]
       .filter(([key]) => key.startsWith(`${workspaceId}${KEY_SEPARATOR}`))
-      .map(([key, value]) => ({ id: value.id, path: key.split(KEY_SEPARATOR)[1] as string }))
+      .map(([key, value]) => ({
+        documentId: value.id,
+        path: key.split(KEY_SEPARATOR)[1] as string,
+      }))
   }
   async rename(workspaceId: string, oldPath: string, newPath: string): Promise<void> {
     this.record('rename')
@@ -606,7 +609,7 @@ describe('restoreVersion subtree mode', () => {
  * branches had actually joined.
  *
  * The row is what carries the REASON. The topology is already derivable
- * from the stored frontiers (`cmpFrontiers` answers -1/1/0/undefined, and
+ * from the stored frontiers (Loro's `cmpFrontiers` answers -1/1/0/undefined, and
  * undefined is a real branch point), but no amount of frontier arithmetic
  * can say WHY the branches met — the same reason a merge commit carries a
  * message.

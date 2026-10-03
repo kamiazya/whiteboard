@@ -12,7 +12,7 @@ export function isValidPullRequestTitle(title) {
 }
 
 export function explainPullRequestTitleRule() {
-  return 'PR titles must be Conventional Commits, e.g. "fix: ...", "feat(scope): ...", or "chore(main): release mcp-server v0.0.3".'
+  return 'PR titles must be Conventional Commits, e.g. "fix: ...", "feat(scope): ...", or "chore: release main".'
 }
 
 function main(argv) {

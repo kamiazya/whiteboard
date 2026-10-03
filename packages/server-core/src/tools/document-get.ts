@@ -2,6 +2,7 @@ import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
 import { readAnnotations, readDocumentKind, readProposals } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
+  type DocumentKind,
   documentIdSchema,
   documentKindSchema,
   proposalSchema,
@@ -10,6 +11,7 @@ import {
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
+import { DocumentSerializeError } from './errors.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
 
@@ -118,12 +120,32 @@ export function createDocumentGetTool(deps: ServerDeps) {
       // the daemon, and concurrent reads of one file are what SQLITE_BUSY is
       // made of (the same reason GET /api/workspaces sequences its own).
       for (const documentId of input.documentIds) {
+        // Placement first: `loadOrCreateDocument` conjures an empty document
+        // for any id, so without this an id that never existed reads as a
+        // document that lost its kind — the wrong cause, with a repair that
+        // does not apply to it.
+        const entry = await deps.documentIndex.resolveDocumentById({
+          workspaceId: input.workspaceId,
+          documentId,
+        })
+        if (entry === null) {
+          failed.push({
+            documentId,
+            reason: `Document not found: ${documentId}. This workspace holds no document with that id; wb_document_list shows the ones it does.`,
+          })
+          continue
+        }
         try {
-          documents.push(await readOne(deps, input, documentId))
+          documents.push(await readOne(deps, input, documentId, entry.kind))
         } catch (error) {
-          // Only the one failure that is genuinely ABOUT this document.
-          // Everything else propagates.
-          if (!(error instanceof DocumentKindUnknownError)) throw error
+          // Only the failures that are genuinely ABOUT this document: it has
+          // no kind to read it by, or its content has no representation in
+          // that format. Everything else propagates.
+          if (
+            !(error instanceof DocumentKindUnknownError || error instanceof DocumentSerializeError)
+          ) {
+            throw error
+          }
           failed.push({ documentId, reason: error.message })
         }
       }
@@ -136,16 +158,14 @@ async function readOne(
   deps: ServerDeps,
   input: DocumentGetInput,
   documentId: string,
+  indexedKind: DocumentKind | undefined,
 ): Promise<ReadDocument> {
   const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
   // A document created before kinds existed carries none on its own Loro
   // doc. Its index row, written at creation time, may still have one —
   // consult it before refusing. This is a read-only fallback: the kind
   // is never written back onto the doc or the row.
-  const kind =
-    readDocumentKind(doc) ??
-    (await deps.documentIndex.resolveDocumentById({ workspaceId: input.workspaceId, documentId }))
-      ?.kind
+  const kind = readDocumentKind(doc) ?? indexedKind
   if (kind === undefined) {
     throw new DocumentKindUnknownError(documentId)
   }

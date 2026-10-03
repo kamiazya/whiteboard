@@ -207,7 +207,7 @@ export function daemonDocumentLabels(canvas: { workspaceId: string; path: string
  * The History column's daemon half: the daemon's `VersionsBackend`, hidden
  * until there is a document, and the two announcements a save here needs.
  * The server's manual `POST /versions` does NOT broadcast `version_created`
- * over the websocket — that fires only for auto-saves and other peers' saves
+ * over the sync stream — that fires only for auto-saves and other peers' saves
  * — so a save made here raises both: the page's own refresh, and the
  * identity-scoped event `useDocumentSync` fires on a broadcast, or nothing
  * listening (the version list, the tab) learns it happened.

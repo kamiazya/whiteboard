@@ -83,7 +83,7 @@ function runsOf(nodes: readonly SceneNode[]): TextRunNode[] {
 const textOf = (nodes: readonly SceneNode[]) => runsOf(nodes).map((run) => run.text)
 
 /**
- * All run text as one string. `layoutMdastBlocks` places body phrasing one
+ * All run text as one string. `typesetMdastBlocks` places body phrasing one
  * run per WORD (each at its own measured x), so a sentence never survives
  * as a single run — asserting on one would be asserting against the
  * layout's own wrapping model rather than against content.

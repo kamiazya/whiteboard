@@ -7,11 +7,11 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import { typesetMdastBlocks } from './mdast-blocks.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 320, fontFamily: 'sans-serif' }
 const layout = (children: MdastRoot['children']) =>
-  layoutMdastBlocks({ type: 'root', children }, options)
+  typesetMdastBlocks({ type: 'root', children }, options)
 
 const table: MdastRoot['children'][number] = {
   type: 'table',

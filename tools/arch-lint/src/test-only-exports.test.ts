@@ -2,8 +2,8 @@
  * Exports that only a test uses, and nothing else ships.
  *
  * Knip counts a test's import as a use, so a symbol kept alive only by its own
- * test is invisible to it: wave 7's deletions of `resolveEdgeStyle` and
- * `isOriginAllowedForServerMode` were found by hand, and the class re-accrues
+ * test is invisible to it (`resolveEdgeStyle` and `isOriginAllowedForServerMode`
+ * lived that way until someone found them by hand), and the class re-accrues
  * with every refactor that leaves its tests behind. The scan is
  * `test-only-exports-scan.ts`; this holds what it finds from both sides.
  *
@@ -34,6 +34,7 @@
  * shipped file counts as production use, and a name a test reaches only
  * through a helper that hides the import is not counted as test use.
  */
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -44,6 +45,7 @@ import {
   type ScannedFile,
   type TestOnlyClass,
 } from './test-only-exports-scan.js'
+import { trackedFiles } from './tracked-files.js'
 
 /** Dead outright: not even used inside their own file, only imported by a test. */
 const NO_USE_BESIDE_TESTS: readonly string[] = []
@@ -244,7 +246,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/server-core/src/tools/canvas-edit-placement.ts#PLACEMENT_COLUMNS',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewInputSchema',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewOutputSchema',
-  'packages/server-core/src/tools/stencil-library.ts#STENCIL_LIBRARY_PATH',
   'packages/server-core/src/tools/version-restore.ts#versionRestoreOutputSchema',
 ]
 
@@ -260,6 +261,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the strict refusal-body contract ApiErrorBody derives from, re-exported through the barrel; the route fuzz holds every refusal to it',
   'packages/facet-engine/src/registry.ts#FacetPlugin':
     'the contract a plugin package implements (ADR-0013), the type a second bundled plugin would import; workspace-stencils.test.ts holds a hand-written one to it',
+  'packages/mcp-server/src/server/server-mode-people.ts#createServerModePeople':
+    'the one definition of server mode’s people, which openServerModePeople in the same file wraps for the root and the packaged smoke; _test-server-mode-harness.ts builds the same stores over an isolated database',
   'packages/mcp-server/src/cli/native-host.ts#keepHostAliveOnUnhandledRejection':
     'the guard runHost arms in the same file, exported so native-host.test.ts can prove a rejection is logged and the process survives',
   'packages/mcp-server/src/server/store/backup-in-progress.ts#DEFAULT_TTL_MS':
@@ -354,7 +357,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 156
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 26
+const PUBLISHED_CEILING = 25
 
 const DIRS = [
   'apps',
@@ -374,8 +377,6 @@ const SKIPPED_DIRS = new Set([
   '.git',
   'worktrees',
   'coverage',
-  '.turbo',
-  'vitest-traces',
   'migrations',
 ])
 
@@ -389,6 +390,44 @@ function readRepoFiles(): ScannedFile[] {
     )
     .map((path) => ({ path: relativeToRepo(path), text: readFileSync(path, 'utf8') }))
 }
+
+// A name in the skip set is a directory this walk would otherwise enter: one
+// git tracks (`migrations`) or one it ignores (build output, a nested checkout).
+// A name that is neither skips nothing and reads exactly like a skip in force.
+describe('the directories the walk skips', () => {
+  // `.git` is git's own, and a nested checkout's is a file git never lists.
+  const GIT_METADATA = '.git'
+  const PREFIXES = ['', '.claude/', ...DIRS.map((dir) => `${dir}/`)]
+
+  it('each exist as a tracked directory or are ignored by git', () => {
+    const tracked = new Set(
+      trackedFiles(REPO_ROOT, ...DIRS).flatMap((file) => file.split('/').slice(0, -1)),
+    )
+    const probes = [...SKIPPED_DIRS].flatMap((name) =>
+      PREFIXES.map((prefix) => ({ name, path: `${prefix}${name}/probe` })),
+    )
+    const ignored = new Set(
+      spawnSync('git', ['check-ignore', '--stdin'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        input: probes.map((probe) => probe.path).join('\n'),
+      })
+        .stdout.split('\n')
+        .filter((line) => line !== ''),
+    )
+    const stale = [...SKIPPED_DIRS].filter(
+      (name) =>
+        name !== GIT_METADATA &&
+        !tracked.has(name) &&
+        !probes.some((probe) => probe.name === name && ignored.has(probe.path)),
+    )
+    expect(
+      stale,
+      'drop the name from SKIPPED_DIRS: nothing by that name is tracked or ignored',
+    ).toEqual([])
+    expect(tracked.size).toBeGreaterThan(100)
+  })
+})
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

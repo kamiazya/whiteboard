@@ -39,7 +39,7 @@ async function resolveDocumentEntry(
  * `referenceSeams`, so this is only I/O.
  *
  * `null` when nothing is indexed under the reference. A document whose
- * snapshot is gone still answers its name, so the card can say what it
+ * snapshot is gone still answers its name (its path when it has none), so the card can say what it
  * pointed at. Only a MARKDOWN document yields a body and only a SPATIAL one
  * a canvas; the kind comes from the document itself rather than the index
  * row, because the format follows from the document (ADR-0009 decision 4)
@@ -54,7 +54,9 @@ export async function loadReferencedDocument(
 ): Promise<LoadedReference | null> {
   const entry = await resolveDocumentEntry(deps, workspaceId, ref)
   if (entry === null) return null
-  const name = entry.name !== undefined ? { name: entry.name } : {}
+  // The web labels a document `displayName ?? path`; an unnamed document (what
+  // an agent creates) must read the same here rather than as its raw id.
+  const name = { name: entry.name ?? entry.path }
 
   const snapshot = await deps.documentStore.loadSnapshot({
     docRef: { kind: 'document', workspaceId, documentId: entry.documentId },

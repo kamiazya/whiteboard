@@ -85,9 +85,9 @@ export interface ServerModeAppOptions {
    *  when none is configured, and then no `/auth/*` route exists. */
   signIn?: SignInRoutesDeps
   /** ADR-0046: resolve each request's person and gate every workspace on
-   *  membership, members-only from the start. Absent (ad-hoc and older test
-   *  compositions), the bearer's scopes alone decide. */
-  people?: ServerModePeople
+   *  membership, members-only from the start. Required: a composition that
+   *  left it out would silently fall back to the bearer's scopes alone. */
+  people: ServerModePeople
 }
 
 export type AppOptions = LocalDaemonAppOptions | ServerModeAppOptions

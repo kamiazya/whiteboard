@@ -48,6 +48,51 @@ describe('applyViewportRequest', () => {
     expect(handle.setViewport).not.toHaveBeenCalled()
   })
 
+  it('defaults an absent mode to move when scroll or zoom arrive without elementIds', () => {
+    // A caller that names a position and a zoom means to go there; reading
+    // that as "fit the whole board" would drop the call on the floor.
+    const handle: SpatialEditorHandle = {
+      setViewport: vi.fn(),
+      fitToContent: vi.fn(),
+      openProposal: vi.fn(),
+    }
+    applyViewportRequest(payload({ scrollX: 400, scrollY: 300, zoom: 0.5 }), handle)
+    expect(handle.setViewport).toHaveBeenCalledWith({ x: 400, y: 300, zoom: 0.5 })
+    expect(handle.fitToContent).not.toHaveBeenCalled()
+  })
+
+  it('defaults an absent mode to move for a lone zoom', () => {
+    const handle: SpatialEditorHandle = {
+      setViewport: vi.fn(),
+      fitToContent: vi.fn(),
+      openProposal: vi.fn(),
+    }
+    applyViewportRequest(payload({ zoom: 2 }), handle)
+    expect(handle.setViewport).toHaveBeenCalledWith({ x: 0, y: 0, zoom: 2 })
+  })
+
+  it('keeps an absent mode as fit when elementIds are named, even beside a zoom', () => {
+    const handle: SpatialEditorHandle = {
+      setViewport: vi.fn(),
+      fitToContent: vi.fn(),
+      openProposal: vi.fn(),
+    }
+    applyViewportRequest(payload({ elementIds: ['a'], zoom: 2 }), handle)
+    expect(handle.fitToContent).toHaveBeenCalledWith(['a'])
+    expect(handle.setViewport).not.toHaveBeenCalled()
+  })
+
+  it('keeps an absent mode as fit when nothing else is given', () => {
+    const handle: SpatialEditorHandle = {
+      setViewport: vi.fn(),
+      fitToContent: vi.fn(),
+      openProposal: vi.fn(),
+    }
+    applyViewportRequest(payload(), handle)
+    expect(handle.fitToContent).toHaveBeenCalledWith(undefined)
+    expect(handle.setViewport).not.toHaveBeenCalled()
+  })
+
   it('degrades missing scroll/zoom fields to the identity viewport rather than throwing', () => {
     const handle: SpatialEditorHandle = {
       setViewport: vi.fn(),
