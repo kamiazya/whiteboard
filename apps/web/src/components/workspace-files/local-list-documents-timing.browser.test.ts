@@ -16,7 +16,7 @@
 import { writeCoreFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
-import { beforeAll, expect, it } from 'vitest'
+import { beforeEach, expect, it } from 'vitest'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
@@ -48,7 +48,9 @@ const boardDoc = (n: number): Loro => {
   return doc
 }
 
-beforeAll(clearWhiteboardDb)
+// Before EACH, not once: a stress run repeats the test in one process, and a
+// second run over the seeded workspace would refuse every path as taken.
+beforeEach(clearWhiteboardDb)
 
 it('prints what listDocuments costs as the workspace grows', { timeout: 600_000 }, async () => {
   const index = new FoldingBrowserIndex()
