@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
+  composeWorkspaceStencils,
   createFacetRegistry,
   defineFacet,
   definePlugin,
@@ -69,20 +70,57 @@ describe('a workspace stencil library', () => {
     // schema, so every payload in it is checked by the schema its own plugin
     // registered. A library that could write an unvalidated facet would be
     // the runtime schema definition ADR-0013 decision 3 forbids.
-    expect(() =>
-      withWorkspaceStencils(baseRegistry(), {
-        bad: { displayName: 'Bad', facets: { 'visualish.shape/v0': { kind: 'octagon' } } },
-      }),
-    ).toThrow(/visualish\.shape/)
+    const { registry, dropped } = composeWorkspaceStencils(baseRegistry(), {
+      bad: { displayName: 'Bad', facets: { 'visualish.shape/v0': { kind: 'octagon' } } },
+    })
+    expect(registry.stencilAsset('workspace.bad')).toBeUndefined()
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]?.name).toBe('bad')
+    expect(dropped[0]?.message).toMatch(/workspace\.bad.*visualish\.shape\/v0/)
   })
 
-  it('refuses a library whose stencil name is not a legal segment', () => {
+  it('drops only the stencil that is refused, so the rest of the library and the deployment stay usable', () => {
+    // A library is composed on every read. One entry the registry refuses
+    // used to take the whole composition down, the deployment's own stencils
+    // included.
+    const { registry, dropped } = composeWorkspaceStencils(baseRegistry(), {
+      aaa: { displayName: 'First' },
+      bad: { displayName: 'Bad', facets: { 'visualish.shape/v0': { kind: 'octagon' } } },
+      unregistered: { displayName: 'U', facets: { 'nope.nothing/v0': { a: 1 } } },
+      zzz: { displayName: 'Last', facets: { 'visualish.shape/v0': { kind: 'cylinder' } } },
+    })
+    expect(registry.assetIds('stencils')).toEqual([
+      'visualish.datastore',
+      'workspace.aaa',
+      'workspace.zzz',
+    ])
+    expect(dropped.map((entry) => entry.name)).toEqual(['bad', 'unregistered'])
+    expect(dropped[1]?.message).toMatch(/nope\.nothing\/v0/)
+  })
+
+  it('answers the deployment alone when every stencil is refused', () => {
+    const { registry } = composeWorkspaceStencils(baseRegistry(), {
+      bad: { displayName: 'Bad', facets: { 'visualish.shape/v0': { kind: 'octagon' } } },
+    })
+    expect(registry.assetIds('stencils')).toEqual(['visualish.datastore'])
+  })
+
+  it('reports nothing dropped for a library that is wholly valid', () => {
+    expect(composeWorkspaceStencils(baseRegistry(), { ok: { displayName: 'Ok' } }).dropped).toEqual(
+      [],
+    )
+  })
+
+  it('drops a stencil whose name is not a legal segment', () => {
     // The id is composed as `workspace.<name>`, so a name that cannot be a
     // segment would produce an id no `namespacedIdSchema` reader accepts —
     // a stencil the picker offers and every writer refuses.
-    expect(() =>
-      withWorkspaceStencils(baseRegistry(), { 'Not A Name': { displayName: 'x' } }),
-    ).toThrow(/Not A Name/)
+    const { registry, dropped } = composeWorkspaceStencils(baseRegistry(), {
+      'Not A Name': { displayName: 'x' },
+      fine: { displayName: 'Fine' },
+    })
+    expect(registry.assetIds('stencils')).toEqual(['visualish.datastore', 'workspace.fine'])
+    expect(dropped[0]?.message).toMatch(/Not A Name/)
   })
 })
 

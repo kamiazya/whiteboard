@@ -433,6 +433,36 @@ describe('wb_facet_list: a WORKSPACE’s own vocabulary', () => {
     expect(result.assets.length).toBeGreaterThan(0)
   })
 
+  test('a stencil whose facet payload its plugin refuses is left out, and the rest stay listed', async () => {
+    // Planted below the write path, as a synced or hand-edited library can
+    // be. One bad entry must cost exactly itself: the bundled six and the
+    // library's other stencils stay discoverable.
+    const deps = await withLibrary({
+      ...lakehouse,
+      worse: { displayName: 'W', facets: { 'visual.shape/v0': { kind: 'blob' } } },
+      unregistered: { displayName: 'U', facets: { 'nope.nothing/v0': { a: 1 } } },
+    })
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    const ids = result.assets.filter((asset) => asset.kind === 'stencils').map((asset) => asset.id)
+    expect(ids).toEqual([
+      'visual.datastore',
+      'visual.service',
+      'visual.gateway',
+      'visual.queue',
+      'visual.actor',
+      'visual.external',
+      'workspace.lakehouse',
+      'workspace.ledger',
+    ])
+  })
+
+  test('a stencil with a colour no node could carry is left out, and the rest stay listed', async () => {
+    const deps = await withLibrary({ ...lakehouse, bad: { displayName: 'Bad', color: 'red' } })
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    const ids = result.assets.filter((asset) => asset.namespace === 'workspace').map((a) => a.id)
+    expect(ids).toEqual(['workspace.lakehouse', 'workspace.ledger'])
+  })
+
   test('the filters still narrow what a workspace added, and the output still validates', async () => {
     const deps = await withLibrary(lakehouse)
     const result = await createFacetListTool(deps).execute({

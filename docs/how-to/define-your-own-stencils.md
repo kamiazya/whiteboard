@@ -95,8 +95,10 @@ Because a library is a document:
 
 - its body is yours, so the vocabulary can explain itself in the same file it is defined in;
 - it syncs, versions and forks with the workspace, like anything else you write;
-- a stencil in it is validated exactly as a bundled one is — a colour, and facet payloads
-  checked against the plugin that owns them.
+- a stencil in it is validated exactly as a bundled one is — a colour (a preset `"1"` to `"6"`
+  or a hex colour), and facet payloads checked against the plugin that owns them — and a write
+  of a library with a bad stencil is refused, naming the stencil and the facet; a bad one that
+  arrives some other way (a synced edit) is left out while the others keep working.
 
 ### What a stencil may not carry
 

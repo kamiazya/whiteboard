@@ -18,6 +18,20 @@ describe('useStencilRegistry', () => {
     expect(result.current.assetIds('stencils')).toContain('visual.datastore')
   })
 
+  it('drops only a stencil the registry refuses, keeping the rest of the library and the deployment', async () => {
+    const library = {
+      ...lakehouse,
+      worse: { displayName: 'W', facets: { 'visual.shape/v0': { kind: 'blob' } } },
+    }
+    const source = sourceOf(() => Promise.resolve(library))
+    const { result } = renderHook(() => useStencilRegistry(source))
+    await waitFor(() =>
+      expect(result.current.assetIds('stencils')).toContain('workspace.lakehouse'),
+    )
+    expect(result.current.assetIds('stencils')).toContain('visual.datastore')
+    expect(result.current.assetIds('stencils')).not.toContain('workspace.worse')
+  })
+
   it('stays the bundled registry for a source that cannot say, one that declares nothing, and no source', async () => {
     const silent = sourceOf()
     const empty = sourceOf(() => Promise.resolve({}))

@@ -11,15 +11,20 @@
  * and composed on top.
  */
 import {
+  composeWorkspaceStencils,
   type FacetRegistry,
   type WorkspaceStencils,
-  withWorkspaceStencils,
 } from '@kamiazya/whiteboard-facet-engine'
 import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
-import { readStencilLibrary, STENCIL_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  readStencilLibrary,
+  STENCIL_LIBRARY_PATH,
+  VISUAL_STENCILS_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
+import { FacetWriteRejectedError } from './errors.js'
 
 /**
  * What to answer when the WORKSPACE itself does not exist. Stated by every
@@ -49,10 +54,11 @@ export type UnknownWorkspace = 'deployment' | 'refuse'
  * the overwhelmingly common workspace, and `withWorkspaceStencils` returns
  * the same instance rather than rebuilding one for nothing.
  *
- * A malformed library reads as NO library rather than throwing: a drawing
- * must stay readable when a document elsewhere in the workspace is wrong,
- * and the write path is where a bad library is refused with its author
- * present.
+ * A malformed library degrades rather than throwing: a drawing must stay
+ * readable when a document elsewhere in the workspace is wrong. It degrades
+ * PER STENCIL — one the registry refuses is left out and the rest, the
+ * deployment's included, stay usable — and the write path is where a bad
+ * library is refused with its author present (`refuseUnusableStencilLibrary`).
  */
 export async function workspaceFacetRegistry(
   deps: ServerDeps,
@@ -62,9 +68,36 @@ export async function workspaceFacetRegistry(
   // one listing however many things it reads from the workspace.
   listed?: readonly DocumentEntry[],
 ): Promise<FacetRegistry> {
-  return withWorkspaceStencils(
+  return composeWorkspaceStencils(
     deps.facetRegistry,
     await workspaceStencilLibrary(deps, workspaceId, unknownWorkspace, listed),
+  ).registry
+}
+
+/**
+ * Refuses a write of the stencil library whose stencils the registry would
+ * not accept, naming the stencil and the facet key.
+ *
+ * The facet's own schema checks a library's SHAPE; whether a stencil's facet
+ * payloads satisfy the plugins that own them is known only once the library
+ * is composed with the deployment's registry. Composing the candidate here
+ * is what makes "a bad library is refused at the write" true, instead of the
+ * write storing it and every later read dropping it unseen.
+ */
+export function refuseUnusableStencilLibrary(
+  deps: ServerDeps,
+  sets: Record<string, unknown>,
+): void {
+  const candidate = sets[VISUAL_STENCILS_KEY]
+  if (candidate === undefined) return
+  const { dropped } = composeWorkspaceStencils(
+    deps.facetRegistry,
+    readStencilLibrary({ [VISUAL_STENCILS_KEY]: candidate } as never),
+  )
+  if (dropped.length === 0) return
+  throw new FacetWriteRejectedError(
+    VISUAL_STENCILS_KEY,
+    dropped.map(({ name, message }) => `stencil "${name}": ${message}`).join('; '),
   )
 }
 
