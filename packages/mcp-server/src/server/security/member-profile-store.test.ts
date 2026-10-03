@@ -10,15 +10,20 @@ import {
   type MemberProfileStore,
   passkeyBinding,
 } from './member-profile-store.js'
+import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let store: MemberProfileStore
+// Removal is the roles store's: the machine-owned form lets a workspace's last
+// owner go, which is what these cases need to take everyone out.
+let roles: WorkspaceRoles
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-member-profiles-'))
   handle = await createIsolatedDb({ dataDir: root })
   store = createMemberProfileStore(handle.db)
+  roles = createWorkspaceRoles(handle.db, { ownedByTheMachine: true })
 })
 afterEach(async () => {
   await handle.dispose()
@@ -112,110 +117,30 @@ describe('addMember / listMembers', () => {
   })
 })
 
-describe('revokeL1Membership', () => {
-  it('deletes the membership and returns the credentials it affected', async () => {
-    const profile = await store.ensureProfile({
-      binding: passkeyBinding('https://a.example', 'cred-1'),
-      displayName: 'Ada',
-    })
-    await store.addMember('ws-1', profile.id)
-
-    const first = await store.revokeL1Membership('ws-1', profile.id)
-    expect(first).toEqual({
-      removed: true,
-      credentials: [{ origin: 'https://a.example', credentialId: 'cred-1' }],
-    })
-
-    const second = await store.revokeL1Membership('ws-1', profile.id)
-    expect(second.removed).toBe(false)
-    expect(second.credentials).toEqual([{ origin: 'https://a.example', credentialId: 'cred-1' }])
-  })
-
+describe('removing a member', () => {
   it('has no tombstone — a following addMember re-admits the profile', async () => {
     const profile = await store.ensureProfile({
       binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
-    await store.revokeL1Membership('ws-1', profile.id)
+    expect(await roles.remove('ws-1', profile.id)).toBe('ok')
     await store.addMember('ws-1', profile.id)
 
     expect(await store.listMembers('ws-1')).toEqual([profile])
   })
 
-  it('returns removed:false and an empty credentials list for an unknown profile', async () => {
-    expect(await store.revokeL1Membership('ws-1', 'unknown-profile')).toEqual({
-      removed: false,
-      credentials: [],
-    })
-  })
-})
-
-describe('reopenToOriginTrust', () => {
-  it('is false for a workspace that was never members-only', async () => {
-    // Nothing to clear is not an error: an operator asking twice, or asking
-    // about the wrong workspace, learns which without a failure to handle.
-    expect(await store.reopenToOriginTrust('ws-1')).toBe(false)
-  })
-
-  it('clears the gate a revoke deliberately leaves standing', async () => {
+  it('leaves the profile itself and its credentials in place', async () => {
     const profile = await store.ensureProfile({
       binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
-    await store.revokeL1Membership('ws-1', profile.id)
-    expect(await store.membersOnly('ws-1')).toBe(true)
+    await roles.remove('ws-1', profile.id)
 
-    // The whole point (ADR-0042 decision 3's escape): an operator who
-    // removed the last member — possibly their own — can return the
-    // workspace to origin trust.
-    expect(await store.reopenToOriginTrust('ws-1')).toBe(true)
-    expect(await store.membersOnly('ws-1')).toBe(false)
-  })
-
-  it('leaves the memberships themselves alone', async () => {
-    const profile = await store.ensureProfile({
-      binding: passkeyBinding('https://a.example', 'cred-1'),
-      displayName: 'Ada',
-    })
-    await store.addMember('ws-1', profile.id)
-
-    await store.reopenToOriginTrust('ws-1')
-
-    // Reopening widens who may read; it does not remove the people who
-    // already could. Deleting memberships here would make one operation two
-    // decisions, and the second one silent.
-    expect(await store.isWorkspaceMember('ws-1', profile.id)).toBe('member')
-    expect((await store.listMembers('ws-1')).map((m) => m.id)).toEqual([profile.id])
-  })
-
-  it('re-closes on the next addMember, rather than staying open', async () => {
-    const profile = await store.ensureProfile({
-      binding: passkeyBinding('https://a.example', 'cred-1'),
-      displayName: 'Ada',
-    })
-    await store.addMember('ws-1', profile.id)
-    await store.reopenToOriginTrust('ws-1')
-
-    // The marker is re-inserted by the ordinary membership path, so a
-    // reopen is a one-shot rather than a mode a workspace stays in.
-    await store.addMember('ws-1', profile.id)
-    expect(await store.membersOnly('ws-1')).toBe(true)
-  })
-
-  it('does not reopen an unrelated workspace', async () => {
-    const profile = await store.ensureProfile({
-      binding: passkeyBinding('https://a.example', 'cred-1'),
-      displayName: 'Ada',
-    })
-    await store.addMember('ws-a', profile.id)
-    await store.addMember('ws-b', profile.id)
-
-    await store.reopenToOriginTrust('ws-a')
-
-    expect(await store.membersOnly('ws-a')).toBe(false)
-    expect(await store.membersOnly('ws-b')).toBe(true)
+    expect(await store.profileForBinding(passkeyBinding('https://a.example', 'cred-1'))).toEqual(
+      profile,
+    )
   })
 })
 
@@ -224,7 +149,7 @@ describe('membersOnly', () => {
     expect(await store.membersOnly('ws-1')).toBe(false)
   })
 
-  it('is true after addMember, and stays true after revoking the only member', async () => {
+  it('is true after addMember, and stays true after removing the only member', async () => {
     const profile = await store.ensureProfile({
       binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
@@ -232,7 +157,7 @@ describe('membersOnly', () => {
     await store.addMember('ws-1', profile.id)
     expect(await store.membersOnly('ws-1')).toBe(true)
 
-    await store.revokeL1Membership('ws-1', profile.id)
+    await roles.remove('ws-1', profile.id)
     expect(await store.membersOnly('ws-1')).toBe(true)
   })
 
@@ -273,7 +198,7 @@ describe('isWorkspaceMember', () => {
     expect(await store.isWorkspaceMember('ws-1', 'unknown-profile')).toBe('not-a-member')
   })
 
-  it('is member after addMember and not-a-member after revokeL1Membership', async () => {
+  it('is member after addMember and not-a-member once removed', async () => {
     const profile = await store.ensureProfile({
       binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
@@ -281,7 +206,7 @@ describe('isWorkspaceMember', () => {
     await store.addMember('ws-1', profile.id)
     expect(await store.isWorkspaceMember('ws-1', profile.id)).toBe('member')
 
-    await store.revokeL1Membership('ws-1', profile.id)
+    await roles.remove('ws-1', profile.id)
     expect(await store.isWorkspaceMember('ws-1', profile.id)).toBe('not-a-member')
   })
 
@@ -374,15 +299,15 @@ describe('membershipRole', () => {
     expect(await store.membershipRole('ws-1', ada.id)).toBeNull()
   })
 
-  // Reopening clears the members-only marker but keeps the members, so the
-  // marker cannot be what decides "first".
-  it('does not make a later member an owner after the workspace was reopened', async () => {
+  // "First" is read from the memberships, so the owner leaving and the
+  // workspace emptying makes the next person the owner of a fresh start.
+  it('makes the next member an owner once the workspace has emptied', async () => {
     const ada = await user('ada')
     const bob = await user('bob')
     await store.addMember('ws-1', ada.id)
-    await store.reopenToOriginTrust('ws-1')
+    await roles.remove('ws-1', ada.id)
     await store.addMember('ws-1', bob.id)
-    expect(await store.membershipRole('ws-1', bob.id)).toBe('member')
+    expect(await store.membershipRole('ws-1', bob.id)).toBe('owner')
   })
 
   it('keeps an owner an owner when they are added again', async () => {

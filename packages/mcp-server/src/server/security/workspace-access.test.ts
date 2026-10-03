@@ -18,6 +18,7 @@ import {
   passkeyBinding,
 } from './member-profile-store.js'
 import { membershipRefusal, OPERATOR_ISSUED_KINDS, workspaceAccess } from './workspace-access.js'
+import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
 
 const WS = 'ws-1'
 const ORIGIN = 'https://a.example'
@@ -25,11 +26,13 @@ const ORIGIN = 'https://a.example'
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
+let roles: WorkspaceRoles
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-workspace-access-'))
   handle = await createIsolatedDb({ dataDir: root })
   members = createMemberProfileStore(handle.db)
+  roles = createWorkspaceRoles(handle.db, { ownedByTheMachine: true })
 })
 afterEach(async () => {
   await handle.dispose()
@@ -130,7 +133,7 @@ describe('workspaceAccess — a member-gated workspace', () => {
 })
 
 describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)', () => {
-  it('revoking the LAST member keeps the workspace person-gated for an unbound session', async () => {
+  it('removing the LAST member keeps the workspace person-gated for an unbound session', async () => {
     const profile = await members.ensureProfile({
       binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
@@ -138,17 +141,17 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
     await members.addMember(WS, profile.id)
     expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
 
-    await members.revokeL1Membership(WS, profile.id)
+    await roles.remove(WS, profile.id)
     expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
   })
 
-  it('revoking the last member refuses that former member’s own passkey as not_a_member', async () => {
+  it('removing the last member refuses that former member’s own passkey as not_a_member', async () => {
     const profile = await members.ensureProfile({
       binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
-    await members.revokeL1Membership(WS, profile.id)
+    await roles.remove(WS, profile.id)
 
     const grant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-1' })
     expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
@@ -158,7 +161,7 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
     expect(await workspaceAccess(UNBOUND_SESSION, 'ws-never-had-one', members)).toBe('admitted')
   })
 
-  it('revoking one member does not change another bound member’s answer', async () => {
+  it('removing one member does not change another bound member’s answer', async () => {
     const removed = await members.ensureProfile({
       binding: passkeyBinding(ORIGIN, 'cred-removed'),
       displayName: 'Ada',
@@ -170,7 +173,7 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
     await members.addMember(WS, removed.id)
     await members.addMember(WS, staying.id)
 
-    await members.revokeL1Membership(WS, removed.id)
+    await roles.remove(WS, removed.id)
 
     const stayingGrant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-staying' })
     const removedGrant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-removed' })

@@ -1,11 +1,11 @@
 /**
  * Model-based: `isWorkspaceMember(ws, p)` must equal whether the LAST
- * add/revoke op on that exact (ws, p) pair was an add, for any interleaved
+ * add/remove op on that exact (ws, p) pair was an add, for any interleaved
  * sequence touching a small pool of workspaces and profiles — and
  * `listMembers(ws)` must never disagree with that same model.
  *
  * `membersOnly(ws)` is a SEPARATE, monotone model: true iff at least one
- * `addMember(ws, ·)` ever ran, for any workspace in the pool — revoking
+ * `addMember(ws, ·)` ever ran, for any workspace in the pool — removing
  * every member never clears it (user decision 2026-09-21).
  */
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -19,12 +19,13 @@ import {
   type MemberProfileStore,
   passkeyBinding,
 } from './member-profile-store.js'
+import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
 
 const WORKSPACES = ['ws-1', 'ws-2'] as const
 const PROFILE_KEYS = ['p1', 'p2', 'p3'] as const
 
 const opArb = fc.record({
-  kind: fc.constantFrom('add', 'revoke'),
+  kind: fc.constantFrom('add', 'remove'),
   ws: fc.constantFrom(...WORKSPACES),
   p: fc.constantFrom(...PROFILE_KEYS),
 })
@@ -32,6 +33,7 @@ const opArb = fc.record({
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let store: MemberProfileStore
+let roles: WorkspaceRoles
 
 // One migrated database for the file: the migrations are the cost of a run,
 // the rows are not.
@@ -39,6 +41,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-member-profiles-prop-'))
   handle = await createIsolatedDb({ dataDir: root })
   store = createMemberProfileStore(handle.db)
+  roles = createWorkspaceRoles(handle.db, { ownedByTheMachine: true })
 })
 afterAll(async () => {
   await handle.dispose()
@@ -61,7 +64,7 @@ describe('membership seam', () => {
   // cost about 87 ms of every run: 60 runs took 5.2 s at load 21 and passed
   // the 3 s per-test budget at load 48 only by timing out (3.3 s), against
   // 0.9-1.1 s at the same load with one migration. 200 runs would still fit,
-  // but 60 covers the add/revoke interleavings that matter.
+  // but 60 covers the add/remove interleavings that matter.
   fcTest.prop([fc.array(opArb, { maxLength: 30 })], withDefaults({ numRuns: 60 }))(
     'isWorkspaceMember and listMembers agree with whichever op ran last per (workspace, profile) pair',
     async (ops) => {
@@ -89,7 +92,7 @@ describe('membership seam', () => {
           model.set(pairKey, true)
           everAdded.add(op.ws)
         } else {
-          await store.revokeL1Membership(op.ws, profileId)
+          await roles.remove(op.ws, profileId)
           model.set(pairKey, false)
         }
       }
