@@ -23,6 +23,9 @@ import { createDocumentSetTool } from './document-set.js'
  * roll them back. Claiming otherwise would be a lie a caller acts on: they
  * would retry the whole batch and create the first documents twice.
  *
+ * A `detail` that already ends in a full stop (an index's refusal reads as a
+ * sentence) is joined without doubling it.
+ *
  * `opIndex` and the applied count are in the MESSAGE as well as on the
  * class, because only `.message` survives the MCP error path and a caller
  * repairing a rejected batch needs to know where to resume.
@@ -35,7 +38,7 @@ class WorkspaceEditError extends Error {
     detail: string,
   ) {
     super(
-      `ops[${opIndex}] (${op}) could not be applied: ${detail}. ` +
+      `ops[${opIndex}] (${op}) could not be applied: ${detail.replace(/\.$/, '')}. ` +
         `${applied} op(s) before it were applied and stand; ops after it were not run. ` +
         'Resume from this index rather than resending the batch.',
     )

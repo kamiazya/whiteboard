@@ -96,6 +96,27 @@ describe('wb_workspace_edit', () => {
     ).rejects.toThrow(/1 op\(s\) before it were applied and stand/)
   })
 
+  it('ends a refusal that already carries a full stop without doubling it', async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    const made = await tool.execute({
+      workspaceId: WS,
+      ops: [
+        { op: 'document.create', path: 'a', kind: 'markdown' },
+        { op: 'document.create', path: 'a/b', kind: 'markdown' },
+      ],
+    })
+    const parent = made.results[0]?.documentId ?? ''
+    const refusal = await tool
+      .execute({ workspaceId: WS, ops: [{ op: 'document.delete', documentId: parent }] })
+      .then(
+        () => '',
+        (err: Error) => err.message,
+      )
+    expect(refusal).toContain('below it first')
+    expect(refusal).not.toContain('..')
+  })
+
   it('deletes and sets alongside creates', async () => {
     const deps = await makeDeps()
     const tool = createWorkspaceEditTool(deps)
