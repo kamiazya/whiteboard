@@ -150,6 +150,9 @@ describe('the extension identity a page checks', () => {
     const skew = bridgeSkew({ version: '0.0.9', protocol: BRIDGE_PROTOCOL_VERSION - 1 }, 'host')
     expect(skew).toMatch(/native host \(version 0\.0\.9\)/)
     expect(skew).toMatch(/@kamiazya\/whiteboard-mcp/)
+    // The host's launcher pins the copy of `whiteboard` it was installed from,
+    // so a new package alone leaves the browser starting the old one.
+    expect(skew).toMatch(/then run `whiteboard native-host install --json` again$/)
     expect(skew).not.toMatch(/update the extension/)
   })
 

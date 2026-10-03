@@ -141,6 +141,46 @@ describe('runNativeHost', () => {
   })
 
   // Chromium refuses a message from the host above 1 MB.
+  // A header dropped from the allowlist breaks only the caller that sends it,
+  // which no other test here does. Each is spelled here rather than read from
+  // the host's own list, so the two cannot drift together.
+  it('forwards each header the page may choose, in any case, and drops any other', async () => {
+    const allowed = [
+      'accept',
+      'content-type',
+      'if-match',
+      'if-none-match',
+      'last-event-id',
+      'traceparent',
+      'tracestate',
+    ]
+    let seen: IncomingMessage['headers'] = {}
+    await startDaemon((req, res) => {
+      seen = req.headers
+      res.end('ok')
+    })
+    const page = connectPage()
+
+    page.send({
+      type: 'request',
+      id: 'h1',
+      method: 'GET',
+      path: '/api/runtime/ping',
+      headers: {
+        ...Object.fromEntries(allowed.map((name) => [name.toUpperCase(), `page-${name}`])),
+        'x-forwarded-for': '203.0.113.9',
+        'proxy-authorization': 'Basic from-the-page',
+      },
+    })
+    await page.until((m) => m.some((x) => x.type === 'end'))
+
+    for (const name of allowed) expect(seen[name]).toBe(`page-${name}`)
+    expect(seen['x-forwarded-for']).toBeUndefined()
+    expect(seen['proxy-authorization']).toBeUndefined()
+    page.close()
+    await page.done
+  })
+
   it('splits a large response into messages the browser accepts', async () => {
     const big = Buffer.alloc(3 * BRIDGE_CHUNK_BYTES + 17, 7)
     await startDaemon((_req, res) => res.end(big))

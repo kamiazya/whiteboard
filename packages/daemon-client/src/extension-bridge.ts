@@ -115,10 +115,12 @@ const HOP_NAME: Record<BridgeHop, string> = {
 }
 
 // The extension is built from a checkout; the host ships in the npm package and
-// moves with it, so the remedy differs by hop.
+// moves with it, so the remedy differs by hop. The host's launcher pins the
+// absolute path of the `whiteboard` it was installed from, so a new package
+// alone leaves the browser starting the old copy until the host is registered again.
 const HOP_UPDATE: Record<BridgeHop, string> = {
   extension: 'update the extension',
-  host: 'update @kamiazya/whiteboard-mcp, the package the native host ships in',
+  host: 'update @kamiazya/whiteboard-mcp, the package the native host ships in, then run `whiteboard native-host install --json` again',
 }
 
 /**
