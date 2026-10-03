@@ -95,6 +95,16 @@ const RETIRED: readonly RetiredClaim[] = [
     example: 'makes **no outbound network requests today**',
   },
   {
+    pattern: /edge with a free end|point-ended edge/i,
+    why: 'an edge cannot end in empty space; a drawn stroke with a free end is a line, and it is carried in `x-whiteboard.lines` (extended) or dropped whole (strict) like any other ink',
+    example: 'one thing is dropped: an edge with a free end',
+  },
+  {
+    pattern: /request names a `background` of its own/,
+    why: 'the export routes take no `background` field: a request carrying one is refused as an unrecognized key, and the paper follows the theme and the mode asked for',
+    example: 'unless the request names a `background` of its own',
+  },
+  {
     pattern: /\.dev-data\.bak/,
     why: 'a sibling of `.dev-data/` is not git-ignored and would hold the dev token; back up under `tmp/`',
     example: 'cp -r .dev-data .dev-data.bak',
