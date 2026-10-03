@@ -339,6 +339,18 @@ contribution point through the derived form alone. Views, slots and
 per-kind resolved-value types stay unbuilt; [ADR-0030](0030-render-theme.md)
 records the constraints that keep this a prefix.
 
+**2026-10-03:** decision 3's deployment-swappable plugin set is DEFERRED,
+until a second plugin exists. The registry seam is real and the four write and
+discovery tools (`wb_facet_set`, `wb_facet_list`, canvas edit, the stencil
+library) read `ServerDeps.facetRegistry`, but rendering, export and the web
+editor read the bundled plugin directly, so a swapped set would make writes
+and drawings disagree. The `plugins` / `facetRegistry` options on the
+composition roots were deleted rather than left half-wired: every root composes
+the bundled set. Bringing the promise back needs the registry to reach
+`SpatialLayoutOptions` and `renderContributions` in canvas-render and the web
+editor's inspector, context menu and font loading, with a test that a set
+without `visual` makes a facet write and `wb_scene_render` agree.
+
 **2026-09-10:** the `edge` target is open, and decision 5's third slot with
 it. Two increments landed together. The pre-facet canvas-level
 `x-whiteboard.edgeRouting` preference — the last of the "existing rendering
