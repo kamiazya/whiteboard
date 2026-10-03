@@ -21,7 +21,7 @@ import {
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
-import { splitBearerTags, tagBearersOf } from '@kamiazya/whiteboard-reference-graph'
+import { splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import {
   fullTextSearch,
   type SearchableDocument,
@@ -41,6 +41,7 @@ import {
   ensureLocalWorkspace,
   idbContentClock,
 } from './local-document-summary.js'
+import { createTagBearersCache } from './local-files-source-tags.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
 
@@ -217,6 +218,8 @@ export function createLocalFilesSource(
     }
   }
 
+  const bearersByDocument = createTagBearersCache(readableDocuments)
+
   /**
    * One document's searchable text, from the corpus cache when the content
    * has not moved.
@@ -253,11 +256,9 @@ export function createLocalFilesSource(
       readLibrary(index, loadCurrentDoc, STENCIL_LIBRARY_PATH, readStencilLibrary),
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
-      const bearers: ReturnType<typeof tagBearersOf> = []
-      for await (const read of readableDocuments(entries)) {
-        bearers.push(...tagBearersOf(read.doc, read.content))
-      }
-      return tagsInUse(bearers)
+      const stamps = await clock(entries.map((entry) => entry.documentId))
+      const bearers = await bearersByDocument(entries, stamps)
+      return tagsInUse([...bearers.values()].flat())
     },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       let entries: Awaited<ReturnType<DocumentIndex['listDocuments']>>
@@ -273,18 +274,17 @@ export function createLocalFilesSource(
       }
       if (entries.length === 0) return []
       const stamps = await clock(entries.map((entry) => entry.documentId))
-      // Tags for search and the filter chips. Loading every markdown doc at
-      // list time is the local spelling of the daemon's tag projection —
-      // IndexedDB reads, so cheap at this scale; an unreadable document
-      // simply lists tagless rather than failing the list.
-      // ponytail: O(N) doc loads per listing; cache per-document when a
-      // measured workspace makes the panel open slowly.
+      // Tags for search and the filter chips: the local spelling of the
+      // daemon's tag projection. A board's own tags are the document's
+      // (ADR-0040 decision 2); what its boxes and edges carry is the carried
+      // set that lets the `#tag` filter find the board (decision 3).
+      const bearers = await bearersByDocument(entries, stamps)
       const tagsById = new Map<string, readonly string[]>()
       const carriedById = new Map<string, readonly string[]>()
-      for await (const read of readableDocuments(entries)) {
-        const { own, carried } = splitBearerTags(tagBearersOf(read.doc, read.content))
-        if (own.length > 0) tagsById.set(read.documentId, own)
-        if (carried.length > 0) carriedById.set(read.documentId, carried)
+      for (const [documentId, found] of bearers) {
+        const { own, carried } = splitBearerTags(found)
+        if (own.length > 0) tagsById.set(documentId, own)
+        if (carried.length > 0) carriedById.set(documentId, carried)
       }
       return entries.map((entry) => ({
         documentId: entry.documentId,

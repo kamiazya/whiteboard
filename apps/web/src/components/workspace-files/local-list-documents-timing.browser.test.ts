@@ -82,7 +82,9 @@ it('prints what listDocuments costs as the workspace grows', { timeout: 600_000 
 
   console.info(`listDocuments, ms: ${JSON.stringify(readings)}`)
 
-  // The budget only where it holds: a workspace of 25 lists in well under the
-  // ceiling whatever the machine.
+  // Budgets only where they hold. A workspace of 25 lists in well under the
+  // ceiling whatever the machine, and a repeat over unchanged documents reads
+  // none of them, so it costs a fraction of a cold list however many there are.
   expect(readings[25]?.coldMs).toBeLessThan(10_000)
+  expect(readings[100]?.repeatMs).toBeLessThan(1000)
 })

@@ -109,6 +109,25 @@ function tagReadContract(factory: FilesSourceFactory): void {
     ])
   })
 
+  it('answers the BODY of a markdown document, never its frontmatter', async () => {
+    const source = await factory({
+      documents: [{ path: 'note', kind: 'markdown', body: 'hello world', tags: ['q3'] }],
+    })
+    const [entry] = await source.listDocuments()
+    expect((await source.loadMarkdown(entry as never)).body).toBe('hello world')
+  })
+
+  it('answers the extension facets stored beside the body', async () => {
+    const facets = { 'visual.mark/v0': { icon: 'star' } }
+    const source = await factory({
+      documents: [{ path: 'note', kind: 'markdown', body: 'x', facets }],
+    })
+    const [entry] = await source.listDocuments()
+    expect((await source.loadMarkdown(entry as never)).facets).toEqual(facets)
+  })
+}
+
+function boardTagContract(factory: FilesSourceFactory): void {
   it('lists what a board carries beside its own tags, each tag once, and nothing carried on a note', async () => {
     const source = await factory({
       documents: [BOARD_WITH_TAGS, { path: 'note', kind: 'markdown', tags: ['q3'] }],
@@ -130,23 +149,6 @@ function tagReadContract(factory: FilesSourceFactory): void {
       { tag: 'q3', documents: 1, boards: 1, nodes: 0, edges: 0 },
       { tag: 'team:core', key: 'team', value: 'core', documents: 0, boards: 1, nodes: 0, edges: 0 },
     ])
-  })
-
-  it('answers the BODY of a markdown document, never its frontmatter', async () => {
-    const source = await factory({
-      documents: [{ path: 'note', kind: 'markdown', body: 'hello world', tags: ['q3'] }],
-    })
-    const [entry] = await source.listDocuments()
-    expect((await source.loadMarkdown(entry as never)).body).toBe('hello world')
-  })
-
-  it('answers the extension facets stored beside the body', async () => {
-    const facets = { 'visual.mark/v0': { icon: 'star' } }
-    const source = await factory({
-      documents: [{ path: 'note', kind: 'markdown', body: 'x', facets }],
-    })
-    const [entry] = await source.listDocuments()
-    expect((await source.loadMarkdown(entry as never)).facets).toEqual(facets)
   })
 }
 
@@ -299,6 +301,7 @@ export function describeWorkspaceFilesSourceConformance(
   describe(`${name} satisfies WorkspaceFilesSource`, () => {
     listingContract(factory)
     tagReadContract(factory)
+    boardTagContract(factory)
     writeContract(factory)
     tagLibraryContract(factory)
     stencilLibraryContract(factory)
