@@ -405,6 +405,24 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
       lakehouse: { displayName: 'Lakehouse', color: '3', facets: {} },
     })
   })
+
+  it('reads a library document whose stored bytes cannot be decoded as no library, not as a failure', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const store = new LoroStore()
+    for (const path of [TAG_LIBRARY_PATH, STENCIL_LIBRARY_PATH]) {
+      const entry = await index.createDocument({
+        workspaceId: getBrowserWorkspaceId(),
+        path,
+        kind: 'markdown',
+      })
+      await store.save(entry.documentId, new Uint8Array([1, 2, 3, 4]))
+    }
+    const source = createLocalFilesSource()
+    await expect(source.readTagLibrary?.()).resolves.toEqual({})
+    await expect(source.readStencilLibrary?.()).resolves.toEqual({})
+    await expectLoggedFailure('startup fold left documents behind')
+  })
 })
 
 describe('createLocalFilesSource tag cache', () => {
