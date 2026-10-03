@@ -10,7 +10,9 @@ paths:
 - **What one document contributes** (`extractContentFacts`): the references
   its content writes (`[[path]]`, `![[path]]`, a file node's target), the
   texts search and mention-finding read, and its tag bearers. Pure over a
-  listing entry and a `LoroDoc`.
+  listing entry and a `LoroDoc`. `tagBearersOf` and `splitBearerTags` are
+  exported on their own, so the daemon's projection and the browser keeper
+  count the same bearers rather than each walking a canvas by hand.
 - **What the graph answers** (`ReferenceAggregate`, `mentionsOfIn`,
   `unlinkedNameSpans`): backlinks and unlinked mentions, computed from those
   facts. The aggregate is the one query engine, fed one upsert per listed
