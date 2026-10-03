@@ -3,9 +3,10 @@
 // timeout, looks exactly like a quiet week. These two guards are what make
 // those two failures loud.
 
-import { readFileSync } from 'node:fs'
-import { isAbsolute, resolve } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
 import { REPO_ROOT } from './scan-roots.js'
@@ -36,6 +37,80 @@ describe('stryker configs', () => {
     expect(plugins.length).toBeGreaterThan(0)
     const bare = plugins.filter((plugin) => typeof plugin !== 'string' || !isAbsolute(plugin))
     expect(bare).toEqual([])
+  })
+})
+
+const MCP_SERVER = resolve(REPO_ROOT, 'packages/mcp-server')
+const MCP_CONFIG_SOURCE = readFileSync(resolve(MCP_SERVER, 'stryker.config.mjs'), 'utf-8')
+
+// The least reach the lane's selection may have: a test that imports a mutated
+// module, or a module that does. Raising the selection's own depth only adds
+// tests; lowering it below this drops the consumers' tests.
+const FLOOR_DEPTH = 2
+
+describe('the contracts lane initial run', () => {
+  // Stryker abandons the lane when its initial run outlasts this bound, and its
+  // default is 5 minutes: the run reads as a config error, not as slow. The
+  // number records what it was sized from, like the workflow's timeouts below:
+  // `measured: <date> <minutes> min`, the newest duration observed, with 1.5x
+  // headroom over it.
+  it('names the timeout and the duration it was sized from', () => {
+    const minutes = /\n\s*dryRunTimeoutMinutes:\s*(\d+)\s*,/.exec(MCP_CONFIG_SOURCE)?.[1]
+    expect(minutes, 'a dryRunTimeoutMinutes key in stryker.config.mjs').toBeDefined()
+    const comment = /((?:\n\s*\/\/[^\n]*)+)\n\s*dryRunTimeoutMinutes:/.exec(MCP_CONFIG_SOURCE)?.[1]
+    const measured = /measured: (\d{4}-\d{2}-\d{2}) (\d+) min\b/.exec(comment ?? '')
+    expect(measured, 'a `measured: <date> <N> min` comment above it').not.toBeNull()
+    expect(Number(minutes)).toBeGreaterThanOrEqual(Math.ceil(Number(measured?.[2]) * 1.5))
+  })
+
+  // The lane's include is derived from the source's import graph by a regex
+  // over specifiers, cut at a depth. This resolves the same graph with the compiler, which
+  // shares no code with it, so a specifier form the regex misses shows up as a
+  // covering test the lane would silently not run.
+  it('runs every test the compiler finds importing a mutated module or one that does', async () => {
+    const { default: config } = (await import(
+      pathToFileURL(resolve(MCP_SERVER, 'stryker.config.mjs')).href
+    )) as { default: { mutate: string[] } }
+    const { default: lane } = (await import(
+      pathToFileURL(resolve(MCP_SERVER, 'vitest.stryker.config.ts')).href
+    )) as { default: { test: { include: string[] } } }
+
+    const sourceDir = join(MCP_SERVER, 'src')
+    const options: ts.CompilerOptions = {
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    }
+    const files = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name)
+        if (entry.isDirectory()) return files(path)
+        return entry.name.endsWith('.ts') ? [path] : []
+      })
+    const importers = new Map<string, string[]>()
+    for (const file of files(sourceDir)) {
+      const { importedFiles } = ts.preProcessFile(readFileSync(file, 'utf-8'), true, true)
+      for (const { fileName } of importedFiles) {
+        const target = ts.resolveModuleName(fileName, file, options, ts.sys).resolvedModule
+          ?.resolvedFileName
+        if (target?.startsWith(sourceDir + sep) !== true) continue
+        importers.set(target, [...(importers.get(target) ?? []), file])
+      }
+    }
+    const reached = new Set(config.mutate.map((path) => resolve(MCP_SERVER, path)))
+    let frontier = [...reached]
+    for (let level = 0; level < FLOOR_DEPTH; level++) {
+      frontier = frontier
+        .flatMap((file) => importers.get(file) ?? [])
+        .filter((f) => !reached.has(f))
+      for (const file of frontier) reached.add(file)
+    }
+    const covering = [...reached]
+      .filter((file) => file.endsWith('.test.ts'))
+      .map((file) => relative(MCP_SERVER, file).split(sep).join('/'))
+
+    // Reached, not assumed: a closure that found nothing passes the check below.
+    expect(covering.length).toBeGreaterThan(50)
+    expect(covering.filter((file) => !lane.test.include.includes(file))).toEqual([])
   })
 })
 
