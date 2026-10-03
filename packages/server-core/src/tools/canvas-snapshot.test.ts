@@ -5,7 +5,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
@@ -14,6 +14,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import {
   canvasSnapshotSchema,
   createCanvasSnapshotTool,
+  projectCanvasSnapshot,
   SNAPSHOT_MAX_EDGES,
   SNAPSHOT_MAX_NODES,
   SNAPSHOT_TEXT_MAX_CHARS,
@@ -485,5 +486,61 @@ describe('wb_canvas_snapshot — overflows', () => {
 
     expect(result.nodes[0]).not.toHaveProperty('overflows')
     expect(result).not.toHaveProperty('layout')
+  })
+})
+
+describe('projectCanvasSnapshot — what an edge and a line keep, and when it reports a cut', () => {
+  const a = textNode({ id: 'a', text: 'a', x: 0, y: 0, width: 10, height: 10 })
+  const b = textNode({ id: 'b', text: 'b', x: 50, y: 0, width: 10, height: 10 })
+  const project = (canvas: SpatialCanvas) =>
+    projectCanvasSnapshot('d', canvas, new Set(), new Set())
+  const edge = (i: number) => ({ id: `e${i}`, from: { node: 'a' }, to: { node: 'b' } })
+
+  test('carries an edge colour', () => {
+    const snapshot = project({
+      nodes: [a, b],
+      edges: [{ ...edge(0), color: '3' }],
+    })
+
+    expect(snapshot.edges[0]?.color).toBe('3')
+  })
+
+  test('carries a line label and colour', () => {
+    const snapshot = project({
+      nodes: [a, b],
+      edges: [],
+      lines: [
+        {
+          id: 'l',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 5, y: 5 } },
+          label: 'hi',
+          color: '2',
+        },
+      ],
+    })
+
+    expect(snapshot.lines[0]).toMatchObject({ label: 'hi', color: '2' })
+  })
+
+  test('is not truncated with exactly as many edges as it returns', () => {
+    const snapshot = project({
+      nodes: [a, b],
+      edges: Array.from({ length: SNAPSHOT_MAX_EDGES }, (_, i) => edge(i)),
+    })
+
+    expect(snapshot.edges).toHaveLength(SNAPSHOT_MAX_EDGES)
+    expect(snapshot.truncated).toBe(false)
+  })
+
+  test('is truncated with one edge more than it returns', () => {
+    const snapshot = project({
+      nodes: [a, b],
+      edges: Array.from({ length: SNAPSHOT_MAX_EDGES + 1 }, (_, i) => edge(i)),
+    })
+
+    expect(snapshot.edges).toHaveLength(SNAPSHOT_MAX_EDGES)
+    expect(snapshot.edgeCount).toBe(SNAPSHOT_MAX_EDGES + 1)
+    expect(snapshot.truncated).toBe(true)
   })
 })
