@@ -193,7 +193,9 @@ describe('DaemonDocumentPage comments panel', () => {
     stubDaemonFetch()
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'board', documentId: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
     mockGetDocumentBacklinks.mockResolvedValue({ backlinks: [], unlinkedMentions: [] })
   })
@@ -248,7 +250,9 @@ describe('DaemonDocumentPage comments panel', () => {
 
   it("lists a markdown document's conversations from the same session, and replies through it", async () => {
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+      documents: [
+        { path: 'note', documentId: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' },
+      ],
     })
     await act(async () => {
       renderInRouter(
@@ -355,7 +359,9 @@ describe('DaemonDocumentPage comments panel', () => {
 
   it('Properties takes the slot on a markdown document: opening it closes History', async () => {
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+      documents: [
+        { path: 'note', documentId: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' },
+      ],
     })
     const fakeVersionsBackend: VersionsBackend = {
       list: async () => [],
@@ -426,7 +432,9 @@ describe('DaemonDocumentPage comments opener with zero open threads', () => {
     stubDaemonFetch()
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'board', documentId: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
     mockGetDocumentBacklinks.mockResolvedValue({ backlinks: [], unlinkedMentions: [] })
   })

@@ -87,8 +87,8 @@ describe('DaemonDocumentPage versions', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'second', documentId: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
     // One backlink by default so `switchDocumentViaConnections` has a row to
@@ -505,7 +505,9 @@ describe('DaemonDocumentPage versions', () => {
   describe('a markdown document reaches its own history', () => {
     it('offers History in the top bar and opens the column', async () => {
       mockListDocuments.mockResolvedValue({
-        documents: [{ path: 'notes', id: 'id-notes', updatedAt: '2026-01-01', kind: 'markdown' }],
+        documents: [
+          { path: 'notes', documentId: 'id-notes', updatedAt: '2026-01-01', kind: 'markdown' },
+        ],
       })
       const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)

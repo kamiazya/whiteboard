@@ -41,7 +41,9 @@ describe('DaemonDocumentPage served by a server-mode keeper', () => {
       workspaces: [{ workspaceId: 'w1' }],
     })
     vi.mocked(daemonApiClient.listDocuments).mockResolvedValue({
-      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
     vi.mocked(replicaRefresh.scheduleReplicaPush).mockClear()
     vi.mocked(replicaRefresh.scheduleReplicaRefresh).mockClear()

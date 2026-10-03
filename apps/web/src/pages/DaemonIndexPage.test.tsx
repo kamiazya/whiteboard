@@ -73,11 +73,9 @@ describe('DaemonIndexPage', () => {
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
-        // displayName rides on the list row exactly as the daemon's
+        // the name rides on the list row exactly as the daemon's
         // documents table serves it; /names projects the same column.
-        'ws-a': [
-          { path: 'alpha', displayName: 'Alpha Board', updatedAt: new Date().toISOString() },
-        ],
+        'ws-a': [{ path: 'alpha', name: 'Alpha Board', updatedAt: new Date().toISOString() }],
         'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: {
@@ -814,7 +812,7 @@ describe('DaemonIndexPage', () => {
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
-        'ws-a': [{ path: 'alpha', displayName: 'Alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
       snapshotByDocument: { alpha: new Uint8Array([1, 2, 3]) },
@@ -849,12 +847,7 @@ describe('DaemonIndexPage', () => {
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
-          {
-            path: 'notes',
-            displayName: 'Notes',
-            kind: 'markdown',
-            updatedAt: new Date().toISOString(),
-          },
+          { path: 'notes', name: 'Notes', kind: 'markdown', updatedAt: new Date().toISOString() },
         ],
       },
       namesByWorkspace: { 'ws-a': { documents: { notes: 'Notes' }, pinned: [] } },
@@ -888,9 +881,9 @@ describe('DaemonIndexPage', () => {
           jsonResponse({
             documents: [
               {
-                id: 'id-alpha',
+                documentId: 'id-alpha',
                 path: 'alpha',
-                displayName: 'Alpha',
+                name: 'Alpha',
                 updatedAt: new Date().toISOString(),
                 kind: 'markdown',
               },
@@ -952,7 +945,7 @@ describe('DaemonIndexPage', () => {
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
-        'ws-a': [{ path: 'alpha', displayName: 'Alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
       // No snapshotByDocument entry for 'alpha' -> the mock 404s the snapshot read.
@@ -980,7 +973,7 @@ describe('DaemonIndexPage', () => {
           jsonResponse({
             documents: [
               {
-                id: 'id-alpha',
+                documentId: 'id-alpha',
                 path: 'alpha',
                 updatedAt: new Date().toISOString(),
                 kind: 'markdown',
@@ -994,7 +987,7 @@ describe('DaemonIndexPage', () => {
           jsonResponse({
             documents: [
               {
-                id: 'id-beta',
+                documentId: 'id-beta',
                 path: 'beta',
                 updatedAt: new Date().toISOString(),
                 kind: 'markdown',
@@ -1268,7 +1261,7 @@ describe('DaemonIndexPage', () => {
               created.length === 0
                 ? []
                 : serverPaths.map((path) => ({
-                    id: `id-${path}`,
+                    documentId: `id-${path}`,
                     path,
                     updatedAt: new Date().toISOString(),
                     kind: 'spatial',
@@ -1308,13 +1301,13 @@ describe('DaemonIndexPage', () => {
         'ws-a': [
           {
             path: 'meeting-notes',
-            displayName: 'Meeting notes',
+            name: 'Meeting notes',
             updatedAt: '2026-08-01T00:00:00Z',
             kind: 'markdown',
           },
           {
             path: 'trip-plan',
-            displayName: 'Trip plan',
+            name: 'Trip plan',
             updatedAt: '2026-08-02T00:00:00Z',
             kind: 'spatial',
           },
@@ -1361,10 +1354,8 @@ describe('DaemonIndexPage', () => {
       documentsByWorkspace: {
         // The SAME path in both, which is the ordinary case rather than a
         // contrived one: every workspace's first document is `untitled`.
-        'ws-a': [{ path: 'untitled', displayName: 'Mine', updatedAt: new Date().toISOString() }],
-        'ws-b': [
-          { path: 'untitled', displayName: 'Someone else', updatedAt: new Date().toISOString() },
-        ],
+        'ws-a': [{ path: 'untitled', name: 'Mine', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'untitled', name: 'Someone else', updatedAt: new Date().toISOString() }],
       },
       onDeleteDocument: (workspaceId, path) => {
         deleted.push({ workspaceId, path })
@@ -1400,9 +1391,7 @@ describe('DaemonIndexPage', () => {
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
-        'ws-a': [
-          { path: 'alpha', displayName: 'Alpha Board', updatedAt: new Date().toISOString() },
-        ],
+        'ws-a': [{ path: 'alpha', name: 'Alpha Board', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha Board' }, pinned: [] } },
       onDeleteDocument: (_ws, path) => {
@@ -1679,7 +1668,12 @@ describe('DaemonIndexPage', () => {
         return Promise.resolve(
           jsonResponse({
             documents: [
-              { path: 'alpha', id: 'doc-a', kind: 'spatial', updatedAt: new Date().toISOString() },
+              {
+                path: 'alpha',
+                documentId: 'doc-a',
+                kind: 'spatial',
+                updatedAt: new Date().toISOString(),
+              },
             ],
           }),
         )
@@ -1728,7 +1722,12 @@ describe('DaemonIndexPage', () => {
         return Promise.resolve(
           jsonResponse({
             documents: [
-              { path: 'alpha', id: 'doc-a', kind: 'spatial', updatedAt: new Date().toISOString() },
+              {
+                path: 'alpha',
+                documentId: 'doc-a',
+                kind: 'spatial',
+                updatedAt: new Date().toISOString(),
+              },
             ],
           }),
         )
@@ -1991,8 +1990,8 @@ describe('the workspace names the page', () => {
   // index-page test green.
   it('names the one document left after a partial delete, not the count it attempted', async () => {
     let rows = [
-      { path: 'alpha', displayName: 'Alpha board', updatedAt: new Date().toISOString() },
-      { path: 'beta', displayName: 'Beta board', updatedAt: new Date().toISOString() },
+      { path: 'alpha', name: 'Alpha board', updatedAt: new Date().toISOString() },
+      { path: 'beta', name: 'Beta board', updatedAt: new Date().toISOString() },
     ]
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],

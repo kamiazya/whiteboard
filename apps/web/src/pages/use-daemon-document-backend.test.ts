@@ -22,7 +22,7 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 const fetchFn = vi.fn() as unknown as typeof fetch
 
 function summary(path: string, id: string): DocumentSummary {
-  return { id, path, kind: 'spatial', updatedAt: '2026-01-01T00:00:00.000Z' }
+  return { documentId: id, path, kind: 'spatial', updatedAt: '2026-01-01T00:00:00.000Z' }
 }
 
 function options(over: Partial<Parameters<typeof useDaemonDocumentBackend>[0]> = {}) {

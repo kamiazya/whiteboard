@@ -22,7 +22,7 @@ export class FakeLiveDocuments implements LiveDocuments {
   async kind(): Promise<DocumentKind | null> {
     return 'spatial'
   }
-  async list(): Promise<readonly { id?: string; path: string }[]> {
+  async list(): Promise<readonly { documentId?: string; path: string }[]> {
     return [...this.docs.keys()].map((path) => ({ path }))
   }
   async rename(): Promise<void> {

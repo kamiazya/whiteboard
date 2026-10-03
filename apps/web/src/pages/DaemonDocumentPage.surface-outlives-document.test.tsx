@@ -99,8 +99,8 @@ describe('the body surface does not outlive its document (daemon)', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'doc-a', id: 'id-a', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'doc-b', id: 'id-b', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'doc-a', documentId: 'id-a', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'doc-b', documentId: 'id-b', updatedAt: '2026-01-01', kind: 'spatial' },
       ],
     })
   })

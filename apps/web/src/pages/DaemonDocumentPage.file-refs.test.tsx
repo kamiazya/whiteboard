@@ -64,8 +64,8 @@ describe('DaemonDocumentPage file refs', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'second', documentId: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
   })

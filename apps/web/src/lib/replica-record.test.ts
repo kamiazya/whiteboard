@@ -82,7 +82,7 @@ describe('replica record', () => {
     const doc = record()
     const entries = replicaEntries(doc)
     const linkable = entries.map((e) => ({
-      id: e.documentId,
+      documentId: e.documentId,
       path: e.path,
       ...(e.kind === undefined ? {} : { kind: e.kind }),
     }))

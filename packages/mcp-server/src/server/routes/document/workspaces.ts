@@ -290,15 +290,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     try {
       const deps = options.serverDeps
       const { documents } = await wbDocumentList(deps, { workspaceId })
-      // The port names a document by the id the index assigned and calls what
-      // a human reads its `name`; this surface has always said `id` and
-      // `displayName`. Renaming either would be a published break for a
-      // translation an adapter is there to do.
       const response: ListDocumentsResponse = {
         documents: documents.map((entry) => ({
           path: entry.path,
-          id: entry.documentId,
-          ...(entry.name === undefined ? {} : { displayName: entry.name }),
+          documentId: entry.documentId,
+          ...(entry.name === undefined ? {} : { name: entry.name }),
           ...(entry.kind === undefined ? {} : { kind: entry.kind }),
           ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
           ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),

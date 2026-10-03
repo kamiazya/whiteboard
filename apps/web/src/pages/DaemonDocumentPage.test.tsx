@@ -69,8 +69,8 @@ describe('DaemonDocumentPage', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'second', documentId: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
     // One backlink by default so `switchDocumentViaConnections` has a row to
@@ -554,7 +554,7 @@ describe('DaemonDocumentPage', () => {
     })
     mockListDocuments.mockResolvedValueOnce({
       documents: [
-        { path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' },
+        { path: 'untitled', documentId: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' },
       ],
     })
 

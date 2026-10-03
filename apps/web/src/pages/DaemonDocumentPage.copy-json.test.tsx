@@ -88,8 +88,8 @@ describe('copying a daemon-kept board as JSON Canvas', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [
-        { path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' },
+        { path: 'board', documentId: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'note', documentId: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' },
       ],
     })
   })

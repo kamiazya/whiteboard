@@ -12,7 +12,7 @@ import type { LoadedFileDocument } from './document-file-contract.js'
  */
 /** The daemon list's row, by the three fields this choice reads. */
 export interface ListedDocument {
-  readonly id: string
+  readonly documentId: string
   readonly path: string
   readonly kind?: DocumentKind
 }
@@ -24,9 +24,9 @@ export function loadedReferenceOf(
   documentId: string | null,
 ): LoadedReference | undefined {
   const entry = entries.find((candidate) =>
-    documentId === null ? candidate.path === target : candidate.id === documentId,
+    documentId === null ? candidate.path === target : candidate.documentId === documentId,
   )
-  const id = documentId ?? entry?.id
+  const id = documentId ?? entry?.documentId
   const identity = id !== undefined ? { documentId: id } : {}
   // A listed row that names no kind is a canvas, as `readDocumentContent`
   // reads it; a document the listing does not hold at all falls to its body.

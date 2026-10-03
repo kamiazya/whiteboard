@@ -81,7 +81,7 @@ function keeperStub(
     if (url.endsWith('/documents')) {
       const documents = readWorkspaceDocuments(target).map((entry) => ({
         path: entry.path,
-        id: entry.documentId,
+        documentId: entry.documentId,
         kind: entry.kind,
         updatedAt: new Date().toISOString(),
       }))

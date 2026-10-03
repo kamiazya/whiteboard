@@ -83,7 +83,9 @@ describe('DaemonDocumentPage markdown documents', () => {
     stubNames({ documents: { 'agent-note': 'Agent verification note' }, pinned: [] })
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+      documents: [
+        { path: 'agent-note', documentId: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' },
+      ],
     })
   })
   afterEach(() => {
@@ -172,7 +174,9 @@ describe('DaemonDocumentPage markdown documents', () => {
 
   it('hides the facets disclosure for a spatial document', async () => {
     mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'board', id: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'board', documentId: 'id-board', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
     stubNames({ documents: { board: 'A board' }, pinned: [] })
     await act(async () => {

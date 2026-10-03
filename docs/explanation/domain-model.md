@@ -129,7 +129,7 @@ That split is **gone**, in four steps recorded in the migration log:
 - A save from a long-lived editing session **merges** into that record
   before writing, so a tool call that lands mid-session is not overwritten
   by the next save from that session.
-- Every listed document carries its `id` and its `kind` — both are required
+- Every listed document carries its `documentId` and its `kind` — both are required
   by the listing contract. Rows recorded before kinds existed were this
   project's own pre-release data and are deleted at startup, so "kind never
   recorded" is no longer a state a surface has to render.

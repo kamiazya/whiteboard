@@ -565,7 +565,7 @@ describe('listDocuments', () => {
   // to resolve a `[[Name]]` link, or to offer link targets, has to be able
   // to read the name from the SAME list it renders — fetching it separately
   // is what let the two disagree.
-  it('carries the display name when one is recorded', async () => {
+  it('carries the name when one is recorded', async () => {
     await saveDocument('session1', 'untitled-2', new LoroDoc())
     const { setDocumentDisplayName } = await import('./names-store.js')
     await setDocumentDisplayName('session1', 'untitled-2', '週次レビュー')
@@ -573,13 +573,13 @@ describe('listDocuments', () => {
     const [entry] = await listDocuments('session1')
 
     expect(entry?.path).toBe('untitled-2')
-    expect(entry?.displayName).toBe('週次レビュー')
+    expect(entry?.name).toBe('週次レビュー')
   })
 
-  it('omits the display name for a document that was never renamed', async () => {
+  it('omits the name for a document that was never renamed', async () => {
     await saveDocument('session1', 'untitled', new LoroDoc())
     const [entry] = await listDocuments('session1')
-    expect(entry?.displayName).toBeUndefined()
+    expect(entry?.name).toBeUndefined()
   })
 
   it('returns an empty array for an empty session', async () => {
@@ -598,16 +598,16 @@ describe('listDocuments', () => {
     expect(list[0].updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
-  it('includes the immutable canvas id on each entry, stable across a path rename', async () => {
+  it('includes the immutable document id on each entry, stable across a path rename', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const before = await listDocuments('session1')
-    expect(before[0].id).toBeTruthy()
+    expect(before[0].documentId).toBeTruthy()
 
     await renameDocumentPath('session1', 'canvas-a', 'canvas-renamed')
     const after = await listDocuments('session1')
     expect(after[0].path).toBe('canvas-renamed')
     // The id is what stored references key on; a rename must not move it.
-    expect(after[0].id).toBe(before[0].id)
+    expect(after[0].documentId).toBe(before[0].documentId)
   })
 
   it('persists kind: markdown and lists it back', async () => {

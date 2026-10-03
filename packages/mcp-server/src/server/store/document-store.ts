@@ -707,17 +707,17 @@ export async function listDocuments(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<
-  Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind' | 'contentDigest'>[]
+  Pick<DocumentSummary, 'path' | 'documentId' | 'name' | 'updatedAt' | 'kind' | 'contentDigest'>[]
 > {
   validateWorkspaceId(workspaceId)
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
   if (workspaceDoc === null) return []
   return readWorkspaceDocuments(workspaceDoc).map((entry) => ({
     path: entry.path,
-    id: entry.documentId,
+    documentId: entry.documentId,
     // Absent rather than null when unset: a document nobody renamed has no
     // name of its own to report.
-    ...(entry.name === undefined ? {} : { displayName: entry.name }),
+    ...(entry.name === undefined ? {} : { name: entry.name }),
     // Every tree write stamps updatedAt and the fold carries the row
     // value; a record written before that stamp existed simply has none,
     // and the epoch is the honest "unknown" for our own pre-release data.

@@ -171,29 +171,37 @@ describe('listDocuments', () => {
   it('parses a valid response body', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       jsonResponse({
-        documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+        documents: [
+          { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+        ],
       }),
     )
     const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')
     expect(result).toEqual({
-      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      documents: [
+        { path: 'main', documentId: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
     })
   })
 
-  it('rejects a summary the daemon serves without id or kind — every row records both', async () => {
+  it('rejects a summary the daemon serves without documentId or kind — every row records both', async () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(jsonResponse({ documents: [{ path: 'main', updatedAt: '2026-01-01' }] }))
     const failure = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1').catch((err: unknown) => err)
     expect(failure).toBeInstanceOf(DaemonContractError)
-    expect((failure as DaemonContractError).issues[0]?.path).toEqual(['documents', 0, 'id'])
-    await expectLoggedFailure('/api/workspaces/w1/documents failed its contract at documents.0.id')
+    expect((failure as DaemonContractError).issues[0]?.path).toEqual(['documents', 0, 'documentId'])
+    await expectLoggedFailure(
+      '/api/workspaces/w1/documents failed its contract at documents.0.documentId',
+    )
   })
 
   it('preserves a recorded kind', async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       jsonResponse({
-        documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+        documents: [
+          { path: 'note', documentId: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' },
+        ],
       }),
     )
     const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')

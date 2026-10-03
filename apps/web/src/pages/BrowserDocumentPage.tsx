@@ -165,20 +165,6 @@ function useBrowserDocument(
   // known too — a legacy path ref names a live document, same rule as the
   // daemon page. Image refs live in the file store, not this list; undefined
   // while the list has not loaded keeps everything ordinary.
-  // [[path]] resolution for the markdown preview goes through the same
-  // link-entries table the daemon page reads; a stored row says
-  // `documentId`/`name`, so the projection onto LinkableDocument is
-  // explicit rather than structural.
-  const linkableDocuments = useMemo(
-    () =>
-      documents.map((entry) => ({
-        id: entry.documentId,
-        path: entry.path,
-        displayName: entry.name,
-        kind: entry.kind,
-      })),
-    [documents],
-  )
   // The list read races the save a rename queues, so this canvas's live
   // truth is its own snapshot and the list is only the copy for the OTHER
   // documents. Both the switcher and the link picker read THIS, or the
@@ -215,19 +201,9 @@ function useBrowserDocument(
   // document's row is overlaid with its live snapshot, so it never offers a
   // stale name for the document being edited. The other three resolutions
   // read the raw list, which is why the hook takes both.
-  const pickerDocuments = useMemo(
-    () =>
-      switcherOptions.map((entry) => ({
-        id: entry.documentId,
-        path: entry.path,
-        displayName: entry.name,
-        kind: entry.kind,
-      })),
-    [switcherOptions],
-  )
   const { resolveAlias, resolveTitle, missingFileRef, pickerTargets } = useLinkResolution({
-    documents: linkableDocuments,
-    pickerDocuments,
+    documents,
+    pickerDocuments: switcherOptions,
     ...(documentId === null ? {} : { excludeDocumentId: documentId }),
   })
 

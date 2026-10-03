@@ -112,10 +112,10 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
     handle: (state) =>
       jsonResponse({
         documents: state.rows.map((row) => ({
-          id: row.id,
+          documentId: row.id,
           path: row.path,
           kind: row.kind,
-          ...(row.name === undefined ? {} : { displayName: row.name }),
+          ...(row.name === undefined ? {} : { name: row.name }),
         })),
       }),
   },

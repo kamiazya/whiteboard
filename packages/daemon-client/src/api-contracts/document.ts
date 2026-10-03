@@ -271,14 +271,14 @@ export const documentSummarySchema = z.object({
   // Required: every row has the id, and the workspace-granularity sync
   // contract binds a session's content by it, so a summary without one
   // would leave the client no document to sync.
-  id: z.string().min(1),
+  documentId: z.string().min(1),
   // The name the user actually chose, ABSENT when they never chose one. The
   // path is an auto-generated ASCII address ('untitled-2') that cannot carry
   // a title in most scripts, so it is an identity for the URL and never one
   // for a reader. Carried on this list precisely so a client resolving a
   // `[[Name]]` reference reads the name from the same response it renders
   // the list from — the split is what let the two disagree.
-  displayName: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
   // Optional, matching `DocumentEntry`, which is optional because an index
   // may genuinely not own a timestamp — apps/web's IndexedDB index reads them
   // from a separate store. The daemon's SQL index always has one, so this

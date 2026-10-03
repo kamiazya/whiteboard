@@ -39,7 +39,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   return daemonApiClientMock(
     importOriginal,
     ['listWorkspaces', 'listDocuments', 'createDocument', 'getDocumentBacklinks'],
-    daemonWithOneDocument({ path: 'note', id: 'id-note', kind: 'markdown' }),
+    daemonWithOneDocument({ path: 'note', documentId: 'id-note', kind: 'markdown' }),
   )
 })
 

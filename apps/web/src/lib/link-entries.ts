@@ -5,16 +5,16 @@ import type { LinkTarget } from './link-target.js'
 /**
  * A document has two names and they are not interchangeable. The `path` is
  * its address — what a URL and a rename-following link key on. The
- * `displayName` is the only identifier the user ever chose, and the only
+ * `name` is the only identifier the user ever chose, and the only
  * one the UI shows. Keeper-agnostic on purpose: the daemon page projects
  * its DocumentSummary rows here and the browser page its DocumentSnapshot
  * rows, so one table owns `[[...]]` resolution for both keepers.
  */
 export type LinkableDocument = {
-  readonly id: string
+  readonly documentId: string
   readonly path: string
   /** Absent (a daemon summary may carry none) → the path labels the link. */
-  readonly displayName?: string
+  readonly name?: string
   /** Optional to match LinkTarget and an older daemon's kind-less summary. */
   readonly kind?: DocumentKind
 }
@@ -28,7 +28,7 @@ export type LinkableDocument = {
  * the daemon's own aggregate treat it.
  */
 export function linkEntries(documents: readonly LinkableDocument[]): readonly UniqueNameEntry[] {
-  return documents.map((entry) => ({ id: entry.id, name: entry.path }))
+  return documents.map((entry) => ({ id: entry.documentId, name: entry.path }))
 }
 
 /**
@@ -39,7 +39,7 @@ export function linkEntries(documents: readonly LinkableDocument[]): readonly Un
 export function linkTitles(
   documents: readonly LinkableDocument[],
 ): (documentId: string) => string | undefined {
-  const byId = new Map(documents.map((entry) => [entry.id, entry.displayName ?? entry.path]))
+  const byId = new Map(documents.map((entry) => [entry.documentId, entry.name ?? entry.path]))
   return (documentId) => byId.get(documentId)
 }
 
@@ -58,12 +58,12 @@ export function linkTargets(
   { excludeDocumentId }: { excludeDocumentId?: string } = {},
 ): readonly LinkTarget[] {
   return documents.flatMap((entry) => {
-    if (entry.id === excludeDocumentId) return []
+    if (entry.documentId === excludeDocumentId) return []
     return [
       {
-        id: entry.id,
+        id: entry.documentId,
         path: entry.path,
-        name: entry.displayName ?? entry.path,
+        name: entry.name ?? entry.path,
         kind: entry.kind,
       },
     ]

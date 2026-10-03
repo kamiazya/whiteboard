@@ -14,10 +14,10 @@ const LEGACY_ID = 'legacy-row-id'
 const PRE_KIND_ID = 'pre-kind-row-id'
 const NOTE_ID = 'note-row-id'
 const entries: ListedDocument[] = [
-  { id: BOARD_ID, path: 'boards/roadmap', kind: 'spatial' },
-  { id: LEGACY_ID, path: 'boards/legacy', kind: 'spatial' },
-  { id: PRE_KIND_ID, path: 'boards/pre-kind' },
-  { id: NOTE_ID, path: 'notes/plan', kind: 'markdown' },
+  { documentId: BOARD_ID, path: 'boards/roadmap', kind: 'spatial' },
+  { documentId: LEGACY_ID, path: 'boards/legacy', kind: 'spatial' },
+  { documentId: PRE_KIND_ID, path: 'boards/pre-kind' },
+  { documentId: NOTE_ID, path: 'notes/plan', kind: 'markdown' },
 ]
 
 describe('loadedReferenceOf', () => {

@@ -15,6 +15,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { listDocumentsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -105,16 +106,7 @@ function browserRecord(): LoroDoc {
 async function listDocuments(app: ReturnType<typeof createDocumentRouter>) {
   const res = await app.request('/api/workspaces/session1/documents')
   expect(res.status).toBe(200)
-  const body = (await res.json()) as {
-    documents: Array<{
-      path: string
-      id: string
-      kind: string
-      displayName?: string
-      shadowed?: boolean
-    }>
-  }
-  return body.documents
+  return listDocumentsResponseSchema.parse(await res.json()).documents
 }
 
 it('a browser record promotes through workspace-document/update: ids, kinds, names and bodies survive; collisions shadow', async () => {
@@ -141,19 +133,18 @@ it('a browser record promotes through workspace-document/update: ids, kinds, nam
   // Presence first: exactly the merged surface — 3 browser documents plus
   // the daemon's own, no duplicates — before any per-row claim.
   expect(documents).toHaveLength(4)
-  const byId = new Map(documents.map((d) => [d.id, d]))
+  const byId = new Map(documents.map((d) => [d.documentId, d]))
   expect(byId.get(ROADMAP_ID)?.path).toBe('notes/roadmap')
   expect(byId.get(ROADMAP_ID)?.kind).toBe('markdown')
-  // The workspace-kept display name crossed with the identity (the list
-  // publishes it as `displayName`).
-  expect(byId.get(ROADMAP_ID)?.displayName).toBe('Roadmap')
+  // The workspace-kept name crossed with the identity.
+  expect(byId.get(ROADMAP_ID)?.name).toBe('Roadmap')
   expect(byId.get(SKETCH_ID)?.kind).toBe('spatial')
   // The collision keeps BOTH documents at the path; exactly one row wins the
   // address and the other carries the shadowed marker.
   const contested = documents.filter((d) => d.path === 'contested')
   expect(contested).toHaveLength(2)
   expect(contested.filter((d) => d.shadowed === true)).toHaveLength(1)
-  expect(contested.map((d) => d.id)).toContain(CONTESTED_ID)
+  expect(contested.map((d) => d.documentId)).toContain(CONTESTED_ID)
 
   // Content and name crossed with the identity.
   const snapshotRes = await app.request('/api/w/session1/workspace-document/snapshot')
@@ -321,7 +312,7 @@ it('promoting the same snapshot twice is idempotent — no duplicate documents, 
 
   const documents = await listDocuments(app)
   expect(documents).toHaveLength(4)
-  expect(new Set(documents.map((d) => d.id)).size).toBe(4)
+  expect(new Set(documents.map((d) => d.documentId)).size).toBe(4)
 })
 
 it("the literal workspace id 'local' cannot be minted by a promotion", async () => {

@@ -227,7 +227,7 @@ async function restoreSubtree(
   // A row without an id cannot be correlated to the version and is left
   // alone.
   const rows = (await live.list(workspaceId)).flatMap((row) =>
-    row.id === undefined ? [] : [{ id: row.id, path: row.path }],
+    row.documentId === undefined ? [] : [{ id: row.documentId, path: row.path }],
   )
   const rowsById = new Map(rows.map((row) => [row.id, row]))
   await progress({

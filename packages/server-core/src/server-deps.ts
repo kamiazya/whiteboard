@@ -329,8 +329,8 @@ export interface LiveDocuments {
   exists(workspaceId: string, path: string): Promise<boolean>
   /** The document's recorded kind, or null when the path holds none. */
   kind(workspaceId: string, path: string): Promise<DocumentKind | null>
-  /** Every document in the workspace; `id` is absent for uncorrelatable rows. */
-  list(workspaceId: string): Promise<readonly { id?: string; path: string }[]>
+  /** Every document in the workspace; `documentId` is absent for uncorrelatable rows. */
+  list(workspaceId: string): Promise<readonly { documentId?: string; path: string }[]>
   rename(workspaceId: string, oldPath: string, newPath: string): Promise<void>
   delete(workspaceId: string, path: string): Promise<void>
   /**
