@@ -184,10 +184,12 @@ the table alone.
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
   edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
   `parseBody`; every consumer already bundled it to pass that same function
-  in), `@kamiazya/whiteboard-plugin-visual` (the default render
-  contribution), `@kamiazya/whiteboard-facet-engine` (the theme token
-  contract, zod-only), `css-line-break` (UAX #14 break opportunities) and
-  `zod` (via `catalog:`), for `sceneDigestSchema` only.
+  in), `@kamiazya/whiteboard-scene` (the scene vocabulary),
+  `@kamiazya/whiteboard-plugin-visual` (the default render contribution),
+  `@kamiazya/whiteboard-facet-engine` (the theme token contract, zod-only),
+  `css-line-break` (UAX #14 break opportunities), `lowlight` + `highlight.js`
+  (the default code tokeniser and its grammars) and `zod` (via `catalog:`),
+  for `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   captures every production source at build time via `import.meta.glob`
@@ -379,8 +381,7 @@ the table alone.
    to delete. The editor's dark palette (contrast-tested against the WCAG
    1.4.11/1.4.3 floors) is the shared theme's dark palette; viewer and export
    both pin `mode: 'light'` at their call sites, preserving the invariant
-   that a user's UI theme can never change exported bytes. The dark-export
-   behavior decision was later taken (2026-08-08): `headless-renderer`'s
+   that a user's UI theme can never change exported bytes. `headless-renderer`'s
    `theme: 'dark'` now builds the scene with `createSpatialTheme({ mode:
    'dark' })` and sets `SvgDocumentOptions.textFill` (an inheritable root
    `fill` — the document-level analogue of the editor host's inherited CSS
@@ -592,7 +593,7 @@ the table alone.
       checked LAST in the file-node pre-pass — after `composeFileImage`,
       `composeFileEmbed` and `composeFileMarkdown` — so a resolved image,
       canvas embed or markdown body always outranks a facet card, and the
-      card in turn always outranks the plain label it replaces. Card text goes through `layoutMdastBlocks`
+      card in turn always outranks the plain label it replaces. Card text goes through `typesetMdastBlocks`
       (`heading`+`paragraph` blocks only, never `list`/`table`, to stay out
       of the `subtreeOffsetX` transform-boundary class); content that
       overflows the node's padded box is truncated at whole-block
@@ -1106,7 +1107,7 @@ plugin adding a silhouette adds it to its own rather than widening
   those checked by hand (the root tie-break, the hop direction, both hop
   arithmetics, the floor's y block) each failed one to three tests when the
   same edit was applied. The cause, found on `sceneDocumentBounds` where
-  15 of 15 mutants came back that way (2026-09-16): `coverageAnalysis:
+  15 of 15 mutants came back that way: `coverageAnalysis:
   'off'` does NOT make the runner run every test — the vitest runner's
   setup records per-test coverage regardless, and Stryker core plans a
   per-mutant `testFilter` from it whenever the dry run returned any. That

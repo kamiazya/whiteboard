@@ -136,7 +136,8 @@ paths:
 
 ## Dependency rules
 
-- Runtime deps: `@kamiazya/whiteboard-model` (workspace), `zod` (catalog).
+- Runtime deps: `zod` (catalog) only — `@kamiazya/whiteboard-model` is a
+  devDependency, read by tests alone.
   Forbidden: `node:*`, DOM globals, `inversify`, `loro-crdt` — enforced by
   `tools/arch-lint` like every shared-layer package.
 

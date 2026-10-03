@@ -97,7 +97,7 @@ the opposite lookup — the places `canvas` and the old spellings are RIGHT, so
 a later sweep does not "fix" them.
 
 - **The spatial surface.** `SpatialCanvas`, `CanvasEdge`, `CanvasColor`,
-  `CanvasViewer`, `canvasRef`, `screenToCanvas`, `wb_canvas_tidy`, the
+  `CanvasViewer`, `canvasRef`, `screenToCanvas`, the
   render/layout helpers, and the MCP Apps UI tools. The word means the
   surface; only the CONTAINER sense was retired.
 

@@ -30,9 +30,10 @@ paths:
 
 ## Dependency rules
 
-- Runtime dependencies: `model`, `codec`, `canvas-render`,
-  `ports`, `facet-engine`, `loro-adapter`, `hono`, and `zod` (via `catalog:`
-  or `workspace:*`).
+- Runtime dependencies: `model`, `codec`, `canvas-render`, `ports`,
+  `facet-engine`, `loro-adapter`, `plugin-visual`, `search`,
+  `reference-graph`, `hono`, `loro-crdt` and `zod` (via `catalog:` or
+  `workspace:*`) — the architecture-map row, which the manifest check holds.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`),
   `inversify`.
 - Enforced by `tools/arch-lint` (`arch-lint-node` vitest project) and the
@@ -222,10 +223,12 @@ until its pinned row is updated with a line saying why it moved. A retirement
 or a consolidation also runs the LLM-driven lane
 (`pnpm --filter @kamiazya/whiteboard-mcp eval:tool-surface`) before and after.
 
-Two of the criteria are debt this package owns today: every input parameter
-carries a `.describe()` (299 do not), and a tool is registered with its Zod
-OBJECT rather than its `.shape`, so `.strict()` reaches the boundary and a
-typo'd key is refused rather than stripped (15 tools strip).
+One of the criteria is debt this package owns today: every input parameter
+carries a `.describe()`, and the scoreboard's `undescribed` total is how many
+do not — read the figure there, since it moves with every tool edit. The other
+is paid: every tool is registered with its Zod OBJECT rather than its `.shape`,
+so `.strict()` reaches the boundary and a typo'd key is refused rather than
+stripped (`strays: 'refused'` on every row).
 
 A tool that mutates a document takes the workspace write lock through
 tools/write-lock.ts's withWorkspaceWrite, which owns the rationale (ADR-0018

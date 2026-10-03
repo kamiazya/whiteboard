@@ -210,7 +210,7 @@ pnpm build
 - Use a Conventional Commit title for normal PRs, for example `fix: ...`, `feat(scope): ...`, or `chore: ...`.
 - Do not use tool prefixes such as `[codex] ...` in PR titles; CI rejects them.
 - This matters because release-please reads the merged commit history to decide version bumps and changelog entries.
-- Release Please PRs are also valid under the same rule, for example `chore(main): release vX.Y.Z` and `chore(main): release mcp-server vX.Y.Z`.
+- The release-please PR is valid under the same rule: its title is `chore: release main` (the `linked-versions` plugin groups every component into one PR, so no component or version appears in it).
 
 ## PR Visual Evidence
 
