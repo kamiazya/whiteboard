@@ -7,6 +7,7 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
+  mintProposalId,
   PROPOSED_CHANGE_OPS,
   type ProposedChange,
   proposalSchema,
@@ -152,5 +153,20 @@ describe('proposalSchema', () => {
     expect(
       proposalSchema.safeParse({ id: 'p1', status: 'open', changes: [change()] }).success,
     ).toBe(false)
+  })
+})
+
+describe('mintProposalId', () => {
+  it('starts at p1 on a document that holds no proposal', () => {
+    expect(mintProposalId(new Set())).toBe('p1')
+  })
+
+  it('takes the first free number, filling a gap rather than counting past the largest', () => {
+    expect(mintProposalId(new Set(['p1', 'p3']))).toBe('p2')
+    expect(mintProposalId(new Set(['p1', 'p2', 'p3']))).toBe('p4')
+  })
+
+  it('ignores an id that is not of the p<n> form', () => {
+    expect(mintProposalId(new Set(['p1', 'custom']))).toBe('p2')
   })
 })

@@ -4,6 +4,7 @@ import {
   canvasCommentSchema,
   canvasEdgeSchema,
   canvasLineSchema,
+  findDuplicateId,
   spatialCanvasSchema,
   spatialNodeSchema,
 } from './spatial.js'
@@ -413,5 +414,16 @@ describe('tags on the spatial model (ADR-0040 decision 2)', () => {
       tags: ['x'],
     }
     expect(canvasLineSchema.safeParse(line).success).toBe(false)
+  })
+})
+
+describe('findDuplicateId', () => {
+  it('answers the first id that repeats an earlier one', () => {
+    expect(findDuplicateId(['a', 'b', 'c', 'b', 'a'])).toBe('b')
+  })
+
+  it('answers undefined when every id is distinct', () => {
+    expect(findDuplicateId(['a', 'b', 'c'])).toBeUndefined()
+    expect(findDuplicateId([])).toBeUndefined()
   })
 })

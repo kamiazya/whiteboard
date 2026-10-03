@@ -505,7 +505,7 @@ export const canvasLineSchema = z
 
 export type CanvasLine = z.infer<typeof canvasLineSchema>
 
-function findDuplicateId(ids: string[]): string | undefined {
+export function findDuplicateId(ids: string[]): string | undefined {
   const seen = new Set<string>()
   for (const id of ids) {
     if (seen.has(id)) return id
