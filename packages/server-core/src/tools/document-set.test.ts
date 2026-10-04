@@ -7,6 +7,7 @@ import {
   writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { SCOPED_TAG_RULE } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -490,6 +491,55 @@ describe('wb_document_set and a workspace tag library (ADR-0040 decision 5)', ()
     }
 
     expect(listings).toBe(0)
+  })
+})
+
+describe('wb_document_set and the scoped-tag grammar (ADR-0040 decision 1)', () => {
+  const STORED = 'The body as it stands.'
+
+  async function noteWithBody(): Promise<{ store: FakeDocumentStore; deps: ServerDeps }> {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    const deps = makeDeps(store)
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      markdown: `---\ntype: note\n---\n${STORED}`,
+    })
+    return { store, deps }
+  }
+
+  test.each([
+    ['uppercase half', 'Health:OK'],
+    ['three halves', 'a:b:c'],
+    ['empty value', 'health:'],
+  ])('refuses a colon-bearing tag that is not a scoped tag (%s), writing nothing', async (_why, tag) => {
+    const { store, deps } = await noteWithBody()
+
+    await expect(
+      createDocumentSetTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        markdown: `---\ntype: note\ntags:\n  - "${tag}"\n---\nA rewritten body.`,
+      }),
+    ).rejects.toThrow(
+      new RegExp(`${tag}.*is not a scoped tag.*${SCOPED_TAG_RULE.slice(0, 40)}`, 's'),
+    )
+
+    expect(readMarkdownBody(await loadDoc(store, DOCUMENT_ID))).toBe(STORED)
+  })
+
+  test('still writes a plain tag and a well-formed scoped one', async () => {
+    const { deps } = await noteWithBody()
+
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      markdown: '---\ntype: note\ntags:\n  - Machine Learning\n  - v1.2\n  - region:eu\n---\nBody.',
+    })
+
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+    expect(exported.frontmatter.tags).toEqual(['Machine Learning', 'v1.2', 'region:eu'])
   })
 })
 

@@ -328,6 +328,14 @@ Two changes reach what a model reads and each runs ADR-0031's ladder:
 - Foreign OKF documents with plain tags round-trip unchanged. A foreign
   document that happens to carry a lowercase `foo:bar` is read as scoped,
   which is the reading every convention using a colon would give it.
+- Note (2026-10-04): the write grammar holds for frontmatter `tags` in a
+  whole OKF body as well, not only for `wb_facet_set` and the editor's chip
+  row. `document.set` and `wb_document_create` (and the `POST /documents`
+  route behind it) refuse a colon-bearing tag that is not a scoped tag, in
+  the one parse both body writers share, before the library is consulted or
+  anything is minted. A foreign document carrying `Health:OK` therefore reads
+  fine and stays readable, but a body write that still carries that tag is
+  refused until the tag is corrected: strict on write, lenient on read.
 
 ## Alternatives considered
 

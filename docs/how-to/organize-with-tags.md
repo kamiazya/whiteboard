@@ -21,6 +21,13 @@ offers what the board and the rest of the workspace already use — the keys
 before you type a colon, the values under that key after it. A tag with a colon that is not `key:value`
 (`Health:OK`) is refused with the rule; correct it and finish again.
 
+The same rule holds when an agent writes a document's whole markdown body:
+`wb_document_set` and `wb_document_create` refuse a frontmatter tag such as
+`Health:OK` or `a:b:c` with the rule, and write nothing. Plain tags
+(`Machine Learning`, `v1.2`) pass. A document that already carries such a tag
+— imported from another tool, say — still opens and keeps it; it is replaced
+only through a write that no longer carries it.
+
 With several boxes selected, a tag added or removed on one is added or
 removed on all of them; what each box already carried stays.
 

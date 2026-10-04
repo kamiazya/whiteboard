@@ -20,6 +20,7 @@ import {
   documentIdSchema,
   type ExtensionFacets,
   okfActorSchema,
+  tagWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -119,6 +120,11 @@ function detail(issues: readonly { path: PropertyKey[]; message: string }[]): st
 /** The stage a write is refused at when its frontmatter holds a value YAML cannot carry. */
 export const OKF_YAML_SAFE_STAGE = 'frontmatter-yaml-safe'
 
+/** The stage a write is refused at when a frontmatter tag breaks ADR-0040's write grammar. */
+const OKF_TAGS_STAGE = 'frontmatter-tags'
+
+const writableTagsSchema = z.array(tagWriteSchema)
+
 export class OkfParseError extends Error {
   constructor(
     public readonly stage: string,
@@ -139,6 +145,12 @@ export class OkfParseError extends Error {
  * say so, with the key named, while the caller still holds the content.
  * `serializeOkf` is the one definition of what can be written out, so this
  * asks it rather than restating its rule.
+ *
+ * Frontmatter `tags` are held to the scoped-tag write grammar here, where both
+ * body writers (`document.set`, `wb_document_create`'s preflight before its
+ * mint) already share one parse: a colon-bearing tag that is not `key:value`
+ * would otherwise be stored by a body while `wb_facet_set` and the editor
+ * refuse it. Reading stays lenient — a stored tag is never re-judged.
  */
 export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
   const parsed = parseOkf(markdown)
@@ -155,6 +167,14 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
       OKF_YAML_SAFE_STAGE,
       'frontmatter contains a value YAML cannot represent',
       error.issues,
+    )
+  }
+  const tags = writableTagsSchema.safeParse(parsed.value.frontmatter.tags ?? [])
+  if (!tags.success) {
+    throw new OkfParseError(
+      OKF_TAGS_STAGE,
+      'frontmatter tags are refused',
+      tags.error.issues.map((issue) => ({ ...issue, path: ['tags', ...issue.path] })),
     )
   }
   return parsed.value

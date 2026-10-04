@@ -1,4 +1,5 @@
 import { serializeOkf } from '@kamiazya/whiteboard-codec'
+import { tagWriteSchema } from '@kamiazya/whiteboard-model'
 import {
   coreFacetsArbitrary,
   extensionFacetsArbitrary,
@@ -83,6 +84,12 @@ const okfDocumentArbitrary = fc
   .map(([core, facets, body, facetsRaw]) => ({
     frontmatter: {
       ...core,
+      // A write refuses a colon-bearing tag that is not scoped (ADR-0040), so
+      // the property generates only tags a body write admits; refusal itself
+      // is pinned in document-set.test.ts.
+      ...(core.tags === undefined
+        ? {}
+        : { tags: core.tags.filter((tag) => tagWriteSchema.safeParse(tag).success) }),
       ...(facets === undefined ? {} : { facets }),
       ...(facetsRaw === undefined ? {} : { facetsRaw }),
     },
