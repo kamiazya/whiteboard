@@ -11,9 +11,9 @@
  * `[mark] ALPHA <spacer> gear`.
  */
 
-import { messageOf } from '@kamiazya/whiteboard-model'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useId, useRef, useState } from 'react'
+import { useCreateWorkspace } from '../../hooks/use-create-workspace.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { workspaceHandle, workspaceLabel } from '../../lib/workspace-handle.js'
 import type { WorkspaceRow, WorkspaceSwitcherSource } from '../../lib/workspace-switcher-source.js'
@@ -55,17 +55,14 @@ export function WorkspaceMenu({
 }: WorkspaceMenuProps) {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const newNameRef = useRef<HTMLInputElement>(null)
   const nameId = useId()
-  // A ref, not the `busy` state below, and the difference is the whole guard.
-  // `busy` is a React SNAPSHOT: a second submit that runs before React
-  // re-renders still sees it false. Measured — two keydowns dispatched inside
-  // one batch call `create` twice; the same two through `fireEvent`, which
-  // flushes between them, call it once. Each browser create MINTS and
-  // persists a workspace.
-  const submitting = useRef(false)
+  const {
+    busy,
+    error,
+    submit: submitCreate,
+    clearError,
+  } = useCreateWorkspace({ source, onSwitch }, { onCreated: () => setCreating(false) })
 
   const active = workspaces.find((w) => workspaceHandle(w) === current)
   const create = source.create
@@ -99,37 +96,6 @@ export function WorkspaceMenu({
       // design — the alternative is an error banner over a working list.
       .catch(() => {})
   }, [source, workspaces])
-
-  const failed = (cause: unknown, fallback: string) => {
-    submitting.current = false
-    setError(messageOf(cause, fallback))
-    setBusy(false)
-  }
-
-  const submitCreate = () => {
-    const displayName = newName.trim()
-    if (create === undefined || displayName === '' || submitting.current) return
-    submitting.current = true
-    setBusy(true)
-    setError(null)
-    create(displayName)
-      .then((created) => {
-        // Released on SUCCESS too, not only on failure. `onSwitch` is an
-        // in-SPA route change for the browser keeper, so the shell does not
-        // remount and this instance survives the navigation — holding the
-        // guard would leave the form open with Create disabled until the
-        // popover happened to be closed and reopened.
-        submitting.current = false
-        setBusy(false)
-        setCreating(false)
-        // The handle CREATE answered with, never the name that was typed: a
-        // segment is derived from the name and may be suffixed past a
-        // collision, or absent entirely, in which case the address is the
-        // canonical id. Navigating to what was typed addresses nothing.
-        onSwitch(workspaceHandle(created))
-      })
-      .catch((cause: unknown) => failed(cause, 'Could not create the workspace.'))
-  }
 
   return (
     <>
@@ -208,7 +174,7 @@ export function WorkspaceMenu({
                 onChange={(event) => setNewName(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter' || isImeComposingKeydown(event.nativeEvent)) return
-                  submitCreate()
+                  submitCreate(newName)
                 }}
                 className="rounded-md border bg-background px-2 py-1 text-sm"
               />
@@ -216,7 +182,7 @@ export function WorkspaceMenu({
                 <button
                   type="button"
                   disabled={busy || newName.trim() === ''}
-                  onClick={submitCreate}
+                  onClick={() => submitCreate(newName)}
                   className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
                 >
                   Create
@@ -225,7 +191,7 @@ export function WorkspaceMenu({
                   type="button"
                   onClick={() => {
                     setCreating(false)
-                    setError(null)
+                    clearError()
                   }}
                   className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
                 >

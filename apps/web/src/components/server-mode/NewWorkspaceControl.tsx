@@ -8,62 +8,11 @@
  * the caller the first member and owner, which is why this is the way a fresh
  * server's first person gets anywhere: nothing else in the app creates one.
  */
-import { membershipRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
-import { messageOf } from '@kamiazya/whiteboard-model'
 import { useEffect, useRef, useState } from 'react'
-import { z } from 'zod'
+import { useCreateWorkspace } from '../../hooks/use-create-workspace.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
-import { workspaceHandle } from '../../lib/workspace-handle.js'
 import type { KeeperWorkspaces } from '../../lib/workspace-switcher-source.js'
 import { Button } from '../ui/button.js'
-
-const GENERIC_FAILURE = 'Could not create the workspace. Nothing was created. Try again.'
-
-// Read by CODE, as `membership-refusal.ts` does, not by the sentence: the
-// sentence is the keeper's to reword. Structural rather than `instanceof
-// DaemonApiError`, which would pull the whole daemon client into this page's
-// chunk and defeat the seam's lazy import of it.
-const refusalSchema = z.object({ status: z.literal(403), body: membershipRefusalSchema })
-
-/** What the person reads when the keeper refused or the call failed. */
-function failureCopy(cause: unknown): string {
-  const refusal = refusalSchema.safeParse(cause)
-  if (refusal.success && refusal.data.body.error === 'requires_person_session') {
-    return 'This session is not signed in as a person, so the server did not create a workspace. Nothing was created. Sign out, sign in again, and try once more.'
-  }
-  return messageOf(cause, GENERIC_FAILURE)
-}
-
-/**
- * The create call and what it leaves behind: busy, and the words for a
- * failure. A failed create keeps the form open with what was typed.
- */
-function useCreate({ source, onSwitch }: KeeperWorkspaces) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  // A ref beside `busy`: state is a snapshot, so a second Enter dispatched
-  // before React re-renders still reads it false, and each create mints a
-  // workspace the person then has to find and be rid of.
-  const submitting = useRef(false)
-  const submit = (typed: string) => {
-    const displayName = typed.trim()
-    if (source.create === undefined || displayName === '' || submitting.current) return
-    submitting.current = true
-    setBusy(true)
-    setError(null)
-    source
-      .create(displayName)
-      // The handle the keeper answered with, never the typed name: the
-      // address is derived from it and may be suffixed or absent.
-      .then((created) => onSwitch(workspaceHandle(created)))
-      .catch((cause: unknown) => {
-        submitting.current = false
-        setBusy(false)
-        setError(failureCopy(cause))
-      })
-  }
-  return { busy, error, submit, clearError: () => setError(null) }
-}
 
 function NameField({
   value,
@@ -121,7 +70,7 @@ function NewWorkspaceForm({
   onCancel: () => void
 }>) {
   const [name, setName] = useState('')
-  const { busy, error, submit, clearError } = useCreate(workspaces)
+  const { busy, error, submit, clearError } = useCreateWorkspace(workspaces)
   return (
     <form
       className="flex w-full max-w-md flex-col gap-2"

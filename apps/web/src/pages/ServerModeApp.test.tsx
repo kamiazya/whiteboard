@@ -124,8 +124,14 @@ describe('the server-mode workspaces page creates a workspace', () => {
   })
 
   it('says a session that names no person was refused, and that nothing was created', async () => {
-    const fake = renderSignedIn([], () =>
-      jsonResponse({ error: 'requires_person_session', message: 'no person on this session' }, 403),
+    let attempts = 0
+    const fake = renderSignedIn([], (displayName) =>
+      attempts++ === 0
+        ? jsonResponse(
+            { error: 'requires_person_session', message: 'no person on this session' },
+            403,
+          )
+        : jsonResponse({ workspaceId: 'ws-2', segment: 'plans', displayName }, 201),
     )
 
     await createNamed('Plans')
@@ -137,6 +143,11 @@ describe('the server-mode workspaces page creates a workspace', () => {
     expect(posts(fake)).toHaveLength(1)
     // The form stays, with what was typed, so the person can retry.
     expect((screen.getByLabelText('New workspace name') as HTMLInputElement).value).toBe('Plans')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(posts(fake)).toHaveLength(2))
+    await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'plans' }))
   })
 
   it('does not post twice for one submit', async () => {
