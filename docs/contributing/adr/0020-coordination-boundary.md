@@ -1,6 +1,8 @@
 # ADR-0020: The coordination boundary — a CRDT data plane and a compare-and-swap control plane
 
-**Status:** Proposed
+**Status:** Accepted — in effect (status corrected 2026-10-04: the store's
+compaction, fold, frontier and destructive passes follow its decisions and cite
+it as their rule).
 
 ## Context
 

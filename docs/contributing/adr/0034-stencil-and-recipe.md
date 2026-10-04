@@ -1,7 +1,9 @@
 # ADR-0034: Stencil and recipe — a reusable element and a reusable arrangement, as two concepts
 
-**Status:** Proposed — the vocabulary, the boundaries, who may author one, and
-the measurement plan. The stencil half lands first and is judged by the three
+**Status:** Accepted for the stencil half, which is in effect (status corrected
+2026-10-04: bundled and workspace stencil libraries ship); the recipe half is
+designed here and not built. Covers the vocabulary, the boundaries, who may
+author one, and the measurement plan. The stencil half lands first and is judged by the three
 axes already pinned ([ADR-0031](0031-tool-surface-criteria.md) §7's drawing
 score, [ADR-0032](0032-composition-axis.md)'s composition axis,
 [ADR-0033](0033-facet-vocabulary-axis.md)'s facet axis) plus the eval lane's

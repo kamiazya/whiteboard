@@ -101,6 +101,12 @@ proxy.
 - **The keeper makes an outbound request by default.** An air-gapped or
   privacy-sensitive deployment turns it off. The self-hosting guide says so
   where it describes the setting.
+- **The server-mode app has no Settings screen** (recorded 2026-10-04). Theme
+  and font choices belong to the browser-and-daemon shell's `/settings` route
+  and are not offered here, so a person using a server keeper keeps the default
+  appearance until a server-mode settings surface is decided on its own. A
+  workspace is renamed from the workspace shell, where the keeper decides who
+  may.
 
 ## Alternatives considered
 
